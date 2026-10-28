@@ -28,6 +28,7 @@ Use in provider or app selection lists.
 `
 
 const story = create({ title: "UI/AppIcon", mod, args: { id: "vscode" } })
+
 export default {
   title: "UI/AppIcon",
   id: "components-app-icon",

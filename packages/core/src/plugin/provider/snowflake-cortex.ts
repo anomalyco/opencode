@@ -1,7 +1,7 @@
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
 import { Clock, Deferred, Effect, Option, Schema, Stream } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
@@ -172,13 +172,7 @@ export const SnowflakeCortexPlugin = define({
 
     const load = Effect.gen(function* () {
       const value = (yield* saved)?.value
-      account.value = normalizeAccount(
-        process.env.SNOWFLAKE_ACCOUNT ??
-          (value?.type === "key"
-            ? (value.configuration?.account ?? value.metadata?.account)
-            : value?.metadata?.account) ??
-          configured?.account,
-      )
+      account.value = normalizeAccount(process.env.SNOWFLAKE_ACCOUNT ?? value?.metadata?.account ?? configured?.account)
     })
     yield* load
     yield* ctx.provider.transform((providers) => {
@@ -197,6 +191,9 @@ export const SnowflakeCortexPlugin = define({
       for (const item of models.list(providerID)) {
         models.update(providerID, item.id, (model) => {
           model.compatibility = { maxTokensField: "max_completion_tokens", ...model.compatibility }
+          // Cortex Chat Completions caches Claude only through explicit `cache_control` breakpoints.
+          if ((model.modelID ?? model.id).includes("claude"))
+            model.compatibility = { cacheFormat: "anthropic", ...model.compatibility }
           if (model.settings?.baseURL !== undefined)
             model.settings.baseURL = endpoint(model.settings.baseURL, account.value)
         })

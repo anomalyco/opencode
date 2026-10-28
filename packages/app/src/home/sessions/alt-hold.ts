@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 
 export function createAltHold(enabled: boolean, onPress: () => void) {
   const [state, setState] = createStore({ active: false })
+
   if (!enabled) return () => false
 
   makeEventListener(window, "keydown", (event) => {

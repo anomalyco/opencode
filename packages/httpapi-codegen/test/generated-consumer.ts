@@ -1,5 +1,5 @@
 import { Effect, Stream } from "effect"
-import { HttpClient } from "effect/unstable/http"
+import { HttpClient } from "effect/http"
 import { ClientError, OpenCode } from "./generated"
 import { Missing } from "./fixture"
 
@@ -32,4 +32,4 @@ export const program = OpenCode.make().pipe(
   }),
 )
 
-const _requiresHttpClient: Effect.Effect<unknown, never, HttpClient.HttpClient> = program
+export const requiresHttpClient: Effect.Effect<unknown, never, HttpClient.HttpClient> = program

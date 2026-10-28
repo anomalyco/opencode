@@ -1,83 +1,24 @@
-import { InputRenderable, TextAttributes } from "@opentui/core"
 import { Slug } from "@opencode/core/util/slug"
-import { createSignal, onMount } from "solid-js"
-import { Keymap } from "../context/keymap"
-import { useTheme } from "../context/theme"
-import { useDialog, type DialogContext } from "../ui/dialog"
-import { useConfig } from "../config"
+import { useNewDesigns } from "../config"
+import { type DialogContext } from "../ui/dialog"
+import { DialogPrompt } from "../ui/dialog-prompt"
 
 export function DialogWorktreeName(props: { onConfirm: (name: string) => void }) {
-  const dialog = useDialog()
-  const theme = useTheme().surface("dialog")
-  const shortcuts = Keymap.useShortcuts()
-  const config = useConfig().data
-  const [inputTarget, setInputTarget] = createSignal<InputRenderable>()
-  let input: InputRenderable
-
-  function generate() {
-    input.value = Slug.create()
-    input.gotoLineEnd()
-  }
-
-  function confirm() {
-    props.onConfirm(slugify(input.value) || Slug.create())
-  }
-
-  Keymap.createLayer(() => ({
-    mode: "modal",
-    target: inputTarget,
-    enabled: inputTarget() !== undefined,
-    priority: 1,
-    commands: [
-      {
-        id: "dialog.worktree.generate",
-        title: "Generate worktree name",
-        group: "Dialog",
-        run: generate,
-      },
-    ],
-  }))
-
-  onMount(() => {
-    dialog.setSize("medium")
-    setTimeout(() => {
-      if (!input || input.isDestroyed) return
-      input.focus()
-    }, 1)
-  })
-
+  const newDesigns = useNewDesigns()
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
-          Name worktree
-        </text>
-        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
-          esc
-        </text>
-      </box>
-      <input
-        cursorStyle={config.cursor}
-        ref={(value: InputRenderable) => {
-          input = value
-          setInputTarget(value)
-        }}
-        onSubmit={confirm}
-        placeholder="Worktree name"
-        placeholderColor={theme.text.muted}
-        textColor={theme.text.formfield.base}
-        focusedTextColor={theme.text.formfield.base}
-        cursorColor={theme.text.formfield.base}
-      />
-      <box paddingBottom={1} flexDirection="row" gap={2}>
-        <text fg={theme.text.base}>
-          enter <span style={{ fg: theme.text.muted }}>submit</span>
-        </text>
-        <text fg={theme.text.base}>
-          {shortcuts.get("dialog.worktree.generate")} <span style={{ fg: theme.text.muted }}>generate one</span>
-        </text>
-      </box>
-    </box>
+    <DialogPrompt
+      title="Name worktree"
+      placeholder="Worktree name"
+      onConfirm={(value) => props.onConfirm(slugify(value) || Slug.create())}
+      actions={[
+        {
+          title: newDesigns() ? "generate name" : "generate one",
+          command: "dialog.worktree.generate",
+          commandTitle: "Generate worktree name",
+          onTrigger: (prompt) => prompt.setValue(Slug.create()),
+        },
+      ]}
+    />
   )
 }
 

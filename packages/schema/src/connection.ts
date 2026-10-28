@@ -20,8 +20,8 @@ export const CredentialInfo = Schema.Struct({
   type: Schema.Literal("credential"),
   id: Credential.ID,
   label: Schema.String,
-  /** How the credential was obtained: a stored key or an OAuth grant. */
-  method: Schema.Literals(["key", "oauth"]),
+  /** Whether the connection stores a key, an OAuth grant, or an external credential-source reference. */
+  method: Schema.Literals(["key", "oauth", "external"]),
   status: optional(Status),
 }).annotate({ identifier: "Connection.CredentialInfo" })
 

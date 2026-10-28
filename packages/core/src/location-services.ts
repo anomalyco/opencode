@@ -1,4 +1,4 @@
-import { Context, Duration, Effect, Exit, Layer, LayerMap, MutableHashMap, Option } from "effect"
+import { Context, Duration, Effect, Exit, Layer, LayerMap, MutableHashMap, Option, Scope } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Instance } from "./instance.js"
 import { Location } from "./location.js"
@@ -17,7 +17,7 @@ export function buildLocationServiceMap(
     Effect.gen(function* () {
       const owner = yield* Effect.scope
       const builds = MutableHashMap.empty<Location.Ref, { close?: Effect.Effect<void> }>()
-      const inner: LayerMap.LayerMap<Location.Ref, LocationServices> = yield* LayerMap.make(
+      const inner: LayerMap.LayerMap<Location.Ref, LocationServices, Instance.Error> = yield* LayerMap.make(
         (ref: Location.Ref) => {
           const build: { close?: Effect.Effect<void> } = {}
           MutableHashMap.set(builds, ref, build)
@@ -54,6 +54,18 @@ export function buildLocationServiceMap(
         // Retain healthy graphs. Boot failures, not local filesystem probes,
         // decide whether a location (including workspace placement) can retry.
         { idleTimeToLive: Duration.infinity },
+      )
+      // RcMap closes entries one at a time on shutdown. Close every Location
+      // (borrowed ones too) concurrently first; RcMap then finds them closed.
+      yield* Effect.addFinalizer(() =>
+        Effect.suspend(() =>
+          inner.rcMap.state._tag === "Closed"
+            ? Effect.void
+            : Effect.forEach(inner.rcMap.state.map, ([, entry]) => Effect.exit(Scope.close(entry.scope, Exit.void)), {
+                concurrency: "unbounded",
+                discard: true,
+              }),
+        ),
       )
       const map = {
         ...inner,

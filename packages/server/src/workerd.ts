@@ -96,6 +96,7 @@ const vcsLayer = Layer.succeed(
   Vcs.Service,
   Vcs.Service.of({
     base: () => Effect.succeed(null),
+    initialize: () => Effect.fail(new Vcs.InitializeError({ kind: "unsupported" })),
     transform: () => Effect.succeed({ dispose: Effect.void }),
     reload: () => Effect.void,
     info: () => Effect.succeed({ branch: {} }),

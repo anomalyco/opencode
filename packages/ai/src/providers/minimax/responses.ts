@@ -11,6 +11,6 @@ export const model: ProviderPackage.Definition<Settings, MiniMax.ResponsesOption
     apiKey,
     baseURL,
     headers,
-    http: body === undefined ? undefined : { body: { ...body } },
+    http: body === undefined ? undefined : { body },
     providerOptions,
   }).responses(modelID)

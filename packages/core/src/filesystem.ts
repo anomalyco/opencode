@@ -2,7 +2,7 @@ export * as FileSystem from "./filesystem.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, type Option, type PlatformError, Schema, type Stream } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "./location.js"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
@@ -10,21 +10,43 @@ import { FileSystemSearch } from "./filesystem/search.js"
 import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode/schema/filesystem"
 
-export const ReadInput = Schema.Struct({
-  path: RelativePath,
-})
-export type ReadInput = typeof ReadInput.Type
+export interface ReadInput {
+  readonly path: RelativePath
+}
 
-export const WriteInput = Schema.Struct({
+export interface WriteInput {
   /** Absolute, or relative to the location directory. */
-  path: Schema.String,
-  data: Schema.Uint8Array,
-})
-export type WriteInput = typeof WriteInput.Type
+  readonly path: string
+  readonly data: Uint8Array
+}
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("FileSystem.NotFoundError", {
   path: RelativePath,
 }) {}
+
+export class DirectoryNotFoundError extends Schema.TaggedError<DirectoryNotFoundError>()(
+  "FileSystem.DirectoryNotFoundError",
+  {
+    directory: AbsolutePath,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message() {
+    return `Directory not found: ${this.directory}`
+  }
+}
+
+export class DirectoryAccessDeniedError extends Schema.TaggedError<DirectoryAccessDeniedError>()(
+  "FileSystem.DirectoryAccessDeniedError",
+  {
+    directory: AbsolutePath,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message() {
+    return `Access denied to directory: ${this.directory}`
+  }
+}
 
 export const Content = Schema.Struct({
   uri: Schema.String,
@@ -35,10 +57,9 @@ export const Content = Schema.Struct({
 }).annotate({ identifier: "FileSystem.Content" })
 export type Content = typeof Content.Type
 
-export const ListInput = Schema.Struct({
-  path: Schema.String.pipe(Schema.optional),
-})
-export type ListInput = typeof ListInput.Type
+export interface ListInput {
+  readonly path?: string
+}
 
 export { FindInput, Write }
 
@@ -63,11 +84,20 @@ export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
 
 export const Event = FileSystem.Event
 
+export interface File {
+  readonly mime: string
+  readonly size: number
+  readonly mtime: Option.Option<Date>
+  readonly stream: (options?: {
+    readonly offset?: number
+    readonly bytesToRead?: number
+  }) => Stream.Stream<Uint8Array, PlatformError.PlatformError>
+}
+
 export interface Interface {
-  readonly read: (
-    input: ReadInput,
-  ) => Effect.Effect<{ readonly content: Uint8Array; readonly mime: string }, NotFoundError>
-  readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
+  readonly read: (input: ReadInput) => Effect.Effect<File, NotFoundError>
+  /** Fails with `NotFoundError` when the path is missing or is not a directory. */
+  readonly list: (input?: ListInput) => Effect.Effect<Entry[], NotFoundError>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
   /** Writes a file at an absolute path or one relative to the location; not confined to it. */
   readonly write: (input: WriteInput) => Effect.Effect<Write>
@@ -87,26 +117,38 @@ const baseLayer = Layer.effect(
     // configured directory as canonical; local placements keep symlink
     // canonicalization. This skip is boot-only: resolve/read/list below still
     // access the host filesystem per operation (tracked in #44568).
-    const root = location.workspaceID ? location.directory : yield* fs.realPath(location.directory).pipe(Effect.orDie)
-    const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
-      const absolute = path.resolve(location.directory, input ?? ".")
-      if (!FSUtil.contains(location.directory, absolute))
-        return yield* Effect.die(new Error("Path escapes the location"))
-      const real = yield* fs.realPath(absolute)
-      if (!FSUtil.contains(root, real)) return yield* Effect.die(new Error("Path escapes the location"))
+    const root = location.workspaceID
+      ? location.directory
+      : yield* fs.realPath(location.directory).pipe(
+          // Linux realpath succeeds on an unreadable directory, so probe readability explicitly.
+          Effect.tap((real) => fs.access(real, { readable: true })),
+          Effect.catch((cause): Effect.Effect<never, DirectoryNotFoundError | DirectoryAccessDeniedError> => {
+            if (cause.reason._tag === "NotFound")
+              return Effect.fail(new DirectoryNotFoundError({ directory: location.directory, cause }))
+            if (FSUtil.isAccessDenied(cause))
+              return Effect.fail(new DirectoryAccessDeniedError({ directory: location.directory, cause }))
+            return Effect.die(cause)
+          }),
+        )
+    const resolve = Effect.fnUntraced(function* (input: RelativePath) {
+      if (input.includes("\u0000")) return yield* Effect.fail(new NotFoundError({ path: input }))
+      const absolute = path.resolve(location.directory, input)
+      if (!FSUtil.contains(location.directory, absolute)) return yield* Effect.fail(new NotFoundError({ path: input }))
+      const real = yield* fs.realPath(absolute).pipe(
+        Effect.catchReason(
+          "PlatformError",
+          "NotFound",
+          () => Effect.fail(new NotFoundError({ path: input })),
+          (_, error) => Effect.die(error),
+        ),
+      )
+      if (!FSUtil.contains(root, real)) return yield* Effect.fail(new NotFoundError({ path: input }))
       return { absolute, real, directory: location.directory }
     })
     return Service.of({
       find: search.find,
       read: Effect.fn("FileSystem.read")(function* (input) {
-        const target = yield* resolve(input.path).pipe(
-          Effect.catchReason(
-            "PlatformError",
-            "NotFound",
-            () => Effect.fail(new NotFoundError({ path: input.path })),
-            (_, error) => Effect.die(error),
-          ),
-        )
+        const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(
           Effect.catchReason(
             "PlatformError",
@@ -115,24 +157,27 @@ const baseLayer = Layer.effect(
             (_, error) => Effect.die(error),
           ),
         )
-        if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+        if (info.type !== "File") return yield* Effect.fail(new NotFoundError({ path: input.path }))
         return {
-          content: yield* fs.readFile(target.real).pipe(
-            Effect.catchReason(
-              "PlatformError",
-              "NotFound",
-              () => Effect.fail(new NotFoundError({ path: input.path })),
-              (_, error) => Effect.die(error),
-            ),
-          ),
           mime: FSUtil.mimeType(target.real),
+          size: Number(info.size),
+          mtime: info.mtime,
+          stream: (options) => fs.stream(target.real, options),
         }
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         // Navigation can leave the cwd without activating another Location.
         const directory = path.resolve(location.directory, input.path ?? ".")
-        const info = yield* fs.stat(directory).pipe(Effect.orDie)
-        if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
+        const missing = new NotFoundError({ path: RelativePath.make(input.path ?? ".") })
+        const info = yield* fs.stat(directory).pipe(
+          Effect.catchReason(
+            "PlatformError",
+            "NotFound",
+            () => Effect.fail(missing),
+            (_, error) => Effect.die(error),
+          ),
+        )
+        if (info.type !== "Directory") return yield* missing
         return yield* fs.readDirectoryEntries(directory).pipe(
           Effect.orDie,
           Effect.map((items) =>

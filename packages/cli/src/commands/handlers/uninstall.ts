@@ -20,13 +20,8 @@ export default Runtime.handler(
     const updater = yield* Updater.Service
     const method = yield* updater.method()
     const removal = method ? updater.removal(method) : undefined
-    const directories = [
-      { path: global.data, label: "Data", keep: input.keepData },
-      { path: global.cache, label: "Cache", keep: false },
-      { path: global.config, label: "Config", keep: input.keepConfig },
-      { path: global.state, label: "State", keep: false },
-    ]
-    // All channels share these directories. Stop their owners before deleting state or data.
+    // Data, config, and state hold sessions, credentials, settings, and prompt history; uninstall only removes the cache.
+    // All channels share the cache. Stop background services before deleting it.
     // Read registrations directly: ServiceConfig.options() can migrate files even during a dry run.
     const services = (yield* fs.exists(global.state))
       ? (yield* fs.readDirectory(global.state)).filter((name) => /^service(?:-.*)?\.json$/.test(name))
@@ -35,12 +30,7 @@ export default Runtime.handler(
 
     log.info(`Installation method: ${method ?? "unknown"}`)
     log.message("The following global files will be removed (shared by OpenCode versions and channels):")
-    yield* Effect.forEach(directories, (directory) =>
-      Effect.gen(function* () {
-        if (!(yield* fs.exists(directory.path))) return
-        log.info(`  ${directory.label}: ${directory.path}${directory.keep ? " (keeping)" : ""}`)
-      }),
-    )
+    if (yield* fs.exists(global.cache)) log.info(`  Cache: ${global.cache}`)
     services.forEach((name) =>
       log.info(`  Stop background service and persistent terminals: ${path.join(global.state, name)}`),
     )
@@ -83,26 +73,21 @@ export default Runtime.handler(
     // Links that keep an older OpenCode replaceable may still run; move them so the cache can go.
     if (process.platform === "win32") yield* RetainedImage.relocate(global.cache, global.tmp)
     const errors: string[] = []
-    yield* Effect.forEach(directories, (directory) =>
-      Effect.gen(function* () {
-        if (directory.keep) return
-        progress.start(`Removing ${directory.label}...`)
-        yield* fs.remove(directory.path, { recursive: true, force: true }).pipe(
-          // Windows reports a terminated service as gone before it releases its database
-          // and log handles, so the first removal can race that teardown.
-          Effect.retry({
-            while: (error) => process.platform === "win32" && error.reason._tag === "Busy",
-            schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(40)]),
-          }),
-          Effect.tap(() => Effect.sync(() => progress.stop(`Removed ${directory.label}`))),
-          Effect.catch((error) =>
-            Effect.sync(() => {
-              progress.stop(`Failed to remove ${directory.label}`, 1)
-              errors.push(`${directory.label}: ${errorMessage(error)}`)
-            }),
-          ),
-        )
+    progress.start("Removing Cache...")
+    yield* fs.remove(global.cache, { recursive: true, force: true }).pipe(
+      // Windows reports a terminated service as gone before it releases its file handles,
+      // so the first removal can race that teardown.
+      Effect.retry({
+        while: (error) => process.platform === "win32" && error.reason._tag === "Busy",
+        schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(40)]),
       }),
+      Effect.tap(() => Effect.sync(() => progress.stop("Removed Cache"))),
+      Effect.catch((error) =>
+        Effect.sync(() => {
+          progress.stop("Failed to remove Cache", 1)
+          errors.push(`Cache: ${errorMessage(error)}`)
+        }),
+      ),
     )
     yield* Effect.forEach(shell, (file) =>
       fs.readFileString(file).pipe(

@@ -383,6 +383,7 @@ function AnimatedHeading(props) {
     ready: false,
     swapping: false,
   })
+
   const current = () => state.current
   const leaving = () => state.leaving
   const width = () => state.width
@@ -395,9 +396,11 @@ function AnimatedHeading(props) {
 
   const measureEnter = () => enterRef?.scrollWidth ?? 0
   const measureLeave = () => leaveRef?.scrollWidth ?? 0
+
   const widen = (px) => {
     if (px <= 0) return
     const w = Number.parseFloat(width())
+
     if (Number.isFinite(w) && px <= w) return
     setState("width", `${px}px`)
   }
@@ -405,9 +408,12 @@ function AnimatedHeading(props) {
   const measure = () => {
     if (!current()) {
       setState("width", "0px")
+
       return
     }
+
     const px = measureEnter()
+
     if (px > 0) setState("width", `${px}px`)
   }
 
@@ -434,6 +440,7 @@ function AnimatedHeading(props) {
             setState("swapping", false)
             measure()
           }
+
           frame = undefined
         })
       },
@@ -575,6 +582,7 @@ export const Playground = {
       debug: false,
       odoBlur: false,
     })
+
     const heading = () => state.heading
     const headingIndex = () => state.headingIndex
     const active = () => state.active
@@ -607,19 +615,24 @@ export const Playground = {
         clearTimeout(cycleTimer)
         cycleTimer = undefined
         setState("cycling", false)
+
         return
       }
+
       setState("cycling", true)
+
       const tick = () => {
         if (!cycling()) return
         nextHeading()
         cycleTimer = setTimeout(tick, 850 + Math.floor(Math.random() * 550))
       }
+
       cycleTimer = setTimeout(tick, 850 + Math.floor(Math.random() * 550))
     }
 
     const clearHeading = () => {
       setState("heading", undefined)
+
       if (cycling()) {
         clearTimeout(cycleTimer)
         cycleTimer = undefined

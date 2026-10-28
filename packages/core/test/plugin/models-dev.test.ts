@@ -624,7 +624,7 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
-  it.effect("omits deprecated model definitions", () =>
+  it.effect("omits deprecated and non-text model definitions", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const providers = yield* Provider.Service
@@ -632,11 +632,13 @@ describe("ModelsDevPlugin", () => {
       const providerID = Provider.ID.make("acme")
       const activeID = Model.ID.make("current")
       const deprecatedID = Model.ID.make("legacy")
+      const videoID = Model.ID.make("video-gen")
+      const sttID = Model.ID.make("transcribe")
       const model = {
         modelID: activeID,
         providerID,
         name: "Current",
-        capabilities: { tools: true, input: [], output: [] },
+        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
         variants: [],
         time: { released: Date.parse("2026-01-01") },
         cost: [],
@@ -662,6 +664,21 @@ describe("ModelsDevPlugin", () => {
               name: "Legacy",
               status: "deprecated" as const,
             },
+            {
+              id: videoID,
+              ...model,
+              modelID: videoID,
+              name: "Video Gen",
+              capabilities: { tools: false, input: ["text", "image"], output: ["video"] },
+              limit: { context: 1_024, output: 0 },
+            },
+            {
+              id: sttID,
+              ...model,
+              modelID: sttID,
+              name: "Transcribe",
+              capabilities: { tools: false, input: ["audio"], output: ["text"] },
+            },
           ],
         },
       ] satisfies readonly ModelsDev.Snapshot[]
@@ -684,6 +701,69 @@ describe("ModelsDevPlugin", () => {
       yield* activate(providers)
       expect(yield* modelState.get(providerID, activeID)).toBeDefined()
       expect(yield* modelState.get(providerID, deprecatedID)).toBeUndefined()
+      expect(yield* modelState.get(providerID, videoID)).toBeUndefined()
+      expect(yield* modelState.get(providerID, sttID)).toBeUndefined()
+    }),
+  )
+
+  it.effect("lists non-chat models only by type, so sessions never see them", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const providers = yield* Provider.Service
+      const modelState = yield* Model.Service
+      const providerID = Provider.ID.make("acme")
+      const model = {
+        providerID,
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        variants: [],
+        time: { released: Date.parse("2026-01-01") },
+        cost: [],
+        status: "active",
+        enabled: true,
+        limit: { context: 128_000, output: 32_000 },
+      } satisfies Omit<Model.Info, "id" | "modelID" | "name">
+      // An unset type means chat; image and decision models list text too, but only chat is offered.
+      const types = { "gpt-5.5": undefined, "gpt-audio": "chat", "jev-1.13": "decision", "gpt-image-2": "image" }
+      const snapshot = {
+        info: {
+          id: providerID,
+          name: "Acme",
+          activation: "auto",
+          package: "@opencode/ai/providers/openai-compatible",
+        },
+        environment: [],
+        models: Object.entries(types).map(([id, type]) => ({
+          ...model,
+          id: Model.ID.make(id),
+          modelID: Model.ID.make(id),
+          name: id,
+          type,
+        })),
+      } satisfies ModelsDev.Snapshot
+
+      yield* ModelsDevPlugin.effect(
+        host({
+          provider: providerHost(providers),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({ get: () => Effect.succeed([snapshot]), refresh: () => Effect.void }),
+        ),
+      )
+
+      yield* activate(providers)
+      const ids = (models: readonly Model.Info[]) => models.map((item) => item.id).sort()
+      expect(ids(yield* modelState.available())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
+      expect(ids(yield* modelState.all())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
+      expect(yield* modelState.get(providerID, Model.ID.make("jev-1.13"))).toBeUndefined()
+      expect(ids(yield* modelState.available(["decision"]))).toEqual([Model.ID.make("jev-1.13")])
+      expect(ids(yield* modelState.available(["image"]))).toEqual([Model.ID.make("gpt-image-2")])
+      expect(ids(yield* modelState.available(["chat", "image", "image"]))).toEqual(
+        ["gpt-5.5", "gpt-audio", "gpt-image-2"].map((id) => Model.ID.make(id)),
+      )
+      expect(yield* modelState.available(["embedding"])).toEqual([])
     }),
   )
 
@@ -884,7 +964,7 @@ describe("ModelsDevPlugin", () => {
       expect(yield* providers.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toMatchObject({
-        methods: [{ type: "key" }, { type: "env", names: ["AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_API_KEY"] }],
+        methods: [{ type: "key" }, { type: "env", names: ["AZURE_RESOURCE_NAME", "AZURE_API_KEY"] }],
       })
       expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
@@ -894,7 +974,7 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
-  it.effect("advertises only credential-bearing environment variables", () =>
+  it.effect("registers every listed environment variable for provider plugins to narrow", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const providers = yield* Provider.Service
@@ -936,29 +1016,15 @@ describe("ModelsDevPlugin", () => {
         ),
       )
 
-      // Vertex authenticates through ADC; project, location, and the credentials
-      // file path are configuration, not API keys.
       expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toMatchObject({
-        methods: [{ type: "key" }, { type: "env", names: ["GOOGLE_VERTEX_API_KEY"] }],
-      })
-      expect(yield* integrations.get(Integration.ID.make("cloudflare-workers-ai"))).toMatchObject({
         methods: [
           { type: "key" },
-          {
-            type: "env",
-            names: ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"],
-          },
+          { type: "env", names: ["GOOGLE_VERTEX_PROJECT", "GOOGLE_VERTEX_LOCATION", "GOOGLE_APPLICATION_CREDENTIALS"] },
         ],
       })
-      yield* withEnv({ CLOUDFLARE_ACCOUNT_ID: "account", CLOUDFLARE_API_KEY: "token" }, () =>
-        integrations.connection
-          .active(Integration.ID.make("cloudflare-workers-ai"))
-          .pipe(
-            Effect.tap((connection) =>
-              Effect.sync(() => expect(connection).toEqual({ type: "env", name: "CLOUDFLARE_API_KEY" })),
-            ),
-          ),
-      )
+      expect(yield* integrations.get(Integration.ID.make("cloudflare-workers-ai"))).toMatchObject({
+        methods: [{ type: "key" }, { type: "env", names: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"] }],
+      })
     }),
   )
 
@@ -1093,14 +1159,14 @@ describe("ModelsDevPlugin", () => {
 
       const gateway = yield* modelState.get(Provider.ID.make("vercel"), Model.ID.make("alibaba/qwen-toggle"))
       expect(gateway?.variants).toEqual([
-        { id: Model.VariantID.make("none"), settings: { enableThinking: false } },
+        { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
         {
           id: Model.VariantID.make("high"),
-          settings: { enableThinking: true, thinkingBudget: 8000 },
+          settings: { thinking: { type: "enabled", budgetTokens: 8000 } },
         },
         {
           id: Model.VariantID.make("max"),
-          settings: { enableThinking: true, thinkingBudget: 16000 },
+          settings: { thinking: { type: "enabled", budgetTokens: 16000 } },
         },
       ])
 
@@ -1108,15 +1174,15 @@ describe("ModelsDevPlugin", () => {
       expect(gatewayNova?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),
-          settings: { additionalModelRequestFields: { reasoningConfig: { type: "disabled" } } },
+          settings: { thinking: { type: "disabled" } },
         },
         {
           id: Model.VariantID.make("low"),
-          settings: { reasoningConfig: { type: "enabled", maxReasoningEffort: "low" } },
+          settings: { reasoningEffort: "low" },
         },
         {
           id: Model.VariantID.make("high"),
-          settings: { reasoningConfig: { type: "enabled", maxReasoningEffort: "high" } },
+          settings: { reasoningEffort: "high" },
         },
       ])
 
@@ -1127,7 +1193,7 @@ describe("ModelsDevPlugin", () => {
       expect(gatewayFallback?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),
-          settings: { reasoning: { enabled: false } },
+          settings: { thinking: { type: "disabled" } },
         },
         {
           id: Model.VariantID.make("low"),

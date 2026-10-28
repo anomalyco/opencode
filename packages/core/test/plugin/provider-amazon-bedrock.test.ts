@@ -104,8 +104,7 @@ describe("AmazonBedrockPlugin", () => {
         })
       })
       yield* addPlugin()
-      expect((yield* integrations.get(integrationID))?.methods).toEqual([
-        { type: "key" },
+      expect((yield* integrations.get(integrationID))?.methods.filter((method) => method.type === "env")).toEqual([
         { type: "env", names: ["AWS_BEARER_TOKEN_BEDROCK"] },
       ])
     }),

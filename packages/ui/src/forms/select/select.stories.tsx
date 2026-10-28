@@ -6,6 +6,7 @@ import { Select } from "./select"
 const fruits = ["Apple", "Banana", "Cherry", "Date", "Elderberry"]
 
 type Region = "North" | "South" | "East" | "West"
+
 const cities: { city: string; region: Region }[] = [
   { city: "Boston", region: "North" },
   { city: "Miami", region: "South" },
@@ -61,6 +62,7 @@ export default {
 export const Playground = {
   render: (args) => {
     const [current, setCurrent] = createSignal(undefined)
+
     return (
       <Select
         placeholder={args.placeholder}
@@ -77,6 +79,7 @@ export const Playground = {
 export const Grouped = {
   render: (args) => {
     const [current, setCurrent] = createSignal(undefined)
+
     return (
       <Select<(typeof cities)[0]>
         placeholder={args.placeholder}
@@ -96,6 +99,7 @@ export const Grouped = {
 export const Invalid = {
   render: (args) => {
     const [current, setCurrent] = createSignal(undefined)
+
     return (
       <Select
         placeholder={args.placeholder}
@@ -126,6 +130,7 @@ export const WithField = {
   parameters: { frameHeight: "500px" },
   render: (args) => {
     const [current, setCurrent] = createSignal(undefined)
+
     return (
       <div style={{ width: "280px" }}>
         <Field>

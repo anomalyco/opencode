@@ -1,5 +1,5 @@
 import { Effect, FileSystem, Scope } from "effect"
-import { Command } from "effect/unstable/cli"
+import { Command } from "effect/cli"
 import { PrintLogs } from "../commands/commands"
 import { Spec } from "./spec"
 import { Global } from "@opencode/util/global"

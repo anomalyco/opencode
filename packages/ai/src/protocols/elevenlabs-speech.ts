@@ -95,7 +95,7 @@ const OUTPUT_FORMATS: Readonly<Record<string, string>> = {
 }
 
 /** WAV is served only by the non-streaming endpoints. */
-const outputFormat = Effect.fn("ElevenLabsSpeech.outputFormat")(function* (request: MediaProtocol.Addressed<Request>) {
+const outputFormat = Effect.fnUntraced(function* (request: MediaProtocol.Addressed<Request>) {
   const format = request.providerOptions?.outputFormat ?? OUTPUT_FORMATS[request.format ?? "mp3"]
   if (format === undefined)
     return yield* route.unsupported(
@@ -138,7 +138,7 @@ const path = (request: MediaProtocol.Addressed<Request>) =>
 // 6. Stream parsing
 // ---------------------------------------------------------------------------
 
-const onRecord = Effect.fn("ElevenLabsSpeech.onRecord")(function* (state: State, frame: string) {
+const onRecord = Effect.fnUntraced(function* (state: State, frame: string) {
   const record = yield* decodeRecord(frame)
   const [next, events] = SpeechStream.delta(state, record.audio_base64)
   const alignment = record.alignment
@@ -169,7 +169,7 @@ const describeOutput = (format: string) => {
   return encoding === undefined ? SpeechStream.container(codec, sampleRate) : SpeechStream.pcm(encoding, sampleRate)
 }
 
-const finish = Effect.fn("ElevenLabsSpeech.finish")(function* (
+const finish = Effect.fnUntraced(function* (
   state: State,
   context: MediaProtocol.ResponseContext<Request>,
 ) {

@@ -1,0 +1,50 @@
+diff --git a/dist/index.js b/dist/index.js
+index c5248382bac4a58b510b48e023e27d14b89c390c..1af906e990bbc637c1100a8e60f8855b93b87687 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -477,6 +477,9 @@ var DrawerRoot = (props) => {
+       if (_open) {
+         setTransitionAwareOpen(true);
+         afterPaint(() => {
++          // A close requested before this frame has already started closing; opening now would slide the drawer in
++          // while it is closed.
++          if (!open()) return;
+           batch(() => {
+             setTransitionState("opening");
+             setActiveSnapPoint(localProps.defaultSnapPoint);
+@@ -493,7 +496,9 @@ var DrawerRoot = (props) => {
+         });
+         afterPaint(() => {
+           const transitionDuration = parseFloat(drawerStyles().transitionDuration);
+-          if (transitionDuration === 0) {
++          // A close that lands before the opening transition has moved the content either starts no transition or
++          // cancels the pending one, so no transitionend arrives to finish it.
++          if (transitionDuration === 0 || !dialogContext().contentRef().getAnimations().length) {
+             closeDrawer();
+           }
+         });
+diff --git a/dist/index.jsx b/dist/index.jsx
+index fa3ca91ca526e9c11a10819a8bda27dcbb884af7..1c464bcdf757c4a20194d28971c89a179072251b 100644
+--- a/dist/index.jsx
++++ b/dist/index.jsx
+@@ -567,6 +567,9 @@ var DrawerRoot = (props) => {
+       if (_open) {
+         setTransitionAwareOpen(true);
+         afterPaint(() => {
++          // A close requested before this frame has already started closing; opening now would slide the drawer in
++          // while it is closed.
++          if (!open()) return;
+           batch2(() => {
+             setTransitionState("opening");
+             setActiveSnapPoint(localProps.defaultSnapPoint);
+@@ -587,7 +590,9 @@ var DrawerRoot = (props) => {
+           const transitionDuration = parseFloat(
+             drawerStyles().transitionDuration
+           );
+-          if (transitionDuration === 0) {
++          // A close that lands before the opening transition has moved the content either starts no transition or
++          // cancels the pending one, so no transitionend arrives to finish it.
++          if (transitionDuration === 0 || !dialogContext().contentRef().getAnimations().length) {
+             closeDrawer();
+           }
+         });

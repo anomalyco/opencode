@@ -1,6 +1,8 @@
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { normalizeProviderList } from "@/runtime/server/global-sync/utils"
+import { isServiceUnavailableError } from "@opencode/client/promise"
+import { retry } from "@opencode/util/retry"
 import { Iterable, pipe } from "effect"
 import { createEffect, createMemo, type Accessor } from "solid-js"
 import type { ProviderListResponse } from "@/runtime/server/types"
@@ -8,14 +10,22 @@ import { useIntegrations } from "./integrations"
 import { popularProviders } from "./order"
 
 export { popularProviders } from "./order"
+
 const emptyProviderCatalog: ProviderListResponse = { all: new Map(), connected: [], default: {} }
+
 const popularProviderSet = new Set(popularProviders)
+
+// A cold Location lists its catalogs once its plugins activate, which can take longer than the server's 5 s wait.
+export const syncWhileBooting = <A>(load: () => Promise<A>) =>
+  retry(load, { attempts: 12, delay: 1000, maxDelay: 5000, retryIf: isServiceUnavailableError })
 
 export function useProviders(directory: Accessor<string | undefined>) {
   const data = useData()
   const sdk = useServerSDK()
+
   const location = () => {
     const dir = directory()
+
     return dir ? { directory: dir } : undefined
   }
 
@@ -25,7 +35,9 @@ export function useProviders(directory: Accessor<string | undefined>) {
     void (async () => {
       if (!ref) await data.location.syncInfo()
       const resolved = ref ?? data.location.default()
-      await Promise.all([data.location.provider.sync(resolved), data.location.model.sync(resolved)])
+      await syncWhileBooting(() =>
+        Promise.all([data.location.provider.sync(resolved), data.location.model.sync(resolved)]),
+      )
     })().catch(() => undefined)
   })
   const integrations = useIntegrations(directory)
@@ -34,12 +46,15 @@ export function useProviders(directory: Accessor<string | undefined>) {
     const ref = location()
     const provider = data.location.provider.list(ref)
     const model = data.location.model.list(ref)
+
     if (!provider || !model) return emptyProviderCatalog
+
     return normalizeProviderList(provider, model)
   })
 
   const ready = () => {
     const ref = location()
+
     return data.location.provider.list(ref) !== undefined && data.location.model.list(ref) !== undefined
   }
 
@@ -54,7 +69,9 @@ export function useProviders(directory: Accessor<string | undefined>) {
         .list()
         .filter((integration) => popularProviderSet.has(integration.id))
         .map((integration) => ({ id: integration.id, name: integration.name }))
+
       const seen = new Set(catalog.map((integration) => integration.id))
+
       return pipe(
         providers().all,
         Iterable.map(([, p]) => p),
@@ -65,6 +82,7 @@ export function useProviders(directory: Accessor<string | undefined>) {
     },
     connected: () => {
       const connected = new Set(providers().connected)
+
       return pipe(
         providers().all,
         Iterable.map(([, p]) => p),
@@ -76,13 +94,16 @@ export function useProviders(directory: Accessor<string | undefined>) {
     // Undefined until both catalogs load, so callers never mistake loading for a first run.
     anyConnection: () => {
       if (!integrations.ready() || !ready()) return undefined
+
       if (integrations.list().some((integration) => integration.connections.length > 0)) return true
+
       return providers().connected.some(
         (id) => id !== "opencode" && Object.keys(providers().all.get(id)?.models ?? {}).length > 0,
       )
     },
     paid: () => {
       const connected = new Set(providers().connected)
+
       const paid = [
         ...Iterable.filter(
           providers().all,
@@ -91,6 +112,7 @@ export function useProviders(directory: Accessor<string | undefined>) {
             (id !== "opencode" || Object.values(providers().all.get(id)?.models ?? {}).some((m) => m.cost?.input)),
         ),
       ]
+
       return paid
     },
   }

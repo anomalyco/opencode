@@ -72,6 +72,12 @@ export class Usage extends Schema.Class<Usage>("AI.Usage")({
   cacheWriteInputTokens: Schema.optional(Schema.Number),
   reasoningTokens: Schema.optional(Schema.Number),
   totalTokens: Schema.optional(Schema.Number),
+  /**
+   * USD the endpoint says it charged for this request, as OpenRouter, LiteLLM and OpenCode Zen report it in
+   * `usage.cost`. `0` is authoritative: the request was free or a subscription covered it. Absent, callers price the
+   * tokens themselves.
+   */
+  cost: Schema.optional(Schema.Number),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {
   /**
@@ -111,6 +117,17 @@ export const MediaUsage = Schema.Union([
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "AI.MediaUsage" })
 export type MediaUsage = Schema.Schema.Type<typeof MediaUsage>
+
+/** Token usage from a provider's counts. A usage object without any count is no usage, so it returns undefined. */
+export const tokenUsage = (counts: {
+  readonly input?: number
+  readonly output?: number
+  readonly total?: number
+  readonly details?: Record<string, unknown>
+}): MediaUsage | undefined =>
+  counts.input === undefined && counts.output === undefined && counts.total === undefined
+    ? undefined
+    : { type: "tokens", ...counts }
 
 /** A replacement context window, not an assistant message to append to prior history. */
 export class CompactionResponse extends Schema.Class<CompactionResponse>("LLM.CompactionResponse")({
@@ -264,6 +281,10 @@ export type ToolError = Schema.Schema.Type<typeof ToolError>
 export const FinishReasonDetails = Schema.Struct({
   normalized: FinishReason,
   raw: Schema.optional(Schema.String),
+  /** The provider's policy area for a content-filter finish, such as `cyber`. */
+  category: Schema.optional(Schema.String),
+  /** The provider's human-readable reason for a content-filter finish. */
+  explanation: Schema.optional(Schema.String),
 }).annotate({ identifier: "LLM.FinishReasonDetails" })
 export type FinishReasonDetails = Schema.Schema.Type<typeof FinishReasonDetails>
 
@@ -300,6 +321,13 @@ export const ProviderErrorEvent = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.ProviderError" })
 export type ProviderErrorEvent = Schema.Schema.Type<typeof ProviderErrorEvent>
 
+/** One provider frame as received, emitted before the events parsed from it when the request sets `includeRaw`. */
+export const RawEvent = Schema.Struct({
+  type: Schema.tag("raw"),
+  data: Schema.Unknown,
+}).annotate({ identifier: "LLM.Event.Raw" })
+export type RawEvent = Schema.Schema.Type<typeof RawEvent>
+
 const llmEventTagged = Schema.Union([
   CompactionPart,
   StepStart,
@@ -320,6 +348,7 @@ const llmEventTagged = Schema.Union([
   StepFinish,
   Finish,
   ProviderErrorEvent,
+  RawEvent,
 ]).pipe(Schema.toTaggedUnion("type"))
 
 type WithID<Event extends { readonly id: unknown }, ID> = Omit<Event, "type" | "id"> & { readonly id: ID | string }
@@ -374,6 +403,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
       usage: input.usage === undefined ? undefined : Usage.from(input.usage),
     }),
   providerError: ProviderErrorEvent.make,
+  raw: RawEvent.make,
   is: {
     compaction: llmEventTagged.guards.compaction,
     stepStart: llmEventTagged.guards["step-start"],
@@ -394,6 +424,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     stepFinish: llmEventTagged.guards["step-finish"],
     finish: llmEventTagged.guards.finish,
     providerError: llmEventTagged.guards["provider-error"],
+    raw: llmEventTagged.guards.raw,
   },
 })
 export type LLMEvent = Schema.Schema.Type<typeof llmEventTagged>
@@ -636,6 +667,7 @@ const reduceToolCall = (state: ResponseState, event: ToolCall): ResponseState =>
 }
 
 const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseState => {
+  if (event.type === "raw") return state
   const next = appendEvent(state, event)
   switch (event.type) {
     case "compaction":

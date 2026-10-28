@@ -1,5 +1,5 @@
 import type { Effect, Scope, Stream } from "effect"
-import type { Headers } from "effect/unstable/http"
+import type { Headers } from "effect/http"
 import type { AIError, HttpContext } from "../../schema/index.js"
 
 export interface WebSocketChannelExecutor {

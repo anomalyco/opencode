@@ -3,6 +3,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator"
 GlobalRegistrator.register()
 
 const originalGetContext = HTMLCanvasElement.prototype.getContext
+
 // @ts-expect-error - we're overriding with a simplified mock
 HTMLCanvasElement.prototype.getContext = function (contextType: string, _options?: unknown) {
   if (contextType === "2d") {
@@ -71,5 +72,6 @@ HTMLCanvasElement.prototype.getContext = function (contextType: string, _options
       }),
     } as unknown as CanvasRenderingContext2D
   }
+
   return originalGetContext.call(this, contextType as "2d", _options)
 }

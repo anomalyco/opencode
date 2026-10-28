@@ -4,9 +4,11 @@ import { createServerHealthPreview, replaceServerConnection, type ServerFormValu
 
 function deferred<T>() {
   let resolve!: (value: T) => void
+
   const promise = new Promise<T>((done) => {
     resolve = done
   })
+
   return { promise, resolve }
 }
 
@@ -15,10 +17,13 @@ const values = (url: string): ServerFormValues => ({ url, name: "", password: ""
 describe("createServerHealthPreview", () => {
   test.each(["", "secret"])("previews a server with only its password (%s)", async (password) => {
     const requests: ServerConnection.HttpBase[] = []
+
     const preview = createServerHealthPreview(async (http) => {
       requests.push(http)
+
       return { healthy: true }
     })
+
     await preview.preview({ ...values("server.example.com"), password }, () => {})
     expect(requests).toEqual([{ url: "http://server.example.com", ...(password ? { password } : {}) }])
   })
@@ -78,6 +83,7 @@ describe("replaceServerConnection", () => {
       removeTabs: (key) => calls.push(`tabs:${key}`),
       add: (server) => {
         calls.push(`add:${ServerConnection.key(server)}`)
+
         return server
       },
       remove: (key) => calls.push(`remove:${key}`),

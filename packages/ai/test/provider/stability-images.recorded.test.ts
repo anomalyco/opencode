@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, Media } from "../../src/index.js"
+import { Image, Media } from "../../src/effect.js"
 import { Stability } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -23,8 +23,8 @@ describe("Stability Images recorded", () => {
       const response = yield* Image.generate({
         model: stability.image("core"),
         prompt: "A simple flat black circle centered on a plain white background.",
-        aspectRatio: "1:1",
-        format: "jpeg",
+        aspect: "1:1",
+        providerOptions: { output_format: "jpeg" },
       })
 
       expect(response.image.mediaType).toBe("image/jpeg")
@@ -46,7 +46,7 @@ describe("Stability Images recorded", () => {
               "image/jpeg",
             ),
           ],
-          format: "jpeg",
+          providerOptions: { output_format: "jpeg" },
         })
         const response = yield* generation.await({ poll: queuedPoll })
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, Message } from "../src/index.js"
+import { CacheHint, CompactionPart, LLM, Message, ProviderID, ToolCallPart } from "../src/effect.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import {
@@ -8,6 +8,7 @@ import {
   AmazonBedrock,
   AnthropicCompatible,
   CloudflareAIGateway,
+  DigitalOcean,
   GoogleVertexMessages,
   Meta,
   MiniMax,
@@ -114,6 +115,86 @@ describe("applyCachePolicy", () => {
         system: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
       })
+    }),
+  )
+
+  it.effect("'auto' emits cache_control markers on DigitalOcean", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: DigitalOcean.configure({ apiKey: "test" }).model("anthropic-claude-fable-5.1"),
+          system: "You are concise.",
+          tools: [{ name: "lookup", description: "Look up a value", inputSchema: { type: "object", properties: {} } }],
+          prompt: "hi",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ type: "function", function: { name: "lookup" }, cache_control: { type: "ephemeral" } }],
+        messages: [
+          {
+            role: "system",
+            content: [{ text: "You are concise.", cache_control: { type: "ephemeral" } }],
+          },
+          {
+            role: "user",
+            content: [{ text: "hi", cache_control: { type: "ephemeral" } }],
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("Alibaba chat caches the system and conversation tail without marking tools", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).chat("qwen3.8-max"),
+          system: "You are concise.",
+          tools: [{ name: "lookup", description: "Look up a value", inputSchema: { type: "object", properties: {} } }],
+          prompt: "hi",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ type: "function", function: { name: "lookup" } }],
+        messages: [
+          {
+            role: "system",
+            content: [{ text: "You are concise.", cache_control: { type: "ephemeral" } }],
+          },
+          { role: "user", content: [{ text: "hi", cache_control: { type: "ephemeral" } }] },
+        ],
+      })
+      expect(prepared.body.tools?.[0]?.cache_control).toBeUndefined()
+    }),
+  )
+
+  it.effect("Alibaba chat omits automatic cache markers when cache is none", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).chat("qwen3.8-max"),
+          system: "You are concise.",
+          prompt: "hi",
+          cache: "none",
+        }),
+      )
+
+      expect(JSON.stringify(prepared.body)).not.toContain("cache_control")
+    }),
+  )
+
+  it.effect("Alibaba chat does not assume non-Qwen models support cache markers", () =>
+    Effect.gen(function* () {
+      const alibaba = Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" })
+      for (const modelID of ["kimi-k3", "glm-5.2", "deepseek-v4-flash-0731", "MiniMax-M2.5"]) {
+        const prepared = yield* compileRequest(
+          LLM.request({ model: alibaba.chat(modelID), system: "You are concise.", prompt: "hi" }),
+        )
+
+        expect(JSON.stringify(prepared.body)).not.toContain("cache_control")
+      }
     }),
   )
 
@@ -308,7 +389,7 @@ describe("applyCachePolicy", () => {
         LLM.request({
           model: anthropicModel,
           system: [
-            { type: "text", text: "first system", cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }) },
+            { type: "text", text: "first system", cache: new CacheHint({ type: "ephemeral", ttl: "1h" }) },
             { type: "text", text: "last system" },
           ],
           prompt: "hi",
@@ -335,7 +416,7 @@ describe("applyCachePolicy", () => {
           {
             type: "text",
             text: "Manual context",
-            cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }),
+            cache: new CacheHint({ type: "ephemeral", ttl: "1h" }),
           },
           { type: "text", text: "Project instructions" },
         ],
@@ -392,14 +473,27 @@ describe("applyCachePolicy", () => {
     expect(namespace.tools[1]).toHaveProperty("cache", { type: "ephemeral" })
   })
 
-  it.effect("ttlSeconds in the policy flows through to wire markers", () =>
+  it.effect("a ttl-only policy keeps automatic placement", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({ model: anthropicModel, system: "Sys", prompt: "hi", cache: { ttl: "1h" } }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        system: [{ type: "text", text: "Sys", cache_control: { type: "ephemeral", ttl: "1h" } }],
+        messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral", ttl: "1h" } }] }],
+      })
+    }),
+  )
+
+  it.effect("ttl in the policy flows through to wire markers", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
           model: anthropicModel,
           system: "Sys",
           prompt: "hi",
-          cache: { system: true, ttlSeconds: 3600 },
+          cache: { system: true, ttl: "1h" },
         }),
       )
 
@@ -443,6 +537,31 @@ describe("applyCachePolicy", () => {
       expect(body.messages[2]?.content[0]?.cache_control).toBeUndefined()
     }),
   )
+
+  test("skips non-cacheable parts when placing message breakpoints", () => {
+    const compaction = CompactionPart.make({ provider: ProviderID.make("anthropic"), text: "summary" })
+    const toolCall = ToolCallPart.make({ id: "tc_1", name: "lookup", input: {} })
+
+    const mixed = LLM.request({
+      model: anthropicModel,
+      messages: [Message.assistant([toolCall, compaction])],
+      cache: { messages: "latest-assistant" },
+    })
+    const appliedMixed = applyCachePolicy(mixed)
+    expect(appliedMixed.messages[0]?.content[0]).toMatchObject({
+      type: "tool-call",
+      id: "tc_1",
+      cache: { type: "ephemeral" },
+    })
+    expect(appliedMixed.messages[0]?.content[1]).toEqual(compaction)
+
+    const compactionOnly = LLM.request({
+      model: anthropicModel,
+      messages: [Message.assistant([compaction])],
+      cache: { messages: "latest-assistant" },
+    })
+    expect(applyCachePolicy(compactionOnly)).toBe(compactionOnly)
+  })
 
   test("returns the same request reference when policy is a no-op (pure function)", () => {
     const request = LLM.request({

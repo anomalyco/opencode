@@ -110,7 +110,6 @@ export const configure = (input: Config = {}) => {
       id: modelID,
       compatibility: {
         maxTokensField: "max_tokens",
-        supportsStore: false,
         supportsStrictMode: false,
         supportsPromptCacheKey: true,
         sanitizer: "moonshot",
@@ -142,7 +141,7 @@ export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["mode
     apiKey,
     baseURL,
     headers,
-    http: body === undefined ? undefined : { body: { ...body } },
+    http: body === undefined ? undefined : { body },
     providerOptions,
   }).model(modelID)
 

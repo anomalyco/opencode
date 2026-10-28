@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LanguageModel, LLMClient, LLMEvent } from "@opencode/ai"
+import { LanguageModel, LLMClient, LLMEvent } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
@@ -46,6 +46,7 @@ const it = testEffect(
         }),
       ),
       Config.node.replace(config),
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/tmp") })),
     ]),
   ),
 )
@@ -102,7 +103,7 @@ describe("ConfigCompactionPlugin.Plugin", () => {
           inputID: SessionMessage.ID.make("msg_compaction_manual"),
         }),
       ).toEqual({ status: "completed" })
-      expect(Option.getOrThrow(yield* Fiber.join(ended)).data.recent).toContain("Recent context")
+      expect(Option.getOrThrow(yield* Fiber.join(ended)).metadata?.keepID).toBe(messages[1].id)
 
       yield* config.setEntries([
         new Document({

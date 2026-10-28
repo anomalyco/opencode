@@ -1,0 +1,17 @@
+export default {
+  "tab.title": "Pārskats",
+  "tab.count.zero": "Mainīti {{count}} failu",
+  "tab.count.one": "{{count}} fails mainīts",
+  "tab.count.other": "Mainīti {{count}} faili",
+  "mobile.title.zero": "Izmaiņu",
+  "mobile.title.one": "Izmaiņa",
+  "mobile.title.other": "Izmaiņas",
+  "empty.git": "Vēl nav neapstiprinātu izmaiņu",
+  "empty.branch": "Vēl nav zara izmaiņu",
+  "git.title": "Izveidot Git repozitoriju",
+  "git.description": "Izseko, pārskati un atsauc izmaiņas šajā projektā",
+  loadingChanges: "Notiek izmaiņu ielāde…",
+  noChanges: "Nav izmaiņu",
+  "settings.wrapLines.title": "Aplauzt rindas",
+  "settings.wrapLines.description": "Aptiniet garās līnijas mobilajās diffās, nevis ritiniet horizontāli",
+}

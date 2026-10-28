@@ -8,13 +8,37 @@ const rendererPermissions = new Set(["clipboard-sanitized-write", "notifications
 export function allowRendererPermissions(win: BrowserWindow) {
   const webContentsId = win.webContents.id
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    if (permission === "media") {
+      callback(
+        webContents.id === webContentsId &&
+          isRendererUrl(details.requestingUrl) &&
+          details.isMainFrame &&
+          "mediaTypes" in details &&
+          !!details.mediaTypes?.length &&
+          details.mediaTypes.every((type) => type === "audio"),
+      )
+
+      return
+    }
+
     callback(
       rendererPermissions.has(permission) && isRendererUrl(details.requestingUrl) && webContents.id === webContentsId,
     )
   })
   win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    if (permission === "media") {
+      return (
+        webContents?.id === webContentsId &&
+        isRendererUrl(details.requestingUrl) &&
+        details.isMainFrame &&
+        details.mediaType === "audio"
+      )
+    }
+
     if (!rendererPermissions.has(permission)) return false
+
     if (webContents && webContents.id !== webContentsId) return false
+
     return isRendererUrl(details.requestingUrl) || isRendererUrl(requestingOrigin)
   })
 }
@@ -22,6 +46,7 @@ export function allowRendererPermissions(win: BrowserWindow) {
 export function wireNavigationPolicy(win: BrowserWindow, openExternalURL: (url: string) => unknown) {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (!isRendererUrl(url)) openExternalURL(url)
+
     return { action: "deny" }
   })
   win.webContents.on("will-navigate", (event, url) => {
@@ -45,9 +70,11 @@ export function wireRendererHeaders(win: BrowserWindow) {
       const frame = details.frame
       const renderer = !!frame && frame.parent === null && isRendererUrl(frame.url)
       const authorization = renderer && SidecarCredentials.authorization(SidecarCredentials.get(), details.url)
+
       if (authorization && !hasHeader(details.requestHeaders, "Authorization")) {
         upsertHeader(details.requestHeaders, "Authorization", authorization)
       }
+
       callback({ requestHeaders: details.requestHeaders })
     },
   )

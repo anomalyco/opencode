@@ -4,6 +4,7 @@ import { toggleMcp } from "./mcp"
 describe("toggleMcp", () => {
   test("runs the status action before refreshing the owning query", async () => {
     const calls: string[] = []
+
     const input = (status: "connected" | "needs_auth" | "disabled") => ({
       status,
       connect: async () => {

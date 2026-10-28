@@ -2,7 +2,9 @@ import { defineConfig } from "@playwright/test"
 import { fileURLToPath } from "node:url"
 
 process.env.PLAYWRIGHT_PORT = "6199"
+
 process.env.PLAYWRIGHT_SERVER_PORT = "6199"
+
 process.env.PLAYWRIGHT_SERVER_HOST = "127.0.0.1"
 
 export default defineConfig({

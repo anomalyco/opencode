@@ -1,6 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
+    "types": ["bun", "node"],
     "composite": true,
     "target": "ESNext",
     "module": "ESNext",
@@ -13,8 +14,10 @@
     "allowJs": true,
     "resolveJsonModule": true,
     "strict": true,
+    "noUnusedLocals": true,
     "noEmit": false,
     "emitDeclarationOnly": true,
+    "rootDir": "..",
     "outDir": "node_modules/.ts-dist",
     "isolatedModules": true,
     "paths": {
@@ -25,7 +28,7 @@
     "src",
     "component-tests",
     "playwright.components.config.ts",
-    "../storybook/playwright/*.ts",
+    "../stories/playwright/*.ts",
     "package.json"
   ],
   "exclude": ["dist", "ts-dist"]

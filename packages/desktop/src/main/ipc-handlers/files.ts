@@ -8,6 +8,7 @@ export const fileHandlers = FileRpcs.toLayer(
   Effect.gen(function* () {
     const files = yield* DesktopFiles.Service
     const handoff = yield* IpcPortHandoff
+
     return FileRpcs.of({
       FilesOpenDirectoryPicker: ({ options }) => files.openDirectoryPicker(options),
       FilesOpenFilePicker: ({ options }, context) =>

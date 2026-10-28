@@ -196,7 +196,6 @@ export const dict = {
   "ui.question.answer.none": "(គ្មានចម្លើយ)",
   "ui.question.review.notAnswered": "(មិនបានឆ្លើយ)",
   "ui.question.multiHint": "ជ្រើសរើសចម្លើយទាំងអស់ដែលអនុវត្ត",
-  "ui.question.singleHint": "ជ្រើសរើសចម្លើយមួយ។",
   "ui.question.custom.placeholder": "វាយបញ្ចូលចម្លើយរបស់អ្នក…",
   "ui.tool.loadedFile": "បានផ្ទុក {{path}}",
   "ui.tool.loadedSkill": "បានផ្ទុកជំនាញ {{name}}",

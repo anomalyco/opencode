@@ -29,3 +29,119 @@ export function truncateMiddle(text: string, maxLength = 20) {
   const end = Math.floor(available / 2)
   return text.slice(0, start) + "…" + text.slice(-end)
 }
+
+const isDrive = (value: string) => {
+  if (value.length !== 2) return false
+  const code = value.charCodeAt(0)
+  return value[1] === ":" && ((code >= 65 && code <= 90) || (code >= 97 && code <= 122))
+}
+
+const trimTrailingSlashes = (value: string) => {
+  for (let i = value.length - 1; i >= 0; i--) {
+    if (value[i] !== "/") return value.slice(0, i + 1)
+  }
+  return ""
+}
+
+const isWindowsPath = (value: string) => value[1] === ":" || value.startsWith("\\\\")
+
+/** A comparable form of a directory path: forward slashes for Windows paths, no trailing slash except on roots. */
+export function comparablePath(path: string) {
+  const value = isWindowsPath(path) ? path.replaceAll("\\", "/") : path
+  const trimmed = trimTrailingSlashes(value)
+  if (!trimmed && value.startsWith("/")) return "/"
+  if (isDrive(trimmed)) return `${trimmed}/`
+  return trimmed
+}
+
+/** `child` is `parent` or inside it. Windows drive and UNC paths compare case-insensitively. */
+export function containsDirectory(parent: string, child: string) {
+  const normalize = (value: string) => {
+    const key = comparablePath(value)
+    return /^[a-z]:\//i.test(key) || key.startsWith("//") ? key.toLowerCase() : key
+  }
+  const root = normalize(parent)
+  const target = normalize(child)
+  return target === root || target.startsWith(root.endsWith("/") ? root : `${root}/`)
+}
+
+export function sameDirectory(a: string, b: string) {
+  return containsDirectory(a, b) && containsDirectory(b, a)
+}
+
+export function encodeFilePath(filepath: string): string {
+  // Normalize Windows paths: convert backslashes to forward slashes
+  const normalized = filepath.replace(/\\/g, "/")
+
+  // Handle Windows absolute paths (D:/path -> /D:/path for proper file:// URLs)
+  const rooted = /^[A-Za-z]:/.test(normalized) ? "/" + normalized : normalized
+
+  // Encode each path segment (preserving forward slashes as path separators)
+  // Keep the colon in Windows drive letters (`/C:/...`) so downstream file URL parsers
+  // can reliably detect drives.
+  return rooted
+    .split("/")
+    .map((segment, index) => {
+      if (index === 1 && /^[A-Za-z]:$/.test(segment)) return segment
+      return encodeURIComponent(segment)
+    })
+    .join("/")
+}
+
+const MAX_LINE_NUMBER = 1_000_000
+
+const lineHashPattern = /^#L(\d+)(?:C\d+)?(?:-L?(\d+)(?:C\d+)?)?$/i
+
+const lineHashSuffixPattern = /^(.*?)#L(\d+)(?:C\d+)?(?:-L?(\d+)(?:C\d+)?)?$/i
+
+const lineColonSuffixPattern = /^(.*?):(\d+)(?::\d+)?(?:-(\d+)(?::\d+)?)?:?$/
+
+function toLineRange(first: number, second: number) {
+  if (
+    !Number.isSafeInteger(first) ||
+    !Number.isSafeInteger(second) ||
+    first < 1 ||
+    second < 1 ||
+    first > MAX_LINE_NUMBER ||
+    second > MAX_LINE_NUMBER
+  ) {
+    return undefined
+  }
+
+  return {
+    start: Math.min(first, second),
+    end: Math.max(first, second),
+  }
+}
+
+export function isLineRangeHash(hash: string) {
+  return lineHashPattern.test(hash)
+}
+
+export function parsePathLineSuffix(input: string) {
+  const hashMatch = input.match(lineHashSuffixPattern)
+
+  if (hashMatch) {
+    const first = Number(hashMatch[2])
+    const second = hashMatch[3] ? Number(hashMatch[3]) : first
+
+    return {
+      path: hashMatch[1] ?? "",
+      selection: toLineRange(first, second),
+    }
+  }
+
+  const colonMatch = input.match(lineColonSuffixPattern)
+
+  if (colonMatch && !/^[a-z]:?$/i.test(colonMatch[1] ?? "")) {
+    const first = Number(colonMatch[2])
+    const second = colonMatch[3] ? Number(colonMatch[3]) : first
+
+    return {
+      path: colonMatch[1] ?? "",
+      selection: toLineRange(first, second),
+    }
+  }
+
+  return { path: input, selection: undefined }
+}

@@ -1,0 +1,40 @@
+export default {
+  label: "SSH",
+  placeholder: "ssh kasutaja@example.com",
+  add: "Lisa SSH server",
+  "server.menu.label": "SSH server",
+  target: "Host või SSH käsk",
+  connect: "Ühendage",
+  connectTo: "Ühendage seadmega {{host}}",
+  authenticate: "SSH autentimine",
+  "session.disconnected": "SSH ühendus inaktiivne",
+  "session.connecting": "Ühendamine serveriga SSH",
+  "session.reconnectDescription":
+    "Ühendage uuesti selle seansi vaatamiseks ja töö jätkamiseks. Teie kaugseanss säilib.",
+  "session.reconnect": "Ühendage uuesti",
+  trust: "Usalda ja ühenda",
+  continue: "Jätka",
+  update: "Värskendage ja ühendage uuesti",
+  project: "Avatud projekt saidil {{host}}",
+  "stage.incompatible": "Vajalik serveri värskendus",
+  "error.input": "Sisestage hosti või SSH ühenduse käsk. Kaugkäsklused ja toetamata SSH suvandid pole lubatud.",
+  "error.connection": "Ühendust SSH ei õnnestunud luua. Kontrollige oma võrku ja SSH konfiguratsiooni.",
+  "error.platform":
+    "Seda kaugplatvormi ei toetata. Automaatne seadistamine nõuab praegu mudelit x64 või arm64 Linux või macOS.",
+  "error.version": "Kaugteenus peab enne ühenduse loomist vastama sellele töölauaversioonile.",
+  "error.install":
+    "Kaugserverit ei saanud installida. Kontrollige ühenduvust, kettaruumi ja seda, kas tar on installitud.",
+  "error.unpublished":
+    "Sellel töölauaversioonil pole avaldatud kaugserverit. Arendusjärkude jaoks installige ja käivitage hostis V2, seejärel proovige uuesti.",
+  "error.service": "SSH on ühendatud, kuid server OpenCode ei saanud valmis.",
+  "error.host-key":
+    "Võõrustaja identiteeti ei õnnestunud kinnitada. Enne SSH teadaolevate hostide värskendamist kontrollige selle sõrmejälge.",
+  "error.ssh-missing": "OpenSSH ei leitud. Installige OpenSSH klient ja veenduge, et ssh oleks PATH-il saadaval.",
+  "action.authenticate": "Autentida",
+  "stage.connecting": "Ühendamine üle SSH…",
+  "stage.authentication": "Nõutav autentimine",
+  "form.name": "Serveri nimi (valikuline)",
+  "form.namePlaceholder": "Localhost",
+  "form.add": "Lisa server",
+  "menu.delete": "Kustuta",
+}

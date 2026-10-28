@@ -104,6 +104,42 @@ export const geoStat = mysqlTable(
     index("idx_country").on(table.country, table.grain, table.period_key),
     index("idx_continent").on(table.continent, table.grain, table.period_key),
     index("idx_country_model").on(table.model, table.country, table.grain, table.period_key),
+    index("idx_country_model_range").on(
+      table.model,
+      table.provider,
+      table.grain,
+      table.dataset,
+      table.client,
+      table.source,
+      table.tier,
+      table.period_key,
+    ),
+  ],
+)
+
+export const modelRetention = mysqlTable(
+  "model_retention",
+  {
+    id: bigint({ mode: "number" }).autoincrement().primaryKey(),
+    cohort_date: char({ length: 10 }).notNull(),
+    dataset: varchar({ length: 64 }).notNull().default("all"),
+    tier: varchar({ length: 64 }).notNull().default("all"),
+    provider: varchar({ length: 128 }).notNull(),
+    model: varchar({ length: 256 }).notNull(),
+    eligible_users: bigint({ mode: "number" }).notNull().default(0),
+    retained_users: bigint({ mode: "number" }).notNull().default(0),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("uniq_model_retention_cohort").on(
+      table.cohort_date,
+      table.dataset,
+      table.tier,
+      table.provider,
+      table.model,
+    ),
+    index("idx_model_retention_recent").on(table.dataset, table.tier, table.cohort_date),
+    index("idx_model_retention_model").on(table.model, table.cohort_date),
   ],
 )
 

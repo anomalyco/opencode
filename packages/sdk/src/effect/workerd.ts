@@ -9,14 +9,15 @@ export type Configuration = WorkerdProfile.Configuration
 
 export interface CreateOptions<R = never> extends WorkerdProfile.Options {
   readonly log?: OpenCode.CreateOptions["log"]
+  readonly plugins?: OpenCode.CreateOptions["plugins"]
   readonly workspaceProviders?: OpenCode.CreateOptions["workspaceProviders"]
   readonly instances?: OpenCode.CreateOptions<R>["instances"]
 }
 
-export const create = <R = never>({ log, workspaceProviders, instances, ...options }: CreateOptions<R>) => {
+export const create = <R = never>({ log, plugins, workspaceProviders, instances, ...options }: CreateOptions<R>) => {
   const profile = WorkerdProfile.make(options)
   return OpenCode.create(
-    { ...profile.options, log, workspaceProviders, instances },
+    { ...profile.options, log, plugins, workspaceProviders, instances },
     { overrides: profile.replacements },
   )
 }

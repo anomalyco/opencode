@@ -8,11 +8,14 @@ import {
   sansDefault,
   sansFontFamily,
   sansInput,
+  type ReduceMotion,
   terminalDefault,
   terminalFontFamily,
   terminalInput,
   useSettings,
 } from "@/settings/model"
+import { usePlatform } from "@/runtime/platform/platform"
+import { desktopZoomLevels, type DesktopZoomLevel } from "@/shell/commands/desktop-menu"
 import { playSoundById, SOUND_OPTIONS } from "@/shell/notifications/sound"
 import { createSoundPreviewController } from "./behavior"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -20,23 +23,24 @@ import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
 
-export { createShellOptions, createSoundPreviewController } from "./behavior"
-export type { ShellOption, ShellSelectOption } from "./behavior"
-
 export function createServerShellController(server: Accessor<ServerConnection.Any>) {
   const language = useLanguage()
   const serverCtx = useServerCtx(server)
   const source = () => ServerConnection.key(server())
+
   const [state, actions] = createResource(
     source,
     async () => {
       const context = serverCtx()
+
       const [entries, shells] = await Promise.all([
         context.sdk.api.config.get().catch(() => []),
         context.sdk.api.config.shells().catch(() => []),
       ])
+
       const boundary = entries.findIndex((entry) => entry.type === "directory")
       const global = boundary === -1 ? entries : entries.slice(0, boundary)
+
       return {
         shells,
         shell: global
@@ -56,7 +60,7 @@ export function createServerShellController(server: Accessor<ServerConnection.An
       actions.mutate({ ...previous, shell: value || undefined })
       void serverCtx()
         .sdk.api.config.update({ shell: value || null })
-        .catch((error: unknown) => {
+        .catch((error) => {
           actions.mutate(previous)
           showToast({
             variant: "error",
@@ -70,6 +74,8 @@ export function createServerShellController(server: Accessor<ServerConnection.An
 
 export function createAppearanceSettingsController() {
   const settings = useSettings()
+  const platform = usePlatform()
+  const language = useLanguage()
   const theme = useTheme()
   const themes = createMemo(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
@@ -84,6 +90,17 @@ export function createAppearanceSettingsController() {
       options: themes,
       current: createMemo(() => themes().find((option) => option.id === theme.themeId())),
       select: (option: { id: string } | null) => option && theme.setTheme(option.id),
+    },
+    zoom: {
+      available: () => platform.zoomLevel !== undefined,
+      options: [...desktopZoomLevels],
+      current: () => platform.zoomLevel?.() ?? 1,
+      label: (level: DesktopZoomLevel) => new Intl.NumberFormat(language.intl(), { style: "percent" }).format(level),
+      select: (level: DesktopZoomLevel) => void platform.setZoomLevel?.(level),
+    },
+    reduceMotion: {
+      current: settings.appearance.reduceMotion,
+      select: (value: ReduceMotion) => settings.appearance.setReduceMotion(value),
     },
     fonts: {
       ui: createMemo(() => ({
@@ -109,12 +126,15 @@ export function createAppearanceSettingsController() {
 }
 
 const noneSound = { id: "none", label: "sound.option.none" } as const
+
 export const soundOptions = [noneSound, ...SOUND_OPTIONS]
+
 export type SoundSelectOption = (typeof soundOptions)[number]
 
 export function createSoundSettingsController() {
   const settings = useSettings()
   const preview = createSoundPreviewController(playSoundById)
+
   const channel = (
     enabled: Accessor<boolean>,
     current: Accessor<string>,
@@ -130,11 +150,14 @@ export function createSoundSettingsController() {
     },
     select: (option: SoundSelectOption | null) => {
       if (!option) return
+
       if (option.id === "none") {
         setEnabled(false)
         preview.stop()
+
         return
       }
+
       setEnabled(true)
       set(option.id)
       preview.play(option.id)
@@ -166,4 +189,5 @@ export function createSoundSettingsController() {
 export type ShellSettingsController = ReturnType<typeof createServerShellController>
 
 export type AppearanceSettingsController = ReturnType<typeof createAppearanceSettingsController>
+
 export type SoundSettingsController = ReturnType<typeof createSoundSettingsController>

@@ -53,6 +53,7 @@ export const Basic = {
 export const InlineMount = {
   render: () => {
     const [mount, setMount] = createSignal<HTMLDivElement | undefined>(undefined)
+
     return (
       <div ref={setMount} style={{ padding: "16px", border: "1px dashed var(--border-weak)" }}>
         <mod.HoverCard

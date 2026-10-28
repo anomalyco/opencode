@@ -61,6 +61,7 @@ export const Playground = {}
 export const Controlled = {
   render: () => {
     const [value, setValue] = createSignal("Controlled value")
+
     return (
       <div style={{ display: "grid", gap: "12px", width: "280px" }}>
         <Textarea value={value()} onInput={(e) => setValue(e.currentTarget.value)} placeholder="Type here…" />

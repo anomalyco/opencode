@@ -8,7 +8,7 @@ import { emitIpcEvent } from "../ipc-events"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
-import { getLastFocusedWindow, getWindowByID, makeMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import { getLastFocusedWindow, getWindowByID, mainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
 import { marks } from "./marks"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
@@ -29,30 +29,48 @@ const runtime = Layer.effect(
   Effect.gen(function* () {
     const shutdown = yield* Shutdown.Service
     const runFork = Effect.runForkWith(yield* Effect.context())
-    const windows = yield* makeMainWindows()
+    const windows = yield* mainWindows()
     const createWindow = windows.create
     const restoreWindows = windows.restore
     const pendingDeepLinks: string[] = []
     let shutdownReady = false
-    const prepareToRestart = shutdown.run.pipe(Effect.ensuring(Effect.sync(() => (shutdownReady = true))))
+    let quitRequested = false
+
+    // A hung shutdown step would otherwise leave every quit waiting on it forever.
+    const prepareToRestart = shutdown.run.pipe(
+      Effect.timeoutOrElse({
+        duration: "10 seconds",
+        orElse: () => Effect.logError("shutdown timed out, quitting anyway"),
+      }),
+      Effect.ensuring(Effect.sync(() => (shutdownReady = true))),
+    )
+
     const focusWindow = (win: BrowserWindow | null) => {
       if (!win) return
+
       if (win.isMinimized()) win.restore()
       win.show()
       win.focus()
     }
+
     const emitDeepLinks = (urls: string[]) => {
       if (!urls.length) return
       pendingDeepLinks.push(...urls)
+
       const target = urls.flatMap((url) => {
         const id = consoleReturnWindow(url)
         const win = id ? getWindowByID(id) : null
+
         return win ? [win] : []
       })[0]
+
       const win = target ?? getLastFocusedWindow()
+
       if (win) emitIpcEvent(win.webContents, new DeepLinksOpened({ urls }))
+
       return win
     }
+
     const relaunch = () => {
       setAppQuitting()
       runFork(
@@ -66,32 +84,45 @@ const runtime = Layer.effect(
         ),
       )
     }
+
     const secondInstance = (_event: Event, argv: string[]) => {
       const urls = argv.filter((arg) => arg.startsWith("opencode://"))
+
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
         focusWindow(emitDeepLinks(urls) ?? null)
       }
+
       if (!urls.length) focusWindow(getLastFocusedWindow())
     }
+
     const openUrl = (event: Event, url: string) => {
       event.preventDefault()
       runFork(Effect.logInfo("deep link received via open-url", { url }))
       focusWindow(emitDeepLinks([url]) ?? null)
     }
+
     const beforeQuit = (event: Event) => {
+      quitRequested = true
       setAppQuitting()
+
       if (shutdownReady) return
       event.preventDefault()
-      runFork(prepareToRestart.pipe(Effect.ensuring(Effect.sync(() => app.quit()))))
+      // Electron records the cancelled quit only after this event returns. A shutdown with nothing to
+      // stop finishes in a microtask, so re-quitting from it would be overwritten and the app would
+      // stay alive with no windows. Re-quit on the next tick instead.
+      runFork(prepareToRestart.pipe(Effect.ensuring(Effect.sync(() => setImmediate(() => app.quit())))))
     }
+
     const willQuit = () => {
       setAppQuitting()
       runFork(shutdown.run)
     }
+
     const childProcessGone = (_event: Event, details: Electron.Details) => {
       runFork(scoped("utility", Effect.logError("child process gone", { details })))
     }
+
     const renderProcessGone = (
       _event: Event,
       webContents: Electron.WebContents,
@@ -101,16 +132,23 @@ const runtime = Layer.effect(
         scoped("window", Effect.logError("app render process gone", { url: safeWebContentsURL(webContents), details })),
       )
     }
+
     const signal = () => {
       setAppQuitting()
       runFork(prepareToRestart.pipe(Effect.ensuring(Effect.sync(() => app.quit()))))
     }
+
+    // Electron emits this instead of will-quit when it lost track of a quit, so finish the one we asked for.
     const windowAllClosed = () => {
-      if (process.platform !== "darwin") app.quit()
+      if (quitRequested || process.platform !== "darwin") app.quit()
     }
+
     const activate = () => {
+      if (quitRequested) return
+
       if (BrowserWindow.getAllWindows().length === 0) restoreWindows()
     }
+
     const resetRelaunchHandler = setRelaunchHandler(relaunch)
     let windowsWired = false
 
@@ -149,6 +187,7 @@ const runtime = Layer.effect(
           app.on("window-all-closed", windowAllClosed)
           app.on("activate", activate)
         }
+
         return restoreWindows()
       },
     })
@@ -169,6 +208,7 @@ export const layer = Layer.unwrap(
     // otherwise read as evidence of an earlier launch on a fresh install.
     yield* initializeFirstLaunchOnboarding(app.getPath("userData"))
     marks.onboarding = Date.now()
+
     return runtime.pipe(Layer.provideMerge(platform))
   }),
 )

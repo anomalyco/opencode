@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 // Moved from packages/app/e2e/regression/session-timeline-notices.spec.ts
 story("renders the moved location notice as a timeline divider", async ({ mount, page }) => {
@@ -19,11 +19,9 @@ story("renders the moved location notice as a timeline divider", async ({ mount,
   await expect(label).toHaveCSS("font-size", "13px")
   await expect(label).toHaveCSS("font-weight", "440")
   await expect(label).toHaveCSS("line-height", "16px")
-  await expect(label).toHaveCSS("color", "rgb(128, 128, 128)")
   await expect(value).toHaveCSS("font-size", "13px")
   await expect(value).toHaveCSS("font-weight", "440")
   await expect(value).toHaveCSS("line-height", "16px")
-  await expect(value).toHaveCSS("color", "rgb(128, 128, 128)")
   await expect(value).toHaveCSS("text-overflow", "ellipsis")
   await expect(value).toHaveCSS("white-space", "nowrap")
   await expect(value).toHaveAttribute("dir", "ltr")

@@ -17,25 +17,29 @@ import {
   userMessage,
   waitForVisualSettle,
   type TimelineMessage,
-} from "./fixture"
+} from "../../utils/timeline"
 
 test.describe("timeline adverse visual stability", () => {
   test("does not pull a scrolled-away user while an active shell grows", async ({ page }, testInfo) => {
     const activeShellID = "prt_adverse_01_shell"
+
     const messages = [
       ...history(24),
       userMessage(),
       assistantMessage([shell(activeShellID, "running")], { completed: false }),
     ]
+
     const timeline = await setupTimeline(page, {
       messages,
       settings: { shellToolPartsExpanded: true },
       cpuRate: 4,
       eventRetry: 30,
     })
+
     const scroller = page.locator(".scroll-view__viewport", {
       has: page.locator('[data-timeline-row="AssistantPart"]'),
     })
+
     await scroller.evaluate((element) => {
       element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -450 }))
       element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight - 450)
@@ -44,19 +48,24 @@ test.describe("timeline adverse visual stability", () => {
     await expect
       .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
       .toBeGreaterThan(100)
+
     const anchor = await scroller.evaluate((element) => {
       const view = element.getBoundingClientRect()
+
       return [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")].find((row) => {
         const rect = row.getBoundingClientRect()
+
         return rect.top >= view.top + 40 && rect.bottom <= view.bottom - 40
       })?.dataset.timelineKey
     })
+
     expect(anchor).toBeTruthy()
     await waitForVisualSettle(page, [`[data-timeline-key="${anchor}"]`])
 
     const regions = defineVisualRegions({
       anchor: { selector: `[data-timeline-key="${anchor}"]` },
     })
+
     await startVisualProbe(page, regions)
     await timeline.send(partUpdated(shell(activeShellID, "running", lines(1))), 180)
     await timeline.send(partUpdated(shell(activeShellID, "running", lines(10))), 90)
@@ -82,6 +91,7 @@ test.describe("timeline adverse visual stability", () => {
 
   test("preserves an explicit shell state across virtualization", async ({ page }) => {
     const targetID = "prt_virtual_shell"
+
     const messages = [
       userMessage(undefined, { id: "msg_0000_virtual_user", created: 1700000000000 }),
       assistantMessage([shell(targetID, "completed", lines(20))], {
@@ -91,6 +101,7 @@ test.describe("timeline adverse visual stability", () => {
       }),
       ...history(35, 10),
     ]
+
     await setupTimeline(page, { messages, settings: { shellToolPartsExpanded: false } })
     const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
     await scroller.evaluate((element) => {
@@ -98,9 +109,11 @@ test.describe("timeline adverse visual stability", () => {
       element.scrollTop = 0
     })
     await page.waitForTimeout(300)
+
     const trigger = page.locator(
       `[data-timeline-part-id="${renderedPartID(targetID)}"] [data-slot="collapsible-trigger"]`,
     )
+
     await expect(trigger).toBeVisible()
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", "true")
@@ -115,6 +128,7 @@ test.describe("timeline adverse visual stability", () => {
   test("keeps narrow viewport rows ordered during long shell growth", async ({ page }, testInfo) => {
     const shellID = "prt_narrow_01_shell"
     const followingID = "prt_narrow_02_following"
+
     const timeline = await setupTimeline(page, {
       messages: [
         userMessage(),
@@ -129,10 +143,12 @@ test.describe("timeline adverse visual stability", () => {
       viewport: { width: 430, height: 800 },
       cpuRate: 4,
     })
+
     await waitForVisualSettle(page, [
       `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
       `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
     ])
+
     const regions = defineVisualRegions({
       shell: {
         selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
@@ -143,6 +159,7 @@ test.describe("timeline adverse visual stability", () => {
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+
     await startVisualProbe(page, regions)
     await timeline.send(partUpdated(shell(shellID, "running", wideLines(10))), 100)
     await timeline.send(partUpdated(shell(shellID, "running", wideLines(50))), 300)
@@ -189,6 +206,7 @@ test.describe("timeline adverse visual stability", () => {
       seedHistory: true,
     })
     const group = `[data-timeline-part-ids="${contextIDs.join(",")}"]`
+
     const regions = defineVisualRegions({
       shell: {
         selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
@@ -200,6 +218,7 @@ test.describe("timeline adverse visual stability", () => {
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+
     await startVisualProbe(page, regions)
     await page.setViewportSize({ width: 430, height: 800 })
     await page.waitForTimeout(500)
@@ -231,6 +250,7 @@ function history(count: number, offset = 0): TimelineMessage[] {
     const value = index + offset
     const prefix = `msg_0${String(value).padStart(3, "0")}_history`
     const userID = `${prefix}_a_user`
+
     return [
       userMessage(undefined, { id: userID, created: 1699990000000 + value * 10_000 }),
       assistantMessage(

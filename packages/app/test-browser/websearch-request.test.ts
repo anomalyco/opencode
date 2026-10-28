@@ -11,10 +11,12 @@ const consent: FormCreated["data"]["form"] = {
   metadata: { kind: "websearch.provider" },
   fields: [{ key: "choice", type: "string", required: true, custom: false }],
 }
+
 const options = [
   { value: "exa", label: "Exa" },
   { value: "parallel", label: "Parallel" },
 ]
+
 const provider: FormCreated["data"]["form"] = {
   ...consent,
   id: "frm_provider",
@@ -22,6 +24,7 @@ const provider: FormCreated["data"]["form"] = {
 }
 
 const cleanups: VoidFunction[] = []
+
 afterEach(() => cleanups.splice(0).forEach((dispose) => dispose()))
 
 function ready(condition: () => boolean) {
@@ -43,6 +46,7 @@ function fixture(form: FormCreated["data"]["form"] | null = consent) {
     const listeners = new Set<(event: OpenCodeEvent) => void>()
     const replies: FormReplyInput[] = []
     const loads: string[] = []
+
     const [state, setState] = createStore({
       request: form ?? undefined,
       owner: "ses_root",
@@ -50,29 +54,35 @@ function fixture(form: FormCreated["data"]["form"] | null = consent) {
       loadFails: false,
       replyFails: false,
     })
+
     const model = createWebSearchRequest({
       owner: () => state.owner,
       connected: () => state.connected,
       request: () => state.request,
       providers: async (sessionID) => {
         loads.push(sessionID)
+
         if (state.loadFails) throw new Error("offline")
+
         return options
       },
       reply: async (input) => {
         replies.push(input)
+
         if (state.replyFails) throw new Error("offline")
         setState("request", undefined)
       },
       events: {
         listen(listener) {
           listeners.add(listener)
+
           return () => {
             listeners.delete(listener)
           }
         },
       },
     })
+
     return {
       model,
       state,
@@ -196,9 +206,13 @@ describe("web search request state", () => {
     const input = fixture()
     await ready(() => !input.model.loading())
     const pending = input.model.submit("exa")
+
     if (action === "navigate") input.setState("owner", "ses_other")
+
     if (action === "disconnect") input.setState("connected", false)
+
     if (action === "dispose") input.dispose()
+
     if (action === "cancel") input.cancel(consent.id)
     await pending
     expect(input.model.sending()).toBe(false)

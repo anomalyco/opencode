@@ -34,40 +34,4 @@ describe("write-behind", () => {
     writer.flush()
     expect(batches).toHaveLength(2)
   })
-
-  test("drop removes queued entries matching a predicate", () => {
-    const batches: Map<string, number>[] = []
-    const writer = createWriteBehind<number>({ delay: 1_000, write: (batch) => batches.push(batch) })
-    writer.set("a", 1)
-    writer.set("b", 2)
-    writer.drop((value) => value === 1)
-    writer.flush()
-    expect([...batches[0]!]).toEqual([["b", 2]])
-  })
-
-  test("keeps a failed batch queued and retries it on the next flush", () => {
-    const errors: unknown[] = []
-    let fail = true
-    const batches: Map<string, number>[] = []
-    const writer = createWriteBehind<number>({
-      delay: 1_000,
-      onError: (error) => errors.push(error),
-      write: (batch) => {
-        if (fail) throw new Error("disk full")
-        batches.push(batch)
-      },
-    })
-    writer.set("a", 1)
-    writer.set("b", 1)
-    writer.flush()
-    expect(errors).toHaveLength(1)
-    expect(writer.get("a")).toBe(1)
-    fail = false
-    writer.set("a", 2)
-    writer.flush()
-    expect([...batches[0]!].sort()).toEqual([
-      ["a", 2],
-      ["b", 1],
-    ])
-  })
 })

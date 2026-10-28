@@ -1,16 +1,11 @@
 import { expect, test } from "@playwright/test"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
-import {
-  assistantMessage,
-  partUpdated,
-  setupTimeline,
-  toolPart,
-  userMessage,
-} from "../performance/timeline-stability/fixture"
+import { assistantMessage, partUpdated, setupTimeline, textPart, toolPart, userMessage } from "../utils/timeline"
 
 test("keeps shell and question failures in their Used group", async ({ page }) => {
   const shellID = "prt_transition_error_shell"
   const questionID = "prt_transition_error_question"
+
   const timeline = await setupTimeline(page, {
     settings: { timelineDetail: timelinePresets[2].value },
     messages: [
@@ -24,6 +19,7 @@ test("keeps shell and question failures in their Used group", async ({ page }) =
       ),
     ],
   })
+
   const group = page.locator('[data-component="collapsed-tool-group"]')
   const used = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
   await used.click()
@@ -59,124 +55,38 @@ test("keeps shell and question failures in their Used group", async ({ page }) =
   await expect(question).toContainText(/dismissed/i)
 })
 
-test("keeps a failed patch in Used without losing the surviving file choice", async ({ page }) => {
-  const failed = "prt_grouped_patch_failed"
-  const surviving = "prt_grouped_patch_surviving"
+test("keeps rendering when a plugin tool reports progress metadata that is not an object", async ({ page }) => {
+  const toolID = "prt_plugin_progress"
+  const input = { prompt: "a cat" }
+
   const timeline = await setupTimeline(page, {
-    settings: { timelineDetail: timelinePresets[2].value },
     messages: [
       userMessage(),
-      assistantMessage(
-        [
-          toolPart(failed, "patch", "running", { patchText: "Update src/failed.ts" }),
-          toolPart(
-            surviving,
-            "patch",
-            "running",
-            { patchText: "Update src/surviving.ts" },
-            {
-              metadata: {
-                files: [
-                  {
-                    file: "src/surviving.ts",
-                    status: "modified",
-                    patch: "@@ -1 +1 @@\n-export const value = 1\n+export const value = 2",
-                    additions: 1,
-                    deletions: 1,
-                  },
-                ],
-              },
-            },
-          ),
-        ],
-        { completed: false },
-      ),
+      assistantMessage([toolPart(toolID, "plugin_imagegen", "running", input)], { completed: false }),
     ],
   })
 
-  const group = page.locator('[data-component="collapsed-tool-group"]')
-  const used = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
-  await used.click()
-  const file = group.locator('[data-scope="apply-patch"] button')
-  await expect(file).toBeVisible()
-  await expect(file).toHaveAttribute("aria-expanded", "false")
-  await file.click()
-  await expect(file).toHaveAttribute("aria-expanded", "true")
-  await group.evaluate((element) => {
-    const row = element.closest<HTMLElement>("[data-timeline-key]")
-    if (row) row.dataset.groupIdentity = "preserved"
-  })
+  await page
+    .locator(
+      '[data-component="collapsed-tool-group"] > [data-component="collapsible"] > [data-slot="collapsible-trigger"]',
+    )
+    .click()
+  await timeline.waitForPart(toolID)
 
-  await timeline.send(
-    partUpdated(
-      toolPart(failed, "patch", "error", { patchText: "Update src/failed.ts" }, { error: "Patch failed visibly" }),
-    ),
+  const progress = partUpdated(
+    toolPart(toolID, "plugin_imagegen", "running", input, { metadata: { status: "x" } }),
+  ).find((event) => event.type === "session.tool.progress")!
+
+  // Plugin tools are untyped at runtime, and the server forwards progress metadata as sent, so the
+  // frame is written raw to skip the harness's event validation.
+  await timeline.transport.writeRaw(
+    `data: ${JSON.stringify({ ...progress, data: { ...progress.data, metadata: "polling" } })}\n\n`,
   )
+  await timeline.send(partUpdated(textPart("prt_plugin_progress_text", "Still polling the image task.")))
 
-  const failedRow = page.locator("[data-timeline-key]", {
-    has: page.locator(`[data-timeline-part-id="${failed}"]`),
-  })
-  const survivingRow = page.locator("[data-timeline-key]", {
-    has: page.locator(`[data-timeline-part-id="${surviving}"]`),
-  })
-  await expect(group).toHaveAttribute("data-timeline-part-ids", `${failed},${surviving}`)
-  await expect(used).toHaveAttribute("aria-expanded", "true")
-  await expect(failedRow).toHaveAttribute("data-timeline-key", /^assistant-part:context:/)
-  await expect(survivingRow).toHaveAttribute("data-timeline-key", /^assistant-part:context:/)
-  await group.locator(`[data-timeline-part-id="${failed}"] [data-slot="collapsible-trigger"]`).click()
-  await expect(failedRow.getByText("Patch failed visibly")).toBeVisible()
-  await expect(survivingRow).toHaveAttribute("data-group-identity", "preserved")
-  await expect(survivingRow.locator('[data-scope="apply-patch"] button')).toHaveAttribute("aria-expanded", "true")
-})
-
-test("groups instruction files loaded by the same read", async ({ page }) => {
-  const id = "prt_read_instructions"
-  await setupTimeline(page, {
-    settings: { timelineDetail: { ...timelinePresets[2].value, tools: { placement: "separate" } } },
-    messages: [
-      userMessage(),
-      assistantMessage([
-        toolPart(
-          id,
-          "read",
-          "completed",
-          { path: "src/a.ts" },
-          { metadata: { loaded: ["AGENTS.md", "packages/app/AGENTS.md", "packages/ui/AGENTS.md"] } },
-        ),
-      ]),
-    ],
-  })
-
-  const tool = page.locator(`[data-timeline-part-id="${id}"]`)
-  const loaded = tool.locator('[data-component="tool-loaded-item"]')
-  await expect(loaded).toHaveCount(1)
-  await expect(loaded).toHaveAttribute("aria-label", "Loaded AGENTS.md, packages/app/AGENTS.md, packages/ui/AGENTS.md")
-  await expect(loaded.locator('[data-slot="tool-loaded-value"]')).toHaveText(
-    "AGENTS.md, packages/app/AGENTS.md, packages/ui/AGENTS.md",
-  )
-  await expect(loaded.locator('[data-slot="tool-loaded-kind"]')).toHaveCount(0)
-})
-
-test("groups only consecutive successful skill tools", async ({ page }) => {
-  const parts = [
-    toolPart("prt_skill_first", "skill", "completed", { id: "ocpr" }),
-    toolPart("prt_skill_second", "skill", "completed", { id: "effect" }),
-    toolPart("prt_skill_third", "skill", "completed", { id: "ui-pr-screenshots" }),
-    toolPart("prt_skill_break", "read", "completed", { path: "src/a.ts" }),
-    toolPart("prt_skill_last", "skill", "completed", { id: "opencode" }),
-  ]
-  await setupTimeline(page, {
-    settings: { timelineDetail: timelinePresets[2].value },
-    messages: [userMessage(), assistantMessage(parts)],
-  })
-
-  const group = page.locator(`[data-timeline-part-ids="${parts.map((part) => part.id).join(",")}"]`)
-  await group.getByRole("button").click()
-
-  const loaded = group.locator('[data-component="tool-loaded-item"]')
-  await expect(loaded).toHaveCount(2)
-  await expect(loaded.nth(0)).toHaveAttribute("aria-label", "Loaded ocpr, effect, ui-pr-screenshots skills")
-  await expect(loaded.nth(1)).toHaveAttribute("aria-label", "Loaded opencode skill")
+  await expect(page.getByText("Still polling the image task.")).toBeVisible()
+  await expect(page.locator(`[data-timeline-part-id="${toolID}"]`)).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Something went wrong" })).toHaveCount(0)
 })
 
 function questionInput() {

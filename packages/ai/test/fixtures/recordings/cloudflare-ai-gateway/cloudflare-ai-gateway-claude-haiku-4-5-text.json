@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "metadata": {
+    "provider": "cloudflare-ai-gateway",
+    "route": "cloudflare-ai-gateway-messages",
+    "transport": "http",
+    "model": "claude-haiku-4-5",
+    "tags": [
+      "prefix:cloudflare-ai-gateway",
+      "provider:cloudflare-ai-gateway",
+      "text",
+      "golden"
+    ],
+    "name": "cloudflare-ai-gateway/cloudflare-ai-gateway-claude-haiku-4-5-text",
+    "recordedAt": "2026-09-30T04:35:43.657Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/anthropic/v1/messages",
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"claude-haiku-4-5\",\"system\":[{\"type\":\"text\",\"text\":\"You are concise.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Reply exactly with: Hello!\"}]}],\"stream\":true,\"max_tokens\":40,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "event: message_start\ndata: {\"p\": \"6247a7b95b5e3f\", \"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_011CfZ16hXSVRfaXBDtUBKis\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":18,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":2,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"},\"diagnostics\":null}}\n\nevent: content_block_start\ndata: {\"p\": \"f9b\", \"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}             }\n\nevent: ping\ndata: {\"p\": \"cc76aa8\", \"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"p\": \"94f\", \"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello!\"}              }\n\nevent: content_block_stop\ndata: {\"p\": \"1a9d8\", \"type\":\"content_block_stop\",\"index\":0 }\n\nevent: message_delta\ndata: {\"p\": \"0cb3c23\", \"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":18,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":5}              }\n\nevent: message_stop\ndata: {\"p\": \"6ef9de29973ed\", \"type\":\"message_stop\"              }\n\n"
+      }
+    }
+  ]
+}

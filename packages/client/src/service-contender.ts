@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process"
+import type { EnsureTiming } from "./service-timing.js"
 
 export type ServiceContender = {
   readonly child: ChildProcess
@@ -17,6 +18,7 @@ export function spawnServiceContender(
 ): ServiceContender {
   const child = spawn(command, args, {
     detached: true,
+    windowsHide: true,
     stdio: ["ignore", "ignore", "pipe"],
     env: { ...process.env, ...env },
   })
@@ -52,7 +54,70 @@ export function spawnServiceContender(
   }
 }
 
-export function contenderFailure(contender: ServiceContender) {
+/**
+ * The startup attempts of one `ensure()` call. It keeps at most two attempts alive, remembers
+ * the first startup failure, and backs off when attempts exit cleanly because another one won.
+ */
+export function contenderPool(timing: EnsureTiming) {
+  const contenders = new Set<ServiceContender>()
+  let failure: Error | undefined
+  let spawnDelay = timing.spawnDelay
+  let lastSpawn = 0
+  return {
+    /** The first startup failure seen since the last eviction. */
+    failure: () => failure,
+    /** A registered service answered, so the next attempt waits the base delay again. */
+    serviceAnswered() {
+      spawnDelay = timing.spawnDelay
+    },
+    /**
+     * The owner `pid` was replaced. Drop its attempt and any finished ones, forget their
+     * failure, and restart the spawn clock.
+     */
+    evict(pid: number) {
+      for (const item of contenders) {
+        if (item.child.pid === pid || contenderFinished(item)) {
+          item.release()
+          contenders.delete(item)
+        }
+      }
+      failure = undefined
+      lastSpawn = 0
+    },
+    /** Let the next attempt start without waiting a spawn delay. */
+    recruitNow() {
+      lastSpawn = Date.now() - spawnDelay
+    },
+    /** Collect finished attempts. Returns the startup failure once no attempt is left alive. */
+    reap() {
+      const finished = [...contenders].filter(contenderFinished)
+      failure ??= finished.map(contenderFailure).find((error) => error !== undefined)
+      if (finished.some((item) => item.child.exitCode === 0))
+        spawnDelay = Math.min(spawnDelay * 2, timing.maxSpawnDelay)
+      finished.forEach((item) => contenders.delete(item))
+      return contenders.size === 0 ? failure : undefined
+    },
+    /**
+     * Whether to start another attempt now. A registration that has not answered yet gets one
+     * spawn delay before an attempt competes with it.
+     */
+    shouldRecruit(registered: boolean) {
+      if (lastSpawn === 0 && registered) lastSpawn = Date.now()
+      // Keep one candidate plus one lock probe for pre-lock stalls. After a failure, let the
+      // survivors finish without recruiting replacements that could hide the error indefinitely.
+      return failure === undefined && contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay
+    },
+    add(contender: ServiceContender) {
+      contenders.add(contender)
+      lastSpawn = Date.now()
+    },
+    releaseAll() {
+      contenders.forEach((contender) => contender.release())
+    },
+  }
+}
+
+function contenderFailure(contender: ServiceContender) {
   const error = contender.error()
   if (error !== undefined) return error
   if (contender.child.exitCode !== null && contender.child.exitCode !== 0)

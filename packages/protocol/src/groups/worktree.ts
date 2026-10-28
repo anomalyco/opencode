@@ -1,12 +1,13 @@
 import { Worktree } from "@opencode/schema/worktree"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { Project } from "@opencode/schema/project"
 import { ProjectNotFoundError } from "../errors.js"
 
 const root = "/api/worktree"
 
-export class WorktreeError extends Schema.Error<WorktreeError>("WorktreeError")(
+export class WorktreeError extends Schema.TaggedError<WorktreeError>()(
+  "WorktreeError",
   {
     name: Schema.Literal("WorktreeError"),
     data: Schema.Struct({

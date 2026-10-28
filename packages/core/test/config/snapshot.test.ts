@@ -37,6 +37,7 @@ describe("ConfigSnapshotPlugin.Plugin", () => {
             const bus = yield* Bus.Service
             const config = yield* Config.Test
             const plugins = yield* Plugin.Service
+            yield* config.setEntries([new Document({ type: "document", info: new Info({ snapshots: false }) })])
             yield* ConfigSnapshotPlugin.Plugin.effect(yield* PluginHost.make(plugins))
 
             expect(yield* snapshot.capture()).toBeUndefined()
@@ -58,9 +59,6 @@ describe("ConfigSnapshotPlugin.Plugin", () => {
           )
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.provide(PluginTestLayer),
-      Effect.provide(Config.testLayer([new Document({ type: "document", info: new Info({ snapshots: false }) })])),
-    ),
+    ).pipe(Effect.provide(PluginTestLayer)),
   )
 })

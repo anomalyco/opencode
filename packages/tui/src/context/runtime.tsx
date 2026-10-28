@@ -1,9 +1,16 @@
 import { createComponent, createContext, type JSX, useContext } from "solid-js"
 
+export type TuiHighlight = Readonly<{
+  title: string
+  body: string
+}>
+
 export type TuiApp = Readonly<{
   name: string
   version: string
   channel: string
+  /** The current release's highlights, embedded only in stable release builds. */
+  highlights?: ReadonlyArray<TuiHighlight>
 }>
 
 export type TuiPaths = Readonly<{
@@ -15,8 +22,6 @@ export type TuiPaths = Readonly<{
 
 export type TuiTerminalEnvironment = Readonly<{
   platform: string
-  multiplexer?: "tmux" | "screen"
-  displayServer?: "wayland" | "x11"
   variables?: Readonly<Record<string, string>>
 }>
 

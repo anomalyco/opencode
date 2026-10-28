@@ -23,13 +23,12 @@ export function withInitial<S extends Schema.ConstraintCodec<object, unknown>>(
   initial: NoInfer<S["Type"]>,
 ) {
   const schema = isMigrated(definition) ? definition.current : definition
-  const read = isMigrated(definition)
-    ? SchemaParser.decodeUnknownResult(definition.read, { onExcessProperty: "preserve" })
-    : Result.succeed<unknown>
+  const read = isMigrated(definition) ? SchemaParser.decodeUnknownResult(definition.read) : Result.succeed<unknown>
   const encode = Schema.encodeUnknownSync(schema)
+
   return Schema.Unknown.pipe(
     Schema.decode<Schema.Unknown>({
-      decode: SchemaGetter.transformOrFail((value) =>
+      decode: SchemaGetter.transformEffect((value) =>
         Effect.fromResult(Result.map(read(value), (stored) => merge(initial, recover(schema.ast, stored, initial)))),
       ),
       encode: SchemaGetter.transform((value) => encode(value)),
@@ -38,26 +37,44 @@ export function withInitial<S extends Schema.ConstraintCodec<object, unknown>>(
   )
 }
 
+// A legacy read shape declares only the fields it migrates. Decoding strips unknown keys, so every
+// struct level in a `migrate` read schema must stay open for the current fields it does not name.
+export function legacy<const Fields extends Schema.Struct.Fields>(fields: Fields) {
+  return Schema.StructWithRest(Schema.Struct(fields), [Schema.Record(Schema.String, Schema.Unknown)])
+}
+
 // Object-level codecs own their recovery. Plain structs can recover fields independently.
+// SAFETY: stored values and their defaults are untyped trees walked against `ast`; `withInitial` decodes the
+// recovered and merged result with the current schema before anyone reads it.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- see SAFETY above
 function recover(ast: SchemaAST.AST, value: unknown, initial: unknown): unknown {
   if (value === undefined) return initial
-  if (ast._tag === "Objects" && !ast.encoding && ast.indexSignatures.length === 0 && Predicate.isObject(value)) {
+
+  if (SchemaAST.isObjects(ast) && !ast.encoding && ast.indexSignatures.length === 0 && Predicate.isObject(value)) {
     return Object.fromEntries(
       ast.propertySignatures.flatMap((field) => {
         const defaults = Predicate.isObject(initial) ? initial[field.name] : undefined
         const next = recover(field.type, value[field.name], defaults)
+
         if (next === undefined && !Object.hasOwn(value, field.name) && defaults === undefined) return []
+
         return [[field.name, next]]
       }),
     )
   }
+
   const decoded = Schema.decodeUnknownOption(Schema.make<Schema.Codec<unknown, unknown>>(ast))(value)
+
   return Option.isSome(decoded) ? decoded.value : initial
 }
 
+// SAFETY: like `recover`, merges untyped trees that `withInitial` decodes with the current schema afterwards.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns -- see SAFETY above
 function merge(initial: unknown, value: unknown): unknown {
   if (value === undefined) return initial
+
   if (!Predicate.isObject(initial) || !Predicate.isObject(value)) return value
+
   return Object.fromEntries(
     [...new Set([...Object.keys(initial), ...Object.keys(value)])].map((key) => [key, merge(initial[key], value[key])]),
   )
@@ -66,11 +83,13 @@ function merge(initial: unknown, value: unknown): unknown {
 // Unlike a decoding default, a fallback also replaces invalid persisted values.
 export function fallback<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S, value: () => S["Type"]) {
   const defaulted = Schema.withDecodingDefaultType<S>(Effect.sync(value))(schema)
+
   return Schema.catchDecoding<typeof defaulted>(() => Effect.sync(() => Option.some(value())))(defaulted)
 }
 
 export function optional<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
   const field = Schema.optional(schema)
+
   return Schema.catchDecoding<typeof field>(() => Effect.succeed(Option.none()))(field)
 }
 
@@ -80,6 +99,7 @@ export function struct<const Fields extends Schema.Struct.Fields>(fields: Fields
 
 export function record<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
   const entries = Schema.Record(Schema.String, Schema.mutableKey(schema))
+
   return fallback(entries, () => Schema.decodeUnknownSync(entries)({}))
 }
 
@@ -87,6 +107,7 @@ export function record<S extends Schema.ConstraintCodec<unknown, unknown>>(schem
 export function array<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
   const decode = Schema.decodeUnknownOption(schema)
   const encode = Schema.encodeSync(schema)
+
   return fallback(
     Schema.Array(Schema.Unknown).pipe(
       Schema.decodeTo(Schema.mutable(Schema.Array(Schema.toType(schema))), {

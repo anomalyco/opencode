@@ -9,7 +9,6 @@ export interface ComposerTab {
   id: string
   label: string
   hints?: () => ComposerHint[]
-  onClose?: () => void
 }
 
 export const ComposerContext = createContext<{

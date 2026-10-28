@@ -41,6 +41,7 @@ function expandText(definition: TextDefinition | undefined): TextDefinition | un
   return {
     ...definition,
     muted: definition.muted ?? (definition.base ? "$text.base" : undefined),
+    faint: definition.faint ?? (definition.muted || definition.base ? "$text.muted" : undefined),
     action: expandActions(definition.action, "text.action"),
     formfield: expandFormfield(definition.formfield, "text.formfield"),
     feedback: definition.feedback

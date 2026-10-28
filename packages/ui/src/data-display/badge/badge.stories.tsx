@@ -9,7 +9,7 @@ Use alongside headings or lists for quick metadata.
 ### API
 - Accepts standard span props.
 - Optional: \`appearance\` is \`compact\` (default) or \`standard\`.
-- Optional: \`variant\` is \`neutral\` (default) or \`accent\`.
+- Optional: \`variant\` is \`neutral\` (default), \`accent\`, or \`subtle\` (borderless, for counts).
 - Optional: \`data-high-contrast\` attribute for stronger border contrast.
 
 ### Variants and states
@@ -51,6 +51,15 @@ export const Appearances = {
     <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
       <Badge appearance="standard">Standard</Badge>
       <Badge appearance="compact">Compact</Badge>
+    </div>
+  ),
+}
+
+export const Subtle = {
+  render: () => (
+    <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+      <Badge variant="subtle">1</Badge>
+      <Badge variant="subtle">12</Badge>
     </div>
   ),
 }

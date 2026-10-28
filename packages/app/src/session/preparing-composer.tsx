@@ -8,6 +8,7 @@ import type { PendingSession } from "@/shell/tabs/tabs"
 export function PreparingComposer(props: { pending: PendingSession }) {
   const location = useLocation()
   let element: HTMLElement | undefined
+
   const editor = createComposerEditor({
     store: () => props.pending.composer.store,
     commands: () => [],
@@ -21,6 +22,7 @@ export function PreparingComposer(props: { pending: PendingSession }) {
       submit: { stopping: () => false, onSubmit() {}, onStop() {} },
     },
   })
+
   createEffect(
     on(
       () => props.pending,
@@ -33,6 +35,7 @@ export function PreparingComposer(props: { pending: PendingSession }) {
           requestAnimationFrame(() => {
             if (location.pathname !== pathname) return
             const next = document.querySelector<HTMLDivElement>('[data-component="composer-editor"]')
+
             if (!next || next === element) return
             next.focus()
             setCursorPosition(next, cursor ?? 0)
@@ -44,7 +47,7 @@ export function PreparingComposer(props: { pending: PendingSession }) {
 
   return (
     <div data-component="session-composer-dock" class="w-full shrink-0 bg-v2-background-bg-base pb-3">
-      <div class="mx-auto w-full max-w-[1000px] px-3">
+      <div class="mx-auto w-full px-3 md:max-w-session">
         <ComposerEditor controller={editor} modelControlsVisible={false} />
       </div>
     </div>

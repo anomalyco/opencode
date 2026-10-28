@@ -144,7 +144,9 @@ test("keeps consecutive close controls fixed across overflow window changes", as
     await app.waitForFrame((frame) => Array.from(frame.split("\n")[0] ?? "")[11] === "✕")
 
     await app.mockMouse.click(11, 0)
-    await app.waitForFrame((frame) => items().length === 4 && Array.from(frame.split("\n")[0] ?? "")[11] === "✕")
+    await app.waitForFrame(
+      (frame) => !frame.includes("Third") && items().length === 4 && Array.from(frame.split("\n")[0] ?? "")[11] === "✕",
+    )
     await app.mockMouse.click(11, 0)
 
     expect(closed).toEqual(["third", "fourth"])

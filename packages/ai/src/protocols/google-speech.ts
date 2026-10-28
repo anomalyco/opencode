@@ -94,7 +94,7 @@ const fromRequest = Effect.fn("GoogleSpeech.fromRequest")(function* (request: Me
 // 6. Stream parsing
 // ---------------------------------------------------------------------------
 
-const step = Effect.fn("GoogleSpeech.step")(function* (state: State, frame: string) {
+const step = Effect.fnUntraced(function* (state: State, frame: string) {
   const chunk = yield* decodeChunk(frame)
   const blocked = GeminiGenerateContent.blocked(route.name, chunk, frame)
   if (blocked !== undefined) return yield* blocked
@@ -122,7 +122,6 @@ const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) =
   return SpeechStream.finish(route, state, {
     ...output,
     usage: GeminiGenerateContent.usage(state.usage),
-    notices: GeminiGenerateContent.notices(route.name, state),
     providerMetadata: GeminiGenerateContent.providerMetadata(state),
     detail: `finish reason: ${state.finishReason}`,
   })

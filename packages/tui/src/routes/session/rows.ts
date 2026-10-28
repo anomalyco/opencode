@@ -21,6 +21,7 @@ import {
   type Verbosity,
   defaultVerbosity,
 } from "./grouping/session"
+import { groupID } from "./anchors"
 export type { CacheUsage, PartRef, SessionRow } from "./grouping/session"
 
 /**
@@ -47,7 +48,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   const data = useData()
   const client = useClient()
   const config = useConfig()
-  const [rows, setRows] = createStore<SessionRow[]>([])
+  const [rows, setRows] = createStore<(SessionRow & { key?: string })[]>([])
   const revertBoundary = () => data.session.get(sessionID())?.revert?.messageID
   const turnTokens = () => Boolean(config.data.debug?.turn_tokens)
   const verbosity = () => config.data.session?.verbosity ?? defaultVerbosity
@@ -79,6 +80,25 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     return rows
   }
 
+  // Rows have no `id`, Solid's default reconcile key. Matching by position instead would move every
+  // row into another store object whenever older history is prepended, remounting the whole transcript.
+  // Rows inserted live carry no key, so key the current rows too before matching.
+  function rebuild() {
+    setRows(
+      produce((draft) => {
+        draft.forEach((row) => {
+          row.key = rowKey(row)
+        })
+      }),
+    )
+    setRows(
+      reconcile(
+        reduce().map((row) => ({ ...row, key: rowKey(row) })),
+        { key: "key" },
+      ),
+    )
+  }
+
   function pendingPermissions() {
     return new Set(
       (data.session.permission.list(sessionID()) ?? []).flatMap((request) =>
@@ -99,13 +119,13 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   createEffect(
     on([sessionID, () => client.connection.status()], ([id, status]) => {
       if (status !== "connected") return
-      setRows(reconcile(reduce()))
+      rebuild()
       void data.session.pending.sync(id).catch(() => undefined)
       void data.session.message
         .sync(id)
         .then(async () => {
           if (sessionID() !== id) return
-          setRows(reconcile(reduce()))
+          rebuild()
           // Restoration waits for complete boundary groups so saved group IDs resolve.
           await completeGroupBoundary({
             rows,
@@ -122,15 +142,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
 
   // Re-reduce when the revert boundary changes (stage/clear/commit). These reactions defer
   // their first run: the mount effect above has already reduced the same state.
-  createEffect(
-    on(
-      revertBoundary,
-      () => {
-        setRows(reconcile(reduce()))
-      },
-      { defer: true },
-    ),
-  )
+  createEffect(on(revertBoundary, rebuild, { defer: true }))
 
   createEffect(
     on(
@@ -140,7 +152,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
           if (item.type === "user" && item.delivery === "queue") return [`${item.id}:queue`]
           return []
         }),
-      () => setRows(reconcile(reduce())),
+      rebuild,
       { defer: true },
     ),
   )
@@ -166,12 +178,12 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
                 ]
               : [],
         ),
-      () => setRows(reconcile(reduce())),
+      rebuild,
       { defer: true },
     ),
   )
 
-  createEffect(on([turnTokens, verbosity], () => setRows(reconcile(reduce())), { defer: true }))
+  createEffect(on([turnTokens, verbosity], rebuild, { defer: true }))
 
   const appendMessage = (messageID: string) =>
     setRows(
@@ -297,17 +309,35 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     data.on("session.step.ended", (event) => {
       if (event.data.sessionID !== sessionID() || ["tool-calls", "unknown"].includes(event.data.finish)) return
       appendFooter(event.data.assistantMessageID)
-      if (turnTokens()) setRows(reconcile(reduce()))
+      if (turnTokens()) rebuild()
     }),
     data.on("session.step.failed", (event) => {
       if (event.data.sessionID !== sessionID()) return
       appendFooter(event.data.assistantMessageID)
-      if (turnTokens()) setRows(reconcile(reduce()))
+      if (turnTokens()) rebuild()
     }),
   ]
   onCleanup(() => subscriptions.forEach((unsubscribe) => unsubscribe()))
 
   return rows
+}
+
+function rowKey(row: SessionRow) {
+  switch (row.type) {
+    case "group":
+      return groupID(row, 0)
+    case "part":
+      return JSON.stringify([row.type, row.ref.messageID, row.ref.partID])
+    case "message":
+    case "assistant-footer":
+      return JSON.stringify([row.type, row.messageID])
+    case "compaction-queued":
+      return JSON.stringify([row.type, row.inboxID])
+    case "turn-usage":
+      return JSON.stringify([row.type, row.messageIDs[0]])
+    default:
+      return row satisfies never
+  }
 }
 
 export function reduceSessionRows(
@@ -392,63 +422,6 @@ export function cacheReuseDrop(previous: CacheUsage | undefined, current: CacheU
   // OpenAI cache reads can move between one and two 1,024-token buckets without a material loss of reuse.
   if (current.model.providerID === "openai" && drop >= 1_024 && drop <= 2_048) return
   return drop > 0 ? drop : undefined
-}
-
-// `legacy` marks a session without idle markers, where a turn ends at the next prompt. Reactive
-// callers should pass it from a shared memo: the default scans every message, which subscribes
-// the footer to the whole history.
-export function turnDuration(
-  message: SessionMessageAssistant,
-  messages: SessionMessageInfo[],
-  position?: number,
-  legacy = legacyTurns(messages),
-) {
-  if (message.time.completed === undefined) return 0
-  const index = position ?? messages.findIndex((item) => item.id === message.id)
-  const input = messages[inputIndex(messages, index === -1 ? messages.length : index, legacy)]
-  return Math.max(0, message.time.completed - (input?.time.created ?? message.time.created))
-}
-
-export function turnTokensPerSecond(
-  message: SessionMessageAssistant,
-  messages: SessionMessageInfo[],
-  position?: number,
-  legacy = legacyTurns(messages),
-) {
-  const index = position ?? messages.findIndex((item) => item.id === message.id)
-  const end = index === -1 ? messages.length : index + 1
-  const start = inputIndex(messages, end, legacy)
-  const steps = messages
-    .slice(start + 1, end)
-    .filter((item): item is SessionMessageAssistant => item.type === "assistant")
-  const durations = steps.flatMap((step) =>
-    step.time.streamed === undefined ? [] : [Math.max(0, step.time.streamed - step.time.created)],
-  )
-  if (steps.length === 0 || durations.length !== steps.length) return
-  const output = steps.reduce((total, step) => total + (step.tokens?.output ?? 0) + (step.tokens?.reasoning ?? 0), 0)
-  const duration = durations.reduce((total, value) => total + value, 0)
-  if (output <= 0 || duration <= 0) return
-  // Aggregate before dividing so each step is weighted by its provider-active duration.
-  return output / (duration / 1_000)
-}
-
-export function legacyTurns(messages: SessionMessageInfo[]) {
-  return !messages.some((message) => message.type === "idle")
-}
-
-function inputIndex(messages: SessionMessageInfo[], end: number, legacy: boolean) {
-  // Reading a sliced prefix subscribes every footer to unrelated historical messages, so walk
-  // back only as far as the turn boundary: the nearest input in legacy sessions, otherwise the
-  // first input after the previous idle marker.
-  let input = -1
-  for (let index = end - 1; index >= 0; index--) {
-    const message = messages[index]
-    if (message.type === "idle") return input
-    if (message.type !== "user" && message.type !== "synthetic") continue
-    if (legacy) return index
-    input = index
-  }
-  return input
 }
 
 function hasTokenUsage(

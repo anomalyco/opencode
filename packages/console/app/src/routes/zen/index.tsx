@@ -1,6 +1,6 @@
 import "./index.css"
-import { createAsync, query } from "@solidjs/router"
 import { Title, Meta } from "@solidjs/meta"
+import { For } from "solid-js"
 //import { HttpHeader } from "@solidjs/start"
 import zenLogoLight from "../../asset/zen-ornate-light.svg"
 import zenLogoDark from "../../asset/zen-ornate-dark.svg"
@@ -16,29 +16,27 @@ import { Faq } from "~/component/faq"
 import { Legal } from "~/component/legal"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
-import { getLastSeenWorkspaceID } from "../workspace/common"
 import { IconGemini, IconMiniMax, IconZai } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
-
-const checkLoggedIn = query(async () => {
-  "use server"
-  return await getLastSeenWorkspaceID().catch(() => {})
-}, "checkLoggedIn.get")
+import { SocialMeta } from "~/component/social-meta"
 
 export default function Home() {
-  const loggedin = createAsync(() => checkLoggedIn())
   const i18n = useI18n()
   const language = useLanguage()
   return (
     <main data-page="zen">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>{i18n.t("zen.title")}</Title>
+      <Meta name="description" content={i18n.t("zen.hero.body")} />
       <LocaleLinks path="/zen" />
-      <Meta property="og:image" content="/social-share-zen.png" />
-      <Meta name="twitter:image" content="/social-share-zen.png" />
-      <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />
+      <SocialMeta
+        title={i18n.t("zen.title")}
+        description={i18n.t("zen.hero.body")}
+        path="/zen"
+        image="/social-share-zen.png"
+      />
 
       <div data-component="container">
         <Header zen hideGetStarted />
@@ -176,7 +174,7 @@ export default function Home() {
                 <span>[1]</span>
                 <div>
                   <strong>{i18n.t("zen.how.step1.title")}</strong> - {i18n.t("zen.how.step1.beforeLink")}{" "}
-                  <a href={language.route("/docs/zen/#how-it-works")} title={i18n.t("zen.how.step1.link")}>
+                  <a href="/v2/docs/console/models/#how-it-works" title={i18n.t("zen.how.step1.link")}>
                     {i18n.t("zen.how.step1.link")}
                   </a>
                 </div>
@@ -185,7 +183,7 @@ export default function Home() {
                 <span>[2]</span>
                 <div>
                   <strong>{i18n.t("zen.how.step2.title")}</strong> -{" "}
-                  <a href={language.route("/docs/zen/#pricing")}>{i18n.t("zen.how.step2.link")}</a>{" "}
+                  <a href="/v2/docs/console/models/#pricing">{i18n.t("zen.how.step2.link")}</a>{" "}
                   {i18n.t("zen.how.step2.afterLink")}
                 </div>
               </li>
@@ -205,7 +203,7 @@ export default function Home() {
                 <span>[*]</span>
                 <p>
                   {i18n.t("zen.privacy.beforeExceptions")}{" "}
-                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("zen.privacy.exceptionsLink")}</a>.
+                  <a href="/v2/docs/console/models/#privacy">{i18n.t("zen.privacy.exceptionsLink")}</a>.
                 </p>
               </div>
             </div>
@@ -301,7 +299,7 @@ export default function Home() {
               <li>
                 <Faq question={i18n.t("zen.faq.q4")}>
                   {i18n.t("zen.faq.a4.p1.beforePricing")}{" "}
-                  <a href={language.route("/docs/zen/#pricing")}>{i18n.t("zen.faq.a4.p1.pricingLink")}</a>{" "}
+                  <a href="/v2/docs/console/models/#pricing">{i18n.t("zen.faq.a4.p1.pricingLink")}</a>{" "}
                   {i18n.t("zen.faq.a4.p1.afterPricing")} {i18n.t("zen.faq.a4.p2.beforeAccount")}{" "}
                   <a href="/auth">{i18n.t("zen.faq.a4.p2.accountLink")}</a>. {i18n.t("zen.faq.a4.p3")}
                 </Faq>
@@ -309,7 +307,7 @@ export default function Home() {
               <li>
                 <Faq question={i18n.t("zen.faq.q5")}>
                   {i18n.t("zen.faq.a5.beforeExceptions")}{" "}
-                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("zen.faq.a5.exceptionsLink")}</a>.
+                  <a href="/v2/docs/console/models/#privacy">{i18n.t("zen.faq.a5.exceptionsLink")}</a>.
                 </Faq>
               </li>
               <li>
@@ -320,6 +318,15 @@ export default function Home() {
               </li>
               <li>
                 <Faq question={i18n.t("zen.faq.q8")}>{i18n.t("zen.faq.a8")}</Faq>
+              </li>
+              <li>
+                <Faq question={i18n.t("zen.faq.q9")}>
+                  <For each={i18n.t("zen.faq.a9").split(/(\{\{contact\}\})/g)}>
+                    {(part) =>
+                      part === "{{contact}}" ? <a href="mailto:help@anoma.ly">{i18n.t("common.contactUs")}</a> : part
+                    }
+                  </For>
+                </Faq>
               </li>
             </ul>
           </section>

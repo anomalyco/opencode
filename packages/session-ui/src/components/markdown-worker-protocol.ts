@@ -44,6 +44,7 @@ export function applyMarkdownWorkerResponse(
   response: Extract<MarkdownWorkerResponse, { type: "highlight" }>,
 ) {
   if (state && response.id <= state.id) return state
+
   return {
     id: response.id,
     generation: (state?.generation ?? 0) + (response.reset ? 1 : 0),

@@ -1,0 +1,93 @@
+[data-slot="mobile-drawer-content"]:has([data-slot="model-selector-drawer"]) {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+[data-slot="model-selector-drawer"] {
+  /* Keep the gutter inside each scroll boundary so outlines are not clipped. */
+  [data-slot="model-selector-search"],
+  .settings-models,
+  [data-slot="model-selector-actions"] {
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+
+  [data-component="settings-list"][data-variant="catalog"] {
+    padding-inline: 12px;
+  }
+
+  [data-component="settings-row"] {
+    width: calc(100% + 24px);
+    margin-inline: -12px;
+    padding-inline: 12px;
+  }
+
+  .settings-models-console-groups {
+    margin-inline-start: 4px;
+    padding-inline-start: 8px;
+  }
+
+  .provider-model-group-trigger,
+  .provider-model-group-models {
+    padding-inline: 12px;
+  }
+
+  .provider-model-group-models > [data-component="settings-list"] {
+    padding-inline: 0;
+  }
+}
+
+[data-component="dialog-v2"]:has(.model-dialog) [data-slot="dialog-container"] {
+  width: min(calc(100vw - 24px), 480px);
+  min-height: 0;
+}
+
+.model-dialog {
+  /* The model list is denser than the palette: tighter sections and quieter, heavier headers. */
+  [data-component="search-list"] [data-slot="search-list-results"] {
+    padding: 0 6px 6px;
+  }
+
+  [data-component="search-list"] [data-slot="search-list-section"]:not(:last-child) {
+    padding-bottom: 6px;
+  }
+
+  [data-component="search-list"] [data-slot="search-list-header"] {
+    color: var(--v2-text-text-faint);
+    font-weight: 530;
+    letter-spacing: -0.25px;
+  }
+
+  [data-component="search-list"] [data-slot="search-list-row"] {
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-base);
+    letter-spacing: -0.04px;
+  }
+
+  [data-slot="model-dialog-variant"] {
+    color: var(--v2-text-text-muted);
+
+    &[data-default] {
+      color: var(--v2-text-text-faint);
+    }
+  }
+
+  [data-slot="model-dialog-hints"] {
+    display: flex;
+    height: 32px;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 16px;
+    padding: 0 12px;
+    border-top: 0.5px solid var(--v2-border-border-base);
+    color: var(--v2-text-text-faint);
+    font-size: 11px;
+
+    > span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+  }
+}

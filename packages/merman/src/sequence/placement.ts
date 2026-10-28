@@ -120,10 +120,6 @@ function visualLength(value: string): number {
   return diagramTextWidth(value)
 }
 
-function centeredStart(center: number, text: string): number {
-  return center - Math.floor(visualLength(text) / 2)
-}
-
 function mermaidLabelLines(label: string): string[] {
   const lines = label.split(/(?:<br\s*\/?\s*>|\\n)/i).map((line) => line.trimEnd())
   return lines.length > 0 ? lines : [""]

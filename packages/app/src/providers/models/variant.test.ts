@@ -1,87 +1,34 @@
 import { describe, expect, test } from "bun:test"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./variant"
 
+const variants = ["low", "high", "xhigh"]
+
 describe("model variant", () => {
-  test("resolves configured agent variant when model matches", () => {
+  test.each([
+    { name: "applies when the model matches", providerID: "openai", modelID: "gpt-5.2", expected: "xhigh" },
+    { name: "is ignored for another model", providerID: "anthropic", modelID: "claude-sonnet-4", expected: undefined },
+  ])("the configured agent variant $name", ({ providerID, modelID, expected }) => {
     const value = getConfiguredAgentVariant({
-      agent: {
-        model: { providerID: "openai", modelID: "gpt-5.2" },
-        variant: "xhigh",
-      },
-      model: {
-        providerID: "openai",
-        modelID: "gpt-5.2",
-        variants: { low: {}, high: {}, xhigh: {} },
-      },
+      agent: { model: { providerID: "openai", modelID: "gpt-5.2" }, variant: "xhigh" },
+      model: { providerID, modelID, variants: { low: {}, high: {}, xhigh: {} } },
     })
 
-    expect(value).toBe("xhigh")
+    expect(value).toBe(expected)
   })
 
-  test("ignores configured variant when model does not match", () => {
-    const value = getConfiguredAgentVariant({
-      agent: {
-        model: { providerID: "openai", modelID: "gpt-5.2" },
-        variant: "xhigh",
-      },
-      model: {
-        providerID: "anthropic",
-        modelID: "claude-sonnet-4",
-        variants: { low: {}, high: {}, xhigh: {} },
-      },
-    })
-
-    expect(value).toBeUndefined()
+  test.each([
+    { name: "prefers the selected variant over configuration", selected: "high", expected: "high" },
+    { name: "lets an explicit default override configuration", selected: null, expected: undefined },
+  ])("resolve $name", ({ selected, expected }) => {
+    expect(resolveModelVariant({ variants, selected, configured: "xhigh" })).toBe(expected)
   })
 
-  test("prefers selected variant over configured variant", () => {
-    const value = resolveModelVariant({
-      variants: ["low", "high", "xhigh"],
-      selected: "high",
-      configured: "xhigh",
-    })
-
-    expect(value).toBe("high")
-  })
-
-  test("lets an explicit default override the configured variant", () => {
-    const value = resolveModelVariant({
-      variants: ["low", "high", "xhigh"],
-      selected: null,
-      configured: "xhigh",
-    })
-
-    expect(value).toBeUndefined()
-  })
-
-  test("cycles from configured variant to next", () => {
-    const value = cycleModelVariant({
-      variants: ["low", "high", "xhigh"],
-      selected: undefined,
-      configured: "high",
-    })
-
-    expect(value).toBe("xhigh")
-  })
-
-  test("cycles from configured last variant to default", () => {
-    const value = cycleModelVariant({
-      variants: ["low", "high", "xhigh"],
-      selected: undefined,
-      configured: "xhigh",
-    })
-
-    expect(value).toBeUndefined()
-  })
-
-  test("cycles from an explicit default to the first variant", () => {
-    const value = cycleModelVariant({
-      variants: ["low", "high", "xhigh"],
-      selected: null,
-      configured: "xhigh",
-    })
-
-    expect(value).toBe("low")
+  test.each([
+    { name: "a configured variant to the next", selected: undefined, configured: "high", expected: "xhigh" },
+    { name: "the configured last variant to default", selected: undefined, configured: "xhigh", expected: undefined },
+    { name: "an explicit default to the first variant", selected: null, configured: "xhigh", expected: "low" },
+  ])("cycles from $name", ({ selected, configured, expected }) => {
+    expect<string | undefined>(cycleModelVariant({ variants, selected, configured })).toBe(expected)
   })
 
   test("prefers a saved variant to configuration, including explicit Default", () => {

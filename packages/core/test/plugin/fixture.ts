@@ -3,6 +3,8 @@ import { AISDK } from "@opencode/core/aisdk"
 import { Command } from "@opencode/core/command"
 import { Config } from "@opencode/core/config"
 import { Credential } from "@opencode/core/credential"
+import { Database } from "@opencode/core/database/database"
+import { FileAccess } from "@opencode/core/file-access"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -14,7 +16,6 @@ import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
-import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { Npm } from "@opencode/util/npm"
@@ -22,6 +23,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -51,7 +53,16 @@ const npmLayer = Layer.succeed(
   }),
 )
 
-const generateLayer = Layer.succeed(Generate.Service, Generate.Service.of({ text: () => Effect.succeed("") }))
+const generateLayer = Layer.succeed(
+  Generate.Service,
+  Generate.Service.of({
+    text: () => Effect.succeed(""),
+    image: () => Effect.die("unused"),
+    decisions: () => Effect.die("unused"),
+  }),
+)
+
+const configLayer = Config.testLayer()
 
 const permissionLayer = Layer.succeed(
   Permission.Service,
@@ -59,6 +70,7 @@ const permissionLayer = Layer.succeed(
     close: Effect.void,
     ask: (input) => Effect.succeed({ id: input.id ?? Permission.ID.create(), effect: "ask" }),
     assert: () => Effect.void,
+    assertNotDenied: () => Effect.void,
     reply: () => Effect.void,
     get: () => Effect.succeed(undefined),
     forSession: () => Effect.succeed([]),
@@ -66,50 +78,56 @@ const permissionLayer = Layer.succeed(
   }),
 )
 
-export const PluginTestLayer = AppNodeBuilder.build(
-  LayerNode.group([
-    AppProcess.node,
-    FileSystem.node,
-    FSUtil.node,
-    Location.node,
-    Npm.node,
-    Credential.node,
-    Bus.node,
-    Form.node,
-    Generate.node,
-    LayerNodePlatform.httpClient,
-    Plugin.node,
-    Agent.node,
-    AISDK.node,
-    Provider.node,
-    Model.node,
-    Command.node,
-    Integration.node,
-    KV.node,
-    ManagedPolicy.node,
-    Mcp.node,
-    Session.node,
-    PersistentPty.node,
-    LocationServiceMap.node,
-    Permission.node,
-    PluginHooks.node,
-    Reference.node,
-    Rpc.node,
-    Skill.node,
-    SkillDiscovery.node,
-    Tool.node,
-    Vcs.node,
-    Watcher.node,
-    WebSearch.node,
-    Worktree.node,
-    WorktreeStrategies.node,
-  ]),
-  [
-    Location.node.replace(tempLocationLayer),
-    Npm.node.replace(npmLayer),
-    Config.node.replace(Config.testLayer()),
-    Mcp.node.replace(emptyMcpLayer),
-    Generate.node.replace(generateLayer),
-    Permission.node.replace(permissionLayer),
-  ],
-)
+export const makePluginTestLayer = (permission = permissionLayer) =>
+  AppNodeBuilder.build(
+    LayerNode.group([
+      AppProcess.node,
+      FileSystem.node,
+      FSUtil.node,
+      Location.node,
+      Npm.node,
+      Credential.node,
+      Config.node,
+      Database.node,
+      FileAccess.node,
+      Bus.node,
+      Form.node,
+      Generate.node,
+      LayerNodePlatform.httpClient,
+      Plugin.node,
+      Agent.node,
+      AISDK.node,
+      Provider.node,
+      Model.node,
+      Command.node,
+      Integration.node,
+      KV.node,
+      Mcp.node,
+      Session.node,
+      InstructionEntry.node,
+      PersistentPty.node,
+      LocationServiceMap.node,
+      Permission.node,
+      PluginHooks.node,
+      Reference.node,
+      Rpc.node,
+      Skill.node,
+      SkillDiscovery.node,
+      Tool.node,
+      Vcs.node,
+      Watcher.node,
+      WebSearch.node,
+      Worktree.node,
+      WorktreeStrategies.node,
+    ]),
+    [
+      Location.node.replace(tempLocationLayer),
+      Npm.node.replace(npmLayer),
+      Config.node.replace(configLayer),
+      Mcp.node.replace(emptyMcpLayer),
+      Generate.node.replace(generateLayer),
+      Permission.node.replace(permission),
+    ],
+  ).pipe(Layer.provideMerge(configLayer))
+
+export const PluginTestLayer = makePluginTestLayer()

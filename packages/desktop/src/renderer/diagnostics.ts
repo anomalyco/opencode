@@ -14,12 +14,15 @@ function installConsoleStacks() {
 
 function tracedConsole(write: (...args: unknown[]) => void, label: string) {
   const pending = new Map<string, { count: number }>()
+
   return (...args: unknown[]) => {
     const stack = diagnosticStack(label)
     const key = `${String(args[0])}\n${stack}`
     const current = pending.get(key)
+
     if (current) {
       current.count += 1
+
       return
     }
 
@@ -28,6 +31,7 @@ function tracedConsole(write: (...args: unknown[]) => void, label: string) {
     write(...args, stack)
     window.setTimeout(() => {
       pending.delete(key)
+
       if (entry.count) write(`${String(args[0])} (repeated ${entry.count} times)`)
     }, 1_000)
   }

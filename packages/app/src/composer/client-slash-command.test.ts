@@ -1,32 +1,20 @@
-import { describe, expect, test } from "bun:test"
+import { expect, test } from "bun:test"
 import { parseClientSlashCommand } from "./client-slash-command"
 
 const options = [
-  { id: "session.btw", trigger: "btw", arguments: true, type: "builtin" as const },
+  { id: "btw.ask", trigger: "btw", arguments: true, type: "builtin" as const },
   { id: "custom.btw", trigger: "custom", type: "custom" as const },
   { id: "model.choose", trigger: "model", type: "builtin" as const },
 ]
 
-describe("parseClientSlashCommand", () => {
-  test("parses inline and multiline arguments", () => {
-    expect(parseClientSlashCommand(options, "/btw why this approach?")).toEqual({
-      id: "session.btw",
-      input: "why this approach?",
-    })
-    expect(parseClientSlashCommand(options, "/btw\nwhy this approach?")).toEqual({
-      id: "session.btw",
-      input: "why this approach?",
-    })
-  })
-
-  test("accepts a bare argument command", () => {
-    expect(parseClientSlashCommand(options, "/btw")).toEqual({ id: "session.btw", input: "" })
-  })
-
-  test("rejects prefixes, custom commands, and ordinary slash commands", () => {
-    expect(parseClientSlashCommand(options, "/btwx nope")).toBeUndefined()
-    expect(parseClientSlashCommand(options, "/custom nope")).toBeUndefined()
-    expect(parseClientSlashCommand(options, "/model opus")).toBeUndefined()
-    expect(parseClientSlashCommand(options, "ask /btw later")).toBeUndefined()
-  })
+test.each([
+  { text: "/btw why this approach?", result: { id: "btw.ask", input: "why this approach?" } },
+  { text: "/btw\nwhy this approach?", result: { id: "btw.ask", input: "why this approach?" } },
+  { text: "/btw", result: { id: "btw.ask", input: "" } },
+  { text: "/btwx nope", result: undefined },
+  { text: "/custom nope", result: undefined },
+  { text: "/model opus", result: undefined },
+  { text: "ask /btw later", result: undefined },
+])("parses $text as a client argument command", (row) => {
+  expect(parseClientSlashCommand(options, row.text)).toEqual(row.result)
 })

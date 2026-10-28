@@ -1,6 +1,6 @@
 import { AwsV4Signer } from "aws4fetch"
 import { Effect } from "effect"
-import { Headers } from "effect/unstable/http"
+import { Headers } from "effect/http"
 import { Auth, type AuthInput } from "../../route/auth.js"
 import { AIError, AuthenticationError } from "../../schema/index.js"
 import { ProviderShared } from "../shared.js"
@@ -37,7 +37,8 @@ export const defaultChain = (options: DefaultChainOptions): Effect.Effect<Creden
   Effect.tryPromise({
     try: async () => {
       const { fromNodeProviderChain } = await import("@aws-sdk/credential-providers")
-      const identity = await fromNodeProviderChain(options.profile === undefined ? {} : { profile: options.profile })()
+      // ignoreCache re-reads shared config and SSO token files, so `aws sso login` takes effect without a restart.
+      const identity = await fromNodeProviderChain({ ignoreCache: true, profile: options.profile })()
       return {
         region: options.region,
         accessKeyId: identity.accessKeyId,

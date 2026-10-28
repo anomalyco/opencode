@@ -74,6 +74,10 @@ export interface ReplyInput {
   readonly answer: Answer
 }
 
+export interface CancelOptions {
+  readonly message?: string
+}
+
 export interface ListInput {
   readonly sessionID?: Form.Info["sessionID"]
 }
@@ -86,7 +90,7 @@ export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<ReadonlyArray<Info>>
   readonly state: (id: ID) => Effect.Effect<State, NotFoundError>
   readonly reply: (input: ReplyInput) => Effect.Effect<void, AlreadySettledError | InvalidAnswerError | NotFoundError>
-  readonly cancel: (id: ID) => Effect.Effect<void, AlreadySettledError | NotFoundError>
+  readonly cancel: (id: ID, options?: CancelOptions) => Effect.Effect<void, AlreadySettledError | NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Form") {}
@@ -192,12 +196,15 @@ export const layer = Layer.effect(
       ),
     )
 
-    const cancel = Effect.fn("Form.cancel")((id: ID) =>
+    const cancel = Effect.fn("Form.cancel")((id: ID, options?: CancelOptions) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           const entry = yield* requireEntry(id)
           if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id })
-          const next: TerminalState = { status: "cancelled" }
+          const next: TerminalState = {
+            status: "cancelled",
+            ...(options?.message === undefined ? {} : { message: options.message }),
+          }
           yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
           yield* Cache.set(forms, id, { ...entry, state: next })
           yield* Deferred.succeed(entry.deferred, next)

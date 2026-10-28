@@ -10,11 +10,15 @@ export function InlineInput(props: InlineInputProps) {
 
   const style = () => {
     if (!local.style) return { width: local.width }
+
     if (typeof local.style === "string") {
       if (!local.width) return local.style
+
       return `${local.style};width:${local.width}`
     }
+
     if (!local.width) return local.style
+
     return { ...local.style, width: local.width }
   }
 

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { assistantMessage, setupTimeline, toolPart, userMessage } from "../performance/timeline-stability/fixture"
+import { assistantMessage, setupTimeline, toolPart, userMessage } from "../utils/timeline"
 
 for (const locale of ["de", "ar"] as const) {
   test(`projects localized tool names with an English fallback in ${locale}`, async ({ page }) => {

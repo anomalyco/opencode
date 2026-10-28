@@ -6,7 +6,14 @@ import type {
   SessionMessageInfo,
 } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
-import { createTimelineProjection, reuseTimelineRows, Timeline, TimelineRow, type PartGroup } from "./projection"
+import {
+  createTimelineProjection,
+  reasoningHeading,
+  reuseTimelineRows,
+  Timeline,
+  TimelineRow,
+  type PartGroup,
+} from "./projection"
 
 const context = (key: string, partIDs: string[], identity: { userMessageID?: string; messageID?: string } = {}) =>
   new TimelineRow.AssistantPart({
@@ -42,6 +49,7 @@ const part = (key: string, partID: string) =>
   })
 
 const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID })
+
 const keys = (rows: TimelineRow.TimelineRow[]) => rows.map(TimelineRow.key)
 
 describe("Timeline.resolveContent", () => {
@@ -53,6 +61,7 @@ describe("Timeline.resolveContent", () => {
     content,
     time: { created: 0 },
   })
+
   const tool = (id: string): SessionMessageAssistantTool => ({
     id,
     type: "tool",
@@ -71,6 +80,7 @@ describe("Timeline.resolveContent", () => {
         { type: "reasoning", text: "thought", time: { created: 0 } },
       ]),
     })
+
     expect(Timeline.resolveContent(store.message, "assistant:text:0")).toBe(store.message.content[0])
     expect(Timeline.resolveContent(store.message, "assistant:reasoning:0")).toBe(store.message.content[1])
     expect(Timeline.resolveContent(store.message, "read")).toBe(store.message.content[2])
@@ -212,6 +222,7 @@ describe("createTimelineProjection", () => {
   test("builds current message, parent, context, and row indexes", () => {
     const selectedModel = { id: "selected", providerID: "provider" } satisfies ModelRef
     const assistantModel = { id: "assistant", providerID: "provider", variant: "fast" } satisfies ModelRef
+
     const messages = [
       { id: "agent", type: "agent-switched", agent: "explore", time: { created: 1 } },
       { id: "model", type: "model-switched", model: selectedModel, time: { created: 2 } },
@@ -270,11 +281,13 @@ describe("createTimelineProjection", () => {
         time: { created: 2, completed: 3 },
       },
     ] satisfies SessionMessageInfo[]
+
     const first = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "idle" },
       reasoningMode: "full",
     })
+
     const second = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "idle" },
@@ -317,5 +330,37 @@ describe("createTimelineProjection", () => {
       "assistant-1",
       "assistant-2",
     ])
+  })
+})
+
+describe("reasoningHeading", () => {
+  test("returns the most recent thinking summary heading as sections stream in", () => {
+    const sections = [
+      "**Designing Interactive Experience**\nI'm focusing on crafting a fun, tactile, and interactive visual toy.",
+      "**Analyzing Reading Recommendations**\nI'm currently dissecting whether Luke Parker should read the *Throne of Glass* series.",
+      "**Constructing Reader Tools**\nI'm now building out interactive tools.",
+    ]
+
+    expect(reasoningHeading(sections[0])).toBe("Designing Interactive Experience")
+    expect(reasoningHeading(sections.slice(0, 2).join("\n\n"))).toBe("Analyzing Reading Recommendations")
+    expect(reasoningHeading(sections.join("\n\n"))).toBe("Constructing Reader Tools")
+  })
+
+  test("keeps the previous heading while the next bold heading is still streaming", () => {
+    const text = [
+      "**Designing Interactive Experience**\nI'm focusing on crafting a fun, tactile, and interactive visual toy.",
+      "**Analyzing Reading",
+    ].join("\n\n")
+
+    expect(reasoningHeading(text)).toBe("Designing Interactive Experience")
+  })
+
+  test("returns the latest heading across markdown heading styles and ignores inline bold spans", () => {
+    expect(reasoningHeading("## First step\n\nDetails.\n\n## Second step\n\nMore details.")).toBe("Second step")
+    expect(reasoningHeading("<h2>First step</h2>\n<p>Body</p>\n<h3>Second step</h3>")).toBe("Second step")
+    expect(reasoningHeading("First step\n===\n\nSecond step\n---")).toBe("Second step")
+    expect(
+      reasoningHeading("**Designing Interactive Experience**\n\n**Note** that this line ends with **bold**"),
+    ).toBe("Designing Interactive Experience")
   })
 })

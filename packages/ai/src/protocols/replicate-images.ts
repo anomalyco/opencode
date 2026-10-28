@@ -1,5 +1,5 @@
 import { Duration, Effect, Schema } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientResponse } from "effect/http"
 import type { Status } from "../generation.js"
 import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
 import { Media } from "../media.js"
@@ -156,7 +156,7 @@ const decodeResult = Effect.fn("ReplicateImages.decodeResult")(function* (
 
 export const protocol = MediaProtocol.queued<Request, ImageResponse, Token>(route, {
   token: Token,
-  unsupported: ["images", "mask", "n", "size", "aspectRatio", "seed", "format"],
+  unsupported: ["images", "n", "aspect", "resolution"],
   start: { body: { from: fromRequest }, decode: decodeStart },
   status: { path: (token) => token.getURL, decode: decodeStatus },
   result: { path: (token) => token.getURL, decode: decodeResult },

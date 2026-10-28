@@ -4,8 +4,8 @@ import {
   CodeRenderable,
   DiffRenderable,
   getTreeSitterClient,
-  LineNumberRenderable,
   type ColorInput,
+  type DiffGutterOptions,
   type OnHighlightCallback,
   type Renderable,
   type ScrollBoxRenderable,
@@ -15,7 +15,6 @@ import type { JSX } from "@opentui/solid"
 import { useRenderer } from "@opentui/solid"
 import { batch, createMemo, createSignal, For, onCleanup, Show, splitProps } from "solid-js"
 import { splitAddedPatch, splitPatchHunks, type AddedPatchChunk } from "../util/diff"
-import { stringWidth } from "../util/string-width"
 
 export interface PatchDiffRef {
   readonly hunks: () => readonly (DiffRenderable | BoxRenderable)[]
@@ -31,20 +30,28 @@ type Props = Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg" | "ref"
   lineNumberBg: ColorInput
   ref?: (value: PatchDiffRef) => void
   scroll?: () => ScrollBoxRenderable | undefined
+  /** Extra gutter columns before the line numbers, painted in each row's color. */
+  gutterPadding?: number
 }
 
 export function PatchDiff(props: Props) {
-  const [local, diffProps] = splitProps(props, ["diff", "hunkFg", "lineNumberBg", "ref", "scroll"])
+  const [local, diffProps] = splitProps(props, ["diff", "hunkFg", "lineNumberBg", "ref", "scroll", "gutterPadding"])
   const hunks = createMemo(() => splitPatchHunks(local.diff))
   const chunks = createMemo(() => {
     if (!local.scroll) return
     const result = splitAddedPatch(local.diff, VIRTUAL_CHUNK_LINES)
     return result && lineCount(result) > VIRTUAL_MIN_LINES ? result : undefined
   })
-  // Virtual chunks mount independently, so size the gutter for the whole file rather than the mounted chunks.
-  const minDigits = createMemo(() => {
+  // Hunks, virtual chunks and split sides each have their own gutter; give them all one width so the code lines up.
+  const gutter = createMemo((): DiffGutterOptions => {
     const items = chunks()
-    return items ? String(lineCount(items)).length : 0
+    const paddingLeft = 1 + (local.gutterPadding ?? 0)
+    if (items) return { paddingLeft, minDigits: String(lineCount(items)).length }
+    const last = [...local.diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)].flatMap((match) => [
+      Number(match[1]) + Number(match[2] ?? 1) - 1,
+      Number(match[3]) + Number(match[4] ?? 1) - 1,
+    ])
+    return { paddingLeft, minDigits: String(Math.max(1, ...last)).length }
   })
   const nodes = new Map<number, DiffRenderable>()
   let virtualRoot: BoxRenderable | undefined
@@ -57,37 +64,9 @@ export function PatchDiff(props: Props) {
         .filter((node) => !node.isDestroyed)
     },
   })
-  const syncGutters = (attempt = 0) => {
-    requestAnimationFrame(() => {
-      const sides = [...nodes.values()]
-        .filter((item) => !item.isDestroyed)
-        .flatMap((item) => item.getChildren().filter((side) => side instanceof LineNumberRenderable))
-      const lineNumbers = sides.map((side) => new Map([...side.getLineNumbers()].filter(([line]) => line >= 0)))
-      const digits = lineNumbers.map((numbers) => Math.max(0, ...numbers.values()).toString().length)
-      const after = sides.map((side) =>
-        Math.max(
-          0,
-          ...[...side.getLineSigns()].filter(([line]) => line >= 0).map(([, sign]) => stringWidth(sign.after ?? "")),
-        ),
-      )
-      const maxDigits = Math.max(...digits)
-      const maxAfter = Math.max(...after)
-      if (!maxDigits && attempt < 2) return syncGutters(attempt + 1)
-      if (!maxDigits) return
-      const width = Math.max(maxDigits, minDigits())
-      sides.forEach((side) => {
-        const index = sides.indexOf(side)
-        const signs = new Map([...side.getLineSigns()].filter(([line]) => line >= 0))
-        signs.set(-1, { after: " ".repeat(maxAfter + width - digits[index]) })
-        side.setLineNumbers(lineNumbers[index])
-        side.setLineSigns(signs)
-      })
-    })
-  }
   const register = (index: number, node: DiffRenderable) => {
     nodes.set(index, node)
     onCleanup(() => nodes.delete(index))
-    syncGutters()
   }
 
   return (
@@ -110,6 +89,7 @@ export function PatchDiff(props: Props) {
                 diff={hunk.patch}
                 minHeight={hunk.rows}
                 lineNumberBg={local.lineNumberBg}
+                gutter={gutter()}
               />
             </>
           )}
@@ -122,6 +102,7 @@ export function PatchDiff(props: Props) {
           scroll={local.scroll!}
           diffProps={diffProps}
           lineNumberBg={local.lineNumberBg}
+          gutter={gutter()}
           register={register}
           registerRoot={(root) => (virtualRoot = root)}
         />
@@ -137,6 +118,7 @@ function VirtualAddedPatch(props: {
   scroll: () => ScrollBoxRenderable | undefined
   diffProps: Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg" | "ref">
   lineNumberBg: ColorInput
+  gutter: DiffGutterOptions
   register: (index: number, node: DiffRenderable) => void
   registerRoot: (root: BoxRenderable) => void
 }) {
@@ -210,6 +192,7 @@ function VirtualAddedPatch(props: {
               wrapMode="none"
               height={chunk.rows}
               lineNumberBg={props.lineNumberBg}
+              gutter={props.gutter}
             />
           </Show>
         )}

@@ -1,6 +1,6 @@
 import { Tool } from "@opencode/schema/tool"
-import { Effect, Option, Schema } from "effect"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Effect, Option, Predicate, Schema, SchemaGetter, SchemaTransformation } from "effect"
+import { Headers, HttpClientRequest } from "effect/http"
 import { Media } from "../media.js"
 import {
   InvalidProviderOutputError,
@@ -14,6 +14,7 @@ import {
   type MediaPart,
   type OpenString,
   type ProviderID,
+  type RequestEncoding,
   type TextPart,
   type ToolEntry,
   type ToolResultPart,
@@ -26,11 +27,53 @@ const isJson = Schema.is(Schema.Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
 export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema))
+/** Optional provider field where an explicit `null` means absent, so decoding never yields `null`. */
+export const optionalNullish = <const S extends Schema.Top>(schema: S) =>
+  Schema.optional(Schema.NullOr(schema)).pipe(
+    Schema.decodeTo(
+      Schema.optional(Schema.toType(schema)),
+      SchemaTransformation.transformOptional({
+        decode: Option.filter(Predicate.isNotNullish),
+        encode: (value) => value,
+      }),
+    ),
+  )
 /** Optional field whose malformed value decodes to `undefined` instead of failing the enclosing struct. */
 export const lenient = <const S extends Schema.Top>(schema: S) =>
   Schema.optionalKey(
     Schema.UndefinedOr(schema).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some(undefined)))),
   )
+/** A billed amount in USD; a malformed or negative one decodes as absent. */
+const billedAmount = lenient(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)))
+
+/** Billing an endpoint reports beside its token usage: `cost` is the USD it charged (OpenRouter, LiteLLM, OpenCode Zen). */
+export const ReportedBilling = Schema.Struct({
+  cost: billedAmount,
+})
+
+/** Reads `ReportedBilling` from a raw usage object, which provider metadata keeps as the endpoint sent it. */
+export const reportedBilling = (usage: unknown) =>
+  Option.match(Schema.decodeUnknownOption(ReportedBilling)(usage), {
+    onNone: () => ({}),
+    onSome: (billing) => ({ cost: billing.cost }),
+  })
+
+/**
+ * Accepts stream frames that carry no `type`, alongside the typed event schema. Gateways inject such frames as
+ * keep-alives, so they decode as an ignored event; one with an `error` still decodes as an error event.
+ */
+export const withUntypedFrames = <const S extends Schema.Codec<{ readonly type: string }, { readonly type: string }>>(
+  event: S,
+) =>
+  Schema.Union([
+    event,
+    JsonObject.check(Schema.makeFilter((frame) => !("type" in frame))).pipe(
+      Schema.decodeTo(event, {
+        decode: SchemaGetter.transform((frame) => ({ ...frame, type: frame.error != null ? "error" : "ignored" })),
+        encode: SchemaGetter.forbidden(() => "Untyped stream frames are decode-only"),
+      }),
+    ),
+  ])
 /** Provider-defined string enum: known values for autocomplete, any string accepted at runtime. */
 export const knownString = <Known extends string>() =>
   Schema.declare<OpenString<Known>>((value): value is OpenString<Known> => typeof value === "string", {
@@ -39,10 +82,15 @@ export const knownString = <Known extends string>() =>
 
 export const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64
 
+// Body-level `prompt_cache_key` is off when caching is disabled or the model
+// explicitly rejects the field. Header-based affinity is unaffected.
+export const sendsPromptCacheKey = (request: LLMRequest) =>
+  request.cache !== "none" && request.model.compatibility?.supportsPromptCacheKey !== false
+
 // OpenAI limits `prompt_cache_key` to 64 chars; DeepSeek and Zai inherit the same
 // limit via their OpenAI-compatible APIs. Clamp with unicode-aware slicing.
 export const promptCacheKey = (request: LLMRequest): string | undefined => {
-  if (request.cache === "none" || request.promptCacheKey === undefined) return undefined
+  if (!sendsPromptCacheKey(request) || request.promptCacheKey === undefined) return undefined
   const chars = Array.from(request.promptCacheKey)
   if (chars.length <= OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH) return request.promptCacheKey
   return chars.slice(0, OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH).join("")
@@ -154,7 +202,7 @@ export const wrapSystemUpdate = (parts: ReadonlyArray<{ readonly text: string }>
  * raw retrieved, tool, or web content into privileged updates: keep untrusted
  * data in ordinary user/tool messages instead.
  */
-export const systemUpdateText = Effect.fn("ProviderShared.systemUpdateText")(function* (
+export const systemUpdateText = Effect.fnUntraced(function* (
   route: string,
   message: LLMRequest["messages"][number],
 ) {
@@ -167,7 +215,7 @@ export const systemUpdateText = Effect.fn("ProviderShared.systemUpdateText")(fun
 })
 
 /** Lower an unsupported privileged update into visible, in-order user text. */
-export const wrappedSystemUpdate = Effect.fn("ProviderShared.wrappedSystemUpdate")(function* (
+export const wrappedSystemUpdate = Effect.fnUntraced(function* (
   route: string,
   message: LLMRequest["messages"][number],
 ) {
@@ -222,14 +270,14 @@ export const mediaReference = (
 }
 
 /**
- * Lift a tool-result file into a `MediaPart`. Tool files carry either a data URL, an `http(s)` URL, or raw base64 in
+ * Lift a tool-result file into a `MediaPart`. Tool files carry either a data URL, a URI, or raw base64 in
  * `uri`; the declared `mime` wins over any data-URL prefix so tool authors control the type the model sees.
  */
 export const toolFileMedia = (item: Tool.FileContent): MediaPart => {
   const parsed = Media.parseDataUrl(item.uri)
   const asset = parsed
     ? Media.from({ ...parsed.source, mediaType: item.mime })
-    : /^https?:\/\//.test(item.uri)
+    : item.uri.includes("://")
       ? Media.url(item.uri, { mediaType: item.mime })
       : Media.base64(item.uri, item.mime)
   return Message.media(asset, { filename: item.name })
@@ -373,11 +421,40 @@ export const validateWith =
  * send JSON with a stale content type. The body is passed pre-encoded so
  * routes can choose between
  * `Schema.encodeSync(payload)` and `ProviderShared.encodeJson(payload)`.
+ * A `zstd` or `gzip` encoding compresses the body and sets `content-encoding`;
+ * it falls back to plain JSON when the runtime has no zlib.
  */
-export const jsonPost = (input: { readonly url: string; readonly body: string; readonly headers?: Headers.Input }) =>
-  HttpClientRequest.post(input.url).pipe(
-    HttpClientRequest.setHeaders(Headers.set(Headers.fromInput(input.headers), "content-type", "application/json")),
-    HttpClientRequest.bodyText(input.body, "application/json"),
+export const jsonPost = (input: {
+  readonly url: string
+  readonly body: string
+  readonly headers?: Headers.Input
+  readonly encoding?: RequestEncoding
+}) => {
+  const headers = Headers.set(Headers.fromInput(input.headers), "content-type", "application/json")
+  const compressed = compressBody(input.body, input.encoding)
+  if (!compressed)
+    return HttpClientRequest.post(input.url).pipe(
+      HttpClientRequest.setHeaders(headers),
+      HttpClientRequest.bodyText(input.body, "application/json"),
+    )
+  return HttpClientRequest.post(input.url).pipe(
+    HttpClientRequest.setHeaders(Headers.set(headers, "content-encoding", compressed.encoding)),
+    HttpClientRequest.bodyUint8Array(compressed.body, "application/json"),
   )
+}
+
+function compressBody(text: string, encoding: RequestEncoding | undefined) {
+  if (encoding === undefined || encoding === "none") return undefined
+  // Looked up at call time instead of imported: a runtime without node:zlib or its zstd export
+  // (browsers, older Node, some workerd setups) sends plain JSON rather than failing to load this module.
+  const zlib = globalThis.process?.getBuiltinModule?.("node:zlib")
+  try {
+    const body = encoding === "zstd" ? zlib?.zstdCompressSync?.(text) : zlib?.gzipSync(text)
+    return body && { encoding, body }
+  } catch {
+    // Compression is an optimization, so a failure sends plain JSON instead of failing the request.
+    return undefined
+  }
+}
 
 export * as ProviderShared from "./shared.js"

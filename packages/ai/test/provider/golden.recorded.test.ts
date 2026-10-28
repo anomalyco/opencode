@@ -49,6 +49,8 @@ const cloudflareWorkers = CloudflareWorkersAI.configure({
 })
 const cloudflareAIGatewayWorkers = cloudflareAIGateway.model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
 const cloudflareAIGatewayWorkersTools = cloudflareAIGateway.model("workers-ai/@cf/openai/gpt-oss-20b")
+const cloudflareAIGatewayClaude = cloudflareAIGateway.model("anthropic/claude-haiku-4.5")
+const cloudflareAIGatewayOpenAI = cloudflareAIGateway.model("openai/gpt-5-nano")
 const cloudflareWorkersAI = cloudflareWorkers.model("@cf/meta/llama-3.1-8b-instruct")
 const cloudflareWorkersAITools = cloudflareWorkers.model("@cf/openai/gpt-oss-20b")
 const deepseek = DeepSeek.configure({ apiKey: process.env.DEEPSEEK_API_KEY ?? "fixture" }).model("deepseek-chat")
@@ -76,7 +78,7 @@ const openrouterOpus = OpenRouter.configure({
 const redactCloudflareURL = (url: string) =>
   url
     .replace(/\/client\/v4\/accounts\/[^/]+\/ai\/v1\//, "/client/v4/accounts/{account}/ai/v1/")
-    .replace(/\/v1\/[^/]+\/[^/]+\/compat\//, "/v1/{account}/{gateway}/compat/")
+    .replace(/\/v1\/[^/]+\/[^/]+\/(anthropic|openai)\//, "/v1/{account}/{gateway}/$1/")
 
 const cloudflareOptions = {
   redact: { url: redactCloudflareURL },
@@ -176,6 +178,25 @@ describeRecordedGoldenScenarios([
     requires: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
     options: cloudflareOptions,
     scenarios: [{ id: "tool-call", maxTokens: 120 }],
+  },
+  {
+    name: "Cloudflare AI Gateway Claude Haiku 4.5",
+    prefix: "cloudflare-ai-gateway",
+    model: cloudflareAIGatewayClaude,
+    requires: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
+    options: { redact: { url: redactCloudflareURL, allowRequestHeaders: ["anthropic-version"] } },
+    scenarios: ["text", "tool-loop"],
+  },
+  {
+    name: "Cloudflare AI Gateway OpenAI GPT-5 Nano",
+    prefix: "cloudflare-ai-gateway",
+    model: cloudflareAIGatewayOpenAI,
+    requires: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
+    options: cloudflareOptions,
+    scenarios: [
+      { id: "text", temperature: false, maxTokens: 2000 },
+      { id: "tool-loop", temperature: false, maxTokens: 2000, timeout: 30_000 },
+    ],
   },
   {
     name: "Cloudflare Workers AI Llama 3.1 8B",

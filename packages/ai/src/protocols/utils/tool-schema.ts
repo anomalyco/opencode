@@ -2,6 +2,8 @@ import { ToolDefinition, type JsonSchema, type LanguageModel, type LLMRequest } 
 import { isRecord } from "../../utils/record.js"
 import { GeminiJsonSchema } from "./gemini-json-schema.js"
 
+const { SCHEMA_MAPS, VALUES, mapValues } = GeminiJsonSchema
+
 const tupleItemsSchema = (items: ReadonlyArray<unknown>) => {
   const projected = items.map(moonshotNode)
   if (projected.length === 0) return {}
@@ -27,10 +29,16 @@ const moonshotNode = (schema: unknown): unknown => {
   return Object.fromEntries([
     ...(type === undefined ? [] : [["type", type]]),
     ...Object.entries(schema).flatMap(([key, value]) => {
-      if (key === "items" && Array.isArray(value)) return [[key, tupleItemsSchema(value)]]
+      if (VALUES.has(key)) return [[key, value]]
+      if (SCHEMA_MAPS.has(key) && isRecord(value)) return [[key, mapValues(value, moonshotNode)]]
+      if (key === "items") {
+        if (Array.isArray(schema.prefixItems)) return []
+        if (Array.isArray(value)) return [[key, tupleItemsSchema(value)]]
+      }
       if (key === "prefixItems") {
-        if ("items" in schema) return []
-        return [["items", tupleItemsSchema(Array.isArray(value) ? value : [])]]
+        if (!Array.isArray(value)) return "items" in schema ? [] : [["items", {}]]
+        const rest = isRecord(schema.items) ? [schema.items] : Array.isArray(schema.items) ? schema.items : []
+        return [["items", tupleItemsSchema([...value, ...rest])]]
       }
       if (key === "unevaluatedItems") return []
       return [[key, moonshotNode(value)]]
@@ -43,9 +51,6 @@ const moonshot = (schema: JsonSchema): JsonSchema => {
   return isRecord(projected) ? projected : {}
 }
 
-const openAI = (schema: JsonSchema): JsonSchema => schema
-const responses = openAI
-
 const gemini = GeminiJsonSchema.normalize
 
 const MODEL_NAMES = [
@@ -54,9 +59,17 @@ const MODEL_NAMES = [
 ] as const
 
 // Tool arguments are always a JSON object, and most providers reject a tool schema whose root does not
-// declare `type: "object"`, such as `{}` or a bare `properties` map. Effect encodes an empty struct as
-// `anyOf` object or array; every object matches its bare object branch, so that `anyOf` is dropped.
+// declare `type: "object"`, such as `{}` or a bare `properties` map. An object root makes Effect's
+// empty-struct markers redundant: `{ not: { type: "null" } }`, and `anyOf` object or array from older
+// releases. Both are dropped so the root is a plain object schema.
 const objectRoot = (schema: JsonSchema): JsonSchema => {
+  if (
+    (schema.type === undefined || schema.type === "object") &&
+    isRecord(schema.not) &&
+    schema.not.type === "null" &&
+    Object.keys(schema.not).length === 1
+  )
+    return { type: "object", ...Object.fromEntries(Object.entries(schema).filter(([key]) => key !== "not")) }
   if (schema.type !== undefined) return schema
   if (
     Array.isArray(schema.anyOf) &&
@@ -98,7 +111,5 @@ const tools = (entries: LLMRequest["tools"], model: LanguageModel): LLMRequest["
 export const ToolSchemaProjection = {
   gemini,
   moonshot,
-  openAI,
-  responses,
   tools,
 } as const

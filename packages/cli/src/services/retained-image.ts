@@ -52,7 +52,7 @@ export const relocate = Effect.fnUntraced(function* (directory: string, destinat
 
 /**
  * Whether the running binary was installed by a package manager or the curl installer, the installs
- * bun can hang on. The updater decides the same question from the package manifest it already reads.
+ * whose upgrades replace it in place. The updater decides the same question from the install location.
  */
 export function installed(home: string) {
   const runtime = path.basename(process.execPath, path.extname(process.execPath)).toLowerCase()
@@ -60,6 +60,7 @@ export function installed(home: string) {
   const executable = path.resolve(process.execPath)
   return (
     executable.split(path.sep).includes("node_modules") ||
+    /[\\/]winget[\\/]packages[\\/]/i.test(executable) ||
     executable === path.resolve(home, ".opencode", "bin", "opencode.exe")
   )
 }

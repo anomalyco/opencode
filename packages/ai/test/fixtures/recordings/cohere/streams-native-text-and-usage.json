@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:cohere",
+      "provider:cohere"
+    ],
+    "name": "cohere/streams-native-text-and-usage",
+    "recordedAt": "2026-10-02T02:36:12.967Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.cohere.com/v2/chat",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"command-a-03-2025\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Reply exactly: OK\"}]}],\"stream\":true,\"max_tokens\":64}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message-start\ndata: {\"id\":\"a171b3a5-db11-4445-a645-5221fb466ab8\",\"type\":\"message-start\",\"delta\":{\"message\":{\"role\":\"assistant\",\"content\":[],\"tool_plan\":\"\",\"tool_calls\":[],\"citations\":[]}}}\n\nevent: content-start\ndata: {\"type\":\"content-start\",\"index\":0,\"delta\":{\"message\":{\"content\":{\"type\":\"text\",\"text\":\"\"}}}}\n\nevent: content-delta\ndata: {\"type\":\"content-delta\",\"index\":0,\"delta\":{\"message\":{\"content\":{\"text\":\"OK\"}}}}\n\nevent: content-end\ndata: {\"type\":\"content-end\",\"index\":0}\n\nevent: message-end\ndata: {\"type\":\"message-end\",\"delta\":{\"finish_reason\":\"COMPLETE\",\"usage\":{\"billed_units\":{\"input_tokens\":4,\"output_tokens\":1},\"tokens\":{\"input_tokens\":499,\"output_tokens\":4},\"cached_tokens\":464}}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

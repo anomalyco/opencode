@@ -75,7 +75,7 @@ const usesSse = (request: MediaProtocol.Addressed<Request>) => request.mode === 
 
 const CONTAINERS: Readonly<Record<string, "raw" | "wav" | "mp3">> = { pcm: "raw", wav: "wav", mp3: "mp3" }
 
-const outputFormat = Effect.fn("CartesiaSpeech.outputFormat")(function* (request: MediaProtocol.Addressed<Request>) {
+const outputFormat = Effect.fnUntraced(function* (request: MediaProtocol.Addressed<Request>) {
   const sse = usesSse(request)
   const format = request.format ?? (sse ? "pcm" : "mp3")
   const container = CONTAINERS[format]
@@ -121,7 +121,7 @@ const fromRequest = Effect.fn("CartesiaSpeech.fromRequest")(function* (request: 
 // 6. Stream parsing
 // ---------------------------------------------------------------------------
 
-const onEvent = Effect.fn("CartesiaSpeech.onEvent")(function* (state: State, frame: string) {
+const onEvent = Effect.fnUntraced(function* (state: State, frame: string) {
   const event = yield* decodeEvent(frame)
   if (event.type === "chunk" && event.data !== undefined) return SpeechStream.delta(state, event.data)
   if (event.type === "timestamps" && event.word_timestamps !== undefined) {
@@ -140,7 +140,7 @@ const onEvent = Effect.fn("CartesiaSpeech.onEvent")(function* (state: State, fra
   return [state, []] as const
 })
 
-const finish = Effect.fn("CartesiaSpeech.finish")(function* (
+const finish = Effect.fnUntraced(function* (
   state: State,
   context: MediaProtocol.ResponseContext<Request>,
 ) {

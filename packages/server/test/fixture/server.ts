@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { HttpServer } from "effect/unstable/http"
+import { HttpServer } from "effect/http"
 import { ServerProcess } from "../../src/process"
 
 export const startServer = Effect.fnUntraced(function* (directory: string) {

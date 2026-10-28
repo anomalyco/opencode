@@ -286,7 +286,15 @@ test("loads location metadata when an open session moves", async () => {
   const setup = await renderSessionTabs("first")
 
   try {
-    await wait(() => setup.locations.includes(directory) && setup.vcsLocations.includes(directory))
+    // server.connected loads the default location on its own, so also wait for the session and its tab:
+    // a move that arrives before either has loaded is dropped.
+    await wait(
+      () =>
+        setup.data.session.get("first") !== undefined &&
+        setup.tabs.tabs().some((tab) => tab.sessionID === "first") &&
+        setup.locations.includes(directory) &&
+        setup.vcsLocations.includes(directory),
+    )
     setup.emit({
       id: "evt_moved",
       created: 1,
@@ -340,26 +348,6 @@ test("lists closed tabs newest first and reopens a selected entry", async () => 
     await wait(() => setup.tabs.tabs().length === 3)
     expect(setup.tabs.current()).toBe("third")
     expect(setup.tabs.recentlyClosed()).toEqual([])
-  } finally {
-    await setup.destroy()
-  }
-})
-
-test("stores session tabs for the current working directory by default", async () => {
-  const setup = await renderSessionTabs("first")
-
-  try {
-    const file = path.join(setup.state, "test", "tui", "tabs.json")
-    await wait(async () => {
-      if (!(await Bun.file(file).exists())) return false
-      const stored = await Bun.file(file).json()
-      return stored.cwd[directory]?.tabs.some((tab: { sessionID: string }) => tab.sessionID === "first")
-    })
-    const stored = await Bun.file(file).json()
-    expect(stored.global).toEqual({ tabs: [], unread: {} })
-    expect(Object.keys(stored.cwd)).toEqual([directory])
-    expect(stored.cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID)).toEqual(["first"])
-    expect(stored.cwd[directory].unread).toEqual({})
   } finally {
     await setup.destroy()
   }

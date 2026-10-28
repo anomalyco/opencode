@@ -28,6 +28,7 @@ test("restores bottom anchoring when Suspense reattaches the scroll viewport", a
     const scroll = createAutoScroll({ working: () => true })
     scroll.scrollRef(viewport)
     scroll.contentRef(content)
+
     return dispose
   })
 

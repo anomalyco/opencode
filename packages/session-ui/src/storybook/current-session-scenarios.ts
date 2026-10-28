@@ -29,6 +29,7 @@ export function storyTool(
               ],
               metadata: options.metadata,
             }
+
   return {
     type: "tool",
     id,

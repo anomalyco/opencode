@@ -2,7 +2,7 @@ export * as WebSearchTavily from "./tavily.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
 import { Duration, Effect, Schema, Scope } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { App } from "../../app.js"
 
 export const endpoint = "https://api.tavily.com/search"

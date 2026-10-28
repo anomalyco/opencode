@@ -115,6 +115,7 @@ export const WithCheckbox = {
     const [wrap, setWrap] = createSignal(true)
     const [minimap, setMinimap] = createSignal(false)
     const [ruler, setRuler] = createSignal(false)
+
     return (
       <Menu gutter={6}>
         <Menu.Trigger as={Button}>View</Menu.Trigger>
@@ -139,6 +140,7 @@ export const WithCheckbox = {
 export const WithRadio = {
   render: () => {
     const [theme, setTheme] = createSignal("system")
+
     return (
       <Menu gutter={6}>
         <Menu.Trigger as={Button}>Theme</Menu.Trigger>

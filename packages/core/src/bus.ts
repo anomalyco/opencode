@@ -12,6 +12,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { isDeepStrictEqual } from "node:util"
 import { Durable } from "@opencode/schema/durable-event-manifest"
 import { SessionEvent } from "@opencode/schema/session-event"
+import { SessionLegacy } from "@opencode/schema/session-legacy"
 import type { SessionID } from "@opencode/schema/session-id"
 import { AbsolutePath } from "@opencode/schema/schema"
 
@@ -70,6 +71,10 @@ const envelope = (aggregateID: string, seq: number, version: number) => ({
   version: Event.Version.make(version),
 })
 
+// Every stored event decodes through here, so payloads written in older shapes are upgraded in one place.
+const decodeStoredData = (definition: Event.DurableDefinition, data: unknown) =>
+  Schema.decodeUnknownSync(definition.data)(SessionLegacy.event(definition.type, data))
+
 const decodeSerializedEvent = (event: SerializedEvent): Event.Payload => {
   const definition = Durable.get(event.type)
   if (!definition?.durable) {
@@ -80,7 +85,7 @@ const decodeSerializedEvent = (event: SerializedEvent): Event.Payload => {
     created: event.created ?? 0,
     type: definition.type,
     durable: envelope(event.aggregateID, event.seq, definition.durable.version),
-    data: Schema.decodeUnknownSync(definition.data)(event.data),
+    data: decodeStoredData(definition, event.data),
   }
 }
 
@@ -193,7 +198,7 @@ export function configured(options?: Options) {
         const pubsub = {
           live: yield* PubSub.unbounded<Event.Payload>(),
           durable: new Map<string, Set<PubSub.PubSub<void>>>(),
-          typed: new Map<string, PubSub.PubSub<Event.Payload>>(),
+          typed: new Map<string, Set<PubSub.PubSub<Event.Payload>>>(),
         }
         const projectors = new Map<string, Subscriber[]>()
         const listeners = new Array<Subscriber>()
@@ -260,15 +265,6 @@ export function configured(options?: Options) {
           }
         })
 
-        const getOrCreate = (definition: Event.Definition) =>
-          Effect.gen(function* () {
-            const existing = pubsub.typed.get(definition.type)
-            if (existing) return existing
-            const created = yield* PubSub.unbounded<Event.Payload>()
-            pubsub.typed.set(definition.type, created)
-            return created
-          })
-
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
             yield* PubSub.shutdown(pubsub.live)
@@ -277,7 +273,11 @@ export function configured(options?: Options) {
               (pubsubs) => Effect.forEach(pubsubs, PubSub.shutdown, { discard: true }),
               { discard: true },
             )
-            yield* Effect.forEach(pubsub.typed.values(), PubSub.shutdown, { discard: true })
+            yield* Effect.forEach(
+              pubsub.typed.values(),
+              (subscribers) => Effect.forEach(subscribers, PubSub.shutdown, { discard: true }),
+              { discard: true },
+            )
           }),
         )
 
@@ -325,7 +325,8 @@ export function configured(options?: Options) {
                           .get()
                           .pipe(Effect.orDie)
                         const latest = row?.seq ?? -1
-                        const encoded = Schema.encodeUnknownSync(definition.data)(event.data) as Record<string, unknown>
+                        const encode = () =>
+                          Schema.encodeUnknownSync(definition.data)(event.data) as Record<string, unknown>
                         if (input?.strictOwner && row?.ownerID && row.ownerID !== input.ownerID) {
                           yield* Effect.die(
                             new InvalidDurableEventError({
@@ -346,7 +347,8 @@ export function configured(options?: Options) {
                             stored?.id === event.id &&
                             stored.type === versionedType(definition.type, durable.version) &&
                             stored.created === (event.created ?? 0) &&
-                            isDeepStrictEqual(stored.data, encoded)
+                            // Rows written before a payload rename compare in their upgraded shape.
+                            isDeepStrictEqual(SessionLegacy.event(definition.type, stored.data), encode())
                           ) {
                             if (input.ownerID && row?.ownerID == null) {
                               yield* db
@@ -423,7 +425,7 @@ export function configured(options?: Options) {
                                 seq,
                                 created: event.created ?? 0,
                                 type: versionedType(definition.type, durable.version),
-                                data: encoded,
+                                data: encode(),
                               },
                             ])
                             .run()
@@ -498,9 +500,11 @@ export function configured(options?: Options) {
               (listener) => (isolateListeners ? observe(event, listener) : listener(event)),
               { discard: true },
             )
-            const typed = pubsub.typed.get(event.type)
-            if (typed) yield* PubSub.publish(typed, event)
+            // Type subscribers resume inline and may publish follow-up events, so live subscribers get this one first.
             yield* PubSub.publish(pubsub.live, event)
+            const typed = pubsub.typed.get(event.type)
+            if (typed)
+              yield* Effect.forEach(typed, (subscriber) => PubSub.publish(subscriber, event), { discard: true })
           })
         }
 
@@ -596,10 +600,6 @@ export function configured(options?: Options) {
                           const ids = new Set<Event.ID>()
                           for (const [index, item] of payloads.entries()) {
                             const seq = firstSeq + index
-                            const encoded = Schema.encodeUnknownSync(item.definition.data)(item.event.data) as Record<
-                              string,
-                              unknown
-                            >
                             if (persist) {
                               if (ids.has(item.event.id))
                                 yield* Effect.die(
@@ -637,7 +637,10 @@ export function configured(options?: Options) {
                                 seq,
                                 created: event.created,
                                 type: versionedType(item.definition.type, item.definition.durable.version),
-                                data: encoded,
+                                data: Schema.encodeUnknownSync(item.definition.data)(item.event.data) as Record<
+                                  string,
+                                  unknown
+                                >,
                               })
                           }
                           yield* db
@@ -684,7 +687,7 @@ export function configured(options?: Options) {
                   id: event.id,
                   created: event.created ?? 0,
                   type: definition.type,
-                  data: Schema.decodeUnknownSync(definition.data)(event.data),
+                  data: decodeStoredData(definition, event.data),
                 } as Event.Payload
                 const committed = yield* commitDurableEvent(definition, payload, {
                   seq: event.seq,
@@ -752,11 +755,30 @@ export function configured(options?: Options) {
         ): Stream.Stream<SubscribePayload<D>>
         function subscribe(input?: Event.Definition | readonly Event.Definition[]): Stream.Stream<Event.Payload> {
           if (input === undefined) return streamLive()
-          if (isDefinition(input)) {
-            return local(Stream.unwrap(getOrCreate(input).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub)))))
-          }
-          const types = new Set(input.map((definition) => definition.type))
-          return streamLive().pipe(Stream.filter((event) => types.has(event.type)))
+          const types = new Set((isDefinition(input) ? [input] : input).map((definition) => definition.type))
+          // One PubSub per subscription, registered under each type, keeps publish order across types.
+          return local(
+            Stream.unwrap(
+              Effect.acquireRelease(
+                PubSub.unbounded<Event.Payload>().pipe(
+                  Effect.tap((subscriber) =>
+                    Effect.sync(() => {
+                      for (const type of types)
+                        pubsub.typed.set(type, (pubsub.typed.get(type) ?? new Set()).add(subscriber))
+                    }),
+                  ),
+                ),
+                (subscriber) =>
+                  Effect.sync(() => {
+                    for (const type of types) {
+                      const subscribers = pubsub.typed.get(type)
+                      subscribers?.delete(subscriber)
+                      if (subscribers?.size === 0) pubsub.typed.delete(type)
+                    }
+                  }).pipe(Effect.andThen(PubSub.shutdown(subscriber))),
+              ).pipe(Effect.flatMap(PubSub.subscribe), Effect.map(Stream.fromSubscription)),
+            ),
+          )
         }
 
         const streamLive = (): Stream.Stream<Event.Payload> => local(Stream.fromPubSub(pubsub.live))

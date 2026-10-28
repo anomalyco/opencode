@@ -19,7 +19,7 @@ const core = createRequire(path.resolve(import.meta.dirname, "../../core/package
 const pty = createRequire(core.resolve("@opencode-ai/pty/package.json"))
 
 export async function resolveOpencodePty(target: Target): Promise<OpencodePtyAsset | undefined> {
-  if (target.platform !== "darwin" && target.platform !== "linux") return undefined
+  if (target.platform !== "darwin" && target.platform !== "linux" && target.platform !== "win32") return undefined
   if (target.arch !== "arm64" && target.arch !== "x64") return undefined
 
   const suffix = [target.platform, target.arch, target.platform === "linux" ? (target.libc ?? "glibc") : undefined]
@@ -30,7 +30,9 @@ export async function resolveOpencodePty(target: Target): Promise<OpencodePtyAss
   const local = process.env.OPENCODE_PTY_BIN
   if (local && (target.platform !== process.platform || target.arch !== process.arch))
     throw new Error("OPENCODE_PTY_BIN can only be embedded in a build for the current platform and architecture")
-  const source = local ? path.resolve(local) : pty.resolve(`${name}/bin/opencode-pty`)
+  const source = local
+    ? path.resolve(local)
+    : pty.resolve(`${name}/bin/${target.platform === "win32" ? "opencode-pty.exe" : "opencode-pty"}`)
   const manifest: unknown = local
     ? { version: "local" }
     : JSON.parse(await readFile(pty.resolve(`${name}/package.json`), "utf8"))

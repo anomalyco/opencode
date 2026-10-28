@@ -9,12 +9,22 @@ export type Data = ServerReadyData & { password: string | null }
 // and every reconnect publish the current endpoint.
 let current: Data | undefined
 
+const listeners = new Set<() => void>()
+
 export function set(data: Data) {
   current = data
+  listeners.forEach((listener) => listener())
 }
 
 export function get() {
   return current
+}
+
+/** Runs `listener` after each `set`: the first connection and every reconnect. Returns a function that stops it. */
+export function onChange(listener: () => void) {
+  listeners.add(listener)
+
+  return () => void listeners.delete(listener)
 }
 
 /** What the renderer learns about the sidecar: its origin, never its credential. */
@@ -25,6 +35,8 @@ export function ready(data: Data): ServerReadyData {
 /** The Basic credential for a request to the sidecar origin, or undefined for any other URL. */
 export function authorization(sidecar: Data | undefined, url: string) {
   if (!sidecar?.password || !URL.canParse(url)) return
+
   if (new URL(url).origin !== sidecar.url) return
+
   return `Basic ${Buffer.from(`opencode:${sidecar.password}`).toString("base64")}`
 }

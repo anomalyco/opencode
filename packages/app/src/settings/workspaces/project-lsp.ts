@@ -7,6 +7,7 @@ export function configuredLanguageServers(entries: readonly ConfigEntry[]) {
     (state, entry) => {
       if (entry.type !== "document" || entry.info.lsp === undefined) return state
       const config = entry.info.lsp
+
       // A boolean replaces the object form, so earlier named entries no longer apply.
       if (typeof config === "boolean") return { disabled: !config, servers: new Map<string, ConfiguredServer>() }
       Object.entries(config).forEach(([name, server]) => {
@@ -17,10 +18,12 @@ export function configuredLanguageServers(entries: readonly ConfigEntry[]) {
           extensions: ("extensions" in server ? server.extensions : undefined) ?? previous?.extensions ?? [],
         })
       })
+
       return { disabled: false, servers: state.servers }
     },
     { disabled: false, servers: new Map<string, ConfiguredServer>() },
   )
+
   return {
     disabled: state.disabled,
     servers: [...state.servers.values()].sort((a, b) => a.name.localeCompare(b.name)),

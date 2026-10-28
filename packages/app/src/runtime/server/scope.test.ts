@@ -1,27 +1,30 @@
 import { describe, expect, test } from "bun:test"
 import { ScopedKey, ServerScope, SessionRouteKey, SessionStateKey } from "./scope"
 
+type ServerKey = Parameters<typeof ServerScope.fromServerKey>[0]
+
 describe("ServerScope", () => {
-  test("uses a stable local scope for the canonical sidecar", () => {
-    expect(String(ServerScope.fromServerKey("sidecar" as Parameters<typeof ServerScope.fromServerKey>[0]))).toBe(
-      "local",
-    )
-  })
-
-  test("keeps configured loopback servers distinct from the canonical sidecar", () => {
-    expect(
-      String(ServerScope.fromServerKey("http://localhost:4096" as Parameters<typeof ServerScope.fromServerKey>[0])),
-    ).toBe("http://localhost:4096")
-  })
-
-  test("uses a stable local scope for an explicit canonical web server", () => {
-    const key = "http://localhost:4096" as Parameters<typeof ServerScope.fromServerKey>[0]
-    expect(String(ServerScope.fromServerKey(key, key))).toBe("local")
+  test.each([
+    { name: "the canonical sidecar", key: "sidecar", canonical: undefined, scope: "local" },
+    {
+      name: "a configured loopback server",
+      key: "http://localhost:4096",
+      canonical: undefined,
+      scope: "http://localhost:4096",
+    },
+    {
+      name: "an explicit canonical web server",
+      key: "http://localhost:4096",
+      canonical: "http://localhost:4096",
+      scope: "local",
+    },
+  ])("scopes $name as $scope", ({ key, canonical, scope }) => {
+    expect(String(ServerScope.fromServerKey(key as ServerKey, canonical as ServerKey | undefined))).toBe(scope)
   })
 })
 
 describe("SessionStateKey", () => {
-  test("combines local and remote scope with route identity", () => {
+  test("combines local and remote scope with route identity and extracts the route again", () => {
     const route = SessionRouteKey.fromRoute("cmVwbw", "session-1")
     expect(String(SessionStateKey.from(ServerScope.local, route))).toBe("local\0cmVwbw/session-1")
     expect(String(SessionStateKey.from("https://windows.example" as ServerScope, route))).toBe(
@@ -30,9 +33,6 @@ describe("SessionStateKey", () => {
     expect(SessionStateKey.from("https://debian.example" as ServerScope, route)).not.toBe(
       SessionStateKey.from("https://windows.example" as ServerScope, route),
     )
-  })
-
-  test("extracts route keys from scoped state keys", () => {
     expect(String(SessionStateKey.route("local\0cmVwbw/session-1"))).toBe("cmVwbw/session-1")
     expect(String(SessionStateKey.route("https://debian.example\0cmVwbw/session-1"))).toBe("cmVwbw/session-1")
   })

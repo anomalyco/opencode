@@ -11,6 +11,7 @@ import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
+import { configuredSettings } from "./configured.js"
 
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const issuer = "https://auth.openai.com"
@@ -22,9 +23,8 @@ const pollingSafetyMargin = 3000
 const codexBaseURL = "https://chatgpt.com/backend-api/codex"
 const browserMethodID = Integration.MethodID.make("chatgpt-browser")
 const headlessMethodID = Integration.MethodID.make("chatgpt-headless")
-// ChatGPT accounts lost gpt-5.4 and gpt-5.4-mini in Codex on 2026-08-31 (replacements: gpt-5.6-terra, gpt-5.6-luna).
-const codexAllowed = new Set(["gpt-5.5", "gpt-5.3-codex-spark"])
-const codexDisallowed = new Set(["gpt-5.5-pro", "gpt-5.6"])
+// Codex rejects gpt-5.5 and older models, including gpt-5.3-codex-spark, for ChatGPT accounts.
+const codexDisallowed = new Set(["gpt-5.6"])
 
 type Pkce = {
   verifier: string
@@ -55,7 +55,7 @@ const browser = (app: App.Info) =>
     method: {
       id: browserMethodID,
       type: "oauth",
-      label: "ChatGPT Pro/Plus (browser)",
+      label: "Codex browser (legacy)",
     },
     authorize: () =>
       Effect.gen(function* () {
@@ -123,7 +123,7 @@ function listen(server: Server) {
             Effect.catchIf(addressInUse, () =>
               Effect.fail(
                 new Error(
-                  `OpenAI browser login needs local port ${callbackPort} or ${callbackFallbackPort}, but both are already in use. Stop the processes using those ports or choose ChatGPT Pro/Plus (headless), then try again.`,
+                  `OpenAI browser login needs local port ${callbackPort} or ${callbackFallbackPort}, but both are already in use. Stop the processes using those ports or choose Codex device code (legacy), then try again.`,
                 ),
               ),
             ),
@@ -174,7 +174,7 @@ const headless = (app: App.Info) =>
     method: {
       id: headlessMethodID,
       type: "oauth",
-      label: "ChatGPT Pro/Plus (headless)",
+      label: "Codex device code (legacy)",
     },
     authorize: () =>
       Effect.gen(function* () {
@@ -253,6 +253,8 @@ export const OpenAIPlugin = define({
       editor.method.update(headless(ctx.app))
     })
     yield* load()
+    // Config applies after provider plugins, so read it here: a custom baseURL may not decode zstd.
+    const configured = yield* configuredSettings(Provider.ID.openai)
     yield* ctx.provider.transform((providers) => {
       const item = providers.get(Provider.ID.openai)
       if (!item) return
@@ -261,6 +263,8 @@ export const OpenAIPlugin = define({
         provider.settings = Provider.mergeOverlay(provider.settings, {
           transport: provider.settings?.transport ?? "websocket",
           ...(chatgpt ? { baseURL: codexBaseURL } : {}),
+          // The ChatGPT backend rejects uncompressed bodies over ~1 MiB and decodes zstd.
+          ...(chatgpt && configured?.baseURL === undefined ? { encoding: provider.settings?.encoding ?? "zstd" } : {}),
         })
         if (!chatgpt) return
         provider.headers = Provider.mergeHeaders(provider.headers, {
@@ -284,16 +288,11 @@ export const OpenAIPlugin = define({
           const match = apiID.match(/^gpt-(\d+)(?:\.(\d+))?/)
           const major = Number(match?.[1])
           const minor = Number(match?.[2] ?? 0)
-          if (
-            !codexAllowed.has(apiID) &&
-            (codexDisallowed.has(apiID) || !match || !(major > 5 || (major === 5 && minor > 4)))
-          ) {
+          if (codexDisallowed.has(apiID) || !match || !(major > 5 || (major === 5 && minor > 5))) {
             draft.enabled = false
             return
           }
           draft.cost = []
-          // Match Codex CLI so context consumption and subscription usage stay consistent between clients.
-          draft.limit = { ...draft.limit, context: 400_000, input: 272_000 }
         })
       }
     })

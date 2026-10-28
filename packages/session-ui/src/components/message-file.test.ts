@@ -3,18 +3,22 @@ import type { PromptFileAttachment } from "@opencode/client/promise"
 import { attached, typeLabel } from "./message-file"
 
 function file(source: PromptFileAttachment["source"], mention = false): PromptFileAttachment {
-  return {
+  const item: PromptFileAttachment = {
     data: "",
     mime: "text/plain",
     source,
-    ...(mention ? { mention: { text: "@README.md", start: 0, end: 10 } } : {}),
   }
+
+  if (mention) item.mention = { text: "@README.md", start: 0, end: 10 }
+
+  return item
 }
 
 describe("message-file", () => {
   test("only treats data-backed files without mentions as attachments", () => {
     expect(attached(file({ type: "inline" }))).toBe(true)
     expect(attached(file({ type: "uri", uri: "data:text/plain;base64,SGVsbG8=" }))).toBe(true)
+    expect(attached(file({ type: "uri", uri: "blob:http://localhost/image-1" }))).toBe(true)
     expect(attached(file({ type: "uri", uri: "file:///repo/README.md" }))).toBe(false)
     expect(attached(file({ type: "inline" }, true))).toBe(false)
   })

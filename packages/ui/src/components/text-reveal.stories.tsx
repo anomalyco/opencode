@@ -100,6 +100,7 @@ export const Playground = {
       edge: 17,
       revealTravel: 0,
     })
+
     const index = () => state.index
     const cycling = () => state.cycling
     const growOnly = () => state.growOnly
@@ -121,13 +122,17 @@ export const Playground = {
         if (timer) clearTimeout(timer)
         timer = undefined
         setState("cycling", false)
+
         return
       }
+
       setState("cycling", true)
+
       const tick = () => {
         next()
         timer = window.setTimeout(tick, 700 + Math.floor(Math.random() * 600))
       }
+
       timer = window.setTimeout(tick, 700 + Math.floor(Math.random() * 600))
     }
 

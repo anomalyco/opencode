@@ -1,0 +1,13 @@
+export default {
+  "command.open": "አሳሽ ክፈት",
+  "command.reload": "የአሳሽ ገጽን እንደገና ጫን",
+  "tab.title": "አሳሽ",
+  "address.label": "የአሳሽ አድራሻ",
+  "action.stop": "አቁም",
+  replaced: "የአሳሽ መቆጣጠሪያ ወደ ሌላ የዴስክቶፕ መስኮት ተንቀሳቅሷል።",
+  unsupported: "ይህ የዴስክቶፕ መተግበሪያ የአሳሽ ፓነሉን አይደግፍም።",
+  suspended: "አሳሽ ታግዷል። እንደገና ለመገናኘት ከዚህ ክፍለ ጊዜ ጋር ይገናኙ።",
+  "failed.title": "URL ላይ መድረስ አልተቻለም",
+  "failed.description": "URL-ውን እና ግንኙነትዎን ይፈትሹ፣ ከዚያ እንደገና ይሞክሩ።",
+  "action.reload": "ዳግም ጫን",
+}

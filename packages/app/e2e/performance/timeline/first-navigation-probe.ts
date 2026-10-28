@@ -22,12 +22,15 @@ export async function measureFirstNavigation(
       const samples: FirstNavigationSample[] = []
       let started: number | undefined
       let running = true
+
       const visible = (selector: string) =>
         [...document.querySelectorAll<HTMLElement>(selector)].some((element) => {
           const rect = element.getBoundingClientRect()
           const style = getComputedStyle(element)
+
           return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none"
         })
+
       const sample = () => {
         if (!running || started === undefined) return
         requestAnimationFrame(() => {
@@ -45,10 +48,12 @@ export async function measureFirstNavigation(
           }, 0)
         })
       }
+
       document.addEventListener(
         "click",
         (event) => {
           const link = event.target instanceof Element ? event.target.closest("a") : undefined
+
           if (link?.getAttribute("href") !== href) return
           started = performance.now()
           sample()
@@ -74,13 +79,18 @@ export async function measureFirstNavigation(
   await page.waitForFunction(() => {
     const samples = (window as Window & { __firstNavigationProbe?: FirstNavigationProbe }).__firstNavigationProbe
       ?.samples
+
     if (!samples) return false
+
     return samples.length >= 3 && samples.slice(-3).every((sample) => sample.destination && !sample.source)
   })
+
   const samples = await page.evaluate(() => {
     const probe = (window as Window & { __firstNavigationProbe?: FirstNavigationProbe }).__firstNavigationProbe!
     probe.stop()
+
     return probe.samples
   })
+
   return { summary: summarizeFirstNavigation(samples), samples }
 }

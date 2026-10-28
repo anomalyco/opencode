@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { CacheHint, LLM, LLMEvent, LLMResponse, ToolEntry, ToolNamespace } from "../src/index.js"
+import { CacheHint, LLM, LLMEvent, LLMResponse, ToolEntry, ToolNamespace } from "../src/effect.js"
 import { OpenAI } from "../src/providers.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAIResponses from "../src/protocols/openai-responses.js"

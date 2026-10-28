@@ -1,15 +1,23 @@
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { UnauthorizedError } from "../errors.js"
 
 export const ServerInfo = Schema.Struct({
   version: Schema.String,
   // 0 means the runtime has no OS process identity (e.g. workerd).
   pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  // The machine's name, absent where the runtime has none (e.g. workerd).
+  hostname: Schema.optional(Schema.String),
   urls: Schema.Array(Schema.String),
   paths: Schema.Struct({
     tmp: Schema.String,
   }),
+  // Optional at every level so clients still decode servers that predate a capability.
+  capabilities: Schema.optional(
+    Schema.Struct({
+      persistentPty: Schema.optional(Schema.Boolean),
+    }),
+  ),
 }).annotate({ identifier: "ServerInfo" })
 export type ServerInfo = typeof ServerInfo.Type
 
@@ -24,11 +32,12 @@ export const PairingSession = Schema.Struct({
 }).annotate({ identifier: "PairingSession" })
 export type PairingSession = typeof PairingSession.Type
 
-const PAIRING_CONNECT_PATH = /^\/auth\/connect\/[^/]+$/
+export const PAIRING_CONNECT_PATH = "/auth/connect/:code"
 
-// Authorization middleware skips credential checks for pairing links; the connect handler consumes the code instead.
+const PAIRING_CONNECT_URL = /^\/auth\/connect\/[^/]+$/
+
 export function isPairingConnectURL(url: URL) {
-  return PAIRING_CONNECT_PATH.test(url.pathname)
+  return PAIRING_CONNECT_URL.test(url.pathname)
 }
 
 export const ServerGroup = HttpApiGroup.make("server.server")
@@ -55,7 +64,7 @@ export const ServerGroup = HttpApiGroup.make("server.server")
     ),
   )
   .add(
-    HttpApiEndpoint.get("server.connect", "/auth/connect/:code", {
+    HttpApiEndpoint.get("server.connect", PAIRING_CONNECT_PATH, {
       params: { code: Schema.String },
       success: PairingSession,
       error: UnauthorizedError,

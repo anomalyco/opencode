@@ -17,7 +17,6 @@ export const ProjectOptions: Component<{
   onOpenChange?: (open: boolean) => void
   onEdit?: () => void
   onRename?: () => void
-  onClose?: () => void
   class?: string
   size?: "small" | "normal" | "large"
 }> = (props) => {
@@ -26,21 +25,14 @@ export const ProjectOptions: Component<{
   const platform = usePlatform()
   const revealProject = useRevealProject()
   const context = () => global.ensureServerCtx(props.server)
-  const unseen = () =>
-    [props.project.worktree, ...(props.project.sandboxes ?? [])].reduce(
-      (total, directory) => total + context().notification.project.unseenCount(directory),
-      0,
-    )
+
+  const directories = () => [props.project.worktree, ...(props.project.sandboxes ?? [])]
+
+  const hasUnread = () => directories().some((directory) => context().notification.project.hasUnread(directory))
+
   const clearNotifications = () => {
     const notification = context().notification
-    const directories = [props.project.worktree, ...(props.project.sandboxes ?? [])]
-    directories
-      .filter((directory) => notification.project.unseenCount(directory) > 0)
-      .forEach((directory) => notification.project.markViewed(directory))
-  }
-  const close = () => {
-    context().projects.close(props.project.worktree)
-    props.onClose?.()
+    directories().forEach((directory) => notification.project.markViewed(directory))
   }
 
   return (
@@ -70,11 +62,9 @@ export const ProjectOptions: Component<{
           <Show when={revealProject.available(props.server)}>
             <Menu.Item onSelect={() => revealProject.reveal(props.server, props.project)}>{language.t(fileManagerApp(platform.os ?? "unknown").actionLabel)}</Menu.Item>
           </Show>
-          <Menu.Item disabled={unseen() === 0} onSelect={clearNotifications}>
+          <Menu.Item disabled={!hasUnread()} onSelect={clearNotifications}>
             {language.t("sidebar.project.clearNotifications")}
           </Menu.Item>
-          <Menu.Separator />
-          <Menu.Item onSelect={close}>{language.t("common.close")}</Menu.Item>
         </Menu.Content>
       </Menu.Portal>
     </Menu>

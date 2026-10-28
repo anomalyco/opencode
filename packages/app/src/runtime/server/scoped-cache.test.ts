@@ -4,6 +4,7 @@ import { createScopedCache } from "./scoped-cache"
 describe("createScopedCache", () => {
   test("evicts least-recently-used entry when max is reached", () => {
     const disposed: string[] = []
+
     const cache = createScopedCache((key) => ({ key }), {
       maxEntries: 2,
       dispose: (value) => disposed.push(value.key),
@@ -26,6 +27,7 @@ describe("createScopedCache", () => {
 
   test("disposes entries on delete and clear", () => {
     const disposed: string[] = []
+
     const cache = createScopedCache((key) => ({ key }), {
       dispose: (value) => disposed.push(value.key),
     })
@@ -46,6 +48,7 @@ describe("createScopedCache", () => {
     let clock = 0
     let count = 0
     const disposed: string[] = []
+
     const cache = createScopedCache((key) => ({ key, count: ++count }), {
       ttlMs: 10,
       now: () => clock,

@@ -6,32 +6,31 @@ import {
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http"
+} from "effect/http"
 import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
-import { Service, type HttpMiddleware, type Interface } from "./executor-service.js"
+import { headerDetails, responseHttp, Service, type HttpMiddleware, type Interface } from "./executor-service.js"
 
-export { Service } from "./executor-service.js"
-export type { HttpHandler, HttpMiddleware, Interface } from "./executor-service.js"
-
-const headerDetails = (headers: Headers.Headers) =>
-  Object.fromEntries(Object.entries(headers).map(([name, value]) => [name, String(value)]))
+export { responseHttp, Service } from "./executor-service.js"
+export type { HttpHandler, HttpMiddleware, Interface, RequestExecutorService } from "./executor-service.js"
 
 const normalizedHeaders = (headers: Headers.Headers) =>
   Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]))
 
+const clampRetryAfterMs = (millis: number) => Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.ceil(millis)))
+
 const retryAfterMs = (headers: Record<string, string>) => {
   const millis = Number(headers["retry-after-ms"])
-  if (Number.isFinite(millis)) return Math.max(0, millis)
+  if (Number.isFinite(millis)) return clampRetryAfterMs(millis)
 
   const value = headers["retry-after"]
   if (!value) return undefined
 
   const seconds = Number(value)
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
+  if (Number.isFinite(seconds)) return clampRetryAfterMs(seconds * 1000)
 
   const date = Date.parse(value)
-  if (!Number.isNaN(date)) return Math.max(0, date - Date.now())
+  if (!Number.isNaN(date)) return clampRetryAfterMs(date - Date.now())
   return undefined
 }
 
@@ -76,13 +75,6 @@ const rateLimitDetails = (headers: Record<string, string>, retryAfter: number | 
     reset: Object.keys(reset).length === 0 ? undefined : reset,
   })
 }
-
-export const responseHttp = (response: HttpClientResponse.HttpClientResponse) =>
-  new HttpContext({
-    url: response.request.url,
-    status: response.status,
-    headers: headerDetails(response.headers),
-  })
 
 const MAX_BODY_CHARS = 2000
 
@@ -159,6 +151,15 @@ const nativeTransportFailure = (error: unknown) => {
   return failure
 }
 
+// HTTP hooks re-wrap response bodies, so a read failure can arrive as an HttpClientError caused by
+// another HttpClientError. The innermost cause carries the native failure.
+const rootCause = (error: unknown): unknown =>
+  HttpClientError.isHttpClientError(error) && "cause" in error.reason && error.reason.cause !== undefined
+    ? rootCause(error.reason.cause)
+    : error
+
+const CONNECTION_LOST = "Connection lost while reading the response"
+
 const httpError = (input: {
   readonly error: unknown
   readonly request: HttpClientRequest.HttpClientRequest
@@ -179,20 +180,21 @@ const httpError = (input: {
       }),
     })
 
-  const source =
-    HttpClientError.isHttpClientError(input.error) && "cause" in input.error.reason
-      ? (input.error.reason.cause ?? input.error)
-      : input.error
+  const source = rootCause(input.error)
   const native = nativeTransportFailure(source)
   const code = native?.code
-  const raw = native?.message ?? (input.error instanceof Error ? input.error.message : undefined)
-  const detail = raw
-  const message = code && detail && !detail.includes(code) ? `${code}: ${detail}` : detail
+  const detail =
+    code && native?.message && !native.message.includes(code) ? `${code}: ${native.message}` : native?.message
+  const message = detail ?? (input.error instanceof Error ? input.error.message : undefined)
 
   if (Cause.isTimeoutError(input.error) || Cause.isTimeoutError(source))
     return transportError({ message: message ?? "HTTP transport timed out", code: code ?? "Timeout" })
   if (!HttpClientError.isHttpClientError(input.error))
     return transportError({ message: message ?? "HTTP transport failed", code })
+  // Effect reports every response body read failure as a DecodeError, but the raw byte stream decodes
+  // nothing: provider output parsing happens later and fails as InvalidProviderOutput.
+  if (input.operation === "read" && input.error.reason._tag === "DecodeError")
+    return transportError({ message: detail ? `${CONNECTION_LOST}: ${detail}` : CONNECTION_LOST, code })
   if (input.error.reason._tag === "TransportError") {
     return transportError({
       message: message ?? input.error.reason.description ?? "HTTP transport failed",

@@ -11,8 +11,10 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { WebSearch } from "@opencode/core/websearch"
 import { Effect, Stream } from "effect"
 
-type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
+type EventSource = ReturnType<Plugin.Context["event"]["subscribe"]>
+type Overrides = Partial<Omit<Plugin.Context, "options" | "session" | "event">> & {
   readonly session?: Partial<Plugin.Context["session"]>
+  readonly event?: { readonly subscribe: () => EventSource }
 }
 export function host(overrides: Overrides = {}): Plugin.Context {
   return {
@@ -62,12 +64,18 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       transform: () => Effect.die("unused command.transform"),
       reload: () => Effect.die("unused command.reload"),
     },
-    event: overrides.event ?? {
-      subscribe: () => Stream.empty,
+    credential: overrides.credential ?? {
+      activate: () => Effect.die("unused credential.activate"),
     },
+    event: { subscribe: events(overrides.event?.subscribe ?? (() => Stream.empty)) },
     experimental: overrides.experimental ?? {
       terminal: {
         read: () => Effect.die("unused experimental.terminal.read"),
+      },
+      generate: {
+        text: () => Effect.die("unused experimental.generate.text"),
+        image: () => Effect.die("unused experimental.generate.image"),
+        decisions: () => Effect.die("unused experimental.generate.decisions"),
       },
     },
     generate: overrides.generate ?? {
@@ -78,6 +86,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       get: () => Effect.die("unused integration.get"),
       connect: {
         key: () => Effect.die("unused integration.connect.key"),
+        external: () => Effect.die("unused integration.connect.external"),
       },
       oauth: {
         connect: () => Effect.die("unused integration.oauth.connect"),
@@ -108,6 +117,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       list: () => Effect.die("unused permission.list"),
       get: () => Effect.die("unused permission.get"),
       reply: () => Effect.die("unused permission.reply"),
+      assert: () => Effect.die("unused permission.assert"),
     },
     plugin: overrides.plugin ?? {
       list: () => Effect.die("unused plugin.list"),
@@ -164,19 +174,29 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     session: {
       hook: overrides.session?.hook ?? (() => Effect.die("unused session.hook")),
+      list: overrides.session?.list ?? (() => Effect.die("unused session.list")),
       create: overrides.session?.create ?? (() => Effect.die("unused session.create")),
       get: overrides.session?.get ?? (() => Effect.die("unused session.get")),
+      remove: overrides.session?.remove ?? (() => Effect.die("unused session.remove")),
       switchAgent: overrides.session?.switchAgent ?? (() => Effect.die("unused session.switchAgent")),
       switchModel: overrides.session?.switchModel ?? (() => Effect.die("unused session.switchModel")),
       prompt: overrides.session?.prompt ?? (() => Effect.die("unused session.prompt")),
       generate: overrides.session?.generate ?? (() => Effect.die("unused session.generate")),
       command: overrides.session?.command ?? (() => Effect.die("unused session.command")),
+      compact: overrides.session?.compact ?? (() => Effect.die("unused session.compact")),
       update: overrides.session?.update ?? (() => Effect.die("unused session.update")),
       move: overrides.session?.move ?? (() => Effect.die("unused session.move")),
       synthetic: overrides.session?.synthetic ?? (() => Effect.die("unused session.synthetic")),
       interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
       wait: overrides.session?.wait ?? (() => Effect.die("unused session.wait")),
       context: overrides.session?.context ?? (() => Effect.die("unused session.context")),
+      instructions: overrides.session?.instructions ?? {
+        entry: {
+          list: () => Effect.die("unused session.instructions.entry.list"),
+          put: () => Effect.die("unused session.instructions.entry.put"),
+          remove: () => Effect.die("unused session.instructions.entry.remove"),
+        },
+      },
     },
   }
 }
@@ -228,13 +248,15 @@ export function providerHost(providers: Provider.Interface): Plugin.Context["pro
   return {
     list: () => providers.available().pipe(Effect.map(located)),
     get: (input) =>
-      providers.get(Provider.ID.make(input.providerID)).pipe(
-        Effect.flatMap((provider) =>
-          provider === undefined
-            ? Effect.fail(new Error(`Provider not found: ${input.providerID}`))
-            : Effect.succeed(located(provider)),
+      providers
+        .get(Provider.ID.make(input.providerID))
+        .pipe(
+          Effect.flatMap((provider) =>
+            provider === undefined
+              ? Effect.fail(new Error(`Provider not found: ${input.providerID}`))
+              : Effect.succeed(located(provider)),
+          ),
         ),
-      ),
     reload: providers.reload,
     transform: (callback) =>
       providers.transform((editor) =>
@@ -295,6 +317,7 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
     get: () => Effect.die("unused integration.get"),
     connect: {
       key: () => Effect.die("unused integration.connect.key"),
+      external: () => Effect.die("unused integration.connect.external"),
     },
     oauth: {
       connect: () => Effect.die("unused integration.oauth.connect"),
@@ -407,6 +430,16 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                 })
                 return
               }
+              if (input.method.type === "external") {
+                editor.method.update({
+                  integrationID: Integration.ID.make(input.integrationID),
+                  method: {
+                    ...input.method,
+                    id: Integration.MethodID.make(input.method.id),
+                  },
+                })
+                return
+              }
               editor.method.update({
                 integrationID: Integration.ID.make(input.integrationID),
                 method: input.method,
@@ -457,7 +490,7 @@ export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["w
 }
 
 function internalMethod(value: IntegrationMethod): Integration.Method {
-  if (value.type === "oauth" || value.type === "command") {
+  if (value.type === "oauth" || value.type === "command" || value.type === "external") {
     return { ...value, id: Integration.MethodID.make(value.id) }
   }
   return value
@@ -488,4 +521,11 @@ function located<A>(data: A) {
     }),
     data,
   }
+}
+
+// Filter like the real host, so a fake source can emit any event type.
+function events(source: () => EventSource) {
+  const subscribe = (input?: { readonly types?: ReadonlyArray<string> }): EventSource =>
+    source().pipe(Stream.filter((event) => !input?.types?.length || input.types.includes(event.type)))
+  return subscribe as Plugin.Context["event"]["subscribe"]
 }

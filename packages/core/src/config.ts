@@ -17,7 +17,10 @@ import { ConfigVariable } from "./config/variable.js"
 import { ConfigNormalize } from "./config/normalize.js"
 import { ConfigDiscovery } from "./config/discovery.js"
 import { ConfigWatch } from "./config/watch.js"
+import { ConfigIntegration } from "./config/integration.js"
 import { WellKnown } from "./wellknown.js"
+import { AppProcess } from "@opencode/util/process"
+import { ChildProcess } from "effect/process"
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
   return entries.findLast((entry): entry is Document => entry.type === "document" && entry.info[key] !== undefined)
@@ -40,13 +43,25 @@ export interface Interface {
   readonly changes: () => Stream.Stream<Watcher.Update>
   /** Updates supported global config fields while preserving unrelated JSONC content. */
   readonly update?: (patch: Patch) => Effect.Effect<void, FSUtil.Error>
+  /**
+   * Replaces, or clears with `undefined`, the document an integration connection contributes. It loads right after
+   * managed policies: its settings layer below remote, user, and project config, while its policies outrank theirs.
+   * Changing it reloads config like any other source.
+   */
+  readonly integration?: (
+    integrationID: ConfigIntegration.Document["integrationID"],
+    document: ConfigIntegration.Document | undefined,
+  ) => Effect.Effect<void>
 }
 
 export const Options = Schema.Struct({
   project: Schema.optional(Schema.Boolean),
-  // false skips the global config dir, ~/.claude, and ~/.agents; wellknown,
-  // file, and content entries still load.
+  // false skips the system and global config dirs, ~/.claude, and ~/.agents;
+  // wellknown, file, and content entries still load.
   global: Schema.optional(Schema.Boolean),
+  system: Schema.optional(Schema.Union([Schema.Boolean, Schema.String])),
+  // false skips ~/.claude and project .claude dirs.
+  claude: Schema.optional(Schema.Boolean),
   file: Schema.optional(Schema.String),
   content: Schema.optional(Schema.String),
 })
@@ -74,13 +89,23 @@ export const testLayer = (
   Layer.effectContext(
     Effect.gen(function* () {
       const entries = yield* Ref.make(initial)
+      const integrations = yield* Ref.make(new Map<string, ConfigIntegration.Document>())
       const updates = yield* PubSub.unbounded<Watcher.Update>()
       const service = Test.of({
-        entries: () => Ref.get(entries),
+        entries: () =>
+          Effect.all([Ref.get(integrations), Ref.get(entries)]).pipe(
+            Effect.map(([documents, entries]) => [...documents.values(), ...entries]),
+          ),
         compatibility: () => Effect.succeed(compatibility),
         changes: () => Stream.fromPubSub(updates),
         setEntries: (next) => Ref.set(entries, next),
         emitChange: (update) => PubSub.publish(updates, update).pipe(Effect.asVoid),
+        integration: (integrationID, document) =>
+          Ref.update(integrations, (current) => {
+            const next = new Map(current)
+            next.delete(integrationID)
+            return document ? next.set(integrationID, document) : next
+          }),
       })
       return Context.empty().pipe(Context.add(Service, service), Context.add(Test, service))
     }),
@@ -97,9 +122,13 @@ export const layer = (options?: Options) =>
       const credentials = yield* Credential.Service
       const globalService = yield* Global.Service
       const wellknown = yield* WellKnown.Service
+      const processes = yield* AppProcess.Service
+      const integrations = new Map<string, ConfigIntegration.Document>()
+      // Integrations set their documents from outside this layer, so their reloads run with its services.
+      const context = yield* Effect.context<FSUtil.Service | Global.Service | Location.Service>()
       const reloadLock = Semaphore.makeUnsafe(1)
       const updateLock = Semaphore.makeUnsafe(1)
-      const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+      const decodeOptions = { errors: "all", onExcessProperty: "ignore" } as const
       const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
       const parseInfo = Effect.fn("Config.parseInfo")(function* (text: string, source: string) {
         const errors: ParseError[] = []
@@ -144,19 +173,19 @@ export const layer = (options?: Options) =>
 
       const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry) {
         const auth = entry.manifest.auth
-        if (!auth) return []
         const credential = (yield* credentials.list(entry.integrationID)).at(-1)
-        if (!credential || credential.value.type !== "key") return []
-        const variables = { [auth.env]: credential.value.key }
-        const configs = yield* wellknown
-          .resolve(entry, variables)
-          .pipe(
-            Effect.catch(() =>
-              Effect.logWarning("failed to load wellknown config", { source: entry.origin }).pipe(
-                Effect.as([] as const),
-              ),
+        const variables = auth && credential?.value.type === "key" ? { [auth.env]: credential.value.key } : undefined
+        // A failed refresh, including a missing credential, keeps the last resolved config so remote providers
+        // and allowlists do not disappear; only removing the source clears it.
+        const configs = yield* (
+          variables ? wellknown.resolve(entry, variables) : Effect.fail(new Error("No usable wellknown credential"))
+        ).pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("failed to load wellknown config", { source: entry.origin, error }).pipe(
+              Effect.andThen(wellknown.cached(entry.origin)),
             ),
-          )
+          ),
+        )
         return yield* Effect.forEach(configs, (config) =>
           ConfigVariable.substitute({
             type: "virtual",
@@ -180,6 +209,26 @@ export const layer = (options?: Options) =>
             ),
           )
         return yield* Effect.forEach(entries, loadWellknownEntry).pipe(Effect.map((documents) => documents.flat()))
+      })
+
+      const loadPreferences = Effect.fn("Config.loadPreferences")(function* (plist: AbsolutePath) {
+        const result = yield* processes
+          .run(ChildProcess.make("plutil", ["-convert", "json", "-o", "-", plist], { stdin: "ignore" }), {
+            timeout: "10 seconds",
+          })
+          .pipe(Effect.flatMap(AppProcess.requireSuccess), Effect.option)
+        if (Option.isNone(result)) {
+          yield* Effect.logWarning("failed to convert managed preferences", { source: plist })
+          return []
+        }
+        const text = yield* ConfigVariable.substitute({
+          type: "virtual",
+          source: plist,
+          dir: path.dirname(plist),
+          text: ConfigDiscovery.stripPreferenceMetadata(result.value.stdout.toString()),
+        })
+        const info = yield* parseInfo(text, plist)
+        return info ? [new Document({ type: "document", path: plist, info })] : []
       })
 
       const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
@@ -217,8 +266,35 @@ export const layer = (options?: Options) =>
               )
             : []
 
-        // Global entries sit below explicit and direct files; project
-        // directories rank above them.
+        // Managed settings load last so they override everything, and MDM
+        // preferences outrank the system directory as in V1. Policies evaluate
+        // in reverse load order, so managed policies split off and load first
+        // to keep final file-based authority.
+        const managed = [
+          ...(sources.system?.present ? yield* loadDirectory(sources.system.path).pipe(Effect.orDie) : []),
+          ...(sources.preferences ? yield* loadPreferences(sources.preferences).pipe(Effect.orDie) : []),
+        ]
+        const managedPolicies = managed
+          .flatMap((entry) =>
+            entry.type === "document" && entry.info.policies
+              ? [
+                  new Document({
+                    type: "document",
+                    path: entry.path,
+                    info: new Info({ policies: entry.info.policies }),
+                  }),
+                ]
+              : [],
+          )
+          .toReversed()
+        const managedSettings = managed.map((entry) =>
+          entry.type === "document" && entry.info.policies
+            ? new Document({ ...entry, info: new Info({ ...entry.info, policies: undefined }) })
+            : entry,
+        )
+        // Integration documents load right after managed policies: every remote, user, and project layer overrides
+        // their settings, and since policies evaluate earliest-loaded first, only managed policies outrank theirs.
+        // Global entries sit below explicit and direct files; project directories rank above them.
         const globalSupplementary = sources.global ? yield* loadDirectory(sources.global).pipe(Effect.orDie) : []
         const projectSupplementary = yield* Effect.forEach(
           sources.project.filter((root) => root.present),
@@ -228,12 +304,15 @@ export const layer = (options?: Options) =>
           Effect.map((entries) => entries.flat()),
         )
         return [
+          ...managedPolicies,
+          ...integrations.values(),
           ...(yield* loadWellknown().pipe(Effect.orDie)),
           ...globalSupplementary,
           ...explicit,
           ...direct,
           ...projectSupplementary,
           ...content,
+          ...managedSettings,
         ]
       })
 
@@ -330,7 +409,8 @@ export const layer = (options?: Options) =>
         function* (patch: Patch) {
           const directory = initial.global ?? AbsolutePath.make(globalService.config)
           const candidates = ConfigDiscovery.names.map((name) => path.join(directory, name))
-          const filepath = (yield* Effect.filter(candidates, fs.isFile)).at(-1) ?? path.join(directory, "opencode.jsonc")
+          const filepath =
+            (yield* Effect.filter(candidates, fs.isFile)).at(-1) ?? path.join(directory, "opencode.jsonc")
           const text = (yield* fs.readFileStringSafe(filepath)) ?? "{}\n"
           const updated = yield* Effect.try({
             try: () =>
@@ -359,6 +439,15 @@ export const layer = (options?: Options) =>
           }),
         changes: () => Stream.fromPubSub(updates),
         update,
+        integration: Effect.fn("Config.integration")(function* (integrationID, document) {
+          if (isDeepStrictEqual(integrations.get(integrationID), document)) return
+          integrations.delete(integrationID)
+          if (document) integrations.set(integrationID, document)
+          yield* reload().pipe(
+            Effect.provide(context),
+            Effect.catchCause((cause) => Effect.logError("failed to reload config", { cause })),
+          )
+        }),
       })
     }),
   )
@@ -367,7 +456,16 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Watcher.node, Bus.node, FSUtil.node, Global.node, Location.node, Credential.node, WellKnown.node],
+    deps: [
+      Watcher.node,
+      Bus.node,
+      FSUtil.node,
+      Global.node,
+      Location.node,
+      Credential.node,
+      WellKnown.node,
+      AppProcess.node,
+    ],
   })
 }
 

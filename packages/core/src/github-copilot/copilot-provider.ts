@@ -95,6 +95,3 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
 
   return provider as OpenaiCompatibleProvider
 }
-
-// Default OpenAI Compatible provider instance
-export const openaiCompatible = createOpenaiCompatible()

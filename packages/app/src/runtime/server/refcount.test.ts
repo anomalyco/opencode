@@ -1,49 +1,30 @@
-import { describe, expect, test } from "bun:test"
+import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createRefCountMap } from "./refcount"
 import { pathKey } from "@/workspaces/path-key"
 
-describe("createRefCountMap", () => {
-  test("removes an item after its last owner is disposed", () => {
-    const removed: string[] = []
-    const map = createRefCountMap(
-      (key) => key,
-      (key) => removed.push(key),
-    )
-    const first = createRoot((dispose) => {
-      map("/project")
-      return dispose
-    })
-    const second = createRoot((dispose) => {
-      map("/project")
-      return dispose
-    })
+test.each([
+  { name: "the same key", keys: ["/project", "/project"], normalize: undefined, removed: "/project" },
+  { name: "equivalent paths", keys: ["C:\\repo", "C:/repo/"], normalize: pathKey, removed: "C:/repo" },
+])("keeps an item for $name until its last owner is disposed", ({ keys, normalize, removed }) => {
+  const calls: string[] = []
 
-    first()
-    expect(removed).toEqual([])
-    second()
-    expect(removed).toEqual(["/project"])
-  })
+  const map = createRefCountMap(
+    (key) => key,
+    (key) => calls.push(key),
+    normalize,
+  )
 
-  test("keeps equivalent path consumers until the last owner is disposed", () => {
-    const removed: string[] = []
-    const map = createRefCountMap(
-      (key) => key,
-      (key) => removed.push(key),
-      pathKey,
-    )
-    const first = createRoot((dispose) => {
-      map("C:\\repo")
-      return dispose
-    })
-    const second = createRoot((dispose) => {
-      map("C:/repo/")
-      return dispose
-    })
+  const [first, second] = keys.map((key) =>
+    createRoot((dispose) => {
+      map(key)
 
-    first()
-    expect(removed).toEqual([])
-    second()
-    expect(removed).toEqual(["C:/repo"])
-  })
+      return dispose
+    }),
+  )
+
+  first!()
+  expect(calls).toEqual([])
+  second!()
+  expect(calls).toEqual([removed])
 })

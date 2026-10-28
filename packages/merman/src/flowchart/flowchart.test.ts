@@ -875,6 +875,63 @@ describe("FlowchartDiagram", () => {
     expect(output.match(/[▼◀]/g)).toHaveLength(3)
   })
 
+  test("orders rank nodes to remove crossings between branches", () => {
+    const content = `flowchart TD
+  A{Question} -->|Path one| B[Step one]
+  A -->|Path two| C[Step two]
+  B --> D{Check one}
+  D -->|No| E{Retry one}
+  E -->|No| B
+  C --> F{Check two}
+  F -->|No| G{Retry two}
+  G -->|No| C
+  E -->|Yes| H[Rethink]
+  G -->|Yes| H
+  H --> A
+  D -->|Yes| I([Done])
+  F -->|Yes| I`
+    const layout = layoutFlowchartDiagram(content, { compact: true, layoutMaxWidth: 120 })
+    const left = (id: string) => layout.bounds.get(id)!.left
+
+    expect(left("E")).toBeLessThan(left("I"))
+    expect(left("I")).toBeLessThan(left("G"))
+    expectDiagram(renderFlowchartDiagram(content, { compact: true, layoutMaxWidth: 120 })).toEqualDiagram(`
+                                    ╭─────────╮
+                                  ╭─╯         ╰─╮
+                                  │  Question   │◀──────────────────────────╮
+                                  ╰─╮         ╭─╯                           │
+                                    ╰────┬────╯                             │
+                           ╭─ Path one ──┴── Path two ───╮                  │
+                           │                             │                  │
+                           ▼                             ▼                  │
+                     ╭──────────╮                  ╭──────────╮             │
+      ╭──── No ─────▶│ Step one │                  │ Step two │◀──── No ────┤
+      │              ╰─────┬────╯                  ╰─────┬────╯             │
+      │                    │                             │                  │
+      │                    │                           ╭─╯                  │
+      │                    ▼                           ▼                    │
+      │               ╭─────────╮                 ╭─────────╮               │
+      │             ╭─╯         ╰─╮             ╭─╯         ╰─╮             │
+      │             │  Check one  │             │  Check two  │             │
+      │             ╰─╮         ╭─╯             ╰─╮         ╭─╯             │
+      │               ╰────┬────╯                 ╰────┬────╯               │
+      │          ╭── No ───┴──── Yes ─────┬─── Yes ────┴─── No ───╮         │
+      │          │                        │                       │         │
+      │          ▼                        │                       ▼         │
+      │     ╭─────────╮                   ▼                  ╭─────────╮    │
+      │   ╭─╯         ╰─╮             ╭──────╮             ╭─╯         ╰─╮  │
+      ╰───┤  Retry one  │             │ Done │             │  Retry two  ├──┤
+          ╰─╮         ╭─╯             ╰──────╯             ╰─╮         ╭─╯  │
+            ╰────┬────╯                                      ╰────┬────╯    │
+                 │                                                │         │
+                 ╰───────── Yes ─────────┬───────── Yes ──────────╯         │
+                                         ▼                                  │
+                                    ╭─────────╮                             │
+                                    │ Rethink ├─────────────────────────────╯
+                                    ╰─────────╯
+    `)
+  })
+
   test("routes transitive horizontal shortcuts around intermediate stages", () => {
     const content = `flowchart LR
   A[Start] --> B[Validate]
@@ -1351,6 +1408,25 @@ flowchart TD
 
     expect(diagram.nodes.find((node) => node.id === "X")?.label).toBe("a & b")
     expect(diagram.edges).toEqual([{ from: "X", to: "Y", label: "x & y" }])
+  })
+
+  test("treats apostrophes in labels as text rather than string delimiters", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  CS[Console's own schema copy] -. validates .-> CFG
+  A[Bob's] & B[Al's] --> C[it's done; ship]`)
+
+    expect(diagram.nodes).toEqual([
+      { id: "CS", label: "Console's own schema copy", shape: "box" },
+      { id: "CFG", label: "CFG", shape: "box" },
+      { id: "A", label: "Bob's", shape: "box" },
+      { id: "B", label: "Al's", shape: "box" },
+      { id: "C", label: "it's done; ship", shape: "box" },
+    ])
+    expect(diagram.edges).toEqual([
+      { from: "CS", to: "CFG", label: "validates", style: "dashed" },
+      { from: "A", to: "C", label: "" },
+      { from: "B", to: "C", label: "" },
+    ])
   })
 
   test("rejects empty & group members", () => {

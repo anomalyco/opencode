@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -44,6 +44,7 @@ it.effect("preserves explicit thinking settings and combines required beta heade
   Effect.gen(function* () {
     for (const thinking of [
       { type: "disabled" },
+      { type: "between_tools" },
       { type: "adaptive", block_binding: { prefix_mismatch_behavior: "error" } },
     ] as const) {
       const request = LLM.request({
@@ -55,7 +56,7 @@ it.effect("preserves explicit thinking settings and combines required beta heade
       const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, request)
       expect(compiled.body.thinking).toEqual(thinking)
       expect(prepared.request.headers["anthropic-beta"]).toBe(
-        thinking.type === "disabled"
+        thinking.type === "disabled" || thinking.type === "between_tools"
           ? "interleaved-thinking-2025-05-14,compact-2026-01-12"
           : "interleaved-thinking-2025-05-14,compact-2026-01-12,thinking-binding-controls-2026-08-01",
       )

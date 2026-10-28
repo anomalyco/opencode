@@ -1,8 +1,13 @@
-import { getProjectAvatarVariant, type LocalProject } from "@/shell/state/layout"
+import type { LocalProject } from "@/shell/state/layout"
 import type { ServerConnection } from "@/runtime/server/registry"
-import { displayName, getProjectAvatarSource } from "@/shell/layout/helpers"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
-import { ProjectAvatar } from "@opencode/ui/project-avatar"
+import {
+  displayName,
+  getProjectAvatarGenerated,
+  getProjectAvatarSource,
+  getProjectAvatarVariant,
+  ProjectAvatar,
+} from "@opencode/ui/project-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { Show } from "solid-js"
 
@@ -17,6 +22,7 @@ export function SessionTabAvatar(props: {
     () => props.sessionId,
     () => true,
   )
+
   return (
     <SessionTabAvatarView
       project={props.project}
@@ -31,7 +37,7 @@ export function SessionTabAvatarView(props: {
   project?: LocalProject
   directory: string
   unread: boolean
-  loading: boolean
+  loading?: boolean
 }) {
   return (
     <Show
@@ -41,6 +47,7 @@ export function SessionTabAvatarView(props: {
           fallback={displayName(props.project ?? { worktree: props.directory })}
           src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
           variant={getProjectAvatarVariant(props.project?.icon?.color)}
+          generated={getProjectAvatarGenerated(props.project ?? { worktree: props.directory })}
           unread={props.unread}
         />
       }

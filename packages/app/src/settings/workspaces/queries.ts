@@ -31,7 +31,9 @@ export function workspaceInventoryQuery(
               { directory: project.canonical },
               ...project.sandboxes.map((directory) => ({ directory })),
             ]
+
             if (shouldRefresh) void context.sync.worktrees.refresh(project.id)
+
             return normalizeProjectInfo({ ...project, worktrees })
           }),
       ),
@@ -45,14 +47,19 @@ export function useWorkspacesPrefetch(
 ) {
   const client = useQueryClient()
   const context = useServerCtx(server)
+
   return () => {
     const current = context()
+
     if (!current || current.sdk.connection.status() !== "connected") return
     const project = projectID?.()
+
     if (project) {
       void client.prefetchQuery(workspaceInventoryQuery(current, client, project, false))
+
       return
     }
+
     // Server-level hover warms metadata without booting every project's Location.
     void client.prefetchQuery(workspaceProjectsQuery(current.sdk))
   }

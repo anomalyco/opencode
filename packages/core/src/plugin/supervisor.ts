@@ -64,6 +64,13 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
         )
       }),
     )
+    if ("blocked" in plugin) {
+      const previous = packages.get(operation.target)
+      if (previous) enabled.delete(previous.id)
+      packages.delete(operation.target)
+      failures.delete(operation.target)
+      continue
+    }
     if ("pending" in plugin) {
       pending.add(operation.target)
       continue
@@ -106,7 +113,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
         id: Plugin.ID.make(plugin.id),
         source: plugin.source ?? { type: "builtin" as const },
         state: { status: "failed" as const, error: `Duplicate plugin ID: ${plugin.id}` },
-        features: { server: true as const, ...plugin.features },
+        features: plugin.features ?? { server: true as const },
       })),
     ],
     pending: [...pending],

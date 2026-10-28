@@ -1,8 +1,8 @@
 import { benchmark, expect } from "../benchmark"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectSessionTitle } from "../../utils/waits"
-import { fixture, pageMessages } from "./session-timeline-stress.fixture"
-import { installStressSessionTabs, installTimelineSettings, stressSessionHref } from "./timeline-test-helpers"
+import { fixture, installStressSessionTabs, installTimelineSettings, pageMessages } from "../../utils/session-fixture"
+import { sessionHref } from "../../utils/app"
 import { waitForStableTimeline } from "./session-tab-switch-probe"
 import type { ModelUpdated } from "@opencode/client/promise"
 
@@ -12,7 +12,8 @@ benchmark("measures retained renderer memory with a large model catalog", async 
   const switches = Number(process.env.PROVIDER_MEMORY_SWITCHES ?? 10)
   const provider = fixture.provider.all[0]
   const selected = { ...provider.models["claude-opus-4-6"] }
-  await mockOpenCodeServer(page, {
+
+  const mock = await mockOpenCodeServer(page, {
     directory: fixture.directory,
     project: fixture.project,
     sessions: fixture.sessions,
@@ -27,6 +28,7 @@ benchmark("measures retained renderer memory with a large model catalog", async 
             ...Object.fromEntries(
               Array.from({ length: count - 1 }, (_, index) => {
                 const id = `catalog-model-${index}`
+
                 return [
                   id,
                   {
@@ -44,19 +46,21 @@ benchmark("measures retained renderer memory with a large model catalog", async 
       ],
     },
   })
+
   await installTimelineSettings(page)
   await installStressSessionTabs(page)
-  await page.goto(stressSessionHref(fixture.sourceID))
+  await page.goto(sessionHref(fixture.sourceID))
   await expectSessionTitle(page, fixture.expected.sourceTitle)
   await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
   await expect(page.locator('[data-action="composer-model"]')).toContainText("Claude Opus 4.6")
   const cdp = await page.context().newCDPSession(page)
   const samples = []
+
   for (let index = 0; index <= switches; index++) {
     if (index > 0) {
       const target = index % 2 === 1
       const id = target ? fixture.targetID : fixture.sourceID
-      await page.locator(`[data-slot="titlebar-tabs"] a[href="${stressSessionHref(id)}"]`).click()
+      await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(id)}"]`).click()
       await expectSessionTitle(page, target ? fixture.expected.targetTitle : fixture.expected.sourceTitle)
       await waitForStableTimeline(
         page,
@@ -64,6 +68,7 @@ benchmark("measures retained renderer memory with a large model catalog", async 
       )
       await expect(page.locator('[data-action="composer-model"]')).toContainText("Claude Opus 4.6")
     }
+
     // GC is an explicit retained-heap measurement, not an application optimization or readiness wait.
     await cdp.send("HeapProfiler.collectGarbage")
     samples.push({
@@ -72,15 +77,11 @@ benchmark("measures retained renderer memory with a large model catalog", async 
       dom: await cdp.send("Memory.getDOMCounters"),
     })
   }
+
   expect(samples).toHaveLength(switches + 1)
   expect(samples.every((sample) => sample.heap.usedSize > 0)).toBe(true)
   selected.name = "Updated catalog model"
-  await page.evaluate(
-    (event) => {
-      const host = window as Window & { __mockServerStream?: { push: (events: ModelUpdated[]) => void } }
-      if (!host.__mockServerStream) throw new Error("Missing fixture event stream")
-      host.__mockServerStream.push([event])
-    },
+  await mock.push([
     {
       id: "evt_model_refresh",
       created: Date.now(),
@@ -88,7 +89,7 @@ benchmark("measures retained renderer memory with a large model catalog", async 
       location: { directory: fixture.directory },
       data: {},
     } satisfies ModelUpdated,
-  )
+  ])
   await expect(page.locator('[data-action="composer-model"]')).toContainText(selected.name)
   report(
     { samples },

@@ -5,6 +5,7 @@ import video from "../asset/lander/opencode-min.mp4"
 import videoPoster from "../asset/lander/opencode-poster.png"
 import { IconCopy, IconCheck } from "../component/icon"
 import { A, createAsync } from "@solidjs/router"
+import { createMemo } from "solid-js"
 import { EmailSignup } from "~/component/email-signup"
 import { Tabs } from "@kobalte/core/tabs"
 import { Faq } from "~/component/faq"
@@ -16,6 +17,7 @@ import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
+import { SocialMeta } from "~/component/social-meta"
 
 function CopyStatus() {
   return (
@@ -29,7 +31,19 @@ function CopyStatus() {
 export default function Home() {
   const i18n = useI18n()
   const language = useLanguage()
-  const _githubData = createAsync(() => github())
+  const githubData = createAsync(() => github())
+  // Formatted like the footer so both show the same figure.
+  const starsCompact = createMemo(() =>
+    githubData()?.stars
+      ? new Intl.NumberFormat(language.tag(language.locale()), { notation: "compact" }).format(githubData()!.stars!)
+      : config.github.starsFormatted.compact,
+  )
+  // Round down so the "over N stars" copy stays true.
+  const starsFull = createMemo(() =>
+    githubData()?.stars
+      ? new Intl.NumberFormat(language.tag(language.locale())).format(Math.floor(githubData()!.stars! / 1000) * 1000)
+      : config.github.starsFormatted.full,
+  )
   const handleCopyClick = (event: Event) => {
     const button = event.currentTarget as HTMLButtonElement
     const text = button.textContent
@@ -46,30 +60,14 @@ export default function Home() {
     <main data-page="opencode">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>{i18n.t("home.title")}</Title>
+      <Meta name="description" content={i18n.t("app.meta.description")} />
       <LocaleLinks path="/" />
-      <Meta property="og:image" content="/social-share.png" />
-      <Meta name="twitter:image" content="/social-share.png" />
+      <SocialMeta title={i18n.t("home.title")} description={i18n.t("app.meta.description")} path="/" />
       <div data-component="container">
         <Header />
 
         <div data-component="content">
           <section data-component="hero">
-            <div data-component="desktop-app-banner">
-              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
-              <div data-slot="content">
-                <span data-slot="text">
-                  {i18n.t("home.banner.text")}
-                  <span data-slot="platforms"> {i18n.t("home.banner.platforms")}</span>.
-                </span>
-                <a href={language.route("/download")} data-slot="link">
-                  {i18n.t("home.banner.downloadNow")}
-                </a>
-                <a href={language.route("/download")} data-slot="link-mobile">
-                  {i18n.t("home.banner.downloadBetaNow")}
-                </a>
-              </div>
-            </div>
-
             <div data-slot="hero-copy">
               {/*<a data-slot="releases"*/}
               {/*   href={release()?.url ?? `${config.github.repoUrl}/releases`}*/}
@@ -107,6 +105,9 @@ export default function Home() {
                   <Tabs.Trigger value="paru" data-slot="tab">
                     paru
                   </Tabs.Trigger>
+                  <Tabs.Trigger value="yay" data-slot="tab">
+                    yay
+                  </Tabs.Trigger>
                   <Tabs.Indicator />
                 </Tabs.List>
                 <div data-slot="panels">
@@ -115,7 +116,7 @@ export default function Home() {
                       <span data-slot="command-script">
                         <span>curl -fsSL </span>
                         <span data-slot="protocol">https://</span>
-                        <span data-slot="highlight">opencode.ai/install</span>
+                        <span data-slot="highlight">opencode.ai/v2/install</span>
                         <span> | bash</span>
                       </span>
                       <CopyStatus />
@@ -124,8 +125,8 @@ export default function Home() {
                   <Tabs.Content as="pre" data-slot="panel" value="npm">
                     <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
-                        <span data-slot="protocol">npm i -g </span>
-                        <span data-slot="highlight">opencode-ai</span>
+                        <span data-slot="protocol">npm install -g </span>
+                        <span data-slot="highlight">@opencode/cli</span>
                       </span>
                       <CopyStatus />
                     </button>
@@ -133,8 +134,8 @@ export default function Home() {
                   <Tabs.Content as="pre" data-slot="panel" value="bun">
                     <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
-                        <span data-slot="protocol">bun add -g </span>
-                        <span data-slot="highlight">opencode-ai</span>
+                        <span data-slot="protocol">bun install -g --trust </span>
+                        <span data-slot="highlight">@opencode/cli</span>
                       </span>
                       <CopyStatus />
                     </button>
@@ -143,7 +144,7 @@ export default function Home() {
                     <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
                         <span data-slot="protocol">brew install </span>
-                        <span data-slot="highlight">anomalyco/tap/opencode</span>
+                        <span data-slot="highlight">anomalyco/tap/opencode-v2</span>
                       </span>
                       <CopyStatus />
                     </button>
@@ -152,7 +153,16 @@ export default function Home() {
                     <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
                         <span data-slot="protocol">paru -S </span>
-                        <span data-slot="highlight">opencode</span>
+                        <span data-slot="highlight">opencode-beta</span>
+                      </span>
+                      <CopyStatus />
+                    </button>
+                  </Tabs.Content>
+                  <Tabs.Content as="pre" data-slot="panel" value="yay">
+                    <button data-copy data-slot="command" onClick={handleCopyClick}>
+                      <span>
+                        <span data-slot="protocol">yay -S </span>
+                        <span data-slot="highlight">opencode-beta</span>
                       </span>
                       <CopyStatus />
                     </button>
@@ -177,19 +187,7 @@ export default function Home() {
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>{i18n.t("home.what.lsp.title")}</strong> {i18n.t("home.what.lsp.body")}
-                </div>
-              </li>
-              <li>
-                <span>[*]</span>
-                <div>
                   <strong>{i18n.t("home.what.multiSession.title")}</strong> {i18n.t("home.what.multiSession.body")}
-                </div>
-              </li>
-              <li>
-                <span>[*]</span>
-                <div>
-                  <strong>{i18n.t("home.what.shareLinks.title")}</strong> {i18n.t("home.what.shareLinks.body")}
                 </div>
               </li>
               <li>
@@ -217,7 +215,7 @@ export default function Home() {
                 </div>
               </li>
             </ul>
-            <a href={language.route("/docs")}>
+            <a href="/v2/docs">
               <span>{i18n.t("home.what.readDocs")} </span>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
@@ -237,7 +235,7 @@ export default function Home() {
                 <span>[*]</span>
                 <p
                   innerHTML={i18n.t("home.growth.body", {
-                    stars: config.github.starsFormatted.full,
+                    stars: starsFull(),
                     contributors: config.stats.contributors,
                     commits: config.stats.commits,
                     monthlyUsers: config.stats.monthlyUsers,
@@ -294,8 +292,8 @@ export default function Home() {
                     </svg>
                   </div>
                   <span>
-                    <figure>{i18n.t("common.figure", { n: 1 })}</figure>{" "}
-                    <strong>{config.github.starsFormatted.compact}</strong> {i18n.t("home.growth.githubStars")}
+                    <figure>{i18n.t("common.figure", { n: 1 })}</figure> <strong>{starsCompact()}</strong>{" "}
+                    {i18n.t("home.growth.githubStars")}
                   </span>
                 </div>
 
@@ -657,7 +655,7 @@ export default function Home() {
 
                 <p>
                   {i18n.t("home.privacy.body")} {i18n.t("home.privacy.learnMore")}{" "}
-                  <a href={language.route("/docs/enterprise/")}>{i18n.t("home.privacy.link")}</a>.
+                  <a href="/v2/docs/policies/">{i18n.t("home.privacy.link")}</a>.
                 </p>
               </div>
             </div>
@@ -673,7 +671,7 @@ export default function Home() {
               </li>
               <li>
                 <Faq question={i18n.t("home.faq.q2")}>
-                  {i18n.t("home.faq.a2.before")} <a href={language.route("/docs")}>{i18n.t("home.faq.a2.link")}</a>.
+                  {i18n.t("home.faq.a2.before")} <a href="/v2/docs">{i18n.t("home.faq.a2.link")}</a>.
                 </Faq>
               </li>
               <li>
@@ -681,7 +679,7 @@ export default function Home() {
                   {i18n.t("home.faq.a3.p1")} {i18n.t("home.faq.a3.p2.beforeZen")}{" "}
                   <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
                   {i18n.t("home.faq.a3.p2.afterZen")} {i18n.t("home.faq.a3.p3")} {i18n.t("home.faq.a3.p4.beforeLocal")}{" "}
-                  <a href={language.route("/docs/providers/#lm-studio")} target="_blank">
+                  <a href="/v2/docs/models/#local" target="_blank">
                     {i18n.t("home.faq.a3.p4.localLink")}
                   </a>
                   .
@@ -690,14 +688,14 @@ export default function Home() {
               <li>
                 <Faq question={i18n.t("home.faq.q4")}>
                   {i18n.t("home.faq.a4.p1")}{" "}
-                  <a href={language.route("/docs/providers/#directory")}>{i18n.t("common.learnMore")}</a>.
+                  <a href="/v2/docs/providers/">{i18n.t("common.learnMore")}</a>.
                 </Faq>
               </li>
               <li>
                 <Faq question={i18n.t("home.faq.q5")}>
                   {i18n.t("home.faq.a5.beforeDesktop")}{" "}
                   <a href={language.route("/download")}>{i18n.t("home.faq.a5.desktop")}</a> {i18n.t("home.faq.a5.and")}{" "}
-                  <a href={language.route("/docs/web")}>{i18n.t("home.faq.a5.web")}</a>!
+                  <a href="/v2/docs/cli/web/">{i18n.t("home.faq.a5.web")}</a>!
                 </Faq>
               </li>
               <li>
@@ -706,9 +704,7 @@ export default function Home() {
               <li>
                 <Faq question={i18n.t("home.faq.q7")}>
                   {i18n.t("home.faq.a7.p1")} {i18n.t("home.faq.a7.p2.beforeModels")}{" "}
-                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("home.faq.a7.p2.modelsLink")}</a>{" "}
-                  {i18n.t("home.faq.a7.p2.and")}{" "}
-                  <a href={language.route("/docs/share/#privacy")}>{i18n.t("home.faq.a7.p2.shareLink")}</a>.
+                  <a href="/v2/docs/console/models/#privacy">{i18n.t("home.faq.a7.p2.modelsLink")}</a>.
                 </Faq>
               </li>
               <li>

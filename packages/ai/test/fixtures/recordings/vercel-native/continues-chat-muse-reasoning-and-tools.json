@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:vercel-native",
+      "provider:vercel-ai-gateway"
+    ],
+    "name": "vercel-native/continues-chat-muse-reasoning-and-tools",
+    "recordedAt": "2026-10-05T02:56:27.988Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://ai-gateway.vercel.sh/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"meta/muse-spark-1.3\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"reasoning_effort\":\"low\",\"max_completion_tokens\":2048}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"gen_01M44ZVD02HF12MJ8X2S7SK1E6\",\"object\":\"chat.completion.chunk\",\"created\":1791168985,\"model\":\"meta/muse-spark-1.3\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"logprobs\":null,\"finish_reason\":null}],\"system_fingerprint\":\"fp_h4uvdop29h\"}\n\ndata: {\"id\":\"gen_01M44ZVD02HF12MJ8X2S7SK1E6\",\"object\":\"chat.completion.chunk\",\"created\":1791168985,\"model\":\"meta/muse-spark-1.3\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"I'll look up the weather in Paris for you.\",\"phase\":\"commentary\"},\"logprobs\":null,\"finish_reason\":null}],\"system_fingerprint\":\"fp_h4uvdop29h\"}\n\ndata: {\"id\":\"gen_01M44ZVD02HF12MJ8X2S7SK1E6\",\"object\":\"chat.completion.chunk\",\"created\":1791168985,\"model\":\"meta/muse-spark-1.3\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_01a109fdbbdd7347a6918c3662c8128e\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"system_fingerprint\":\"fp_h4uvdop29h\"}\n\ndata: {\"id\":\"gen_01M44ZVD02HF12MJ8X2S7SK1E6\",\"object\":\"chat.completion.chunk\",\"created\":1791168985,\"model\":\"meta/muse-spark-1.3\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"system_fingerprint\":\"fp_h4uvdop29h\"}\n\ndata: {\"id\":\"gen_01M44ZVD02HF12MJ8X2S7SK1E6\",\"object\":\"chat.completion.chunk\",\"created\":1791168985,\"model\":\"meta/muse-spark-1.3\",\"choices\":[{\"index\":0,\"delta\":{\"provider_metadata\":{\"openai\":{\"responseId\":\"resp_6ac311d9306b8844d6104957\",\"serviceTier\":\"auto\"},\"gateway\":{\"routing\":{\"originalModelId\":\"meta/muse-spark-1.3\",\"resolvedProvider\":\"meta\",\"fallbacksAvailable\":[],\"planningReasoning\":\"System credentials planned for: meta. Total execution order: meta(system)\",\"canonicalSlug\":\"meta/muse-spark-1.3\",\"finalProvider\":\"meta\",\"modelAttemptCount\":1,\"modelAttempts\":[{\"canonicalSlug\":\"meta/muse-spark-1.3\",\"success\":true,\"providerAttemptCount\":1,\"providerAttempts\":[{\"provider\":\"meta\",\"credentialType\":\"system\",\"success\":true,\"startTime\":1791168984107,\"endTime\":1791168986296,\"providerRequestId\":\"f93f8fd8-1b40-49b2-8a0c-222d6e70af95\",\"statusCode\":200,\"providerResponseId\":\"resp_6ac311d9306b8844d6104957\"}]}],\"totalProviderAttemptCount\":1,\"affinity\":{\"outcome\":\"skipped_below_min_prefix\"},\"clientSessionId\":\"a47cd177650917b88c4d443d7bd8be68\",\"clientSessionIdSource\":\"fingerprint\"},\"cost\":\"0.0012462\",\"marketCost\":\"0.0012462\",\"surchargeCost\":\"0\",\"gatewayCost\":\"0.0012462\",\"inferenceCost\":\"0.0012462\",\"inputInferenceCost\":\"0.0005832\",\"outputInferenceCost\":\"0.000663\",\"generationId\":\"gen_01M44ZVD02HF12MJ8X2S7SK1E6\"}}},\"logprobs\":null,\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":566,\"completion_tokens\":156,\"total_tokens\":722,\"cost\":0.0012462,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":113,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":null,\"upstream_inference_prompt_cost\":0,\"upstream_inference_completions_cost\":0},\"completion_tokens_details\":{\"reasoning_tokens\":87,\"image_tokens\":0},\"cache_creation_input_tokens\":0,\"market_cost\":0.0012462,\"gateway_cost\":0.0012462},\"system_fingerprint\":\"fp_h4uvdop29h\",\"service_tier\":\"auto\",\"generationId\":\"gen_01M44ZVD02HF12MJ8X2S7SK1E6\"}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://ai-gateway.vercel.sh/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"meta/muse-spark-1.3\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"},{\"role\":\"assistant\",\"content\":\"I'll look up the weather in Paris for you.\",\"tool_calls\":[{\"id\":\"call_01a109fdbbdd7347a6918c3662c8128e\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}],\"reasoning\":\"\"},{\"role\":\"tool\",\"tool_call_id\":\"call_01a109fdbbdd7347a6918c3662c8128e\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"reasoning_effort\":\"low\",\"max_completion_tokens\":2048}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"gen_01M44ZVF8Y196MQE5QNXBYK63X\",\"object\":\"chat.completion.chunk\",\"created\":1791168987,\"model\":\"meta/muse-spark-1.3\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"logprobs\":null,\"finish_reason\":null}],\"system_fingerprint\":\"fp_t8q87incvs\"}\n\ndata: {\"id\":\"gen_01M44ZVF8Y196MQE5QNXBYK63X\",\"object\":\"chat.completion.chunk\",\"created\":1791168987,\"model\":\"meta/muse-spark-1.3\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Paris is sunny.\"},\"logprobs\":null,\"finish_reason\":null}],\"system_fingerprint\":\"fp_t8q87incvs\"}\n\ndata: {\"id\":\"gen_01M44ZVF8Y196MQE5QNXBYK63X\",\"object\":\"chat.completion.chunk\",\"created\":1791168987,\"model\":\"meta/muse-spark-1.3\",\"choices\":[{\"index\":0,\"delta\":{\"provider_metadata\":{\"openai\":{\"responseId\":\"resp_6ac311db491fe86e00954e5c\",\"serviceTier\":\"auto\"},\"gateway\":{\"routing\":{\"originalModelId\":\"meta/muse-spark-1.3\",\"resolvedProvider\":\"meta\",\"fallbacksAvailable\":[],\"planningReasoning\":\"System credentials planned for: meta. Total execution order: meta(system)\",\"canonicalSlug\":\"meta/muse-spark-1.3\",\"finalProvider\":\"meta\",\"modelAttemptCount\":1,\"modelAttempts\":[{\"canonicalSlug\":\"meta/muse-spark-1.3\",\"success\":true,\"providerAttemptCount\":1,\"providerAttempts\":[{\"provider\":\"meta\",\"credentialType\":\"system\",\"success\":true,\"startTime\":1791168986439,\"endTime\":1791168988032,\"providerRequestId\":\"88abdbee-80b6-444b-a295-16cd5b25801f\",\"statusCode\":200,\"providerResponseId\":\"resp_6ac311db491fe86e00954e5c\"}]}],\"totalProviderAttemptCount\":1,\"affinity\":{\"outcome\":\"skipped_below_min_prefix\"},\"clientSessionId\":\"a47cd177650917b88c4d443d7bd8be68\",\"clientSessionIdSource\":\"fingerprint\"},\"cost\":\"0.0011\",\"marketCost\":\"0.0011\",\"surchargeCost\":\"0\",\"gatewayCost\":\"0.0011\",\"inferenceCost\":\"0.0011\",\"inputInferenceCost\":\"0.00082375\",\"outputInferenceCost\":\"0.00027625\",\"generationId\":\"gen_01M44ZVF8Y196MQE5QNXBYK63X\"}}},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":659,\"completion_tokens\":65,\"total_tokens\":724,\"cost\":0.0011,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":null,\"upstream_inference_prompt_cost\":0,\"upstream_inference_completions_cost\":0},\"completion_tokens_details\":{\"reasoning_tokens\":51,\"image_tokens\":0},\"cache_creation_input_tokens\":0,\"market_cost\":0.0011,\"gateway_cost\":0.0011},\"system_fingerprint\":\"fp_t8q87incvs\",\"service_tier\":\"auto\",\"generationId\":\"gen_01M44ZVF8Y196MQE5QNXBYK63X\"}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

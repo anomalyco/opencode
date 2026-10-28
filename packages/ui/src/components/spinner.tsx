@@ -1,48 +1,50 @@
-import { ComponentProps, For } from "solid-js"
+import { For, splitProps, type ComponentProps } from "solid-js"
+import { syncSpinPhase } from "../hooks/spin-phase"
+import { radarDots, radarKeyframes, radarLoop } from "./spinner-radar"
 
-const outerIndices = new Set([1, 2, 4, 7, 8, 11, 13, 14])
-const cornerIndices = new Set([0, 3, 12, 15])
-const squares = Array.from({ length: 16 }, (_, i) => ({
-  id: i,
-  x: (i % 4) * 4,
-  y: Math.floor(i / 4) * 4,
-  delay: Math.random() * 1.5,
-  duration: 1 + Math.random() * 1,
-  outer: outerIndices.has(i),
-  corner: cornerIndices.has(i),
-}))
+// Every AI activity spinner (busy session tabs, the activity chip, subagents, tool cards) shows Soft Radar. Non-AI
+// loading uses Loader.
 
-export function Spinner(props: {
-  class?: string
-  classList?: ComponentProps<"div">["classList"]
-  style?: ComponentProps<"div">["style"]
-}) {
+const keyframes = "spinner-radar"
+
+const dots = radarDots()
+
+// The keyframes are added to the document once, the first time a spinner renders.
+let added = false
+
+export function Spinner(props: ComponentProps<"svg"> & { "data-component"?: string }) {
+  const [local, rest] = splitProps(props, ["class", "classList", "data-component"])
+
+  if (!added) {
+    added = true
+    const style = document.createElement("style")
+    style.textContent = radarKeyframes(keyframes)
+    document.head.append(style)
+  }
+
   return (
     <svg
-      {...props}
-      viewBox="0 0 15 15"
-      data-component="spinner"
-      classList={{
-        ...props.classList,
-        [props.class ?? ""]: !!props.class,
-      }}
+      {...rest}
+      ref={syncSpinPhase}
+      viewBox="0 0 16 16"
+      data-component={local["data-component"] ?? "spinner"}
+      data-slot="spinner-dots"
+      classList={{ ...local.classList, [local.class ?? ""]: !!local.class }}
       fill="currentColor"
     >
-      <For each={squares}>
-        {(square) => (
+      <For each={dots}>
+        {(dot) => (
           <rect
-            x={square.x}
-            y={square.y}
-            width="3"
-            height="3"
-            rx="1"
+            x={dot.x}
+            y={dot.y}
+            width={dot.size}
+            height={dot.size}
+            rx={dot.size * 0.24}
             style={{
-              opacity: square.corner ? 0 : undefined,
-              animation: square.corner
+              "--still": dot.still,
+              animation: dot.steady
                 ? undefined
-                : `${square.outer ? "pulse-opacity-dim" : "pulse-opacity"} ${square.duration}s ease-in-out infinite`,
-              "animation-fill-mode": square.corner ? undefined : "both",
-              "animation-delay": square.corner ? undefined : `${square.delay}s`,
+                : `${keyframes}-${dot.shape} calc(${radarLoop}s * var(--spinner-time, 1)) linear calc(${-radarLoop * (1 - dot.at)}s * var(--spinner-time, 1)) infinite`,
             }}
           />
         )}

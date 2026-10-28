@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:venice-chat",
+      "provider:venice",
+      "protocol:venice-chat",
+      "tool",
+      "parallel",
+      "signature"
+    ],
+    "name": "venice-chat/gemini-preserves-per-call-signatures-through-parallel-tools",
+    "recordedAt": "2026-10-05T03:21:54.383Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.venice.ai/api/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gemini-3-8-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"Look up private rates for both ZEBRA and MOOSE using two calls to lookup_rate. Then add the rates and multiply by 7. Use parallel calls if possible.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"lookup_rate\",\"description\":\"Retrieve the private conversion rate for a code. Only this tool knows the rate.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\",\"enum\":[\"ZEBRA\",\"MOOSE\"]}},\"required\":[\"code\"],\"additionalProperties\":false},\"strict\":false}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_completion_tokens\":4096,\"reasoning\":{\"effort\":\"high\"},\"venice_parameters\":{\"include_venice_system_prompt\":false},\"parallel_tool_calls\":true}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"id\":\"gcp-1791170510482-itouwq\",\"object\":\"chat.completion.chunk\",\"created\":1791170510,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"index\":0,\"id\":\"call_0\",\"type\":\"function\",\"thought_signature\":\"AY89a1/bp+ihzOXpD71E6UhQv6xnBjHTAdPeNHvLEAevtqznKg46D/3qO3e9Qg7wGmccL6IpLV56PwWIT+6pXoeU6ix8JCCk7nlml/Sz2huX/rNFoSRHpB+YAZK07lHP9cbotXy7FPNMaRhsl18sPSJZLlPK0iTGhJa7MmH72r4v/G3/izffMKUPRos6i5qQ52La10FUWSunPigqNnglEvWEC3Yb+d+PnEq5iOPaVCD0awXjhsIk8L0n4+T6jM4epO+whUSSgvH9PGwgmsP197hb7l5YSjQncNX0oF1G4ch3xrFzXyS/noFFy6SlBfzfN0NJmAyP//4oVqjffUJngigTAtboI4HdDwH1fPHuI5FTfmVcUGVVIEjhAEDAAHtS77uW/XdLH4bsSigjYeCzgRTYmHP8bqFb1HjRjl2HK2Pr1y6ch0JSIgtAKv8Kj4R0PM8rIYxxf7LgrsaVWogt4rq2M4HvcUcBi6IhQ/500JUCoqdhlTGMqCFUHkN6P/qAoPGZXmo50OvtNChQ4vXVGYxWp89IRwdcv8vqjIFk75/R6oZG9BsrUaC1JnQN8i3BbYc1bz/lzFCQ1IC/g1Sm+wPhsaPmoVN77101ZAdNMiP4B5Ow7K/UycMunFKWy4xdpaT7Pb+LLNy6GYy9q2TvoRXTq1lJugLH4Q8TQZj5neWZmiDxqzsj0Xvwew7zLwGSMfkpBB4rgx9XWMx5CwqO068qjhmo+0gUkxMug2RHblEGnPO7i0i9fYj9ltDfUpFxN2adDpyk4dwuIeVSlu4N4oHOgjGms5jWLp0MqkyoKFo=\",\"function\":{\"name\":\"lookup_rate\",\"arguments\":\"{\\\"code\\\":\\\"ZEBRA\\\"}\"}}]}}]}\n\ndata: {\"id\":\"gcp-1791170510482-itouwq\",\"object\":\"chat.completion.chunk\",\"created\":1791170510,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":1,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"lookup_rate\",\"arguments\":\"{\\\"code\\\":\\\"MOOSE\\\"}\"}}]}}]}\n\ndata: {\"id\":\"gcp-1791170510482-itouwq\",\"object\":\"chat.completion.chunk\",\"created\":1791170510,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: {\"id\":\"gcp-1791170510482-itouwq\",\"object\":\"chat.completion.chunk\",\"created\":1791170510,\"model\":\"gemini-3-8-flash\",\"choices\":[],\"usage\":{\"prompt_tokens\":74,\"completion_tokens\":156,\"total_tokens\":230},\"cost\":{\"usd\":0.000800625,\"diem\":0}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.venice.ai/api/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gemini-3-8-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"Look up private rates for both ZEBRA and MOOSE using two calls to lookup_rate. Then add the rates and multiply by 7. Use parallel calls if possible.\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"lookup_rate\",\"arguments\":\"{\\\"code\\\":\\\"ZEBRA\\\"}\"},\"thought_signature\":\"AY89a1/bp+ihzOXpD71E6UhQv6xnBjHTAdPeNHvLEAevtqznKg46D/3qO3e9Qg7wGmccL6IpLV56PwWIT+6pXoeU6ix8JCCk7nlml/Sz2huX/rNFoSRHpB+YAZK07lHP9cbotXy7FPNMaRhsl18sPSJZLlPK0iTGhJa7MmH72r4v/G3/izffMKUPRos6i5qQ52La10FUWSunPigqNnglEvWEC3Yb+d+PnEq5iOPaVCD0awXjhsIk8L0n4+T6jM4epO+whUSSgvH9PGwgmsP197hb7l5YSjQncNX0oF1G4ch3xrFzXyS/noFFy6SlBfzfN0NJmAyP//4oVqjffUJngigTAtboI4HdDwH1fPHuI5FTfmVcUGVVIEjhAEDAAHtS77uW/XdLH4bsSigjYeCzgRTYmHP8bqFb1HjRjl2HK2Pr1y6ch0JSIgtAKv8Kj4R0PM8rIYxxf7LgrsaVWogt4rq2M4HvcUcBi6IhQ/500JUCoqdhlTGMqCFUHkN6P/qAoPGZXmo50OvtNChQ4vXVGYxWp89IRwdcv8vqjIFk75/R6oZG9BsrUaC1JnQN8i3BbYc1bz/lzFCQ1IC/g1Sm+wPhsaPmoVN77101ZAdNMiP4B5Ow7K/UycMunFKWy4xdpaT7Pb+LLNy6GYy9q2TvoRXTq1lJugLH4Q8TQZj5neWZmiDxqzsj0Xvwew7zLwGSMfkpBB4rgx9XWMx5CwqO068qjhmo+0gUkxMug2RHblEGnPO7i0i9fYj9ltDfUpFxN2adDpyk4dwuIeVSlu4N4oHOgjGms5jWLp0MqkyoKFo=\"},{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"lookup_rate\",\"arguments\":\"{\\\"code\\\":\\\"MOOSE\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_0\",\"content\":\"{\\\"rate\\\":23}\"},{\"role\":\"tool\",\"tool_call_id\":\"call_1\",\"content\":\"{\\\"rate\\\":31}\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"lookup_rate\",\"description\":\"Retrieve the private conversion rate for a code. Only this tool knows the rate.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\",\"enum\":[\"ZEBRA\",\"MOOSE\"]}},\"required\":[\"code\"],\"additionalProperties\":false},\"strict\":false}}],\"tool_choice\":\"none\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_completion_tokens\":4096,\"reasoning\":{\"effort\":\"high\"},\"venice_parameters\":{\"include_venice_system_prompt\":false},\"parallel_tool_calls\":true}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"id\":\"gcp-1791170512529-w6lmsz\",\"object\":\"chat.completion.chunk\",\"created\":1791170512,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"The retrieved rates are:\\n- **\"}}]}\n\ndata: {\"id\":\"gcp-1791170512529-w6lmsz\",\"object\":\"chat.completion.chunk\",\"created\":1791170512,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ZEBRA:** 23\\n- **MOOSE:** 31\\n\\n### Calculation:\\n1. **Add\"}}]}\n\ndata: {\"id\":\"gcp-1791170512529-w6lmsz\",\"object\":\"chat.completion.chunk\",\"created\":1791170512,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" the rates:**  \\n   $$23 + 31 = 54$$\\n\\n2. **Multiply by 7:**  \"}}]}\n\ndata: {\"id\":\"gcp-1791170512529-w6lmsz\",\"object\":\"chat.completion.chunk\",\"created\":1791170512,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\n   $$54 \\\\times 7 = 378$$\\n\\nThe final result is **378\"}}]}\n\ndata: {\"id\":\"gcp-1791170512529-w6lmsz\",\"object\":\"chat.completion.chunk\",\"created\":1791170512,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"**.\"}}]}\n\ndata: {\"id\":\"gcp-1791170512529-w6lmsz\",\"object\":\"chat.completion.chunk\",\"created\":1791170512,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{\"thought_signature\":\"AY89a18wXUWI7m5/5GGqxfoJDqE4MU2X2SR/ZQMCX+JQ/clHQynyEjplK4a8w9tXAi8uuxYPVxYj1ULcb83zUQBsr77tSkJN5R0J2Jgc2HzYtmTW7OYHoFQqmMESnDjvDiO51y3xpXGbVkqRlXwfmap+Tpivfx45hiXlns/hObEQo1gE70NzD7d8CQOseYVz2N7MPMmGDqpAy+5SAHXGAcQ9K2ufHNUdfWM/uUi+sGUcDhGnjPXPlzIuYk7IjUQXNAH9FFqo19dBQPhE106C3aI69QAuMvyZZ/no4ou9XSOUXrstjzQwUM+TOJXsab80F1+C6DghvYm0UZSb827xCKPtj7oCQwtwg+f4sWELhflp42IL3URo2UxpZaDNpt7PYXmmcCvKAN7/PTirCijNWMtlDL0LDbiKj+DfOFEuS2VxVq+yQgWRbKJZF7bl8BCSe7+Qab0bAsu0ZJXKBlxs46ulaXn5cc933y/Yv7O0XGHbVULMzeEpZndzkHqZYs5D+ve+CJFfjWsVk1NKrTdXqt11Ov470+MCpSlHTXdjug7oUd0A0b5AH+bF4yAZAGj4snJ7hi04EQ4Ch7rASB3OB+YB+8SnStAGf0XuimNgY2wzR68qaQ==\"}}]}\n\ndata: {\"id\":\"gcp-1791170512529-w6lmsz\",\"object\":\"chat.completion.chunk\",\"created\":1791170512,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"gcp-1791170512529-w6lmsz\",\"object\":\"chat.completion.chunk\",\"created\":1791170512,\"model\":\"gemini-3-8-flash\",\"choices\":[],\"usage\":{\"prompt_tokens\":206,\"completion_tokens\":208,\"total_tokens\":414},\"cost\":{\"usd\":0.001168125,\"diem\":0}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.venice.ai/api/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gemini-3-8-flash\",\"messages\":[{\"role\":\"user\",\"content\":\"Look up private rates for both ZEBRA and MOOSE using two calls to lookup_rate. Then add the rates and multiply by 7. Use parallel calls if possible.\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_0\",\"type\":\"function\",\"function\":{\"name\":\"lookup_rate\",\"arguments\":\"{\\\"code\\\":\\\"ZEBRA\\\"}\"},\"thought_signature\":\"AY89a1/bp+ihzOXpD71E6UhQv6xnBjHTAdPeNHvLEAevtqznKg46D/3qO3e9Qg7wGmccL6IpLV56PwWIT+6pXoeU6ix8JCCk7nlml/Sz2huX/rNFoSRHpB+YAZK07lHP9cbotXy7FPNMaRhsl18sPSJZLlPK0iTGhJa7MmH72r4v/G3/izffMKUPRos6i5qQ52La10FUWSunPigqNnglEvWEC3Yb+d+PnEq5iOPaVCD0awXjhsIk8L0n4+T6jM4epO+whUSSgvH9PGwgmsP197hb7l5YSjQncNX0oF1G4ch3xrFzXyS/noFFy6SlBfzfN0NJmAyP//4oVqjffUJngigTAtboI4HdDwH1fPHuI5FTfmVcUGVVIEjhAEDAAHtS77uW/XdLH4bsSigjYeCzgRTYmHP8bqFb1HjRjl2HK2Pr1y6ch0JSIgtAKv8Kj4R0PM8rIYxxf7LgrsaVWogt4rq2M4HvcUcBi6IhQ/500JUCoqdhlTGMqCFUHkN6P/qAoPGZXmo50OvtNChQ4vXVGYxWp89IRwdcv8vqjIFk75/R6oZG9BsrUaC1JnQN8i3BbYc1bz/lzFCQ1IC/g1Sm+wPhsaPmoVN77101ZAdNMiP4B5Ow7K/UycMunFKWy4xdpaT7Pb+LLNy6GYy9q2TvoRXTq1lJugLH4Q8TQZj5neWZmiDxqzsj0Xvwew7zLwGSMfkpBB4rgx9XWMx5CwqO068qjhmo+0gUkxMug2RHblEGnPO7i0i9fYj9ltDfUpFxN2adDpyk4dwuIeVSlu4N4oHOgjGms5jWLp0MqkyoKFo=\"},{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"lookup_rate\",\"arguments\":\"{\\\"code\\\":\\\"MOOSE\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_0\",\"content\":\"{\\\"rate\\\":23}\"},{\"role\":\"tool\",\"tool_call_id\":\"call_1\",\"content\":\"{\\\"rate\\\":31}\"},{\"role\":\"assistant\",\"content\":\"The retrieved rates are:\\n- **ZEBRA:** 23\\n- **MOOSE:** 31\\n\\n### Calculation:\\n1. **Add the rates:**  \\n   $$23 + 31 = 54$$\\n\\n2. **Multiply by 7:**  \\n   $$54 \\\\times 7 = 378$$\\n\\nThe final result is **378**.\",\"thought_signature\":\"AY89a18wXUWI7m5/5GGqxfoJDqE4MU2X2SR/ZQMCX+JQ/clHQynyEjplK4a8w9tXAi8uuxYPVxYj1ULcb83zUQBsr77tSkJN5R0J2Jgc2HzYtmTW7OYHoFQqmMESnDjvDiO51y3xpXGbVkqRlXwfmap+Tpivfx45hiXlns/hObEQo1gE70NzD7d8CQOseYVz2N7MPMmGDqpAy+5SAHXGAcQ9K2ufHNUdfWM/uUi+sGUcDhGnjPXPlzIuYk7IjUQXNAH9FFqo19dBQPhE106C3aI69QAuMvyZZ/no4ou9XSOUXrstjzQwUM+TOJXsab80F1+C6DghvYm0UZSb827xCKPtj7oCQwtwg+f4sWELhflp42IL3URo2UxpZaDNpt7PYXmmcCvKAN7/PTirCijNWMtlDL0LDbiKj+DfOFEuS2VxVq+yQgWRbKJZF7bl8BCSe7+Qab0bAsu0ZJXKBlxs46ulaXn5cc933y/Yv7O0XGHbVULMzeEpZndzkHqZYs5D+ve+CJFfjWsVk1NKrTdXqt11Ov470+MCpSlHTXdjug7oUd0A0b5AH+bF4yAZAGj4snJ7hi04EQ4Ch7rASB3OB+YB+8SnStAGf0XuimNgY2wzR68qaQ==\"},{\"role\":\"user\",\"content\":\"Add 7 to your previous final answer. Reply with just the number.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"lookup_rate\",\"description\":\"Retrieve the private conversion rate for a code. Only this tool knows the rate.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\",\"enum\":[\"ZEBRA\",\"MOOSE\"]}},\"required\":[\"code\"],\"additionalProperties\":false},\"strict\":false}}],\"tool_choice\":\"none\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_completion_tokens\":4096,\"reasoning\":{\"effort\":\"high\"},\"venice_parameters\":{\"include_venice_system_prompt\":false},\"parallel_tool_calls\":true}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"id\":\"gcp-1791170514341-j5gh1h\",\"object\":\"chat.completion.chunk\",\"created\":1791170514,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"385\"}}]}\n\ndata: {\"id\":\"gcp-1791170514341-j5gh1h\",\"object\":\"chat.completion.chunk\",\"created\":1791170514,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{\"thought_signature\":\"AY89a1/DMIB/2qixC5QVQQH1tA2QiQFpEsXnIDd7wlCgwuYQXBGWgSsP1bpTZJUJM/yqKdQh96+/c6c28VMbW5iovCDxxeK56KfmSBSBIPtNW8BUHHLxQw9vdsxQvQyHcGW6rLb4W3gElqx6JFmNkTMvijUS9QDgkPlPipirbv7pqLejFyQ040GD4IVhP8ovyR49EJm61W0JvJOPFT30/gVvaKA6RnRgTKGiHrZWVqLxhKVkb0gC7jI9CNNASOYH67uelFQ2trbcf5Qbhx4q93vAErFsBzvzliSuaELDrxZAF9VCNIiWz4AUtEWI1FLCMYxkgNry/K+iNpwcXu8BxABETbNkEb722wjpt1A2EZK/5qhqKQvUOq+WgSCPCLoI1zfUiGN6UV9D/QGtyS2Iyt3AYlvKjZVVzP217ItWSDacGzigLd4t+4MMW7Dvbs7ffBvBV+EzMCP1dnsLkKCxicfvT3e2EgY+liDSaSZG3sE7Lm4WKCYbI4rrBLMupERSaFfAHWdTlea5HeM=\"}}]}\n\ndata: {\"id\":\"gcp-1791170514341-j5gh1h\",\"object\":\"chat.completion.chunk\",\"created\":1791170514,\"model\":\"gemini-3-8-flash\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"gcp-1791170514341-j5gh1h\",\"object\":\"chat.completion.chunk\",\"created\":1791170514,\"model\":\"gemini-3-8-flash\",\"choices\":[],\"usage\":{\"prompt_tokens\":429,\"completion_tokens\":83,\"total_tokens\":512},\"cost\":{\"usd\":0.00079125,\"diem\":0}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

@@ -13,7 +13,8 @@ export function text(message: SessionMessage.Info | undefined) {
     message.content
       .filter((part) => part.type === "text")
       .map((part) => part.text)
-      .join("") || NO_TEXT
+      .filter((text) => text.length > 0)
+      .join("\n\n") || NO_TEXT
   )
 }
 

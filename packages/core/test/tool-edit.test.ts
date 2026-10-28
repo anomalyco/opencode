@@ -586,6 +586,163 @@ describe("EditTool", () => {
     }),
   )
 
+  it.live("matches across mixed line endings and keeps each region's endings", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const mostlyLf = path.join(tmp.path, "mostly-lf.txt")
+      const mostlyCrlf = path.join(tmp.path, "mostly-crlf.txt")
+      return Effect.promise(() =>
+        Promise.all([
+          fs.writeFile(mostlyLf, "head\r\nAAA OLD BBB\ntail\n"),
+          fs.writeFile(mostlyCrlf, "one\r\ntwo\r\nthree\nfour\r\n"),
+        ]),
+      ).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            Effect.gen(function* () {
+              const inline = yield* executeTool(
+                registry,
+                call({ path: "mostly-lf.txt", oldString: "AAA OLD BBB", newString: "AAA NEW\nLINE2" }),
+              )
+              expect(inline.status).toBe("completed")
+              const spanning = yield* executeTool(
+                registry,
+                call({ path: "mostly-lf.txt", oldString: "LINE2\ntail", newString: "LINE2\nTAIL" }),
+              )
+              expect(spanning.status).toBe("completed")
+              const crossing = yield* executeTool(
+                registry,
+                call({ path: "mostly-crlf.txt", oldString: "o\nthree\nfo", newString: "O\nTHREE\nFO" }),
+              )
+              expect(crossing.status).toBe("completed")
+              const single = yield* executeTool(
+                registry,
+                call({ path: "mostly-crlf.txt", oldString: "one", newString: "ONE\nUNO" }),
+              )
+              expect(single.status).toBe("completed")
+            }),
+          ),
+        ),
+        Effect.andThen(
+          Effect.promise(() => Promise.all([fs.readFile(mostlyLf, "utf8"), fs.readFile(mostlyCrlf, "utf8")])),
+        ),
+        Effect.tap(([lfContent, crlfContent]) =>
+          Effect.sync(() => {
+            expect(lfContent).toBe("head\r\nAAA NEW\nLINE2\nTAIL\n")
+            expect(crlfContent).toBe("ONE\r\nUNO\r\ntwO\r\nTHREE\nFOur\r\n")
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("keeps the endings of unchanged and in-place lines inside a multi-line match", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      // A CRLF file with a block pasted in from an LF editor, edited with surrounding context.
+      const target = path.join(tmp.path, "store.cs")
+      return Effect.promise(() =>
+        fs.writeFile(target, "All(item.Sku);\r\n\r\nFind(sku);\r\n\r\nvoid Add()\n{\n  _items[item.Sku] = item;\n}\r\n"),
+      ).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            executeTool(
+              registry,
+              call({
+                path: "store.cs",
+                oldString: "All(item.Sku);\n\nFind(sku);\n\nvoid Add()\n{\n  _items[item.Sku] = item;\n}",
+                newString:
+                  "All(item.Code);\n\nFind(code);\n\nvoid Add()\n{\n  _items[item.Code] = item;\n}\n\nbool Remove(string code)\n{\n}",
+              }),
+            ),
+          ),
+        ),
+        Effect.andThen(() => Effect.promise(() => fs.readFile(target, "utf8"))),
+        Effect.tap((content) =>
+          Effect.sync(() =>
+            expect(content).toBe(
+              "All(item.Code);\r\n\r\nFind(code);\r\n\r\nvoid Add()\n{\n  _items[item.Code] = item;\n}\r\n\r\nbool Remove(string code)\r\n{\r\n}\r\n",
+            ),
+          ),
+        ),
+      )
+    }),
+  )
+
+  it.live("applies edits that differ only in \\r to the exact bytes", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const strip = path.join(tmp.path, "strip.sh")
+      const whole = path.join(tmp.path, "whole.sh")
+      const add = path.join(tmp.path, "add.bat")
+      return Effect.promise(() =>
+        Promise.all([
+          fs.writeFile(strip, "a\r\nb\r\n"),
+          fs.writeFile(whole, "x\r\ny\r\n"),
+          fs.writeFile(add, "p\nq\n"),
+        ]),
+      ).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            Effect.gen(function* () {
+              expect(
+                yield* executeTool(registry, call({ path: "strip.sh", oldString: "\r", newString: "", replaceAll: true })),
+              ).toMatchObject({ status: "completed", output: { replacements: 2 } })
+              expect(
+                yield* executeTool(registry, call({ path: "whole.sh", oldString: "x\r\ny\r\n", newString: "x\ny\n" })),
+              ).toMatchObject({ status: "completed" })
+              expect(
+                yield* executeTool(registry, call({ path: "add.bat", oldString: "p\nq", newString: "p\r\nq" })),
+              ).toMatchObject({ status: "completed" })
+              expect(
+                yield* executeTool(registry, call({ path: "add.bat", oldString: "p\nq", newString: "p\r\nq" })),
+              ).toMatchObject({ status: "error" })
+            }),
+          ),
+        ),
+        Effect.andThen(
+          Effect.promise(() =>
+            Promise.all([fs.readFile(strip, "utf8"), fs.readFile(whole, "utf8"), fs.readFile(add, "utf8")]),
+          ),
+        ),
+        Effect.tap(([stripped, converted, added]) =>
+          Effect.sync(() => {
+            expect(stripped).toBe("a\nb\n")
+            expect(converted).toBe("x\ny\n")
+            expect(added).toBe("p\r\nq\n")
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("fails instead of reporting success when the edit leaves the file unchanged", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "quote.txt")
+      return Effect.promise(() => fs.writeFile(target, "it’s here\n")).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            Effect.gen(function* () {
+              // The typography tier matches the curly quote, and the replacement writes the same bytes back.
+              expect(
+                yield* executeTool(registry, call({ path: "quote.txt", oldString: "it's here", newString: "it’s here" })),
+              ).toEqual({
+                status: "error",
+                error: {
+                  type: "tool.execution",
+                  message:
+                    "No changes to apply: the edit leaves quote.txt unchanged. Line endings follow the file; to change them, write \\r explicitly in oldString or newString.",
+                },
+              })
+              expect(edit.writes).toEqual([])
+            }),
+          ),
+        ),
+      )
+    }),
+  )
+
   it.live("serializes concurrent edit transactions", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()

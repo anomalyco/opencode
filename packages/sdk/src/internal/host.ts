@@ -1,6 +1,7 @@
 export * as EmbeddedHost from "./host"
 
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
+import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Session } from "@opencode/core/session"
 import { Workspace } from "@opencode/core/workspace"
@@ -9,13 +10,14 @@ import { createEmbeddedRoutes } from "@opencode/server/routes"
 import type { ServerOptions } from "@opencode/server/options"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
 import { Context, Effect, Layer, ManagedRuntime, Scope } from "effect"
-import { HttpEffect, HttpRouter, HttpServer, HttpServerRequest } from "effect/unstable/http"
+import { HttpEffect, HttpRouter, HttpServer, HttpServerRequest } from "effect/http"
 import { context, layer, type LogOptions } from "../logging"
 import { OwnedFetch } from "./fetch"
 import { SdkInstances } from "./instances"
 
 export interface CreateOptions<R = never> extends Omit<ServerOptions, "hostname" | "port" | "password"> {
   readonly log?: LogOptions
+  readonly plugins?: ReadonlyArray<Plugin>
   readonly workspaceProviders?: Readonly<Record<string, WorkspaceDriver.Interface>>
   readonly instances?: SdkInstances.Options<R>
 }
@@ -29,7 +31,7 @@ export const create = Effect.fn("EmbeddedHost.create")(function* <R = never>(
   options: CreateOptions<R> = {},
   embed: EmbedOptions = {},
 ) {
-  const { log, workspaceProviders, instances, ...server } = options
+  const { log, plugins, workspaceProviders, instances, ...server } = options
   const selector = instances ? SdkInstances.provide(instances, yield* Effect.context<R>()) : undefined
   const runtime = ManagedRuntime.make(
     createEmbeddedRoutes(
@@ -47,6 +49,8 @@ export const create = Effect.fn("EmbeddedHost.create")(function* <R = never>(
 
   return yield* Effect.gen(function* () {
     const services = yield* runtime.contextEffect
+    const sdkPlugins = Context.get(services, SdkPlugins.Service)
+    for (const plugin of plugins ?? []) yield* sdkPlugins.register(plugin)
     // The sweep is a no-op when nothing is suspended. ManagedRuntime owns the
     // fiber so recovery never delays startup but still stops with the host.
     runtime.runFork(Context.get(services, SessionRestart.Service).resumeSuspendedSessions)
@@ -58,7 +62,7 @@ export const create = Effect.fn("EmbeddedHost.create")(function* <R = never>(
     return {
       runtime,
       fetch: transport.fetch,
-      plugins: Context.get(services, SdkPlugins.Service),
+      plugins: sdkPlugins,
       sessions: Context.get(services, Session.Service),
       workspace: Context.get(services, Workspace.Service),
       close: transport.close,

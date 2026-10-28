@@ -1,11 +1,13 @@
+import type { FileSystem } from "@opencode/core/filesystem"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, LayerMap } from "effect"
+import { Duration, Effect, Layer, LayerMap } from "effect"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
 import { Image } from "@opencode/core/image"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -25,8 +27,11 @@ import { Skill } from "@opencode/core/skill"
 import { Event } from "@opencode/schema/event"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
+import { organizationPolicy, registerIntegrationPolicy } from "./fixture/policy"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
+// The organization behind this location's Console connection denies the skill.
+const blocked = Location.Ref.make({ directory: AbsolutePath.make("/blocked") })
 const info = Skill.Info.make({
   id: Skill.ID.make("effect"),
   name: Skill.Name.make("Effect"),
@@ -39,24 +44,55 @@ const locations = makeGlobalNode({
   layer: Layer.effect(
     LocationServiceMap.Service,
     LayerMap.make(
-      (_ref: Location.Ref) =>
+      (ref: Location.Ref) =>
         // These tests need skill activation and prompt preparation from the same location services.
         // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
         Layer.mergeAll(
-          LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node])),
-          Layer.mock(Skill.Service, {
-            get: (id) => Effect.succeed(id === info.id ? info : undefined),
-            list: () => Effect.succeed([info]),
-          }),
+          Layer.effectDiscard(
+            Effect.gen(function* () {
+              const skills = yield* Skill.Service
+              yield* skills.transform((editor) => editor.add(info))
+              yield* registerIntegrationPolicy({ skill: skills })
+            }),
+          ).pipe(
+            Layer.provideMerge(
+              LayerNode.compile(
+                LayerNode.group([PluginHooks.node, Image.node, Skill.node, Config.node]),
+                {
+                  replacements: [
+                    Config.node.replace(
+                      Config.testLayer(
+                        ref.directory === blocked.directory
+                          ? [
+                              organizationPolicy([
+                                { action: "integration.use", resource: "skill:effect", effect: "deny" },
+                              ]),
+                            ]
+                          : [],
+                      ),
+                    ),
+                  ],
+                },
+              ),
+            ),
+          ),
           Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
-        ) as unknown as Layer.Layer<LocationServices>,
+        ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
+      { idleTimeToLive: Duration.infinity },
     ),
   ),
   deps: [],
 })
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      Session.node,
+      LocationServiceMap.node,
+    ]),
     [
       LocationServiceMap.node.replace(locations),
       Project.node.replace(globalProjectNode),
@@ -66,6 +102,28 @@ const it = testEffect(
 )
 
 describe("Session.skill", () => {
+  it.effect("refuses blocked skill mentions and standalone activation without writing their content", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ location: blocked })
+      expect(
+        yield* sessions.skill({ sessionID: session.id, skill: info.id, resume: false }).pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.SkillNotFoundError", skill: info.id })
+      expect(
+        yield* sessions
+          .prompt({
+            sessionID: session.id,
+            text: "@effect",
+            skills: [{ id: info.id, mention: { start: 0, end: 7, text: "@effect" } }],
+            resume: false,
+          })
+          .pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.SkillNotFoundError", skill: info.id })
+      expect(yield* sessions.messages({ sessionID: session.id })).toEqual([])
+      expect(yield* sessions.inbox(session.id)).toEqual([])
+    }),
+  )
+
   it.effect("materializes mentioned skills on their owning prompt", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
@@ -143,6 +201,8 @@ describe("Session.skill", () => {
       const bus = yield* Bus.Service
       const session = yield* sessions.create({ location })
       const id = SessionMessage.ID.make("msg_caller_skill")
+      const locations = yield* LocationServiceMap.Service
+      yield* Skill.Service.use((skills) => skills.list()).pipe(Effect.provide(locations.get(session.location)))
       const events: Event.Payload[] = []
       yield* bus.listen((event) =>
         Effect.sync(() => {

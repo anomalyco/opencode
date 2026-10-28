@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode/ui/hooks"
 import { Switch } from "@opencode/ui/switch"
-import { type Component, createEffect, createMemo, For, Show } from "solid-js"
+import { type Component, createEffect, createMemo, For, type JSX, Show } from "solid-js"
 
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -27,15 +27,18 @@ export const SettingsModels: Component<{
   active?: boolean
   provider?: string
   onReveal?: () => void
+  headerAction?: JSX.Element
 }> = (props) => {
   const language = useLanguage()
   const models = useModels()
   const serverSdk = useServerSDK()
+
   const [store, setStore] = persisted(
     Persist.serverGlobal(serverSdk.scope, "settings-v2.models.providers"),
     ModelProvidersSchema,
     { collapsed: {} },
   )
+
   const sections = new Map<string, HTMLElement>()
 
   const list = useFilteredList<ModelItem>({
@@ -51,17 +54,22 @@ export const SettingsModels: Component<{
       const bPopular = bIndex >= 0
 
       if (aPopular && !bPopular) return -1
+
       if (!aPopular && bPopular) return 1
+
       if (aPopular && bPopular) return aIndex - bIndex
 
       const aName = a.items[0].provider.name
       const bName = b.items[0].provider.name
+
       return aName.localeCompare(bName)
     },
   })
+
   const managed = createMemo(() => consoleModelGroup(models.list()))
   const searching = () => list.filter().length > 0
   const expanded = (key: string) => searching() || !store.collapsed[key]
+
   const setProviderVisibility = (providerID: string, visible: boolean) =>
     models
       .list()
@@ -74,6 +82,7 @@ export const SettingsModels: Component<{
         <For each={props.items}>
           {(item) => {
             const key = { providerID: item.provider.id, modelID: item.id }
+
             return (
               <SettingsRow title={item.name} description="">
                 <div>
@@ -96,19 +105,25 @@ export const SettingsModels: Component<{
   createEffect(() => {
     if (!props.active || !props.provider) return
     const provider = props.provider
+
     if (list.filter()) {
       list.clear()
+
       return
     }
+
     if (!list.grouped.latest.some((group) => group.category === provider)) return
     const section = sections.get(provider)
+
     if (!section?.isConnected) return
+
     // Expand only the path to the target so the saved layout of other providers is kept.
     if (managed()?.providers.some((item) => item.id === provider)) setStore("collapsed", CONSOLE_GROUP_KEY, false)
     setStore("collapsed", provider, false)
     requestAnimationFrame(() => {
       const panel = section.closest<HTMLElement>(".settings-panel")
       const header = panel?.querySelector<HTMLElement>(".settings-tab-header")
+
       if (panel && header) {
         panel.scrollTo({
           top: panel.scrollTop + section.getBoundingClientRect().top - header.getBoundingClientRect().bottom - 24,
@@ -116,6 +131,7 @@ export const SettingsModels: Component<{
       } else {
         section.scrollIntoView({ block: "start" })
       }
+
       section
         .querySelector<HTMLElement>(".provider-model-group-trigger, .settings-models-group-trigger")
         ?.focus({ preventScroll: true })
@@ -127,10 +143,11 @@ export const SettingsModels: Component<{
     <>
       <div class="settings-tab-header settings-tab-header--stacked">
         <div class="settings-tab-header-row">
-          <div class="flex flex-col gap-1">
+          <div class="flex min-w-0 flex-col gap-1">
             <h2 class="settings-tab-title">{language.t("settings.models.title")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.models.description")}</span>
           </div>
+          <div class="settings-tab-header-actions">{props.headerAction}</div>
         </div>
         <SettingsSearchField
           value={list.filter()}

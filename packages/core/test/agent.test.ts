@@ -167,7 +167,7 @@ describe("Agent", () => {
     }),
   )
 
-  it.effect("applies managed external directories without opting built-in agents into bash", () =>
+  it.effect("allows external directories without opting built-in agents into bash", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service
       yield* AgentPlugin.Plugin.effect(
@@ -202,11 +202,15 @@ describe("Agent", () => {
       ).toBe("allow")
       expect(Permission.evaluate("external_directory", path.join(global.config, "*"), permissions).effect).toBe("allow")
       expect(Permission.evaluate("external_directory", path.join(global.tmp, "*"), permissions).effect).toBe("allow")
+      expect(Permission.evaluate("external_directory", "/outside/*", permissions).effect).toBe("allow")
       const explore = yield* agent.get(Agent.ID.make("explore"))
+      expect(Permission.evaluate("shell", "git log -5", explore?.permissions ?? []).effect).toBe("allow")
+      expect(Permission.evaluate("edit", "src/index.ts", explore?.permissions ?? []).effect).toBe("deny")
       expect(Permission.evaluate("read", ".env", explore?.permissions ?? []).effect).toBe("ask")
       expect(Permission.evaluate("read", ".env.local", explore?.permissions ?? []).effect).toBe("ask")
       expect(Permission.evaluate("read", ".env.example", explore?.permissions ?? []).effect).toBe("allow")
       expect(Permission.evaluate("read", "src/index.ts", explore?.permissions ?? []).effect).toBe("allow")
+      expect(Permission.evaluate("external_directory", "/outside/*", explore?.permissions ?? []).effect).toBe("allow")
       for (const item of agents) {
         expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
       }

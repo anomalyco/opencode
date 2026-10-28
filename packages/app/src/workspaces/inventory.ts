@@ -3,7 +3,7 @@ import type { WorktreeDirectory } from "@opencode/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
 import type { ServerScope } from "@/runtime/server/scope"
 import type { Project } from "@/runtime/server/types"
-import { sameDirectory } from "./paths"
+import { sameDirectory } from "@opencode/util/path"
 
 export function worktreeInventoryKey(scope: ServerScope, projectID: string) {
   return [scope, "worktree", projectID] as const
@@ -16,6 +16,7 @@ export function worktreeInventoryViewKey(scope: ServerScope, projectID?: string)
 // Project metadata arrives without worktrees; a loaded inventory supplies the workspace list.
 export function withWorktreeInventory(project: Project, worktrees: readonly WorktreeDirectory[] | undefined): Project {
   if (!worktrees) return project
+
   return {
     ...project,
     worktrees: [...worktrees],
@@ -40,6 +41,7 @@ export function createWorktreeInventory(input: {
         .list({ projectID })
         .then((items) => {
           input.updated(projectID, items)
+
           return items
         }),
     // `worktree.updated` and reconnect invalidation drive list reloads; time alone does not re-list.
@@ -47,6 +49,7 @@ export function createWorktreeInventory(input: {
     gcTime: Infinity,
     retry: false,
   })
+
   return {
     cached: (projectID: string) =>
       input.queryClient.getQueryData<WorktreeDirectory[]>(worktreeInventoryKey(input.scope, projectID)),

@@ -51,7 +51,7 @@ Možete prilagoditi osnovni URL za bilo kojeg provajdera postavljanjem opcije `b
 ## OpenCode Zen
 
 OpenCode Zen je lista modela koje je obezbedio OpenCode tim koji su bili
-testirano i potvrđeno da dobro radi sa OpenCode. [Saznajte više](/docs/zen).
+testirano i potvrđeno da dobro radi sa OpenCode. [Saznajte više](https://opencode.ai/v2/docs/console/).
 
 :::tip
 Ako ste novi, preporučujemo da počnete sa OpenCode Zen.
@@ -562,7 +562,7 @@ Također možete dodati modele kroz svoju opencode konfiguraciju.
   "provider": {
     "cloudflare-ai-gateway": {
       "models": {
-        "openai/gpt-4o": {},
+        "openai/gpt-6.1-sol": {},
         "anthropic/claude-sonnet-4": {}
       }
     }
@@ -762,13 +762,12 @@ da pohrani token u opencode auth memoriju.
 OpenCode koristi mali model za neke AI zadatke kao što je generiranje naslova sesije.
 Podrazumevano je konfigurisan da koristi gpt-5-nano, a hostuje ga Zen. Da zaključate OpenCode
 da biste koristili samo svoju vlastitu instancu koju hostuje GitLab, dodajte sljedeće u svoju
-`opencode.json` fajl. Također se preporučuje da onemogućite dijeljenje sesije.
+`opencode.json` fajl.
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 
@@ -1404,7 +1403,7 @@ Ako već imate API ključ, možete odabrati **Ručno unesite API ključ** i zali
 
 ### OpenCode Zen
 
-OpenCode Zen je lista testiranih i verifikovanih modela koju je obezbedio OpenCode tim. [Saznajte više](/docs/zen).
+OpenCode Zen je lista testiranih i verifikovanih modela koju je obezbedio OpenCode tim. [Saznajte više](https://opencode.ai/v2/docs/console/).
 
 1. Prijavite se na **<a href={console}>OpenCode Zen</a>** i kliknite na **Kreiraj API ključ**.
 

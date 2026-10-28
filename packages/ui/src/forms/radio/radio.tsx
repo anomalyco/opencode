@@ -21,6 +21,7 @@ export interface RadioGroupProps extends ParentProps<ComponentProps<typeof Root>
 
 export function RadioGroup(props: RadioGroupProps) {
   const [local, others] = splitProps(props, ["class", "classList", "children", "label", "description", "hideLabel"])
+
   return (
     <Root
       {...others}
@@ -54,6 +55,7 @@ export interface RadioItemProps extends ComponentProps<typeof Item> {
 
 export function RadioItem(props: RadioItemProps) {
   const [local, others] = splitProps(props, ["class", "classList", "label", "description", "hideLabel"])
+
   return (
     <Item
       {...others}

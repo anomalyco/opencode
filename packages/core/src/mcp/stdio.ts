@@ -1,9 +1,9 @@
 export * as McpStdio from "./stdio.js"
 
 import { ReadBuffer, serializeMessage, type JSONRPCMessage, type Transport } from "@modelcontextprotocol/client"
-import { Cause, Duration, Effect, Queue, Scope, Stream } from "effect"
-import { ChildProcess } from "effect/unstable/process"
-import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner"
+import { Cause, Duration, Effect, Fiber, Option, Queue, Scope, Stream } from "effect"
+import { ChildProcess } from "effect/process"
+import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner"
 import { Environment } from "../environment/index.js"
 
 /** Mirrors StdioClientTransport: wait this long for a graceful exit after stdin closes. */
@@ -13,6 +13,9 @@ const CLOSE_GRACE = Duration.seconds(2)
 const FORCE_KILL_AFTER = Duration.seconds(2)
 const OUTGOING_CAPACITY = 64
 const MAX_FRAME_BYTES = 16 * 1024 * 1024
+// An unexpected exit is reported with its exit code and the end of stderr, which usually names the cause.
+const EXIT_WAIT = Duration.seconds(1)
+const STDERR_TAIL = 1_000
 
 export interface Options {
   /** Server name; only used to attribute logs. */
@@ -50,6 +53,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   let startup: Promise<void> | undefined
   let closing: Promise<void> | undefined
   let trailingBytes = 0
+  let stderr = ""
 
   const stop = Effect.fnUntraced(function* (handle: ChildProcessHandle) {
     // Exit completion can precede descendant cleanup after the capture deadline.
@@ -139,6 +143,20 @@ export const make = Effect.fnUntraced(function* (options: Options) {
 
   const startOutput = (handle: ChildProcessHandle) =>
     Effect.gen(function* () {
+      // Drain stderr into the debug log so chatty servers cannot stall on a full pipe.
+      const drain = yield* Effect.forkScoped(
+        handle.stderr.pipe(
+          Stream.decodeText(),
+          Stream.tap((output) => Effect.sync(() => (stderr = (stderr + output).slice(-STDERR_TAIL)))),
+          Stream.runForEach((output) =>
+            output.trim() === ""
+              ? Effect.void
+              : Effect.logDebug("mcp server stderr", { server: options.server, output }),
+          ),
+          Effect.ignore,
+        ),
+      )
+
       yield* Effect.forkScoped(
         Stream.runForEach(handle.stdout, deliver).pipe(
           Effect.tapCause((cause) =>
@@ -152,23 +170,24 @@ export const make = Effect.fnUntraced(function* (options: Options) {
           Effect.ensuring(
             Effect.gen(function* () {
               const unexpected = state.phase !== "closed"
-              if (unexpected) yield* Effect.promise(close)
+              if (unexpected) {
+                // stdout can end before the final stderr output has been read.
+                const code = yield* Fiber.await(drain).pipe(
+                  Effect.andThen(handle.exitCode),
+                  Effect.timeoutOption(EXIT_WAIT),
+                  Effect.orElseSucceed(() => Option.none()),
+                )
+                const exited = Option.match(code, {
+                  onNone: () => "MCP server process exited",
+                  onSome: (code) => `MCP server process exited with code ${code}`,
+                })
+                const output = stderr.trim()
+                transport.onerror?.(new Error(output ? `${exited}: ${output}` : exited))
+                yield* Effect.promise(close)
+              }
               transport.onclose?.()
             }),
           ),
-        ),
-      )
-
-      // Drain stderr into the debug log so chatty servers cannot stall on a full pipe.
-      yield* Effect.forkScoped(
-        handle.stderr.pipe(
-          Stream.decodeText(),
-          Stream.runForEach((output) =>
-            output.trim() === ""
-              ? Effect.void
-              : Effect.logDebug("mcp server stderr", { server: options.server, output }),
-          ),
-          Effect.ignore,
         ),
       )
     })

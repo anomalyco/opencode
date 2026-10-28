@@ -17,9 +17,13 @@ import shell from "../../../../core/src/tool/plugin/shell.ts?raw"
 import "../../../src/index.css"
 
 const scenario = new URLSearchParams(location.search).get("scenario") ?? "complete"
+
 const sources = [edit, patch, read, shell].map((text) => text.replaceAll("\r\n", "\n"))
+
 const names = ["edit", "patch", "read", "shell"]
+
 const changed = (text: string) => text.replaceAll(/\bcontext\b/g, "invocation")
+
 const entry = (index: number, before: string, after: string) => ({
   file: `src/tool/plugin/${names[index]}.ts`,
   patch: createTwoFilesPatch(names[index], names[index], before, after, "", "", {
@@ -34,6 +38,7 @@ const entry = (index: number, before: string, after: string) => ({
   ),
   status: "modified" as const,
 })
+
 const files =
   scenario === "multi"
     ? sources.map((text, index) => entry(index, text, changed(text)))
@@ -43,6 +48,7 @@ const files =
           ? [entry(0, changed(sources[0]), changed(sources[0]).replaceAll(/\binput\b/g, "parameters"))]
           : []),
       ]
+
 const tools: SessionMessageAssistantTool[] = files.map((file, index) => ({
   id: `fixture-edit-${index}`,
   type: "tool",
@@ -67,6 +73,7 @@ declare global {
     }
   }
 }
+
 window.patchBenchmark = {
   payloadBytes: new TextEncoder().encode(JSON.stringify(tools)).length,
   sourceBytes: new TextEncoder().encode(sources.slice(0, scenario === "multi" ? 4 : 1).join("")).length,
@@ -76,6 +83,7 @@ window.patchBenchmark = {
     const start = performance.now()
     const groups = patchFileGroups(files)
     const views = expanded ? groups.reduce((count, file) => count + file.views.length, 0) : 0
+
     return { ms: performance.now() - start, groups: groups.length, views }
   },
 }
@@ -83,6 +91,7 @@ window.patchBenchmark = {
 function Fixture() {
   const [state, setState] = createStore({ mounted: false, duration: 0, rendered: 0 })
   let start = 0
+
   return (
     <ThemeProvider>
       <section style={{ margin: "24px auto", "max-width": "960px" }}>
@@ -140,4 +149,5 @@ function Fixture() {
     </ThemeProvider>
   )
 }
+
 render(() => <Fixture />, document.getElementById("root")!)

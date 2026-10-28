@@ -19,7 +19,7 @@ import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 // Every test boots a real Location, so shell start waits for cold plugin activation before spawning.
-setDefaultTimeout(15_000)
+setDefaultTimeout(30_000)
 
 class ExecutionControl extends Context.Service<
   ExecutionControl,

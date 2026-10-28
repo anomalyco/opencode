@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { Image, ImageEvent, Media } from "../../src/index.js"
+import { Image, ImageEvent, Media } from "../../src/effect.js"
 import { OpenAI } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -22,9 +22,8 @@ describe("OpenAI Images recorded", () => {
       const response = yield* Image.generate({
         model,
         prompt: "A simple flat black circle centered on a plain white background.",
-        size: "1024x1024",
-        format: "jpeg",
-        providerOptions: { quality: "low", outputCompression: 10 },
+        aspect: "1:1",
+        providerOptions: { outputFormat: "jpeg", quality: "low", outputCompression: 10 },
       })
 
       expect(response.images).toHaveLength(1)
@@ -55,9 +54,7 @@ describe("OpenAI Images recorded", () => {
               "image/jpeg",
             ),
           ],
-          size: "1024x1024",
-          format: "jpeg",
-          providerOptions: { quality: "low", outputCompression: 10 },
+          providerOptions: { size: "1024x1024", outputFormat: "jpeg", quality: "low", outputCompression: 10 },
         })
 
         expect(response.image.mediaType).toBe("image/jpeg")
@@ -71,9 +68,9 @@ describe("OpenAI Images recorded", () => {
         yield* Image.stream({
           model,
           prompt: "A simple flat black circle centered on a plain white background.",
-          size: "1024x1024",
-          format: "jpeg",
-          providerOptions: { quality: "low", outputCompression: 10, partialImages: 1 },
+          aspect: "1:1",
+          resolution: "1K",
+          providerOptions: { outputFormat: "jpeg", quality: "low", outputCompression: 10, partialImages: 1 },
         }).pipe(Stream.runCollect),
       )
 

@@ -17,12 +17,14 @@ export interface ButtonProps
     | "ghost"
     | "ghost-muted"
     | "ghost-faint"
+    | "ghost-danger"
     | "loading"
   icon?: IconProps["name"]
 }
 
 export function Button(props: ButtonProps) {
   const [split, rest] = splitProps(props, ["variant", "size", "icon", "class", "classList"])
+
   return (
     <Root
       {...rest}

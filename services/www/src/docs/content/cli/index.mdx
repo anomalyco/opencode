@@ -55,6 +55,17 @@ opencode --standalone
 opencode --server http://localhost:4096
 ```
 
+To make private servers the default for CLI commands instead of starting the shared service, disable it:
+
+```bash
+opencode service set disabled true
+opencode
+```
+
+This stops the running background service. `--server` still connects to an explicitly selected server; `opencode service start`
+can still start the shared service explicitly. To return to automatic service use, run `opencode service unset disabled`.
+Pairing requires the shared service and is unavailable while it is disabled.
+
 See [Troubleshooting](/troubleshooting) for shared service diagnostics and the [API reference](/api) for server endpoints.
 
 ## Paths
@@ -85,16 +96,9 @@ opencode uninstall --dry-run
 ```
 
 Run `opencode uninstall` to confirm removal. OpenCode stops registered background services and persistent terminals before
-removing global data, cache, configuration, and state. These directories are shared by OpenCode versions and channels.
+removing the global cache directory, which is shared by OpenCode versions and channels. Session data, configuration, and
+state are never removed.
 
-To retain configuration and session data:
-
-```bash
-opencode uninstall --keep-config --keep-data
-```
-
-- `--keep-config` (`-c`) retains configuration files.
-- `--keep-data` (`-d`) retains session data and snapshots. Cache and state are still removed.
 - `--force` (`-f`) skips confirmation; use it for noninteractive removal.
 - Package-manager installations use the detected package manager. Curl installations print the final command to remove
   the executable manually.

@@ -13,7 +13,9 @@ export default mergeConfig(
           if (!id.replaceAll("\\", "/").endsWith("/session-ui/src/timeline/projection.ts")) return
           const start = "    type Turn = {"
           const end = "\n  export function constructMessageRows("
+
           if (!source.includes(start) || !source.includes(end)) throw new Error("Projection probe boundary changed")
+
           return source
             .replace(
               start,

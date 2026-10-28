@@ -8,7 +8,9 @@ export function MobileDrawer(
     open: boolean
     onOpenChange: (open: boolean) => void
     onContentPresentChange?: (present: boolean) => void
+    initialFocus?: () => HTMLElement | undefined
     returnFocus?: () => HTMLElement | undefined
+    onFinalFocus?: (event: Event) => void
     closeOnOutsideFocus?: boolean
   }>,
 ) {
@@ -18,7 +20,9 @@ export function MobileDrawer(
       onOpenChange={props.onOpenChange}
       onContentPresentChange={props.onContentPresentChange}
       side="bottom"
+      initialFocusEl={props.initialFocus?.()}
       finalFocusEl={props.returnFocus?.()}
+      onFinalFocus={props.onFinalFocus}
       closeOnOutsideFocus={props.closeOnOutsideFocus}
     >
       {props.children}
@@ -30,6 +34,7 @@ export const MobileDrawerTrigger = Drawer.Trigger
 
 export function MobileDrawerContent(props: ParentProps) {
   const language = useLanguage()
+
   return (
     <Drawer.Portal forceMount>
       <Drawer.Overlay data-slot="mobile-drawer-overlay" />
@@ -44,4 +49,5 @@ export function MobileDrawerContent(props: ParentProps) {
 }
 
 export const MobileDrawerLabel = Drawer.Label
+
 export const MobileDrawerClose = Drawer.Close

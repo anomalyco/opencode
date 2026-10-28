@@ -9,11 +9,12 @@ type Row = { name: string; key: string; value: string | null }
 
 // Reads hit SQLite directly: they happen at mount time and a point lookup on the primary key
 // costs microseconds, so a second in-memory copy would only duplicate the renderer's cache.
-export function createStateStore(db: Database, input: { delay?: number; onError?: (error: unknown) => void } = {}) {
+export function createStateStore(db: Database, input: { onError?: (error: unknown) => void } = {}) {
   // Prepared once; the flush loop then only binds values instead of rebuilding SQL per row.
   const byKey = and(eq(state.name, sql.placeholder("name")), eq(state.key, sql.placeholder("key")))
   const read = db.select({ value: state.value }).from(state).where(byKey).prepare()
   const remove = db.delete(state).where(byKey).prepare()
+
   const upsert = db
     .insert(state)
     .values({
@@ -27,18 +28,21 @@ export function createStateStore(db: Database, input: { delay?: number; onError?
       set: { value: sql.placeholder("value"), updated_at: sql.placeholder("updated_at") },
     })
     .prepare()
+
   const writer = createWriteBehind<Row>({
-    delay: input.delay ?? 250,
+    delay: 250,
     onError: input.onError,
     write: (batch) =>
       db.transaction(() => {
         const updated_at = Date.now()
+
         for (const row of batch.values()) {
           if (row.value === null) remove.run({ name: row.name, key: row.key })
           else upsert.run({ name: row.name, key: row.key, value: row.value, updated_at })
         }
       }),
   })
+
   const id = (name: string, key: string) => `${name}\0${key}`
   const set = (name: string, key: string, value: string) => writer.set(id(name, key), { name, key, value })
   const unset = (name: string, key: string) => writer.set(id(name, key), { name, key, value: null })
@@ -50,7 +54,9 @@ export function createStateStore(db: Database, input: { delay?: number; onError?
   return {
     get(name: string, key: string) {
       const queued = writer.get(id(name, key))
+
       if (queued) return queued.value
+
       return read.get({ name, key })?.value ?? null
     },
     set,
@@ -66,16 +72,21 @@ export function createStateStore(db: Database, input: { delay?: number; onError?
           .all()
           .map((row) => [row.key, row.value]),
       )
+
       for (const row of writer.entries()) {
         if (row.name !== name) continue
+
         if (row.value === null) delete items[row.key]
         else items[row.key] = row.value
       }
+
       return { items, revision }
     },
     update(name: string, insert: Record<string, string>, removed: readonly string[]) {
       for (const [key, value] of Object.entries(insert)) set(name, key, value)
+
       for (const key of removed) unset(name, key)
+
       return ++revision
     },
     // Rare (window closed for good, explicit clear) so it goes straight to the database.

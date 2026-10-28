@@ -1,0 +1,40 @@
+export default {
+  label: "SSH",
+  placeholder: "ssh brúkari@dømi.com",
+  add: "Legg SSH ambætara til",
+  "server.menu.label": "SSH ambætari",
+  target: "Vertur ella SSH skipan",
+  connect: "Samband",
+  connectTo: "Seta teg í samband við {{host}}",
+  authenticate: "SSH góðkenning",
+  "session.disconnected": "SSH sambandið óvirkið",
+  "session.connecting": "Samband við SSH ambætara",
+  "session.reconnectDescription":
+    "Set samband aftur fyri at síggja hesa setuna og halda fram at arbeiða. Tín fjarseta er varðveitt.",
+  "session.reconnect": "Samband aftur",
+  trust: "Lít á og knýta samband",
+  continue: "Halt fram",
+  update: "Dagfør og set samband aftur",
+  project: "Opið verkætlan á {{host}}",
+  "stage.incompatible": "Ambætaradagføring krevst",
+  "error.input":
+    "Skriva eina verts- ella SSH sambandsskipan. Fjarskipanir og óstuðlaðir SSH møguleikar eru ikki loyvdir.",
+  "error.connection": "Kundi ikki fáa SSH sambandið upp. Kanna títt net og SSH uppseting.",
+  "error.platform":
+    "Hesin fjarskiftispallurin er ikki stuðlaður. Sjálvvirkandi uppseting krevur í løtuni Linux ella macOS á x64 ella arm64.",
+  "error.version": "Fjartænastan skal passa til hesa skriviborðsútgávuna áðrenn tú setur samband.",
+  "error.install": "Kundi ikki seta fjar-ambætaran upp. Kanna samband, diskpláss, og at tar er sett upp.",
+  "error.unpublished":
+    "Hendan skriviborðsútgávan hevur ongan útgivnan fjarskiftis-ambætara. Til menningarbyggingar, installera og byrja V2 á vertinum, royn síðani aftur.",
+  "error.service": "SSH varð knýtt, men OpenCode ambætarin gjørdist ikki klárur.",
+  "error.host-key":
+    "Samleikin hjá vertinum kundi ikki staðfestast. Staðfest fingramerkið áðrenn tú dagførir tínar SSH kendu vertir.",
+  "error.ssh-missing": "OpenSSH varð ikki funnið. Set ein OpenSSH klient upp og tryggja tær at ssh er tøkt á PATH.",
+  "action.authenticate": "Staðfesta",
+  "stage.connecting": "Samband yvir SSH...",
+  "stage.authentication": "Staðfesting krevst",
+  "form.name": "Ambætaranavn (valfrítt)",
+  "form.namePlaceholder": "Localhost",
+  "form.add": "Legg ambætara til",
+  "menu.delete": "Strika",
+}

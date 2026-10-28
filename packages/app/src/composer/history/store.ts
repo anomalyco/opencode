@@ -31,6 +31,7 @@ function createComposerHistoryStore(
       const current = mode === "shell" ? shell : normal
       const setCurrent = mode === "shell" ? setShell : setNormal
       const next = prependHistoryEntry(current.entries, prompt, comments)
+
       if (next === current.entries) return
       setCurrent("entries", next)
     },
@@ -38,6 +39,7 @@ function createComposerHistoryStore(
       const current = mode === "shell" ? shell : normal
       const setCurrent = mode === "shell" ? setShell : setNormal
       const next = removeHistoryEntry(current.entries, prompt, comments)
+
       if (next === current.entries) return
       setCurrent("entries", next)
     },
@@ -50,16 +52,20 @@ export function createComposerHistory() {
     PromptHistoryState,
     { entries: [] },
   )
+
   const [shell, setShell, shellInit] = persisted(
     Persist.prompt(Persist.global("prompt-history-shell")),
     PromptHistoryState,
     { entries: [] },
   )
+
   const history = createComposerHistoryStore(normal, setNormal, shell, setShell)
+
   return {
     ...history,
     add(prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) {
       const ready = mode === "shell" ? shellInit : normalInit
+
       if (!(ready instanceof Promise)) return history.add(prompt, mode, comments)
       const saved = clonePrompt(prompt)
       const metadata = clonePromptHistoryComments(comments)
@@ -67,6 +73,7 @@ export function createComposerHistory() {
     },
     remove(prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) {
       const ready = mode === "shell" ? shellInit : normalInit
+
       if (!(ready instanceof Promise)) return history.remove(prompt, mode, comments)
       const saved = clonePrompt(prompt)
       const metadata = clonePromptHistoryComments(comments)

@@ -14,6 +14,7 @@ import type { SessionDocument } from "../document"
 import type { SessionUserPresentation } from "../timeline/session-timeline"
 
 export const CURRENT_SESSION_ID = "session_current_story"
+
 export const STORY_TIME = 1_735_689_600_000
 
 export const STORY_MODEL = {
@@ -90,6 +91,10 @@ function runningTool(input: {
   output?: string
   metadata?: Record<string, JsonValue>
 }): SessionMessageAssistantTool {
+  const metadata = { ...input.metadata }
+
+  if (input.output !== undefined) metadata.output = input.output
+
   return {
     type: "tool",
     id: input.id,
@@ -97,10 +102,7 @@ function runningTool(input: {
     state: {
       status: "running",
       input: input.args,
-      metadata: {
-        ...input.metadata,
-        ...(input.output === undefined ? {} : { output: input.output }),
-      },
+      metadata,
     },
     time: { created: STORY_TIME + input.offset, ran: STORY_TIME + input.offset + 100 },
   }
@@ -190,13 +192,13 @@ export const streamingDocument = document(
         {
           type: "reasoning",
           text: "## Checking the current contract\n\nThe assistant content is nested on each current Session message.",
-          state: { phase: "streaming" },
+          native: { phase: "streaming" },
           time: { created: STORY_TIME + 11_100 },
         },
         {
           type: "text",
           text: "I have the typed rows in place. Next I am checking the streaming presentation",
-          state: { phase: "streaming" },
+          native: { phase: "streaming" },
         },
       ],
     }),
@@ -542,9 +544,46 @@ export const executeCodeDocument = document([
         name: "execute",
         offset: 52_300,
         args: {
-          code: 'const greeting = "Code Mode execute completed"\nreturn { greeting, timestamp: new Date().toISOString() }',
+          code: 'const tab = await tools.browser.tabs.open({ url: "http://localhost:4399" })\nconst usage = await tools.opencode_console.get_usage({ range: "24h" })\nreturn { tab: tab.id, cost: usage.cost_usd }',
         },
-        output: '{\n  "greeting": "Code Mode execute completed",\n  "timestamp": "2026-08-17T09:01:43.590Z"\n}',
+        output: '{\n  "tab": "tab_4f1c",\n  "cost": 0.42\n}',
+        metadata: {
+          toolCalls: [
+            { tool: "browser.tabs.open", status: "completed", input: { url: "http://localhost:4399" } },
+            { tool: "opencode_console.get_usage", status: "completed", input: { range: "24h" } },
+          ],
+        },
+      }),
+      completedTool({
+        id: "tool_execute_followup",
+        name: "execute",
+        offset: 52_600,
+        args: { code: "return await tools.browser.tabs.list()" },
+        output: "[]",
+        metadata: { toolCalls: [{ tool: "browser.tabs.list", status: "completed" }] },
+      }),
+      completedTool({
+        id: "tool_execute_long_call",
+        name: "execute",
+        offset: 52_700,
+        args: {
+          code: 'return await tools.mesh.exec({ target: "blade", script: "foreach ($t in \'\\\\opencode-mesh\\\\sync\', \'\\\\opencode-mesh\\\\run\') { schtasks /delete /tn $t /f 2>&1 | Out-Null; \\"deleted $t\\" }" })',
+        },
+        output:
+          "deleted \\opencode-mesh\\sync\ndeleted \\opencode-mesh\\run\nCleanup finished on blade after removing both scheduled tasks and their trigger history.",
+        metadata: {
+          toolCalls: [
+            {
+              tool: "mesh.exec",
+              status: "completed",
+              input: {
+                target: "blade",
+                script:
+                  "foreach ($t in '\\opencode-mesh\\sync', '\\opencode-mesh\\run') { schtasks /delete /tn $t /f 2>&1 | Out-Null; \"deleted $t\" }",
+              },
+            },
+          ],
+        },
       }),
     ],
   }),
@@ -982,7 +1021,6 @@ export const compactionRunningDocument = document(
       status: "running",
       reason: "auto",
       summary: "## Goal\n\nRestore compaction output while preserving timeline notices.",
-      recent: "",
       time: { created: STORY_TIME + 63_000 },
     },
   ] satisfies SessionMessageInfo[],
@@ -997,7 +1035,6 @@ export const compactionDocument = document([
     status: "completed",
     reason: "auto",
     summary: "The Session timeline now consumes current nested assistant content.",
-    recent: "Add deterministic stories and verify Storybook.",
     cost: 0.0142,
     tokens: { input: 3_180, output: 412, reasoning: 96, cache: { read: 8_704, write: 0 } },
     time: { created: STORY_TIME + 63_000 },
@@ -1008,6 +1045,20 @@ export const compactionDocument = document([
     completed: 66_000,
     content: [{ type: "text", text: "Context restored. I continued from the durable Session messages." }],
   }),
+] satisfies SessionMessageInfo[])
+
+export const compactionManualDocument = document([
+  ...compactionPrelude,
+  {
+    id: "msg_compaction_manual",
+    type: "compaction",
+    status: "completed",
+    reason: "manual",
+    summary: "The Session timeline now consumes current nested assistant content.",
+    cost: 0.0142,
+    tokens: { input: 3_180, output: 412, reasoning: 96, cache: { read: 8_704, write: 0 } },
+    time: { created: STORY_TIME + 63_000 },
+  },
 ] satisfies SessionMessageInfo[])
 
 export const compactionFailedDocument = document([
@@ -1116,6 +1167,44 @@ export const attachmentsAndCommentsPresentation = {
   },
 } satisfies Record<string, SessionUserPresentation>
 
+// The header and body as the OpenCode iOS app's `VoiceHandoff.format` writes them.
+const voiceHeader =
+  "Voice delegation. The user is on a voice call with a voice agent, which hands their requests to you. Instruction is the user's own spoken words since the previous delegation, transcribed from speech, so it may contain recognition errors and disfluencies: resolve meaning from the complete utterance, not a disfluent prefix. Voice, when present, is how the voice agent framed the request. Transcript delta is the surrounding voice conversation, both sides, for context, not additional commands. Lead your reply with one or two plain sentences suitable for reading aloud, then any detail; answer only what was asked, with no unrequested tips. If this arrives while you are already working (a follow-up, nudge, or status check), answer it promptly: a clear status update, the finished result if you have enough, or the precise blocker or input you need; then continue on the fastest safe path."
+
+const voiceInstruction =
+  "okay so the upload test keeps failing on CI but only sometimes, can you look at the last few runs, figure out whether it's the retry timing or the fixture cleanup, and if it's the fixture just fix it and open a PR"
+
+export const voiceDocument = document([
+  user(
+    "msg_user_voice",
+    `${voiceHeader}\n${JSON.stringify({ instruction: "check the upload test", transcript_delta: ["user: check the upload test"], voice: "Checking the upload test." }, null, 2)}`,
+    100_000,
+  ),
+  assistant({
+    id: "msg_assistant_voice",
+    offset: 101_000,
+    completed: 104_000,
+    content: [{ type: "text", text: "The upload test is flaky on CI: it fails about one run in five." }],
+  }),
+  user(
+    "msg_user_voice_continued",
+    `Voice delegation (continued). Same fields as before.\n${JSON.stringify({ instruction: voiceInstruction, transcript_delta: [`user: ${voiceInstruction}`] }, null, 2)}`,
+    110_000,
+  ),
+  assistant({
+    id: "msg_assistant_voice_continued",
+    offset: 111_000,
+    completed: 118_000,
+    content: [{ type: "text", text: "It was the fixture cleanup. I fixed it and opened a pull request." }],
+  }),
+  user("msg_user_typed", "Thanks, merge it once CI is green.", 120_000),
+] satisfies SessionMessageInfo[])
+
+export const voicePresentation = {
+  msg_user_voice: { displayText: "Checking the upload test.", voice: true },
+  msg_user_voice_continued: { displayText: voiceInstruction, voice: true },
+} satisfies Record<string, SessionUserPresentation>
+
 export const revertDocument = document([
   user("msg_user_revert_base", "Add a compact Session summary.", 90_000),
   assistant({
@@ -1137,6 +1226,7 @@ const largeMessages = Array.from({ length: 16 }, (_, index) => {
   const offset = 110_000 + index * 5_000
   const userID = `msg_user_large_${String(index + 1).padStart(2, "0")}`
   const assistantID = `msg_assistant_large_${String(index + 1).padStart(2, "0")}`
+
   const context =
     index % 4 === 0
       ? [
@@ -1150,6 +1240,7 @@ const largeMessages = Array.from({ length: 16 }, (_, index) => {
           }),
         ]
       : []
+
   return [
     user(userID, `Complete deterministic Session UI checkpoint ${index + 1}.`, offset),
     assistant({

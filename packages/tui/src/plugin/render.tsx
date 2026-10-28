@@ -1,4 +1,5 @@
 import {
+  children,
   createComponent,
   createContext,
   createMemo,
@@ -40,9 +41,22 @@ function PluginBoundary(props: ParentProps<{ id: string; where: string }>) {
         return null
       }}
     >
-      {props.children}
+      <PluginOutput>{props.children}</PluginOutput>
     </ErrorBoundary>
   )
+}
+
+// Bare text is only valid under <text>. Left to the host's insert, it would
+// throw outside the boundary and crash the app, so reject it here instead.
+function PluginOutput(props: ParentProps) {
+  const output = children(() => props.children)
+  const nodes = createMemo(() => {
+    const resolved = output.toArray()
+    if (resolved.some((node) => typeof node === "string" || typeof node === "number"))
+      throw new Error("rendered bare text; wrap it in <text>")
+    return resolved
+  })
+  return <>{nodes()}</>
 }
 
 export function PluginRoute(props: { readonly fallback: (id: string, name: string) => JSX.Element }) {

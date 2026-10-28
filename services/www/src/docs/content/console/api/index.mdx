@@ -1,0 +1,152 @@
+---
+title: "API Overview"
+description: "Authenticate with the OpenCode Console API using personal API keys or service account keys, and scope what each key can do."
+---
+
+The Console API lets your scripts and integrations call models. Every request authenticates with an API key.
+
+```bash
+curl --fail-with-body "https://opencode.ai/inference/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+| API                                 | Endpoints                                  |
+| ----------------------------------- | ------------------------------------------ |
+| [Inference](/console/api/inference) | `https://opencode.ai/inference/...`        |
+| [Providers](/console/api/providers) | `https://opencode.ai/inference/custom/...` |
+
+## API keys
+
+Both workspace members and service accounts can have API keys. Send a key as a bearer token.
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+|                  | Personal API key                                       | Service account key                                                      |
+| ---------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| Created by       | Any member, for themselves                             | Owners and admins                                                        |
+| Created in       | **Account › Personal API keys**                        | **Settings › Service accounts**                                          |
+| Acts as          | The member who created it                              | The service account                                                      |
+| Usage counted to | The member's [budget](/console/budgets#member-budgets) | The service account's [budget](/console/budgets#service-account-budgets) |
+| Best for         | Your own scripts and [harnesses](/console/harnesses)   | CI, shared machines, and integrations                                    |
+
+- Each key works in one workspace, chosen when it is created. No workspace header is needed.
+- The full key is shown only once, right after you create it. Afterward Console shows only its prefix.
+- **Expiration** is optional: **Never**, **1 day**, **7 days**, **30 days**, or **Custom** (1 to 365 days). An expired
+  key can't be renewed, so create a new one.
+
+## Personal API keys
+
+A personal key acts as you. Your role, [budgets](/console/budgets#member-budgets), and model rules apply to it.
+
+1. Open **Account** from the account menu and find **Personal API keys**.
+2. Click **Add API key**.
+3. Choose the **Workspace**, a **Key name**, and an optional **Expiration**. Owners and admins also choose
+   **Permissions**.
+4. Click **Create** and copy the key.
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+The key follows your current access to the workspace. If your role changes, so does what the key can do. If the
+workspace enforces [SSO](/console/sso#sso-enforcement), the key works only while you have an active SSO session, unless
+you are an owner.
+
+## Service accounts
+
+A service account is a non-human member of the workspace with its own API keys, usage, and
+[budget](/console/budgets#service-account-budgets). Use one for automation, so usage isn't tied to a person. Owners and
+admins manage them.
+
+1. Open **Settings › Service accounts** and click **Add Service Account**, then name it, for example `CI Pipeline`.
+2. Open the service account and click **Add API Key**.
+3. Choose a **Key name**, an optional **Expiration**, and **Permissions**, then click **Create**.
+4. Copy the key.
+
+```bash
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+Owners and admins can rename a service account key or change its permissions later with **Edit…** in the key's actions
+menu.
+
+## Permissions
+
+Each key has a permission level, chosen under **Permissions** when you create it.
+
+| Permissions    | Allows                                                                               |
+| -------------- | ------------------------------------------------------------------------------------ |
+| **All**        | Everything the member or service account can do, except **This account's API keys**. |
+| **Restricted** | Only the resources you choose.                                                       |
+| **Read only**  | Read access to every resource. The key can list models but not call them.            |
+
+A key never does more than whoever it acts as. A personal key is capped by the member's current role, and a service
+account key by what [service accounts can do](#limitations).
+
+### Restricted keys
+
+Set each resource to **None**, **Read**, or **Write**. **Write** includes **Read**.
+
+| Resource                    | Levels                |
+| --------------------------- | --------------------- |
+| **Models**                  | **Read**, **Request** |
+| **Usage**                   | **Read**              |
+| **Budgets**                 | **Read**, **Write**   |
+| **Members**                 | **Read**, **Write**   |
+| **Providers**               | **Read**, **Write**   |
+| **Billing**                 | **Read**, **Write**   |
+| **Workspace settings**      | **Read**, **Write**   |
+| **SSO**                     | **Read**              |
+| **Service accounts**        | **Read**              |
+| **This account's API keys** | **Write**             |
+
+**Models › Read** lists models, and **Models › Request** also calls them through the [Inference](/console/api/inference)
+and [Providers](/console/api/providers) APIs. For example, a key that only calls models needs:
+
+```text
+Permissions: Restricted
+Models:      Request
+```
+
+Keys created as **Inference only** before scoped permissions show as **Restricted** with **Models** set to **Request**.
+
+### Who can grant what
+
+- **Members** can only create personal keys that list and call models. Console shows "This key can list and call
+  models as you." instead of permission choices.
+- **Owners and admins** can give their personal keys **All**, **Restricted**, or **Read only**, up to their own role.
+  The default is **Restricted** with **Models** set to **Request**. If they are later demoted, their keys shrink to
+  match.
+- **Service account keys** default to **All**. Owners and admins choose their permissions.
+
+### Limitations
+
+Some actions always need a person signed in to the Console, and creating keys with a key is tightly limited.
+
+- No API key can change SSO settings or delete the workspace.
+- Service account keys can't invite members, change roles, remove members, manage billing, change workspace settings,
+  manage models, or create or remove service accounts, even with **All**.
+- **This account's API keys** is only available on service account keys, and **All** doesn't include it. A key with it
+  can create and revoke keys for its own service account only. New keys must be **Restricted**, stay within the
+  creating key's permissions, and can't include **This account's API keys**.
+- Personal keys can never get **This account's API keys**, and no API key can create or revoke personal API keys.
+
+Requests outside a key's permissions return HTTP `403`.
+
+## Revocation
+
+| Key                 | Who can revoke it      | Where                                                                             |
+| ------------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| Personal API key    | The member who owns it | **Account › Personal API keys**, then **Revoke**                                  |
+| Personal API key    | Owners and admins      | The member's page in **Settings › Members**, under **API Keys**                   |
+| Service account key | Owners and admins      | The service account's page in **Settings › Service accounts**, under **API Keys** |
+
+Keys are also revoked automatically:
+
+- Leaving or being removed from a workspace, or being deprovisioned through [SCIM](/console/scim), revokes every key
+  that person created in it, including service account keys. Other keys on the same service account keep working.
+- Removing a service account revokes all its keys.
+
+Revoked and expired keys stop working immediately and return HTTP `401`.

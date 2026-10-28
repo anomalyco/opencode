@@ -153,6 +153,28 @@ const flowFamilies = {
       ],
     )
   },
+  "decision-loops"(direction: FlowchartDirection, profile: LabelProfile) {
+    return flowSource(
+      direction,
+      profile,
+      ["A", "B", "C", "D", "E", "F", "G", "H", "I"],
+      [
+        ["A", "B", "E01"],
+        ["A", "C", "E02"],
+        ["B", "D", "E03"],
+        ["D", "E", "E04"],
+        ["E", "B", "E05"],
+        ["C", "F", "E06"],
+        ["F", "G", "E07"],
+        ["G", "C", "E08"],
+        ["E", "H", "E09"],
+        ["G", "H", "E10"],
+        ["H", "A", "E11"],
+        ["D", "I", "E12"],
+        ["F", "I", "E13"],
+      ],
+    )
+  },
   parallel(direction: FlowchartDirection, profile: LabelProfile) {
     return flowSource(
       direction,

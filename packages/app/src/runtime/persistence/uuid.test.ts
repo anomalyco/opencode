@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { uuid } from "./uuid"
 
 const cryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto")
+
 const secureDescriptor = Object.getOwnPropertyDescriptor(globalThis, "isSecureContext")
+
 const randomDescriptor = Object.getOwnPropertyDescriptor(Math, "random")
 
 const setCrypto = (value: Partial<Crypto>) => {
@@ -51,27 +53,27 @@ describe("uuid", () => {
     expect(uuid()).toBe("00000000-0000-0000-0000-000000000000")
   })
 
-  test("falls back in insecure contexts", () => {
-    setCrypto({ randomUUID: () => "00000000-0000-0000-0000-000000000000" })
-    setSecure(false)
-    setRandom(() => 0.5)
-    expect(uuid()).toBe("8")
-  })
-
-  test("falls back when randomUUID throws", () => {
-    setCrypto({
-      randomUUID: () => {
-        throw new DOMException("Failed", "OperationError")
+  const fallbacks: { name: string; secure: boolean; crypto: Partial<Crypto> }[] = [
+    {
+      name: "in insecure contexts",
+      secure: false,
+      crypto: { randomUUID: () => "00000000-0000-0000-0000-000000000000" },
+    },
+    {
+      name: "when randomUUID throws",
+      secure: true,
+      crypto: {
+        randomUUID: () => {
+          throw new DOMException("Failed", "OperationError")
+        },
       },
-    })
-    setSecure(true)
-    setRandom(() => 0.5)
-    expect(uuid()).toBe("8")
-  })
+    },
+    { name: "when randomUUID is unavailable", secure: true, crypto: {} },
+  ]
 
-  test("falls back when randomUUID is unavailable", () => {
-    setCrypto({})
-    setSecure(true)
+  test.each(fallbacks)("falls back $name", (row) => {
+    setCrypto(row.crypto)
+    setSecure(row.secure)
     setRandom(() => 0.5)
     expect(uuid()).toBe("8")
   })

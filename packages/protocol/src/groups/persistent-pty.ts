@@ -3,16 +3,18 @@ import { Pty } from "@opencode/schema/pty"
 import { PtyTicket } from "@opencode/schema/pty-ticket"
 import { Session } from "@opencode/schema/session"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { ForbiddenError, InvalidRequestError, PtyNotFoundError, ServiceUnavailableError } from "../errors.js"
 import { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE } from "./pty.js"
 
 export { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE }
 
-const CONNECT_PATH = /^\/api\/experimental\/persistent-pty\/[^/]+\/connect$/
+export const PERSISTENT_PTY_CONNECT_PATH = "/api/experimental/persistent-pty/:ptyID/connect"
+
+const PERSISTENT_PTY_CONNECT_URL = /^\/api\/experimental\/persistent-pty\/[^/]+\/connect$/
 
 export function hasPersistentPtyConnectTicketURL(url: URL) {
-  return CONNECT_PATH.test(url.pathname) && !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
+  return PERSISTENT_PTY_CONNECT_URL.test(url.pathname) && !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
 }
 
 const errors = [InvalidRequestError, ServiceUnavailableError] as const
@@ -100,7 +102,7 @@ export const PersistentPtyGroup = HttpApiGroup.make("server.experimental")
     }),
   )
   .add(
-    HttpApiEndpoint.get("persistentPty.connect", "/api/experimental/persistent-pty/:ptyID/connect", {
+    HttpApiEndpoint.get("persistentPty.connect", PERSISTENT_PTY_CONNECT_PATH, {
       params: { ptyID: Pty.ID },
       success: Schema.Boolean,
       error: [ForbiddenError, PtyNotFoundError, ServiceUnavailableError],

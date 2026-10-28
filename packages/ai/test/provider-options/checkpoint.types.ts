@@ -6,7 +6,7 @@ import {
   LLM,
   LLMClient,
   LLMRequest,
-} from "../../src/index.js"
+} from "../../src/effect.js"
 import {
   Anthropic,
   Azure,

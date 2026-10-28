@@ -1,4 +1,5 @@
-import { Effect, Encoding } from "effect"
+import { Effect } from "effect"
+import { Base64 } from "effect/encoding"
 import { Media } from "../../media.js"
 import type { MediaProtocol } from "../../route/media-protocol.js"
 import { mergeJsonRecords, type AIError, type ProviderID } from "../../schema/index.js"
@@ -10,7 +11,7 @@ export const inlineBytes = (route: string, asset: Media.Asset): Effect.Effect<Ui
   if (asset.source.type === "bytes") return Effect.succeed(asset.source.data)
   const inline = asset.inline()
   if (!inline) return Effect.fail(ProviderShared.inlineRequired(route, asset))
-  return Effect.fromResult(Encoding.decodeBase64(inline.base64)).pipe(
+  return Effect.fromResult(Base64.decode(inline.base64)).pipe(
     Effect.mapError((cause) => ProviderShared.invalidRequest(`${route} media contains invalid base64 data`, cause)),
   )
 }
@@ -35,11 +36,6 @@ export const query = (route: string, values: Record<string, unknown>): Effect.Ef
   )
 }
 
-export const dimensions = (size: string) => {
-  const [width, height] = size.split("x").map(Number)
-  return { width, height }
-}
-
 /** Provider file handle when the ref belongs to this provider; refs from other providers are never forwarded. */
 export const refID = (asset: Media.Asset, provider: ProviderID) =>
   asset.source.type === "ref" && asset.source.provider === provider ? asset.source.id : undefined
@@ -52,12 +48,15 @@ export const decodedAsset = (
   mediaType: string | undefined,
   options?: Media.AssetOptions,
 ) =>
-  Effect.fromResult(Encoding.decodeBase64(data)).pipe(
+  Effect.fromResult(Base64.decode(data)).pipe(
     Effect.mapError((cause) => invalid(`${label} contains invalid base64 data`, cause)),
     Effect.map((bytes) => Media.bytes(bytes, mediaType, options)),
   )
 
-/** One image of an OpenAI-shaped `data` array, which carries either `b64_json` or a `url`. */
+/**
+ * One image of an OpenAI-shaped `data` array, which carries `b64_json`, a `url`, or both. `b64_json` wins; a `data:`
+ * URL decodes inline with its own media type, and any other URL stays a URL asset for the caller to download.
+ */
 export const imageOutput = (
   invalid: (message: string, cause?: unknown) => AIError,
   label: string,
@@ -66,6 +65,10 @@ export const imageOutput = (
   options?: Media.AssetOptions,
 ) => {
   if (item.b64_json) return decodedAsset(invalid, label, item.b64_json, mediaType, options)
+  if (item.url?.startsWith("data:")) {
+    const asset = Media.parseDataUrl(item.url, options)
+    return asset === undefined ? Effect.fail(invalid(`${label} has an invalid data URL`)) : Effect.succeed(asset)
+  }
   if (item.url) return Effect.succeed(Media.url(item.url, { ...options, mediaType }))
   return Effect.fail(invalid(`${label} has neither image data nor a URL`))
 }
