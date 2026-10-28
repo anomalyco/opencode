@@ -35,6 +35,10 @@ type SidebarPose = { closed: number; peek: number | undefined }
 
 export const sidebarToggleCommand = { id: "sidebar.toggle", keybind: "mod+shift+b" }
 
+export const verticalTabsCommand = { id: "view.tabs" }
+
+export const inboxCommand = { id: "view.inbox" }
+
 export default function Layout(props: ParentProps) {
   const platform = usePlatform()
   const settings = useSettingsSurface()
@@ -198,6 +202,22 @@ export default function Layout(props: ParentProps) {
         const { DialogCommandSearch } = await import("@/shell/commands/command-search")
         void dialog.show(() => <DialogCommandSearch />)
       },
+    },
+  ])
+
+  // The interface mode can be switched from the palette or a keybind, not only from Settings → General.
+  command.register("interface-mode", () => [
+    {
+      ...verticalTabsCommand,
+      title: language.t("command.view.tabs"),
+      category: language.t("command.category.view"),
+      onSelect: () => preferences.appearance.setTabLayout("vertical"),
+    },
+    {
+      ...inboxCommand,
+      title: language.t("command.view.inbox"),
+      category: language.t("command.category.view"),
+      onSelect: () => preferences.appearance.setTabLayout("inbox"),
     },
   ])
   const bottomTitlebar = () => mobile() && preferences.general.mobileTitlebarPosition() === "bottom"

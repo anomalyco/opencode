@@ -80,6 +80,8 @@ export const dict = {
   "command.review.toggle": "Toggle review",
   "command.sidebar.toggle": "Toggle sidebar",
   "command.sidebar.toggle.unread": "Toggle sidebar, unread sessions",
+  "command.view.tabs": "Switch to vertical tabs",
+  "command.view.inbox": "Switch to inbox",
   "command.bottom.toggle": "Toggle bottom panel",
   "command.message.previous": "Previous message",
   "command.message.previous.description": "Go to the previous user message",
