@@ -1,5 +1,5 @@
 import { base64Encode, checksum } from "@opencode/util/encode"
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import { sessionHref } from "../utils/app"
 import { mockWorkspace, openSession, type WorkspaceInput } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
@@ -8,15 +8,24 @@ const workspace = { name: "TerminalInput", pty: {} } satisfies WorkspaceInput
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
-test("clears the terminal line with Command+Delete", async ({ page }) => {
+test("clears the terminal line with Command+Delete and suppresses printable Command chords", async ({ page }) => {
   const { pty } = await openSession(page, workspace)
   const terminal = page.locator('[data-component="terminal"]')
   await page.keyboard.press("Control+Backquote")
   await expect(terminal.locator("textarea")).toHaveCount(1)
   await expect.poll(() => pty.sockets.length).toBe(1)
 
+  await page.keyboard.press("Meta+k")
+  await page.keyboard.press("Meta+j")
+  await terminal.locator("textarea").evaluate((textarea) => {
+    const clipboardData = new DataTransfer()
+    clipboardData.setData("text/plain", "echo pasted")
+    textarea.dispatchEvent(new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true }))
+  })
+  await expect.poll(() => pty.sockets[0]!.input.join("")).toBe("echo pasted")
+
   await page.keyboard.press("Meta+Backspace")
-  await expect.poll(() => pty.sockets[0]!.input.join("")).toBe("\x15")
+  await expect.poll(() => pty.sockets[0]!.input.join("")).toBe("echo pasted\x15")
 })
 
 test("a custom Close tab shortcut closes the focused terminal, not the session tab", async ({ page }) => {
@@ -48,6 +57,35 @@ test("reveals the terminal after its first output and hides the native caret", a
   await expect(terminal).toHaveCSS("opacity", "0")
   pty.send("ready")
   await expect(terminal).toHaveCSS("opacity", "1")
+})
+
+test("quotes selected terminal output into the composer", async ({ page }) => {
+  const { pty, editor } = await openSession(page, workspace)
+  const terminal = page.locator('[data-component="terminal"]')
+  await page.keyboard.press("Control+Backquote")
+  await expect.poll(() => pty.sockets.length).toBe(1)
+  pty.send("$ bun run build\r\nerror: Cannot find module './config'\r\n")
+  await expect(terminal).toHaveCSS("opacity", "1")
+
+  const canvas = terminal.locator("canvas").first()
+  const box = await canvas.boundingBox()
+
+  if (!box) throw new Error("The terminal has no canvas")
+  // From the first output row's start to well into the second.
+  await page.mouse.move(box.x + 2, box.y + 4)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 320, box.y + 26, { steps: 8 })
+  await page.mouse.up()
+
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+  await expect(toolbar).toBeVisible()
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+
+  const chips = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+  await expect(chips).toHaveCount(1)
+  await expect(chips).toContainText("Terminal")
+  await expect(toolbar).toBeHidden()
+  await expect(editor).toBeFocused()
 })
 
 test("routes typing to the composer unless the open terminal is focused", async ({ page }) => {
@@ -86,14 +124,7 @@ for (const mount of ["cached", "explicit"] as const) {
     const { pty, sessions } = await mockWorkspace(page, {
       ...workspace,
       pty: mount === "cached" ? { initial: [cached] } : {},
-      seed:
-        mount === "cached"
-          ? {
-              panes: { ses_terminalinput: { terminal: true, terminalHeight: 320 } },
-              // The pre-extension terminal store, which the terminal extension imports.
-              storage: { [legacyTerminalKey()]: { active: cached.id, all: [{ ...cached, titleNumber: 1 }] } },
-            }
-          : undefined,
+      seed: mount === "cached" ? restoredTerminal(cached) : undefined,
     })
 
     await page.goto(sessionHref(sessions[0]!.id), { waitUntil: "commit" })
@@ -153,18 +184,38 @@ test("reconnects the same terminal after a transient connection failure", async 
   expect(pty.created.map((item) => item.id)).toEqual([id])
 })
 
-test("focuses a terminal created from the new-terminal button", async ({ page }) => {
-  const { editor } = await openSession(page, workspace)
+test("opens terminals as side panel tabs from the + menu", async ({ page }) => {
+  const { editor, pty } = await openSession(page, workspace)
+  const panel = page.locator("#review-panel")
   const terminal = page.locator('[data-component="terminal"]')
   await page.keyboard.press("Control+Backquote")
+  await expect(panel.getByRole("tab", { name: "Terminal 1", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(terminal.locator("textarea")).toHaveCount(1)
-  await editor.click()
-  await expect(editor).toBeFocused()
 
-  await page.getByRole("button", { name: "New terminal" }).click()
-  await expect(page.getByRole("tab", { name: "Terminal 2" })).toHaveAttribute("aria-selected", "true")
-  const active = page.locator('#terminal-wrapper-pty_2 [data-component="terminal"]')
-  await expect.poll(() => active.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+  const add = async () => {
+    await editor.click()
+    await expect(editor).toBeFocused()
+    await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+    await panel.getByRole("button", { name: /^Terminal/ }).click()
+  }
+
+  for (const number of [2, 3]) {
+    await add()
+    await expect(panel.getByRole("tab", { name: `Terminal ${number}`, exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    )
+    const active = page.locator(`#terminal-wrapper-pty_${number} [data-component="terminal"]`)
+    await expect.poll(() => active.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+  }
+
+  // Closing a tab closes its terminal, and the next one takes the lowest free number.
+  await closeTab(page, "pty_2")
+  await expect.poll(() => pty.removed).toEqual(["pty_2"])
+  await expect(panel.getByRole("tab", { name: /^Terminal / })).toHaveText(["Terminal 1", "Terminal 3"])
+  await add()
+  await expect(panel.getByRole("tab", { name: /^Terminal / })).toHaveText(["Terminal 1", "Terminal 3", "Terminal 2"])
+  await expect(panel.getByRole("tab", { name: "Terminal 2", exact: true })).toHaveAttribute("aria-selected", "true")
 })
 
 test("focuses the terminal opened from the command palette", async ({ page }) => {
@@ -173,7 +224,7 @@ test("focuses the terminal opened from the command palette", async ({ page }) =>
   await editor.click()
   await page.keyboard.press("ControlOrMeta+Shift+P")
   const palette = page.getByRole("dialog")
-  const search = palette.getByRole("textbox")
+  const search = palette.getByRole("combobox")
   await expect(search).toBeFocused()
   await search.fill("Toggle terminal")
   await expect(palette.getByRole("option", { name: /^Toggle terminal/ })).toHaveAttribute("aria-selected", "true")
@@ -186,22 +237,16 @@ test("focuses the terminal opened from the command palette", async ({ page }) =>
 
 test("closing the last restored terminal does not create a hidden replacement", async ({ page }) => {
   const cached = { id: "pty_cached", title: "Terminal 1" }
-
-  const { pty } = await openSession(page, {
-    ...workspace,
-    pty: { initial: [cached] },
-    seed: {
-      panes: { ses_terminalinput: { terminal: true, terminalHeight: 320 } },
-      storage: { [legacyTerminalKey()]: { active: cached.id, all: [{ ...cached, titleNumber: 1 }] } },
-    },
-  })
+  const { pty } = await openSession(page, { ...workspace, pty: { initial: [cached] }, seed: restoredTerminal(cached) })
+  const panel = page.locator("#review-panel")
+  const tab = panel.getByRole("tab", { name: "Terminal 1", exact: true })
 
   const terminal = page.locator('[data-component="terminal"]')
   await expect(terminal.locator("textarea")).toHaveCount(1)
   await expect.poll(() => pty.sockets.length).toBe(1)
   expect(pty.created).toEqual([])
 
-  await page.locator("#terminal-panel").getByRole("button", { name: "Close terminal", exact: true }).click()
+  await closeTab(page, cached.id)
   await expect(terminal).toBeHidden()
   await expect.poll(() => pty.removed).toEqual([cached.id])
   expect(pty.created).toEqual([])
@@ -209,14 +254,39 @@ test("closing the last restored terminal does not create a hidden replacement", 
   await page.keyboard.press("Control+Backquote")
   await expect(terminal.locator("textarea")).toHaveCount(1)
   await expect.poll(() => pty.created.map((item) => item.id)).toEqual(["pty_1"])
-  await expect(page.locator("#terminal-panel").getByRole("tab", { name: "Terminal 1", exact: true })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  )
+  await expect(tab).toHaveAttribute("aria-selected", "true")
 })
 
+// A terminal tab restored open in the side panel, with the terminal in the pre-plugin store, which the terminal
+// plugin imports.
+function restoredTerminal(pty: { id: string; title: string }) {
+  const key = `terminal:${pty.id}`
+
+  return {
+    panes: { ses_terminalinput: { review: true } },
+    storage: {
+      [legacyTerminalKey()]: { active: pty.id, all: [{ ...pty, titleNumber: 1 }] },
+      "opencode.global.dat:layout": {
+        sessionTabs: { [`local\u0000${directory()}/ses_terminalinput`]: { all: [key], active: key } },
+      },
+    },
+  }
+}
+
+function closeTab(page: Page, id: string) {
+  return page
+    .locator(`#review-panel [data-value="terminal:${id}"]`)
+    .first()
+    .getByRole("button", { name: "Close tab", exact: true })
+    .click()
+}
+
+function directory() {
+  return base64Encode("C:/OpenCode/TerminalInput")
+}
+
 function legacyTerminalKey() {
-  const dir = base64Encode("C:/OpenCode/TerminalInput")
+  const dir = directory()
   const head = dir.slice(0, 12).replace(/[^a-zA-Z0-9._-]/g, "-")
 
   return `opencode.workspace.${head}.${checksum(dir) ?? "0"}.dat:workspace:terminal`

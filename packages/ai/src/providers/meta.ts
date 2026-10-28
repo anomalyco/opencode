@@ -74,7 +74,7 @@ export const imageGeneration = (options: ImageGenerationOptions = {}) =>
     },
   })
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptionsInput
@@ -118,7 +118,7 @@ const messagesRoute = Route.make({
 
 export const routes = [responsesRoute, chatRoute, messagesRoute]
 
-export const configure = (input: LanguageModelOptions = {}) => {
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const options = {
     ...defaults,
@@ -151,20 +151,16 @@ export const chat = provider.chat
 export const messages = provider.messages
 export const image = provider.image
 
-export const model: ProviderPackage.Definition<Settings, OpenResponsesProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => fromSettings(settings).responses(modelID)
+export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings) =>
+  fromSettings(settings).responses(modelID)
 
-export const chatModel: ProviderPackage.Definition<Settings, OpenResponsesProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => fromSettings(settings).chat(modelID)
+export const chatModel: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (modelID, settings) =>
+  fromSettings(settings).chat(modelID)
 
-export const messagesModel: ProviderPackage.Definition<Settings, MessagesOptionsInput>["model"] = (modelID, settings) =>
+export const messagesModel: ProviderPackage.Model<Settings, MessagesOptionsInput> = (modelID, settings) =>
   fromSettings(settings).messages(modelID)
 
-function fromSettings({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
+function fromSettings({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
   return configure({
     apiKey,
     baseURL,

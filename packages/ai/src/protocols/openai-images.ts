@@ -12,8 +12,8 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { AIError, mergeJsonRecords, ProviderID, type MediaUsage, type OpenString } from "../schema/index.js"
-import { ProviderShared } from "./shared.js"
+import { AIError, mergeJsonRecords, ProviderID, tokenUsage, type MediaUsage, type OpenString } from "../schema/index.js"
+import { optionalNull, ProviderShared } from "./shared.js"
 import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
 
@@ -64,7 +64,8 @@ const Settings = {
 }
 
 const OpenAIImageResponse = Schema.Struct({
-  data: Schema.Array(Schema.Struct({ b64_json: Schema.String })),
+  // GPT Image models always return `b64_json`; compatible hosts that default to `url` can return either.
+  data: Schema.Array(Schema.Struct({ b64_json: optionalNull(Schema.String), url: optionalNull(Schema.String) })),
   ...Settings,
   usage: Schema.optional(Usage),
 })
@@ -140,7 +141,13 @@ const RESERVED_FORM_FIELDS = new Set(["model", "prompt", "image", "image[]", "im
 const nativeOptions = (options: OpenAIImageOptions | undefined) => {
   if (!options) return undefined
   const { outputCompression, outputFormat, partialImages: _, mask: __, ...native } = options
-  return { output_compression: outputCompression, output_format: outputFormat, ...native }
+  // `response_format: null` drops a provider's default, for hosts that reject the field.
+  return {
+    output_compression: outputCompression,
+    output_format: outputFormat,
+    ...native,
+    response_format: native.response_format ?? undefined,
+  }
 }
 
 /**
@@ -250,13 +257,12 @@ const fromRequest = Effect.fn("OpenAIImages.fromRequest")(function* (request: Me
 const usage = (value: Schema.Schema.Type<typeof Usage> | undefined, provider: ProviderID): MediaUsage | undefined =>
   value === undefined
     ? undefined
-    : {
-        type: "tokens",
+    : tokenUsage({
         input: value.input_tokens,
         output: value.output_tokens,
         total: value.total_tokens,
         details: { [provider]: value },
-      }
+      })
 
 /** `size` echoes the rendered `WIDTHxHEIGHT`; `auto` or any other value leaves the dimensions unknown. */
 const info = (format: string | undefined, size: string | undefined): Media.Info => {
@@ -307,7 +313,7 @@ const onDocument = Effect.fnUntraced(function* (frame: Exclude<Frame, string>) {
   const format = decoded.output_format
   const mediaType = format === undefined ? undefined : `image/${format}`
   const images = yield* Effect.forEach(decoded.data, (item, index) =>
-    MediaInput.decodedAsset(invalid, `${route.name} result ${index}`, item.b64_json, mediaType, {
+    MediaInput.imageOutput(invalid, `${route.name} result ${index}`, item, mediaType, {
       info: info(format, decoded.size),
     }),
   )
@@ -328,12 +334,9 @@ const step = (state: State, frame: Frame) => (typeof frame === "string" ? onEven
 const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) => {
   if (state.completed === 0) return Effect.fail(route.incomplete())
   const provider = context.request.model.provider
-  const chosen = size(context.request)
-  const notice = chosen === undefined ? undefined : ImageSizing.notice(route.name, context.request, chosen)
   return Effect.succeed([
     ImageFinishEvent.make({
       usage: usage(state.usage, provider),
-      notices: notice === undefined ? undefined : [notice],
       providerMetadata: {
         [provider]: {
           outputFormat: state.format,

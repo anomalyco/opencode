@@ -12,7 +12,7 @@ import { OpenCode } from "../../client/src/promise/index"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
 
-// opencode-pty does not support Windows, and its package resolves no binary on other unsupported platforms.
+// These tests drive Unix shell commands, so they skip Windows; the package resolves no binary on unsupported platforms.
 const binary = process.platform === "win32" ? undefined : (process.env.OPENCODE_PTY_BIN ?? binaryPath)
 const smoke = binary !== undefined && existsSync(binary) ? it.live : it.live.skip
 
@@ -639,8 +639,8 @@ async function verifySharedControl(base: string, ptyID: string) {
     second.socket.send(inputFrame(70, 20, "from-second\n"))
     await waitForSocketOutput([first, second], "from-second")
 
-    // opencode-pty v0.1.13 uses /proc on Linux and returns None on other platforms:
-    // https://github.com/anomalyco/opencode-pty/blob/v0.1.13/src/service.rs#L1091-L1128
+    // opencode-pty reads the foreground process from /proc on Linux and reports none elsewhere
+    // (foreground_process in packages/process-daemon/src/service.rs).
     if (process.platform === "linux") await waitForForegroundProcess([first, second], "cat")
     if (process.platform !== "linux") {
       expect(first.foregroundProcess).toBeNull()

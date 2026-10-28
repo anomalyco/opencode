@@ -3,7 +3,7 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { AIError, mergeJsonRecords, type MediaUsage } from "../schema/index.js"
+import { AIError, mergeJsonRecords, tokenUsage, type MediaUsage } from "../schema/index.js"
 import {
   TranscriptionFinishEvent,
   TranscriptionModel,
@@ -243,13 +243,12 @@ const step = (state: State, frame: Frame) =>
 const usage = (value: Transcript["usage"]): MediaUsage | undefined => {
   if (value === undefined) return undefined
   if (value.type === "duration") return { type: "seconds", seconds: value.seconds }
-  return {
-    type: "tokens",
+  return tokenUsage({
     input: value.input_tokens,
     output: value.output_tokens,
     total: value.total_tokens,
     details: { openai: value },
-  }
+  })
 }
 
 const finish = (state: State) => {

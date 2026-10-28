@@ -79,6 +79,8 @@ export interface LineCommentEditorProps extends Omit<ComponentProps<"div">, "chi
   cancelLabel?: string
   submitLabel?: string
   autofocus?: boolean
+  /** Submit an empty value too, such as to clear a comment that exists (default: false). */
+  allowEmpty?: boolean
   mention?: LineCommentEditorMention
 }
 
@@ -111,12 +113,13 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
     "cancelLabel",
     "submitLabel",
     "autofocus",
+    "allowEmpty",
     "mention",
     "class",
     "classList",
   ])
 
-  const canSubmit = () => local.value.trim().length > 0
+  const canSubmit = () => !!local.allowEmpty || local.value.trim().length > 0
 
   const closeMention = () => {
     setMentionOpen(false)
@@ -203,7 +206,7 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
   const submit = () => {
     const v = local.value.trim()
 
-    if (!v) return
+    if (!v && !local.allowEmpty) return
     local.onSubmit(v)
   }
 

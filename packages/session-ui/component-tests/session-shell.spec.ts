@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("requests live output only when the shell is expanded", async ({ mount }) => {
   const root = await mount("current-session-terminal-work--live-user-command", { args: { expanded: false } })

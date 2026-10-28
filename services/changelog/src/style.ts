@@ -118,6 +118,8 @@ main a:hover { color: var(--ink-strong); text-decoration-color: var(--underline-
 .markdown li::before { content: "\\2013"; position: absolute; left: 0; color: var(--ink-weaker); }
 
 main code { font-family: var(--mono); font-size: 0.83em; font-variant-numeric: lining-nums tabular-nums; color: var(--ink-code); white-space: nowrap; }
+main pre { margin: 0 0 12px; overflow-x: auto; }
+main pre code { white-space: pre; }
 main strong { font-weight: 600; }
 
 .notice { font-size: 20px; line-height: 1.65; color: var(--ink-weak); }

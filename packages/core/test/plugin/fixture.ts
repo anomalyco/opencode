@@ -16,7 +16,6 @@ import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
-import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { Npm } from "@opencode/util/npm"
@@ -24,6 +23,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -53,7 +53,14 @@ const npmLayer = Layer.succeed(
   }),
 )
 
-const generateLayer = Layer.succeed(Generate.Service, Generate.Service.of({ text: () => Effect.succeed("") }))
+const generateLayer = Layer.succeed(
+  Generate.Service,
+  Generate.Service.of({
+    text: () => Effect.succeed(""),
+    image: () => Effect.die("unused"),
+    decisions: () => Effect.die("unused"),
+  }),
+)
 
 const configLayer = Config.testLayer()
 
@@ -63,6 +70,7 @@ const permissionLayer = Layer.succeed(
     close: Effect.void,
     ask: (input) => Effect.succeed({ id: input.id ?? Permission.ID.create(), effect: "ask" }),
     assert: () => Effect.void,
+    assertNotDenied: () => Effect.void,
     reply: () => Effect.void,
     get: () => Effect.succeed(undefined),
     forSession: () => Effect.succeed([]),
@@ -94,9 +102,9 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       Command.node,
       Integration.node,
       KV.node,
-      ManagedPolicy.node,
       Mcp.node,
       Session.node,
+      InstructionEntry.node,
       PersistentPty.node,
       LocationServiceMap.node,
       Permission.node,

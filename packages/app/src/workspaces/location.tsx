@@ -6,8 +6,6 @@ import { createStore } from "solid-js/store"
 import { type LocationContext, useServerSDK } from "@/runtime/server/client"
 import { useData, useServer } from "@/runtime/server/current"
 
-export type { LocationContext } from "@/runtime/server/client"
-
 export type WorkspaceLocation = LocationContext & {
   readonly ref: LocationRef
   readonly current: LocationGetOutput | undefined

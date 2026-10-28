@@ -218,6 +218,30 @@ describe("session diff", () => {
     expect(normalize({ ...diff, after: "three\n" }).fileDiff.cacheKey).not.toBe(first.cacheKey)
   })
 
+  test("reuses the parsed content diff until its inputs change", () => {
+    const diff = { file: "cached.ts", before: "one\n", after: "two\n", additions: 1, deletions: 1 }
+    const first = normalize(diff).fileDiff
+
+    expect(normalize({ ...diff }).fileDiff).toBe(first)
+
+    const changed = normalize({ ...diff, after: "three\n" }).fileDiff
+    expect(changed).not.toBe(first)
+    expect(changed.additionLines).toEqual(["three\n"])
+    expect(normalize({ ...diff, file: "cached.py" }).fileDiff).not.toBe(first)
+  })
+
+  test("evicts the oldest parsed content diff once the cache is full", () => {
+    const diff = { file: "evicted-content.ts", before: "one\n", after: "two\n", additions: 1, deletions: 1 }
+    const first = normalize(diff).fileDiff
+
+    Array.from({ length: 20 }, (_, index) => normalize({ ...diff, after: `two${index}\n` }))
+
+    const restored = normalize(diff).fileDiff
+    expect(restored).not.toBe(first)
+    expect(restored.additionLines).toEqual(first.additionLines)
+    expect(restored.cacheKey).toBe(first.cacheKey)
+  })
+
   test("does not reuse an evicted highlight identity for different content", () => {
     const patch = "@@ -1 +1 @@\n-old\n+new\n"
     const first = resolveFileDiff({ file: "evicted.ts", patch })

@@ -8,7 +8,7 @@ import {
   type DecisionRequestFor,
   type DecisionResponse,
 } from "../decision.js"
-import { HttpOptions, ProviderID, type AIError } from "../schema/index.js"
+import { HttpOptions, ProviderID, type AIError, type ProviderOptions } from "../schema/index.js"
 import { Auth } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
 import { RequestExecutorService } from "./executor-service.js"
@@ -56,6 +56,7 @@ export interface Route {
   readonly model: <Options extends DecisionOptions = DecisionOptions>(input: {
     readonly id: string
     readonly compatibility?: DecisionModelCompatibility.Input
+    readonly providerOptions?: ProviderOptions
   }) => DecisionModel<Options>
 }
 
@@ -94,12 +95,14 @@ export const make = (input: MakeInput): Route => {
     model: <Options extends DecisionOptions>(model: {
       readonly id: string
       readonly compatibility?: DecisionModelCompatibility.Input
+      readonly providerOptions?: ProviderOptions
     }) => {
       const send = transport(route)
       return DecisionModel.make<Options>({
         id: model.id,
         provider,
         http: route.http,
+        providerOptions: model.providerOptions,
         compatibility:
           model.compatibility === undefined ? undefined : DecisionModelCompatibility.make(model.compatibility),
         route: { id: route.id, generate: send },

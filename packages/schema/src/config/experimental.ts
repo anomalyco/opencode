@@ -19,6 +19,9 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     description:
       "Store new session media once in a deduplicated blob table instead of inline in every message row. Defaults to false.",
   }),
+  schedules: Schema.Boolean.pipe(optional).annotate({
+    description: "Enable experimental scheduled tasks that wake a session with a prompt. Defaults to false.",
+  }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
   }),

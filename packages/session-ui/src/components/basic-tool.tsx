@@ -54,6 +54,8 @@ export interface BasicToolProps {
   triggerAsLink?: boolean
   clickable?: boolean
   compact?: boolean
+  /** Rendered beside the trigger rather than inside it, so it can be its own button. Shown on hover or focus. */
+  action?: JSX.Element
 }
 
 const deferredMounts: Array<{ active: boolean; fn: () => void }> = []
@@ -268,6 +270,7 @@ export function BasicTool(props: BasicToolProps) {
       class="tool-collapsible"
       data-compact={props.compact ? "true" : undefined}
       data-rail={props.rail === false ? "false" : undefined}
+      data-has-action={props.action ? "true" : undefined}
     >
       <Show
         when={!props.locked && (props.triggerAsLink || props.triggerHref)}
@@ -305,6 +308,7 @@ export function BasicTool(props: BasicToolProps) {
           {trigger()}
         </Collapsible.Trigger>
       </Show>
+      <Show when={props.action}>{(action) => <span data-slot="basic-tool-action">{action()}</span>}</Show>
       <Show when={hasChildren() && !props.hideDetails}>
         <Show
           when={props.locked && open() && !props.defer}

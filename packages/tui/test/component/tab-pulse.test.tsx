@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 /** @jsxImportSource @opentui/solid */
 import { RGBA } from "@opentui/core"
+import { ManualClock } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import {
@@ -13,42 +14,108 @@ import {
 } from "../../src/component/tab-pulse"
 import { tint } from "../../src/theme/color"
 
-test("a disabled pulse stays idle when it becomes active", async () => {
-  const background = RGBA.fromHex("#101010")
-  const [active, setActive] = createSignal(false)
+const BACKGROUND = RGBA.fromHex("#101010")
+
+async function mount(
+  props: () => { active: boolean; enabled?: boolean; glow?: boolean; onLevel?: (level: number) => void },
+) {
+  const clock = new ManualClock()
   const app = await testRender(
-    () => <TabPulse enabled={false} active={active()} color={background} backgroundColor={background} />,
-    { width: 8, height: 1 },
+    () => (
+      <TabPulse
+        enabled={props().enabled}
+        active={props().active}
+        glow={props().glow}
+        color={RGBA.fromHex("#ffcc00")}
+        backgroundColor={BACKGROUND}
+        onLevel={props().onLevel}
+      />
+    ),
+    { width: 10, height: 1, clock },
   )
+  let frames = 0
+  app.renderer.on("frame", () => frames++)
+  await app.renderOnce()
+  return Object.assign(app, {
+    clock,
+    /** Advances the clock in 5 ms steps, drawing another frame every `other` ms, and counts the frames. */
+    async run(ms: number, other = 0) {
+      frames = 0
+      for (let elapsed = 5; elapsed <= ms; elapsed += 5) {
+        clock.advance(5)
+        if (other && elapsed % other === 0) await app.renderOnce()
+        await Bun.sleep(0)
+        await Bun.sleep(0)
+      }
+      return frames
+    },
+    colors() {
+      return app.captureSpans().lines[0]!.spans.flatMap((span) => Array(span.width).fill(span.bg.buffer.join()))
+    },
+  })
+}
 
-  try {
-    await app.renderOnce()
-    expect(app.renderer.root.liveCount).toBe(0)
-
-    setActive(true)
-    await app.renderOnce()
-    expect(app.renderer.root.liveCount).toBe(0)
-  } finally {
-    app.renderer.destroy()
-  }
+test("a disabled pulse stays idle when it becomes active", async () => {
+  const [active, setActive] = createSignal(false)
+  await using pulse = await mount(() => ({ active: active(), enabled: false }))
+  setActive(true)
+  expect(await pulse.run(500)).toBe(1)
+  expect(pulse.renderer.root.liveCount).toBe(0)
+  expect(pulse.clock.pendingTimerCount).toBe(0)
 })
 
 test("an attention glow becomes idle after ignition", async () => {
-  const background = RGBA.fromHex("#101010")
-  const app = await testRender(
-    () => <TabPulse active={false} glow color={RGBA.fromHex("#ffcc00")} backgroundColor={background} />,
-    { width: 8, height: 1 },
-  )
+  await using pulse = await mount(() => ({ active: false, glow: true }))
+  expect(pulse.clock.pendingTimerCount).toBe(1)
+  await pulse.run(650)
+  expect(pulse.clock.pendingTimerCount).toBe(0)
+  expect(await pulse.run(500)).toBe(0)
+})
 
-  try {
-    await app.renderOnce()
-    expect(app.renderer.root.liveCount).toBe(1)
-    await Bun.sleep(650)
-    await app.renderOnce()
-    expect(app.renderer.root.liveCount).toBe(0)
-  } finally {
-    app.renderer.destroy()
+test.each([
+  // A requested frame draws asynchronously, on the same 5 ms clock step or a later one depending on the event loop,
+  // so frames alone come 50 to 55 ms apart.
+  { name: "alone", other: 0, min: 18, max: 20 },
+  { name: "beside a 25 fps animation", other: 40, min: 25, max: 25 },
+  { name: "beside a 50 fps animation", other: 20, min: 50, max: 50 },
+])("a running pulse adds frames only up to 20 fps, $name", async (item) => {
+  await using pulse = await mount(() => ({ active: true }))
+  const frames = await pulse.run(1000, item.other)
+  expect(frames).toBeGreaterThanOrEqual(item.min)
+  expect(frames).toBeLessThanOrEqual(item.max)
+  expect(pulse.renderer.root.liveCount).toBe(0)
+})
+
+test("a running pulse changes its level at most 20 times a second while the renderer draws at 50 fps", async () => {
+  const levels: number[] = []
+  await using pulse = await mount(() => ({ active: true, onLevel: (level) => levels.push(level) }))
+  expect(await pulse.run(2000, 20)).toBe(100)
+  expect(levels.length).toBeGreaterThan(10)
+  expect(levels.length).toBeLessThanOrEqual(40)
+})
+
+test("the sweep shows the same colors at the same time at any frame rate", async () => {
+  await using slow = await mount(() => ({ active: true }))
+  await using fast = await mount(() => ({ active: true }))
+  for (const ms of [300, 700, 1400, 2800]) {
+    await slow.run(ms)
+    await fast.run(ms, 20)
+    await slow.renderOnce()
+    await fast.renderOnce()
+    expect(slow.colors()).toEqual(fast.colors())
+    expect(new Set(slow.colors()).size).toBeGreaterThan(1)
   }
+})
+
+test("a pulse stops requesting frames when the run ends", async () => {
+  const [active, setActive] = createSignal(true)
+  await using pulse = await mount(() => ({ active: active() }))
+  await pulse.run(1000)
+  setActive(false)
+  await pulse.run(1000)
+  expect(pulse.clock.pendingTimerCount).toBe(0)
+  expect(await pulse.run(1000)).toBe(0)
+  expect(new Set(pulse.colors()).size).toBe(1)
 })
 
 test("completion pulse rises quickly and fades over the remaining duration", () => {

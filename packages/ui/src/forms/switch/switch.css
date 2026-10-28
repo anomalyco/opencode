@@ -167,7 +167,7 @@
     width: 28px;
     height: 16px;
     border-radius: 3px;
-    border: 1px solid var(--border-weak-base);
+    border: 1px solid var(--v2-border-border-base);
     background: var(--surface-base);
     box-shadow: none;
     transition:
@@ -180,7 +180,7 @@
     width: 14px;
     height: 14px;
     border-radius: 2px;
-    border: 1px solid var(--border-base);
+    border: 1px solid var(--v2-border-border-strong);
     background: var(--icon-invert-base);
     box-shadow:
       0 1px 2px -1px rgba(19, 16, 16, 0.04),
@@ -216,7 +216,7 @@
   }
 
   &:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {
-    border-color: var(--border-hover);
+    border-color: var(--v2-border-border-strong);
     background: var(--surface-hover);
   }
 
@@ -226,7 +226,7 @@
   }
 
   &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
-    border-color: var(--border-focus);
+    border-color: var(--v2-border-border-focus);
     outline: none;
     box-shadow: var(--shadow-xs-border-focus);
   }
@@ -252,12 +252,12 @@
   }
 
   &[data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-control"] {
-    border-color: var(--border-hover);
+    border-color: var(--v2-border-border-strong);
     background: var(--surface-hover);
   }
 
   &[data-disabled] [data-slot="switch-control"] {
-    border-color: var(--border-disabled);
+    border-color: var(--v2-border-border-muted);
     background: var(--surface-disabled);
     opacity: 1;
   }
@@ -267,6 +267,6 @@
   }
 
   &[data-invalid] [data-slot="switch-control"] {
-    border-color: var(--border-error);
+    border-color: var(--v2-state-border-danger);
   }
 }

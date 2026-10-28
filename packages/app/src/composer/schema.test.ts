@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
+import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
 import { Persistence } from "@/runtime/persistence/schema"
 import { SessionMessage } from "@opencode/schema/session-message"
 import {
@@ -74,7 +75,7 @@ describe("composer persistence schemas", () => {
     expect(decode({}).prompt).toEqual(DEFAULT_PROMPT)
   })
 
-  test("restores extension notes and legacy browser comments without their process-bound refs", () => {
+  test("restores plugin notes and legacy browser comments without their process-bound refs", () => {
     const durable = {
       type: "note" as const,
       origin: "example",
@@ -91,7 +92,7 @@ describe("composer persistence schemas", () => {
       live: { subject: 'the "button#save" element (browser ref @e42)', href: `${durable.href}#e42` },
     }
 
-    // A draft stored by a build before extension notes, as its composer schema encoded it.
+    // A draft stored by a build before plugin notes, as its composer schema encoded it.
     const browser = {
       type: "browser" as const,
       tabID: "tab_00000000-0000-4000-8000-000000000000",
@@ -221,6 +222,23 @@ describe("composer persistence schemas", () => {
     const encoded = Schema.encodeSync(ComposerStore)(value)
     expect(JSON.stringify(encoded)).not.toContain("dataUrl")
     expect(decode(encoded)).toEqual(value)
+  })
+
+  test("persists a restored media:<hash> image as a reference without a URL", () => {
+    const ref = `media:${"a".repeat(64)}`
+
+    const value = decode({
+      prompt: [
+        { ...image, blob: createLegacyBlobReference(ref) },
+        { ...image, blob: { id: ref, url: ref } },
+      ],
+    })
+
+    expect(value.prompt).toEqual([
+      { ...image, blob: { id: ref, url: "" } },
+      { ...image, blob: { id: ref, url: "" } },
+    ])
+    expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
   })
 
   test("migrates legacy history arrays and recovers entries, parts, and comments independently", () => {

@@ -3,6 +3,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocation } from "@solidjs/router"
 import { createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import { frameLoop } from "@opencode/ui/motion"
 import { useLayout } from "@/shell/state/layout"
 import type { SessionModel } from "../model"
 import { useSessionHashScroll } from "../use-session-hash-scroll"
@@ -18,10 +19,13 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     pendingMessage: string | undefined
     scroll: { overflow: boolean; jump: boolean }
     follow: { sessionKey: string; pinned: boolean }
+    /** The composer region's height; the timeline scrolls on underneath it and fades out at its top. */
+    inset: number
     refs: {
       scroller: HTMLDivElement | undefined
       content: HTMLDivElement | undefined
       dock: HTMLDivElement | undefined
+      visible: HTMLDivElement | undefined
     }
   }>({
     messageID: undefined,
@@ -34,10 +38,12 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       sessionKey: session.identity.sessionKey(),
       pinned: true,
     },
+    inset: 0,
     refs: {
       scroller: undefined,
       content: undefined,
       dock: undefined,
+      visible: undefined,
     },
   })
 
@@ -52,20 +58,21 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   }
 
   let scroller: HTMLDivElement | undefined
-  let dockHeight = 0
   // The history entry whose tool call was already revealed.
   let revealed: string | undefined
 
   // The active timeline's navigation, registered by its virtualizer.
   let revealMessage = (_id: string, _partID?: string) => {}
 
-  let scrollToEnd = () => {}
+  let revealPart = (_target: string) => false
+
+  let scrollToEnd = (_behavior?: ScrollBehavior) => {}
 
   let scrollMark = 0
   let messageMark = 0
-  let scrollStateFrame: number | undefined
+  let scrollStateFrame: (() => void) | undefined
   let scrollStateTarget: HTMLDivElement | undefined
-  let fillFrame: number | undefined
+  let fillFrame: (() => void) | undefined
   let historyContinuationFrame: number | undefined
   const historyRequests = new Set<string>()
   const visibleUserMessages = timeline.visibleUserMessages
@@ -111,27 +118,36 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
   const jumpThreshold = (element: HTMLDivElement) => Math.max(400, element.clientHeight)
 
-  const updateScrollState = (element: HTMLDivElement) => {
+  const measureScrollState = (element: HTMLDivElement) => {
     const max = element.scrollHeight - element.clientHeight
     const distance = max - element.scrollTop
     const overflow = max > 1
-    const jump = overflow && distance > jumpThreshold(element)
 
-    if (state.scroll.overflow === overflow && state.scroll.jump === jump) return
-    setState("scroll", { overflow, jump })
+    return { overflow, jump: overflow && distance > jumpThreshold(element) }
   }
 
+  // Reads in the shared frame loop's read phase, before any frame's writes, so a panel resizing the timeline on
+  // every frame does not force an extra layout here.
   const scheduleScrollState = (element: HTMLDivElement) => {
     scrollStateTarget = element
 
     if (scrollStateFrame !== undefined) return
-    scrollStateFrame = requestAnimationFrame(() => {
-      scrollStateFrame = undefined
-      const target = scrollStateTarget
-      scrollStateTarget = undefined
+    let next: { overflow: boolean; jump: boolean } | undefined
+    scrollStateFrame = frameLoop.addMeasured(
+      () => {
+        const target = scrollStateTarget
+        scrollStateTarget = undefined
+        next = target && measureScrollState(target)
+      },
+      () => {
+        scrollStateFrame = undefined
 
-      if (target) updateScrollState(target)
-    })
+        if (!next || (state.scroll.overflow === next.overflow && state.scroll.jump === next.jump)) return false
+        setState("scroll", next)
+
+        return false
+      },
+    )
   }
 
   const { clearMessageHash, scrollToMessage } = useSessionHashScroll({
@@ -160,10 +176,10 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     consumePendingMessage: (key) => layout.pendingMessage.consume(key),
   })
 
-  const resume = () => {
+  const resume = (behavior?: ScrollBehavior) => {
     setState("messageID", undefined)
     pin()
-    scrollToEnd()
+    scrollToEnd(behavior)
     clearMessageHash()
 
     if (scroller) scheduleScrollState(scroller)
@@ -250,18 +266,28 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     void loadOlder()
   }
 
+  // Like the scroll state, measures in the shared frame loop's read phase.
   const fill = () => {
     if (fillFrame !== undefined) return
-    fillFrame = requestAnimationFrame(() => {
-      fillFrame = undefined
+    let short = false
+    fillFrame = frameLoop.addMeasured(
+      () => {
+        short =
+          !!session.identity.params.id &&
+          timeline.ready() &&
+          pinned() &&
+          !timeline.history.loading() &&
+          !!scroller &&
+          scroller.scrollHeight <= scroller.clientHeight + 1
+      },
+      () => {
+        fillFrame = undefined
 
-      if (!session.identity.params.id || !timeline.ready()) return
+        if (short && timeline.history.more()) void loadOlder()
 
-      if (!pinned() || timeline.history.loading() || !scroller) return
-
-      if (scroller.scrollHeight > scroller.clientHeight + 1 || !timeline.history.more()) return
-      void loadOlder()
-    })
+        return false
+      },
+    )
   }
 
   createEffect(
@@ -332,17 +358,20 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   )
   createResizeObserver(
     () => state.refs.dock,
-    ({ height }) => {
-      const next = Math.ceil(height)
+    (_rect, _element, entry) => {
+      // The activity pill floats above the region out of flow, so only the docks, queue and composer count here.
+      const dpr = window.devicePixelRatio || 1
+      const next = Math.round((entry.borderBoxSize[0]?.blockSize ?? 0) * dpr) / dpr
 
-      if (next === dockHeight) return
-      const delta = next - dockHeight
+      if (next === state.inset) return
+      const delta = next - state.inset
 
+      // Measured before the new inset applies: a shrinking region also keeps a reader whose end it uncovers.
       const stick = scroller
-        ? pinned() || scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 10 + Math.max(0, delta)
+        ? pinned() || scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 10 + Math.max(0, -delta)
         : false
 
-      dockHeight = next
+      setState("inset", next)
 
       if (stick) scrollToEnd()
 
@@ -353,23 +382,27 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   onCleanup(() => {
     if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
 
-    if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
+    scrollStateFrame?.()
 
-    if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
+    fillFrame?.()
   })
 
   return {
     actions: {
       navigateMessage,
       revealMessage: (id: string, partID?: string) => revealMessage(id, partID),
+      revealPart: (target: string) => revealPart(target),
       resume,
       setActiveMessage,
     },
+    inset: () => state.inset,
     lastUserMessage: timeline.lastUserMessage,
     resource: timeline.resource,
     ready: timeline.ready,
     scroll: state.scroll,
     scroller: () => state.refs.scroller,
+    /** The part of the timeline not covered by the composer region. */
+    visible: () => state.refs.visible,
     view: {
       anchor,
       markUserScroll,
@@ -386,8 +419,14 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       setDockRef: (element: HTMLDivElement | undefined) => {
         setState("refs", "dock", element)
       },
+      setVisibleRef: (element: HTMLDivElement | undefined) => {
+        setState("refs", "visible", element)
+      },
       setRevealMessage: (reveal: (id: string, partID?: string) => void) => {
         revealMessage = reveal
+      },
+      setRevealPart: (reveal: (target: string) => boolean) => {
+        revealPart = reveal
       },
       // The tool call the route opened the session on, revealed once per history entry.
       reveal: {
@@ -397,7 +436,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
         },
       },
       setScrollRef,
-      setScrollToEnd: (scroll: () => void) => {
+      setScrollToEnd: (scroll: (behavior?: ScrollBehavior) => void) => {
         scrollToEnd = scroll
       },
       unpin,

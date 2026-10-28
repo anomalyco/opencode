@@ -5,6 +5,7 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import type { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords } from "../schema/index.js"
+import { ProviderShared } from "./shared.js"
 import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
 
@@ -60,10 +61,23 @@ const fromRequest = Effect.fn("CloudflareWorkersAIImages.fromRequest")(function*
     ...(yield* ImageSizing.exact(route, request, { multiple: 16, minEdge: 256, maxEdge: 2048 })),
   }
   const native = mergeJsonRecords(request.providerOptions, request.http?.body)
-  if (!request.model.id.startsWith(MULTIPART_MODEL_PREFIX))
-    return MediaProtocol.json(mergeJsonRecords(fields, native) ?? {})
+  const images = request.images ?? []
+  if (!request.model.id.startsWith(MULTIPART_MODEL_PREFIX)) {
+    if (images.length > 1)
+      return yield* route.unsupported("media.images", `${request.model.id} takes one input image as image_b64`)
+    const image = images[0]?.inline()
+    if (images[0] !== undefined && image === undefined) return yield* ProviderShared.inlineRequired(route.id, images[0])
+    return MediaProtocol.json(mergeJsonRecords({ ...fields, image_b64: image?.base64 }, native) ?? {})
+  }
   const body = new FormData()
   MediaInput.appendFields(body, fields, { overlay: native, reserved: RESERVED_FORM_FIELDS })
+  yield* Effect.forEach(images, (image, index) =>
+    MediaInput.inlineBytes(route.id, image).pipe(
+      Effect.map((bytes) =>
+        body.append(`input_image_${index}`, MediaInput.blob(bytes, image.mediaType), `image_${index}`),
+      ),
+    ),
+  )
   return MediaProtocol.multipart(body)
 })
 
@@ -94,7 +108,6 @@ const decodeResponse = Effect.fn("CloudflareWorkersAIImages.decodeResponse")(fun
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
-  unsupported: ["images"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })

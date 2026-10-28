@@ -5,6 +5,7 @@ import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { ResponsesCompaction } from "./utils/responses-compaction.js"
+import { OpenAIFreeform } from "./openai-freeform.js"
 
 const ADAPTER = "xai-responses"
 const NAME = "xAI Responses"
@@ -115,7 +116,7 @@ export const protocol = Protocol.make({
 })
 
 export const compact = ResponsesCompaction.make(adapter, (request) =>
-  OpenResponses.lowerTools(ProviderShared.flattenTools(request.tools), adapter),
+  OpenResponses.lowerTools(ProviderShared.flattenTools(request.tools), adapter, OpenAIFreeform.tools(request)),
 )
 
 export * as XAIResponses from "./xai-responses.js"

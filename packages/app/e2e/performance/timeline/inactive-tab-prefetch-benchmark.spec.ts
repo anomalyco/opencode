@@ -36,7 +36,11 @@ const workload = {
   events: 0,
 }
 
-type ProbeWindow = Window & { __prefetchBodies?: Record<string, number> }
+declare global {
+  interface Window {
+    __prefetchBodies?: Record<string, number>
+  }
+}
 
 benchmark.use({ viewport: { width: 1440, height: 900 }, video: "off", trace: "off", serviceWorkers: "block" })
 
@@ -65,15 +69,14 @@ for (const close of [false, true]) {
         if (request.method() === "GET" && inbox) inboxReads.push(inbox[1])
       })
       await page.addInitScript(() => {
-        const host = window as ProbeWindow
-        host.__prefetchBodies = {}
+        window.__prefetchBodies = {}
         const text = Response.prototype.text
         Response.prototype.text = async function () {
           const body = await text.call(this)
 
           if (this.url) {
             const path = new URL(this.url).pathname
-            host.__prefetchBodies![path] = (host.__prefetchBodies![path] ?? 0) + 1
+            window.__prefetchBodies![path] = (window.__prefetchBodies![path] ?? 0) + 1
           }
 
           return body
@@ -97,10 +100,10 @@ for (const close of [false, true]) {
       await page.goto(sessionHref(sessions[0].id))
       await expectSessionTitle(page, sessions[0].title)
       await waitForStableTimeline(page, pages[sessions[0].id].at(-2)!.id)
-      // Every inactive tab's scheduled attention request must finish. This gates on the
+      // Every inactive tab's scheduled inbox request must finish. This gates on the
       // same production callback as prefetch, without a sleep or waiting for a removed read.
       await page.waitForFunction(
-        (ids) => ids.every((id) => (window as ProbeWindow).__prefetchBodies![`/api/session/${id}/form`] > 0),
+        (ids) => ids.every((id) => window.__prefetchBodies![`/api/session/${id}/inbox`] > 0),
         sessions.slice(1).map((session) => session.id),
       )
       const speculativeReads = reads.filter((id) => id !== sessions[0].id)
@@ -118,7 +121,7 @@ for (const close of [false, true]) {
 
       gate.resolve()
       await page.waitForFunction(
-        (ids) => ids.every((id) => (window as ProbeWindow).__prefetchBodies![`/api/session/${id}/message`] > 0),
+        (ids) => ids.every((id) => window.__prefetchBodies![`/api/session/${id}/message`] > 0),
         reads,
       )
       await expectSessionTitle(page, sessions[0].title)

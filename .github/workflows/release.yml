@@ -1,0 +1,752 @@
+name: release
+run-name: "${{ format('release {0}{1}', inputs.bump, inputs.version) }}"
+
+# Builds are separated from signing and publishing.
+# - build-* jobs run repository code (`bun run build`, `bun run pack`) with no environment, secrets or id-token.
+# - sign-* and publish-* jobs run in the release environment, check out only .github/release/, and run those
+#   scripts on verified artifacts, which they treat as data. They never execute repository code.
+# - plan decides version, channel and npm dist-tag from the event, inputs and ref; only a dispatch with a bump or
+#   version on dev reaches latest.
+# .github/release/ and this file are the security boundary for releases.
+
+on:
+  push:
+    branches: [dev, beta]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Bump major, minor, or patch"
+        required: false
+        type: choice
+        options: [major, minor, patch]
+      version:
+        description: "Override version (optional)"
+        required: false
+        type: string
+      release_notes:
+        description: "Reviewed V2 release notes for CHANGELOG.md and the GitHub release (optional)"
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ (inputs.bump || inputs.version) && 'release' || 'build' }}
+  # Beta ships only the newest commit to the team. A cancelled beta run can leave unreferenced files in R2, but only
+  # publish-desktop records a release, in one request.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref_name == 'beta' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  plan:
+    if: github.repository == 'anomalyco/opencode'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      channel: ${{ steps.plan.outputs.channel }}
+      npm_tag: ${{ steps.plan.outputs.npm_tag }}
+      dry_run: ${{ steps.plan.outputs.dry_run }}
+      cli: ${{ steps.plan.outputs.cli }}
+      desktop: ${{ steps.plan.outputs.desktop }}
+      node: ${{ steps.plan.outputs.node }}
+      release: ${{ steps.plan.outputs.release }}
+    steps:
+      - &checkout-release
+        name: Check out release scripts
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: /.github/release/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - id: plan
+        name: Plan
+        run: bash .github/release/plan-release.sh
+        env:
+          GH_TOKEN: ${{ github.token }} # reads the triggering actor's repository role for stable releases
+          INPUT_BUMP: ${{ inputs.bump }}
+          INPUT_VERSION: ${{ inputs.version }}
+
+  # A versioned release builds from a commit with its versions and changelog on the dispatched dev commit,
+  # tagged v<version>. Runs git only.
+  tag:
+    needs: plan
+    runs-on: ubuntu-24.04
+    # Stable tags are pushed with the release deploy key, the only non-releasers actor the v* tag ruleset admits.
+    environment: ${{ needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
+    env: &env
+      OPENCODE_VERSION: ${{ needs.plan.outputs.version }}
+      OPENCODE_CHANNEL: ${{ needs.plan.outputs.channel }}
+      OPENCODE_NPM_TAG: ${{ needs.plan.outputs.npm_tag }}
+      OPENCODE_DRY_RUN: ${{ needs.plan.outputs.dry_run }}
+    outputs:
+      sha: ${{ steps.tag.outputs.sha || github.sha }}
+    steps:
+      - name: Check out
+        if: needs.plan.outputs.channel == 'latest'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ssh-key: ${{ secrets.RELEASE_TAG_KEY }}
+      - id: tag
+        name: Tag
+        if: needs.plan.outputs.channel == 'latest'
+        run: bash .github/release/tag-release.sh
+        env:
+          OPENCODE_RELEASE_NOTES: ${{ inputs.release_notes }}
+
+  # ---- Build: repository code; no environment, secrets or id-token --------------------------------------------
+
+  # Fetches the models.dev catalog once per run, so every CLI bundles the same copy.
+  models-catalog:
+    needs: [plan, tag]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+    env: *env
+    steps:
+      - &checkout
+        name: Check out
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ needs.tag.outputs.sha }}
+          persist-credentials: false
+      - name: Set up Bun
+        uses: ./.github/actions/setup-bun
+      - name: Fetch
+        run: bun packages/core/script/update-models-snapshot.ts .cache/models-catalog/api.json
+      - name: Upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: models-catalog
+          path: .cache/models-catalog/api.json
+          if-no-files-found: error
+
+  build-cli:
+    needs: [plan, tag, models-catalog]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    env: *env
+    steps:
+      - *checkout
+      - name: Set up Bun
+        uses: ./.github/actions/setup-bun
+        with:
+          bun-version: 1.4.4
+      - &download-models-catalog
+        name: Download models catalog
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: models-catalog
+          path: .cache/models-catalog
+      - name: Build
+        working-directory: packages/cli
+        run: bun run build && rm -rf dist/.bun
+        env:
+          BUN_COMPILE_RELEASE: bun-v1.4.4
+          OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
+          OPENCODE_RELEASE_NOTES: ${{ needs.plan.outputs.channel == 'latest' && inputs.release_notes || '' }}
+          GH_TOKEN: ${{ github.token }} # read-only; raises the rate limit for Bun release downloads
+      - name: Verify bundled models catalog
+        run: bun packages/cli/script/catalog-smoke.ts packages/cli/dist/cli-linux-x64/bin/opencode
+        env:
+          OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
+      - name: Upload
+        uses: ./.github/release/upload
+        with:
+          name: build-cli
+          path: packages/cli/dist
+
+  build-node:
+    needs: [plan, tag, models-catalog]
+    if: needs.plan.outputs.node == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-arm64, host: blacksmith-4vcpu-ubuntu-2404-arm }
+          - { target: linux-x64, host: blacksmith-4vcpu-ubuntu-2404 }
+          - { target: darwin-arm64, host: macos-26 }
+          - { target: windows-arm64, host: blacksmith-4vcpu-windows-2025 }
+          - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
+    runs-on: ${{ matrix.host }}
+    env: *env
+    steps:
+      - *checkout
+      - name: Set up Bun
+        uses: ./.github/actions/setup-bun
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "26.4.0"
+      - *download-models-catalog
+      - name: Build
+        working-directory: packages/cli
+        run: bun run build:node
+        env:
+          OPENCODE_TARGET: ${{ matrix.target }}
+          OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
+      - name: Test
+        if: matrix.target != 'windows-arm64'
+        working-directory: packages/cli
+        run: bun run script/service-smoke.ts --node
+      - name: Verify bundled models catalog
+        if: matrix.target != 'windows-arm64'
+        run: bun packages/cli/script/catalog-smoke.ts "packages/cli/dist/node/cli-node-$OPENCODE_TARGET/bin/opencode2-node$EXE"
+        env:
+          OPENCODE_TARGET: ${{ matrix.target }}
+          EXE: ${{ startsWith(matrix.target, 'windows') && '.exe' || '' }}
+          OPENCODE_MODELS_SNAPSHOT: ${{ github.workspace }}/.cache/models-catalog/api.json
+      - name: Upload
+        uses: ./.github/release/upload
+        with:
+          name: build-node-${{ matrix.target }}
+          path: packages/cli/dist/node
+
+  # `bun run pack` packs every npm package into dist/npm and the Linux and Node CLI archives into dist/archives.
+  # The macOS and Windows CLI packages and archives are re-packed after signing.
+  build-npm:
+    needs: [plan, tag, build-cli, build-node]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.cli == 'true' }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    env: *env
+    steps:
+      - *checkout
+      - name: Set up Bun
+        uses: ./.github/actions/setup-bun
+      - &download-cli
+        name: Download
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: build-cli
+          path: packages/cli/dist
+      - name: Download Node CLI
+        if: needs.plan.outputs.node == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: build-node-*
+          path: packages/cli/dist/node
+          merge-multiple: true
+      - name: Pack
+        run: rm packages/cli/dist/SHA256SUMS && bun run pack
+      - name: Upload
+        uses: ./.github/release/upload
+        with:
+          name: build-npm
+          path: dist/npm
+      - name: Upload archives
+        uses: ./.github/release/upload
+        with:
+          name: build-archives
+          path: dist/archives
+
+  build-docker:
+    needs: [plan, tag, build-cli]
+    if: needs.plan.outputs.release == 'true'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    env: *env
+    steps:
+      - *checkout
+      - *download-cli
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - name: Set up Bun
+        uses: ./.github/actions/setup-bun
+      - name: Pack
+        working-directory: packages/cli
+        run: bun run pack:docker
+      - name: Upload
+        uses: ./.github/release/upload
+        with:
+          name: build-docker
+          path: dist/docker
+
+  # macOS and Windows pack an unsigned app; Linux packs the final AppImage, deb and rpm.
+  # Dev and beta package macOS x64 on Apple Silicon and Windows arm64 on Blacksmith for speed. electron-builder's
+  # afterPack rejects a bundle whose CLI or node-pty does not match the target CPU.
+  build-desktop:
+    needs: [plan, tag, build-cli]
+    if: needs.plan.outputs.desktop == 'true'
+    permissions:
+      contents: read
+      pull-requests: read # beta builds read who made each change and what it does for "What's new in beta"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-x64
+            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'macos-26' || 'macos-26-intel' }}
+            install: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && '--os=darwin --cpu=*' || '--os=darwin --cpu=x64' }}
+          - { target: darwin-arm64, host: macos-26, install: --os=darwin --cpu=arm64 }
+          # github-hosted: blacksmith lacks the ARM64 MSVC cross-compilation toolchain
+          - target: windows-arm64
+            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'blacksmith-4vcpu-windows-2025' || 'windows-2025' }}
+            install: --cpu=*
+          - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
+          - { target: linux-x64, host: blacksmith-4vcpu-ubuntu-2404 }
+          - { target: linux-arm64, host: blacksmith-4vcpu-ubuntu-2404-arm }
+    runs-on: ${{ matrix.host }}
+    env: *env
+    steps:
+      - *checkout
+      - *download-cli
+      - name: Set up Bun
+        uses: ./.github/actions/setup-bun
+        with:
+          install-flags: ${{ matrix.install }}
+      - name: Set up rpm
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends rpm
+      # The beta build embeds the subjects of its newest commits for "What's new in beta"
+      # (packages/desktop/script/beta-notes.ts). Commits without file contents are enough.
+      - name: Fetch beta history
+        if: needs.plan.outputs.channel == 'beta'
+        run: git fetch --no-tags --filter=blob:none --depth=300 origin "$SHA"
+        env:
+          SHA: ${{ needs.tag.outputs.sha }}
+      # Dev and beta trade larger packages for faster packaging. fpm sets XZ_OPT for the deb and rpm level, but xz
+      # still reads XZ_DEFAULTS, so it uses every CPU.
+      - name: Preview packaging settings
+        if: (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && runner.os == 'Linux'
+        run: echo "XZ_DEFAULTS=-T0" >> "$GITHUB_ENV"
+      - name: Build
+        working-directory: packages/desktop
+        run: bun run build
+        env:
+          OPENCODE_TARGET: ${{ matrix.target }}
+          NODE_OPTIONS: --max-old-space-size=4096
+          VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
+          VITE_SENTRY_ENVIRONMENT: ${{ needs.plan.outputs.channel == 'latest' && 'production' || needs.plan.outputs.channel }}
+          VITE_SENTRY_RELEASE: desktop@${{ needs.plan.outputs.version }}
+          GITHUB_TOKEN: ${{ github.token }} # read-only; beta notes read pull request authors and descriptions
+      - name: Pack
+        working-directory: packages/desktop
+        timeout-minutes: 60
+        run: bun run pack
+        env:
+          OPENCODE_TARGET: ${{ matrix.target }}
+      - name: Upload
+        uses: ./.github/release/upload
+        with:
+          name: build-desktop-${{ matrix.target }}
+          path: dist/desktop
+
+  # Packs the NSIS installer around the signed app. This runs repository config, so it is a build job; the
+  # installer is signed next.
+  build-desktop-windows-installer:
+    needs: [plan, tag, sign-windows]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.desktop == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-arm64
+            host: ${{ (needs.plan.outputs.channel == 'dev' || needs.plan.outputs.channel == 'beta') && 'blacksmith-4vcpu-windows-2025' || 'windows-2025' }}
+            install: --cpu=*
+          - { target: windows-x64, host: blacksmith-4vcpu-windows-2025 }
+    runs-on: ${{ matrix.host }}
+    env: *env
+    steps:
+      - *checkout
+      - name: Set up Bun
+        uses: ./.github/actions/setup-bun
+        with:
+          install-flags: ${{ matrix.install }}
+      - name: Download
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sign-desktop-${{ matrix.target }}
+          path: ${{ runner.temp }}/app
+      - name: Pack
+        working-directory: packages/desktop
+        timeout-minutes: 30
+        run: bun run pack
+        env:
+          OPENCODE_TARGET: ${{ matrix.target }}
+          OPENCODE_DESKTOP_APP: ${{ runner.temp }}/app/app
+      - name: Upload
+        uses: ./.github/release/upload
+        with:
+          name: build-desktop-windows-installer-${{ matrix.target }}
+          path: dist/desktop
+
+  # ---- Sign: release environment; only .github/release/ is checked out ----------------------------------------
+  # Pull requests run sign and publish jobs without an environment, so steps that need a secret skip or dry-run.
+
+  # Signs the macOS CLI; signs the desktop apps inside-out, notarizes them in one submission, staples them, and
+  # only then builds the zip, dmg and .app.tar.gz from the stapled apps.
+  sign-macos:
+    needs: [plan, build-npm, build-desktop]
+    if: ${{ !cancelled() && !failure() && (needs.plan.outputs.cli == 'true' || needs.plan.outputs.desktop == 'true') }}
+    runs-on: macos-26
+    timeout-minutes: 90
+    environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    env: *env
+    outputs:
+      digest: ${{ steps.upload.outputs.digest }}
+    steps:
+      - *checkout-release
+      - name: Download
+        uses: ./.github/release/download
+        with:
+          pattern: "{build-npm,build-desktop-darwin-*}"
+      # The certificate has no password, which apple-actions/import-codesign-certs rejects. The sign scripts look up
+      # the identity in build.keychain, and codesign finds the key through the user search list.
+      - name: Import certificate
+        if: needs.plan.outputs.dry_run != 'true'
+        run: |
+          cert="$RUNNER_TEMP/cert.p12"
+          keychain_password=$(openssl rand -base64 32)
+          printf '%s' "$APPLE_SIGNING_CERTIFICATE" | base64 --decode > "$cert"
+          security create-keychain -p "$keychain_password" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "$keychain_password" build.keychain
+          security import "$cert" -k build.keychain -P "" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" build.keychain > /dev/null
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+          rm -f "$cert"
+        env:
+          APPLE_SIGNING_CERTIFICATE: ${{ secrets.APPLE_SIGNING_CERTIFICATE }}
+      - name: Sign CLI
+        if: needs.plan.outputs.cli == 'true'
+        run: bash .github/release/sign-cli-macos.sh "$RUNNER_TEMP/in/build-npm" "$RUNNER_TEMP/out"
+      - name: Sign desktop
+        if: needs.plan.outputs.desktop == 'true'
+        run: |
+          bash .github/release/sign-desktop-macos.sh "$RUNNER_TEMP/out" \
+            "$RUNNER_TEMP"/in/build-desktop-darwin-*/opencode-desktop-mac-*.app.tar
+        env:
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_NOTARY_KEY_ID: ${{ vars.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ vars.APPLE_NOTARY_ISSUER_ID }}
+      - id: upload
+        name: Upload
+        uses: ./.github/release/upload
+        with:
+          name: sign-macos
+          path: ${{ runner.temp }}/out
+      - name: Delete keychain
+        if: always() && needs.plan.outputs.dry_run != 'true'
+        run: |
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security delete-keychain build.keychain || true
+
+  # Signs the Windows CLI and every executable and native module of the unpacked desktop apps.
+  sign-windows:
+    needs: [plan, build-npm, build-desktop]
+    if: ${{ !cancelled() && !failure() && (needs.plan.outputs.cli == 'true' || needs.plan.outputs.desktop == 'true') }}
+    runs-on: windows-2025
+    environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
+      id-token: write
+    env: *env
+    outputs:
+      digest: ${{ steps.upload.outputs.digest }}
+    steps:
+      - *checkout-release
+      - name: Download
+        uses: ./.github/release/download
+        with:
+          pattern: "{build-npm,build-desktop-windows-*}"
+      - name: Unpack
+        run: bash .github/release/unpack-windows.sh "$RUNNER_TEMP/in" "$RUNNER_TEMP/work"
+      - &azure-login
+        name: Log in to Azure
+        if: needs.plan.outputs.dry_run != 'true'
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - &azure-sign
+        name: Sign
+        if: needs.plan.outputs.dry_run != 'true'
+        uses: azure/artifact-signing-action@b443cf8ea4124818d2ea9f043cba29fc3ec47b16 # v1.2.0
+        with:
+          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+          files-folder: ${{ runner.temp }}\work
+          files-folder-filter: exe,node
+          files-folder-recurse: true
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: false
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
+      - name: Repack
+        run: bash .github/release/repack-windows.sh "$RUNNER_TEMP/work" "$RUNNER_TEMP/out"
+      - id: upload
+        name: Upload
+        if: needs.plan.outputs.cli == 'true'
+        uses: ./.github/release/upload
+        with:
+          name: sign-windows
+          path: ${{ runner.temp }}/out
+      - name: Upload arm64 app
+        if: needs.plan.outputs.desktop == 'true'
+        uses: ./.github/release/upload
+        with:
+          name: sign-desktop-windows-arm64
+          path: ${{ runner.temp }}/work/desktop-windows-arm64
+      - name: Upload x64 app
+        if: needs.plan.outputs.desktop == 'true'
+        uses: ./.github/release/upload
+        with:
+          name: sign-desktop-windows-x64
+          path: ${{ runner.temp }}/work/desktop-windows-x64
+
+  sign-desktop-windows-installer:
+    needs: [plan, build-desktop-windows-installer]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.desktop == 'true' }}
+    runs-on: windows-2025
+    environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
+      id-token: write
+    env: *env
+    outputs:
+      digest: ${{ steps.upload.outputs.digest }}
+    steps:
+      - *checkout-release
+      - name: Download
+        uses: ./.github/release/download
+        with:
+          pattern: build-desktop-windows-installer-*
+      - name: Unpack
+        run: mkdir -p "$RUNNER_TEMP/work" && cp "$RUNNER_TEMP"/in/build-desktop-windows-installer-*/*.exe "$RUNNER_TEMP/work/"
+      - *azure-login
+      - *azure-sign
+      - name: Repack
+        run: bash .github/release/repack-windows.sh "$RUNNER_TEMP/work" "$RUNNER_TEMP/out"
+      - id: upload
+        name: Upload
+        uses: ./.github/release/upload
+        with:
+          name: sign-desktop-windows-installer
+          path: ${{ runner.temp }}/work
+
+  # ---- Publish: release environment; only .github/release/ is checked out -------------------------------------
+  # Destinations, names and channels come from plan and the scripts, never from artifacts.
+
+  # Build provenance for the npm tarballs and Linux archives. No secrets; id-token only for Sigstore.
+  publish-attestations:
+    needs: [plan, build-npm]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.cli == 'true' && needs.plan.outputs.dry_run != 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - *checkout-release
+      - name: Download
+        uses: ./.github/release/download
+        with:
+          pattern: "{build-npm,build-archives}"
+      - name: Sign
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/in/build-npm/*.tgz
+            ${{ runner.temp }}/in/build-archives/opencode*
+
+  publish-npm:
+    needs: [plan, sign-macos, sign-windows, publish-attestations]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.cli == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: read
+    env: *env
+    steps:
+      - *checkout-release
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.11.0"
+      - &download-signed-cli
+        name: Download
+        uses: ./.github/release/download
+        with:
+          pattern: "{build-npm,build-archives,sign-macos,sign-windows}"
+          digests: sign-macos=${{ needs.sign-macos.outputs.digest }} sign-windows=${{ needs.sign-windows.outputs.digest }}
+      - name: Publish
+        run: bash .github/release/publish-npm.sh "$RUNNER_TEMP/in/build-npm" "$RUNNER_TEMP/in/sign-macos" "$RUNNER_TEMP/in/sign-windows"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  publish-cli:
+    needs: [plan, sign-macos, sign-windows, publish-npm]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.cli == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
+      id-token: write
+    env: *env
+    steps:
+      - *checkout-release
+      - *download-signed-cli
+      - name: Publish
+        run: bash .github/release/publish-cli.sh "$RUNNER_TEMP/in/build-archives" "$RUNNER_TEMP/in/sign-macos" "$RUNNER_TEMP/in/sign-windows"
+        env: &cloudflare
+          CLOUDFLARE_ACCOUNT_ID: 15d29c8639fd3733b1b5486a2acfd968
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+  publish-desktop:
+    needs: [plan, sign-macos, sign-desktop-windows-installer]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.desktop == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
+      id-token: write
+    env: *env
+    steps:
+      - *checkout-release
+      - name: Download
+        uses: ./.github/release/download
+        with:
+          pattern: "{sign-macos,sign-desktop-windows-installer,build-desktop-linux-*}"
+          digests: sign-macos=${{ needs.sign-macos.outputs.digest }} sign-desktop-windows-installer=${{ needs.sign-desktop-windows-installer.outputs.digest }}
+      - name: Publish
+        run: |
+          bash .github/release/publish-desktop.sh "$RUNNER_TEMP/in/sign-macos" "$RUNNER_TEMP/in/sign-desktop-windows-installer" \
+            "$RUNNER_TEMP/in/build-desktop-linux-x64" "$RUNNER_TEMP/in/build-desktop-linux-arm64"
+        env: *cloudflare
+
+  publish-docker:
+    needs: [plan, build-docker]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
+      packages: write
+    env: *env
+    steps:
+      - *checkout-release
+      - name: Download
+        uses: ./.github/release/download
+        with:
+          pattern: build-docker
+      - name: Publish
+        run: bash .github/release/publish-docker.sh "$RUNNER_TEMP/in/build-docker"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  publish-homebrew:
+    needs: [plan, sign-macos, sign-windows, publish-cli]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
+      id-token: write
+    env: *env
+    steps:
+      - *checkout-release
+      - *download-signed-cli
+      - name: Publish
+        run: bash .github/release/publish-homebrew.sh "$RUNNER_TEMP/in/sign-macos" "$RUNNER_TEMP/in/build-archives"
+        env:
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+
+  # The AUR package installs the published npm tarballs, so it follows the npm publish.
+  publish-aur:
+    needs: [plan, sign-macos, sign-windows, publish-npm]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
+      id-token: write
+    env: *env
+    steps:
+      - *checkout-release
+      - *download-signed-cli
+      - name: Publish
+        run: bash .github/release/publish-aur.sh "$RUNNER_TEMP/in/build-npm"
+        env:
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+
+  # WinGet manifests as data. Submission to microsoft/winget-pkgs stays paused until the packages are accepted.
+  publish-winget:
+    needs: [plan, sign-windows, sign-desktop-windows-installer]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
+    runs-on: ubuntu-24.04
+    env: *env
+    steps:
+      - *checkout-release
+      - name: Download
+        uses: ./.github/release/download
+        with:
+          pattern: "{sign-windows,sign-desktop-windows-installer}"
+          digests: sign-windows=${{ needs.sign-windows.outputs.digest }} sign-desktop-windows-installer=${{ needs.sign-desktop-windows-installer.outputs.digest }}
+      - name: Render
+        run: bash .github/release/render-winget.sh "$RUNNER_TEMP/in/sign-windows" "$RUNNER_TEMP/in/sign-desktop-windows-installer" "$RUNNER_TEMP/out"
+      - name: Upload
+        uses: ./.github/release/upload
+        with:
+          name: publish-winget
+          path: ${{ runner.temp }}/out
+
+  publish-github-release:
+    needs: [plan, sign-macos, sign-windows, sign-desktop-windows-installer, publish-cli, publish-desktop]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: write
+    env: *env
+    steps:
+      - *checkout-release
+      - name: Download
+        uses: ./.github/release/download
+        with:
+          pattern: "{build-archives,build-desktop-linux-*,sign-macos,sign-windows,sign-desktop-windows-installer}"
+          digests: >-
+            sign-macos=${{ needs.sign-macos.outputs.digest }} sign-windows=${{ needs.sign-windows.outputs.digest }}
+            sign-desktop-windows-installer=${{ needs.sign-desktop-windows-installer.outputs.digest }}
+      - name: Publish
+        run: bash .github/release/publish-github-release.sh "$RUNNER_TEMP"/in/*
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          OPENCODE_RELEASE_NOTES: ${{ inputs.release_notes }}
+
+  # Brings the release commit back to dev. Pushing to dev is blocked by rulesets, so it opens a PR.
+  publish-version-pr:
+    needs: [plan, tag, publish-npm, publish-cli, publish-desktop, publish-github-release]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.channel == 'latest' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    env: *env
+    steps:
+      - *checkout-release
+      - name: Publish
+        run: bash .github/release/publish-version-pr.sh "$SHA"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ needs.tag.outputs.sha }}

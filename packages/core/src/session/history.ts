@@ -19,6 +19,7 @@ type DatabaseService = Database.Interface["db"]
 const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
 const decodeSync = Schema.decodeUnknownSync(SessionMessage.Info)
 const decodeStoredUser = Schema.decodeUnknownEffect(SessionStored.User)
+const decodeMedia = Schema.decodeUnknownEffect(SessionMessage.MediaInfo)
 
 /**
  * Which completed compactions bound a history read. Local summaries always do. Native
@@ -113,6 +114,27 @@ export const decodeMessageRows = Effect.fnUntraced(function* (
   rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
 ) {
   return yield* Effect.forEach(yield* SessionBlob.hydrate(db, rows), decodeMessageRow, { concurrency: 1 })
+})
+
+/** Decodes rows for clients that fetch media themselves, so files stored in `blob` stay `media:` refs. */
+export const decodeMessageRowsWithRefs = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
+) {
+  const kept = yield* SessionBlob.keepRefs(db, rows)
+  return yield* Effect.forEach(
+    kept.rows,
+    (row) =>
+      decodeMedia(rowInput(row)).pipe(
+        Effect.mapError(decodeError(row)),
+        Effect.map((message) =>
+          message.type === "user" && message.files
+            ? { ...message, files: SessionBlob.describe(message.files, kept.meta) }
+            : message,
+        ),
+      ),
+    { concurrency: 1 },
+  )
 })
 
 const messageEntries = Effect.fnUntraced(function* (
@@ -251,6 +273,31 @@ export const preview = Effect.fn("SessionHistory.preview")(function* (
       }),
     )
     .pipe(Effect.catch((error) => (error instanceof Instructions.InitializationBlocked ? error : Effect.die(error))))
+})
+
+/**
+ * The synthetic messages `load(db, sessionID, "latest")` would return, read without the rest of the transcript. Under
+ * that boundary every row from the latest completed compaction on is kept, and synthetic rows carry no media.
+ */
+export const synthetics = Effect.fn("SessionHistory.synthetics")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const compaction = yield* latestCompaction(db, sessionID, "latest")
+  const rows = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, sessionID),
+        eq(SessionMessageTable.type, "synthetic"),
+        compaction ? gte(SessionMessageTable.seq, compaction.seq) : undefined,
+      ),
+    )
+    .orderBy(asc(SessionMessageTable.seq))
+    .all()
+    .pipe(Effect.orDie)
+  return yield* Effect.forEach(rows, decodeMessageRow, { concurrency: 1 })
 })
 
 /** The id and text of the session's first user message. */

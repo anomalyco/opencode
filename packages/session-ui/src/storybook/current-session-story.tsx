@@ -95,7 +95,10 @@ export function CurrentSessionTimelineStory(props: {
       setActivity(`Opened ${file.name ?? file.mime}`)
     },
     revert: (input) => {
-      setActivity(`Selected revert boundary ${input.messageID}`)
+      setActivity(`Rewound to ${input.messageID}`)
+    },
+    fork: (input) => {
+      setActivity(`Forked from ${input.messageID}`)
     },
   } satisfies SessionUserActions
 

@@ -51,7 +51,7 @@
 }
 
 [data-component="tag"][data-appearance="standard"][data-variant="neutral"] {
-  border: 0.5px solid var(--border-weak-base);
+  border: 0.5px solid var(--v2-border-border-base);
   background: var(--surface-raised-base);
   color: var(--text-base);
 }
