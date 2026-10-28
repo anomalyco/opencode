@@ -32,7 +32,7 @@ for (const model of [
         details.map((detail) => ({
           type: "input_image",
           image_url: "https://example.com/image.png",
-          detail,
+          detail: detail ?? "auto",
         })),
       )
     }),

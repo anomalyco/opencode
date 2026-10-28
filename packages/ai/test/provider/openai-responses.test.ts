@@ -1704,7 +1704,7 @@ describe("OpenAI Responses route", () => {
 
       expect(expectToolOutput(prepared.body).output).toEqual([
         { type: "input_text", text: "Image read successfully" },
-        { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+        { type: "input_image", image_url: "data:image/png;base64,AAECAw==", detail: "auto" },
       ])
     }),
   )
@@ -1728,7 +1728,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(expectToolOutput(prepared.body).output).toEqual([
-        { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+        { type: "input_image", image_url: "data:image/png;base64,AAECAw==", detail: "auto" },
       ])
     }),
   )
@@ -1873,7 +1873,7 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(expectToolOutput(prepared.body).output).toEqual([
-        { type: "input_image", image_url: "https://example.com/image.png" },
+        { type: "input_image", image_url: "https://example.com/image.png", detail: "auto" },
         { type: "input_file", filename: "report.pdf", file_url: "https://example.com/report.pdf" },
       ])
     }),
@@ -4050,7 +4050,11 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.store).toBe(false)
       expect(prepared.body.input).toEqual([
         { type: "message", role: "user", content: [{ type: "input_text", text: "Generate a black triangle." }] },
-        { type: "message", role: "user", content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }] },
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_image", image_url: "data:image/png;base64,AQID", detail: "auto" }],
+        },
         { type: "message", role: "user", content: [{ type: "input_text", text: "Make it blue." }] },
       ])
     }),
@@ -4087,7 +4091,11 @@ describe("OpenAI Responses route", () => {
       )
 
       expect(prepared.body.input).toEqual([
-        { type: "message", role: "user", content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }] },
+        {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_image", image_url: "data:image/png;base64,AQID", detail: "auto" }],
+        },
       ])
     }),
   )
@@ -4907,14 +4915,14 @@ describe("OpenAI Responses route", () => {
           {
             type: "message",
             role: "user",
-            content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }],
+            content: [{ type: "input_image", image_url: "data:image/png;base64,AQID", detail: "auto" }],
           },
         ],
         [
           {
             type: "message",
             role: "user",
-            content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }],
+            content: [{ type: "input_image", image_url: "data:image/png;base64,AQID", detail: "auto" }],
           },
         ],
       ])
@@ -5037,7 +5045,7 @@ describe("OpenAI Responses route", () => {
           type: "message",
           role: "user",
           content: [
-            { type: "input_image", image_url: "data:image/png;base64,AAECAw==" },
+            { type: "input_image", image_url: "data:image/png;base64,AAECAw==", detail: "auto" },
             {
               type: "input_file",
               filename: "report.pdf",
@@ -5129,7 +5137,7 @@ describe("OpenAI Responses route", () => {
           type: "message",
           role: "user",
           content: [
-            { type: "input_image", image_url: "https://example.com/image.png" },
+            { type: "input_image", image_url: "https://example.com/image.png", detail: "auto" },
             { type: "input_file", filename: "report.pdf", file_url: "https://example.com/report.pdf" },
           ],
         },
