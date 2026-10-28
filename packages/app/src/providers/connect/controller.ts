@@ -5,7 +5,9 @@ import type {
   IntegrationInfo,
   IntegrationMethod,
   IntegrationOauthConnectOutput,
+  IntegrationPrompt,
 } from "@opencode/client/promise"
+import { isIntegrationAttemptNotFoundError } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
@@ -122,9 +124,11 @@ export function createProviderConnectionController(options: {
     authorization?: Authorization
     command?: { attempt: CommandAttempt; output: string }
     formAnswer?: FormAnswer
+    prompt?: IntegrationPrompt
+    receipt?: { title: string; url: string }
     // Nothing is in flight until a method is selected; `busy()` reads this, so a truthy initial
     // value would keep multi-method providers on the spinner instead of the method list.
-    state?: "pending" | "waiting" | "refreshing" | "ready" | "error" | "form"
+    state?: "pending" | "waiting" | "refreshing" | "ready" | "error" | "form" | "receipt"
     error?: string
     auto: boolean
     connected: boolean
@@ -172,6 +176,8 @@ export function createProviderConnectionController(options: {
           draft.authorization = undefined
           draft.command = undefined
           draft.formAnswer = undefined
+          draft.prompt = undefined
+          draft.receipt = undefined
           draft.state = undefined
           draft.error = undefined
           draft.connected = false
@@ -283,7 +289,7 @@ export function createProviderConnectionController(options: {
     options.onComplete()
   }
 
-  const poll = async (authorization: Authorization, generation: number) => {
+  const poll = async (authorization: Authorization, generation: number, recover = false): Promise<void> => {
     const result = await serverSDK.api.integration.oauth
       .status({
         integrationID: options.provider(),
@@ -296,6 +302,8 @@ export function createProviderConnectionController(options: {
     if (polling.disposed || generation !== polling.generation) return
 
     if (!result.ok) {
+      if (recover && isIntegrationAttemptNotFoundError(result.error) && store.methodIndex !== undefined)
+        return select(store.methodIndex, store.formAnswer)
       setStore("statusFailed", true)
       dispatch({
         type: "auth.error",
@@ -308,13 +316,25 @@ export function createProviderConnectionController(options: {
     }
 
     if (result.status.status === "complete") {
+      if (result.status.next) {
+        polling.attempt = undefined
+        setStore({ receipt: result.status.next, state: "receipt" })
+        return
+      }
       await finish()
 
       return
     }
 
+    if (result.status.status === "pending" && result.status.prompt) {
+      setStore({ prompt: result.status.prompt, state: "form" })
+      return
+    }
+
     if (result.status.status === "failed") {
       polling.attempt = undefined
+      setStore("prompt", undefined)
+      if (recover && store.methodIndex !== undefined) return select(store.methodIndex, store.formAnswer)
       const message = result.status.message
       dispatch({
         type: "auth.error",
@@ -331,6 +351,8 @@ export function createProviderConnectionController(options: {
 
     if (result.status.status === "expired") {
       polling.attempt = undefined
+      setStore("prompt", undefined)
+      if (recover && store.methodIndex !== undefined) return select(store.methodIndex, store.formAnswer)
       dispatch({
         type: "auth.error",
         error: language.t(isConsole() ? "provider.connect.console.expired" : "provider.connect.oauth.expired"),
@@ -339,6 +361,7 @@ export function createProviderConnectionController(options: {
       return
     }
 
+    setStore({ prompt: undefined, state: "waiting", error: undefined })
     polling.timer = setTimeout(() => void poll(authorization, generation), options.pollInterval ?? 1_000)
   }
 
@@ -413,6 +436,7 @@ export function createProviderConnectionController(options: {
     }
 
     const merged = { ...providerFormDefaults(form), ...answer }
+    setStore("formAnswer", Object.keys(merged).length ? merged : undefined)
 
     if (selected.type === "key") {
       dispatch({ type: "auth.answer", answer: Object.keys(merged).length ? merged : undefined })
@@ -531,11 +555,11 @@ export function createProviderConnectionController(options: {
     if (store.connected) return finish()
     const authorization = store.authorization
 
-    if (store.statusFailed && authorization) {
+    if ((store.prompt || store.statusFailed) && authorization) {
       polling.attempt = { type: "oauth", attemptID: authorization.attemptID }
-      setStore({ state: "waiting", error: undefined, statusFailed: false })
+      setStore({ prompt: undefined, state: "waiting", error: undefined, statusFailed: false })
 
-      return poll(authorization, polling.generation)
+      return poll(authorization, polling.generation, true)
     }
 
     const index = store.methodIndex
@@ -559,6 +583,31 @@ export function createProviderConnectionController(options: {
       answer: store.formAnswer,
     })
     await finish()
+  }
+
+  const completePrompt = async (answer: FormAnswer) => {
+    const authorization = store.authorization
+    const prompt = store.prompt
+    if (!authorization || !prompt) return
+    setStore({ prompt: undefined, state: "waiting" })
+    const generation = polling.generation
+    const result = await serverSDK.api.integration.oauth
+      .complete({
+        integrationID: options.provider(),
+        attemptID: authorization.attemptID,
+        location: location(),
+        promptID: prompt.id,
+        answer: { ...providerFormDefaults(prompt.fields), ...answer },
+      })
+      .then(() => ({ ok: true as const }))
+      .catch((error) => ({ ok: false as const, error }))
+    if (polling.disposed || generation !== polling.generation) return
+    if (!result.ok) {
+      setStore("statusFailed", true)
+      dispatch({ type: "auth.error", error: formatServerError(result.error, language.t) })
+      return
+    }
+    void poll(authorization, generation)
   }
 
   const completeCode = async (code: string) => {
@@ -603,6 +652,8 @@ export function createProviderConnectionController(options: {
     currentMethod,
     methodIndex: () => store.methodIndex,
     authorization: () => store.authorization,
+    prompt: () => store.prompt,
+    receipt: () => store.receipt,
     command: () => store.command,
     browserFailed: () => store.browserFailed,
     // True while nothing useful can be shown yet: the integration is loading, a method is
@@ -623,6 +674,7 @@ export function createProviderConnectionController(options: {
       refresh: finish,
       connectKey,
       completeCode,
+      completePrompt,
     },
   }
 }

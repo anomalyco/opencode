@@ -92,6 +92,13 @@ const AttemptTime = Schema.Struct({
   expires: Schema.Number,
 })
 
+export const Prompt = Schema.Struct({
+  id: Form.ID,
+  title: Schema.String,
+  fields: Form.Fields,
+}).annotate({ identifier: "Integration.Prompt" })
+export type Prompt = typeof Prompt.Type
+
 export class Attempt extends Schema.Class<Attempt>("Integration.Attempt")({
   attemptID: AttemptID,
   url: Schema.String,
@@ -101,8 +108,12 @@ export class Attempt extends Schema.Class<Attempt>("Integration.Attempt")({
 }) {}
 
 export const AttemptStatus = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("pending"), time: AttemptTime }),
-  Schema.Struct({ status: Schema.Literal("complete"), time: AttemptTime }),
+  Schema.Struct({ status: Schema.Literal("pending"), time: AttemptTime, prompt: optional(Prompt) }),
+  Schema.Struct({
+    status: Schema.Literal("complete"),
+    time: AttemptTime,
+    next: optional(Schema.Struct({ title: Schema.String, url: Schema.String })),
+  }),
   Schema.Struct({ status: Schema.Literal("failed"), message: Schema.String, time: AttemptTime }),
   Schema.Struct({ status: Schema.Literal("expired"), time: AttemptTime }),
 ])

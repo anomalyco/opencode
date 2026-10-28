@@ -416,20 +416,29 @@ export function fromPromise(plugin: Plugin) {
                         const refresh = input.refresh
                         editor.method.update({
                           ...input,
-                          authorize: (answer) =>
-                            Effect.promise(() => input.authorize(answer)).pipe(
-                              Effect.map((authorization) =>
-                                authorization.mode === "auto"
-                                  ? {
-                                      ...authorization,
-                                      callback: Effect.promise(() => authorization.callback),
-                                    }
-                                  : {
-                                      ...authorization,
-                                      callback: (code) => Effect.promise(() => authorization.callback(code)),
-                                    },
-                              ),
-                            ),
+                          authorize: (answer, prompt) =>
+                            Effect.gen(function* () {
+                              const controller = new AbortController()
+                              yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()))
+                              const authorization = yield* Effect.promise(() =>
+                                input.authorize(answer, (input) =>
+                                  Effect.runPromiseWith(runtime)(prompt(input), { signal: controller.signal }),
+                                ),
+                              )
+                              if (authorization.mode === "auto") {
+                                const callback = authorization.callback
+                                return {
+                                  ...authorization,
+                                  callback: Effect.promise(() =>
+                                    typeof callback === "function" ? callback() : callback,
+                                  ),
+                                }
+                              }
+                              return {
+                                ...authorization,
+                                callback: (code: string) => Effect.promise(() => authorization.callback(code)),
+                              }
+                            }),
                           refresh:
                             refresh === undefined
                               ? undefined
