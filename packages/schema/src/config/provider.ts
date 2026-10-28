@@ -1,6 +1,6 @@
 export * as ConfigProvider from "./provider.js"
 
-import { Schema } from "effect"
+import { Schema, Struct } from "effect"
 import { Money } from "../money.js"
 import { Capabilities, Compatibility, Family, ID, Model, Type, VariantID } from "../model.js"
 import { ProviderCompatibility } from "../model-compatibility.js"
@@ -96,6 +96,13 @@ class ModelConfig extends Schema.Class<ModelConfig>("Config.Model")({
   variants: Schema.Struct({
     id: VariantID,
     ...ModelOverlays,
+    // The prompt cache belongs to the model, so a variant can't change it.
+    settings: Schema.StructWithRest(
+      Schema.Struct(Struct.omit(ModelSettings.schema.fields, ["cache"])),
+      ModelSettings.records,
+    )
+      .annotate({ identifier: "Config.Model.VariantSettings" })
+      .pipe(optional),
   }).pipe(Schema.Array, optional),
   cost: Schema.Union([Cost, Cost.pipe(Schema.Array)]).pipe(optional),
   disabled: Schema.Boolean.pipe(optional),

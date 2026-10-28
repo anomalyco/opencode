@@ -9,7 +9,7 @@ import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("openai-compatible")
 
-type GenericModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly provider?: string
     readonly baseURL: string
@@ -25,7 +25,7 @@ export type Settings = ProviderPackage.Settings &
 
 export const routes = [OpenAICompatibleChat.route]
 
-export const configure = (input: GenericModelOptions) => {
+export const configure = (input: Config) => {
   const provider = input.provider ?? "openai-compatible"
   const { provider: _, baseURL, apiKey: _apiKey, auth: _auth, ...rest } = input
   const auth = AuthOptions.bearer(input, [])
@@ -50,7 +50,7 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
 export const imageModel = (modelID: string, settings: Settings) => {
   const input = config(settings)

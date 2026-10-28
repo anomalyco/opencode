@@ -157,7 +157,7 @@ const fromSettings = ({
   region,
   topP,
   ...providerOptions
-}: Settings<Config["providerOptions"]>) =>
+}: Settings<Config["providerOptions"]> = {}) =>
   configure({
     apiKey,
     auth,
@@ -171,16 +171,12 @@ const fromSettings = ({
     region,
   })
 
-export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
+export const chatModel: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  fromSettings(settings).chat(modelID)
+export const messagesModel: ProviderPackage.Model<MessagesSettings, AnthropicMessages.ProviderOptionsInput> = (
   modelID,
   settings,
-) => fromSettings(settings).chat(modelID)
-export const messagesModel: ProviderPackage.Definition<
-  MessagesSettings,
-  AnthropicMessages.ProviderOptionsInput
->["model"] = (modelID, settings) => fromSettings(settings).messages(modelID)
-export const responsesModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => fromSettings(settings).responses(modelID)
+) => fromSettings(settings).messages(modelID)
+export const responsesModel: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  fromSettings(settings).responses(modelID)
 export const model = responsesModel

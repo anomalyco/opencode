@@ -6,15 +6,11 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
 import { Slash } from "@opencode/ui/slash"
-import { consoleModelGroup } from "@/providers/models/provider-group"
-import { consoleProviderName } from "@/providers/catalog/console"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { ComposerEditor } from "./editor/editor"
 import { DialogSelectModel, ModelSelectorDrawer } from "@/providers/models/select-dialog"
 import { DialogSelectModelNext, ModelSelectorDrawerNext } from "@/providers/models/select-dialog-next"
 import { useSettings } from "@/settings/model"
-import { ModelDetails } from "@/providers/models/details"
-import { createModelUsage } from "@/usage/model"
 import { DialogSelectModelUnpaid } from "@/providers/models/unpaid"
 import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -95,8 +91,6 @@ function ComposerModelControl(props: {
   const mobile = createMediaQuery("(max-width: 767px)")
   const dialog = useDialog()
   const settings = useSettings()
-  const managed = createMemo(() => consoleModelGroup(props.model.list()))
-  const usage = createModelUsage()
 
   const open = (detail: number) => {
     if (!props.paid) return props.onUnpaidClick()
@@ -116,14 +110,6 @@ function ComposerModelControl(props: {
     setDeferred(undefined)
     open(detail)
   })
-
-  const providerName = (provider: { id: string; name: string }) => {
-    const group = managed()
-
-    return group?.providers.some((item) => item.id === provider.id)
-      ? consoleProviderName(group, provider.name)
-      : provider.name
-  }
 
   const content = () => (
     <>
@@ -149,30 +135,12 @@ function ComposerModelControl(props: {
     <Show when={!props.loading || props.preview}>
       <Tooltip
         inactive={mobile()}
-        openDelay={750}
-        contentClass={props.model.current() ? "!p-0 rounded-md" : undefined}
         placement="top"
-        gutter={4}
         value={
-          <Show
-            when={props.model.current()}
-            fallback={
-              <>
-                {props.title}
-                <Keybind keys={props.keybind} variant="neutral" />
-              </>
-            }
-          >
-            {(model) => (
-              <div class="flex w-[188px] max-w-[calc(100vw-24px)] flex-col">
-                <ModelDetails model={model()} provider={providerName(model().provider)} usage={usage(model())} />
-                <div class="flex h-7 min-w-0 items-center gap-2 border-t-[0.5px] border-v2-border-border-base px-2">
-                  <span class="min-w-0 flex-1 truncate text-v2-text-text-faint">{props.title}</span>
-                  <Keybind keys={props.keybind} variant="neutral" />
-                </div>
-              </div>
-            )}
-          </Show>
+          <>
+            {props.title}
+            <Keybind keys={props.keybind} variant="neutral" />
+          </>
         }
       >
         {/* While loading, the drawer would open on a catalog that isn't there yet, so the inert chip stands in. */}
