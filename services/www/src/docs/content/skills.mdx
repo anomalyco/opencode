@@ -115,6 +115,10 @@ For that entry, OpenCode downloads each file from `<base-url>/git-release/<file>
 
 Each downloaded skill directory becomes a source root named after the entry, so both `git-release.md` and `SKILL.md` have the ID `git-release`.
 
+This catalog format is specific to OpenCode. It is not compatible with the [Agent Skills Discovery draft 0.2.0](https://github.com/cloudflare/agent-skills-discovery-rfc): OpenCode reads `files` from a configured base URL, rather than discovering `/.well-known/agent-skills/` or loading the draft's `type`, `url`, and `digest` entries. OpenCode does not verify the draft's digests.
+
+To use a draft-format catalog with OpenCode, publish a separate `index.json` in the format above and host the individual skill files under `<base-url>/<name>/`. List the entry file and any supporting files in `files`, and change the entry's `version` whenever their contents change.
+
 ## Frontmatter
 
 Use frontmatter to name the skill and control where it appears:
