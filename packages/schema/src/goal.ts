@@ -1,8 +1,8 @@
-export * as Goal from "./rpc.js"
+export * as Goal from "./goal.js"
 
 import { Schema } from "effect"
-import { Rpc } from "@opencode/schema/rpc"
-import { optional } from "@opencode/schema/schema"
+import { Rpc } from "./rpc.js"
+import { optional } from "./schema.js"
 
 export const Status = Schema.Literals(["active", "paused", "complete"])
 export type Status = typeof Status.Type

@@ -274,7 +274,6 @@
         "@opencode/codemode": "workspace:*",
         "@opencode/plugin": "workspace:*",
         "@opencode/plugin-browser": "workspace:*",
-        "@opencode/plugin-goal": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/util": "workspace:*",
         "@parcel/watcher": "2.5.1",
@@ -401,7 +400,6 @@
         "@opencode/client": "workspace:*",
         "@opencode/plugin": "workspace:*",
         "@opencode/plugin-browser": "workspace:*",
-        "@opencode/plugin-goal": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/session-ui": "workspace:*",
         "@opencode/ui": "workspace:*",
@@ -561,23 +559,6 @@
       "dependencies": {
         "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
-        "effect": "catalog:",
-      },
-      "devDependencies": {
-        "@tsconfig/bun": "catalog:",
-        "@types/bun": "catalog:",
-        "@typescript/native": "catalog:",
-        "typescript": "catalog:",
-      },
-    },
-    "packages/plugin-goal": {
-      "name": "@opencode/plugin-goal",
-      "version": "2.2.0",
-      "dependencies": {
-        "@opencode/ai": "workspace:*",
-        "@opencode/plugin": "workspace:*",
-        "@opencode/schema": "workspace:*",
-        "@opencode/util": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -856,7 +837,6 @@
         "@opencode/latex": "workspace:*",
         "@opencode/merman": "workspace:*",
         "@opencode/plugin": "workspace:*",
-        "@opencode/plugin-goal": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/simulation": "workspace:*",
         "@opencode/theme": "workspace:*",
@@ -2049,8 +2029,6 @@
     "@opencode/plugin-browser": ["@opencode/plugin-browser@workspace:packages/plugin-browser"],
 
     "@opencode/plugin-figma": ["@opencode/plugin-figma@workspace:packages/plugins/figma"],
-
-    "@opencode/plugin-goal": ["@opencode/plugin-goal@workspace:packages/plugin-goal"],
 
     "@opencode/posts": ["@opencode/posts@workspace:packages/posts"],
 

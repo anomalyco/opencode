@@ -1,13 +1,16 @@
-export * as GoalPlugin from "./index.js"
+export * as GoalPlugin from "./goal.js"
 
 import { isContextOverflowFailure, Message } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionIdleBackground } from "@opencode/plugin/effect/session"
+import { Goal } from "@opencode/schema/goal"
 import { Session } from "@opencode/schema/session"
 import { isExactRootFallback } from "@opencode/util/session-title-fallback"
 import { Cause, Clock, DateTime, Duration, Effect, FiberMap, Option, Schema, Stream } from "effect"
-import { CONTINUATION, JUDGE, KICKOFF, REMINDER } from "./prompts.js"
-import { Goal } from "./rpc.js"
+import CONTINUATION from "./goal/continuation.txt"
+import JUDGE from "./goal/judge.txt"
+import KICKOFF from "./goal/kickoff.txt"
+import REMINDER from "./goal/reminder.txt"
 
 export const MAX_OBJECTIVE = 4_000
 export const MAX_ROUNDS = 50

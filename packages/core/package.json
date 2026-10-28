@@ -113,7 +113,6 @@
     "@opencode/codemode": "workspace:*",
     "@opencode/plugin": "workspace:*",
     "@opencode/plugin-browser": "workspace:*",
-    "@opencode/plugin-goal": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/util": "workspace:*",
     "@parcel/watcher": "2.5.1",

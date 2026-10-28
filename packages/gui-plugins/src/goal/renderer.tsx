@@ -7,7 +7,7 @@ import {
   type ComposerPillProps,
   type Plugin,
 } from "@opencode/plugin/gui"
-import { Goal } from "@opencode/plugin-goal/rpc"
+import { Goal } from "@opencode/schema/goal"
 import { showToast } from "@opencode/ui/toast"
 import type GoalDefinition from "./index"
 
