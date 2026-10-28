@@ -347,7 +347,6 @@ describe("tools.search alias", () => {
     const direct = await value(runtime, `return search({ query: "list" })`)
     expect(await value(runtime, `return tools.search({ query: "list" })`)).toStrictEqual(direct)
     expect(await value(runtime, `return (await tools.search({ query: "list" })).items[0].path`)).toBe("tools.api.list")
-    expect(await value(runtime, `return tools.search({ query: "list" }).items[0].path`)).toBe("tools.api.list")
   })
 
   test("a registered root-level search tool takes precedence", async () => {
@@ -359,7 +358,8 @@ describe("tools.search alias", () => {
 describe("search results used like a Promise", () => {
   const runtime = CodeMode.make({ tools: { api: { list: echo("List things", "listed") } } })
 
-  test.each(["search", "tools.search"])("%s(...) can be read, awaited, or chained", async (call) => {
+  test("search(...) can be read, awaited, or chained", async () => {
+    const call = "search"
     expect(
       await value(
         runtime,

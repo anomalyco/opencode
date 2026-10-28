@@ -1885,7 +1885,6 @@ class Frame<R> {
       if (callable.path.length === 0) {
         throw typeError("The tools root is not callable.", callee ?? node)
       }
-      if (this.ctx.tools.isSearch(callable.path)) return this.native(() => this.ctx.search(args), node)
       return this.createToolCallPromise(callable.path, args, node)
     }
     throw typeError(`${calleeDescription(callee) ?? "The called value"} is not a function.`, callee ?? node)
