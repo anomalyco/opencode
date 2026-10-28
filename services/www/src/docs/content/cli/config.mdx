@@ -413,22 +413,22 @@ Highlight more languages with tree-sitter grammars:
 
 <div class="docs-table-scroll" role="region" aria-label="Language settings" tabIndex={0}>
 
-| Setting                         | Values          | Description                                                             |
-| ------------------------------- | --------------- | ----------------------------------------------------------------------- |
-| `languages.*`                   | object          | Defines a language. Its key is also the Markdown code-fence name.       |
-| `languages.*.extensions`        | array of string | Lists file extensions that use the language, including the leading dot. |
-| `languages.*.aliases`           | array of string | Alternate Markdown code-fence names, such as `js` for `javascript`.     |
-| `languages.*.wasm`              | string          | Sets the compiled tree-sitter parser.                                   |
-| `languages.*.highlights`        | array of string | Sets highlight queries, concatenated in order.                          |
-| `languages.*.injections`        | array of string | Sets injection queries.                                                 |
-| `languages.*.injectionMapping`  | object          | Maps grammar nodes or fence info strings to injected languages.          |
+| Setting                        | Values          | Description                                                             |
+| ------------------------------ | --------------- | ----------------------------------------------------------------------- |
+| `languages.*`                  | object          | Defines a language. Its key is also the Markdown code-fence name.       |
+| `languages.*.extensions`       | array of string | Lists file extensions that use the language, including the leading dot. |
+| `languages.*.aliases`          | array of string | Adds other Markdown code-fence names, such as `js` for `javascript`.    |
+| `languages.*.wasm`             | string          | Sets the compiled tree-sitter parser.                                   |
+| `languages.*.highlights`       | array of string | Sets highlight queries, concatenated in order.                          |
+| `languages.*.injections`       | array of string | Sets injection queries.                                                 |
+| `languages.*.injectionMapping` | object          | Maps grammar nodes or fence info strings to injected languages.         |
 
 </div>
 
 Sources are URLs or paths relative to `cli.json`. Highlight queries should use nvim-treesitter capture names such
-as `keyword`, `type` and `string`, which themes color. A built-in key such as `python` replaces that parser, and an
-extension registered here resolves directly to the language ID instead of the built-in alias for that type. Plugins
-can register languages too; see [CLI plugins](/build/plugins/cli#languages).
+as `keyword`, `type` and `string`, which themes color. A built-in key such as `python` replaces that parser, and
+extensions listed here take precedence over the built-in ones. Plugins can register languages too; see [TUI
+plugins](/build/plugins/cli#languages).
 
 ## Debug and experimental
 
