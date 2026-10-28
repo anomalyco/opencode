@@ -174,19 +174,24 @@ export function TextPart(props: {
   last: boolean
   part: SessionMessageAssistantText
   message: SessionMessageAssistant
+  partID?: string
 }) {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
   const plugins = usePlugin()
+  const content = createMemo(() => {
+    const text = props.part.text.trim()
+    return (props.partID && ctx.pathLinks?.(props.partID, text)) || text
+  })
   return (
-    <Show when={props.part.text.trim()}>
+    <Show when={content()}>
       <box paddingLeft={3} flexShrink={0}>
         {/* Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens. */}
         <markdown
           syntaxStyle={syntax()}
           renderNode={plugins.markdown()}
-          content={props.part.text.trim()}
+          content={content()}
           streaming={props.message.time.completed === undefined}
           internalBlockMode="top-level"
           tableOptions={{ style: "grid", cellPaddingX: 1 }}
