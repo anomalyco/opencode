@@ -94,7 +94,7 @@ export function LimitsGraph(props: { href: string }) {
                   <Show when={model.regions}>
                     <a
                       data-slot="region"
-                      href="https://ai.developer.meta.com/legal/geographic-use-policy"
+                      href="https://dev.meta.ai/legal/geographic-use-policy"
                       aria-label={`${model.name}: ${i18n.t("go.graph.limitedRegions")}`}
                       title={i18n.t("go.graph.limitedRegions")}
                     >

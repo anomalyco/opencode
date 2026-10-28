@@ -14,7 +14,7 @@ OpenCode supports both **JSON** and **JSONC** (JSON with Comments) formats.
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "anthropic/claude-sonnet-5-5",
   "autoupdate": true,
   "server": {
     "port": 4096,
@@ -35,7 +35,7 @@ Configuration files are **merged together**, not replaced.
 
 Configuration files are merged together, not replaced. Settings from the following config locations are combined. Later configs override earlier ones only for conflicting keys. Non-conflicting settings from all configs are preserved.
 
-For example, if your global config sets `autoupdate: true` and your project config sets `model: "anthropic/claude-sonnet-4-5"`, the final configuration will include both settings.
+For example, if your global config sets `autoupdate: true` and your project config sets `model: "anthropic/claude-sonnet-5-5"`, the final configuration will include both settings.
 
 ---
 
@@ -365,8 +365,8 @@ You can configure the providers and models you want to use in your OpenCode conf
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
-  "model": "anthropic/claude-sonnet-4-5",
-  "small_model": "anthropic/claude-haiku-4-5"
+  "model": "anthropic/claude-sonnet-5-5",
+  "small_model": "anthropic/claude-haiku-5-5"
 }
 ```
 
@@ -389,9 +389,9 @@ Provider options can include `timeout`, `headerTimeout`, `chunkTimeout`, and `se
 }
 ```
 
-- `timeout` - Request timeout in milliseconds (default: 300000). Set to `false` to disable.
+- `timeout` - Overall request timeout in milliseconds (disabled by default).
 - `headerTimeout` - Timeout in milliseconds to wait for response headers (default: 300000, or 5 minutes). This timer stops once headers arrive and does not limit the streamed response body. Set to `false` to disable.
-- `chunkTimeout` - Timeout in milliseconds between streamed response chunks (default: 900000, or 15 minutes). If no chunk arrives in time, the request is aborted. Set to `false` to disable.
+- `chunkTimeout` - Timeout in milliseconds between streamed response chunks (default: 300000, or 5 minutes). If no chunk arrives in time, the request is aborted. Set to `false` to disable.
 - `setCacheKey` - Ensure a cache key is always set for designated provider.
 
 You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
@@ -400,7 +400,9 @@ You can also configure [local models](/docs/models#local). [Learn more](/docs/mo
 
 ### Policies
 
-Use the `experimental.policies` option to allow or deny OpenCode actions on configured resources. Currently, policies can control which providers OpenCode may use.
+The `experimental.policies` feature requires OpenCode 2 and isn't enforced in OpenCode 1. In OpenCode 1, use [`disabled_providers`](#disabled-providers) or [`enabled_providers`](#enabled-providers) to control provider availability.
+
+The following example applies to OpenCode 2 only:
 
 ```json title="opencode.json"
 {
@@ -510,7 +512,7 @@ You can configure specialized agents for specific tasks through the `agent` opti
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         // Disable file modification tools for review-only agent
@@ -570,7 +572,7 @@ You can configure custom commands for repetitive tasks through the `command` opt
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
       "description": "Run tests with coverage",
       "agent": "build",
-      "model": "anthropic/claude-haiku-4-5",
+      "model": "anthropic/claude-haiku-5-5",
     },
     "component": {
       "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
@@ -622,7 +624,9 @@ Note that disabling snapshots means changes made by the agent cannot be rolled b
 
 ### Autoupdate
 
-OpenCode will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
+OpenCode checks for new versions and shows a notice when one is available. Updates are never installed automatically. Run [`/update`](/docs/tui#update) in the TUI or [`opencode upgrade`](/docs/cli#upgrade) to install one.
+
+You can turn off update checks and notices with the `autoupdate` option.
 
 ```json title="opencode.json"
 {
@@ -631,8 +635,7 @@ OpenCode will automatically download any new updates when it starts up. You can 
 }
 ```
 
-If you don't want updates but want to be notified when a new version is available, set `autoupdate` to `"notify"`.
-Notice that this only works if it was not installed using a package manager such as Homebrew.
+Setting `autoupdate` to `true` or `"notify"` keeps the default behavior: you're notified, but nothing is installed until you choose to update.
 
 ---
 
@@ -701,7 +704,7 @@ Use an object to keep built-ins enabled while configuring overrides or custom LS
 
 ### Permissions
 
-By default, opencode **allows all operations** without requiring explicit approval. You can change this using the `permission` option.
+By default, opencode allows most operations without requiring explicit approval. Some operations, including reading `.env` files and accessing external directories, require approval. You can change these [defaults](/docs/permissions#defaults) using the `permission` option.
 
 For example, to ensure that the `edit` and `bash` tools require user approval:
 
@@ -753,7 +756,7 @@ You can configure file watcher ignore patterns through the `watcher` option.
 }
 ```
 
-Patterns follow glob syntax. Common dependency, VCS, build, and cache directories are ignored automatically at any depth.
+Patterns follow glob syntax. Use explicit recursive patterns, as above, for directories you want to ignore at any depth.
 
 ---
 

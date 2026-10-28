@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Headers, HttpClientRequest } from "effect/http"
-import { Image, ImageClient } from "../../src/index.js"
+import { Image, ImageClient } from "../../src/effect.js"
 import { XAI } from "../../src/providers.js"
 import { Auth } from "../../src/route.js"
 import { it } from "../lib/effect.js"
@@ -18,16 +18,16 @@ describe("xAI Images", () => {
         }).image("grok-imagine-image"),
         prompt: "A robot tending a rooftop garden",
         n: 2,
-        aspectRatio: "16:9",
+        aspect: "16:9",
+        resolution: "4K",
         providerOptions: {
           aspect_ratio: "4:3",
-          resolution: "1k",
           responseFormat: "url",
           response_format: "b64_json",
           future_option: true,
         },
         http: {
-          body: { resolution: "2k", future_option: "http" },
+          body: { future_option: "http" },
           headers: { "x-request": "yes" },
           query: { trace: "1" },
         },

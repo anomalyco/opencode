@@ -1,4 +1,4 @@
-import { LLM } from "@opencode/ai"
+import { LLM } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"

@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
 import { Base64 } from "effect/encoding"
-import { Speech, SpeechClient, SpeechEvent } from "../src/index.js"
+import { Speech, SpeechClient, SpeechEvent } from "../src/effect.js"
 import { Cartesia, Deepgram, ElevenLabs, Google, OpenAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
@@ -209,6 +209,24 @@ describe("Speech", () => {
     }),
   )
 
+  it.effect("ignores unknown OpenAI speech stream events", () =>
+    Effect.gen(function* () {
+      const events = yield* collect(Speech.stream({ model: openai, text: "Hi" })).pipe(
+        Effect.provide(
+          respond(
+            sseEvents(
+              { type: "speech.audio.delta", audio: "AQI=" },
+              { type: "speech.audio.future", value: 1 },
+              { type: "speech.audio.done" },
+            ),
+            "text/event-stream",
+          ),
+        ),
+      )
+      expect(events.map((event) => event.type)).toEqual(["audio-delta", "finish"])
+    }),
+  )
+
   it.effect("surfaces Gemini speech that ended without STOP instead of returning it as complete", () =>
     Effect.gen(function* () {
       const document = (finishReason?: string) =>
@@ -230,13 +248,7 @@ describe("Speech", () => {
 
       expect(truncated.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
       expect(yield* partial.audio.bytes()).toEqual(Uint8Array.from([1, 2]))
-      expect(partial.notices).toEqual([
-        {
-          type: "other",
-          message: "Google Speech finished with MAX_TOKENS",
-          providerMetadata: { google: { finishReason: "MAX_TOKENS" } },
-        },
-      ])
+      expect(partial.providerMetadata?.google).toMatchObject({ finishReason: "MAX_TOKENS" })
       expect(policy.reason).toMatchObject({ _tag: "ContentPolicy", body: withheld })
     }),
   )

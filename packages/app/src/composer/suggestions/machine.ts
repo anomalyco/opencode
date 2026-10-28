@@ -1,4 +1,4 @@
-import type { ComposerHistoryEntry, ComposerPersistedState, ComposerSuggestion } from "../types"
+import type { ComposerPersistedState, ComposerSuggestion } from "../types"
 import { isAttachment } from "../prompt-parts"
 
 export type ComposerInteractionState = {
@@ -8,17 +8,17 @@ export type ComposerInteractionState = {
     | { type: "context"; query: string; activeID?: string }
     | { type: "command-inline"; query: string; activeID?: string }
     | { type: "command-menu"; query: string; activeID?: string }
+    | { type: "history"; query: string; activeID?: string }
   drag: "idle" | "active"
-  focus: "editor" | "command-search" | "external"
+  focus: "editor" | "command-search" | "history-search" | "external"
   activeContextID?: string
-  historyIndex: number
-  savedHistory?: ComposerHistoryEntry
 }
 
 export type ComposerInteractionEvent =
   | { type: "input.changed"; value: string; persist?: boolean }
   | { type: "commands.open" }
   | { type: "context.open" }
+  | { type: "history.open"; id: string }
   | { type: "popover.query"; value: string }
   | { type: "popover.results"; ids: string[] }
   | { type: "popover.active"; id: string }
@@ -41,6 +41,8 @@ export type ComposerInteractionCommand =
   | { type: "suggestion.select"; id: string }
   | { type: "focus.editor" }
   | { type: "focus.command-search" }
+  | { type: "history.preview"; id: string }
+  | { type: "history.restore" }
 
 export type ComposerEditorTransition = {
   state: ComposerInteractionState
@@ -54,7 +56,6 @@ export function createComposerInteractionState(): ComposerInteractionState {
     popover: { type: "closed" },
     drag: "idle",
     focus: "external",
-    historyIndex: -1,
   }
 }
 
@@ -68,6 +69,11 @@ export function transitionComposer(
   if (event.type === "commands.open") return openCommands(state, persisted)
 
   if (event.type === "context.open") return openContext(state)
+
+  if (event.type === "history.open")
+    return changed({ ...state, popover: { type: "history", query: "", activeID: event.id }, focus: "history-search" }, [
+      { type: "history.preview", id: event.id },
+    ])
 
   if (event.type === "popover.query") return queryChanged(state, event.value)
 
@@ -112,7 +118,10 @@ function inputChanged(
     ])
   }
 
-  const context = value.slice(0, cursor ?? value.length).match(/(?:^|\s)@([^\s@]*)$/)
+  // An open mention keeps single spaces so multi-word session titles stay searchable.
+  const context = value
+    .slice(0, cursor ?? value.length)
+    .match(state.popover.type === "context" ? /(?:^|\s)@((?:[^\s@]+(?: [^\s@]+)* ?)?)$/ : /(?:^|\s)@([^\s@]*)$/)
 
   if (context) {
     const query = context[1] ?? ""
@@ -165,6 +174,10 @@ function openContext(state: ComposerInteractionState): ComposerEditorTransition 
 
 function queryChanged(state: ComposerInteractionState, query: string): ComposerEditorTransition {
   if (state.popover.type === "closed") return unchanged(state)
+
+  if (state.popover.type === "history")
+    return changed({ ...state, popover: { ...state.popover, query, activeID: undefined } })
+
   const popover = state.popover.type === "context" ? "context" : "command"
 
   return changed({ ...state, popover: { ...state.popover, query, activeID: undefined } }, [
@@ -174,17 +187,24 @@ function queryChanged(state: ComposerInteractionState, query: string): ComposerE
 
 function resultsChanged(state: ComposerInteractionState, ids: string[]): ComposerEditorTransition {
   if (state.popover.type === "closed") return unchanged(state)
+
   const activeID = state.popover.activeID && ids.includes(state.popover.activeID) ? state.popover.activeID : ids[0]
 
   if (activeID === state.popover.activeID) return unchanged(state)
 
-  return changed({ ...state, popover: { ...state.popover, activeID } })
+  return changed(
+    { ...state, popover: { ...state.popover, activeID } },
+    state.popover.type === "history" && activeID ? [{ type: "history.preview", id: activeID }] : [],
+  )
 }
 
 function activeChanged(state: ComposerInteractionState, id: string): ComposerEditorTransition {
   if (state.popover.type === "closed" || state.popover.activeID === id) return unchanged(state)
 
-  return changed({ ...state, popover: { ...state.popover, activeID: id } })
+  return changed(
+    { ...state, popover: { ...state.popover, activeID: id } },
+    state.popover.type === "history" ? [{ type: "history.preview", id }] : [],
+  )
 }
 
 function suggestionSelected(
@@ -209,9 +229,10 @@ function suggestionSelected(
     commands.push({
       type: "mention.add",
       item,
-      ...(item.kind === "skill" && item.label.startsWith("/")
-        ? { range: { start: 0, end: state.popover.type === "command-menu" ? 0 : current.length } }
-        : {}),
+      range:
+        item.kind === "skill" && item.label.startsWith("/")
+          ? { start: 0, end: state.popover.type === "command-menu" ? 0 : current.length }
+          : undefined,
     })
   }
 
@@ -224,6 +245,10 @@ function keyDown(
   state: ComposerInteractionState,
   event: Extract<ComposerInteractionEvent, { type: "key.down" }>,
 ): ComposerEditorTransition {
+  if (state.popover.type === "history" && (event.key === "Escape" || (event.ctrl && event.key.toLowerCase() === "g"))) {
+    return changed({ ...state, popover: { type: "closed" }, focus: "editor" }, [{ type: "history.restore" }], true)
+  }
+
   if (event.ctrl && event.key.toLowerCase() === "g") {
     if (state.popover.type === "closed") return unchanged(state)
 
@@ -238,7 +263,7 @@ function keyDown(
     return unchanged(state)
   }
 
-  if (event.key === "Escape") {
+  if (event.key === "Escape" || (state.popover.type === "history" && event.key === "Tab")) {
     return changed({ ...state, popover: { type: "closed" }, focus: "editor" }, [{ type: "focus.editor" }], true)
   }
 
@@ -265,7 +290,16 @@ function keyDown(
         : event.ids.length - 1
       : (current + direction + event.ids.length) % event.ids.length
 
-  return changed({ ...state, popover: { ...state.popover, activeID: event.ids[index] } }, [], true)
+  const next =
+    state.popover.type === "history" && current >= 0
+      ? Math.max(0, Math.min(event.ids.length - 1, current + direction))
+      : index
+
+  return changed(
+    { ...state, popover: { ...state.popover, activeID: event.ids[next] } },
+    state.popover.type === "history" ? [{ type: "history.preview", id: event.ids[next] }] : [],
+    true,
+  )
 }
 
 function promptText(persisted: ComposerPersistedState) {

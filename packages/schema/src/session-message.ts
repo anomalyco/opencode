@@ -1,16 +1,14 @@
 export * as SessionMessage from "./session-message.js"
 
 import { Schema } from "effect"
-import { SessionProviderContext } from "./session-provider-context.js"
 import { optional } from "./schema.js"
 import { Content } from "./tool.js"
 import { Location } from "./location.js"
 import { Model } from "./model.js"
 import { Project } from "./project.js"
-import { Prompt } from "./prompt.js"
+import { Attachment, Prompt } from "./prompt.js"
 import { DateTimeUtcFromMillis, PositiveInt, RelativePath, statics } from "./schema.js"
 import { ascending } from "./identifier.js"
-import { Event } from "./event.js"
 import { Shell as ShellSchema } from "./shell.js"
 import { FinishReason } from "./llm.js"
 import { SessionError } from "./session-error.js"
@@ -25,7 +23,7 @@ export const ID = Schema.String.check(Schema.isStartingWith("msg_")).pipe(
   Schema.annotate({ identifier: "Session.Message.ID" }),
   statics((schema) => ({
     create: () => schema.make("msg_" + ascending()),
-    fromEvent: (eventID: Event.ID) => schema.make(eventID.replace(/^evt_/, "msg_")),
+    fromEvent: (eventID: string) => schema.make(eventID.replace(/^evt_/, "msg_")),
   })),
 )
 export type ID = typeof ID.Type
@@ -36,10 +34,14 @@ const Base = {
   time: Schema.Struct({ created: DateTimeUtcFromMillis }),
 }
 
-export const ProviderState = Schema.Record(Schema.String, Schema.Unknown).annotate({
-  identifier: "Session.Message.ProviderState",
+/**
+ * Provider-owned replay data, keyed by the producing provider's metadata fields and echoed back verbatim. A tool's
+ * result data is merged into its call data, so adapters must not reuse a key with a different value across the two.
+ */
+export const Native = Schema.Record(Schema.String, Schema.Unknown).annotate({
+  identifier: "Session.Message.Native",
 })
-export type ProviderState = typeof ProviderState.Type
+export type Native = typeof Native.Type
 
 export interface AgentSelected extends Schema.Schema.Type<typeof AgentSelected> {}
 export const AgentSelected = Schema.Struct({
@@ -80,6 +82,13 @@ export const User = Schema.Struct({
   skills: Prompt.fields.skills,
   type: Schema.tag("user"),
 }).annotate({ identifier: "Session.Message.User" })
+
+/** A {@link User} whose files may stay on the server, for clients that opt into `experimental-media-uri`. */
+export interface MediaUser extends Schema.Schema.Type<typeof MediaUser> {}
+export const MediaUser = Schema.Struct({
+  ...User.fields,
+  files: Schema.Array(Attachment).pipe(optional),
+}).annotate({ identifier: "Session.Message.MediaUser" })
 
 export interface Synthetic extends Schema.Schema.Type<typeof Synthetic> {}
 export const Synthetic = Schema.Struct({
@@ -164,8 +173,7 @@ export const AssistantTool = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   executed: Schema.Boolean.pipe(optional),
-  providerState: ProviderState.pipe(optional),
-  providerResultState: ProviderState.pipe(optional),
+  native: Native.pipe(optional),
   state: ToolState,
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
@@ -178,14 +186,14 @@ export interface AssistantText extends Schema.Schema.Type<typeof AssistantText> 
 export const AssistantText = Schema.Struct({
   type: Schema.tag("text"),
   text: Schema.String,
-  state: ProviderState.pipe(optional),
+  native: Native.pipe(optional),
 }).annotate({ identifier: "Session.Message.Assistant.Text" })
 
 export interface AssistantReasoning extends Schema.Schema.Type<typeof AssistantReasoning> {}
 export const AssistantReasoning = Schema.Struct({
   type: Schema.tag("reasoning"),
   text: Schema.String,
-  state: ProviderState.pipe(optional),
+  native: Native.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     completed: DateTimeUtcFromMillis.pipe(optional),
@@ -223,7 +231,8 @@ export const Assistant = Schema.Struct({
   }).pipe(optional),
   finish: FinishReason.pipe(optional),
   rawFinish: Schema.String.pipe(optional),
-  providerState: ProviderState.pipe(optional),
+  /** Step-level native data, such as a provider's reason for blocking a response. */
+  native: Native.pipe(optional),
   cost: Money.USD.pipe(optional),
   tokens: TokenUsage.Info.pipe(optional),
   error: SessionError.Error.pipe(optional),
@@ -250,7 +259,6 @@ export const CompactionRunning = Schema.Struct({
   status: Schema.tag("running"),
   reason: Schema.Literals(["auto", "manual"]),
   summary: Schema.String,
-  recent: Schema.String,
 }).annotate({ identifier: "Session.Message.Compaction.Running" })
 
 export interface CompactionCompleted extends Schema.Schema.Type<typeof CompactionCompleted> {}
@@ -259,10 +267,9 @@ export const CompactionCompleted = Schema.Struct({
   status: Schema.tag("completed"),
   reason: Schema.Literals(["auto", "manual"]),
   model: Model.Ref.pipe(optional),
-  providerState: ProviderState.pipe(optional),
+  /** A provider compaction stores its replacement window in `native.messages`, replayed instead of `summary`. */
+  native: Native.pipe(optional),
   summary: Schema.String,
-  recent: Schema.String,
-  providerContext: SessionProviderContext.Info.pipe(optional),
   ...CompactionUsage,
 }).annotate({ identifier: "Session.Message.Compaction.Completed" })
 
@@ -320,3 +327,19 @@ export type Info =
   | Compaction
   | Idle
 export type Type = Info["type"]
+
+/** {@link Info} with {@link MediaUser} for clients that opt into `experimental-media-uri`. */
+export const MediaInfo = Schema.Union([
+  AgentSelected,
+  ModelSelected,
+  LocationSwitched,
+  MediaUser,
+  Synthetic,
+  System,
+  Skill,
+  Shell,
+  Assistant,
+  Compaction,
+  Idle,
+]).annotate({ identifier: "Session.Message.MediaInfo" })
+export type MediaInfo = Exclude<Info, User> | MediaUser

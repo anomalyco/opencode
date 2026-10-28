@@ -8,13 +8,19 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { SessionTable } from "@opencode/core/session/sql"
 import { Project } from "@opencode/core/project"
+import { Agent } from "@opencode/schema/agent"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Effect, Fiber, Layer, Logger, Schedule, Schema, Scope } from "effect"
 import { eq, sql } from "drizzle-orm"
 import type { SqlClient } from "effect/sql/SqlClient"
 import { tmpdir } from "./fixture/tmpdir"
+import { initRepo } from "./fixture/git"
+import fs from "fs/promises"
 import path from "path"
 
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
@@ -337,8 +343,8 @@ describe("V1Migration.transformSession", () => {
       agent: "build",
       model: { id: "model", providerID: "provider", variant: "fast" },
       content: [
-        { type: "text", text: "", state: { separator: true } },
-        { type: "reasoning", text: "think", state: { provider: 1 }, time: { created: 21, completed: 22 } },
+        { type: "text", text: "", native: { separator: true } },
+        { type: "reasoning", text: "think", native: { provider: 1 }, time: { created: 21, completed: 22 } },
       ],
       snapshot: { start: "snap_start", end: "snap_end", files: ["a.ts", "b.ts", "c.ts"] },
       finish: "stop",
@@ -430,7 +436,7 @@ describe("V1Migration.transformSession", () => {
     })
     expect(content[2]).toMatchObject({
       id: "completed",
-      providerState: { provider: true },
+      native: { provider: true },
       state: {
         status: "completed",
         content: [
@@ -505,7 +511,7 @@ describe("V1Migration.transformSession", () => {
           "The following tools were renamed and must be called by their new names: `bash` is now `shell`; `task` is now `subagent`; `apply_patch` is now `patch`.",
           "The `subagent` tool takes `agent` instead of `subagent_type` and `sessionID` instead of `task_id`.",
           "The `read` tool now takes `path` instead of `filePath`.",
-          "The `todowrite` tool is no longer available and must not be called.",
+          "The `todowrite` tool is no longer available by default. Only call it if it is in your tool list.",
         ].join("\n\n"),
         time: { created: 20 },
       },
@@ -651,7 +657,7 @@ describe("V1Migration.transformSession", () => {
       id: compact.id,
       time_created: 3,
       time_updated: 6,
-      data: { status: "completed", reason: "manual", summary: "summary", recent: "" },
+      data: { status: "completed", reason: "manual", summary: "summary" },
     })
   })
 
@@ -661,7 +667,7 @@ describe("V1Migration.transformSession", () => {
     const compact = user("msg_000000000027aaaaaaaaaaaaaa", {}, 3)
     const summary = assistant("msg_000000000028aaaaaaaaaaaaaa", compact.id, { summary: true }, 4)
     const existing = session({
-      agent: "existing",
+      agent: Agent.ID.make("existing"),
       model: { id: "existing-model", providerID: "existing-provider", variant: "existing" },
     })
     const result = transform(
@@ -677,9 +683,10 @@ describe("V1Migration.transformSession", () => {
     expect(result.messages[2].data).toMatchObject({
       reason: "auto",
       summary: "summary",
-      recent: "[User]: question\n\n[Assistant]: answer",
+      metadata: { recent: "[User]: question\n\n[Assistant]: answer" },
     })
-    expect(result.session.agent).toBe("existing")
+    expect(result.messages[2].data).not.toHaveProperty("recent")
+    expect(result.session.agent).toBe(Agent.ID.make("existing"))
     expect(result.session.model).toEqual(existing.model)
   })
 
@@ -721,7 +728,7 @@ describe("V1Migration.transformSession", () => {
       },
     ])
     expect(result.session).toEqual({
-      agent: "review",
+      agent: Agent.ID.make("review"),
       model: { id: "m2", providerID: "p2", variant: "default" },
       cost: 7,
       tokens_input: 8,
@@ -876,13 +883,21 @@ describe("V1Migration database workflow", () => {
     `)
   })
 
-  const database = <A, E>(effect: Effect.Effect<A, E, Database.Service | Global.Service | Scope.Scope>) =>
+  const database = <A, E>(
+    effect: Effect.Effect<A, E, Database.Service | Global.Service | Scope.Scope | Project.Service | FSUtil.Service>,
+  ) =>
     run(
       Effect.gen(function* () {
         const db = yield* makeDb
         yield* DatabaseMigration.apply(db)
         yield* createLegacyTables(db)
-        return yield* effect.pipe(Effect.provideService(Database.Service, { db }))
+        return yield* effect.pipe(
+          Effect.provide(
+            AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, FSUtil.node]), [
+              Database.node.replace(Layer.succeed(Database.Service, { db })),
+            ]),
+          ),
+        )
       }),
     )
 
@@ -1119,13 +1134,46 @@ describe("V1Migration database workflow", () => {
     )
   })
 
-  test("reassigns V1 sessions whose projects are missing to the global project", async () => {
+  test.each([
+    { worktree: "/repo", directory: ".", expected: "/repo" },
+    { worktree: "/repo", directory: "src", expected: "/repo" },
+    { worktree: "C:/repo", directory: ".", expected: "C:/repo" },
+    { worktree: "//server/share/repo", directory: ".", expected: "//server/share/repo" },
+    { worktree: "/repo", directory: "C:/other", expected: "C:/other" },
+    { worktree: "/repo", directory: "//server/share/other", expected: "//server/share/other" },
+    { worktree: "/repo", directory: "", expected: "" },
+    { worktree: "relative", directory: ".", expected: "" },
+  ])("migrates $directory in $worktree", async (input) => {
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        yield* db.run(sql`
+          INSERT INTO project (id, worktree, time_created, time_updated, sandboxes)
+          VALUES ('saved-project', ${input.worktree}, 1, 2, '[]')
+        `)
+        yield* db.run(sql`
+          INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+          VALUES ('ses_test', 'saved-project', 'test', ${input.directory}, 'Test', '1', 1, 2)
+        `)
+
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* db.get(sql`SELECT directory FROM session_v2 WHERE id = 'ses_test'`)).toEqual({
+          directory: input.expected,
+        })
+        expect(yield* db.get(sql`SELECT directory FROM session WHERE id = 'ses_test'`)).toEqual({
+          directory: input.directory,
+        })
+      }),
+    )
+  })
+
+  test.each(["/tmp/orphan", "."])("reassigns V1 sessions with missing projects and directory %s", async (directory) => {
     await database(
       Effect.gen(function* () {
         const { db } = yield* Database.Service
         const global = yield* Global.Service
         yield* db.run(
-          sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_orphan', 'missing-project', 'orphan', '/tmp/orphan', 'Orphan', '1', 1, 2)`,
+          sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_orphan', 'missing-project', 'orphan', ${directory}, 'Orphan', '1', 1, 2)`,
         )
 
         expect(yield* V1Migration.run()).toEqual({ status: "completed" })
@@ -1135,9 +1183,72 @@ describe("V1Migration database workflow", () => {
         expect(yield* db.get(sql`SELECT worktree FROM project WHERE id = 'global'`)).toEqual({
           worktree: path.parse(global.data).root,
         })
+        expect(yield* db.get(sql`SELECT directory FROM session_v2 WHERE id = 'ses_orphan'`)).toEqual({
+          directory: directory === "." ? path.parse(global.data).root.replaceAll("\\", "/") : directory,
+        })
         expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toEqual({
           value: '{"phase":"completed"}',
         })
+      }),
+    )
+  })
+
+  test("attributes V1 global sessions to the V2 project of their directory", async () => {
+    await using tmp = await tmpdir()
+    const plain = path.join(tmp.path, "plain")
+    const nested = path.join(plain, "nested")
+    const repo = path.join(tmp.path, "repo")
+    const missing = path.join(tmp.path, "missing")
+    await fs.mkdir(nested, { recursive: true })
+    await fs.mkdir(path.join(repo, "pkg", "a"), { recursive: true })
+    await initRepo(repo)
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        const projects = yield* Project.Service
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('global', '/', 1, 2, '[]')`,
+        )
+        yield* Effect.forEach(
+          [
+            { id: "ses_plain", project: "global", directory: plain },
+            { id: "ses_nested", project: "global", directory: nested },
+            { id: "ses_repo", project: "global", directory: path.join(repo, "pkg", "a") },
+            { id: "ses_missing", project: "global", directory: missing },
+            { id: "ses_orphan", project: "missing-project", directory: plain },
+            { id: "ses_imported", project: "global", directory: plain },
+          ],
+          (input) =>
+            db.run(sql`
+              INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+              VALUES (${input.id}, ${input.project}, ${input.id}, ${input.directory}, 'Test', '1', 1, 2)
+            `),
+        )
+        yield* db.run(sql`
+          INSERT INTO session_v2 (id, project_id, slug, directory, title, version, time_created, time_updated)
+          VALUES ('ses_imported', 'global', 'ses_imported', ${plain}, 'Kept', '1', 1, 2)
+        `)
+
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        // New owners take their recency from the V1 session instead of the import time.
+        expect(
+          yield* db.all(sql`SELECT time_active FROM project WHERE id NOT IN ('global', 'missing-project')`),
+        ).toEqual([{ time_active: 2 }, { time_active: 2 }, { time_active: 2 }])
+        // Resolve after the import, since runtime resolution persists the projects it finds.
+        const owners = {
+          plain: yield* projects.resolve(AbsolutePath.make(plain)),
+          nested: yield* projects.resolve(AbsolutePath.make(nested)),
+          repo: yield* projects.resolve(AbsolutePath.make(repo)),
+        }
+        expect(owners.repo.vcs?.type).toBe("git")
+        expect(yield* db.all(sql`SELECT id, project_id, path, title FROM session_v2 ORDER BY id`)).toEqual([
+          { id: "ses_imported", project_id: "global", path: null, title: "Kept" },
+          { id: "ses_missing", project_id: "global", path: null, title: "Test" },
+          { id: "ses_nested", project_id: owners.nested.id, path: "", title: "Test" },
+          { id: "ses_orphan", project_id: owners.plain.id, path: "", title: "Test" },
+          { id: "ses_plain", project_id: owners.plain.id, path: "", title: "Test" },
+          { id: "ses_repo", project_id: owners.repo.id, path: "pkg/a", title: "Test" },
+        ])
       }),
     )
   })

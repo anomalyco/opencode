@@ -1,9 +1,14 @@
-import { expect, test } from "bun:test"
-import { EmbeddedTerminalRenderable } from "@opentui/core"
+import { expect, spyOn, test } from "bun:test"
+import { EmbeddedTerminalRenderable, type Renderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { Global } from "@opencode/util/global"
+import * as Open from "@opencode/util/open"
+import { waitForGoUpsellConnect } from "../src/component/dialog-go-upsell"
+import { GoUpsellArtRenderable } from "../src/component/go-upsell-art"
+import { SimulationRenderer } from "@opencode/simulation/frontend/renderer"
 import path from "node:path"
+import { Writable } from "node:stream"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 import { createAppFixture } from "./fixture/app"
@@ -215,17 +220,42 @@ test.each(["dismissed", "refreshing"])(
   },
 )
 
+test("boots on the simulation renderer with the terminal title enabled", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const setup = SimulationRenderer.setupFor(yield* SimulationRenderer.create({}))
+        yield* Effect.promise(async () => {
+          await using app = await createAppFixture({ setup })
+          await app.ready
+          await app.waitForFrame((frame) => frame.includes("commands"))
+        })
+      }),
+    ),
+  )
+})
+
 test("SIGHUP clears title and disposes scoped resources once", async () => {
   await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
-  const titles: string[] = []
+  const output: string[] = []
+  const setup = await createTestRenderer({
+    width: 80,
+    height: 24,
+    bufferedOutput: "stdout",
+    stdout: new Writable({
+      write(chunk, _encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    }) as NodeJS.WriteStream,
+  })
+  await setup.renderer.setupTerminal()
   let started!: () => void
   const ready = new Promise<void>((resolve) => {
     started = resolve
   })
   const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
   setup.renderer.setTerminalTitle = (title) => {
-    titles.push(title)
     if (title === "OpenCode") started()
     setTitle(title)
   }
@@ -251,17 +281,19 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
     await task
 
     expect(setup.renderer.isDestroyed).toBe(true)
-    expect(titles.at(-1)).toBe("")
+    expect(output.join("")).toContain("\x1b]0;\x07")
     expect(process.listeners("SIGHUP").every((listener) => listeners.has(listener))).toBe(true)
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await setup.renderer.closed
     await server.stop()
   }
 })
 
 test("session lifecycle updates the terminal title and prints the epilogue after cleanup", async () => {
   await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const setup = await createTestRenderer({ width: 80, height: 24 })
+  await setup.renderer.setupTerminal()
   let initialTitle!: () => void
   const initialTitleSet = new Promise<void>((resolve) => {
     initialTitle = resolve
@@ -348,7 +380,8 @@ test("session lifecycle updates the terminal title and prints the epilogue after
 
 test("session title generated while an untitled session is loading remains visible", async () => {
   await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const setup = await createTestRenderer({ width: 80, height: 24 })
+  await setup.renderer.setupTerminal()
   const titles: string[] = []
   const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
   const generatedTitle = Promise.withResolvers<void>()
@@ -814,7 +847,8 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
 
 test("session startup prompt is submitted exactly once", async () => {
   await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const setup = await createTestRenderer({ width: 80, height: 24 })
+  await setup.renderer.setupTerminal()
   const events = createEventStream()
   const cwd = process.cwd()
   const location = { directory: cwd, project: { id: "project", directory: cwd } }
@@ -1355,9 +1389,10 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
 
 test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
   "selection copy and pane management respect %s mode in the prompt and terminal pane",
-  async (copy) => {
-    await using state = await tmpdir()
-    const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+    async (copy) => {
+      await using state = await tmpdir()
+      const setup = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true })
+      await setup.renderer.setupTerminal()
     setup.renderer.start()
     const ready = Promise.withResolvers<void>()
     const session = {
@@ -1669,6 +1704,982 @@ test("server plugin failures share one notice and use source names before an ID 
   expect(setup.captureCharFrame()).toContain("Open plugins")
 })
 
+test("free usage limit offers OpenCode Go once per 24h, transitions Subscribe to Connect Go, and restores focus", async () => {
+  await using state = await tmpdir()
+  const baseNow = 1_700_000_000_000
+  let currentNow = baseNow
+  using _now = spyOn(Date, "now").mockImplementation(() => currentNow)
+  const session = {
+    id: "ses_free_limit",
+    projectID: "proj_test",
+    location: { directory },
+    title: "Free limit",
+    agent: "build",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 1 },
+  }
+  const model = { id: "big-pickle", providerID: "opencode" }
+  const freeModel = {
+    id: "big-pickle",
+    providerID: "opencode",
+    name: "Big Pickle",
+    status: "active",
+    cost: [{ input: 0, output: 0, cache: { read: 0, write: 0 } }],
+    capabilities: { input: ["text"], output: ["text"], reasoning: false, toolCall: true, attachment: false },
+    limit: { context: 200_000, output: 8_192 },
+    variants: [],
+    time: { released: 1 },
+  }
+  const goModel = {
+    id: "glm-5-go",
+    providerID: "opencode-go",
+    name: "GLM-5 Go",
+    status: "active",
+    cost: [{ input: 1, output: 2, cache: { read: 0, write: 0 } }],
+    capabilities: { input: ["text"], output: ["text"], reasoning: false, toolCall: true, attachment: false },
+    limit: { context: 200_000, output: 8_192 },
+    variants: [],
+    time: { released: 2 },
+  }
+  const error = {
+    type: "provider.free-limit",
+    message: "Free usage limit reached.",
+    status: 429,
+    retryAfterMs: 3_600_000,
+  }
+  let authorized = false
+  let releaseOAuth!: () => void
+  const oauthGate = new Promise<void>((resolve) => {
+    releaseOAuth = resolve
+  })
+  const oauthRequests: unknown[] = []
+  const switchedModels: unknown[] = []
+  const resentPrompts: unknown[] = []
+  const promptResent = Promise.withResolvers<void>()
+  await using setup = await createAppFixture({
+    width: 100,
+    state: state.path,
+    args: { sessionID: session.id },
+    config: { animations: false, tabs: { mode: "off" } },
+    fetch: async (url, request) => {
+      const location = { directory, project: { id: "proj_test", directory, canonical: directory } }
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === "/api/agent")
+        return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+      if (url.pathname === "/api/provider")
+        return json({
+          location,
+          data: [
+            { id: "opencode", name: "OpenCode Zen" },
+            ...(authorized ? [{ id: "opencode-go", integrationID: "opencode", name: "OpenCode Go" }] : []),
+          ],
+        })
+      if (url.pathname === "/api/model")
+        return json({
+          location,
+          data: authorized ? [goModel, freeModel] : [freeModel],
+        })
+      if (url.pathname === "/api/integration")
+        return json({
+          location,
+          data: [
+            {
+              id: "opencode",
+              name: "OpenCode Console",
+              methods: [
+                {
+                  id: "device",
+                  type: "oauth",
+                  label: "OpenCode Console account",
+                  form: [
+                    {
+                      key: "server",
+                      type: "string",
+                      format: "uri",
+                      hidden: true,
+                      default: "https://opencode.ai/console",
+                    },
+                  ],
+                },
+                { type: "key", label: "API key (service account)" },
+              ],
+              connections: authorized
+                ? [{ type: "credential", method: "oauth", id: "cred_console", label: "Anomaly" }]
+                : [],
+            },
+            {
+              id: "opencode-go",
+              name: "OpenCode Go",
+              methods: [{ type: "key", label: "Enter Go API key" }],
+              connections: [],
+            },
+          ],
+        })
+      if (url.pathname === "/api/integration/opencode/connect/oauth" && request.method === "POST") {
+        oauthRequests.push(await request.json())
+        return json({
+          location,
+          data: {
+            attemptID: "attempt_go",
+            mode: "auto",
+            url: "https://opencode.ai/console/device?user_code=GOGO-1234",
+            instructions: "Enter code: GOGO-1234",
+          },
+        })
+      }
+      if (url.pathname === "/api/integration/opencode/connect/oauth/attempt_go") {
+        if (request.method === "DELETE") return new Response(null, { status: 204 })
+        await oauthGate
+        authorized = true
+        return json({ location, data: { status: "complete" } })
+      }
+      if (url.pathname === `/api/session/${session.id}/model` && request.method === "POST") {
+        switchedModels.push(await request.json())
+        return new Response(null, { status: 204 })
+      }
+      if (url.pathname === `/api/session/${session.id}/prompt` && request.method === "POST") {
+        resentPrompts.push(await request.json())
+        promptResent.resolve()
+        return json({ data: {} })
+      }
+      if (url.pathname === `/api/session/${session.id}/message`)
+        return json({
+          data: [
+            { id: "msg_queued_user", type: "user", text: "Queued follow-up", time: { created: 3 } },
+            {
+              id: "msg_free_assistant",
+              type: "assistant",
+              agent: "build",
+              model,
+              content: [],
+              time: { created: 2 },
+            },
+            { id: "msg_free_user", type: "user", text: "Refactor the parser", time: { created: 1 } },
+          ],
+          cursor: {},
+        })
+      if (url.pathname === `/api/session/${session.id}/inbox`)
+        return json({
+          data: [
+            {
+              id: "msg_queued_user",
+              sessionID: session.id,
+              type: "user",
+              delivery: "queue",
+              payload: { text: "Queued follow-up" },
+              time: { created: 3 },
+            },
+          ],
+        })
+      if (url.pathname === `/api/session/${session.id}/permission`) return json({ data: [] })
+      return undefined
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("Refactor the parser"))
+  setup.events.emit({
+    id: "evt_free_limit_1",
+    created: baseNow,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 1, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant", error },
+  })
+  setup.events.emit({
+    id: "evt_free_limit_exec",
+    created: baseNow,
+    type: "session.execution.failed",
+    durable: { aggregateID: session.id, seq: 2, version: 1 },
+    data: { sessionID: session.id, error },
+  })
+  using openSpy = spyOn(Open, "openUrl").mockResolvedValue(undefined as never)
+  await setup.waitForFrame((frame) => frame.includes("Free limit reached"))
+  const upsell = setup.captureCharFrame()
+  expect(upsell).toContain("OpenCode Go gives you reliable access")
+  expect(upsell).toContain("▀▀▀▀ ▀▀▀▀")
+  expect(upsell).toContain("opencode.ai/go")
+  expect(upsell).toContain("don't show again")
+  expect(upsell).toContain("dismiss")
+  expect(upsell).toContain("subscribe")
+  expect(upsell).not.toContain("Connect OpenCode Go")
+  expect(upsell).not.toContain("Session failed")
+  // Dismiss closes the modal, leaves the muted notice, and restores focus to the composer.
+  setup.mockInput.pressArrow("left")
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => !frame.includes("Free limit reached"))
+  const frame = setup.captureCharFrame()
+  expect(frame).toContain("You've used today's free messages. They reset at")
+  expect(frame).toContain("Upgrade to OpenCode Go → /connect · Switch model → /models")
+  expect(frame).not.toContain("Error:")
+  expect(frame).not.toContain("Session failed")
+  // The delivered prompt (not the queued one) shows once in the transcript and once more back in the composer.
+  await setup.waitForFrame((frame) => frame.split("Refactor the parser").length === 3)
+  expect(setup.captureCharFrame().split("Queued follow-up").length).toBe(2)
+
+  // Clear the composer (which also verifies composer focus was restored after Dismiss): a duplicate event does not re-restore.
+  await Bun.sleep(10)
+  setup.mockInput.pressKey("c", { ctrl: true })
+  await setup.waitForFrame((frame) => frame.split("Refactor the parser").length === 2)
+  setup.events.emit({
+    id: "evt_free_limit_dup",
+    created: baseNow,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 3, version: 1 },
+    data: {
+      sessionID: session.id,
+      assistantMessageID: "msg_free_assistant",
+      error: { ...error, retryAfterMs: undefined },
+    },
+  })
+  await setup.waitForFrame((frame) => !frame.includes("They reset at"))
+  expect(setup.captureCharFrame().split("Refactor the parser").length).toBe(2)
+
+  // Just before 24h (86_400_000 - 1 ms) with an empty composer: recalls the next turn's prompt without reopening Free limit reached.
+  currentNow = baseNow + 86_400_000 - 1
+  setup.events.emit({
+    id: "evt_free_limit_delivered",
+    created: 4,
+    type: "session.inbox.delivered",
+    durable: { aggregateID: session.id, seq: 4, version: 1 },
+    data: { sessionID: session.id, inboxID: "msg_queued_user" },
+  })
+  setup.events.emit({
+    id: "evt_free_limit_2",
+    created: 5,
+    type: "session.step.started",
+    durable: { aggregateID: session.id, seq: 5, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_2", agent: "build", model, started: 5 },
+  })
+  setup.events.emit({
+    id: "evt_free_limit_3",
+    created: currentNow,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 6, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_2", error },
+  })
+  await setup.waitForFrame(
+    (frame) =>
+      frame.split("You've used today's free messages").length === 3 && frame.split("Queued follow-up").length === 3,
+  )
+  expect(setup.captureCharFrame()).not.toContain("Free limit reached")
+  expect(setup.captureCharFrame()).not.toContain("Connect OpenCode Go")
+
+  // Exactly at 24h (86_400_000 ms) with an empty composer: reopens Free limit reached, and Subscribe starts OpenCode device OAuth directly, selects Go, and resends the saved prompt.
+  currentNow = baseNow + 86_400_000
+  setup.mockInput.pressKey("c", { ctrl: true })
+  await setup.waitForFrame((frame) => frame.split("Queued follow-up").length === 2)
+  setup.events.emit({
+    id: "evt_free_limit_4",
+    created: 7,
+    type: "session.step.started",
+    durable: { aggregateID: session.id, seq: 7, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_3", agent: "build", model, started: 7 },
+  })
+  setup.events.emit({
+    id: "evt_free_limit_5",
+    created: currentNow,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 8, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_3", error },
+  })
+  await setup.waitForFrame((frame) => frame.includes("Free limit reached"))
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("GOGO-1234"))
+  expect(openSpy).toHaveBeenCalledWith("https://opencode.ai/go")
+  expect(oauthRequests).toEqual([
+    { methodID: "device", answer: { server: "https://opencode.ai/console" } },
+  ])
+  const connectFrame = setup.captureCharFrame()
+  expect(connectFrame).toContain("OpenCode Console account")
+  expect(connectFrame).not.toContain("Enter Go API key")
+  expect(connectFrame).not.toContain("API key (service account)")
+  releaseOAuth()
+  await promptResent.promise
+  await setup.waitForFrame((frame) => !frame.includes("GOGO-1234") && frame.includes("GLM-5 Go"))
+  expect(switchedModels).toEqual([{ model: { providerID: "opencode-go", id: "glm-5-go" } }])
+  expect(resentPrompts).toHaveLength(1)
+  expect(resentPrompts[0]).toMatchObject({
+    text: "Queued follow-up",
+  })
+})
+
+test("free usage limit Subscribe handles mid-auth/mid-sync Escape, sync failure, already-connected accounts, and Don't show again across restart", async () => {
+  await using state = await tmpdir()
+  const baseNow = 1_700_000_000_000
+  let currentNow = baseNow
+  using _now = spyOn(Date, "now").mockImplementation(() => currentNow)
+  using openSpy = spyOn(Open, "openUrl").mockResolvedValue(undefined as never)
+  const session = {
+    id: "ses_free_limit_key",
+    projectID: "proj_test",
+    location: { directory },
+    title: "Free limit no Go subscription",
+    agent: "build",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 1 },
+  }
+  const model = { id: "big-pickle", providerID: "opencode" }
+  const freeModel = {
+    id: "big-pickle",
+    providerID: "opencode",
+    name: "Big Pickle",
+    status: "active",
+    cost: [{ input: 0, output: 0, cache: { read: 0, write: 0 } }],
+    capabilities: { input: ["text"], output: ["text"], reasoning: false, toolCall: true, attachment: false },
+    limit: { context: 200_000, output: 8_192 },
+    variants: [],
+    time: { released: 1 },
+  }
+  const goModel = {
+    id: "glm-5-go",
+    providerID: "opencode-go",
+    name: "GLM-5 Go",
+    status: "active",
+    cost: [{ input: 1, output: 2, cache: { read: 0, write: 0 } }],
+    capabilities: { input: ["text"], output: ["text"], reasoning: false, toolCall: true, attachment: false },
+    limit: { context: 200_000, output: 8_192 },
+    variants: [],
+    time: { released: 2 },
+  }
+  const error = {
+    type: "provider.free-limit",
+    message: "Free usage limit reached.",
+    status: 429,
+    retryAfterMs: 3_600_000,
+  }
+  let releaseCatalog!: () => void
+  const catalogGate = new Promise<void>((resolve) => {
+    releaseCatalog = resolve
+  })
+  let oauthGate = Promise.resolve()
+  let modelSyncGate = Promise.resolve()
+  let onModelSyncRequest: (() => void) | undefined
+  let failModelSync = false
+  let connected = false
+  let needsAuth = false
+  let goEntitled = false
+  let oauthConnectCalls = 0
+  const switchedModels: unknown[] = []
+  const resentPrompts: unknown[] = []
+  const promptResent = Promise.withResolvers<void>()
+  await using setup = await createAppFixture({
+    width: 100,
+    state: state.path,
+    args: { sessionID: session.id },
+    config: { animations: false, tabs: { mode: "off" } },
+    fetch: async (url, request) => {
+      const location = { directory, project: { id: "proj_test", directory, canonical: directory } }
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === "/api/agent")
+        return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+      if (url.pathname === "/api/provider")
+        return json({
+          location,
+          data: [
+            { id: "opencode", name: "OpenCode Zen" },
+            ...(goEntitled ? [{ id: "opencode-go", integrationID: "opencode", name: "OpenCode Go" }] : []),
+          ],
+        })
+      if (url.pathname === "/api/model") {
+        onModelSyncRequest?.()
+        await modelSyncGate
+        if (failModelSync) return json({ message: "Model catalog sync failed" }, { status: 500 })
+        return json({ location, data: goEntitled ? [goModel, freeModel] : [freeModel] })
+      }
+      if (url.pathname === "/api/integration") {
+        await catalogGate
+        return json({
+          location,
+          data: [
+            {
+              id: "opencode",
+              name: "OpenCode Console",
+              methods: [
+                { id: "device", type: "oauth", label: "OpenCode Console account" },
+                { type: "key", label: "API key (service account)" },
+              ],
+              connections: connected
+                ? [
+                    {
+                      type: "credential",
+                      method: "oauth",
+                      id: "cred_console",
+                      label: "Personal",
+                      ...(needsAuth ? { status: { type: "needs_auth", message: "Session expired" } } : {}),
+                    },
+                    { type: "credential", method: "oauth", id: "cred_inactive", label: "Inactive backup" },
+                  ]
+                : [],
+            },
+          ],
+        })
+      }
+      if (url.pathname === "/api/integration/opencode/connect/oauth" && request.method === "POST") {
+        oauthConnectCalls += 1
+        return json({
+          location,
+          data: {
+            attemptID: "attempt_no_go",
+            mode: "auto",
+            url: "https://opencode.ai/console/device?user_code=NOGO-5678",
+            instructions: "Enter code: NOGO-5678",
+          },
+        })
+      }
+      if (url.pathname === "/api/integration/opencode/connect/oauth/attempt_no_go") {
+        if (request.method === "DELETE") return new Response(null, { status: 204 })
+        await oauthGate
+        if (failModelSync) connected = true
+        return json({ location, data: { status: "complete" } })
+      }
+      if (url.pathname === `/api/session/${session.id}/model` && request.method === "POST") {
+        switchedModels.push(await request.json())
+        return new Response(null, { status: 204 })
+      }
+      if (url.pathname === `/api/session/${session.id}/prompt` && request.method === "POST") {
+        resentPrompts.push(await request.json())
+        promptResent.resolve()
+        return json({ data: {} })
+      }
+      if (url.pathname === `/api/session/${session.id}/message`)
+        return json({
+          data: [
+            {
+              id: "msg_free_assistant",
+              type: "assistant",
+              agent: "build",
+              model,
+              content: [],
+              time: { created: 2 },
+            },
+            { id: "msg_free_user", type: "user", text: "Refactor the parser", time: { created: 1 } },
+          ],
+          cursor: {},
+        })
+      if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+        return json({ data: [] })
+      return undefined
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("Refactor the parser"))
+
+  // 1a. Escape mid-auth: cancelling while oauth.status is in flight must not select a model or resubmit the prompt.
+  let releaseMidAuth!: () => void
+  oauthGate = new Promise<void>((resolve) => {
+    releaseMidAuth = resolve
+  })
+  goEntitled = true
+  setup.events.emit({
+    id: "evt_free_limit_mid_auth",
+    created: baseNow,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 1, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant", error },
+  })
+  await setup.waitForFrame((frame) => frame.includes("Free limit reached"))
+  setup.mockInput.pressEnter()
+  expect(openSpy).toHaveBeenCalledWith("https://opencode.ai/go")
+  await setup.waitForFrame((frame) => frame.includes("Connect an integration"))
+  releaseCatalog()
+  await setup.waitForFrame((frame) => frame.includes("Waiting for authorization…"))
+  setup.mockInput.pressEscape()
+  await setup.waitForFrame((frame) => !frame.includes("Waiting for authorization…"))
+  releaseMidAuth()
+  await waitForGoUpsellConnect()
+  expect(switchedModels).toHaveLength(0)
+  expect(resentPrompts).toHaveLength(0)
+  expect(setup.captureCharFrame().split("Refactor the parser").length).toBe(3)
+
+  // 1b. Escape mid-sync: cancelling while model sync is awaited must not select a model or resubmit the prompt.
+  currentNow = baseNow + 86_400_000
+  oauthGate = Promise.resolve()
+  let releaseMidSync!: () => void
+  const midSyncStarted = Promise.withResolvers<void>()
+  onModelSyncRequest = () => midSyncStarted.resolve()
+  modelSyncGate = new Promise<void>((resolve) => {
+    releaseMidSync = resolve
+  })
+  await setup.mockInput.pressKey("c", { ctrl: true })
+  await setup.waitForFrame((frame) => frame.split("Refactor the parser").length === 2)
+  setup.events.emit({
+    id: "evt_free_limit_mid_sync_start",
+    created: 3,
+    type: "session.step.started",
+    durable: { aggregateID: session.id, seq: 2, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_2", agent: "build", model, started: 3 },
+  })
+  setup.events.emit({
+    id: "evt_free_limit_mid_sync_fail",
+    created: currentNow,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 3, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_2", error },
+  })
+  await setup.waitForFrame((frame) => frame.includes("Free limit reached"))
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Waiting for authorization…"))
+  await midSyncStarted.promise
+  setup.mockInput.pressEscape()
+  await setup.waitForFrame((frame) => !frame.includes("Waiting for authorization…"))
+  releaseMidSync()
+  await waitForGoUpsellConnect()
+  onModelSyncRequest = undefined
+  expect(switchedModels).toHaveLength(0)
+  expect(resentPrompts).toHaveLength(0)
+  expect(setup.captureCharFrame().split("Refactor the parser").length).toBe(3)
+
+  // 2. Model-sync rejection: catches the failure, closes "Waiting for authorization…", shows the error, and keeps the recalled prompt.
+  currentNow = baseNow + 2 * 86_400_000
+  modelSyncGate = Promise.resolve()
+  failModelSync = true
+  await setup.mockInput.pressKey("c", { ctrl: true })
+  await setup.waitForFrame((frame) => frame.split("Refactor the parser").length === 2)
+  setup.events.emit({
+    id: "evt_free_limit_sync_err_start",
+    created: 5,
+    type: "session.step.started",
+    durable: { aggregateID: session.id, seq: 4, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_3", agent: "build", model, started: 5 },
+  })
+  setup.events.emit({
+    id: "evt_free_limit_sync_err_fail",
+    created: currentNow,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 5, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_3", error },
+  })
+  await setup.waitForFrame((frame) => frame.includes("Free limit reached"))
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame(
+    (frame) => !frame.includes("Waiting for authorization…") && frame.includes("UnexpectedStatus: 500"),
+  )
+  expect(switchedModels).toHaveLength(0)
+  expect(resentPrompts).toHaveLength(0)
+  expect(setup.captureCharFrame().split("Refactor the parser").length).toBe(3)
+
+  // 3a. Expired/needs_auth active credential (even with a status-free inactive backup): refresh detects needs_auth and routes to device sign-in without submitting.
+  failModelSync = false
+  goEntitled = true
+  connected = true
+  needsAuth = true
+  let releaseNeedsAuthOAuth!: () => void
+  oauthGate = new Promise<void>((resolve) => {
+    releaseNeedsAuthOAuth = resolve
+  })
+  currentNow = baseNow + 3 * 86_400_000
+  await setup.mockInput.pressKey("c", { ctrl: true })
+  await setup.waitForFrame((frame) => frame.split("Refactor the parser").length === 2)
+  setup.events.emit({
+    id: "evt_free_limit_expired_start",
+    created: 6,
+    type: "session.step.started",
+    durable: { aggregateID: session.id, seq: 6, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_expired", agent: "build", model, started: 6 },
+  })
+  setup.events.emit({
+    id: "evt_free_limit_expired_fail",
+    created: currentNow,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 7, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_expired", error },
+  })
+  await setup.waitForFrame((frame) => frame.includes("Free limit reached"))
+  const oauthCallsBeforeExpired = oauthConnectCalls
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Waiting for authorization…") && frame.includes("NOGO-5678"))
+  expect(oauthConnectCalls).toBe(oauthCallsBeforeExpired + 1)
+  expect(switchedModels).toHaveLength(0)
+  expect(resentPrompts).toHaveLength(0)
+  // Complete sign-in so the refreshed active credential becomes valid again, then cancel before testing already-connected.
+  setup.mockInput.pressEscape()
+  await setup.waitForFrame((frame) => !frame.includes("Waiting for authorization…"))
+  releaseNeedsAuthOAuth()
+  await waitForGoUpsellConnect()
+
+  // 3b. Cached active credential with needs_auth (and status-free inactive backup): goes straight to device sign-in, then once re-authenticated without Go lands on /models.
+  oauthGate = Promise.resolve()
+  goEntitled = false
+  currentNow = baseNow + 4 * 86_400_000
+  await setup.mockInput.pressKey("c", { ctrl: true })
+  await setup.waitForFrame((frame) => frame.split("Refactor the parser").length === 2)
+  setup.events.emit({
+    id: "evt_free_limit_no_go_start",
+    created: 7,
+    type: "session.step.started",
+    durable: { aggregateID: session.id, seq: 8, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_4", agent: "build", model, started: 7 },
+  })
+  setup.events.emit({
+    id: "evt_free_limit_no_go_fail",
+    created: currentNow,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 9, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_4", error },
+  })
+  await setup.waitForFrame((frame) => frame.includes("Free limit reached"))
+  needsAuth = false
+  const oauthCallsBeforeCachedExpired = oauthConnectCalls
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Select model") && frame.includes("Big Pickle"))
+  expect(oauthConnectCalls).toBe(oauthCallsBeforeCachedExpired + 1)
+  setup.mockInput.pressEscape()
+  await setup.waitForFrame((frame) => !frame.includes("Select model"))
+
+  // 3c. Already-connected valid account with Go entitlement: skips device OAuth, refreshes catalog, selects Go, and resends the prompt.
+  const oauthCallsBeforeAlreadyConnected = oauthConnectCalls
+  goEntitled = true
+  currentNow = baseNow + 5 * 86_400_000
+  await setup.mockInput.pressKey("c", { ctrl: true })
+  await setup.waitForFrame((frame) => frame.split("Refactor the parser").length === 2)
+  setup.events.emit({
+    id: "evt_free_limit_already_go_start",
+    created: 9,
+    type: "session.step.started",
+    durable: { aggregateID: session.id, seq: 10, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_5", agent: "build", model, started: 9 },
+  })
+  setup.events.emit({
+    id: "evt_free_limit_already_go_fail",
+    created: currentNow,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 11, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_5", error },
+  })
+  await setup.waitForFrame((frame) => frame.includes("Free limit reached"))
+  setup.mockInput.pressEnter()
+  await promptResent.promise
+  await setup.waitForFrame((frame) => !frame.includes("Free limit reached") && frame.includes("GLM-5 Go"))
+  expect(oauthConnectCalls).toBe(oauthCallsBeforeAlreadyConnected)
+  expect(switchedModels).toEqual([{ model: { providerID: "opencode-go", id: "glm-5-go" } }])
+  expect(resentPrompts).toHaveLength(1)
+  expect(resentPrompts[0]).toMatchObject({ text: "Refactor the parser" })
+
+  // Advance past 24h, trigger again, and choose "don't show again".
+  currentNow = baseNow + 6 * 86_400_000
+  setup.events.emit({
+    id: "evt_free_limit_key_2",
+    created: 11,
+    type: "session.step.started",
+    durable: { aggregateID: session.id, seq: 12, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_6", agent: "build", model, started: 11 },
+  })
+  setup.events.emit({
+    id: "evt_free_limit_key_3",
+    created: currentNow,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 13, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_6", error },
+  })
+  await setup.waitForFrame((frame) => frame.includes("Free limit reached"))
+  setup.mockInput.pressArrow("right")
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => !frame.includes("Free limit reached"))
+  await Bun.sleep(30)
+
+  // Restart against the same state directory past another 48h: fresh in-memory store still respects persisted dontShow.
+  currentNow = baseNow + 8 * 86_400_000
+  await using restarted = await createAppFixture({
+    width: 100,
+    state: state.path,
+    args: { sessionID: session.id },
+    config: { animations: false, tabs: { mode: "off" } },
+    fetch: (url) => {
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === "/api/integration")
+        return json({
+          location: { directory, project: { id: "proj_test", directory, canonical: directory } },
+          data: [{ id: "opencode-go", name: "OpenCode Go", methods: [{ type: "key" }], connections: [] }],
+        })
+      if (url.pathname === `/api/session/${session.id}/message`)
+        return json({
+          data: [
+            {
+              id: "msg_free_assistant_3",
+              type: "assistant",
+              agent: "build",
+              model,
+              content: [],
+              time: { created: 8 },
+            },
+            { id: "msg_free_user", type: "user", text: "Refactor the parser", time: { created: 1 } },
+          ],
+          cursor: {},
+        })
+      if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+        return json({ data: [] })
+      return undefined
+    },
+  })
+  await restarted.ready
+  await restarted.waitForFrame((frame) => frame.includes("Refactor the parser"))
+  restarted.events.emit({
+    id: "evt_free_limit_key_restart",
+    created: currentNow,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 1, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant_3", error },
+  })
+  await restarted.waitForFrame((frame) => frame.includes("You've used today's free messages. They reset at"))
+  await Bun.sleep(30)
+  await restarted.renderOnce()
+  expect(restarted.captureCharFrame()).not.toContain("Free limit reached")
+})
+
+test("free usage limit claims suppression atomically across two TUI instances and protects typing drafts", async () => {
+  await using state = await tmpdir()
+  const session = {
+    id: "ses_free_limit_race",
+    projectID: "proj_test",
+    location: { directory },
+    title: "Free limit race",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 1 },
+  }
+  const model = { id: "big-pickle", providerID: "opencode" }
+  const error = {
+    type: "provider.free-limit",
+    message: "Free usage limit reached.",
+    status: 429,
+    retryAfterMs: 3_600_000,
+  }
+  const fetch = (url: URL) => {
+    if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+    if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+    if (url.pathname === "/api/integration")
+      return json({
+        location: { directory, project: { id: "proj_test", directory, canonical: directory } },
+        data: [
+          {
+            id: "opencode-go",
+            name: "OpenCode Go",
+            methods: [{ id: "device", type: "oauth", label: "Sign in with your OpenCode account" }, { type: "key" }],
+            connections: [],
+          },
+        ],
+      })
+    if (url.pathname === `/api/session/${session.id}/message`)
+      return json({
+        data: [
+          {
+            id: "msg_free_assistant",
+            type: "assistant",
+            agent: "build",
+            model,
+            content: [],
+            time: { created: 2 },
+          },
+          { id: "msg_free_user", type: "user", text: "Refactor the parser", time: { created: 1 } },
+        ],
+        cursor: {},
+      })
+    if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+      return json({ data: [] })
+    return undefined
+  }
+  await using first = await createAppFixture({
+    width: 100,
+    state: state.path,
+    args: { sessionID: session.id },
+    config: { animations: false, tabs: { mode: "off" } },
+    fetch,
+  })
+  await using second = await createAppFixture({
+    width: 100,
+    state: state.path,
+    args: { sessionID: session.id },
+    config: { animations: false, tabs: { mode: "off" } },
+    fetch,
+  })
+  await Promise.all([first.ready, second.ready])
+  await Promise.all([
+    first.waitForFrame((frame) => frame.includes("Refactor the parser")),
+    second.waitForFrame((frame) => frame.includes("Refactor the parser")),
+  ])
+  // Emit concurrently in both processes: only one claims the 24h window and opens the modal.
+  const event = {
+    id: "evt_free_limit_race_1",
+    created: 3,
+    type: "session.step.failed" as const,
+    durable: { aggregateID: session.id, seq: 1, version: 1 as const },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant", error },
+  }
+  first.events.emit(event)
+  second.events.emit(event)
+  await Promise.all([
+    first.waitForFrame((frame) => frame.includes("You've used today's free messages. They reset at")),
+    second.waitForFrame((frame) => frame.includes("You've used today's free messages. They reset at")),
+  ])
+  await first.waitForFrame(
+    () =>
+      first.captureCharFrame().includes("Free limit reached") ||
+      second.captureCharFrame().includes("Free limit reached"),
+  )
+  await Bun.sleep(30)
+  await Promise.all([first.renderOnce(), second.renderOnce()])
+  const opened = [first.captureCharFrame(), second.captureCharFrame()].filter((frame) =>
+    frame.includes("Free limit reached"),
+  )
+  expect(opened).toHaveLength(1)
+
+  // Typing draft protection: does not overwrite a draft or open Free limit reached while typing.
+  await using typingState = await tmpdir()
+  await using typing = await createAppFixture({
+    width: 100,
+    state: typingState.path,
+    args: { sessionID: session.id },
+    config: { animations: false, tabs: { mode: "off" } },
+    fetch,
+  })
+  await typing.ready
+  await typing.waitForFrame((frame) => frame.includes("Refactor the parser"))
+  await typing.mockInput.typeText("Draft in progress")
+  await typing.waitForFrame((frame) => frame.includes("Draft in progress"))
+  typing.events.emit(event)
+  await typing.waitForFrame((frame) => frame.includes("You've used today's free messages. They reset at"))
+  const frame = typing.captureCharFrame()
+  expect(frame).toContain("Draft in progress")
+  expect(frame.split("Refactor the parser").length).toBe(2)
+  expect(frame).not.toContain("Free limit reached")
+  expect(frame).not.toContain("Connect OpenCode Go")
+})
+
+test("free usage limit modal manages live animation FPS and adapts to 44x24 and 60x12 terminals", async () => {
+  const session = {
+    id: "ses_free_limit_anim",
+    projectID: "proj_test",
+    location: { directory },
+    title: "Free limit anim",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 1 },
+  }
+  const model = { id: "big-pickle", providerID: "opencode" }
+  const error = {
+    type: "provider.free-limit",
+    message: "Free usage limit reached.",
+    status: 429,
+    retryAfterMs: 3_600_000,
+  }
+  const fetch = (url: URL) => {
+    if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+    if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+    if (url.pathname === `/api/session/${session.id}/message`)
+      return json({
+        data: [
+          {
+            id: "msg_free_assistant",
+            type: "assistant",
+            agent: "build",
+            model,
+            content: [],
+            time: { created: 2 },
+          },
+          { id: "msg_free_user", type: "user", text: "Refactor the parser", time: { created: 1 } },
+        ],
+        cursor: {},
+      })
+    if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+      return json({ data: [] })
+    return undefined
+  }
+  const findArt = (node: Renderable): GoUpsellArtRenderable | undefined => {
+    if (node instanceof GoUpsellArtRenderable) return node
+    for (const child of node.getChildren()) {
+      const found = findArt(child)
+      if (found) return found
+    }
+    return undefined
+  }
+
+  await using animState = await tmpdir()
+  await using anim = await createAppFixture({
+    width: 100,
+    height: 30,
+    state: animState.path,
+    args: { sessionID: session.id },
+    config: { animations: true, tabs: { mode: "off" } },
+    fetch,
+  })
+  await anim.ready
+  await anim.waitForFrame((frame) => frame.includes("Refactor the parser"))
+  const initialTargetFps = anim.renderer.targetFps
+  const initialMaxFps = anim.renderer.maxFps
+  const initialLive = anim.renderer.liveRequestCount
+  anim.events.emit({
+    id: "evt_free_limit_anim_1",
+    created: 3,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 1, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_free_assistant", error },
+  })
+  await anim.waitForFrame((frame) => frame.includes("Free limit reached"))
+  const art = findArt(anim.renderer.root)
+  expect(art).toBeDefined()
+  expect(art!.live).toBe(true)
+  expect(art!.isDestroyed).toBe(false)
+  expect(anim.renderer.targetFps).toBe(30)
+  expect(anim.renderer.maxFps).toBe(30)
+  // Toggling animate off disables live updates; toggling back on re-enables them.
+  art!.animate = false
+  expect(art!.live).toBe(false)
+  art!.animate = true
+  expect(art!.live).toBe(true)
+  // Closing the modal destroys the art renderable and restores FPS.
+  anim.mockInput.pressEscape()
+  await anim.waitForFrame((frame) => !frame.includes("Free limit reached"))
+  expect(art!.isDestroyed).toBe(true)
+  expect(art!.live).toBe(false)
+  expect(findArt(anim.renderer.root)).toBeUndefined()
+  expect(anim.renderer.liveRequestCount).toBe(initialLive)
+  expect(anim.renderer.targetFps).toBe(initialTargetFps)
+  expect(anim.renderer.maxFps).toBe(initialMaxFps)
+
+  // Compact sizes: 44x24 (narrow, stacked buttons) and 60x12 (short, scrollable body).
+  for (const [width, height] of [
+    [44, 24],
+    [60, 12],
+  ] as const) {
+    await using compactState = await tmpdir()
+    await using compact = await createAppFixture({
+      width,
+      height,
+      state: compactState.path,
+      args: { sessionID: session.id },
+      config: { animations: true, tabs: { mode: "off" } },
+      fetch,
+    })
+    await compact.ready
+    await compact.waitForFrame((frame) => frame.includes("Refactor the parser"))
+    compact.events.emit({
+      id: `evt_free_limit_${width}x${height}`,
+      created: 3,
+      type: "session.step.failed",
+      durable: { aggregateID: session.id, seq: 1, version: 1 },
+      data: { sessionID: session.id, assistantMessageID: "msg_free_assistant", error },
+    })
+    await compact.waitForFrame((frame) => frame.includes("Free limit reached"))
+    const frame = compact.captureCharFrame()
+    expect(frame).toContain("Free limit reached")
+    expect(frame).toContain("don't show again")
+    expect(frame).toContain("dismiss")
+    expect(frame).toContain("subscribe")
+    expect(findArt(compact.renderer.root)).toBeUndefined()
+    // Locate "dismiss" in the rendered frame and click it with the mouse.
+    const lines = frame.split("\n")
+    const row = lines.findIndex((line) => line.includes("dismiss"))
+    expect(row).toBeGreaterThanOrEqual(0)
+    const col = lines[row]!.indexOf("dismiss") + 2
+    await compact.mockMouse.click(col, row)
+    await compact.waitForFrame((next) => !next.includes("Free limit reached"))
+  }
+})
+
 test.each([44, 100])(
   "retry countdown updates and clears with the retry lifecycle at width %s",
   async (width) => {
@@ -1760,3 +2771,4 @@ test.each([44, 100])(
   },
   15_000,
 )
+

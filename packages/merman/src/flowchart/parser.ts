@@ -130,18 +130,18 @@ function stripNodeToken(token: string): string {
 function splitNodeGroup(token: string): string[] {
   const groups: string[] = []
   const stack: string[] = []
-  let quote: '"' | "'" | undefined
+  let quoted = false
   let start = 0
   const closes: Record<string, string> = { "[": "]", "(": ")", "{": "}" }
 
   for (let index = 0; index < token.length; index++) {
     const character = token[index]!
-    if (quote) {
-      if (character === quote && token[index - 1] !== "\\") quote = undefined
+    if (quoted) {
+      if (character === '"' && token[index - 1] !== "\\") quoted = false
       continue
     }
-    if (character === '"' || character === "'") {
-      quote = character
+    if (character === '"') {
+      quoted = true
       continue
     }
     if (character in closes) {
@@ -213,18 +213,18 @@ function parseEdgeOperators(line: string): ParsedEdgeOperator[] {
 function maskNodeLabelOperators(line: string): string {
   const characters = line.split("")
   const stack: string[] = []
-  let quote: '"' | "'" | undefined
+  let quoted = false
   const closes: Record<string, string> = { "[": "]", "(": ")", "{": "}" }
 
   for (let index = 0; index < characters.length; index++) {
     const character = characters[index]!
-    if (quote) {
-      if (character === quote && characters[index - 1] !== "\\") quote = undefined
+    if (quoted) {
+      if (character === '"' && characters[index - 1] !== "\\") quoted = false
       else if (/[<>=.-]/.test(character)) characters[index] = " "
       continue
     }
-    if (character === '"' || character === "'") {
-      quote = character
+    if (character === '"') {
+      quoted = true
       continue
     }
     if (character in closes) {
@@ -242,19 +242,19 @@ function maskNodeLabelOperators(line: string): string {
 
 function hasInternalStatementSeparator(line: string): boolean {
   const stack: string[] = []
-  let quote: '"' | "'" | undefined
+  let quoted = false
   let edgeLabel = false
   const closes: Record<string, string> = { "[": "]", "(": ")", "{": "}" }
   const finalIndex = line.trimEnd().length - 1
 
   for (let index = 0; index < line.length; index++) {
     const character = line[index]!
-    if (quote) {
-      if (character === quote && line[index - 1] !== "\\") quote = undefined
+    if (quoted) {
+      if (character === '"' && line[index - 1] !== "\\") quoted = false
       continue
     }
-    if (character === '"' || character === "'") {
-      quote = character
+    if (character === '"') {
+      quoted = true
       continue
     }
     if (character in closes) {

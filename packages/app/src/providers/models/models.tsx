@@ -1,10 +1,9 @@
 import { type Accessor, createMemo } from "solid-js"
-import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useProviders } from "@/providers/catalog/providers"
 import { useGlobal } from "@/runtime/server/runtime"
 
-export type ModelKey = { providerID: string; modelID: string }
+type ModelKey = { providerID: string; modelID: string }
 
 type Visibility = "show" | "hide"
 
@@ -19,6 +18,33 @@ function modelKey(model: ModelKey) {
 
 export const isFreeModel = (model: { provider: { id: string }; cost?: { input: number } }) =>
   model.provider.id === "opencode" && (!model.cost || model.cost.input === 0)
+
+// The newest release of each family per provider. A free model shares its family and release date with its paid twin,
+// so the two are grouped apart. A tie keeps the first model listed.
+export function latestModels<T extends { id: string; provider: { id: string }; family?: string; release_date: string }>(
+  models: T[],
+) {
+  return [...Map.groupBy(models, (x) => x.provider.id).values()].flatMap((provider) =>
+    [...Map.groupBy(provider, (x) => `${x.family}:${isFreeModel(x)}`).values()].map((group) => {
+      const first = group.reduce((best, x) => (x.release_date > best.release_date ? x : best))
+
+      return { modelID: first.id, providerID: first.provider.id }
+    }),
+  )
+}
+
+export function uniqueModels(models: ModelKey[]) {
+  const seen = new Set<string>()
+
+  return models.filter((model) => {
+    const key = modelKey(model)
+
+    if (seen.has(key)) return false
+    seen.add(key)
+
+    return true
+  })
+}
 
 const createModelsController = (directory: Accessor<string | undefined>) => {
   const providers = useProviders(() => directory())
@@ -40,36 +66,19 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
     () =>
       new Map(
         available().map(
-          (model) => [modelKey({ providerID: model.provider.id, modelID: model.id }), Date.parse(model.release_date)] as const,
+          (model) =>
+            [modelKey({ providerID: model.provider.id, modelID: model.id }), Date.parse(model.release_date)] as const,
         ),
       ),
   )
 
   const latest = createMemo(() =>
-    pipe(
-      available(),
-      filter((x) => {
+    latestModels(
+      available().filter((x) => {
         const released = release().get(modelKey({ providerID: x.provider.id, modelID: x.id })) ?? NaN
 
         return Math.abs(Date.now() - released) < sixMonths
       }),
-      groupBy((x) => x.provider.id),
-      mapValues((models) =>
-        pipe(
-          models,
-          // A free model shares its family and release date with its paid twin, so group them apart.
-          groupBy((x) => `${x.family}:${isFreeModel(x)}`),
-          values(),
-          (groups) =>
-            groups.flatMap((g) => {
-              const first = firstBy(g, [(x) => x.release_date, "desc"])
-
-              return first ? [{ modelID: first.id, providerID: first.provider.id }] : []
-            }),
-        ),
-      ),
-      values(),
-      flat(),
     ),
   )
 
@@ -124,10 +133,23 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
   }
 
   const push = (model: ModelKey) => {
-    const uniq = uniqueBy([model, ...store.recent], (x) => `${x.providerID}:${x.modelID}`)
+    const uniq = uniqueModels([model, ...store.recent])
 
     if (uniq.length > RECENT_LIMIT) uniq.pop()
     setStore("recent", uniq)
+  }
+
+  // Newest favorite first, as in the TUI.
+  const toggleFavorite = (model: ModelKey) => {
+    const key = modelKey(model)
+    const rest = store.favorite.filter((item) => modelKey(item) !== key)
+
+    setStore(
+      "favorite",
+      rest.length === store.favorite.length
+        ? [{ providerID: model.providerID, modelID: model.modelID }, ...rest]
+        : rest,
+    )
   }
 
   const variantKey = (model: ModelKey) => `${model.providerID}/${model.modelID}`
@@ -154,6 +176,10 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
     recent: {
       list: models.recent,
       push,
+    },
+    favorite: {
+      list: models.favorite,
+      toggle: toggleFavorite,
     },
     variant: {
       get: getVariant,

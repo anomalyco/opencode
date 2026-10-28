@@ -403,7 +403,8 @@
       }
     }
 
-    &:hover [data-component="copy-status"] {
+    &:hover [data-component="copy-status"],
+    &:focus-visible [data-component="copy-status"] {
       opacity: 1;
     }
 

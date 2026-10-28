@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("keeps file disclosures keyboard-accessible as the file list changes", async ({ mount }) => {
   const root = await mount("current-tool-group--patch-follow-ups")

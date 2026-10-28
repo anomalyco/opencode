@@ -7,7 +7,7 @@ import {
   type ImageModelOptions,
   type ImageOptions,
   type ImageRequestFor,
-} from "../src/index.js"
+} from "../src/effect.js"
 import type { Service } from "../src/image-client.js"
 import { Anthropic, BlackForestLabs, Google, OpenAI, Stability, XAI, ZAI } from "../src/providers.js"
 
@@ -33,8 +33,8 @@ Image.generate({
     Media.fromDataUrl("data:image/jpeg;base64,AQID"),
     Media.ref("google", "https://generativelanguage.googleapis.com/v1beta/files/example", "image/webp"),
   ],
-  aspectRatio: "16:9",
-  seed: 7,
+  aspect: "16:9",
+  resolution: "2K",
   providerOptions: { imageSize: "2K", thinkingLevel: "HIGH", futureOption: true },
 })
 
@@ -42,9 +42,10 @@ const googleProvider = Google.configure({ apiKey: "test" }).image("any-model-id"
 Image.generate({
   model: googleProvider,
   prompt: "A lighthouse",
-  aspectRatio: "16:9",
+  aspect: "16:9",
+  resolution: "2K",
   providerOptions: {
-    imageSize: "2K",
+    seed: 7,
     thinkingLevel: "HIGH",
     includeThoughts: true,
     futureOption: true,
@@ -53,12 +54,17 @@ Image.generate({
 Image.generate({
   model: googleProvider,
   prompt: "A lighthouse",
-  providerOptions: { imageSize: "8K", thinkingLevel: "FUTURE" },
+  resolution: "8K",
+  providerOptions: { thinkingLevel: "FUTURE" },
 })
 // @ts-expect-error Image generation options are request-scoped, not provider configuration.
-Google.configure({ image: { providerOptions: { imageSize: "2K" } } })
+Google.configure({ image: { providerOptions: { thinkingLevel: "HIGH" } } })
 // @ts-expect-error Known Google string options retain their value kind.
-Image.generate({ model: googleProvider, prompt: "A lighthouse", providerOptions: { imageSize: 2 } })
+Image.generate({ model: googleProvider, prompt: "A lighthouse", providerOptions: { thinkingLevel: 2 } })
+// @ts-expect-error Known Google numeric options retain their value kind.
+Image.generate({ model: googleProvider, prompt: "A lighthouse", providerOptions: { seed: "7" } })
+// @ts-expect-error Resolution tiers are strings.
+Image.generate({ model: googleProvider, prompt: "A lighthouse", resolution: 2 })
 // @ts-expect-error Known Google boolean options retain their value kind.
 Image.generate({ model: googleProvider, prompt: "A lighthouse", providerOptions: { includeThoughts: "yes" } })
 
@@ -71,11 +77,11 @@ Image.generate({
   model: openai,
   prompt: "A lighthouse",
   images: [Media.url("https://example.com/source.png"), Media.ref("openai", "file_123")],
-  mask: Media.bytes(Uint8Array.from([1]), "image/png"),
   n: 2,
-  size: "2048x2048",
-  format: "webp",
   providerOptions: {
+    mask: Media.bytes(Uint8Array.from([1]), "image/png"),
+    size: "2048x2048",
+    outputFormat: "webp",
     quality: "hd",
     background: "transparent",
     future_option: true,
@@ -84,10 +90,11 @@ Image.generate({
 Image.generate({
   model: openai,
   prompt: "A lighthouse",
-  size: "256x256",
+  aspect: "16:9",
+  resolution: "4K",
   providerOptions: { quality: "future-quality" },
 })
-Image.generate({ model: openai, prompt: "A lighthouse", format: "future-format" })
+Image.generate({ model: openai, prompt: "A lighthouse", providerOptions: { outputFormat: "future-format" } })
 Image.generate({ model: openai, prompt: "A lighthouse", providerOptions: { native_future_option: true } })
 // @ts-expect-error Known OpenAI string options retain their value kind.
 Image.generate({ model: openai, prompt: "A lighthouse", providerOptions: { quality: 1 } })
@@ -112,15 +119,15 @@ Image.generate({ model: Anthropic.configure({ apiKey: "test" }).model("claude-so
 
 const xai = XAI.configure({ apiKey: "test" }).image("any-model-id")
 // @ts-expect-error Image generation options are request-scoped, not provider configuration.
-XAI.configure({ image: { providerOptions: { resolution: "1k" } } })
+XAI.configure({ image: { providerOptions: { responseFormat: "b64_json" } } })
 Image.generate({
   model: xai,
   prompt: "A lighthouse",
   images: [Media.fromDataUrl("data:image/png;base64,AQID"), Media.ref("xai", "file_123")],
   n: 2,
-  aspectRatio: "16:9",
+  aspect: "16:9",
+  resolution: "future-resolution",
   providerOptions: {
-    resolution: "future-resolution",
     responseFormat: "future-format",
     future_option: true,
   },
@@ -133,7 +140,7 @@ Image.generate({
 // @ts-expect-error Common count is numeric.
 Image.generate({ model: xai, prompt: "A lighthouse", n: "2" })
 // @ts-expect-error Known xAI string options retain their value kind.
-Image.generate({ model: xai, prompt: "A lighthouse", providerOptions: { resolution: 2 } })
+Image.generate({ model: xai, prompt: "A lighthouse", providerOptions: { responseFormat: 2 } })
 
 const zai = ZAI.configure({ apiKey: "test" }).image("any-model-id")
 // @ts-expect-error Image generation options are request-scoped, not provider configuration.
@@ -161,7 +168,7 @@ Image.generate({ model: openai, prompt: "A lighthouse", images: ["AQID"] })
 // @ts-expect-error Plain source objects must be lifted into `Media.Asset` first.
 Image.generate({ model: openai, prompt: "A lighthouse", images: [{ type: "bytes", data: new Uint8Array() }] })
 // @ts-expect-error Masks are media assets, not strings.
-Image.generate({ model: openai, prompt: "A lighthouse", mask: "https://example.com/mask.png" })
+Image.generate({ model: openai, prompt: "A lighthouse", providerOptions: { mask: "https://example.com/mask.png" } })
 
 const request = Image.request({
   model: google,
@@ -176,10 +183,10 @@ void (true satisfies GenerateRequirements)
 
 // @ts-expect-error Image requests use `n`, not `count`.
 Image.generate({ model: openai, prompt: "A lighthouse", count: 2 })
-// @ts-expect-error Image sizes are `${width}x${height}` strings.
-Image.generate({ model: openai, prompt: "A lighthouse", size: { width: 1024, height: 1024 } })
+// @ts-expect-error Exact sizes are provider options, not common fields.
+Image.generate({ model: openai, prompt: "A lighthouse", size: "1024x1024" })
 // @ts-expect-error Aspect ratios are `${w}:${h}` strings.
-Image.generate({ model: openai, prompt: "A lighthouse", aspectRatio: "wide" })
+Image.generate({ model: openai, prompt: "A lighthouse", aspect: "wide" })
 // @ts-expect-error Image requests do not expose metadata.
 Image.generate({ model: openai, prompt: "A lighthouse", metadata: { trace: true } })
 // @ts-expect-error `options` was renamed to `providerOptions`.

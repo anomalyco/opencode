@@ -123,6 +123,17 @@ V1 groups permission effects by tool. V2 uses one ordered `permissions` array, m
 Permission actions also changed: `bash` is now `shell`, `task` is now `subagent`, and `write` and `patch` are now `edit`.
 See [Permissions](/permissions) for the ordered V2 rule format.
 
+Todos are off by default in V2. To turn them on, use the experimental flag. It may change or be removed in a future
+release; see [Experimental](/config#experimental).
+
+```jsonc
+{
+  "experimental": {
+    "todo": true,
+  },
+}
+```
+
 <Callout type="warning">
   V1 asks before accessing paths outside the project. V2 does not: `external_directory` is allowed by default. To keep
   the V1 behavior, add `{ "action": "external_directory", "resource": "*", "effect": "ask" }` to `permissions`.
@@ -139,7 +150,7 @@ V2 config:
   "agent": {
     "reviewer": {
       "prompt": "Review for correctness and missing tests.",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "variant": "high",
       "disable": false,
       "permission": {
@@ -154,7 +165,7 @@ V2 config:
   "agents": {
     "reviewer": {
       "system": "Review for correctness and missing tests.",
-      "model": "anthropic/claude-sonnet-4-5#high",
+      "model": "anthropic/claude-sonnet-5-5#high",
       "disabled": false,
       "permissions": [
         { "action": "edit", "resource": "*", "effect": "deny" }
@@ -165,8 +176,30 @@ V2 config:
 ```
 
 `prompt` becomes `system`, `disable` becomes `disabled`, and a separate `variant` joins the model reference after `#`.
-`temperature`, `top_p`, and provider-specific `options` move under `request.body`. `maxSteps` becomes `steps`. Entries from
-the old `mode` map become primary agents.
+`maxSteps` becomes `steps`. Entries from the old `mode` map become primary agents.
+
+Agent [`request.body`](/agents#request) is kept but not sent to the model, so V1 `temperature`, `top_p`, and `options`
+have no effect there. Set them on a model variant instead. DeepSeek only applies `temperature` with thinking off, so
+this variant turns thinking off too:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "opencode": {
+      "models": {
+        "deepseek-v4.1-flash": {
+          "variants": [{ "id": "review", "body": { "thinking": { "type": "disabled" }, "temperature": 0.2 } }],
+        },
+      },
+    },
+  },
+  "agents": {
+    "reviewer": { "model": "opencode/deepseek-v4.1-flash#review" },
+  },
+}
+```
+
+Use `body` for provider JSON fields and `settings` for provider package options. See [model options](/models#options).
 
 ### Snapshots
 
@@ -289,7 +322,7 @@ Rename the singular `command` map to `commands` and `subtask` to `subagent`. Joi
   "command": {
     "review": {
       "template": "Review the current changes.",
-      "model": "anthropic/claude-sonnet-4-5",
+      "model": "anthropic/claude-sonnet-5-5",
       "variant": "high",
       "subtask": true
     }
@@ -301,7 +334,7 @@ Rename the singular `command` map to `commands` and `subtask` to `subagent`. Joi
   "commands": {
     "review": {
       "template": "Review the current changes.",
-      "model": "anthropic/claude-sonnet-4-5#high",
+      "model": "anthropic/claude-sonnet-5-5#high",
       "subagent": true
     }
   }
@@ -466,9 +499,12 @@ When converting the frontmatter to native V2 fields:
 - Rename `prompt` to `system` when it appears in JSON configuration; file bodies do not need a `system` field.
 - Rename `disable` to `disabled` and `permission` to `permissions`.
 - Join `model` and `variant` as `provider/model#variant`.
-- Move `temperature`, `top_p`, and provider-specific options under `request.body`.
+- Set sampling and provider options on a model variant, as shown [above](#agents-and-modes).
 
-V2 translates legacy agent frontmatter automatically, so these edits are optional. See [Agents](/agents).
+V1 agent frontmatter is deprecated but still translated automatically. Each file is read as one format. A file that
+uses any of `permissions`, `request`, `system`, or `disabled` is read as V2, and V1 fields in it, such as `name`,
+`tools`, `permission`, or `temperature`, are ignored with a warning in the log. Other files that use V1 fields are read
+as V1. Convert a file's frontmatter all at once rather than mixing the two formats. See [Agents](/agents).
 
 ### Command files
 
@@ -485,12 +521,12 @@ the native name for background delegation. If frontmatter has separate
 
 ```yaml
 # V1
-model: anthropic/claude-sonnet-4-5
+model: anthropic/claude-sonnet-5-5
 variant: high
 subtask: true
 
 # V2
-model: anthropic/claude-sonnet-4-5#high
+model: anthropic/claude-sonnet-5-5#high
 subagent: true
 ```
 
@@ -545,7 +581,7 @@ Rename `plugin` to `plugins`. Replace a package-and-options tuple with an object
   "plugins": [
     "opencode-example-plugin",
     {
-      "package": "./plugin/local.ts",
+      "package": "./plugin/local",
       "options": { "enabled": true }
     }
   ]
@@ -553,6 +589,7 @@ Rename `plugin` to `plugins`. Replace a package-and-options tuple with an object
 ```
 
 V2 discovers local plugins from both `.opencode/plugin/` and `.opencode/plugins/`; use `.opencode/plugins/` for V2 files.
+Configured local paths must be directories, so move the ported plugin to `./plugin/local/index.ts`.
 
 <Callout type="warning">
   V1 plugin implementations do not run in V2. Moving a file or renaming its config entry is not enough.
@@ -568,6 +605,23 @@ must migrate to the V2 API.
 
 Use the `@opencode/client` package to access the released V2 API. See the generated [API reference](/api) for its
 endpoints, request types, and responses.
+
+### Server authentication
+
+V2 servers still use HTTP Basic auth, with these changes:
+
+- `OPENCODE_PASSWORD` sets the password. `OPENCODE_SERVER_PASSWORD` still works.
+- `OPENCODE_SERVER_USERNAME` is no longer supported. The username is always `opencode`.
+
+```bash
+# V1
+OPENCODE_SERVER_USERNAME=alice OPENCODE_SERVER_PASSWORD=secret opencode serve
+
+# V2
+OPENCODE_PASSWORD=secret opencode serve
+```
+
+See [Web](/cli/web#authentication).
 
 ## Verify your setup
 

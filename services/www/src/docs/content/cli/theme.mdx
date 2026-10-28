@@ -8,7 +8,7 @@ OpenCode comes with many built-in themes for light and dark modes. Choose one in
 
 Press `Ctrl+P`, select **Open settings**, then open **Theme**. The default theme is `opencode`.
 
-You can also set them in your global [CLI settings](/cli/config):
+You can also set the theme and mode in your global [CLI settings](/cli/config):
 
 ```json title="~/.config/opencode/cli.json"
 {
@@ -56,9 +56,9 @@ OpenCode reads `.json` files only. A theme closer to the current directory repla
 
 ## Using Themes in Plugins
 
-[CLI plugins](/build/plugins/cli) read resolved colors through `context.theme` and the active mode through `context.themeMode`. Use semantic tokens so your plugin follows the selected theme:
+[TUI plugins](/build/plugins/cli) read resolved colors through `context.theme` and the active mode through `context.themeMode`. Use semantic tokens so your plugin follows the selected theme:
 
-```tsx title="Inside a CLI plugin component"
+```tsx title="Inside a TUI plugin component"
 import { usePlugin } from "@opencode/plugin/tui"
 
 function Status() {
@@ -67,7 +67,7 @@ function Status() {
 }
 ```
 
-The public CLI plugin API does not register themes. Add custom theme definitions with JSON files in the directories above.
+The public TUI plugin API does not register themes. Add custom theme definitions with JSON files in the directories above.
 
 ## Creating a Theme
 
@@ -174,7 +174,7 @@ Semantic tokens assign colors to UI roles. Components use these roles instead of
 
 | Group | Purpose |
 | --- | --- |
-| `text` | Base, muted, faint, action, form-field, status, and feedback text. `faint` defaults to `muted`. |
+| `text` | Base, muted, faint, action, form-field, and feedback text. `faint` defaults to `muted`. |
 | `background` | Base, raised surfaces, actions, form fields, and feedback fills. |
 | `border`, `scrollbar` | Border and scrollbar colors. |
 | `diff` | Added, removed, context, highlight, and line-number colors. |

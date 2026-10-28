@@ -108,4 +108,40 @@ describe("ReferenceInstructions", () => {
       Effect.provide(instructionsLayer(Layer.mock(Reference.Service, { list: () => Effect.succeed(references) }))),
     )
   })
+
+  it.effect("announces added, changed, and removed references in one delta", () => {
+    const reference = (name: string, description: string) =>
+      Reference.Info.make({
+        name,
+        path: AbsolutePath.make(`/${name}`),
+        description,
+        source: Reference.LocalSource.make({ type: "local", path: AbsolutePath.make(`/${name}`), description }),
+      })
+    let references = [reference("docs", "Use for product documentation"), reference("legacy", "Use for old code")]
+    return Effect.gen(function* () {
+      const instructions = yield* ReferenceInstructions.Service
+      const initialized = yield* readInitial(yield* instructions.load())
+
+      references = [reference("docs", "Use for API documentation"), reference("examples", "Use for examples")]
+      expect((yield* readUpdate(yield* instructions.load(), initialized)).text).toBe(
+        [
+          "New project references are available in addition to those previously listed:",
+          "  <reference>",
+          "    <name>examples</name>",
+          "    <path>/examples</path>",
+          "    <description>Use for examples</description>",
+          "  </reference>",
+          "The following project references have changed. Each entry replaces the previously listed reference with the same name:",
+          "  <reference>",
+          "    <name>docs</name>",
+          "    <path>/docs</path>",
+          "    <description>Use for API documentation</description>",
+          "  </reference>",
+          "The following project references are no longer available and must not be used: legacy.",
+        ].join("\n"),
+      )
+    }).pipe(
+      Effect.provide(instructionsLayer(Layer.mock(Reference.Service, { list: () => Effect.succeed(references) }))),
+    )
+  })
 })

@@ -8,9 +8,9 @@ import { mockWorkspace } from "../utils/workspace"
 // The web app's version, which What's New compares with the version last seen.
 const current = pkg.version
 
-const SEEN = "opencode.global.dat:extension.updater.seen"
+const SEEN = "opencode.global.dat:plugin.updater.seen"
 
-const RELEASE_NOTES = "opencode.global.dat:extension.updater.releaseNotes"
+const RELEASE_NOTES = "opencode.global.dat:plugin.updater.releaseNotes"
 
 const cors = { "access-control-allow-origin": "*" }
 
@@ -62,7 +62,7 @@ const changelog = {
 // The list form, whose one release in range has no desktop highlights.
 const cliOnly = [{ tag: current, highlights: [{ source: "cli", title: "Terminal only", description: "Not here." }] }]
 
-// A user who last saw 1.9.1, stored where the app kept it before the updater extension owned What's New.
+// A user who last saw 1.9.1, stored where the app kept it before the updater plugin owned What's New.
 const upgraded = { storage: { "highlights.v1": { version: "1.9.1" } } }
 
 test("What's New shows the highlights since the version seen, pages to Get started, and is seen once shown", async ({
@@ -132,7 +132,7 @@ test("What's New opened after the attachment mounts waits for the routes, then k
   const app = await openHeldStart(page, "/settings")
   await app.start()
   held.resolve()
-  // What's New marks the release seen as it opens: after attachment, while an extension still holds the routes.
+  // What's New marks the release seen as it opens: after attachment, while a plugin still holds the routes.
   await expect.poll(() => stored(page, SEEN)).toEqual({ version: "test" })
 
   const dialog = page.getByRole("dialog")

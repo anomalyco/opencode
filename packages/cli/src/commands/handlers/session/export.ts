@@ -16,10 +16,7 @@ export default Runtime.handler(
       if (!requested && !process.stdin.isTTY) {
         yield* Effect.fail(new Error("Pass a session ID when running without an interactive terminal"))
       }
-      const server = yield* ServerConnection.resolve({
-        server: Option.getOrUndefined(input.server),
-        standalone: input.standalone,
-      })
+      const server = yield* ServerConnection.resolve()
       const client = OpenCode.make({
         baseUrl: server.endpoint.url,
         headers: Service.headers(server.endpoint),

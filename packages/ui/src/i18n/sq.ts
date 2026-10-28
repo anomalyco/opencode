@@ -193,7 +193,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(pa përgjigje)",
   "ui.question.review.notAnswered": "(nuk u përgjigj)",
   "ui.question.multiHint": "Zgjidh të gjitha përgjigjet që zbatohen",
-  "ui.question.singleHint": "Zgjidhni një përgjigje",
   "ui.question.custom.placeholder": "Shkruani përgjigjen tuaj…",
   "ui.tool.loadedFile": "U ngarkua {{path}}",
   "ui.tool.loadedSkill": "U ngarkua aftësia {{name}}",

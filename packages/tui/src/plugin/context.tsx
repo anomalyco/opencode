@@ -299,7 +299,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
           optional: true,
         })),
         ...serverTuiPlugins().map((plugin) => ({
-          entry: plugin.source.type === "package" ? plugin.source.target : path.dirname(plugin.source.path),
+          entry: plugin.source.type === "package" ? plugin.source.target : plugin.source.path,
           install: false,
           optional: true,
         })),

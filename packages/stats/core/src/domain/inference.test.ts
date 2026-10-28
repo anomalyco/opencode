@@ -88,12 +88,11 @@ describe("inference stat normalization", () => {
     expect(statProvider("omen-alpha", "gpt-test-model", "test-provider")).toBe("unknown")
     expect(statProvider("OMEN-ALPHA-free:global", "gpt-test-model", "test-provider")).toBe("unknown")
     expect(statProvider("omen-alpha", "", "test-provider")).toBe("unknown")
-    expect(statProvider("space-bunny-free", "hidden-route-model", "hidden-provider")).toBe("unknown")
     expect(statProvider("exo-free", "gpt-test-model", "hidden-provider")).toBe("unknown")
 
-    const spaceBunny = { ...aggregate("space-bunny-free", "hidden-provider"), provider_model: "hidden-route-model" }
-    expect(toModelAggregate(spaceBunny)).toMatchObject([{ model: "space-bunny", provider: "unknown", requests: 1 }])
-    expect(toProviderAggregate(spaceBunny)).toMatchObject([{ provider: "unknown", requests: 1 }])
+    const exo = { ...aggregate("exo-free", "hidden-provider"), provider_model: "hidden-route-model" }
+    expect(toModelAggregate(exo)).toMatchObject([{ model: "exo", provider: "unknown", requests: 1 }])
+    expect(toProviderAggregate(exo)).toMatchObject([{ provider: "unknown", requests: 1 }])
 
     const row = { ...aggregate("omen-alpha", "test-provider"), provider_model: "gpt-test-model" }
     expect(toModelAggregate(row)).toMatchObject([{ model: "omen-alpha", provider: "unknown", requests: 1 }])
@@ -128,11 +127,22 @@ describe("inference stat normalization", () => {
     expect(statModel("x-preview-f", "")).toBe("glm-5.3-flash")
     expect(statModel("ox-alpha", "")).toBe("glm-5.3-flash")
     expect(statModel("ox-alpha-free", "")).toBe("glm-5.3-flash")
-    expect(statModel("cat-jam-free", "")).toBe("beam")
-    expect(statModel("beam-free", "")).toBe("beam")
+    expect(statModel("cat-jam-free", "")).toBe("beam-1.0-501b-a23b")
+    expect(statModel("beam-free", "")).toBe("beam-1.0-501b-a23b")
+    expect(statModel("beam-1.0-501b-a23b", "")).toBe("beam-1.0-501b-a23b")
     expect(RETIRED_STAT_MODELS).toContain("cat-jam")
+    expect(RETIRED_STAT_MODELS).toContain("beam")
     expect(statProvider("cat-jam-free", "", "unknown")).toBe("reflection")
     expect(statProvider("beam-free", "", "unknown")).toBe("reflection")
+    expect(statModel("ll-alpha-free", "")).toBe("flint-40b")
+    expect(statModel("flint-40b-free", "")).toBe("flint-40b")
+    expect(RETIRED_STAT_MODELS).toContain("ll-alpha")
+    expect(statProvider("ll-alpha-free", "", "unknown")).toBe("recursive")
+    expect(statModel("space-bunny-free", "")).toBe("minimax-m3.1-flash")
+    expect(statModel("space-bunny", "")).toBe("minimax-m3.1-flash")
+    expect(statModel("minimax-m3.1-flash-free", "")).toBe("minimax-m3.1-flash")
+    expect(RETIRED_STAT_MODELS).toContain("space-bunny")
+    expect(statProvider("space-bunny-free", "hidden-route-model", "hidden-provider")).toBe("minimax")
     expect(statModel("glm-5.3-flash-free", "")).toBe("glm-5.3-flash")
     expect(statModel("big-pickle", "zhipuai/ox-alpha-free")).toBe("glm-5.3-flash")
     expect(statModel("xiaomi/mimo-v2.5", "")).toBe("mimo-v2.5")
@@ -273,6 +283,19 @@ describe("inference stat normalization", () => {
     queries.forEach((query) => expect(query).toContain("lower(model) NOT IN ('alpha-gpt-next', 'hidden-model')"))
   })
 
+  test("excludes requests rejected before routing from stats and retention queries", () => {
+    const source = { namespace: "inference", table: "generation", dataset: "zen" }
+    const queries = [
+      ...buildStatsQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-11T00:00:00.000Z"), source),
+      ...buildRetentionQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-24T00:00:00.000Z"), source).map(
+        (item) => item.query,
+      ),
+    ]
+
+    expect(queries.length).toBeGreaterThan(0)
+    queries.forEach((query) => expect(query).toContain("AND attempts > 0\n"))
+  })
+
   test("builds bounded R2 SQL queries for each day and week", () => {
     const queries = buildStatsQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-12T12:00:00.000Z"), {
       namespace: "inference",
@@ -284,7 +307,7 @@ describe("inference stat normalization", () => {
     queries.forEach((query) => {
       expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next')")
       expect(query).toContain(
-        "CASE\n      WHEN lower(model) IN ('exo', 'omen-alpha', 'space-bunny', 'union-alpha') THEN 'unknown'\n",
+        "CASE\n      WHEN lower(model) IN ('exo', 'iceman-contributor', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
       )
       expect(query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
       expect(query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
@@ -296,7 +319,7 @@ describe("inference stat normalization", () => {
     expect(queries[6]).toContain("'2026-08-12' AS period_key")
     expect(queries[0]).toContain('FROM "inference"."generation"')
     expect(queries[0]).toContain("event_type = 'generation.completed'")
-    expect(queries[0]).toContain("AND (product = 'go' OR (lower(COALESCE(model_tier, '')) = 'free'")
+    expect(queries[0]).toContain("AND (product IN ('go', 'go-plus') OR (lower(COALESCE(model_tier, '')) = 'free'")
     expect(queries[0]).toContain("COALESCE(NULLIF(lower(model_tier), ''), '') AS raw_tier")
     expect(queries[0]).toContain("WHEN lower(COALESCE(raw_tier, '')) = 'free'")
     expect(queries[0]).toContain("regexp_replace(NULLIF(route_model, ''), '^.*/', '')")
@@ -354,10 +377,10 @@ describe("inference stat normalization", () => {
       expect(query).toContain("= 'deepseek-flash' THEN 'deepseek-v4.1-flash'")
     })
     expect(queries.map((query) => query.cohortDates)).toEqual([["2026-08-10"], ["2026-08-17"]])
-    expect(queries[0]?.query).toContain("AND product = 'go'")
+    expect(queries[0]?.query).toContain("AND product IN ('go', 'go-plus')")
     expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next')")
     expect(queries[0]?.query).toContain(
-      "CASE\n      WHEN lower(model) IN ('exo', 'omen-alpha', 'space-bunny', 'union-alpha') THEN 'unknown'\n",
+      "CASE\n      WHEN lower(model) IN ('exo', 'iceman-contributor', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
     )
     expect(queries[0]?.query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
     expect(queries[0]?.query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")

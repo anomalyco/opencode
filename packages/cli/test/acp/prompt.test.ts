@@ -411,7 +411,7 @@ describe("acp prompt turns over the wire", () => {
               delivered(sessionID, id),
               toolStarted(sessionID, "call_sleep", "shell"),
               toolCalled(sessionID, "call_sleep", { command: "sleep 60" }),
-              durableEvent("session.compaction.started", { sessionID, reason: "manual", recent: "", inputID: id }),
+              durableEvent("session.compaction.started", { sessionID, reason: "manual", inputID: id }),
               textDelta(sessionID, "msg_held", "working"),
             ],
       onInterrupt: ({ sessionID }) => [
@@ -464,7 +464,7 @@ describe("acp prompt turns over the wire", () => {
         delivered(sessionID, id),
         toolStarted(sessionID, "call_stuck", "shell"),
         toolCalled(sessionID, "call_stuck", { command: "sleep 60" }),
-        durableEvent("session.compaction.started", { sessionID, reason: "manual", recent: "", inputID: id }),
+        durableEvent("session.compaction.started", { sessionID, reason: "manual", inputID: id }),
         ephemeralEvent("session.compaction.delta", { sessionID, text: "partial" }),
         textDelta(sessionID, "msg_held", "working"),
       ],

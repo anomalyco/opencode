@@ -36,16 +36,17 @@ export const dict = {
   "email.subtitle": "Join the waitlist for early access.",
   "email.placeholder": "Email address",
   "email.subscribe": "Subscribe",
-  "email.success": "Almost done, check your inbox and confirm your email address",
+  "email.success": "Almost done. Check your inbox and confirm your email address.",
+  "email.error": "Couldn't subscribe you. Please try again.",
 
-  "notFound.title": "Not Found | opencode",
+  "notFound.title": "OpenCode | Not Found",
   "notFound.heading": "404 - Page Not Found",
   "notFound.home": "Home",
   "notFound.docs": "Docs",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencode logo light",
-  "notFound.logoDarkAlt": "opencode logo dark",
+  "notFound.logoLightAlt": "OpenCode logo light",
+  "notFound.logoDarkAlt": "OpenCode logo dark",
 
   "common.cancel": "Cancel",
   "common.contactUs": "Contact us",
@@ -59,22 +60,6 @@ export const dict = {
 
   "home.title": "OpenCode | The open source AI coding agent",
 
-  "temp.title": "opencode | AI coding agent built for the terminal",
-  "temp.hero.title": "The AI coding agent built for the terminal",
-  "temp.zen": "opencode zen",
-  "temp.getStarted": "Get Started",
-  "temp.feature.native.title": "Native TUI",
-  "temp.feature.native.body": "A responsive, native, themeable terminal UI",
-  "temp.feature.zen.beforeLink": "A",
-  "temp.feature.zen.link": "curated list of models",
-  "temp.feature.zen.afterLink": "provided by opencode",
-  "temp.feature.models.beforeLink": "Supports 75+ LLM providers through",
-  "temp.feature.models.afterLink": ", including local models",
-  "temp.screenshot.caption": "opencode TUI with the tokyonight theme",
-  "temp.screenshot.alt": "opencode TUI with tokyonight theme",
-  "temp.logoLightAlt": "opencode logo light",
-  "temp.logoDarkAlt": "opencode logo dark",
-
   "home.banner.badge": "New",
 
   "home.hero.title": "The open source AI coding agent",
@@ -85,12 +70,8 @@ export const dict = {
 
   "home.what.title": "What is OpenCode?",
   "home.what.body": "OpenCode is an open source agent that helps you write code in your terminal, IDE, or desktop.",
-  "home.what.lsp.title": "LSP enabled",
-  "home.what.lsp.body": "Automatically loads the right LSPs for the LLM",
   "home.what.multiSession.title": "Multi-session",
   "home.what.multiSession.body": "Start multiple agents in parallel on the same project",
-  "home.what.shareLinks.title": "Share links",
-  "home.what.shareLinks.body": "Share a link to any session for reference or to debug",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Log in with GitHub to use your Copilot account",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -122,7 +103,7 @@ export const dict = {
   "home.faq.a2.link": "intro",
   "home.faq.q3": "Do I need extra AI subscriptions to use OpenCode?",
   "home.faq.a3.p1":
-    "Not necessarily, OpenCode comes with a set of free models that you can use without creating an account.",
+    "Not necessarily. OpenCode comes with a set of free models that you can use without creating an account.",
   "home.faq.a3.p2.beforeZen": "Aside from these, you can use any of the popular coding models by creating a",
   "home.faq.a3.p2.afterZen": " account.",
   "home.faq.a3.p3":
@@ -130,8 +111,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "You can even connect your",
   "home.faq.a3.p4.localLink": "local models",
   "home.faq.q4": "Can I use my existing AI subscriptions with OpenCode?",
-  "home.faq.a4.p1":
-    "Yes, OpenCode supports subscription plans from all major providers. You can use your Claude Pro/Max, ChatGPT Plus/Pro, or GitHub Copilot subscriptions.",
+  "home.faq.a4.p1": "Yes, you can use your ChatGPT Plus/Pro or GitHub Copilot subscriptions.",
   "home.faq.q5": "Can I only use OpenCode in the terminal?",
   "home.faq.a5.beforeDesktop": "Not anymore! OpenCode is now available as an app for your",
   "home.faq.a5.desktop": "desktop",
@@ -153,23 +133,23 @@ export const dict = {
 
   "home.zenCta.title": "Access reliable optimized models for coding agents",
   "home.zenCta.body":
-    "Zen gives you access to a handpicked set of AI models that OpenCode has tested and benchmarked specifically for coding agents. No need to worry about inconsistent performance and quality across providers, use validated models that work.",
+    "Zen gives you access to a handpicked set of AI models that OpenCode has tested and benchmarked specifically for coding agents. No need to worry about inconsistent performance and quality across providers. Use validated models that work.",
   "home.zenCta.link": "Learn about Zen",
 
   "zen.title": "OpenCode Zen | A curated set of reliable optimized models for coding agents",
   "zen.hero.title": "Reliable optimized models for coding agents",
   "zen.hero.body":
-    "Zen gives you access to a curated set of AI models that OpenCode has tested and benchmarked specifically for coding agents. No need to worry about inconsistent performance and quality, use validated models that work.",
+    "Zen gives you access to a curated set of AI models that OpenCode has tested and benchmarked specifically for coding agents. No need to worry about inconsistent performance and quality. Use validated models that work.",
 
   "zen.faq.q1": "What is OpenCode Zen?",
   "zen.faq.a1":
     "Zen is a curated set of AI models tested and benchmarked for coding agents created by the team behind OpenCode.",
   "zen.faq.q2": "What makes Zen more accurate?",
   "zen.faq.a2":
-    "Zen only provides models that have been specifically tested and benchmarked for coding agents. You wouldn't use a butter knife to cut steak, don't use poor models for coding.",
+    "Zen only provides models that have been specifically tested and benchmarked for coding agents. You wouldn't use a butter knife to cut steak, so don't use poor models for coding.",
   "zen.faq.q3": "Is Zen cheaper?",
   "zen.faq.a3":
-    "Zen is not for profit. Zen passes through the costs from the model providers to you. The higher Zen's usage the more OpenCode can negotiate better rates and pass those to you.",
+    "Zen is not for profit. Zen passes through the costs from the model providers to you. The higher Zen's usage, the better the rates OpenCode can negotiate, and pass those to you.",
   "zen.faq.q4": "How much does Zen cost?",
   "zen.faq.a4.p1.beforePricing": "Zen",
   "zen.faq.a4.p1.pricingLink": "charges per request",
@@ -179,7 +159,7 @@ export const dict = {
   "zen.faq.a4.p3": "To cover costs, OpenCode adds only a small payment processing fee of $1.23 per $20 balance top-up.",
   "zen.faq.q5": "What about data and privacy?",
   "zen.faq.a5.beforeExceptions":
-    "All Zen models are hosted in the US. Providers follow a zero-retention policy and do not use your data for model training, with the",
+    "All Zen models are hosted in the US and EU. Providers follow a zero-retention policy and do not use your data for model training, with the",
   "zen.faq.a5.exceptionsLink": "following exceptions",
   "zen.faq.q6": "Can I set spend limits?",
   "zen.faq.a6": "Yes, you can set monthly spending limits in your account.",
@@ -212,19 +192,19 @@ export const dict = {
   "zen.how.step2.link": "pay per request",
   "zen.how.step2.afterLink": "with zero markups",
   "zen.how.step3.title": "Auto-top up",
-  "zen.how.step3.body": "when your balance reaches $5 we'll automatically add $20",
+  "zen.how.step3.body": "optional; choose your balance threshold and top-up amount",
   "zen.privacy.title": "Your privacy is important to us",
   "zen.privacy.beforeExceptions":
-    "All Zen models are hosted in the US. Providers follow a zero-retention policy and do not use your data for model training, with the",
+    "All Zen models are hosted in the US and EU. Providers follow a zero-retention policy and do not use your data for model training, with the",
   "zen.privacy.exceptionsLink": "following exceptions",
 
-  "go.promo.step5": "Step 5 Preview is now available in Go with 4× usage for a limited time.",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro is now available in Go.",
   "go.title": "OpenCode Go | Low cost coding models for everyone",
   "go.meta.description": "Go costs $10/month, with generous usage limits and reliable access to leading coding models.",
   "go.hero.title": "Low cost coding models for everyone",
   "go.hero.tagline": "Use with any agent. Top up credit if needed. Cancel any time.",
   "go.hero.body":
-    "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable open-source models, so you can build with powerful agents without worrying about cost or availability.",
+    "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable coding models, so you can build with powerful agents without worrying about cost or availability.",
 
   "go.cta.text": "Subscribe to Go",
   "go.plans.month": "per month",
@@ -254,8 +234,7 @@ export const dict = {
 
   "go.problem.title": "What problem is Go solving?",
   "go.problem.body":
-    "We're focused on bringing the OpenCode experience to as many people as possible. OpenCode Go is a low cost $10/month subscription. It provides generous limits and reliable access to the most capable open source models.",
-  "go.problem.subtitle": " ",
+    "We're focused on bringing the OpenCode experience to as many people as possible. OpenCode Go is a low cost $10/month subscription. It provides generous limits and reliable access to the most capable coding models.",
   "go.problem.item1": "Low cost subscription pricing",
   "go.problem.item2": "Generous limits and reliable access",
   "go.problem.item3": "Built for as many programmers as possible",
@@ -269,10 +248,10 @@ export const dict = {
   "go.how.step2.link": "$10/month",
   "go.how.step2.afterLink": "with generous limits",
   "go.how.step3.title": "Start coding",
-  "go.how.step3.body": "with reliable access to open-source models",
+  "go.how.step3.body": "with reliable access to capable coding models",
   "go.faq.q1": "What is OpenCode Go?",
   "go.faq.a1":
-    "Go is a low-cost subscription that gives you reliable access to capable open-source models for agentic coding.",
+    "Go is a low-cost subscription that gives you reliable access to capable coding models for agentic coding.",
   "go.faq.q2": "What models does Go include?",
   "go.faq.a2": "Go includes the models listed below, with generous limits and reliable access.",
   "go.faq.q3": "Is Go the same as Zen?",
@@ -302,7 +281,6 @@ export const dict = {
     "Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models.",
   "go.faq.a5.deepseekRetention":
     "ZDR agreement is renewed monthly. The current agreement is valid through October 31, 2026.",
-  "go.faq.a5.geminiRetention": "Your prompts and completions may be used to train future Google models.",
   "go.faq.a5.learnMore": "Learn more",
 
   "go.faq.q6": "Can I top up credit?",
@@ -314,36 +292,10 @@ export const dict = {
 
   "go.faq.q9": "What is the difference between free models and Go?",
   "go.faq.a9":
-    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go offers a curated model lineup with higher request quotas enforced across rolling windows: 20% of the monthly allowance per 5 hours, 50% per week, and 100% per month. Model-specific allowances may differ (actual request counts vary by model and usage).",
+    "Free models include Big Pickle plus promotional models available at the time. Go offers a curated model lineup with higher request quotas enforced across rolling windows: 20% of the monthly allowance per 5 hours, 50% per week, and 100% per month. Model-specific allowances may differ (actual request counts vary by model and usage).",
   "go.faq.q10": "Can I get a refund?",
   "go.faq.a10":
     "You may qualify for a refund if the charge was made within the last 14 days and you have not used your Go allowance during that billing period. {{contact}} to request a refund.",
-
-  "black.meta.title": "OpenCode Black | Access all the world's best coding models",
-  "black.meta.description": "Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans.",
-  "black.hero.title": "Access all the world's best coding models",
-  "black.hero.subtitle": "Including Claude, GPT, Gemini and more",
-  "black.title": "OpenCode Black | Pricing",
-  "black.paused": "Black plan enrollment is temporarily paused.",
-  "black.plan.icon20": "Black 20 plan",
-  "black.plan.icon100": "Black 100 plan",
-  "black.plan.icon200": "Black 200 plan",
-  "black.plan.multiplier100": "5x more usage than Black 20",
-  "black.plan.multiplier200": "20x more usage than Black 20",
-  "black.price.perMonth": "per month",
-  "black.price.perPersonBilledMonthly": "per person billed monthly",
-  "black.terms.1": "Your subscription will not start immediately",
-  "black.terms.2": "You will be added to the waitlist and activated soon",
-  "black.terms.3": "Your card will only be charged when your subscription is activated",
-  "black.terms.4": "Usage limits apply, heavily automated use may reach limits sooner",
-  "black.terms.5": "Subscriptions are for individuals, contact Enterprise for teams",
-  "black.terms.6": "Limits may be adjusted and plans may be discontinued in the future",
-  "black.terms.7": "Cancel your subscription at any time",
-  "black.finePrint.beforeTerms": "Prices shown don't include applicable tax",
-  "black.finePrint.terms": "Terms of Service",
-  "black.workspace.title": "OpenCode Black | Select Workspace",
-  "black.workspace.selectPlan": "Select a workspace for this plan",
-  "black.workspace.name": "Workspace {{n}}",
 
   "download.title": "OpenCode | Download",
   "download.meta.description": "Download OpenCode for macOS, Windows, and Linux",
@@ -372,7 +324,7 @@ export const dict = {
     "Any additional costs will come from your subscription to a model provider. While OpenCode works with any model provider, we recommend using",
   "download.faq.a5.p2.afterZen": ".",
 
-  "enterprise.title": "OpenCode | Enterprise solutions for your organisation",
+  "enterprise.title": "OpenCode | Enterprise solutions for your organization",
   "enterprise.meta.description": "Contact OpenCode for enterprise solutions",
   "enterprise.hero.title": "Your code is yours",
   "enterprise.hero.body1":
@@ -402,10 +354,11 @@ export const dict = {
   "enterprise.form.sending": "Sending...",
   "enterprise.form.success": "Message sent, we'll be in touch soon.",
   "enterprise.form.success.submitted": "Form submitted successfully.",
-  "enterprise.form.error.allFieldsRequired": "All fields are required.",
+  "enterprise.form.error.allFieldsRequired": "Please fill in all required fields.",
   "enterprise.form.error.invalidEmailFormat": "Invalid email format.",
   "enterprise.form.error.invalidInferenceSpend": "Select a valid inference spend range.",
   "enterprise.form.error.internalServer": "Internal server error.",
+  "enterprise.form.error.captcha": "Captcha verification failed. Please try again.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "What is OpenCode Enterprise?",
   "enterprise.faq.a1":
@@ -415,7 +368,7 @@ export const dict = {
     "Simply start with an internal trial with your team. OpenCode by default does not store your code or context data, making it easy to get started. Then contact us to discuss pricing and implementation options.",
   "enterprise.faq.q3": "How does enterprise pricing work?",
   "enterprise.faq.a3":
-    "We offer per-seat enterprise pricing. If you have your own LLM gateway, we do not charge for tokens used. For further details, contact us for a custom quote based on your organization's needs.",
+    "If you have your own LLM gateway, we do not charge for tokens used. For further details, contact us for a custom quote based on your organization's needs.",
   "enterprise.faq.q4": "Is my data secure with OpenCode Enterprise?",
   "enterprise.faq.a4":
     "Yes. OpenCode does not store your code or context data. All processing happens locally or through direct API calls to your AI provider. With central config and SSO integration, your data remains secure within your organization's infrastructure.",

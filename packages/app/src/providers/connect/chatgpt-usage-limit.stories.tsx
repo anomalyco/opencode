@@ -16,7 +16,7 @@ function UsageLimitStory() {
 }
 
 export default {
-  title: "App/Dialogs/Connect Provider",
+  title: "App/Dialogs/ChatGPT usage limit",
   id: "app-dialog-chatgpt-usage-limit",
 }
 

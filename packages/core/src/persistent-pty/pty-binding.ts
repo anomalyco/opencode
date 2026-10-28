@@ -1,4 +1,4 @@
-// Published separately by anomalyco/opencode-pty; it has not migrated npm scopes.
+// Published from packages/process-daemon under its original npm scope.
 import { binaryPath } from "@opencode-ai/pty"
 
 const binding: string | { readonly path: string; readonly version: string; readonly sha256: string } | undefined =

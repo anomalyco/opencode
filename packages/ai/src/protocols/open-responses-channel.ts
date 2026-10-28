@@ -1,10 +1,12 @@
 import { Effect, Schema, Stream } from "effect"
 import { Headers } from "effect/http"
 import { Framing } from "../route/framing.js"
-import type { HttpContext } from "../schema/index.js"
+import type { AIError, HttpContext } from "../schema/index.js"
 import {
   HttpTransport,
   WebSocketTransport,
+  type ChannelCreate,
+  type ChannelObservation,
   type Transport,
   type WebSocketChannelDriver,
   type WebSocketChannelExchange,
@@ -48,9 +50,81 @@ const message = (body: unknown) =>
     return { request: decoded, message: encodeMessage(decoded) }
   })
 
-const driver = (options: Options, body: string): WebSocketChannelDriver => {
+const driver = (options: Options, body: string): OpenResponsesContinuation.BaseDriver => {
   let responseID: string | undefined
   let terminal = false
+  const observeEvent = Effect.fnUntraced(function* (
+    _create: ChannelCreate,
+    frame: string,
+    event: OpenResponses.Event,
+  ): Effect.fn.Return<ChannelObservation, AIError> {
+    if (terminal)
+      return yield* ProviderShared.eventError(
+        options.id,
+        `${options.name} emitted ${event.type} after a terminal event`,
+        frame,
+      )
+    if (event.type === "error") {
+      terminal = true
+      return {
+        type: "provider-failure",
+        error: OpenResponses.providerFailure(event, `${options.name} stream error`, frame),
+      }
+    }
+    if (event.type === "response.failed") {
+      terminal = true
+      if (responseID && event.response?.id && event.response.id !== responseID)
+        return yield* ProviderShared.eventError(
+          options.id,
+          `${options.name} response ID changed during execution`,
+          frame,
+        )
+      return {
+        type: "provider-failure",
+        error: OpenResponses.providerFailure(event, `${options.name} response failed`, frame),
+      }
+    }
+    if (event.type === "response.created") {
+      const created = event.response?.id
+      if (responseID)
+        return yield* ProviderShared.eventError(
+          options.id,
+          `${options.name} emitted duplicate response.created`,
+          frame,
+        )
+      if (!created)
+        return yield* ProviderShared.eventError(
+          options.id,
+          `${options.name} response.created is missing response.id`,
+          frame,
+        )
+      responseID = created
+      return { type: "frame", frame }
+    }
+    // Keepalives and provider notifications carry no response state and may precede response.created.
+    if (!event.type.startsWith("response.")) return { type: "frame", frame }
+    if (!responseID)
+      return yield* ProviderShared.eventError(
+        options.id,
+        `${options.name} emitted ${event.type} before response.created`,
+        frame,
+      )
+    if (event.response?.id && event.response.id !== responseID)
+      return yield* ProviderShared.eventError(
+        options.id,
+        `${options.name} response ID changed during execution`,
+        frame,
+      )
+    if (event.type === "response.completed") {
+      terminal = true
+      return { type: "completed", frame }
+    }
+    if (event.type === "response.incomplete") {
+      terminal = true
+      return { type: "incomplete", frame }
+    }
+    return { type: "frame", frame }
+  })
   return {
     create: () =>
       Effect.sync(() => {
@@ -58,80 +132,14 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
         terminal = false
         return { message: body, mode: "full" }
       }),
-    observe: (_create, frame) =>
-      Effect.gen(function* () {
-        const event = yield* OpenResponses.decodeChannelEvent(frame).pipe(
-          Effect.mapError((cause) =>
-            ProviderShared.eventError(options.id, `Invalid ${options.name} WebSocket event`, frame, cause),
-          ),
-        )
-        if (terminal)
-          return yield* ProviderShared.eventError(
-            options.id,
-            `${options.name} emitted ${event.type} after a terminal event`,
-            frame,
-          )
-        if (event.type === "error") {
-          terminal = true
-          return {
-            type: "provider-failure",
-            error: OpenResponses.providerFailure(event, `${options.name} stream error`, frame),
-          }
-        }
-        if (event.type === "response.failed") {
-          terminal = true
-          if (responseID && event.response?.id && event.response.id !== responseID)
-            return yield* ProviderShared.eventError(
-              options.id,
-              `${options.name} response ID changed during execution`,
-              frame,
-            )
-          return {
-            type: "provider-failure",
-            error: OpenResponses.providerFailure(event, `${options.name} response failed`, frame),
-          }
-        }
-        if (event.type === "response.created") {
-          const created = event.response?.id
-          if (responseID)
-            return yield* ProviderShared.eventError(
-              options.id,
-              `${options.name} emitted duplicate response.created`,
-              frame,
-            )
-          if (!created)
-            return yield* ProviderShared.eventError(
-              options.id,
-              `${options.name} response.created is missing response.id`,
-              frame,
-            )
-          responseID = created
-          return { type: "frame", frame }
-        }
-        // Keepalives and provider notifications carry no response state and may precede response.created.
-        if (!event.type.startsWith("response.")) return { type: "frame", frame }
-        if (!responseID)
-          return yield* ProviderShared.eventError(
-            options.id,
-            `${options.name} emitted ${event.type} before response.created`,
-            frame,
-          )
-        if (event.response?.id && event.response.id !== responseID)
-          return yield* ProviderShared.eventError(
-            options.id,
-            `${options.name} response ID changed during execution`,
-            frame,
-          )
-        if (event.type === "response.completed") {
-          terminal = true
-          return { type: "completed", frame }
-        }
-        if (event.type === "response.incomplete") {
-          terminal = true
-          return { type: "incomplete", frame }
-        }
-        return { type: "frame", frame }
-      }),
+    observeEvent,
+    observe: (create, frame) =>
+      OpenResponses.decodeChannelEvent(frame).pipe(
+        Effect.mapError((cause) =>
+          ProviderShared.eventError(options.id, `Invalid ${options.name} WebSocket event`, frame, cause),
+        ),
+        Effect.flatMap((event) => observeEvent(create, frame, event)),
+      ),
   }
 }
 
