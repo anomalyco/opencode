@@ -423,7 +423,7 @@ describe("Job", () => {
       })
       yield* jobs.background(job.id)
       yield* Deferred.succeed(interrupted, undefined)
-      yield* jobs.wait({ id: job.id })
+      expect((yield* jobs.wait({ id: job.id })).info?.status).toBe("cancelled")
 
       const marker = (yield* jobs.pendingBackground).find((item) => item.id === job.id)
       expect(marker).toMatchObject({ id: job.id, status: "running" })

@@ -2,7 +2,7 @@ export * as SessionRunner from "./index.js"
 
 import type { FileSystem } from "../../filesystem.js"
 import type { AIError } from "@opencode/ai/effect"
-import { Context, Data, Effect } from "effect"
+import { Cause, Context, Data, Effect } from "effect"
 import { SessionSchema } from "../schema.js"
 import type { Promotable } from "../inbox.js"
 import type { AgentNotFoundError, MessageDecodeError, StepFailedError } from "../error.js"
@@ -40,3 +40,8 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunner") {}
+
+/** Annotates the interruption a user decline causes, so execution settles it as a deliberate stop. */
+export class Declined extends Context.Service<Declined, true>()("@opencode/SessionRunner/Declined") {}
+
+export const declined = Effect.failCause(Cause.annotate(Cause.interrupt(), Context.make(Declined, true)))

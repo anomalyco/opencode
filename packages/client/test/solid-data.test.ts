@@ -330,6 +330,135 @@ test("omits inline tool-result file payloads from read and live tool results whe
   }
 })
 
+test.each(["shutdown", "user", "previous-stop"] as const)(
+  "requires startup evidence for a live restart label: %s",
+  async (reason) => {
+    const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+    const api = OpenCode.make({
+      baseUrl: "http://opencode.local",
+      fetch: async () =>
+        Response.json({
+          data: [
+            {
+              id: "msg_assistant",
+              type: "assistant",
+              agent: "build",
+              model: { providerID: "provider", id: "model" },
+              content: [],
+              error: { type: "aborted", message: "Step interrupted" },
+              time: { created: 1, completed: 2 },
+            },
+            ...(reason === "previous-stop"
+              ? [{ id: "msg_idle", type: "idle", outcome: "interrupted", time: { created: 3 } }]
+              : []),
+          ].toReversed(),
+          cursor: {},
+        }),
+    })
+    const setup = createRoot((dispose) => ({
+      data: createData({
+        api: () => api,
+        directory: "/project",
+        event: {
+          on: () => () => {},
+          listen(handler) {
+            listeners.add(handler)
+            return () => listeners.delete(handler)
+          },
+        },
+      }),
+      dispose,
+    }))
+    try {
+      await setup.data.session.message.sync("ses_refresh")
+      const event: OpenCodeEvent = {
+        id: "evt_shutdown",
+        created: 4,
+        type: "session.execution.interrupted",
+        durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+        data: { sessionID: "ses_refresh", reason: reason === "user" ? "user" : "shutdown" },
+      }
+      listeners.forEach((listener) => listener({ name: event.type, details: event }))
+      expect(
+        setup.data.session.message.get("ses_refresh", "msg_assistant")?.metadata?.interruptionReason,
+      ).toBeUndefined()
+      const restart: OpenCodeEvent = {
+        id: "evt_restart",
+        created: 5,
+        type: "session.synthetic",
+        durable: { aggregateID: "ses_refresh", seq: 2, version: 1 },
+        data: {
+          sessionID: "ses_refresh",
+          text: "The server restarted while you were working.",
+          metadata: { notice: "restart" },
+        },
+      }
+      listeners.forEach((listener) => listener({ name: restart.type, details: restart }))
+      expect(setup.data.session.message.get("ses_refresh", "msg_assistant")?.metadata?.interruptionReason).toBe(
+        reason === "shutdown" ? "restart" : undefined,
+      )
+    } finally {
+      setup.dispose()
+    }
+  },
+)
+
+test("closes an unfinished assistant when a new step follows an idle boundary", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () =>
+      Response.json({
+        data: [
+          { id: "msg_idle", type: "idle", outcome: "succeeded", time: { created: 2 } },
+          {
+            id: "msg_unfinished",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "provider", id: "model" },
+            content: [],
+            time: { created: 1 },
+          },
+        ],
+        cursor: {},
+      }),
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    const event: OpenCodeEvent = {
+      id: "evt_step",
+      created: 1000,
+      type: "session.step.started",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        assistantMessageID: "msg_after_idle",
+        agent: "build",
+        model: { providerID: "provider", id: "model" },
+        started: 1000,
+      },
+    }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+    expect(setup.data.session.message.get("ses_refresh", "msg_unfinished")?.time).toMatchObject({ completed: 1000 })
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("revalidates after an event overtakes an active session read", async () => {
   let release!: () => void
   const gate = new Promise<void>((resolve) => (release = resolve))

@@ -1209,6 +1209,15 @@ export function AssistantTextContent(props: {
     return !!type && (type.includes("abort") || type.includes("interrupt"))
   }
 
+  const interruption = () =>
+    interrupted()
+      ? i18n.t(
+          props.message.metadata?.interruptionReason === "restart"
+            ? "ui.message.serverRestarted"
+            : "ui.message.interrupted",
+        )
+      : ""
+
   const labels = createMemo<MetaItem[]>(() => {
     const agent = agentLabel(props.message.agent, data.agents)
 
@@ -1243,7 +1252,7 @@ export function AssistantTextContent(props: {
 
   const meta = createMemo<MetaItem[]>(() => [
     ...(mobile() ? [] : labels()),
-    ...[duration(), interrupted() ? i18n.t("ui.message.interrupted") : ""].flatMap((label) =>
+    ...[duration(), interruption()].flatMap((label) =>
       label ? [{ label }] : [],
     ),
   ])

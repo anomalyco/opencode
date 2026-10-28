@@ -25,6 +25,7 @@ import { SessionModelRequest } from "../model-request.js"
 import { SessionSchema } from "../schema.js"
 import { toSessionError } from "../to-session-error.js"
 import { SessionUsage } from "../usage.js"
+import { SessionRunner } from "./index.js"
 import { SessionRunnerModel } from "./model.js"
 import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
@@ -271,7 +272,7 @@ export const make = Effect.gen(function* () {
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) {
           if (input.isLocationClosed()) return Outcome.Completed({ needsContinuation: true })
-          return yield* Effect.interrupt
+          return yield* SessionRunner.declined
         }
         if (tools.interrupted && tools.failure) return yield* Effect.failCause(tools.failure)
         if (tools.interrupted && Exit.isFailure(joined)) return yield* Effect.failCause(joined.cause)
