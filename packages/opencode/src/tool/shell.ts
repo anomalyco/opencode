@@ -444,8 +444,6 @@ export const ShellTool = Tool.define(
       let file = ""
       let sink: ReturnType<typeof createWriteStream> | undefined
       let cut = false
-      let expired = false
-      let aborted = false
 
       const closeSink = Effect.fnUntraced(function* () {
         const stream = sink
@@ -478,7 +476,7 @@ export const ShellTool = Tool.define(
         },
       })
 
-      const code: number | null = yield* Effect.scoped(
+      const exit = yield* Effect.scoped(
         Effect.gen(function* () {
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
@@ -540,31 +538,35 @@ export const ShellTool = Tool.define(
           const timeout = Effect.sleep(`${input.timeout + 100} millis`)
 
           const exit = yield* Effect.raceAll([
-            handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
+            // Signal termination fails exitCode; raceAll only settles on success.
+            handle.exitCode.pipe(
+              Effect.match({
+                onSuccess: (code: number) => ({ kind: "exit" as const, code }),
+                onFailure: (error) => ({ kind: "error" as const, code: null, error }),
+              }),
+            ),
             abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
             timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
           ])
 
-          if (exit.kind === "abort") {
-            aborted = true
-            yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-          }
-          if (exit.kind === "timeout") {
-            expired = true
+          if (exit.kind === "abort" || exit.kind === "timeout") {
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
           }
 
-          return exit.kind === "exit" ? exit.code : null
+          return exit
         }),
       ).pipe(Effect.orDie)
 
       const meta: string[] = []
-      if (expired) {
+      if (exit.kind === "timeout") {
         meta.push(
           `shell tool terminated command after exceeding timeout ${input.timeout} ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds.`,
         )
       }
-      if (aborted) meta.push("User aborted the command")
+      if (exit.kind === "abort") meta.push("User aborted the command")
+      if (exit.kind === "error") {
+        meta.push(exit.error.cause instanceof Error ? exit.error.cause.message : exit.error.message)
+      }
       const raw = list.map((item) => item.text).join("")
       const end = tail(raw, limits.maxLines, limits.maxBytes)
       if (end.cut) cut = true
@@ -585,8 +587,8 @@ export const ShellTool = Tool.define(
       return {
         title: input.command,
         metadata: {
-          output: last || preview(output),
-          exit: code,
+          output: exit.kind === "error" ? preview(output) : last || preview(output),
+          exit: exit.code,
           truncated: cut,
           ...(cut && file ? { outputPath: file } : {}),
         },
