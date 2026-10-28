@@ -130,6 +130,18 @@ Subagents run with fresh context in foreground or background child sessions. The
 }
 ```
 
+### Nested subagents
+
+By default, subagents cannot launch their own subagents. Set [`experimental.subagent_depth`](/config#subagent-depth) to `2` to allow a primary agent to launch a subagent that can launch another subagent:
+
+```jsonc title="opencode.jsonc"
+{
+  "experimental": { "subagent_depth": 2 },
+}
+```
+
+Each agent also needs permission to launch the target subagent. For example, the built-in `general` agent denies the `subagent` action by default, so increasing the depth alone does not enable it to delegate.
+
 ## Builtins
 
 OpenCode includes these visible agents:
