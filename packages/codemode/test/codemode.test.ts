@@ -297,9 +297,9 @@ describe("CodeMode call hooks", () => {
           name: "host",
           globals: {
             value: () => record("value", () => 1),
-            promise: () => record("promise", () => Promise.resolve(1)),
             asyncFn: async () => record("asyncFn", () => 1),
-            effect: () => Effect.sync(() => record("effect", () => 1)),
+            promise: Extension.async(() => record("promise", () => Promise.resolve(1))),
+            effect: Extension.async(() => Effect.sync(() => record("effect", () => 1))),
           },
         }),
       ],
@@ -307,14 +307,11 @@ describe("CodeMode call hooks", () => {
     })
     const run = async (code: string) => (await Effect.runPromise(runtime.execute(code))) as { value?: unknown }
 
-    // An async function's denial rejects its promise; any other global's denial throws at the call site.
-    expect(await run(`return await asyncFn().catch((e) => e.message)`)).toMatchObject({
-      value: "asyncFn is not allowed",
-    })
-    for (const name of ["value", "promise", "effect"])
-      expect(await run(`try { ${name}() } catch (e) { return e.message }`)).toMatchObject({
-        value: `${name} is not allowed`,
-      })
+    // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
+    expect(
+      await run(`return (await Promise.allSettled([asyncFn(), promise(), effect()])).map((r) => r.reason.message)`),
+    ).toMatchObject({ value: ["asyncFn is not allowed", "promise is not allowed", "effect is not allowed"] })
+    expect(await run(`try { value() } catch (e) { return e.message }`)).toMatchObject({ value: "value is not allowed" })
     expect(called).toEqual([])
   })
 

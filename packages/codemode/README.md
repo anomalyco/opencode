@@ -92,8 +92,9 @@ The Effect environment is inferred from the supplied tools. `hooks` surround eve
 host: `tool.before`/`tool.after` receive `{ name, input }` with decoded input, `extension.before`/`extension.after`
 receive `{ extension, name, args }`. An `after` hook also receives how the call ended (`success` with its value,
 `failure` with its error, or `interrupted`). A `before` hook runs before the call reaches the host, and a failing one
-denies it: the host function is never called, and the program catches the failure as a thrown error. A denied tool
-call or `async` extension function rejects its promise; any other denied extension global throws at the call site.
+denies it: the host function is never called, and the program catches the failure as a thrown error. A denied call
+fails the way the call itself would: a tool call or asynchronous global rejects its promise, and a synchronous global
+throws.
 
 ### `Extension.make`
 
@@ -101,8 +102,15 @@ Extensions are host functions a program calls directly as globals, such as `fetc
 catalog, not counted against `maxToolCalls`, and not described to the model; the host decides what they mean.
 
 ```ts
-const web = Extension.make({ name: "web", globals: { fetch: (url: string) => globalThis.fetch(url) } })
+const web = Extension.make({ name: "web", globals: { fetch: async (url: string) => globalThis.fetch(url) } })
 const runtime = CodeMode.make({ tools, extensions: [web] })
+```
+
+A global is synchronous unless it is an `async` function or is marked with `Extension.async`. Mark a plain function
+that returns a Promise or an Effect, so a denied call rejects its promise like any other failure:
+
+```ts
+Extension.make({ name: "web", globals: { fetch: Extension.async((url: string) => globalThis.fetch(url)) } })
 ```
 
 A global may return a value, a Promise, or an Effect. An Effect's requirements join the runtime's environment the same
@@ -112,12 +120,13 @@ way a tool's do, so the host can provide per-execution services such as the call
 const web = Extension.make({
   name: "web",
   globals: {
-    fetch: (url: string) =>
+    fetch: Extension.async((url: string) =>
       Effect.gen(function* () {
         const session = yield* Session
         yield* session.authorize(url)
         return yield* Effect.promise(() => globalThis.fetch(url))
       }),
+    ),
   },
 })
 const result = yield* CodeMode.make({ extensions: [web] }).execute(code).pipe(Effect.provideService(Session, session))

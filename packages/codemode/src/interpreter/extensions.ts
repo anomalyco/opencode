@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { Extension } from "../extension.js"
+import { type Extension, isAsync } from "../extension.js"
 import { type ExtensionInvocation, hooked } from "../tool-runtime.js"
 import type { Interpreter } from "./interpreter.js"
 import { createErrorValue, isErrorType } from "./intrinsics.js"
@@ -149,13 +149,12 @@ export const extensionGlobals = <R>(
         (after ? hooked(call, undefined, after, effect) : effect).pipe(
           Effect.mapBoth({ onFailure: cross, onSuccess: (result) => fromHost(result, label) }),
         )
-      // An async function never throws at its call site, so a denial rejects its promise like any other failure.
-      if (value instanceof AsyncFunction)
+      // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
+      if (isAsync(value))
         return pending(
           Effect.andThen(before ?? Effect.void, settle(Effect.suspend(() => callHost<R>(value, args).effect))),
           site,
         )
-      // Anything else may return a plain value, so the hook runs first and a denial throws where the call is.
       if (before) yield ctx.runner.blocking(before)
       const host = callHost<R>(value, args)
       if (host.async) return pending(settle(host.effect), site)
@@ -213,8 +212,6 @@ const crossing = <T>(convert: () => T): T | typeof left => {
     throw reason
   }
 }
-
-const AsyncFunction = (async () => {}).constructor
 
 const hostErrors = new Map<string, ErrorConstructor>([
   ["TypeError", TypeError],
