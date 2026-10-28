@@ -48,8 +48,15 @@ const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
 const OUTPUT_TOKEN_FALLBACK = 32_000
 // No reply needs more, however much the model allows.
 const OUTPUT_TOKEN_MAX = 256_000
-// Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
-const ESTIMATE_ERROR = 0.15
+// The unmeasured tail is estimated from characters and scaled to the provider's own counts (see
+// `SessionCompaction.estimatePrompt`); this covers what the scaling misses on a single step.
+const ESTIMATE_ERROR = 0.25
+// Share of the window an output limit never claims, at least `HEADROOM_MIN` unless that is more than
+// `HEADROOM_MAX_SHARE` of the window. Providers count framing that the estimate does not, a couple of hundred tokens a
+// step on some, and strict ones reject a request whose input and output exceed the window by a single token.
+const HEADROOM_SHARE = 0.01
+const HEADROOM_MIN = 4_000
+const HEADROOM_MAX_SHARE = 0.05
 // Never ask for less; only reachable with automatic compaction off, since it keeps the window from filling this far.
 const OUTPUT_TOKEN_MIN = 1_024
 
@@ -85,7 +92,11 @@ export interface Input {
 export const outputLimit = (limit: Model.Info["limit"], inputTokens?: Input["inputTokens"]) => {
   const requested = Math.min(limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK, OUTPUT_TOKEN_MAX)
   if (inputTokens === undefined || limit.context <= 0) return requested
-  const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
+  const headroom = Math.max(
+    Math.floor(limit.context * HEADROOM_SHARE),
+    Math.min(HEADROOM_MIN, Math.floor(limit.context * HEADROOM_MAX_SHARE)),
+  )
+  const room = limit.context - headroom - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
   return Math.min(requested, Math.max(OUTPUT_TOKEN_MIN, room))
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Message, ToolResultPart, Media } from "@opencode/ai/effect"
-import { boundImages, unsupportedParts } from "@opencode/core/session/model-request"
+import { boundImages, outputLimit, unsupportedParts } from "@opencode/core/session/model-request"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
 
@@ -243,5 +243,18 @@ describe("SessionModelRequest.boundImages", () => {
         value: [{ type: "text" }, { type: "file", name: "second.png" }],
       },
     })
+  })
+})
+
+describe("SessionModelRequest.outputLimit", () => {
+  test("never fills the window, so a low estimate does not overflow a strict provider", () => {
+    // Kimi K2.6 through OpenRouter (#58463): the output limit is 90% of the window, so it is fitted from a 26k prompt on.
+    const kimi = { context: 262_144, output: 235_929 }
+    expect(outputLimit(kimi, { measured: 20_000, estimated: 0 })).toBe(235_929)
+    // 4k stays free, plus a 25% margin on the unmeasured part: 262,144 − 4,000 − 100,000 − 5,000.
+    expect(outputLimit(kimi, { measured: 100_000, estimated: 4_000 })).toBe(153_144)
+    // 1% of a large window stays free, and at most 5% of a small one.
+    expect(outputLimit({ context: 1_000_000, output: 128_000 }, { measured: 900_000, estimated: 0 })).toBe(90_000)
+    expect(outputLimit({ context: 8_000, output: 4_000 }, { measured: 6_000, estimated: 0 })).toBe(1_600)
   })
 })

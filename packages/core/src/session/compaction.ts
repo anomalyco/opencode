@@ -40,7 +40,10 @@ import { SessionUsage } from "./usage.js"
 
 export type Settings = {
   auto: boolean
-  /** Tokens kept free below the model's limits before compacting. Unset keeps 15%, and at least 16k, free. */
+  /**
+   * Tokens kept free below the model's limits before compacting. Unset keeps 16k plus 10k free, or 16k plus 5% of the
+   * window when that is less.
+   */
   buffer?: number
   /** Tokens of recent conversation kept verbatim beside the summary. */
   keep: number
@@ -126,12 +129,17 @@ const NOTHING_TO_COMPACT: Failure = { error: { type: "compaction.unavailable", m
 const SHRINK_STEPS = [0.85, 0.7, 0.5, 0.35]
 // The least of the window kept free for the last reply before compaction and for the summary itself.
 const RESERVE_MIN = 16_000
+/** Share of the window kept free before automatic compaction when the window is too small to give up `RESERVE_MIN`. */
+const SMALL_WINDOW_RESERVE = 0.15
 /**
- * Share of the window kept free before automatic compaction. Above `RESERVE_MIN`, the margin between it and
- * `summaryRoom` absorbs a large step past the trigger, so the whole conversation still goes out unchanged and reuses
- * the cache. Single steps grew by up to ~22k tokens at p99 in real sessions.
+ * How far below `summaryRoom` automatic compaction starts, at most `TRIGGER_MARGIN_SHARE` of the window. Compaction
+ * runs once the context has passed the trigger, by an overshoot O with P(O > m) = E[(G − m)⁺] / E[G] for the growth G
+ * of one step, which depends on step sizes, not on the window. The summary still reuses the cache while O stays under
+ * this margin plus the tail kept beside it, since `deliver` sends the history before that tail unchanged up to
+ * `summaryRoom`. In real sessions 10k plus the 15k tail cover about 99% of overshoots.
  */
-const RESERVE_SHARE = 0.15
+const TRIGGER_MARGIN = 10_000
+const TRIGGER_MARGIN_SHARE = 0.05
 /** A common window size, assumed for the compaction request when the model's window is unknown. */
 const UNKNOWN_WINDOW = 200_000
 /** A summary gets at least this much output, or the room left if less, even when the estimate margin leaves less. */
@@ -149,6 +157,10 @@ const TRANSCRIPT_LEVELS = [0, OUTPUTS_CLIPPED, OUTPUTS_REMOVED, USER_ONLY, OMITT
 const TRANSCRIPT_CLIP = 2_000
 const IMAGE_TOKEN_ESTIMATE = 1_500
 const PDF_TOKEN_ESTIMATE = 2_000
+/** Consecutive measured responses the token ratio looks back over, appended tails it ignores, and its cap. */
+const CALIBRATION_STEPS = 16
+const CALIBRATION_MIN_TAIL = 500
+const CALIBRATION_MAX = 3
 /** Share of the compaction ceiling at which a background summary starts. */
 const PRECOMPUTE_RATIO = 0.85
 /** Measured prompt tokens below which a background summary is not worth its cost. */
@@ -472,6 +484,12 @@ export const layer = Layer.effect(
       // A hook can still make this request larger than that count; the provider then rejects it and it is resent as
       // text. An overflow already proved the count low, so it keeps the character estimate.
       const measured = trigger.reason === "overflow" ? undefined : measuredPrompt({ ...context, messages })
+      // The history before the kept tail ends at a response as well, so it is sized the same way.
+      const keepIndex = keepID === undefined ? -1 : messages.findIndex((message) => message.id === keepID)
+      const historyMeasured =
+        trigger.reason === "overflow" || keepIndex <= 0
+          ? undefined
+          : measuredPrompt({ ...context, messages: messages.slice(0, keepIndex) })
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
@@ -504,10 +522,10 @@ export const layer = Layer.effect(
 
       const overhead = Token.estimate(prompt) + Token.estimate(NUDGE)
       // Automatic compaction starts past the ceiling, so the whole conversation is sent unchanged while the window can
-      // still fit the summary. Below that, the history before the tail is sent instead, as before: unchanged when it fits,
-      // which still reuses the cache for that shorter prefix, and as text otherwise. Dropping exchanges to make room
-      // for the tail would leave them in neither the summary nor the tail. Where 15% of the window is under
-      // `RESERVE_MIN`, the ceiling equals `summaryRoom`, so automatic compaction always takes this fallback.
+      // still fit the summary. Past that, the history before the kept tail is sent unchanged under the same limit,
+      // which still reuses the cache for that shorter prefix, so the margin below `summaryRoom` and the kept tail add
+      // up; beyond both it goes as text. Dropping exchanges to make room for the tail would leave them in neither the
+      // summary nor the tail.
       const fit =
         trigger.reason === "overflow"
           ? budget
@@ -517,7 +535,7 @@ export const layer = Layer.effect(
         prepared,
         budget - overhead,
         send,
-        { fit: fit - overhead, history: withoutTail(prepared.request, keepID), measured },
+        { fit: fit - overhead, history: withoutTail(prepared.request, keepID), measured, historyMeasured },
         background,
       )
       if (!keepID) return result
@@ -578,9 +596,10 @@ export const layer = Layer.effect(
     })
 
     /**
-     * Sends the request as-is if it is estimated to fit `shrink.fit`, else `shrink.history` as-is if it fits `target`,
-     * and otherwise `shrink.history` as text aimed at `target` (see `flattenAndDropOldest`). `shrink.measured`, when
-     * given, sizes the unchanged request until the provider rejects it; after that it is only sent as text.
+     * Sends the request as-is if it is estimated to fit `shrink.fit`, else `shrink.history` as-is if it fits too, and
+     * otherwise `shrink.history` as text aimed at `target` (see `flattenAndDropOldest`). `shrink.measured` and
+     * `shrink.historyMeasured`, when given, size those two requests until the provider rejects one; after that the
+     * request is only sent as text.
      * Limits and estimates can be wrong, so until the provider rejects something as too long, a request that cannot
      * be made to fit is sent whole: unchanged, or as text once its media has to go. A "too long" rejection means the
      * estimate ran low, so the next attempts aim at 85%, 70%, 50%, then 35% of the first rejected request's estimate,
@@ -595,7 +614,12 @@ export const layer = Layer.effect(
       prepared: Prepared,
       target: number,
       send: (request: LLMRequest, size?: Estimate) => Effect.Effect<Result, AIError | Failure>,
-      shrink: { readonly fit: number; readonly history: LLMRequest; readonly measured?: Estimate } = {
+      shrink: {
+        readonly fit: number
+        readonly history: LLMRequest
+        readonly measured?: Estimate
+        readonly historyMeasured?: Estimate
+      } = {
         fit: target,
         history: prepared.request,
       },
@@ -612,11 +636,14 @@ export const layer = Layer.effect(
 
       while (true) {
         const measured = rejections === 0 ? shrink.measured : undefined
+        // With no tail to keep, the history is the unchanged request itself.
+        const historyMeasured =
+          shrink.history === prepared.request ? measured : rejections === 0 ? shrink.historyMeasured : undefined
         const unchanged = asText
           ? undefined
           : (measured ? total(measured) : estimateRequest(prepared.request)) <= fit
             ? prepared.request
-            : estimateRequest(shrink.history) <= target
+            : (historyMeasured ? total(historyMeasured) : estimateRequest(shrink.history)) <= fit
               ? shrink.history
               : undefined
         const request =
@@ -637,7 +664,7 @@ export const layer = Layer.effect(
           })
         }
 
-        const size = request === prepared.request ? measured : undefined
+        const size = request === prepared.request ? measured : request === shrink.history ? historyMeasured : undefined
         const attempt = yield* Effect.result(send(request, size))
         if (Result.isSuccess(attempt)) return attempt.success
         const cause = attempt.failure
@@ -1106,11 +1133,7 @@ export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
   // TODO: Pass compaction history the runner has already shaped. This and `recentUserMessages` repeat the
   // runner's unsupported-media and image-budget passes; here the image budget only sees images since the anchor,
   // so image-heavy sessions can estimate high.
-  const sent = SessionModelRequest.boundImages(
-    SessionModelRequest.unsupportedParts(base.messages, context.model.capabilities),
-  )
-  // The anchor's usage covers its own output, but not its local tool results, which the provider never saw.
-  const unmeasured = sent.filter((message) => message.role !== "assistant" || message.id !== anchor?.id)
+  const unmeasured = unmeasuredSince(context, base.messages, anchor?.id)
 
   if (anchor?.type !== "assistant" || !anchor.tokens)
     return {
@@ -1120,15 +1143,64 @@ export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
 
   const tokens = anchor.tokens
   return {
-    measured: tokens.input + tokens.cache.read + tokens.cache.write + tokens.output + tokens.reasoning,
-    estimated: unmeasured.reduce((sum, message) => sum + estimateMessage(message), 0),
+    measured: promptTokens(tokens) + tokens.output + tokens.reasoning,
+    estimated: Math.ceil(unmeasured.reduce((sum, message) => sum + estimateMessage(message), 0) * tokenRatio(context)),
   }
 }
 
+/** The messages as the runner sends them, without the anchor's own message, whose output the provider counted. */
+const unmeasuredSince = (context: SessionContext.Loaded, messages: Message[], anchorID?: SessionMessage.ID) =>
+  SessionModelRequest.boundImages(SessionModelRequest.unsupportedParts(messages, context.model.capabilities))
+    // The anchor's usage covers its own output, but not its local tool results, which the provider never saw.
+    .filter((message) => message.role !== "assistant" || message.id !== anchorID)
+
 /**
- * The largest request the model takes while leaving room for its reply: `RESERVE_SHARE` of the window, or
- * `RESERVE_MIN` when that is more. A summary request that must be shrunk is aimed at the same size. A window too small
- * to give up `RESERVE_MIN` keeps `RESERVE_SHARE`.
+ * Provider tokens per estimated token, from consecutive measured responses of this model: between two of them the
+ * prompt grew by the first one's output and reasoning plus what was appended after it, which the estimate counts from
+ * characters. chars/4 runs low on dense code and JSON for some tokenizers, about 1.6× for Claude. Never below 1, so
+ * an overcount only compacts a little early, and 1 until two responses since the last compaction have been measured.
+ */
+const tokenRatio = (context: SessionContext.Loaded) => {
+  const measured = context.messages.flatMap((message, index) =>
+    message.type === "assistant" &&
+    message.tokens &&
+    message.model.id === context.model.ref.id &&
+    hasMeasuredPrompt(message, context.model.ref)
+      ? [{ index, id: message.id, tokens: message.tokens }]
+      : [],
+  )
+  const recent = measured.slice(-(CALIBRATION_STEPS + 1))
+  const steps = recent
+    .slice(1)
+    .map((next, i) => {
+      const previous = recent[i]
+      const between = transcript(context, context.messages.slice(previous.index, next.index))
+      return {
+        estimated: unmeasuredSince(context, between.messages, previous.id).reduce(
+          (sum, message) => sum + estimateMessage(message),
+          0,
+        ),
+        counted:
+          promptTokens(next.tokens) -
+          promptTokens(previous.tokens) -
+          previous.tokens.output -
+          previous.tokens.reasoning,
+      }
+    })
+    // Small tails are mostly per-message framing, which the output limit's headroom covers.
+    .filter((step) => step.estimated >= CALIBRATION_MIN_TAIL)
+  const estimated = steps.reduce((sum, step) => sum + step.estimated, 0)
+  if (estimated === 0) return 1
+  return Math.min(CALIBRATION_MAX, Math.max(1, steps.reduce((sum, step) => sum + step.counted, 0) / estimated))
+}
+
+const promptTokens = (tokens: NonNullable<SessionMessage.Assistant["tokens"]>) =>
+  tokens.input + tokens.cache.read + tokens.cache.write
+
+/**
+ * The largest request the model takes while leaving room for its reply and the summary: `RESERVE_MIN` plus
+ * `TRIGGER_MARGIN` below the window. A summary request that must be shrunk is aimed at the same size. A window too
+ * small to give up `RESERVE_MIN` keeps `SMALL_WINDOW_RESERVE`.
  */
 const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer: number | undefined) => {
   // Unknown limits are reported as 0. An unknown input limit falls back to the context window; with no window at
@@ -1137,7 +1209,8 @@ const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer
   if (window <= 0) return Number.POSITIVE_INFINITY
   // A buffer that leaves no room, such as one set for a larger model, is ignored.
   if (buffer !== undefined && buffer < window) return window - buffer
-  return window - Math.max(Math.floor(window * RESERVE_SHARE), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
+  if (window < 2 * RESERVE_MIN) return window - Math.floor(window * SMALL_WINDOW_RESERVE)
+  return window - RESERVE_MIN - Math.min(TRIGGER_MARGIN, Math.floor(window * TRIGGER_MARGIN_SHARE))
 }
 
 /**
@@ -1156,7 +1229,7 @@ const hasMeasuredPrompt = (message: SessionMessage.Info, model: SessionContext.L
   message.model.providerID === model.providerID &&
   !message.error &&
   message.tokens !== undefined &&
-  message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0
+  promptTokens(message.tokens) > 0
 
 /** The prompt size, only while the model, variant and agent that were measured still match; they shape the request. */
 const measuredPrompt = (context: SessionContext.Loaded) => {
@@ -1176,9 +1249,10 @@ const measuredPrompt = (context: SessionContext.Loaded) => {
  * cannot shrink the conversation further. Lower the limit to the room the request being sent leaves in the window,
  * so the input and the requested output never exceed the window by our own estimate.
  *
- * The limit leaves the same margin for a low estimate that primary requests do. `deliver` aims at about 90% of the
- * window, so that margin alone would cut a summary near its target to the minimum; there it still gets up to
- * `SUMMARY_OUTPUT_FLOOR` of the room left without the margin.
+ * The limit leaves the same margin for a low estimate that primary requests do. `deliver` aims close to the window,
+ * so that margin alone would cut a summary near its target to the minimum; there it still gets up to
+ * `SUMMARY_OUTPUT_FLOOR` of the room left without the margin on the estimate. The window headroom always stays free:
+ * an output limit that fills the window exactly is rejected by strict providers whenever the estimate runs low.
  */
 const fitOutput = (request: LLMRequest, limit: SessionContext.Loaded["model"]["limit"], size?: Estimate) => {
   const current = request.generation?.maxTokens

@@ -3229,7 +3229,9 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(2)
     expect(userTexts(s.requests[0])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
-    expect(userTexts(s.requests[0])[0]).toContain("Recent exact request")
+    // The previous summary's kept tail is summarized again. The measured count says the history before the new tail
+    // no longer fits this 4k window unchanged, so it goes as text, the kept tail as its oldest entry.
+    expect(JSON.stringify(s.requests[0].messages)).toContain("Recent exact request")
     expect(userTexts(s.requests[0]).at(-1)).toBe(SessionCompaction.buildPrompt(true))
     expect((yield* store.context(sessionID))[0]).toMatchObject({
       type: "compaction",
@@ -3561,8 +3563,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Continue")
 
     expect(s.requests[0]?.generation?.maxTokens).toBe(64_000)
-    expect(s.requests[1]?.generation?.maxTokens).toBeLessThan(100_000 - 50_000)
-    expect(s.requests[1]?.generation?.maxTokens).toBeGreaterThan(100_000 - 50_000 - 200)
+    // 4k of the window always stays free, since strict providers reject a request that overshoots it by a token.
+    expect(s.requests[1]?.generation?.maxTokens).toBeLessThan(96_000 - 50_000)
+    expect(s.requests[1]?.generation?.maxTokens).toBeGreaterThan(96_000 - 50_000 - 200)
   })
 
   scenario("caps the output limit a large model advertises", function* (s) {
@@ -3587,8 +3590,8 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(2)
     expect(userTexts(s.requests[0]).at(-1)).toContain("## Objective")
-    // The summary may use the whole 30k reserve of a 200k window.
-    expect(s.requests[0]?.generation?.maxTokens).toBe(30_000)
+    // The summary may use all of the 22k that the 174k budget leaves in a 200k window beside the 4k headroom.
+    expect(s.requests[0]?.generation?.maxTokens).toBe(22_000)
     expect(s.requests[1]?.generation?.maxTokens).toBe(32_000)
   })
 

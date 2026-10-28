@@ -84,7 +84,7 @@ Add `compaction` to any [OpenCode configuration file](/config):
 | --- | ---: | --- |
 | `auto` | `true` | Compact automatically near the context limit, and recover once when a provider rejects a request as too long. Manual compaction always works. |
 | `keep.tokens` | `15000` | Approximate recent conversation kept beside the summary. Larger values preserve more detail but leave less room for new work. |
-| `buffer` | 15% of the limit, at least 16k | Tokens to keep free below the model's limit. Larger values start automatic compaction earlier. A buffer at least as large as the model's limit is ignored. |
+| `buffer` | 26k (16k plus 5% of the limit on smaller models) | Tokens to keep free below the model's limit. Larger values start automatic compaction earlier. A buffer at least as large as the model's limit is ignored. |
 
 `keep.tokens` and `buffer` accept non-negative integers.
 
