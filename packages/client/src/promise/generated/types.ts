@@ -264,6 +264,17 @@ export type McpStatusFailed = { status: "failed"; error: string }
 
 export type McpStatusNeedsAuth = { status: "needs_auth"; error: string }
 
+export type McpTrustedHost = { host: string; port: number; fingerprint: string; subject: string; validTo: number }
+
+export type McpTrustResult = {
+  host: string
+  port: number
+  fingerprint: string
+  subject: string
+  validTo: number
+  replaced: boolean
+}
+
 export type McpResource = { server: string; name: string; uri: string; description?: string; mimeType?: string }
 
 export type McpResourceTemplate = {
@@ -748,6 +759,8 @@ export type McpServer = {
   title?: string
   integrationID?: IntegrationID
 }
+
+export type McpTrustInspect = { cert: McpTrustedHost; stored?: McpTrustedHost }
 
 export type McpResourceCatalog = { resources: Array<McpResource>; templates: Array<McpResourceTemplate> }
 
@@ -2346,6 +2359,7 @@ export type ConfigEntry =
                   codemode?: boolean
                   timeout?: { startup?: number; catalog?: number; execution?: number }
                   protocol?: McpProtocol
+                  tls?: { ca_file?: string; ca_pem?: string; fingerprint?: string }
                 }
           }
         }
@@ -3942,6 +3956,7 @@ export type McpAddInput = {
         readonly codemode?: boolean
         readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
         readonly protocol?: "legacy" | "auto" | "2026-07-28"
+        readonly tls?: { readonly ca_file?: string; readonly ca_pem?: string; readonly fingerprint?: string }
       }
 }
 
@@ -3967,6 +3982,22 @@ export type McpDisconnectInput = {
 }
 
 export type McpDisconnectOutput = void
+
+export type McpTrustInspectInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly url: string
+}
+
+export type McpTrustInspectOutput = { location: LocationPublicRef; data: McpTrustInspect }
+
+export type McpTrustPinInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly url: string
+  readonly force?: boolean | undefined
+  readonly expectFingerprint?: string | undefined
+}
+
+export type McpTrustPinOutput = { location: LocationPublicRef; data: McpTrustResult }
 
 export type McpResourceCatalogInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

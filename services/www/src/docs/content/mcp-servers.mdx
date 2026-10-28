@@ -241,6 +241,31 @@ OpenCode reads the server's certificate once, compares the fingerprint, and then
 openssl s_client -connect 192.168.1.1:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
 ```
 
+### First use on a private network
+
+When the server URL is a private IP address (RFC 1918, loopback, or link-local), you can skip the `tls` config and trust the certificate on first use instead. The first connection fails with the certificate the server presents:
+
+```text
+TLS certificate for 192.168.1.1:443 is not trusted.
+Fingerprint: SHA256:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77.
+Subject: CN=OPNsense. If this is a server on your private network, trust it with:
+opencode mcp trust https://192.168.1.1/mcp
+```
+
+Check that the fingerprint matches what the server presents (with the `openssl s_client` command above), then trust it:
+
+```sh
+opencode mcp trust https://192.168.1.1/mcp
+```
+
+The command shows the certificate's subject, validity, and fingerprint and asks for confirmation. The pin is stored on this machine, per project, and later connections verify that the server presents exactly that certificate. If the appliance rotates its certificate, the connection fails until you re-pin it:
+
+```sh
+opencode mcp trust https://192.168.1.1/mcp --force
+```
+
+Only private IP literals qualify — hostnames never do, so a name cannot be pointed at another server through DNS. An explicit `tls` config always takes precedence.
+
 A TLS failure shows up as the server's connection status in `opencode mcp list` and `/mcps`. Unlike [NODE_EXTRA_CA_CERTS](/network), the trust applies to this server only.
 
 ## OAuth

@@ -29,6 +29,7 @@ import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpStdio } from "@opencode/core/mcp/stdio"
+import { McpTrustedHost } from "@opencode/core/mcp/trust"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -384,6 +385,7 @@ function resourceMcpLayer(
           },
         }),
         Layer.mock(Credential.Service, {}),
+        Layer.mock(McpTrustedHost.Service, {}),
         overrides?.environment ?? hostEnvironmentLayer,
       ),
     ),
@@ -2064,6 +2066,7 @@ const shutdownIt = testEffect(
       Form.node,
       Environment.node,
       Location.node,
+      McpTrustedHost.node,
     ]),
     [
       Location.node.replace(

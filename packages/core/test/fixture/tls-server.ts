@@ -4,9 +4,12 @@ import { Server, WebStandardStreamableHTTPServerTransport } from "@modelcontextp
 
 export const TLS_FIXTURE_DIR = path.join(import.meta.dir, "tls")
 
-// Long-lived self-signed certificate for 127.0.0.1 and localhost.
+// Long-lived self-signed certificates for 127.0.0.1 and localhost. The rotated pair presents a
+// different certificate (and fingerprint) from the default pair on the same host and port.
 export const CERT = readFileSync(path.join(TLS_FIXTURE_DIR, "localhost.crt"), "utf-8")
 export const KEY = readFileSync(path.join(TLS_FIXTURE_DIR, "localhost.key"), "utf-8")
+export const CERT_ROTATED = readFileSync(path.join(TLS_FIXTURE_DIR, "localhost2.crt"), "utf-8")
+export const KEY_ROTATED = readFileSync(path.join(TLS_FIXTURE_DIR, "localhost2.key"), "utf-8")
 
 export function startTlsMcpServer(options: { cert?: string; key?: string; port?: number } = {}) {
   const cert = options.cert ?? CERT

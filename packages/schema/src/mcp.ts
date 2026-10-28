@@ -1,7 +1,7 @@
 export * as Mcp from "./mcp.js"
 
 import { Schema } from "effect"
-import { optional, PositiveInt } from "./schema.js"
+import { DateTimeUtcFromMillis, optional, PositiveInt } from "./schema.js"
 import { IntegrationID } from "./integration-id.js"
 
 export class TimeoutConfig extends Schema.Class<TimeoutConfig>("Mcp.TimeoutConfig")({
@@ -83,6 +83,31 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
 
 export const ServerConfig = Schema.Union([LocalConfig, RemoteConfig]).pipe(Schema.toTaggedUnion("type"))
 export type ServerConfig = typeof ServerConfig.Type
+
+export interface TrustedHost extends Schema.Schema.Type<typeof TrustedHost> {}
+export const TrustedHost = Schema.Struct({
+  host: Schema.String,
+  port: PositiveInt,
+  fingerprint: Schema.String,
+  subject: Schema.String,
+  validTo: DateTimeUtcFromMillis,
+}).annotate({ identifier: "Mcp.TrustedHost" })
+
+export interface TrustInspect extends Schema.Schema.Type<typeof TrustInspect> {}
+export const TrustInspect = Schema.Struct({
+  cert: TrustedHost,
+  stored: optional(TrustedHost),
+}).annotate({ identifier: "Mcp.TrustInspect" })
+
+export interface TrustResult extends Schema.Schema.Type<typeof TrustResult> {}
+export const TrustResult = Schema.Struct({
+  host: Schema.String,
+  port: PositiveInt,
+  fingerprint: Schema.String,
+  subject: Schema.String,
+  validTo: DateTimeUtcFromMillis,
+  replaced: Schema.Boolean,
+}).annotate({ identifier: "Mcp.TrustResult" })
 
 const Connected = Schema.Struct({ status: Schema.Literal("connected") }).annotate({
   identifier: "Mcp.Status.Connected",

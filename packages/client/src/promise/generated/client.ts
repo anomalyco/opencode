@@ -156,6 +156,10 @@ import type {
   McpConnectOutput,
   McpDisconnectInput,
   McpDisconnectOutput,
+  McpTrustInspectInput,
+  McpTrustInspectOutput,
+  McpTrustPinInput,
+  McpTrustPinOutput,
   McpResourceCatalogInput,
   McpResourceCatalogOutput,
   McpClientTokenInput,
@@ -1497,6 +1501,34 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      trust: {
+        inspect: (input: McpTrustInspectInput, requestOptions?: RequestOptions) =>
+          request<McpTrustInspectOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/mcp/trust/inspect`,
+              query: { location: input["location"] },
+              body: { url: input["url"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        pin: (input: McpTrustPinInput, requestOptions?: RequestOptions) =>
+          request<McpTrustPinOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/mcp/trust`,
+              query: { location: input["location"] },
+              body: { url: input["url"], force: input["force"], expectFingerprint: input["expectFingerprint"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
       resource: {
         catalog: (input?: McpResourceCatalogInput, requestOptions?: RequestOptions) =>
           request<McpResourceCatalogOutput>(

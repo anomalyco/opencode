@@ -186,6 +186,60 @@ export function port(url: URL): number {
 }
 
 /**
+ * Return the host (brackets stripped) when it is a private IP literal: RFC 1918, loopback,
+ * link-local, or IPv6 unique-local. Public addresses and all hostnames return undefined.
+ * Hostnames are excluded because their DNS mapping is attacker-controllable, unlike an IP
+ * literal written in the configuration.
+ */
+export function privateHost(hostname: string): string | undefined {
+  const bare = hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname
+  const version = isIP(bare)
+  if (version === 4) return isPrivateIPv4(bare) ? bare : undefined
+  if (version === 6) return isPrivateIPv6(bare) ? bare : undefined
+  return undefined
+}
+
+function isPrivateIPv4(host: string): boolean {
+  const [a, b] = host.split(".").map(Number)
+  if (a === 127) return true
+  if (a === 10) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  if (a === 169 && b === 254) return true
+  return false
+}
+
+function isPrivateIPv6(host: string): boolean {
+  const groups = expandIPv6(host)
+  if (!groups) return false
+  if (groups.every((group, index) => (index === groups.length - 1 ? group === 1 : group === 0))) return true
+  const first = groups[0]
+  if (first >= 0xfe80 && first <= 0xfebf) return true
+  if (first >= 0xfc00 && first <= 0xfdff) return true
+  return false
+}
+
+function expandIPv6(host: string): number[] | undefined {
+  const halves = host.split("::")
+  if (halves.length > 2) return undefined
+  const parseHalf = (text: string): number[] | undefined => {
+    if (text === "") return []
+    const groups: number[] = []
+    for (const part of text.split(":")) {
+      if (!/^[0-9a-f]{1,4}$/i.test(part)) return undefined
+      groups.push(parseInt(part, 16))
+    }
+    return groups
+  }
+  const head = parseHalf(halves[0] ?? "")
+  const tail = halves.length === 2 ? parseHalf(halves[1]) : []
+  if (!head || !tail) return undefined
+  if (halves.length === 2 && head.length + tail.length > 7) return undefined
+  const groups = halves.length === 2 ? [...head, ...Array(8 - head.length - tail.length).fill(0), ...tail] : head
+  return groups.length === 8 ? groups : undefined
+}
+
+/**
  * Convert a DER certificate to PEM so it can be used as a trust anchor. Bytes are base64-encoded
  * in chunks to keep the spread argument small on large certificates.
  */
