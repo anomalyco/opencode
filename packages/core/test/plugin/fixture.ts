@@ -4,6 +4,7 @@ import { Command } from "@opencode/core/command"
 import { Config } from "@opencode/core/config"
 import { Credential } from "@opencode/core/credential"
 import { Database } from "@opencode/core/database/database"
+import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { AppProcess } from "@opencode/util/process"
@@ -11,6 +12,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { FileSystem } from "@opencode/core/filesystem"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { Form } from "@opencode/core/form"
 import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
@@ -78,7 +80,7 @@ const permissionLayer = Layer.succeed(
   }),
 )
 
-export const makePluginTestLayer = (permission = permissionLayer) =>
+export const makePluginTestLayer = (permission = permissionLayer, generate = generateLayer) =>
   AppNodeBuilder.build(
     LayerNode.group([
       AppProcess.node,
@@ -89,7 +91,9 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       Credential.node,
       Config.node,
       Database.node,
+      Environment.node,
       FileAccess.node,
+      Global.node,
       Bus.node,
       Form.node,
       Generate.node,
@@ -125,7 +129,7 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       Npm.node.replace(npmLayer),
       Config.node.replace(configLayer),
       Mcp.node.replace(emptyMcpLayer),
-      Generate.node.replace(generateLayer),
+      Generate.node.replace(generate),
       Permission.node.replace(permission),
     ],
   ).pipe(Layer.provideMerge(configLayer))

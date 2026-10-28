@@ -50,6 +50,9 @@ export const ModelsInput = Schema.Struct({
   provider: Schema.optionalKey(Schema.String).annotate({
     description: "Provider ID or name to filter by. Try your own provider first.",
   }),
+  type: Schema.optionalKey(Schema.Literals(["chat", "image", "decision"])).annotate({
+    description: 'Kind of model to list: "chat" for language models (the default), "image" for image generation, or "decision".',
+  }),
   all: Schema.optionalKey(Schema.Boolean).annotate({
     description: "Include older versions of each model family. By default only the newest version is listed.",
   }),
@@ -231,7 +234,7 @@ export const Plugin = {
               const terms = input.query?.toLowerCase().split(/\s+/).filter(Boolean) ?? []
               const names = new Map((yield* ctx.provider.list()).data.map((provider) => [provider.id, provider.name]))
               const provider = input.provider?.toLowerCase()
-              const matching = (yield* ctx.model.list()).data
+              const matching = (yield* ctx.model.list({ types: [input.type ?? "chat"] })).data
                 .filter(
                   (model) =>
                     provider === undefined ||
