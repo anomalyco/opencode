@@ -3,7 +3,7 @@ export * as GoalPlugin from "./goal.js"
 import { isContextOverflowFailure, Message } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionIdleBackground } from "@opencode/plugin/effect/session"
-import type { Session } from "@opencode/schema/session"
+import { Session } from "@opencode/schema/session"
 import { SessionGoal } from "@opencode/schema/session-goal"
 import { isExactRootFallback } from "@opencode/util/session-title-fallback"
 import { Cause, Clock, DateTime, Duration, Effect, FiberMap, Option, Schema, Stream } from "effect"
@@ -17,14 +17,15 @@ export const MAX_ROUNDS = 50
 export const MAX_STALLS = 3
 /** How long an active goal may sit idle, waiting on background work that never reports, before it pauses. */
 export const WAIT_LIMIT = Duration.minutes(30)
-/** Recent Sessions checked at startup for goals an earlier server process left active. */
-const SWEEP_LIMIT = 100
 // Identifies this server process. A goal armed by an earlier process comes back paused instead of resuming on its own.
 // Created on first use: Workers forbid random values while a module loads.
 let processBoot: string | undefined
 const boot = () => (processBoot ??= crypto.randomUUID())
 
 type State = SessionGoal.State
+const decodeState = Schema.decodeUnknownOption(SessionGoal.State)
+// Storage key prefix of a Session's goal. Plugin storage is the plugin's own, so children and forks start without one.
+const PREFIX = "session:"
 
 const Verdict = Schema.Struct({
   verdict: Schema.Literals(["done", "continue", "blocked", "paused", "wait"]),
@@ -39,18 +40,25 @@ const USAGE = "Usage: /goal <objective> | pause | resume | clear"
 export const Plugin = define({
   id: "opencode.goal",
   effect: Effect.fn(function* (ctx) {
-    const read = Effect.fn("GoalPlugin.read")(function* (sessionID: Session.ID) {
-      return SessionGoal.fromMetadata(sessionID, (yield* ctx.session.get({ sessionID })).metadata)
+    const read = Effect.fn("GoalPlugin.read")(function* (sessionID: string) {
+      return Option.getOrUndefined(decodeState(yield* ctx.storage.get(PREFIX + sessionID)))
     })
 
-    // Metadata updates replace the whole record, so keep the keys other writers own.
-    const write = Effect.fn("GoalPlugin.write")(function* (sessionID: Session.ID, goal: State | undefined) {
-      const metadata = (yield* ctx.session.get({ sessionID })).metadata ?? {}
-      const others = Object.fromEntries(Object.entries(metadata).filter(([key]) => key !== SessionGoal.KEY))
-      yield* ctx.session.update({ sessionID, metadata: goal ? { ...others, [SessionGoal.KEY]: goal } : others })
+    const rpc = yield* ctx.rpc
+      .register(SessionGoal.Definition, {
+        get: (input) => read(input.sessionID).pipe(Effect.map((goal) => goal ?? null)),
+      })
+      .pipe(Effect.orDie)
+
+    // Clients read the goal through `get` and follow `changed`, so every write publishes the new value.
+    const write = Effect.fn("GoalPlugin.write")(function* (sessionID: string, goal: State | undefined) {
+      yield* goal ? ctx.storage.set(PREFIX + sessionID, goal) : ctx.storage.remove(PREFIX + sessionID)
+      yield* rpc.events
+        .emit("changed", { sessionID, goal: goal ?? null })
+        .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to publish a goal change", { sessionID, cause })))
     })
 
-    // The loop's own writes only apply to the goal they were decided on. Metadata has no compare-and-set, so this
+    // The loop's own writes only apply to the goal they were decided on. Storage has no compare-and-set, so this
     // re-reads first: a `/goal pause`, `clear` or new goal that landed since wins instead of being overwritten.
     const replace = Effect.fn("GoalPlugin.replace")(function* (sessionID: Session.ID, expected: State, next: State) {
       const current = yield* read(sessionID)
@@ -268,11 +276,14 @@ export const Plugin = define({
           "session.execution.failed",
           "session.step.started",
           "session.step.ended",
+          "session.deleted",
         ],
       })
       .pipe(
         Stream.runForEach((event) => {
           const sessionID = event.data.sessionID
+          if (event.type === "session.deleted")
+            return FiberMap.remove(timers, sessionID).pipe(Effect.andThen(ctx.storage.remove(PREFIX + sessionID)))
           if (event.type === "session.step.started" || event.type === "session.step.ended")
             return touch(sessionID).pipe(
               Effect.catchCause((cause) => Effect.logWarning("failed to note goal activity", { sessionID, cause })),
@@ -298,20 +309,30 @@ export const Plugin = define({
       )
 
     // A goal an earlier process left active would show as running while nothing drives it, unless something wakes the
-    // Session. Pause those among recent Sessions now; the boot check in the hook covers the rest when they wake. This
-    // assumes one server process per database: a second one would pause the first one's live goals.
-    yield* ctx.session.list({ limit: SWEEP_LIMIT, order: "desc" }).pipe(
-      Effect.flatMap((page) =>
-        Effect.forEach(
-          page.data,
-          (session) => {
-            const goal = SessionGoal.fromMetadata(session.id, session.metadata)
-            if (goal?.status !== "active" || goal.boot === boot()) return Effect.void
-            return settle(session.id, goal, "paused", "The server restarted while the goal was active")
-          },
+    // Session, so pause those now; the boot check in the hook covers any that wake first. Goals of Sessions deleted
+    // while no instance listened are dropped. This assumes one server process per database: a second one would pause
+    // the first one's live goals.
+    yield* Effect.gen(function* () {
+      let after: string | undefined
+      do {
+        const page = yield* ctx.storage.scan({ prefix: PREFIX, after, limit: 100 })
+        yield* Effect.forEach(
+          page.entries,
+          (entry) =>
+            Effect.gen(function* () {
+              const session = yield* ctx.session
+                .get({ sessionID: Session.ID.make(entry.key.slice(PREFIX.length)) })
+                .pipe(Effect.option)
+              if (Option.isNone(session)) return yield* ctx.storage.remove(entry.key)
+              const goal = Option.getOrUndefined(decodeState(entry.value))
+              if (goal?.status !== "active" || goal.boot === boot()) return
+              yield* settle(session.value.id, goal, "paused", "The server restarted while the goal was active")
+            }),
           { discard: true },
-        ),
-      ),
+        )
+        after = page.next
+      } while (after !== undefined)
+    }).pipe(
       Effect.catchCause((cause) => Effect.logWarning("failed to pause goals left by an earlier process", { cause })),
       Effect.forkScoped({ startImmediately: true }),
     )
@@ -341,7 +362,6 @@ export const Plugin = define({
               if (goal?.status !== "paused") return yield* Effect.fail(new Error("No paused goal to resume."))
               const resumed: State = {
                 id: goal.id,
-                sessionID: goal.sessionID,
                 objective: goal.objective,
                 status: "active",
                 // The resume continuation is the first round of the new budget.
@@ -368,7 +388,6 @@ export const Plugin = define({
               )
             const created: State = {
               id: crypto.randomUUID(),
-              sessionID: input.sessionID,
               objective: text,
               status: "active",
               rounds: 0,

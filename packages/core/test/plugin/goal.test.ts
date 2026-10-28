@@ -8,8 +8,11 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Job } from "@opencode/core/job"
+import { KV } from "@opencode/core/kv"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Model } from "@opencode/core/model"
+import { GoalPlugin } from "@opencode/core/plugin/goal"
+import { PluginHost } from "@opencode/core/plugin/host"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -26,7 +29,7 @@ const llmLayer = TestLLM.testLayer({ fallback: TestLLM.text("Working on it", "wo
 const it = testEffect(
   Layer.merge(
     llmLayer,
-    AppNodeBuilder.build(LayerNode.group([Session.node, LocationServiceMap.node, Job.node]), [
+    AppNodeBuilder.build(LayerNode.group([Session.node, LocationServiceMap.node, Job.node, KV.node]), [
       Global.node.replace(tempGlobalLayer),
       offlineModels,
       Watcher.node.replace(Watcher.configured({ enabled: false })),
@@ -68,7 +71,6 @@ describe("goal plugin", () => {
 
       expect(verdicts.asked()).toBe(2)
       expect(yield* goal(session.id)).toMatchObject({
-        sessionID: session.id,
         objective: "Make the test suite pass",
         status: "complete",
         reason: "All 12 tests pass.",
@@ -300,20 +302,14 @@ describe("goal plugin", () => {
       )
       yield* sessions.prompt({ sessionID: session.id, text: "Look at the failing CI job" })
       yield* sessions.wait(session.id)
-      yield* sessions.setMetadata({
-        sessionID: session.id,
-        metadata: {
-          [SessionGoal.KEY]: {
-            id: "goal-compacted",
-            sessionID: session.id,
-            objective: "Make CI green",
-            status: "active",
-            rounds: 2,
-            maxRounds: 50,
-            boot: "an-earlier-process",
-            updatedAt: 0,
-          },
-        },
+      yield* setGoal(session.id, {
+        id: "goal-compacted",
+        objective: "Make CI green",
+        status: "active",
+        rounds: 2,
+        maxRounds: 50,
+        boot: "an-earlier-process",
+        updatedAt: 0,
       })
 
       yield* sessions.compact({ sessionID: session.id })
@@ -404,20 +400,14 @@ describe("goal plugin", () => {
       const sessions = yield* Session.Service
       const verdicts = reviewer('{"verdict":"continue","reason":"Not yet."}')
       yield* serve(verdicts.respond)
-      yield* sessions.setMetadata({
-        sessionID: session.id,
-        metadata: {
-          [SessionGoal.KEY]: {
-            id: "goal-earlier",
-            sessionID: session.id,
-            objective: "Migrate the database",
-            status: "active",
-            rounds: 3,
-            maxRounds: 20,
-            boot: "an-earlier-process",
-            updatedAt: 0,
-          },
-        },
+      yield* setGoal(session.id, {
+        id: "goal-earlier",
+        objective: "Migrate the database",
+        status: "active",
+        rounds: 3,
+        maxRounds: 20,
+        boot: "an-earlier-process",
+        updatedAt: 0,
       })
 
       yield* sessions.prompt({ sessionID: session.id, text: "Server came back" })
@@ -431,7 +421,7 @@ describe("goal plugin", () => {
     }),
   )
 
-  it.live("ignores the goal a child session inherits from its parent", () =>
+  it.live("does not give a child session its parent's goal", () =>
     Effect.gen(function* () {
       const session = yield* project()
       const sessions = yield* Session.Service
@@ -441,15 +431,13 @@ describe("goal plugin", () => {
       const gate = yield* llm.gate()
       yield* sessions.command({ sessionID: session.id, command: "goal", text: "Tidy the docs" })
       yield* gate.started
-      // Created while the parent's goal is active, so the child copies an active goal.
+      // Created while the parent's goal is active.
       const child = yield* sessions.create({ parentID: session.id, title: "Helper", agent: Agent.ID.make("build") })
       yield* gate.release
       yield* sessions.wait(session.id)
       expect(verdicts.asked()).toBe(1)
 
-      expect(
-        Option.getOrUndefined(decodeGoal((yield* sessions.get(child.id)).metadata?.[SessionGoal.KEY])),
-      ).toMatchObject({ sessionID: session.id, status: "active" })
+      expect(yield* goal(child.id)).toBeUndefined()
       yield* sessions.prompt({ sessionID: child.id, text: "Help out" })
       yield* sessions.wait(child.id)
 
@@ -489,7 +477,6 @@ describe("goal plugin", () => {
 
       yield* sessions.command({ sessionID: session.id, command: "goal", text: "clear" })
       expect(yield* goal(session.id)).toBeUndefined()
-      expect((yield* sessions.get(session.id)).metadata).toEqual({})
     }),
   )
 })
@@ -535,12 +522,19 @@ function serve(respond: (request: LLMRequest) => TestLLM.Response) {
   return TestLLM.Test.use((llm) => llm.serve(respond))
 }
 
+// The goal plugin's own storage, as the plugin host hands it to the plugin.
+const goals = KV.Service.use((kv) => Effect.succeed(PluginHost.storage(kv, GoalPlugin.Plugin.id)))
 const decodeGoal = Schema.decodeUnknownOption(SessionGoal.State)
 
 function goal(sessionID: Session.ID) {
-  return Session.Service.use((sessions) => sessions.get(sessionID)).pipe(
-    Effect.map((session) => Option.getOrUndefined(decodeGoal(session.metadata?.[SessionGoal.KEY]))),
+  return goals.pipe(
+    Effect.flatMap((storage) => storage.get(`session:${sessionID}`)),
+    Effect.map((value) => Option.getOrUndefined(decodeGoal(value))),
   )
+}
+
+function setGoal(sessionID: Session.ID, state: SessionGoal.State) {
+  return goals.pipe(Effect.flatMap((storage) => storage.set(`session:${sessionID}`, state)))
 }
 
 // The interrupt watcher reacts to the bus stream, after the interrupted execution has settled.

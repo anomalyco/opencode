@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Duration, Effect, Queue, Stream } from "effect"
+import { DateTime, Duration, Effect, Option, Queue, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import type { Plugin } from "@opencode/plugin/effect"
 import type { CommandDefinition } from "@opencode/plugin/effect/command"
@@ -33,35 +33,56 @@ const execution = (type: Execution["type"]): Execution => ({
 const step = (stepSessionID: Session.ID) =>
   ({ type: "session.step.started", data: { sessionID: stepSessionID } }) as unknown as SessionEvent.Step.Started
 
-/** Runs the goal plugin against stubbed domains: one Session whose metadata the plugin reads and writes. */
-const run = Effect.fnUntraced(function* (metadata: Record<string, unknown> = {}) {
-  const state = { metadata }
+/** Runs the goal plugin against stubbed domains: plugin storage in memory, and RPC that records what it publishes. */
+const run = Effect.fnUntraced(function* (seed?: SessionGoal.State) {
+  const stored = new Map<string, Schema.Json>(seed ? [[`session:${sessionID}`, seed]] : [])
+  const changed: unknown[] = []
+  const handlers: { get?: (input: { sessionID: string }) => Effect.Effect<SessionGoal.State | null> } = {}
   const events = yield* Queue.unbounded<Watched>()
   const commands: CommandDefinition[] = []
-  const info = (id: Session.ID = sessionID) =>
-    // SAFETY: the plugin reads only the id, parent, title, creation time and metadata of a Session.
+  const info = (id: Session.ID) =>
+    // SAFETY: the plugin reads only the id, parent, title and creation time of a Session.
     ({
       id,
       parentID: parents[id],
       title: "Release",
       time: { created: DateTime.makeUnsafe(0) },
-      metadata: id === sessionID ? state.metadata : {},
     }) as unknown as Session.Info
   const session: Partial<Plugin.Context["session"]> = {
     // SAFETY: these tests drive the plugin through events and commands, not its session hooks.
     hook: (() => Effect.void) as never,
     get: (input) => Effect.sync(() => info(input.sessionID)),
-    // SAFETY: the startup sweep reads only `data`.
-    list: () => Effect.sync(() => ({ data: [info()], cursor: {} })) as never,
-    update: (input) =>
-      Effect.sync(() => {
-        if (input.metadata) state.metadata = input.metadata
-      }),
+    update: () => Effect.void,
     synthetic: () => Effect.void as never,
   }
   yield* GoalPlugin.Plugin.effect(
     host({
       session,
+      storage: {
+        get: (key) => Effect.sync(() => stored.get(key)),
+        set: (key, value) => Effect.sync(() => void stored.set(key, value)),
+        remove: (key) => Effect.sync(() => void stored.delete(key)),
+        scan: (options) =>
+          Effect.sync(() => ({
+            entries: [...stored].flatMap(([key, value]) => (key.startsWith(options.prefix) ? [{ key, value }] : [])),
+          })),
+      },
+      rpc: Object.assign(
+        () => {
+          throw new Error("unused rpc.client")
+        },
+        {
+          // SAFETY: the goal plugin registers one RPC, whose `get` handler and `changed` events these tests observe.
+          register: ((_definition: unknown, registered: typeof handlers) =>
+            Effect.sync(() => {
+              handlers.get = registered.get
+              return {
+                dispose: Effect.void,
+                events: { emit: (_name: string, data: unknown) => Effect.sync(() => void changed.push(data)) },
+              }
+            })) as never,
+        },
+      ),
       // SAFETY: the plugin only filters the stream by event type.
       event: { subscribe: () => Stream.fromQueue(events) as never },
       command: {
@@ -75,7 +96,10 @@ const run = Effect.fnUntraced(function* (metadata: Record<string, unknown> = {})
   // Let the forked event watcher and startup sweep start.
   yield* Effect.yieldNow
   return {
-    goal: () => SessionGoal.fromMetadata(sessionID, state.metadata),
+    goal: () =>
+      Option.getOrUndefined(Schema.decodeUnknownOption(SessionGoal.State)(stored.get(`session:${sessionID}`))),
+    changed,
+    get: () => handlers.get?.({ sessionID }) ?? Effect.die("the goal RPC was not registered"),
     command: (text: string) =>
       Effect.forEach(commands, (definition) =>
         definition.execute({ sessionID, prompt: { text }, delivery: "steer" }).pipe(Effect.orDie),
@@ -91,16 +115,13 @@ describe("goal plugin waiting", () => {
   it.effect("pauses a goal an earlier server process left active when the plugin starts", () =>
     Effect.gen(function* () {
       const plugin = yield* run({
-        [SessionGoal.KEY]: {
-          id: "goal-earlier",
-          sessionID,
-          objective: "Ship the release",
-          status: "active",
-          rounds: 1,
-          maxRounds: 50,
-          boot: "an-earlier-process",
-          updatedAt: 0,
-        },
+        id: "goal-earlier",
+        objective: "Ship the release",
+        status: "active",
+        rounds: 1,
+        maxRounds: 50,
+        boot: "an-earlier-process",
+        updatedAt: 0,
       })
 
       expect(plugin.goal()).toMatchObject({
@@ -167,6 +188,25 @@ describe("goal plugin waiting", () => {
       // The wait was decided on the active goal; the user's pause since then wins.
       yield* TestClock.adjust(GoalPlugin.WAIT_LIMIT)
       expect(plugin.goal()).toMatchObject({ status: "paused", reason: "Paused by the user" })
+    }),
+  )
+
+  it.effect("serves the goal over RPC and publishes every change", () =>
+    Effect.gen(function* () {
+      const plugin = yield* run()
+      expect(yield* plugin.get()).toBeNull()
+
+      yield* plugin.command("Ship the release")
+      yield* plugin.command("pause")
+      expect(yield* plugin.get()).toMatchObject({ objective: "Ship the release", status: "paused" })
+      yield* plugin.command("clear")
+
+      expect(yield* plugin.get()).toBeNull()
+      expect(plugin.changed).toMatchObject([
+        { sessionID, goal: { objective: "Ship the release", status: "active" } },
+        { sessionID, goal: { status: "paused", reason: "Paused by the user" } },
+        { sessionID, goal: null },
+      ])
     }),
   )
 })

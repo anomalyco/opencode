@@ -23,7 +23,9 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
         id === "session.child.first" ? ["ctrl+j"] : id === "command.palette.show" ? ["ctrl+p"] : [],
       dispatch: (id: string) => dispatched.push(id),
     },
+    client: { rpc: () => ({ get: () => Promise.resolve(null), events: { on: () => () => {} } }) },
     data: {
+      on: () => () => {},
       session: {
         family: () => ["session", "child"],
         status: (id: string) => (id === "child" ? "running" : "idle"),
@@ -81,7 +83,9 @@ test("prompt footer can hide details", async () => {
         return []
       },
     },
+    client: { rpc: () => ({ get: () => Promise.resolve(null), events: { on: () => () => {} } }) },
     data: {
+      on: () => () => {},
       session: {
         family: () => ["session"],
         status: () => "running",
@@ -143,7 +147,6 @@ test("prompt footer shows the session's goal without its objective and opens it 
   const warning = RGBA.fromInts(200, 200, 0)
   const goal = {
     id: "goal",
-    sessionID: "session",
     objective: "Make the test suite pass",
     status: "active",
     rounds: 3,
@@ -151,7 +154,8 @@ test("prompt footer shows the session's goal without its objective and opens it 
     boot: "boot",
     updatedAt: 0,
   }
-  const [metadata, setMetadata] = createSignal<Record<string, unknown>>({ "opencode.goal": goal })
+  const fetched = Promise.resolve(goal)
+  const changed: ((event: { data: { sessionID: string; goal: unknown } }) => void)[] = []
   const dialogs: unknown[] = []
   const context = {
     location: { directory: "/workspace" },
@@ -164,11 +168,18 @@ test("prompt footer shows the session's goal without its objective and opens it 
     },
     keymap: { shortcuts: () => [] },
     ui: { dialog: { show: (render: unknown) => dialogs.push(render) }, toast: { show: () => {} } },
+    client: {
+      rpc: () => ({
+        get: () => fetched,
+        events: { on: (_name: string, handler: (typeof changed)[number]) => (changed.push(handler), () => {}) },
+      }),
+    },
     data: {
+      on: () => () => {},
       session: {
         family: () => ["session"],
         status: () => "idle",
-        get: () => ({ id: "session", location: { directory: "/workspace" }, metadata: metadata() }),
+        get: () => ({ id: "session", location: { directory: "/workspace" } }),
         cost: () => 0,
         message: { list: () => [] },
       },
@@ -182,6 +193,8 @@ test("prompt footer shows the session's goal without its objective and opens it 
   )
 
   try {
+    // The footer fetches the goal from the goal plugin's RPC.
+    await fetched
     await app.renderOnce()
     const frame = app.captureCharFrame()
     expect(frame).toContain("◎ goal")
@@ -194,13 +207,16 @@ test("prompt footer shows the session's goal without its objective and opens it 
     expect(dialogs).toHaveLength(1)
     await app.mockMouse.moveTo(70, 1)
 
-    setMetadata({ "opencode.goal": { ...goal, status: "paused", reason: "Stopped by the user" } })
+    // Then it follows the plugin's changes for this Session only.
+    const change = (sessionID: string, next: unknown) =>
+      changed.forEach((handler) => handler({ data: { sessionID, goal: next } }))
+    change("session", { ...goal, status: "paused", reason: "Stopped by the user" })
+    change("other", null)
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("◎ goal paused")
     expect(findText(app.renderer.root, "◎ goal paused")?.fg.toInts()).toEqual(warning.toInts())
 
-    // A goal copied from a parent belongs to the parent, so the footer ignores it.
-    setMetadata({ "opencode.goal": { ...goal, sessionID: "parent" } })
+    change("session", null)
     await app.renderOnce()
     expect(app.captureCharFrame()).not.toContain("goal")
   } finally {

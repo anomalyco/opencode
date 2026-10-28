@@ -1,39 +1,46 @@
 export * as SessionGoal from "./session-goal.js"
 
-import { Option, Schema } from "effect"
-
-/** Session metadata key holding the goal that `/goal` set. */
-export const KEY = "opencode.goal"
+import { Schema } from "effect"
+import { Rpc } from "./rpc.js"
+import { optional } from "./schema.js"
 
 export const Status = Schema.Literals(["active", "paused", "complete"])
 export type Status = typeof Status.Type
 
+export interface State extends Schema.Schema.Type<typeof State> {}
 export const State = Schema.Struct({
   id: Schema.String,
-  sessionID: Schema.String,
   objective: Schema.String,
   status: Status,
   /** Why the goal last changed: the reviewer's reason, or what paused it. */
-  reason: Schema.optionalKey(Schema.String),
+  reason: optional(Schema.String),
   /** Continuations sent since the goal was set or last resumed. */
   rounds: Schema.Number,
   /** A backstop for loops that stall detection misses. */
   maxRounds: Schema.Number,
   /** Rounds in a row without progress: no tool calls, or the same reason as the round before. */
-  stalls: Schema.optionalKey(Schema.Number),
+  stalls: optional(Schema.Number),
   /** The server process that armed the goal. */
   boot: Schema.String,
   updatedAt: Schema.Number,
 }).annotate({ identifier: "SessionGoal.State" })
-export type State = typeof State.Type
-
-const decode = Schema.decodeUnknownOption(State)
 
 /**
- * The goal a Session set for itself. Children and forks copy their parent's metadata, so a copied
- * goal names another Session and is ignored.
+ * The `/goal` plugin's RPC. Clients read a Session's goal with `get` and keep it current from `changed`, which the
+ * plugin publishes in the Session's Location on every write. A Session's goal is its own: children and forks start
+ * without one. The schemas are Standard Schemas too, so Promise clients can call it.
  */
-export function fromMetadata(sessionID: string, metadata: Readonly<Record<string, unknown>> | undefined) {
-  const goal = Option.getOrUndefined(decode(metadata?.[KEY]))
-  return goal?.sessionID === sessionID ? goal : undefined
-}
+export const Definition = Rpc.define({
+  id: "opencode.goal",
+  methods: {
+    get: {
+      input: Schema.toStandardSchemaV1(Schema.Struct({ sessionID: Schema.String })),
+      output: Schema.toStandardSchemaV1(Schema.NullOr(State)),
+    },
+  },
+  events: {
+    changed: {
+      schema: Schema.toStandardSchemaV1(Schema.Struct({ sessionID: Schema.String, goal: Schema.NullOr(State) })),
+    },
+  },
+})

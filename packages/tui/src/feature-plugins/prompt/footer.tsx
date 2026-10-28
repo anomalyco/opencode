@@ -5,7 +5,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { useInteractivity } from "../../context/interactivity"
 import { stringWidth } from "../../util/string-width"
-import { GoalStatus, sessionGoal } from "./goal"
+import { createSessionGoal, GoalStatus } from "./goal"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -50,7 +50,7 @@ export function PromptFooter(props: {
     ].filter((item): item is string => Boolean(item))
   })
   const live = createMemo(() => Boolean(subagents() || shells()))
-  const goal = createMemo(() => (props.sessionID ? sessionGoal(props.context, props.sessionID) : undefined))
+  const goal = createSessionGoal(props.context, () => props.sessionID)
   // Prompt hints read as disabled while the session does not own input, e.g. while a side panel is focused.
   const interactive = useInteractivity()
   const shortcut = (id: string) => props.context.keymap.shortcuts(id)[0]
@@ -96,7 +96,7 @@ export function PromptFooter(props: {
                     {" · "}
                   </text>
                 </Show>
-                <GoalStatus context={props.context} sessionID={props.sessionID ?? ""} />
+                <GoalStatus context={props.context} sessionID={props.sessionID ?? ""} goal={goal} />
               </Show>
               <Show when={props.showDetails && layout().usage && status().length > 0}>
                 <text fg={props.context.theme.text.muted} wrapMode="none" flexShrink={0}>
