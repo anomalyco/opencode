@@ -19,6 +19,10 @@ function catalog(...providers: ReturnType<typeof provider>[]) {
   return new Map(providers.map((provider) => [provider.id, provider]))
 }
 
+function label(labels: ReturnType<typeof composerModelLabels>, providerID: string, modelID: string) {
+  return labels.get(composerModelLabelKey(providerID, modelID))
+}
+
 const root = provider("opencode", "Anomaly / OpenCode", { integrationID: "opencode", models: [] })
 
 const managed = provider("console-openai", "Anomaly / OpenAI", { integrationID: "opencode", canonical: "openai" })
@@ -26,52 +30,42 @@ const managed = provider("console-openai", "Anomaly / OpenAI", { integrationID: 
 test.each([
   provider("opencode", "Anomaly / OpenCode", { integrationID: "opencode" }),
   provider("opencode", "OpenCode"),
-])("omits native provider $name in composer but retains its accessible context", (native) => {
+])("omits native provider $name", (native) => {
   const all = catalog(native)
-  expect(composerProviderName("opencode", all)).toBe("OpenCode")
-  expect(composerModelLabels(all).get(composerModelLabelKey("opencode", "m"))).toEqual({
-    provider: undefined,
-    model: "Model",
-    full: `${native.name} / Model`,
-  })
+
+  expect(composerProviderName("opencode", all)).toBeUndefined()
+  expect(label(composerModelLabels(all), "opencode", "m")).toEqual({ provider: undefined, model: "Model" })
 })
 
 test.each([
   { direct: provider("openai", "Renamed", { models: [] }), connected: [], expected: "OpenAI" },
-  { direct: provider("openai", "Renamed", { models: [] }), connected: ["openai"], expected: "Anomaly / OpenAI" },
+  { direct: provider("openai", "Renamed", { models: [] }), connected: ["openai"], expected: "OpenCode / OpenAI" },
   {
-    direct: provider("account", "Owls", { integrationID: "openai" }),
+    direct: provider("account", "Owls", { integrationID: "openai", models: [] }),
     connected: ["account"],
-    expected: "Anomaly / OpenAI",
+    expected: "OpenCode / OpenAI",
   },
-  { direct: provider("proxy", "OpenAI", { canonical: "openai" }), connected: ["proxy"], expected: "OpenAI" },
+  {
+    direct: provider("proxy", "OpenAI", { canonical: "openai", models: [] }),
+    connected: ["proxy"],
+    expected: "OpenAI",
+  },
   { direct: provider("azure", "Azure", { canonical: "openai" }), connected: ["azure"], expected: "OpenAI" },
 ])("matches connected stable identities, not names or canonical proxies: $direct.id / $connected", (row) => {
   const all = catalog(root, managed, row.direct)
-  expect(composerProviderName(managed.id, all, { connected: row.connected })).toBe(row.expected)
-})
 
-test("shared helper retains workspace origin by default and supports composer origin", () => {
-  const all = catalog(root, managed, provider("openai", "OpenAI", { models: [] }))
-  expect(composerProviderName(managed.id, all)).toBe("Anomaly / OpenAI")
-  expect(composerProviderName(managed.id, all, { origin: "OpenCode" })).toBe("OpenCode / OpenAI")
-  expect(composerProviderName("openai", all)).toBe("OpenAI")
-})
-
-test.each([
-  { connected: ["opencode", "console-openai"], provider: "OpenAI", full: "Anomaly / OpenAI / Model" },
-  {
-    connected: ["opencode", "console-openai", "openai"],
-    provider: "OpenCode / OpenAI",
-    full: "OpenCode / OpenAI / Model (Anomaly / OpenAI / Model)",
-  },
-])("composer origin follows direct connection availability: $provider", (row) => {
-  const all = catalog(root, managed, provider("openai", "OpenAI", { models: [] }))
-  expect(composerModelLabels(all, { connected: row.connected }).get(composerModelLabelKey(managed.id, "m"))).toEqual({
-    provider: row.provider,
+  expect(composerProviderName(managed.id, all, [managed.id, ...row.connected])).toBe(row.expected)
+  expect(label(composerModelLabels(all, [managed.id, ...row.connected]), managed.id, "m")).toEqual({
+    provider: row.expected,
     model: "Model",
-    full: row.full,
   })
+})
+
+test("only connected providers get labels", () => {
+  const labels = composerModelLabels(catalog(root, managed, provider("openai", "OpenAI")), [managed.id])
+
+  expect(label(labels, managed.id, "m")).toEqual({ provider: "OpenAI", model: "Model" })
+  expect(label(labels, "openai", "m")).toBeUndefined()
 })
 
 test("unknown managed routes do not infer identity from console prefixes or display names", () => {
@@ -82,11 +76,7 @@ test("unknown managed routes do not infer identity from console prefixes or disp
   )
 
   expect(composerProviderName("console-openai", all)).toBe("OpenAI")
-  expect(composerModelLabels(all).get(composerModelLabelKey("console-openai", "m"))).toEqual({
-    provider: "console-openai",
-    model: "Model",
-    full: "console-openai / Model (Anomaly / OpenAI / Model)",
-  })
+  expect(label(composerModelLabels(all), "console-openai", "m")).toEqual({ provider: "console-openai", model: "Model" })
 })
 
 test("duplicate provider labels use raw IDs only for overlapping model labels", () => {
@@ -99,49 +89,27 @@ test("duplicate provider labels use raw IDs only for overlapping model labels", 
         ],
       }),
       provider("b", "OpenAI"),
-      provider("empty", "OpenAI", { models: [] }),
     ),
   )
 
-  expect(labels.get(composerModelLabelKey("a", "m"))).toEqual({
-    provider: "a",
-    model: "Model",
-    full: "a / Model (OpenAI / Model)",
-  })
-  expect(labels.get(composerModelLabelKey("b", "m"))).toEqual({
-    provider: "b",
-    model: "Model",
-    full: "b / Model (OpenAI / Model)",
-  })
-  expect(labels.get(composerModelLabelKey("a", "other"))).toEqual({
-    provider: "OpenAI",
-    model: "Other",
-    full: "OpenAI / Other",
-  })
+  expect(label(labels, "a", "m")).toEqual({ provider: "a", model: "Model" })
+  expect(label(labels, "b", "m")).toEqual({ provider: "b", model: "Model" })
+  expect(label(labels, "a", "other")).toEqual({ provider: "OpenAI", model: "Other" })
 })
 
-test("same-route duplicate model names append exact model IDs", () => {
+test.each([
+  { ids: ["gemini-4-argon", "gemini-4-argon-eap"], expected: ["Gemini", "Gemini (eap)"] },
+  { ids: ["v1", "v2"], expected: ["Gemini (v1)", "Gemini (v2)"] },
+  {
+    ids: ["accounts/fireworks/models/glm", "accounts/fireworks/routers/glm-spot"],
+    expected: ["Gemini (models/glm)", "Gemini (routers/glm-spot)"],
+  },
+])("same-route duplicate model names show only where their IDs differ: $ids", (row) => {
   const labels = composerModelLabels(
-    catalog(
-      provider("openai", "OpenAI", {
-        models: [
-          ["v1", "GPT"],
-          ["v2", "GPT"],
-        ],
-      }),
-    ),
+    catalog(provider("google", "Google", { models: row.ids.map((id) => [id, "Gemini"] as const) })),
   )
 
-  expect(labels.get(composerModelLabelKey("openai", "v1"))).toEqual({
-    provider: "OpenAI",
-    model: "GPT (v1)",
-    full: "OpenAI / GPT (v1)",
-  })
-  expect(labels.get(composerModelLabelKey("openai", "v2"))).toEqual({
-    provider: "OpenAI",
-    model: "GPT (v2)",
-    full: "OpenAI / GPT (v2)",
-  })
+  expect(row.ids.map((id) => label(labels, "google", id)?.model)).toEqual([...row.expected])
 })
 
 test("a peer group with provider and model duplicates needs both qualifiers", () => {
@@ -157,19 +125,15 @@ test("a peer group with provider and model duplicates needs both qualifiers", ()
     ),
   )
 
-  expect(labels.get(composerModelLabelKey("a", "v1"))).toMatchObject({ provider: "a", model: "GPT (v1)" })
-  expect(labels.get(composerModelLabelKey("a", "v2"))).toMatchObject({ provider: "a", model: "GPT (v2)" })
-  expect(labels.get(composerModelLabelKey("b", "m"))).toMatchObject({ provider: "b", model: "GPT" })
+  expect(label(labels, "a", "v1")).toEqual({ provider: "a", model: "GPT (v1)" })
+  expect(label(labels, "a", "v2")).toEqual({ provider: "a", model: "GPT (v2)" })
+  expect(label(labels, "b", "m")).toEqual({ provider: "b", model: "GPT" })
 })
 
-test("preserves configured direct provider and model names verbatim", () => {
-  const all = catalog(provider("custom", "  Custom / Proxy  ", { models: [["m", "  GPT / custom  "]] }))
-  expect(composerProviderName("custom", all)).toBe("  Custom / Proxy  ")
-  expect(composerModelLabels(all).get(composerModelLabelKey("custom", "m"))).toEqual({
-    provider: "  Custom / Proxy  ",
-    model: "  GPT / custom  ",
-    full: "  Custom / Proxy   /   GPT / custom  ",
-  })
+test("drops the (latest) marker and keeps provider names verbatim", () => {
+  const all = catalog(provider("custom", "  Custom / Proxy  ", { models: [["m", "GPT (latest)"]] }))
+
+  expect(label(composerModelLabels(all), "custom", "m")).toEqual({ provider: "  Custom / Proxy  ", model: "GPT" })
 })
 
 test("tuple keys keep slash-containing provider and model identities separate", () => {
@@ -182,14 +146,6 @@ test("tuple keys keep slash-containing provider and model identities separate", 
 
   expect(composerModelLabelKey("company", "openai/gpt")).toBe('["company","openai/gpt"]')
   expect(labels.size).toBe(2)
-  expect(labels.get(composerModelLabelKey("company", "openai/gpt"))).toEqual({
-    provider: "Company",
-    model: "First model",
-    full: "Company / First model",
-  })
-  expect(labels.get(composerModelLabelKey("company/openai", "gpt"))).toEqual({
-    provider: "Other",
-    model: "Second model",
-    full: "Other / Second model",
-  })
+  expect(label(labels, "company", "openai/gpt")).toEqual({ provider: "Company", model: "First model" })
+  expect(label(labels, "company/openai", "gpt")).toEqual({ provider: "Other", model: "Second model" })
 })

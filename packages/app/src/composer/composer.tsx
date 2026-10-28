@@ -48,10 +48,8 @@ export function Composer(props: {
     const label = preview ? preview.label : props.model.model.label
 
     if (label) return label
-    const provider = preview ? preview.provider : props.model.model.providerName
-    const model = modelName()
 
-    return { provider, model, full: provider ? `${provider} / ${model}` : model }
+    return { provider: preview ? preview.provider : props.model.model.providerName, model: modelName() }
   }
 
   return (
@@ -160,7 +158,6 @@ function ComposerModelControl(props: {
             <Button
               data-action="composer-model"
               data-control-type="dialog"
-              aria-label={props.label.full}
               variant="ghost-muted"
               size="normal"
               class="min-w-0 max-w-[60cqw] justify-start ![font-weight:440]"
@@ -191,7 +188,6 @@ function ComposerModelControl(props: {
                 classList={{ "animate-in fade-in": shouldAnimate() }}
                 data-action="composer-model"
                 data-control-type="drawer"
-                aria-label={props.label.full}
               >
                 {content()}
               </Button>

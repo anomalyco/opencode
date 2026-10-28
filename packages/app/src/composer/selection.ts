@@ -13,8 +13,6 @@ import { useConfiguredModel } from "@/providers/models/configured"
 import { useGlobal } from "@/runtime/server/runtime"
 import { composerModelLabelKey, composerModelLabels, composerProviderName } from "./model-label"
 
-export { composerProviderName }
-
 export function createComposerControls(input: { model?: ModelSelection } = {}) {
   const local = useLocal()
   const sdk = useWorkspaceLocation()
@@ -22,41 +20,8 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
   const providers = useProviders(() => sdk().directory)
   const models = useGlobal().models
 
-  const providerName = (
-    providerID: string,
-    catalog = providers.all(),
-    connected = providers.connected().map((provider) => provider.id),
-  ) => {
-    const provider = catalog.get(providerID)
-
-    if (providerID === "opencode" && (!provider?.integrationID || provider.integrationID === "opencode")) return
-
-    return composerProviderName(providerID, catalog, { connected, origin: "OpenCode" })
-  }
-
-  const labels = (catalog: ReturnType<typeof providers.all>, connected: readonly string[]) => {
-    // Use the same visible names as ModelSelection for collision checks.
-    return composerModelLabels(
-      new Map(
-        [...catalog].map(([id, provider]) => [
-          id,
-          {
-            ...provider,
-            models: Object.fromEntries(
-              Object.values(provider.models).map((model) => [
-                model.id,
-                { id: model.id, name: model.name.replace("(latest)", "").trim() },
-              ]),
-            ),
-          },
-        ]),
-      ),
-      { connected },
-    )
-  }
-
   const modelLabels = createMemo(() =>
-    labels(
+    composerModelLabels(
       providers.all(),
       providers.connected().map((provider) => provider.id),
     ),
@@ -109,9 +74,9 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
     const variants = Object.keys(match.model.variants ?? {})
 
     return {
-      provider: providerName(expected.model.providerID, match.all, match.connected),
+      provider: composerProviderName(expected.model.providerID, match.all, match.connected),
       model: match.model.name.replace("(latest)", "").trim(),
-      label: labels(match.all, match.connected).get(
+      label: composerModelLabels(match.all, match.connected).get(
         composerModelLabelKey(expected.model.providerID, expected.model.modelID),
       ),
       variants,
@@ -139,7 +104,13 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
       },
       model: {
         selection,
-        providerName: key && providerName(key.providerID),
+        providerName:
+          key &&
+          composerProviderName(
+            key.providerID,
+            providers.all(),
+            providers.connected().map((provider) => provider.id),
+          ),
         label: key && modelLabels().get(composerModelLabelKey(key.providerID, key.modelID)),
         paid: providers.paid().length > 0,
         // The session's model applies only to its agent, so resolve agents before showing a model.

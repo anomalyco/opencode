@@ -580,7 +580,7 @@ test("a managed composer label follows direct connections, not picker filtering 
     },
   ])
   await expect(control).toHaveText("OpenCode / OpenAI / GPT")
-  await expect(control).toHaveAccessibleName("OpenCode / OpenAI / GPT (Anomaly / OpenAI / GPT)")
+  await expect(control).toHaveAccessibleName("OpenCode / OpenAI / GPT")
   await control.click()
   const search = picker.getByRole("combobox", { name: "Search models", exact: true })
   await expect(picker.locator('[data-option-key="openai:direct-model"]')).toBeVisible()

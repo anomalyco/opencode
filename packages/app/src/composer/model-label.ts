@@ -1,6 +1,6 @@
 import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
 
-export type ComposerModelLabel = { provider?: string; model: string; full: string }
+export type ComposerModelLabel = { provider?: string; model: string }
 
 type Provider = {
   id: string
@@ -14,14 +14,18 @@ export function composerModelLabelKey(providerID: string, modelID: string) {
   return JSON.stringify([providerID, modelID])
 }
 
+// Native Console models need no provider. A managed provider drops its workspace, and says it routes through
+// OpenCode only when the same provider is also connected directly.
 export function composerProviderName(
   providerID: string,
   catalog: ReadonlyMap<string, Provider>,
-  options?: { connected?: readonly string[]; origin?: string },
+  connected?: readonly string[],
 ) {
   const provider = catalog.get(providerID)
 
   if (!provider) return providerID
+
+  if (native(provider)) return
   const all = [...catalog.values()]
   const group = consoleProviderGroup(all)
 
@@ -29,62 +33,71 @@ export function composerProviderName(
     provider.integrationID === "opencode" && group ? consoleProviderName(group, provider.name) : provider.name
 
   if (provider.integrationID !== "opencode" || !provider.canonical) return name
-  const connected = options?.connected && new Set(options.connected)
+  const active = connected && new Set(connected)
 
   const direct = all.some(
     (item) =>
       !native(item) &&
       item.integrationID !== "opencode" &&
-      (!connected || connected.has(item.id)) &&
+      (!active || active.has(item.id)) &&
       (item.integrationID ?? item.id) === provider.canonical,
   )
 
-  return direct ? `${options?.origin ?? group?.workspace ?? "OpenCode"} / ${name}` : name
+  return direct ? `OpenCode / ${name}` : name
 }
 
 export function composerModelLabels(
   catalog: ReadonlyMap<string, Provider>,
-  options?: { connected?: readonly string[] },
+  connected?: readonly string[],
 ): ReadonlyMap<string, ComposerModelLabel> {
-  const connected = options?.connected && new Set(options.connected)
-  const active = (id: string) => !connected || connected.has(id)
+  const active = connected && new Set(connected)
 
-  const rows = [...catalog.values()].flatMap((provider) => {
-    const name = native(provider)
-      ? undefined
-      : composerProviderName(provider.id, catalog, { ...options, origin: "OpenCode" })
+  const rows = [...catalog.values()]
+    .filter((provider) => !active || active.has(provider.id))
+    .flatMap((provider) => {
+      const name = composerProviderName(provider.id, catalog, connected)
 
-    return Object.values(provider.models).map((model) => ({
-      key: composerModelLabelKey(provider.id, model.id),
-      providerID: provider.id,
-      modelID: model.id,
-      originalProvider: provider.name,
-      provider: name,
-      model: model.name,
-      text: name ? `${name} / ${model.name}` : model.name,
-    }))
-  })
+      return Object.values(provider.models).map((model) => {
+        const label = model.name.replace("(latest)", "").trim()
 
-  const groups = Map.groupBy(
-    rows.filter((row) => active(row.providerID)),
-    (row) => row.text,
-  )
+        return {
+          key: composerModelLabelKey(provider.id, model.id),
+          providerID: provider.id,
+          modelID: model.id,
+          provider: name,
+          model: label,
+          text: name ? `${name} / ${label}` : label,
+        }
+      })
+    })
+
+  const groups = Map.groupBy(rows, (row) => row.text)
 
   return new Map(
     rows.map((row) => {
-      const peers = active(row.providerID) ? groups.get(row.text) : undefined
-      const provider = peers?.some((other) => other.providerID !== row.providerID) ? row.providerID : row.provider
+      const peers = groups.get(row.text) ?? []
+      const provider = peers.some((other) => other.providerID !== row.providerID) ? row.providerID : row.provider
+      const same = peers.filter((other) => other.providerID === row.providerID).map((other) => other.modelID)
+      const suffix = same.length > 1 ? row.modelID.slice(sharedPrefix(same)).replace(/^[-_./:]+/, "") : ""
 
-      const model = peers?.some((other) => other.providerID === row.providerID && other.modelID !== row.modelID)
-        ? `${row.model} (${row.modelID})`
-        : row.model
-
-      const visible = provider ? `${provider} / ${model}` : model
-      const full = `${row.originalProvider} / ${model}`
-
-      return [row.key, { provider, model, full: full.includes(visible) ? full : `${visible} (${full})` }]
+      return [row.key, { provider, model: suffix ? `${row.model} (${suffix})` : row.model }]
     }),
   )
+}
+
+// The part of the IDs they all share, cut back to a separator so "v1" and "v2" share nothing
+// while "gemini-4-argon" and "gemini-4-argon-eap" share "gemini-4-argon".
+function sharedPrefix(ids: string[]) {
+  const first = ids[0] ?? ""
+  const separator = (char: string | undefined) => !!char && /[-_./:]/.test(char)
+
+  const boundary = (n: number) =>
+    n === 0 || ids.every((id) => n === id.length || separator(id[n]) || separator(id[n - 1]))
+
+  const differs = first.split("").findIndex((char, index) => ids.some((id) => id[index] !== char))
+  const common = differs === -1 ? first.length : differs
+
+  return Array.from({ length: common + 1 }, (_, index) => common - index).find(boundary) ?? 0
 }
 
 function native(provider: Provider) {
