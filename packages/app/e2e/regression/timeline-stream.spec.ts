@@ -633,24 +633,7 @@ test("shows a background subagent's outcome as its own row where it finished", a
   ])
   await expect(notice).toHaveAttribute("data-outcome", "completed")
 
-  // The outcome icon starts at the column edge like the subagent card, in a 16px box centered on the text line and
-  // clear of the label; the exact gap is styling.
-  await expect
-    .poll(async () => {
-      const [card, icon, label] = await Promise.all([
-        page.locator('[data-component="task-tool-card"]').boundingBox(),
-        notice.locator('[data-slot="icon-svg"]').boundingBox(),
-        notice.locator(":scope > bdi").boundingBox(),
-      ])
-
-      return {
-        inset: icon!.x - card!.x,
-        size: [icon!.width, icon!.height],
-        separated: label!.x - icon!.x - icon!.width > 0,
-        centered: Math.abs(icon!.y + icon!.height / 2 - (label!.y + label!.height / 2)) <= 0.5,
-      }
-    })
-    .toEqual({ inset: 0, size: [16, 16], separated: true, centered: true })
+  await expect(notice.locator('[data-slot="icon-svg"]')).toHaveCount(0)
   await notice.click()
   await expect(page).toHaveURL(new RegExp(`/session/${childID}$`))
 })

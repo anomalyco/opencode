@@ -206,9 +206,13 @@ async function selectArtifacts(
     rows
       .filter((row) => row.active === 1)
       .map(async (active) => {
-        const minimum = rows.find(
-          (row) => row.minimum === 1 && row.name === active.name && row.distribution === active.distribution,
-        )
+        // Preview build numbers reset, so a minimum outside latest can send clients back to a build they passed.
+        const minimum =
+          active.channel === "latest"
+            ? rows.find(
+                (row) => row.minimum === 1 && row.name === active.name && row.distribution === active.distribution,
+              )
+            : undefined
         const floor = minimum && releaseVersion(minimum.version)
         if (current !== undefined && minimum && (!floor || !caller || semver.lt(caller, floor))) return minimum
         if (active.time_created <= cutoff) return active
@@ -335,14 +339,18 @@ async function admin(request: Request, env: Env, prefix: string) {
                   <button class="btn" data-size="sm" data-variant="outline" type="submit">Activate</button>
                 </form>`
           }
-          <form action="${prefix}/admin/minimum" method="post">
-            <input type="hidden" name="channel" value="${escape(artifact.channel)}">
-            <input type="hidden" name="name" value="${escape(artifact.name)}">
-            <input type="hidden" name="distribution" value="${escape(artifact.distribution)}">
-            <input type="hidden" name="version" value="${escape(artifact.version)}">
-            <input type="hidden" name="enabled" value="${artifact.minimum ? "0" : "1"}">
-            <button class="btn" data-size="sm" data-variant="outline" type="submit">${artifact.minimum ? "Clear minimum" : "Set minimum"}</button>
-          </form>
+          ${
+            artifact.channel === "latest" || artifact.minimum
+              ? `<form action="${prefix}/admin/minimum" method="post">
+                  <input type="hidden" name="channel" value="${escape(artifact.channel)}">
+                  <input type="hidden" name="name" value="${escape(artifact.name)}">
+                  <input type="hidden" name="distribution" value="${escape(artifact.distribution)}">
+                  <input type="hidden" name="version" value="${escape(artifact.version)}">
+                  <input type="hidden" name="enabled" value="${artifact.minimum ? "0" : "1"}">
+                  <button class="btn" data-size="sm" data-variant="outline" type="submit">${artifact.minimum ? "Clear minimum" : "Set minimum"}</button>
+                </form>`
+              : ""
+          }
         </td>
       </tr>`,
     )
@@ -457,6 +465,9 @@ async function markArtifact(request: Request, env: Env, flag: "active" | "minimu
   })
   if (key instanceof Response) return key
   const enabled = flag === "minimum" && form.get("enabled") === "0" ? 0 : 1
+  if (flag === "minimum" && enabled && key.channel !== "latest") {
+    return json({ error: "Minimum is only supported on the latest channel" }, 400)
+  }
   if (flag === "minimum" && enabled && !releaseVersion(key.version)) {
     return json({ error: "Minimum must have a comparable release version" }, 400)
   }

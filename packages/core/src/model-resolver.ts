@@ -175,7 +175,11 @@ export const withVariant = (
     variant
       ? {
           ...model,
-          settings: Provider.mergeOverlay(model.settings, Provider.modelSettings(variant.settings)),
+          // Config accepts unknown variant keys, so drop `cache` here too; a variant can't change the prompt cache.
+          settings: Provider.mergeOverlay(
+            model.settings,
+            Provider.modelSettings(variant.settings && Struct.omit(variant.settings, ["cache"])),
+          ),
           headers: Provider.mergeHeaders(model.headers, variant.headers),
           body: Provider.mergeOverlay(model.body, variant.body),
         }

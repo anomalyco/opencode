@@ -1,6 +1,9 @@
-import { createMemo, createSignal, Index, onCleanup, onMount, Show, type JSX } from "solid-js"
+import { batch, createMemo, createSignal, Index, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { createStore } from "solid-js/store"
 import { createKeyed } from "@opencode/plugin/gui"
+import { PreviewControls } from "@opencode/ui/preview-controls"
+import { DocumentSurface } from "@opencode/ui/document-surface"
 import { paper } from "./paper"
 
 /** Paints one page into `canvas` at `scale`; `signal` aborts once a newer paint replaces this one or the page leaves. */
@@ -27,8 +30,6 @@ type SharedObserver = { value: IntersectionObserver | undefined }
 /** The timer of the next slice of rows, and how many rows it mounts. */
 type Growth = { timer: ReturnType<typeof setTimeout> | undefined; slice: number }
 
-const padding = 24
-
 /** How long a resize has to settle before visible pages paint again at the new scale. */
 const settleDelay = 150
 
@@ -42,13 +43,12 @@ const sliceBudget = 12
 const maxSlice = 200
 
 /**
- * A column of pages that fit the pane's width, up to `maxScale`. Only pages near the viewport hold a bitmap, an
+ * A column of pages that fit the pane's width. Only pages near the viewport hold a bitmap, an
  * overlay and the work that keeps them: a long document would otherwise keep hundreds of page-sized canvases in memory,
  * and mount the work for each at once.
  */
 export function OfficePages(props: {
   pages: readonly PageSize[]
-  maxScale: number
   paint: PaintPage
   label: (index: number) => string
   /** Laid over each page near the viewport, such as a text layer for selection, links and screen readers. */
@@ -60,6 +60,7 @@ export function OfficePages(props: {
   /** Receives the column's scroll function once it mounts. */
   onScrollTo?: (scrollTo: ScrollToPage) => void
 }) {
+  const [view, setView] = createStore({ zoom: 1, gutter: 20 })
   const [width, setWidth] = createSignal(0)
   // The width pages paint at: a resize repaints each visible page once it settles, while the CSS size follows at once.
   const [settled, setSettled] = createSignal(0)
@@ -73,12 +74,17 @@ export function OfficePages(props: {
   const watched = new Map<Element, (near: boolean) => void>()
   const observer: SharedObserver = { value: undefined }
   let scroller: HTMLDivElement | undefined
+  let column: HTMLDivElement | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
 
   createResizeObserver(
     () => scroller,
     (rect) => {
-      setWidth(rect.width)
+      if (!column) return
+      batch(() => {
+        setView("gutter", Number.parseFloat(getComputedStyle(column).paddingInlineStart))
+        setWidth(rect.width)
+      })
       clearTimeout(timer)
 
       if (settled() === 0) return void setSettled(rect.width)
@@ -112,7 +118,7 @@ export function OfficePages(props: {
     if (!scroller || !page || index >= mounted()) return void (pending.target = { index, y })
 
     pending.target = undefined
-    scroller.scrollTo({ top: page.offsetTop + y * fit(width(), target.width) - padding })
+    scroller.scrollTo({ top: page.offsetTop + y * fit(width(), target.width) })
   }
 
   onMount(() => props.onScrollTo?.(scrollTo))
@@ -162,34 +168,57 @@ export function OfficePages(props: {
     })
   }
 
-  const fit = (available: number, page: number) =>
-    Math.max(0, Math.min(props.maxScale, (available - padding * 2) / page))
+  const fit = (available: number, page: number) => Math.max(0, (available - view.gutter * 2) / page) * view.zoom
 
   return (
-    <div ref={scroller} data-slot="artifact-stage" class="relative min-h-0 flex-1 overflow-auto">
-      <div class="flex flex-col items-center gap-4 py-6">
-        {/* Keyed by position: a replaced page keeps its row and canvas, and paints over its old bitmap. */}
-        <Index each={shown()}>
-          {(page, index) => (
-            <div class="flex shrink-0 flex-col items-center gap-3">
-              <OfficePage
-                ref={(element) => (pages[index] = element)}
-                watch={watch}
-                index={index}
-                page={page()}
-                scale={fit(width(), page().width)}
-                rasterScale={fit(settled(), page().width)}
-                ratio={ratio()}
-                paint={props.paint}
-                overlay={props.overlay}
-                text={props.text ?? false}
-                label={props.label(index)}
-              />
-              {props.footer?.(index)}
-            </div>
-          )}
-        </Index>
+    <div class="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={scroller}
+        data-slot="artifact-stage"
+        data-document-surface-scrollport
+        class="relative min-h-0 flex-1 overflow-auto"
+        data-scrollable
+      >
+        <div
+          ref={column}
+          data-document-surface-inset
+          data-document-surface-column
+          class="flex w-max min-w-full flex-col items-center gap-4 pb-18"
+        >
+          {/* Keyed by position: a replaced page keeps its row and canvas, and paints over its old bitmap. */}
+          <Index each={shown()}>
+            {(page, index) => (
+              <div class="flex shrink-0 flex-col items-center gap-3">
+                <OfficePage
+                  ref={(element) => (pages[index] = element)}
+                  watch={watch}
+                  index={index}
+                  page={page()}
+                  scale={fit(width(), page().width)}
+                  rasterScale={fit(settled(), page().width)}
+                  ratio={ratio()}
+                  paint={props.paint}
+                  overlay={props.overlay}
+                  text={props.text ?? false}
+                  label={props.label(index)}
+                />
+                {props.footer?.(index)}
+              </div>
+            )}
+          </Index>
+        </div>
       </div>
+      <PreviewControls
+        disabled={width() === 0 || props.pages.length === 0}
+        zoomInDisabled={view.zoom >= 2}
+        zoomOutDisabled={view.zoom <= 0.25}
+        onZoomIn={() => setView("zoom", Math.min(2, view.zoom * 1.25))}
+        onZoomOut={() => setView("zoom", Math.max(0.25, view.zoom / 1.25))}
+        onFit={() => {
+          setView("zoom", 1)
+          scroller?.scrollTo({ left: 0 })
+        }}
+      />
     </div>
   )
 }
@@ -216,14 +245,14 @@ function OfficePage(props: {
   })
 
   return (
-    <div
+    <DocumentSurface
       ref={(element) => {
         frame = element
         props.ref(element)
       }}
       role={props.text ? "group" : undefined}
       aria-label={props.text ? props.label : undefined}
-      class="relative shrink-0 shadow-[var(--v2-elevation-raised)]"
+      class="shrink-0 overflow-hidden"
       style={{
         width: `${props.page.width * props.scale}px`,
         height: `${props.page.height * props.scale}px`,
@@ -252,7 +281,7 @@ function OfficePage(props: {
           />
         )}
       </Show>
-    </div>
+    </DocumentSurface>
   )
 }
 

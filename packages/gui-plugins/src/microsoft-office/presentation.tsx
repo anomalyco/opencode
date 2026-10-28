@@ -91,7 +91,6 @@ export default function OfficePresentation(props: FileViewerProps) {
       {(opened) => (
         <OfficePages
           pages={opened().slides}
-          maxScale={Number.POSITIVE_INFINITY}
           paint={opened().paint}
           label={(index) => ctx.t("slide", { number: index + 1 })}
           overlay={(input) => (

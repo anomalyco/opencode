@@ -145,6 +145,33 @@
           }
         ]
       }
+    },
+    {
+      "files": ["packages/codemode/src/interpreter/**", "packages/codemode/src/stdlib/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "effect",
+                "allowTypeImports": true,
+                "message": "The evaluator and built-ins are plain generators driven by the job queue in runner.ts. Start host work with runner.host or block on it with runner.blocking; only runner.ts, execute.ts, and extensions.ts run Effects."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/codemode/src/interpreter/runner.ts",
+        "packages/codemode/src/interpreter/execute.ts",
+        "packages/codemode/src/interpreter/extensions.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
     }
   ],
   "ignorePatterns": [

@@ -239,7 +239,8 @@ function startDesktop(profile: Awaited<ReturnType<typeof createColdProfile>>) {
         }),
       ])
 
-      browser = await chromium.connectOverCDP(url, { timeout: 120_000 })
+      // Observe the native appearance and focus instead of applying Playwright's media defaults.
+      browser = await chromium.connectOverCDP(url, { timeout: 120_000, noDefaults: true })
       const context = browser.contexts()[0]
 
       if (!context) throw new Error("Electron did not expose a browser context")
