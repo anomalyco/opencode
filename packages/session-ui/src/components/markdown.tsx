@@ -146,9 +146,10 @@ function codeUrl(text: string) {
   }
 }
 
-function createCopyButton(labels: CopyLabels) {
+function createCopyButton(labels: CopyLabels, source?: HTMLElement) {
   const host = document.createElement("div")
   host.setAttribute("data-slot", "markdown-copy-button")
+  if (source?.dataset.language) host.dataset.language = source.dataset.language
 
   const state: Partial<CopyButtonState> = {}
 
@@ -245,6 +246,13 @@ function codeKind(language: string | undefined) {
 function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
   if (language) wrapper.dataset.language = language
   else delete wrapper.dataset.language
+
+  const button = wrapper.querySelector(':scope > [data-slot="markdown-copy-button"]')
+
+  if (button instanceof HTMLElement) {
+    if (language) button.dataset.language = language
+    else delete button.dataset.language
+  }
 
   const kind = codeKind(language)
 
@@ -1075,7 +1083,7 @@ function updateBlock(
       )
       pre.replaceWith(wrapper)
       wrapper.appendChild(pre)
-      wrapper.appendChild(createCopyButton(labels))
+      wrapper.appendChild(createCopyButton(labels, wrapper))
       decorateMermaid(wrapper, code, true)
     })
   }
@@ -1163,7 +1171,7 @@ function updateCodeBlock(
   ;[...block.stable, ...block.unstable].map(createTokenSpan).forEach((span) => codeElement.appendChild(span))
   pre.appendChild(codeElement)
   wrapper.appendChild(pre)
-  wrapper.appendChild(createCopyButton(labels))
+  wrapper.appendChild(createCopyButton(labels, wrapper))
   decorateMermaid(wrapper, codeElement, block.complete)
   next.appendChild(wrapper)
   renderedCodeTokens.set(next, {
