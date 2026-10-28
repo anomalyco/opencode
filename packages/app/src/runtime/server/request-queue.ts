@@ -128,7 +128,7 @@ export function createRequestQueue(input: {
       // Writes go first. Session lists and the first transcript page unblock navigation, so they
       // go ahead of location reads. Older pages and filtered indexes keep background priority.
       const initialMessages =
-        /^\/api\/session\/[^/]+\/message$/.test(pathname) &&
+        /^\/api\/(?:experimental\/)?session\/[^/]+\/(?:message|timeline)$/.test(pathname) &&
         !url.searchParams.has("cursor") &&
         !url.searchParams.has("before") &&
         !url.searchParams.has("type") &&

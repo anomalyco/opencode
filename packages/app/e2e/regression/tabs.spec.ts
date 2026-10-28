@@ -943,7 +943,7 @@ test("selecting a tab with waiting work waits for its transcript instead of show
   // The inactive tab read its inbox, which materializes the pending steer as a transcript row.
   await expect(tabB.locator('[data-component="activity-ring"]')).toBeVisible()
 
-  const transcript = await holdRoute(page, (url) => url.pathname === `/api/session/${b.id}/message`)
+  const transcript = await holdRoute(page, (url) => url.pathname === `/api/experimental/session/${b.id}/timeline`)
   await page.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`).click()
   await transcript.arrived
   await expect(page.locator("[data-timeline-virtual-content]")).toHaveCount(0)
@@ -1031,9 +1031,9 @@ test("inactive tabs load attention and inbox, but read the transcript only on se
     expect(reads.filter((path) => path === `/api/session/${id}/inbox`)).toHaveLength(1)
 
   for (const id of [fixture.sourceID, fixture.targetID])
-    expect(reads.filter((path) => path === `/api/session/${id}/message`)).toHaveLength(1)
+    expect(reads.filter((path) => path === `/api/experimental/session/${id}/timeline`)).toHaveLength(1)
 
-  expect(reads.filter((path) => path === `/api/session/${fixture.childID}/message`)).toEqual([])
+  expect(reads.filter((path) => path === `/api/experimental/session/${fixture.childID}/timeline`)).toEqual([])
   expect(mutations).toEqual([])
   expect(errors).toEqual([])
 })
@@ -1284,7 +1284,9 @@ async function twoServers(
 test("loads a tab's transcript while the pointer rests on it, and not when it passes over", async ({ page }) => {
   const requested: string[] = []
   page.on("request", (request) => {
-    const id = new URL(request.url()).pathname.match(/^\/api\/session\/([^/]+)\/message$/)?.[1]
+    const id = new URL(request.url()).pathname.match(
+      /^\/api\/(?:experimental\/)?session\/([^/]+)\/(?:message|timeline)$/,
+    )?.[1]
 
     if (id && request.method() === "GET") requested.push(id)
   })

@@ -85,7 +85,7 @@ async function prepareSessionTabs(page: Page) {
   const requests: string[] = []
   page.on("request", (request) => {
     if (request.method() !== "GET") return
-    const match = new URL(request.url()).pathname.match(/^\/api\/session\/([^/]+)\/message$/)
+    const match = new URL(request.url()).pathname.match(/^\/api\/experimental\/session\/([^/]+)\/timeline$/)
 
     if (match) requests.push(decodeURIComponent(match[1]))
   })

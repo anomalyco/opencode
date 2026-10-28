@@ -209,7 +209,7 @@ test("shows parent lineage while the child timeline loads", async ({ page }) => 
   const requested = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
   await page.route(
-    (url) => url.pathname === `/api/session/${childID}/message` && url.port === serverPort,
+    (url) => url.pathname === `/api/experimental/session/${childID}/timeline` && url.port === serverPort,
     async (route) => {
       requested.resolve()
       await release.promise

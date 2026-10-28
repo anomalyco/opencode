@@ -121,7 +121,7 @@ for (const close of [false, true]) {
 
       gate.resolve()
       await page.waitForFunction(
-        (ids) => ids.every((id) => window.__prefetchBodies![`/api/session/${id}/message`] > 0),
+        (ids) => ids.every((id) => window.__prefetchBodies![`/api/experimental/session/${id}/timeline`] > 0),
         reads,
       )
       await expectSessionTitle(page, sessions[0].title)

@@ -4349,6 +4349,28 @@ export type ExperimentalMediaGetInput = { readonly hash: string }
 
 export type ExperimentalMediaGetOutput = globalThis.Uint8Array
 
+export type ExperimentalSessionTimelineInput = {
+  readonly sessionID: string
+  readonly limit?: number | undefined
+  readonly order?: "asc" | "desc" | undefined
+  readonly cursor?: string | undefined
+  readonly type?:
+    | "agent-switched"
+    | "model-switched"
+    | "location-switched"
+    | "user"
+    | "synthetic"
+    | "system"
+    | "skill"
+    | "shell"
+    | "assistant"
+    | "compaction"
+    | "idle"
+    | undefined
+}
+
+export type ExperimentalSessionTimelineOutput = SessionMessagesResponse
+
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
 export type ShellListOutput = { location: LocationPublicRef; data: Array<ShellInfo1> }

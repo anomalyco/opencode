@@ -189,6 +189,35 @@ it.live("serves stored media as refs only to clients that opt in while experimen
         expect(await plain.session.message.get({ sessionID, messageID: "msg_media_user" })).toEqual(user)
         expect((await opted.session.export({ sessionID })).messages).toEqual([user, assistant])
 
+        // The timeline drops read-tool files whether they are stored as refs or inlined, and still honors the header.
+        const stripped: SessionMessageInfo = {
+          ...assistant,
+          content: [
+            {
+              type: "tool",
+              id: "call_read_img",
+              name: "read",
+              executed: true,
+              state: {
+                status: "completed",
+                input: { path: "shot.png" },
+                content: [{ type: "text", text: "Image read successfully" }],
+              },
+              time: { created: 110, ran: 111, completed: 112 },
+            },
+          ],
+        }
+        const timelineAssistant = async (c: typeof opted) =>
+          (await c.experimental.session.timeline({ sessionID, order: "asc" })).data[1]
+        expect(await timelineAssistant(opted)).toEqual(stripped)
+        expect(await timelineAssistant(plain)).toEqual(stripped)
+        expect(
+          ((await opted.experimental.session.timeline({ sessionID, order: "asc" })).data[0] as typeof user).files,
+        ).toMatchObject([{ uri: media(png) }, { uri: media(text) }, {}, {}])
+        expect(
+          ((await plain.experimental.session.timeline({ sessionID, order: "asc" })).data[0] as typeof user).files,
+        ).toEqual(user.files)
+
         // The route serves raw bytes, immutable caching and a 304, and never renders active content inline.
         const image = await handler(new Request(route(png)))
         expect(image.status).toBe(200)

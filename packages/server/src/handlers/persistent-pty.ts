@@ -13,6 +13,7 @@ import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { makeMediaGet } from "./media"
+import { MessageList } from "./message"
 import { type Outbound, runPtySocket } from "./pty-socket"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
@@ -21,8 +22,10 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const cors = yield* CorsConfig
     const pty = yield* PersistentPty.Service
     const mediaGet = yield* makeMediaGet
+    const messages = yield* MessageList
 
     return handlers
+      .handle("session.timeline", (ctx) => messages(ctx, { omitReadMedia: true }))
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
       .handle(
         "persistentPty.read",

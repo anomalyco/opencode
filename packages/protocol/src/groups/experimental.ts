@@ -1,5 +1,6 @@
 import { MediaGetEndpoint } from "./media.js"
+import { SessionTimelineEndpoint } from "./message.js"
 import { PersistentPtyGroup } from "./persistent-pty.js"
 
 /** `server.experimental`: routes under /api/experimental, without compatibility guarantees. */
-export const ExperimentalGroup = PersistentPtyGroup.add(MediaGetEndpoint)
+export const ExperimentalGroup = PersistentPtyGroup.add(MediaGetEndpoint).add(SessionTimelineEndpoint)

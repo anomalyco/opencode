@@ -149,6 +149,31 @@ describe("createRequestQueue", () => {
     await Promise.all(responses)
   })
 
+  test("the first timeline page is a navigation read, older timeline pages are not", async () => {
+    const input = setup({ limit: 1 })
+    const requests = [
+      "/api/a",
+      "/api/b",
+      "/api/experimental/session/ses_1/timeline?cursor=older",
+      "/api/experimental/session/ses_1/timeline?limit=40&order=desc",
+    ]
+
+    const responses = requests.map((path) => input.queue.fetch(`http://server${path}`))
+    await input.settle()
+    for (const _ of requests) {
+      input.pending.at(-1)?.resolve()
+      await input.settle()
+    }
+
+    expect(input.pending.map((item) => new URL(item.url).pathname + new URL(item.url).search)).toEqual([
+      "/api/a",
+      "/api/experimental/session/ses_1/timeline?limit=40&order=desc",
+      "/api/b",
+      "/api/experimental/session/ses_1/timeline?cursor=older",
+    ])
+    await Promise.all(responses)
+  })
+
   test("never counts the event stream against the budget", async () => {
     const input = setup({ limit: 1 })
     void input.queue.fetch("http://server/api/session")

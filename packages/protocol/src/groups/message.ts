@@ -97,15 +97,38 @@ export const SessionMediaMessagesResponse = Schema.Struct({
 /** Experimental: the `session.message` response for clients that opt into `experimental-media-uri`. */
 export const SessionMediaMessageResponse = Schema.Struct({ data: PublicMediaSessionMessage })
 
+const SessionMessagesResponse = Schema.Struct({
+  data: Schema.Array(PublicSessionMessage),
+  cursor: MessagesCursor,
+}).annotate({ identifier: "SessionMessagesResponse" })
+
+/** Served from the experimental group, so clients reach it as `experimental.session.timeline`. */
+export const SessionTimelineEndpoint = HttpApiEndpoint.get(
+  "session.timeline",
+  "/api/experimental/session/:sessionID/timeline",
+  {
+    params: { sessionID: Session.ID },
+    query: SessionMessagesQuery,
+    success: SessionMessagesResponse,
+    error: [InvalidCursorError, SessionNotFoundError, UnknownError],
+  },
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "experimental.session.timeline",
+    summary: "Get session timeline",
+    description:
+      "Retrieve the same pages as session.message.list for display. Inline and media: read-tool files are omitted, since the file can be opened by path; execute media stays. Honors X-OpenCode-Capabilities: experimental-media-uri like session.message.list. Experimental: may change without compatibility guarantees.",
+    // The experimental group is titled for persistent PTYs; list this beside the other session routes.
+    transform: (operation) => ({ ...operation, tags: ["session"] }),
+  }),
+)
+
 export const MessageGroup = HttpApiGroup.make("server.message")
   .add(
     HttpApiEndpoint.get("session.messages", "/api/session/:sessionID/message", {
       params: { sessionID: Session.ID },
       query: SessionMessagesQuery,
-      success: Schema.Struct({
-        data: Schema.Array(PublicSessionMessage),
-        cursor: MessagesCursor,
-      }).annotate({ identifier: "SessionMessagesResponse" }),
+      success: SessionMessagesResponse,
       error: [InvalidCursorError, SessionNotFoundError, UnknownError],
     }).annotateMerge(
       OpenApi.annotations({

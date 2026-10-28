@@ -59,7 +59,7 @@ for (const size of ["typical", "large"]) {
     await installMarkdownGate(page, { answer, targetPart, sourcePart, href: sessionHref(fixture.sourceID) })
 
     const prefetched = page.waitForResponse((response) =>
-      new URL(response.url()).pathname.endsWith(`/session/${fixture.targetID}/message`),
+      new URL(response.url()).pathname.endsWith(`/session/${fixture.targetID}/timeline`),
     )
 
     await page.goto(sessionHref(fixture.sourceID))
