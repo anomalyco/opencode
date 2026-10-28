@@ -791,13 +791,7 @@ const layer = Layer.effectDiscard(
       db
         .update(SessionTable)
         .set({ time_busy: event.created, time_updated: sql`${SessionTable.time_updated}` })
-        .where(
-          and(
-            eq(SessionTable.id, event.data.sessionID),
-            // A turn resumed after shutdown or a crash never reached idle, so it keeps its original start.
-            or(isNull(SessionTable.time_busy), gte(SessionTable.time_idle, SessionTable.time_busy)),
-          ),
-        )
+        .where(eq(SessionTable.id, event.data.sessionID))
         .run()
         .pipe(Effect.orDie),
     )

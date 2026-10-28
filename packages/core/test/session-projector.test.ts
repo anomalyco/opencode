@@ -600,7 +600,7 @@ describe("SessionProjector", () => {
     }),
   )
 
-  it.effect("records each execution's start and keeps it across a shutdown resume", () =>
+  it.effect("records each execution's start, including a resume after shutdown", () =>
     Effect.gen(function* () {
       const db = yield* seedSession({ time_created: 0, time_updated: 0 })
       const bus = yield* Bus.Service
@@ -619,17 +619,13 @@ describe("SessionProjector", () => {
       yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: "shutdown" })
       yield* TestClock.setTime(30)
       yield* bus.publish(SessionEvent.Execution.Started, { sessionID })
-      expect(yield* times()).toEqual({ busy: 10, idle: null, updated: 0 })
+      expect(yield* times()).toEqual({ busy: 30, idle: null, updated: 0 })
 
       yield* TestClock.setTime(40)
       yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
-      expect(yield* times()).toEqual({ busy: 10, idle: 40, updated: 0 })
+      expect(yield* times()).toEqual({ busy: 30, idle: 40, updated: 0 })
 
       yield* TestClock.setTime(50)
-      yield* bus.publish(SessionEvent.Execution.Started, { sessionID })
-      expect(yield* times()).toEqual({ busy: 50, idle: 40, updated: 0 })
-
-      yield* TestClock.setTime(60)
       yield* bus.publish(SessionEvent.Execution.Started, { sessionID })
       expect(yield* times()).toEqual({ busy: 50, idle: 40, updated: 0 })
     }),
