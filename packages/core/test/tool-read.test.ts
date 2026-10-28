@@ -655,8 +655,12 @@ describe("ReadTool", () => {
       const registry = yield* Tool.Service
       for (const [error, message] of [
         [
-          new ReadToolFileSystem.OffsetOutOfRangeError({ offset: 10, lines: 3 }),
+          new ReadToolFileSystem.OffsetOutOfRangeError({ offset: 10, total: 3, kind: "file" }),
           "Offset 10 is out of range for this file (3 lines)",
+        ],
+        [
+          new ReadToolFileSystem.OffsetOutOfRangeError({ offset: 10, total: 3, kind: "directory" }),
+          "Offset 10 is out of range for this directory (3 entries)",
         ],
         [
           new ReadToolFileSystem.PathKindError({ resource: "socket", expected: "a file" }),
