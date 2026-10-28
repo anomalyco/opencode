@@ -55,7 +55,7 @@ async function customProviderForm(page: Page) {
   const settings = page.getByTestId("settings-screen")
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
-  const picker = page.getByRole("dialog", { name: "Connect provider", exact: true })
+  const picker = page.getByRole("dialog", { name: "Connect an integration", exact: true })
   const search = picker.getByRole("searchbox")
   await search.fill("OpenAI-compatible")
   const custom = picker.getByRole("button", { name: "Custom OpenAI-compatible provider", exact: true })
@@ -1140,11 +1140,14 @@ test("providers: a custom provider waits for its models before reporting success
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   const model = page.locator('[data-action="composer-model"]')
   await model.click()
-  await page
-    .getByRole("menu", { name: "My Model", exact: true })
-    .getByRole("menuitemradio", { name: "My Model", exact: true })
+  const picker = page.getByRole("dialog", { name: "Select model", exact: true })
+  await picker
+    .getByRole("group", { name: "My Local Server", exact: true })
+    .getByRole("option", { name: "My Model", exact: true })
     .click()
-  await expect(model).toHaveText("My Model")
+  await expect(picker).toBeHidden()
+  await expect(model.getByText("My Local Server", { exact: true })).toBeVisible()
+  await expect(model.getByText("My Model", { exact: true })).toBeVisible()
   expect(credentials).toEqual([
     { integrationID: "local", label: "My Local Server", value: { type: "key", key: "sk-local" } },
   ])

@@ -14,7 +14,6 @@
     "test": "bun test --only-failures"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "1.15.2",
     "@ibm/plex": "6.4.1",
     "@kobalte/core": "catalog:",
     "@opencode/console-resource": "workspace:*",
@@ -26,7 +25,6 @@
     "nitro": "3.0.1-alpha.1",
     "number-flow": "0.6.2",
     "solid-js": "catalog:",
-    "solid-list": "0.3.0",
     "vite": "catalog:",
     "zod": "catalog:"
   },

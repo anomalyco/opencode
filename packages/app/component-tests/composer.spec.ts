@@ -96,20 +96,22 @@ story(
     const height = await composer.evaluate((element) => element.getBoundingClientRect().height)
 
     await input.press("Shift+ArrowUp")
-    await expect(input).toBeFocused()
-    await expect(search).toHaveCount(0)
+    await expect(search).toBeFocused()
     await expect(input).toHaveText("Explain the latest changes")
     await expect(composer).toHaveCSS("height", `${height}px`)
     const menu = await component.locator('[data-component="composer-suggestions"]').boundingBox()
 
     if (!menu) throw new Error("Missing history menu")
     await expect(options).toHaveText([
-      "Run the focused tests",
-      "Review the composer layout Keep keyboard navigation accessible",
       "Explain the latest changes",
+      "Review the composer layout Keep keyboard navigation accessible",
+      "Run the focused tests",
     ])
     await expect(component.getByRole("option", { selected: true })).toHaveText("Explain the latest changes")
-    await input.press("ArrowUp")
+    await expect(
+      component.getByRole("option", { name: "Explain the latest changes", exact: true }).locator("bdi"),
+    ).toHaveCSS("font-weight", "400")
+    await search.press("ArrowDown")
     await expect(component.getByRole("option", { selected: true })).toHaveText(
       "Review the composer layout Keep keyboard navigation accessible",
     )
@@ -140,19 +142,15 @@ story(
       .toBe(menu.y)
     await expect(component.getByRole("img", { name: "layout.png", exact: true })).toBeVisible()
     await expect(component.getByText("Keep the search separate from the draft", { exact: true })).toBeVisible()
-    await input.press("ArrowUp")
+    await search.press("ArrowDown")
     await expect(input).toHaveText("Run the focused tests")
     await expect(composer).toHaveCSS("height", `${height}px`)
-    await input.press("ArrowUp")
+    await search.press("ArrowDown")
     await expect(input).toHaveText("Run the focused tests")
-    await input.press("ArrowDown")
+    await search.press("ArrowUp")
     await expect(input).toHaveText("Review the composer layout\nKeep keyboard navigation accessible")
-    await input.press("ControlOrMeta+f")
     await expect(search).toBeFocused()
     await search.fill("ACCESSIBLE")
-    await expect(composer).toHaveCSS("height", `${height}px`)
-    await search.press("Escape")
-    await expect(input).toBeFocused()
     await expect(composer).toHaveCSS("height", `${height}px`)
     await expect
       .poll(() =>
@@ -161,7 +159,7 @@ story(
           .evaluate((element) => element.scrollHeight > element.clientHeight),
       )
       .toBe(true)
-    await input.press("Enter")
+    await search.press("Enter")
     await expect(options).toHaveCount(0)
     await expect(content).toHaveCSS("mask-image", "none")
     await expect(viewport).not.toHaveCSS("mask-image", "none")
@@ -186,7 +184,7 @@ story(
     await expect(input).toHaveText("Explain the latest changes")
     await expect(component.getByRole("img", { name: "layout.png", exact: true })).toHaveCount(0)
     await expect(composer).toHaveCSS("height", `${restoredHeight}px`)
-    await input.press("Escape")
+    await search.press("Escape")
     await expect(options).toHaveCount(0)
     await expect(input).toBeFocused()
     await expect(input).toBeEmpty()
@@ -196,13 +194,12 @@ story(
   },
 )
 
-story("searches history on demand, returns to browsing, and keeps shell history separate", async ({ mount, page }) => {
+story("searches history, cancels with Escape, and keeps shell history separate", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--prompt-history")
   const input = component.getByRole("textbox", { name: "Prompt", exact: true })
   const search = component.getByRole("combobox", { name: "Prompt history", exact: true })
 
   await input.press("Shift+ArrowUp")
-  await input.press("ControlOrMeta+f")
   await expect(search).toBeFocused()
   await search.fill("ACCESSIBLE")
   await expect(component.getByRole("option")).toHaveCount(1)
@@ -211,13 +208,10 @@ story("searches history on demand, returns to browsing, and keeps shell history 
   await search.press("Escape")
   await expect(search).toHaveCount(0)
   await expect(input).toBeFocused()
-  await expect(component.getByRole("option")).toHaveCount(3)
-  await input.press("Escape")
   await expect(component.getByRole("option")).toHaveCount(0)
   await expect(input).toBeEmpty()
 
   await input.press("Shift+ArrowUp")
-  await component.getByRole("button", { name: /^Search/ }).click()
   await expect(search).toBeFocused()
   await search.fill("no matching prompt")
   await expect(component.getByRole("option")).toHaveCount(0)
@@ -246,6 +240,8 @@ story("searches history on demand, returns to browsing, and keeps shell history 
   await input.press("Shift+ArrowUp")
   await expect(input).toHaveText("Explain the latest changes")
   await expect(component.getByRole("option")).toHaveCount(3)
+  await expect(search).toBeFocused()
+  await search.press("Enter")
   await expect(input).toBeFocused()
   await input.press("Shift+Digit1")
   await expect(component.getByRole("option")).toHaveCount(0)
@@ -256,11 +252,11 @@ story("searches history on demand, returns to browsing, and keeps shell history 
   await input.press("Shift+ArrowUp")
   await expect(input).toHaveText("bun typecheck")
   await expect(component.getByRole("option")).toHaveText(["bun typecheck"])
-  await input.press("Escape")
+  await search.press("Escape")
   await expect(input).toBeFocused()
   await expect(input).toBeEmpty()
   await input.press("Shift+ArrowUp")
-  await input.press("Enter")
+  await search.press("Enter")
   await expect(input).toHaveText("bun typecheck")
   await expect(component.getByRole("status")).toHaveText("Ready")
 })
@@ -270,7 +266,7 @@ story("pins history search above the scrolling prompts", async ({ mount }) => {
   const input = component.getByRole("textbox", { name: "Prompt", exact: true })
   await input.press("Shift+ArrowUp")
   const menu = component.locator('[data-component="composer-suggestions"]')
-  const search = menu.getByRole("button", { name: /^Search/ })
+  const search = menu.getByRole("combobox", { name: "Prompt history", exact: true })
   const viewport = menu.locator("[data-scrollable]")
   await expect.poll(() => viewport.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
 
@@ -287,7 +283,7 @@ story("pins history search above the scrolling prompts", async ({ mount }) => {
 
   await expect.poll(clippedTop).toBe(false)
 
-  for (let index = 0; index < 12; index++) await input.press("ArrowUp")
+  for (let index = 0; index < 12; index++) await search.press("ArrowDown")
   await expect(menu.getByRole("option", { selected: true })).toBeInViewport({ ratio: 1 })
   await expect.poll(clippedTop).toBe(false)
   await expect.poll(async () => (await search.boundingBox())!.y - (await viewport.boundingBox())!.y).toBeLessThan(0)

@@ -8,6 +8,8 @@ import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
+import type { QuoteSource } from "@/composer/quote-source"
+import { captureQuoteSource } from "./quote-highlight"
 import {
   characterRect,
   narrowSelection,
@@ -34,7 +36,7 @@ export function createTimelineQuote(input: {
   root: () => HTMLElement | undefined
   sessionKey: () => string
   enabled: () => boolean
-  add: (text: string, comment: boolean) => void
+  add: (text: string, comment: boolean, source: QuoteSource) => void
 }) {
   const [state, setState] = createStore<{
     text: string | undefined
@@ -292,9 +294,10 @@ export function createTimelineQuote(input: {
       const text = state.text
 
       if (!text || state.truncated) return
+      const source = selected ? captureQuoteSource(quoteText(selected).ranges) : []
       window.getSelection()?.removeAllRanges()
       close()
-      input.add(text, comment)
+      input.add(text, comment, source)
     },
     setElement: (value: HTMLElement | undefined) => {
       element = value
@@ -376,7 +379,7 @@ export function TimelineQuote(props: { controller: TimelineQuoteController }) {
                 </>
               }
               placement="top"
-              openDelay={1200}
+              openDelay={800}
             >
               <Button
                 size="small"

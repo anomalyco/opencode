@@ -53,9 +53,11 @@ Apply the `0004_channel_rollout.sql` migration before deploying.
 
 ## Minimum releases
 
-Each channel/name/distribution can mark one retained artifact as `minimum`, independently
+Each `latest` name/distribution can mark one retained artifact as `minimum`, independently
 of its `active` artifact. Set or clear it from the admin page. Publishing a new active
-release preserves the minimum marker.
+release preserves the minimum marker. Preview build numbers reset, so `dev` and `beta`
+cannot set a minimum and lookups ignore any existing preview minimum; the admin page
+still lets you clear one.
 
 Clients send their running version as `?current=<version>` and use the CLI's default
 `User-Agent: opencode/<channel>/<version>/cli`. When `current` is absent, the service

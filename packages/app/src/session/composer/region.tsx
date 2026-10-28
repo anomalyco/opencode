@@ -21,6 +21,7 @@ import { useLocal } from "@/providers/models/selection"
 import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@/runtime/persistence/uuid"
 import { contextItemKey } from "@/composer/schema"
+import type { QuoteSource } from "@/composer/quote-source"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import { useComposerCommands } from "@/composer/commands"
@@ -333,13 +334,21 @@ export function createActiveSessionRegion(input: {
       input: () => active()?.drop.input(),
     },
     quote: {
+      source: () => prompt.capture().quoteSource,
       // A child session has no composer to quote into, and a shell command takes no quotes.
       available: () => !input.session.data.isChild() && prompt.capture().mode.current() !== "shell",
-      add: (text: string, comment: boolean) => {
+      add: (text: string, comment: boolean, source: QuoteSource) => {
         const item = { type: "quote" as const, text, commentID: uuid() }
         prompt.context.add(item)
 
-        if (comment) return prompt.capture().quoteComment.set(contextItemKey(item))
+        if (source.length) prompt.capture().quoteSource.add(contextItemKey(item), source)
+
+        if (comment) {
+          prompt.capture().quoteSource.pend(contextItemKey(item))
+
+          return prompt.capture().quoteComment.set(contextItemKey(item))
+        }
+
         focusPrompt()
       },
       focus: focusPrompt,

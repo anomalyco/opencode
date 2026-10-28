@@ -16,7 +16,6 @@ import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
-import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { Npm } from "@opencode/util/npm"
@@ -71,6 +70,7 @@ const permissionLayer = Layer.succeed(
     close: Effect.void,
     ask: (input) => Effect.succeed({ id: input.id ?? Permission.ID.create(), effect: "ask" }),
     assert: () => Effect.void,
+    assertNotDenied: () => Effect.void,
     reply: () => Effect.void,
     get: () => Effect.succeed(undefined),
     forSession: () => Effect.succeed([]),
@@ -102,7 +102,6 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       Command.node,
       Integration.node,
       KV.node,
-      ManagedPolicy.node,
       Mcp.node,
       Session.node,
       InstructionEntry.node,

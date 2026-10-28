@@ -324,7 +324,7 @@ describe("Config", () => {
               expect(Config.latest(entries, "shell")).toBe("system")
               expect(Config.latest(entries, "username")).toBe("system-user")
               expect(
-                ManagedPolicy.decision(ManagedPolicy.statements(entries, { statements: [] }), "tool.use", "shell:ls"),
+                ManagedPolicy.decision(ManagedPolicy.statements(entries), "tool.use", "shell:ls"),
               ).toBe("deny")
             }).pipe(
               Effect.provide(
@@ -543,7 +543,7 @@ describe("Config", () => {
                   info: decodeInfo({ policies: [shell("shell:rm*", "allow"), shell("shell:*", "deny")] }),
                 }),
               )
-              const statements = ManagedPolicy.statements(yield* config.entries(), { statements: [] })
+              const statements = ManagedPolicy.statements(yield* config.entries())
               const deciding = (resource: string) =>
                 statements.findLast(
                   (policy) => policy.action === "tool.use" && Wildcard.match(resource, policy.resource),
