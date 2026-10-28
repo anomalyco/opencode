@@ -11,6 +11,7 @@ const server: SessionActivityItem = {
   target: "sh_dev",
   started: 1_000,
 }
+
 const watcher: SessionActivityItem = {
   key: "sh_test",
   type: "shell",
@@ -23,6 +24,7 @@ type Ended = Awaited<ReturnType<Parameters<typeof createShellPanel>[0]["ended"]>
 
 function deferred<T>() {
   let resolve = (_: T) => {}
+
   const promise = new Promise<T>((done) => (resolve = done))
 
   return { promise, resolve }
@@ -179,6 +181,7 @@ describe("createShellTail", () => {
   test("a first read still in flight when the shell ends still lands", async () => {
     const [running, setRunning] = createSignal(true)
     const reads: { input: ShellOutputInput; result: ReturnType<typeof deferred<ShellOutputOutput>> }[] = []
+
     const view = createRoot((dispose) => ({
       dispose,
       output: createShellTail({

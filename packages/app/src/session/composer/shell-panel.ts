@@ -69,6 +69,7 @@ export function createShellPanel(input: {
       setState("stopping", true)
       void input.stop(item).then((stopped) => {
         if (!shown(item.key)) return
+
         if (stopped && !state.end) setState("end", { status: "killed", completed: Date.now() })
         setState("stopping", false)
       })
@@ -91,10 +92,12 @@ export function createShellTail(input: {
     const id = input.id()
     let loaded = false
     let retired = false
+
     const dispose = () => {
       retiring.delete(dispose)
       stop()
     }
+
     const stop = followShellOutput({
       id,
       directory: input.directory(),
@@ -102,13 +105,16 @@ export function createShellTail(input: {
       load: input.load,
       onOutput: (text) => {
         loaded = true
+
         if (!retired || input.id() === id) setOutput(text)
+
         if (retired) dispose()
       },
     })
 
     onCleanup(() => {
       retired = true
+
       if (loaded) return dispose()
       retiring.add(dispose)
     })

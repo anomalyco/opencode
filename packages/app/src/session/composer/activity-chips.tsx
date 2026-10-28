@@ -114,10 +114,12 @@ export function SessionActivityChips(props: {
 
   // Focus moves a frame late: the menu refocuses itself when the selected row unmounts. One pending move at a time.
   let frame = 0
+
   const later = (move: () => void) => {
     cancelAnimationFrame(frame)
     frame = requestAnimationFrame(move)
   }
+
   onCleanup(() => cancelAnimationFrame(frame))
 
   // Opening a shell moves focus to its back arrow.
@@ -368,7 +370,9 @@ export function SessionActivityChips(props: {
 
 function endLabel(end: ShellEnd, t: ReturnType<typeof useLanguage>["t"]) {
   if (end.status === "timeout") return t("session.activity.shell.timeout")
+
   if (end.status === "killed") return t("session.activity.shell.killed")
+
   if (end.exit === undefined) return t("session.activity.shell.exited")
 
   return t("session.activity.shell.exitCode", { code: String(end.exit) })
@@ -385,6 +389,7 @@ function ShellTail(props: {
   load: (input: ShellOutputInput) => Promise<ShellOutputOutput>
 }) {
   const language = useLanguage()
+
   const output = createShellTail({
     id: () => props.id,
     directory: () => props.directory,
