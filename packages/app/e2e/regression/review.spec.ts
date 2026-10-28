@@ -474,6 +474,7 @@ test("file tree expands Windows paths and scrolls long names in both directions"
     fileList: (path) => {
       if (path === "frontend\\" || path === "frontend") {
         return [
+          fileNode(directory, "frontend/nested", "directory"),
           { ...fileNode(directory, "frontend/app.ts"), path: "frontend\\app.ts" },
           { ...fileNode(directory, longPath), path: `frontend\\${longFilename}` },
           // Short rows below the long one, so it can scroll out of view.
@@ -484,6 +485,8 @@ test("file tree expands Windows paths and scrolls long names in both directions"
           }),
         ]
       }
+
+      if (path === "frontend/nested") return [fileNode(directory, "frontend/nested/child.ts")]
 
       if (path) return []
 
@@ -509,6 +512,36 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await expect(frontend).toHaveAttribute("aria-expanded", "false")
   await frontend.click()
   await expect(frontend).toHaveAttribute("aria-expanded", "true")
+
+  const nested = panel.locator('[data-type="item"][data-item-path="frontend/nested/"]')
+  await nested.click()
+  const child = panel.locator('[data-type="item"][data-item-path="frontend/nested/child.ts"]')
+  await expect(child).toBeVisible()
+  await expect(child.locator('[data-item-section="spacing-item"]')).toHaveCount(2)
+
+  // Every ancestor guide runs through its folder's chevron, not just the first indentation level.
+  const guideOffset = () =>
+    child.evaluate((element) => {
+      const root = element.getRootNode()
+
+      if (!(root instanceof ShadowRoot)) throw new Error("Expected the file tree's shadow root")
+
+      return Math.max(
+        ...Array.from(element.querySelectorAll<HTMLElement>('[data-item-section="spacing-item"]'), (guide) => {
+          const folder = Array.from(root.querySelectorAll<HTMLElement>('[data-type="item"]')).find(
+            (row) => row.dataset.itemPath === guide.dataset.ancestorPath,
+          )!
+
+          const icon = folder.querySelector('[data-item-section="icon"]')!.getBoundingClientRect()
+          const line = guide.getBoundingClientRect()
+          const center = getComputedStyle(guide).direction === "rtl" ? line.right - 0.5 : line.left + 0.5
+
+          return Math.abs(center - (icon.left + icon.width / 2))
+        }),
+      )
+    })
+
+  await expect.poll(guideOffset).toBeLessThanOrEqual(0.5)
 
   const viewport = sidebar.locator('[data-slot="session-review-v2-sidebar-viewport"]')
   const longRow = panel.locator(`[data-type="item"][data-item-path="${longPath}"]`)
@@ -553,6 +586,7 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await expect.poll(async () => (await scrollTree({})).left).toBeGreaterThan(0)
   await scrollTree({ left: 0, top: 0 })
   await viewport.evaluate((element) => element.setAttribute("dir", "rtl"))
+  await expect.poll(guideOffset).toBeLessThanOrEqual(0.5)
   await expect.poll(() => statusInset(status, "left")).toBeLessThanOrEqual(24)
   await frontend.focus()
   await page.keyboard.press("ArrowRight")
