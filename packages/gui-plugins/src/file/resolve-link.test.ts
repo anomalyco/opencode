@@ -58,6 +58,9 @@ describe("parseFileLink", () => {
     ["a%2520b.ts", "a%2520b.ts", undefined],
     ["C:/foo/../../x.ts", "C:/x.ts", undefined],
     ["file:///C:/tmp/demo%20file.ts:12", "C:/tmp/demo file.ts", { start: 12, end: 12 }],
+    ["@packages/app/src/app.tsx", "packages/app/src/app.tsx", undefined],
+    ["@session/timeline/interaction.ts:74", "session/timeline/interaction.ts", { start: 74, end: 74 }],
+    ["src/@types/a.ts", "src/@types/a.ts", undefined],
   ])("parses %s", (href, expectedPath, expectedSelection) => {
     const parsed = parseFileLink(href)
     expect(parsed.path).toBe(expectedPath)
@@ -101,6 +104,7 @@ describe("checkFileLinkExists", () => {
       })
 
     expect(await check("interaction.ts:74")).toBe(true)
+    expect(await check("@interaction.ts:74")).toBe(true)
     expect(await check("index.ts")).toBe(true)
     expect(await check("Interaction.ts")).toBe(false)
     expect(await check("C:/tmp/out.html")).toBe(true)

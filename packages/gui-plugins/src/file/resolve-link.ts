@@ -17,7 +17,8 @@ export type FileLinkTarget =
  * Supports `:line`, `:line:col`, `:start-end`, `#Lstart`, and `#Lstart-Lend`.
  */
 export function parseFileLink(href: string): ParsedFileLink {
-  const raw = href.trim().replaceAll("\\", "/")
+  // `@`-mention links keep the composer's prefix in their href; it is not part of the path.
+  const raw = href.trim().replace(/^@/, "").replaceAll("\\", "/")
   const isFileUrl = /^file:\/\//i.test(raw)
   const extracted = extractLineSelection(raw, isFileUrl)
 
