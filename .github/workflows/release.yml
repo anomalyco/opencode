@@ -75,12 +75,20 @@ jobs:
 
   nix:
     needs: plan
+    if: needs.plan.outputs.channel == 'latest'
     uses: ./.github/workflows/check-nix.yml
+    with:
+      build-deps: true
 
   # A versioned release builds from a commit with its versions and changelog on the dispatched dev commit,
   # tagged v<version>. Runs git only.
   tag:
     needs: [plan, nix]
+    # Explicit status checks also keep descendants running when dev/beta skip Nix.
+    if: >-
+      ${{ !cancelled() && needs.plan.result == 'success' &&
+          (needs.nix.result == 'success' ||
+           (needs.plan.outputs.channel != 'latest' && needs.nix.result == 'skipped')) }}
     runs-on: ubuntu-24.04
     # Stable tags are pushed with the release deploy key, the only non-releasers actor the v* tag ruleset admits.
     environment: ${{ needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
@@ -111,6 +119,7 @@ jobs:
   # Fetches the models.dev catalog once per run, so every CLI bundles the same copy.
   models-catalog:
     needs: [plan, tag]
+    if: ${{ !cancelled() && !failure() && needs.tag.result == 'success' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     env: *env
@@ -134,6 +143,7 @@ jobs:
 
   build-cli:
     needs: [plan, tag, models-catalog]
+    if: ${{ !cancelled() && !failure() && needs.tag.result == 'success' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     env: *env
@@ -169,7 +179,9 @@ jobs:
 
   build-node:
     needs: [plan, tag, models-catalog]
-    if: needs.plan.outputs.node == 'true'
+    if: >-
+      ${{ !cancelled() && !failure() && needs.tag.result == 'success' &&
+          needs.plan.outputs.node == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -253,7 +265,9 @@ jobs:
 
   build-docker:
     needs: [plan, tag, build-cli]
-    if: needs.plan.outputs.release == 'true'
+    if: >-
+      ${{ !cancelled() && !failure() && needs.tag.result == 'success' &&
+          needs.plan.outputs.release == 'true' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     env: *env
     steps:
@@ -279,7 +293,9 @@ jobs:
   # afterPack rejects a bundle whose CLI or node-pty does not match the target CPU.
   build-desktop:
     needs: [plan, tag, build-cli]
-    if: needs.plan.outputs.desktop == 'true'
+    if: >-
+      ${{ !cancelled() && !failure() && needs.tag.result == 'success' &&
+          needs.plan.outputs.desktop == 'true' }}
     permissions:
       contents: read
       pull-requests: read # beta builds read who made each change and what it does for "What's new in beta"

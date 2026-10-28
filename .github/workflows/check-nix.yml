@@ -8,9 +8,13 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
   workflow_call:
+    inputs:
+      build-deps:
+        type: boolean
+        default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: check-nix-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 permissions:
@@ -19,7 +23,11 @@ permissions:
 jobs:
   nix-deps:
     name: nix-deps (${{ matrix.system }})
-    if: ${{ !github.event.pull_request.draft }}
+    if: >-
+      ${{ !github.event.pull_request.draft &&
+          (inputs.build-deps || github.ref == 'refs/heads/bot/nix-hashes' ||
+           (github.head_ref == 'bot/nix-hashes' &&
+            github.event.pull_request.head.repo.full_name == github.repository)) }}
     strategy:
       fail-fast: false
       matrix:
@@ -46,11 +54,18 @@ jobs:
           SYSTEM: ${{ matrix.system }}
         run: nix build ".#packages.${SYSTEM}.opencode.node_modules" --no-link --print-build-logs
 
+  # A skipped matrix has no per-system checks; keep one stable check for branch protection.
   nix-eval:
-    if: ${{ !github.event.pull_request.draft }}
+    needs: nix-deps
+    if: ${{ always() && !github.event.pull_request.draft }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
+      - name: Check dependency build results
+        env:
+          RESULT: ${{ needs.nix-deps.result }}
+        run: test "$RESULT" = success || test "$RESULT" = skipped
+
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
