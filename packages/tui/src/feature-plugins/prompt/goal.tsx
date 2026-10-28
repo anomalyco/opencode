@@ -9,7 +9,7 @@ import { DialogFooter, DialogHeader, DialogLayout, type DialogFooterAction } fro
  * The goal `/goal` set on a Session, from the goal plugin's RPC: fetched when the Session changes or the server
  * reconnects, since changes published meanwhile were missed, and kept current from its `changed` events.
  */
-export function createSessionGoal(context: Plugin.Context, sessionID: Accessor<string | undefined>) {
+export function createGoal(context: Plugin.Context, sessionID: Accessor<string | undefined>) {
   const [goal, setGoal] = createSignal<Goal.State>()
   const rpc = context.client.rpc(Goal.Definition)
   // A change that arrives while a fetch is in flight is newer than its reply, so each change or fetch takes a turn.
