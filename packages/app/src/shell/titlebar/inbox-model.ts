@@ -249,7 +249,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
   }
 
   const open = (entry: InboxEntry) => {
-    const directory = entry.ctx.projects.forSession(entry.session)?.worktree ?? entry.session.location.directory
+    const directory = inboxProjectDirectory(entry)
     void entry.ctx.data.session.message.sync(entry.session.id).catch((error) => {
       if (isSessionNotFoundError(error)) forget(entry.conn, entry.session.id)
     })
@@ -358,7 +358,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
 export type SessionInbox = ReturnType<typeof createSessionInbox>
 
-export function inboxArchived(entry: InboxEntry) {
+export function inboxArchived(entry: { session: { time: { archived?: number } } }) {
   return entry.session.time.archived !== undefined
 }
 
@@ -374,4 +374,161 @@ export function inboxInWorktree(entry: InboxEntry) {
   const root = entry.ctx.projects.forSession(entry.session)?.worktree
 
   return !!root && pathKey(root) !== pathKey(entry.session.location.directory)
+}
+
+export type InboxSessionItem = {
+  id: string
+  location: {
+    directory: string
+  }
+  time: {
+    updated: number
+    idle?: number
+    archived?: number
+  }
+}
+
+export type InboxEntryItem<TSession extends InboxSessionItem = SessionInfo> = {
+  key: string
+  server: string
+  status: InboxStatus
+  session: TSession
+  ctx: {
+    projects: {
+      forSession(session: TSession): { worktree: string } | undefined
+    }
+  }
+}
+
+export function inboxProjectDirectory<TSession extends InboxSessionItem>(entry: InboxEntryItem<TSession>) {
+  return entry.ctx.projects.forSession(entry.session)?.worktree ?? entry.session.location.directory
+}
+
+export function inboxProjectKey<TSession extends InboxSessionItem>(entry: InboxEntryItem<TSession>) {
+  return `${entry.server}\0${pathKey(inboxProjectDirectory(entry))}`
+}
+
+export type InboxProjectOption<T = InboxEntry> = {
+  key: string
+  directory: string
+  name: string
+  label: string
+  count: number
+  entry: T
+}
+
+export function inboxProjects<TSession extends InboxSessionItem, T extends InboxEntryItem<TSession>>(
+  entries: readonly T[],
+  nameOf: (entry: T) => string,
+): InboxProjectOption<T>[] {
+  const byProject = new Map<string, { directory: string; name: string; count: number; entry: T }>()
+
+  entries.forEach((entry) => {
+    const key = inboxProjectKey(entry)
+    const existing = byProject.get(key)
+
+    if (existing) {
+      existing.count += 1
+
+      return
+    }
+
+    const directory = inboxProjectDirectory(entry)
+
+    byProject.set(key, {
+      directory,
+      name: nameOf(entry),
+      count: 1,
+      entry,
+    })
+  })
+
+  const nameCounts = new Map<string, number>()
+
+  byProject.forEach((item) => {
+    nameCounts.set(item.name, (nameCounts.get(item.name) ?? 0) + 1)
+  })
+
+  return [...byProject.entries()]
+    .map(([key, item]) => ({
+      key,
+      directory: item.directory,
+      name: item.name,
+      label: (nameCounts.get(item.name) ?? 0) > 1 ? `${item.name} (${item.directory})` : item.name,
+      count: item.count,
+      entry: item.entry,
+    }))
+    .toSorted((a, b) => a.label.localeCompare(b.label))
+}
+
+export type InboxProjectGroup<T = InboxEntry> = {
+  key: string
+  label: string
+  entries: T[]
+}
+
+export function groupInboxByProject<TSession extends InboxSessionItem, T extends InboxEntryItem<TSession>>(
+  entries: readonly T[],
+  labelOf: (entry: T) => string,
+): InboxProjectGroup<T>[] {
+  const groups = new Map<string, InboxProjectGroup<T>>()
+
+  entries.forEach((entry) => {
+    const key = inboxProjectKey(entry)
+    const existing = groups.get(key)
+
+    if (existing) {
+      existing.entries.push(entry)
+
+      return
+    }
+
+    groups.set(key, {
+      key,
+      label: labelOf(entry),
+      entries: [entry],
+    })
+  })
+
+  return [...groups.values()]
+}
+
+export function partitionInboxEntries<TSession extends InboxSessionItem, T extends InboxEntryItem<TSession>>(
+  entries: readonly T[],
+  options: {
+    since?: number
+    pinned?: readonly string[]
+    project?: string
+  },
+) {
+  const project =
+    options.project && entries.some((entry) => inboxProjectKey(entry) === options.project) ? options.project : undefined
+
+  const scoped = project ? entries.filter((entry) => inboxProjectKey(entry) === project) : entries
+  const pinnedSet = new Set(options.pinned ?? [])
+
+  // Pinned sessions stay visible across `since` resets unless they are currently working, waiting on a person, or archived.
+  const pinned = scoped
+    .filter((entry) => pinnedSet.has(entry.key) && !inboxBusy(entry.status) && !inboxArchived(entry))
+    .toSorted(
+      (a, b) => (b.session.time.idle ?? b.session.time.updated) - (a.session.time.idle ?? a.session.time.updated),
+    )
+
+  // The most recently finished session comes first.
+  const finished = scoped
+    .filter((entry) => {
+      const since = options.since
+
+      return !inboxBusy(entry.status) && since !== undefined && (entry.session.time.idle ?? 0) >= since
+    })
+    .toSorted((a, b) => (b.session.time.idle ?? 0) - (a.session.time.idle ?? 0))
+
+  return {
+    project,
+    needs: scoped.filter((entry) => entry.status === "approval" || entry.status === "input"),
+    pinned,
+    inbox: finished.filter((entry) => !inboxArchived(entry) && !pinnedSet.has(entry.key)),
+    archived: finished.filter(inboxArchived),
+    working: scoped.filter((entry) => entry.status === "working"),
+  }
 }
