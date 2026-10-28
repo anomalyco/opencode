@@ -349,6 +349,10 @@ export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArra
   return [...new Map(flat.map((tool) => [tool.name, tool])).values()]
 }
 
+/** Keep unadvertised multi-segment names from wedging strict OpenAI-compatible history. */
+export const openAIReplayToolName = (name: string, tools: ReadonlySet<string>) =>
+  tools.has(name) || name.indexOf(".", name.indexOf(".") + 1) === -1 ? name : name.replaceAll(".", "_")
+
 export const flattenToolRequest = (request: LLMRequest) => {
   const messages = request.messages.map((message) => {
     const content = message.content.map((part) => {

@@ -13,6 +13,72 @@ import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 describe("Open Responses-compatible route", () => {
+  it.effect("replays a rejected multi-dot tool call without invalidating the next request", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
+        "example-model",
+      )
+      const call = { type: "tool-call" as const, id: "call_unknown", name: "browser.tabs.open", input: {} }
+      const error = 'No tool named "browser.tabs.open" is currently available.'
+      const request = LLM.request({
+        model,
+        tools: [
+          ToolDefinition.make({
+            name: "browser_tabs_open",
+            description: "Open a tab",
+            inputSchema: { type: "object" },
+          }),
+        ],
+        messages: [
+          Message.assistant(call),
+          Message.tool({ id: call.id, name: call.name, result: error, resultType: "error" }),
+        ],
+      })
+      const prepared = yield* compileRequest(request)
+
+      expect(prepared.body.input).toMatchObject([
+        { type: "function_call", call_id: call.id, name: "browser_tabs_open" },
+        { type: "function_call_output", call_id: call.id, output: error },
+      ])
+      expect(prepared.body.tools).toMatchObject([{ name: "browser_tabs_open" }])
+      expect(request.messages[0].content[0]).toMatchObject(call)
+    }),
+  )
+
+  it.effect("preserves advertised multi-dot tool names and names with one dot", () =>
+    Effect.gen(function* () {
+      const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
+        "example-model",
+      )
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            ToolDefinition.make({
+              name: "plugin.custom.lookup",
+              description: "Lookup",
+              inputSchema: { type: "object" },
+            }),
+          ],
+          messages: [
+            Message.assistant([
+              { type: "tool-call", id: "call_one", name: "other.lookup", input: {} },
+              { type: "tool-call", id: "call_two", name: "plugin.custom.lookup", input: {} },
+            ]),
+            Message.tool({ id: "call_one", name: "other.lookup", result: "done" }),
+            Message.tool({ id: "call_two", name: "plugin.custom.lookup", result: "done" }),
+          ],
+        }),
+      )
+      expect(prepared.body.input).toMatchObject([
+        { type: "function_call", call_id: "call_one", name: "other.lookup" },
+        { type: "function_call", call_id: "call_two", name: "plugin.custom.lookup" },
+        { type: "function_call_output", call_id: "call_one" },
+        { type: "function_call_output", call_id: "call_two" },
+      ])
+    }),
+  )
+
   it.effect("uses the Open Responses baseline for a configured deployment", () =>
     Effect.gen(function* () {
       expect(OpenAICompatibleResponses.route.body).toBe(OpenResponses.protocol.body)

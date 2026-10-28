@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMEvent, LLMRequest, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { LLM, LLMEvent, LLMRequest, Media, Message, ToolCallPart, ToolChoice, ToolDefinition, Tool, ToolRuntime } from "../../src/effect.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
@@ -41,6 +41,115 @@ const usageChunk = (usage: object) => ({
 })
 
 describe("OpenAI-compatible Chat route", () => {
+  it.effect("replays a rejected multi-dot tool call without invalidating the next request", () =>
+    Effect.gen(function* () {
+      const call = ToolCallPart.make({
+        id: "call_unknown",
+        name: "browser.tabs.open",
+        input: { url: "https://example.com" },
+      })
+      const error = 'No tool named "browser.tabs.open" is currently available.'
+      const request = LLM.request({
+        model,
+        tools: [
+          ToolDefinition.make({
+            name: "browser_tabs_open",
+            description: "Open a tab",
+            inputSchema: { type: "object" },
+          }),
+        ],
+        messages: [
+          Message.user("Open the page"),
+          Message.assistant([call]),
+          Message.tool({ id: call.id, name: call.name, result: error, resultType: "error" }),
+          Message.user("Continue"),
+        ],
+      })
+      const prepared = yield* compileRequest(request)
+
+      expect(prepared.body.messages).toMatchObject([
+        { role: "user" },
+        { role: "assistant", tool_calls: [{ id: call.id, function: { name: "browser_tabs_open" } }] },
+        { role: "tool", tool_call_id: call.id, content: error },
+        { role: "user" },
+      ])
+      expect(prepared.body.tools).toMatchObject([{ function: { name: "browser_tabs_open" } }])
+      expect(request.messages[1].content[0]).toEqual(call)
+      expect(call.name).toBe("browser.tabs.open")
+    }),
+  )
+
+  it.effect("preserves advertised multi-dot tool names and names with one dot", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          tools: [
+            ToolDefinition.make({
+              name: "plugin.custom.lookup",
+              description: "Lookup",
+              inputSchema: { type: "object" },
+            }),
+          ],
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "call_one", name: "other.lookup", input: {} }),
+              ToolCallPart.make({ id: "call_two", name: "plugin.custom.lookup", input: {} }),
+            ]),
+            Message.tool({ id: "call_one", name: "other.lookup", result: "done" }),
+            Message.tool({ id: "call_two", name: "plugin.custom.lookup", result: "done" }),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toMatchObject([
+        {
+          role: "assistant",
+          tool_calls: [{ function: { name: "other.lookup" } }, { function: { name: "plugin.custom.lookup" } }],
+        },
+        { role: "tool", tool_call_id: "call_one" },
+        { role: "tool", tool_call_id: "call_two" },
+      ])
+    }),
+  )
+
+  it.effect("does not dispatch an unknown dotted name as its replay spelling", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({
+                tool_calls: [
+                  { index: 0, id: "call_unknown", function: { name: "browser.tabs.open", arguments: "{}" } },
+                ],
+              }),
+              deltaChunk({}, "tool_calls"),
+            ),
+          ),
+        ),
+      )
+      const call = response.toolCalls[0]
+      if (!call) throw new Error("Expected a tool call")
+      expect(call.name).toBe("browser.tabs.open")
+      const dispatched = yield* ToolRuntime.dispatch(
+        {
+          browser_tabs_open: Tool.make({
+            description: "Open a tab",
+            parameters: Schema.Struct({}),
+            success: Schema.String,
+            execute: () => Effect.die("A normalized replay name must not select an executor"),
+          }),
+        },
+        call,
+      )
+      expect(dispatched.result).toEqual({
+        type: "error",
+        value:
+          'No tool named "browser.tabs.open" is currently available. Please use a tool from the available tool list.',
+      })
+    }),
+  )
+
   it.effect("serializes user and tool video for unknown compatible providers", () =>
     Effect.gen(function* () {
       const inline = "data:video/mp4;base64,AAEC"
