@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { checkFileLinkExists, findFileLink, parseFileLink, type FileLinkTarget } from "./resolve-link"
+import {
+  checkFileLinkExists,
+  findFileLink,
+  parseFileLink,
+  parseFileLinkCandidates,
+  type FileLinkTarget,
+} from "./resolve-link"
 
 const workspaceFiles = [
   "src/index.ts",
@@ -65,6 +71,26 @@ describe("parseFileLink", () => {
   })
 })
 
+describe("parseFileLinkCandidates", () => {
+  test.each([
+    ["@packages/app/src/app.tsx", ["@packages/app/src/app.tsx", "packages/app/src/app.tsx"]],
+    ["@session/timeline/interaction.ts:74", ["@session/timeline/interaction.ts", "session/timeline/interaction.ts"]],
+    ["@types/node/index.d.ts", ["@types/node/index.d.ts", "types/node/index.d.ts"]],
+    ["@/lib/utils.ts", ["@/lib/utils.ts"]],
+    ["src/@types/a.ts", ["src/@types/a.ts"]],
+    ["packages/app/src/app.tsx", ["packages/app/src/app.tsx"]],
+  ])("%s", (href, paths) => {
+    expect(parseFileLinkCandidates(href).map((candidate) => candidate.path)).toEqual(paths)
+  })
+
+  test("keeps the line selection on the mention candidate", () => {
+    expect(parseFileLinkCandidates("@session/timeline/interaction.ts:74")[1]).toEqual({
+      path: "session/timeline/interaction.ts",
+      selection: { start: 74, end: 74 },
+    })
+  })
+})
+
 describe("findFileLink", () => {
   test.each<[string, FileLinkTarget | undefined]>([
     ["src/index.ts", { kind: "file", path: "src/index.ts" }],
@@ -108,5 +134,21 @@ describe("checkFileLinkExists", () => {
     expect(await check("~/README.md")).toBe(false)
     expect(await check("\\\\host\\share\\x.ts")).toBe(false)
     expect(await check("console.log")).toBe(false)
+  })
+
+  test("keeps a package scope's literal path", async () => {
+    const href = "@types/node/index.d.ts"
+
+    expect(
+      await checkFileLinkExists({
+        files: {
+          search: async (query: string) => (query === href ? ["node_modules/@types/node/index.d.ts"] : []),
+          resolve: (path: string) => path,
+          exists: async () => false,
+        },
+        href,
+        signal: new AbortController().signal,
+      }),
+    ).toBe(true)
   })
 })
