@@ -90,7 +90,7 @@
       "semver": "7.7.4",
       "typescript": "npm:@typescript/typescript6@6.0.2",
       "@typescript/native": "npm:typescript@7.1.0-beta",
-      "zod": "4.1.8",
+      "zod": "4.6.7",
       "remeda": "2.26.0",
       "sst": "4.13.1",
       "shiki": "4.4.3",

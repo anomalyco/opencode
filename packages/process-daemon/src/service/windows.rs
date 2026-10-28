@@ -9,10 +9,12 @@ use windows_sys::Win32::{
 
 use super::ActorMessage;
 
+const EXIT_POLL_INTERVAL: Duration = Duration::from_millis(25);
+
 /// Keep blocking ClosePseudoConsole off the actor/reader without introducing
 /// another worker. The actor hands its unique master here on root exit or on
 /// teardown; closing it then produces the real output-pipe EOF.
-/// Root-exit detection uses a 10 ms poll interval. After reaping, the
+/// Root-exit detection uses a 25 ms poll interval. After reaping, the
 /// worker blocks on the close channel rather than continuing to poll.
 pub(super) fn wait_and_close(
     mut child: Box<dyn Child + Send + Sync>,
@@ -37,7 +39,7 @@ pub(super) fn wait_and_close(
         let request = if reported {
             close.recv().map_err(|_| RecvTimeoutError::Disconnected)
         } else {
-            close.recv_timeout(Duration::from_millis(10))
+            close.recv_timeout(EXIT_POLL_INTERVAL)
         };
         match request {
             Ok(master) => {

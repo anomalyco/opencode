@@ -140,7 +140,7 @@ test("restores each existing session's model and variant when switching tabs", a
   const composer = page.locator('[data-component="composer"]')
   const modelControl = composer.locator('[data-action="composer-model"]')
   const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
-  await expect(modelControl).toHaveText("OpenCode / Model A")
+  await expect(modelControl).toHaveText("Model A")
   await expect(variant).toHaveText("balanced")
   await variant.click()
   await page.getByRole("menuitemradio", { name: "high", exact: true }).click()
@@ -148,7 +148,7 @@ test("restores each existing session's model and variant when switching tabs", a
 
   await page.locator(`[data-titlebar-tab-link][href="${hrefB}"]`).click()
   await expect(page).toHaveURL(hrefB)
-  await expect(modelControl).toHaveText("OpenCode / Model B")
+  await expect(modelControl).toHaveText("Model B")
   await expect(variant).toHaveText("balanced")
   await variant.click()
   await page.getByRole("menuitemradio", { name: "high", exact: true }).click()
@@ -157,11 +157,11 @@ test("restores each existing session's model and variant when switching tabs", a
   // A new draft starts from the current session's non-default model and chosen variant.
   await page.getByRole("button", { name: "New session", exact: true }).click()
   await expect(page).toHaveURL(/\/new-session\?draftId=/)
-  await expect(modelControl).toHaveText("OpenCode / Model B")
+  await expect(modelControl).toHaveText("Model B")
   await expect(variant).toHaveText("high")
 
   await page.locator(`[data-titlebar-tab-link][href="${hrefA}"]`).click()
   await expect(page).toHaveURL(hrefA)
-  await expect(modelControl).toHaveText("OpenCode / Model A")
+  await expect(modelControl).toHaveText("Model A")
   await expect(variant).toHaveText("high")
 })

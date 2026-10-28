@@ -98,11 +98,8 @@
     "fast-check": "catalog:"
   },
   "dependencies": {
-    "@ai-sdk/cohere": "3.0.27",
-    "@ai-sdk/perplexity": "3.0.26",
     "@ai-sdk/provider": "3.0.8",
     "@ai-sdk/provider-utils": "4.0.23",
-    "@ai-sdk/vercel": "2.0.39",
     "@ff-labs/fff-bun": "0.10.5",
     "@ff-labs/fff-node": "0.10.5",
     "@lydell/node-pty": "catalog:",

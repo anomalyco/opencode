@@ -69,6 +69,8 @@ pub fn read_registration(directory: &Path) -> Result<Registration> {
     }
 }
 
+#[cfg(any(unix, windows))]
+mod control;
 #[cfg(unix)]
 #[path = "daemon/unix.rs"]
 mod platform;

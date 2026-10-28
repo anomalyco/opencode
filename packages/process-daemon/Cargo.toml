@@ -21,7 +21,7 @@ shell-words = "1.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
-nix = { version = "0.28", features = ["process", "term", "user"] }
+nix = { version = "0.28", features = ["poll", "process", "term", "user"] }
 sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]

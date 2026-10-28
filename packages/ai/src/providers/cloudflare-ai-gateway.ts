@@ -27,7 +27,7 @@ type GatewayOptions = {
   readonly collectLog?: boolean
 }
 
-export type LanguageModelOptions = GatewayURL &
+export type Config = GatewayURL &
   GatewayOptions &
   Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
@@ -94,12 +94,12 @@ export const route = OpenAIChat.route.with({
 
 export const routes = [responsesRoute, messagesRoute, route]
 
-const credential = (input: LanguageModelOptions) =>
+const credential = (input: Config) =>
   Auth.optional(input.gatewayApiKey ?? ("apiKey" in input ? input.apiKey : undefined), "apiKey")
     .orElse(Auth.config(authEnvVars[0]))
     .orElse(Auth.config(authEnvVars[1]))
 
-const headers = (input: LanguageModelOptions) => ({
+const headers = (input: Config) => ({
   ...(input.metadata === undefined ? {} : { "cf-aig-metadata": encodeJson(input.metadata) }),
   ...(input.cacheTtl === undefined ? {} : { "cf-aig-cache-ttl": String(input.cacheTtl) }),
   ...(input.cacheKey === undefined ? {} : { "cf-aig-cache-key": input.cacheKey }),
@@ -108,7 +108,7 @@ const headers = (input: LanguageModelOptions) => ({
   ...input.headers,
 })
 
-export const configure = (input: LanguageModelOptions) => {
+export const configure = (input: Config) => {
   const custom = "auth" in input && input.auth ? input.auth : undefined
   const rest = {
     endpoint: { baseURL: baseURL(input) },
@@ -162,7 +162,7 @@ export const configure = (input: LanguageModelOptions) => {
 
 export const provider = { id, configure }
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
 export const decisionModel = (modelID: string, settings: Settings) => {
   const input = config(settings)
