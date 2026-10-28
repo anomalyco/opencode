@@ -974,6 +974,8 @@ export function createTimelineVirtualizer(input: Input) {
           </Show>
           <div
             data-timeline-virtual-content
+            data-timeline-session-key={ownerSessionKey}
+            data-timeline-pinned={input.pinned() ? "" : undefined}
             ref={(element) => {
               virtualContent = element
 
