@@ -1,16 +1,19 @@
 import { MemoryRouter, createMemoryHistory } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
-import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
+import type { Bridge } from "@opencode/plugin/gui/host"
 import { AppBaseProviders, AppInterface } from "../../src/app"
 import { PlatformProvider, type Platform } from "../../src/runtime/platform/platform"
 
 // The app on a Windows desktop platform, so the titlebar shows the app menu. Menu actions are listed in an output.
-export function mount(input: { server: string }) {
+// `path` opens a route other than Home.
+export function mount(input: { server: string; path?: string }) {
   const root = document.getElementById("root")
 
   if (!root) throw new Error("Missing fixture root")
   const history = createMemoryHistory()
+
+  if (input.path) history.set({ value: input.path, replace: true })
   render(() => {
     const [store, setStore] = createStore<{ actions: string[] }>({ actions: [] })
 
@@ -18,7 +21,7 @@ export function mount(input: { server: string }) {
       throw new Error("Unexpected fixture action")
     }
 
-    // No main-process extensions run in this fixture.
+    // No main-process plugins run in this fixture.
     const bridge: Bridge = {
       packaged: false,
       call: unused,
@@ -28,15 +31,12 @@ export function mount(input: { server: string }) {
       capture: async () => undefined,
       runMenubarItem: () => undefined,
       configure: () => undefined,
+      pluginGuis: async () => ({ plugins: [], reserved: [] }),
       manager: {
         list: async () => [],
         enable: async () => undefined,
         disable: async () => undefined,
         reload: async () => undefined,
-        install: async () => undefined,
-        remove: async () => undefined,
-        source: async () => "",
-        asset: () => "",
       },
     }
 
@@ -48,7 +48,7 @@ export function mount(input: { server: string }) {
       openDirectoryPickerDialog: async () => null,
       notify: async () => undefined,
       restart: unused,
-      extensions: bridge,
+      plugins: bridge,
       runDesktopMenuAction: (action) => setStore("actions", (actions) => [...actions, action]),
     }
 

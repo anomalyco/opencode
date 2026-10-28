@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
-import { queuedPromptAttachments, queuedPromptRows } from "./queue"
+import { queuedPromptAttachments, queuedPromptRows, type SentEdit } from "./queue"
 
 const queued = [
   {
@@ -23,23 +23,81 @@ const queued = [
 
 const other = { ...queued[0], id: "msg_other", payload: { text: "other" } }
 
-const edit = { original: "msg_original", replacement: "msg_replacement" }
+const later = { ...queued[0], id: "msg_later", payload: { text: "later" } }
 
+const laterCopy = { ...later, id: "msg_later_copy" }
+
+const sent = (change: Partial<SentEdit> = {}): SentEdit => ({
+  original: "msg_original",
+  delivery: "queue",
+  text: "edited",
+  attachments: 1,
+  moved: { msg_original: "msg_replacement", msg_later: "msg_later_copy" },
+  admitted: false,
+  ...change,
+})
+
+const row = (item: (typeof queued)[number], pending?: boolean) => ({
+  id: item.id,
+  text: item.payload.text,
+  attachments: 0,
+  pending,
+})
+
+const edited = (id: string) => ({ id, text: "edited", attachments: 1, pending: true })
+
+// One edit's life in the strip: sent from the composer, re-admitted by the server, its originals
+// cancelled last first, then settled once the server's queue reflects it, or rolled back on failure.
 describe("queuedPromptRows", () => {
   test.each([
-    ["keeps the edited prompt to one row while its replacement is admitted", queued, edit, [queued[1]]],
-    ["keeps the original visible until its replacement appears", [queued[0]], edit, [queued[0]]],
-    ["retains unrelated queue entries", queued, undefined, queued],
     [
-      "keeps other prompts visible while a mutation replaces the edited prompt",
-      [queued[0], other, queued[1]],
-      edit,
-      [other, queued[1]],
+      "shows a sent edit on the original row and marks the rows it rewrites as pending",
+      [other, queued[0], later],
+      [sent()],
+      [row(other), edited("msg_original"), row(later, true)],
     ],
-  ])("%s", (_name, items, replacement, visible) => {
-    expect(queuedPromptRows(items, replacement)).toEqual(
-      visible.map((item) => ({ id: item.id, text: item.payload.text, attachments: 0 })),
-    )
+    [
+      "hides re-admitted copies while their originals are listed",
+      [other, queued[0], later, queued[1], laterCopy],
+      [sent()],
+      [row(other), edited("msg_original"), row(later, true)],
+    ],
+    [
+      "keeps the order as the originals are cancelled last first",
+      [other, queued[0], queued[1], laterCopy],
+      [sent({ admitted: true })],
+      [row(other), edited("msg_original"), row(laterCopy, true)],
+    ],
+    [
+      "shows the edit on its replacement once the original is gone",
+      [other, queued[1], laterCopy],
+      [sent({ admitted: true })],
+      [row(other), edited("msg_replacement"), row(laterCopy, true)],
+    ],
+    [
+      "drops the original row once a steered edit is admitted",
+      [queued[0], other],
+      [sent({ delivery: "steer", moved: { msg_original: "msg_replacement" }, admitted: true })],
+      [row(other)],
+    ],
+    ["shows the server's queue once the edit settles", [other, queued[1]], [], [row(other), row(queued[1])]],
+    ["restores the original row when a failed edit settles", [queued[0], other], [], [row(queued[0]), row(other)]],
+  ])("%s", (_name, items, edits, visible) => {
+    expect(queuedPromptRows(items, edits)).toEqual(visible)
+  })
+
+  test("shows each of several edits in flight on its own row", () => {
+    const second = sent({ original: "msg_other", text: "other edited", moved: { msg_other: "msg_other_copy" } })
+
+    expect(queuedPromptRows([queued[0], other, later], [sent(), second])).toEqual([
+      edited("msg_original"),
+      { id: "msg_other", text: "other edited", attachments: 1, pending: true },
+      row(later, true),
+    ])
+  })
+
+  test("hides prompts the server confirmed gone until its events catch up", () => {
+    expect(queuedPromptRows([queued[0], other], [], ["msg_original"])).toEqual([row(other)])
   })
 })
 

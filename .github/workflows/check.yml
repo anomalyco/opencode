@@ -4,7 +4,8 @@ on:
   push:
     branches: [dev]
   pull_request:
-    branches: [dev]
+    branches: [dev, beta]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 concurrency:
@@ -14,6 +15,7 @@ concurrency:
 jobs:
   check:
     name: typecheck
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
@@ -25,10 +27,14 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Run checks
-        run: bun run check
+      - name: Lint
+        run: bun run lint
 
-      # Every GUI package file (app, desktop, gui-extensions, ui, session-ui) a pull request adds or edits must be free of
+      # Local `bun run check` uses `bun check`; CI keeps the official TypeScript compiler as the source of truth.
+      - name: Typecheck (TypeScript 7.1)
+        run: bun run typecheck:tsc
+
+      # Every GUI package file (app, desktop, gui-plugins, the plugin package's GUI SDK, ui, session-ui) a pull request adds or edits must be free of
       # oxlint problems, warn-level rules (anti-slop) included. Other packages are not affected.
       - name: Lint changed files
         if: github.event_name == 'pull_request'

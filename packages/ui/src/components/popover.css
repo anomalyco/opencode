@@ -9,7 +9,7 @@
   border-radius: var(--radius-md);
   background-color: var(--surface-raised-stronger-non-alpha);
 
-  border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);
+  border: 1px solid var(--v2-border-border-muted);
   background-clip: padding-box;
   box-shadow: var(--shadow-md);
 

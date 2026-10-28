@@ -10,7 +10,7 @@
 //
 // Manual `cache: CacheHint` placements on individual parts are preserved and
 // count against the four-breakpoint budget; auto only fills remaining slots.
-import { CacheHint, type CachePolicy, type CachePolicyObject } from "./schema/options.js"
+import { CacheHint, type CachePolicy, type CachePolicyObject, type CacheTTL } from "./schema/options.js"
 import { LLMRequest, Message, ToolDefinition, type ContentPart, type ToolEntry } from "./schema/messages.js"
 import { effortUpdate } from "./effort-updates.js"
 
@@ -27,12 +27,24 @@ const BREAKPOINT_CAP = 4
 //   - undefined   → "auto" — caching is on by default.
 //   - "auto"      → tools + first/last system + final message boundary.
 //   - "none"      → no auto placement; manual `CacheHint`s still flow.
+//   - `{ ttl }`   → "auto" with that lifetime.
 //   - object form → exactly what the caller asked for.
 const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
-  if (policy === undefined || policy === "auto") return AUTO
   if (policy === "none") return NONE
-  return policy
+  if (typeof policy === "object" && !isAuto(policy)) return policy
+  return AUTO
 }
+
+const isAuto = (policy: CachePolicy | undefined) =>
+  policy === undefined ||
+  policy === "auto" ||
+  (typeof policy === "object" &&
+    policy.tools === undefined &&
+    policy.system === undefined &&
+    policy.messages === undefined)
+
+/** The requested cache lifetime, for routes that send it as a request-level option instead of on markers. */
+export const requestTTL = (request: LLMRequest) => (typeof request.cache === "object" ? request.cache.ttl : undefined)
 
 // Protocols whose wire format ignores inline cache markers (OpenAI's implicit
 // prefix caching, Gemini's implicit + out-of-band CachedContent). Skip the
@@ -67,8 +79,8 @@ const gatewayPolicy = (modelID: string): CachePolicyObject => {
   return NONE
 }
 
-const makeHint = (ttlSeconds: number | undefined): CacheHint =>
-  ttlSeconds !== undefined ? new CacheHint({ type: "ephemeral", ttlSeconds }) : new CacheHint({ type: "ephemeral" })
+const makeHint = (ttl: CacheTTL | undefined): CacheHint =>
+  ttl !== undefined ? new CacheHint({ type: "ephemeral", ttl }) : new CacheHint({ type: "ephemeral" })
 
 interface Budget {
   remaining: number
@@ -179,7 +191,7 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   const policy = selectPolicy(request)
   if (!policy.tools && !policy.system && !policy.messages) return request
 
-  const hint = makeHint(policy.ttlSeconds)
+  const hint = makeHint(requestTTL(request))
   const budget = { remaining: Math.max(0, BREAKPOINT_CAP - countHints(request)) }
   const tools = policy.tools ? markLastTool(request.tools, hint, budget) : request.tools
   const system = policy.system ? markSystemBoundaries(request.system, hint, budget) : request.system
@@ -189,11 +201,17 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   return LLMRequest.update(request, { tools, system, messages })
 }
 
+/** Whether the cache policy places inline markers, which then carry the requested lifetime. */
+export const placesMarkers = (request: LLMRequest) => {
+  const policy = selectPolicy(request)
+  return Boolean(policy.tools || policy.system || policy.messages)
+}
+
 // A declared cache format overrides the route allowlist and its model-ID heuristics.
 const selectPolicy = (request: LLMRequest): CachePolicyObject => {
   const format = request.model.compatibility?.cacheFormat
   const route = request.model.route.id
-  const auto = request.cache === undefined || request.cache === "auto"
+  const auto = isAuto(request.cache)
   if (format === "alibaba") return auto ? QWEN : { ...resolve(request.cache), tools: false }
   if (format === "anthropic") return resolve(request.cache)
   if (!RESPECTS_INLINE_HINTS.has(route)) return NONE

@@ -37,6 +37,7 @@ import { Expected } from "./lib/session-message"
 import { testEffect } from "./lib/effect"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { initGit } from "./fixture/git"
+import { countingSpawner } from "./fixture/spawn"
 import { offlineModels } from "./fixture/models"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { globalProjectNode } from "./lib/project"
@@ -131,6 +132,40 @@ describe("Session.create", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("repeat Session.create on the same location spawns no git", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => initGit(directory))
+        const counter = countingSpawner()
+        const layer = AppNodeBuilder.build(
+          LayerNode.group([
+            Database.node,
+            Bus.node,
+            Project.node,
+            LocationServiceMap.node,
+            SessionProjector.node,
+            SessionStore.node,
+            Session.node,
+          ]),
+          [
+            Bus.node.replace(Bus.configured({ persist: true })),
+            SessionExecution.node.replace(SessionExecution.noopLayer),
+            offlineModels,
+            counter.node,
+          ],
+        )
+        yield* Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+          yield* sessions.create({ location: ref })
+          const before = counter.spawns()
+          yield* sessions.create({ location: ref })
+          expect(counter.spawns()).toBe(before)
+        }).pipe(Effect.provide(layer))
+      }),
+    ),
+  )
+
   projectIt.live("follows the directory's project identity established after creation", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
@@ -211,7 +246,7 @@ describe("Session.create", () => {
         })
         expect(aliasAdopted).toMatchObject({
           projectID: project.id,
-          location: aliased,
+          location: nested,
           subpath: RelativePath.make("packages/app"),
         })
         // Adoption is a project-domain fact; the session log records nothing new.
@@ -313,6 +348,19 @@ describe("Session.create", () => {
 
       expect(second.id).not.toBe(first.id)
       expect((yield* session.list()).data).toHaveLength(2)
+    }),
+  )
+
+  it.effect("stores a trailing-slash directory in the same session list", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+
+      const created = yield* session.create({ location: { directory: AbsolutePath.make("/project/") } })
+
+      expect(created.location.directory).toBe(location.directory)
+      expect((yield* session.list({ directory: location.directory })).data.map((item) => item.id)).toEqual([
+        created.id,
+      ])
     }),
   )
 

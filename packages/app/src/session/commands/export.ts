@@ -2,7 +2,7 @@ import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
 import type { Platform } from "@/runtime/platform/platform"
 
-export type SessionExportData = {
+type SessionExportData = {
   info: SessionInfo
   messages: SessionMessageInfo[]
 }
@@ -58,11 +58,7 @@ export function downloadSessionExport(filename: string, data: unknown) {
   URL.revokeObjectURL(url)
 }
 
-export async function saveSessionExport(
-  filename: string,
-  data: unknown,
-  platform: Pick<Platform, "saveFile">,
-) {
+export async function saveSessionExport(filename: string, data: unknown, platform: Pick<Platform, "saveFile">) {
   if (!platform.saveFile) {
     downloadSessionExport(filename, data)
 

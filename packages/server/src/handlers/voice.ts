@@ -9,11 +9,6 @@ import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 import { awaitPlugins, locationErrors } from "../location"
 
-const voiceErrors = (error: Voice.Error) =>
-  error._tag === "Voice.InvalidRequestError"
-    ? new InvalidRequestError({ message: error.message })
-    : new ServiceUnavailableError({ message: error.message, service: error.service })
-
 export const VoiceHandler = HttpApiBuilder.group(Api, "server.voice", (handlers) =>
   Effect.gen(function* () {
     const global = yield* Global.Service
@@ -38,24 +33,16 @@ export const VoiceHandler = HttpApiBuilder.group(Api, "server.voice", (handlers)
           function* (request) {
             yield* awaitPlugins
             const voice = yield* Voice.Service
-            const session = yield* voice.session(request.payload).pipe(Effect.mapError(voiceErrors))
-            return {
-              data: { transport: session.transport, ...(session.id === undefined ? {} : { session: { id: session.id } }) },
-            }
-          },
-          Effect.provide(services),
-          locationErrors,
-        ),
-      )
-      .handle(
-        "voice.instructions",
-        Effect.fn("server.voice.instructions")(
-          function* (request) {
-            yield* awaitPlugins
-            const voice = yield* Voice.Service
-            yield* voice
-              .instruct({ id: request.params.sessionID, instructions: request.payload.instructions })
-              .pipe(Effect.mapError(voiceErrors))
+            const transport = yield* voice
+              .session(request.payload)
+              .pipe(
+                Effect.mapError((error) =>
+                  error._tag === "Voice.InvalidRequestError"
+                    ? new InvalidRequestError({ message: error.message })
+                    : new ServiceUnavailableError({ message: error.message, service: error.service }),
+                ),
+              )
+            return { data: { transport } }
           },
           Effect.provide(services),
           locationErrors,

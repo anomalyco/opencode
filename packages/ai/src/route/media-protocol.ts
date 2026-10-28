@@ -206,6 +206,15 @@ export const identity = (input: { readonly id: string; readonly name: string; re
   const provider = ProviderID.make(input.provider)
   const frameError = (message: string, body?: string, cause?: unknown) =>
     new AIError({ reason: new InvalidProviderOutputError({ route: input.id, message, body, cause }) })
+  const readError = (http: HttpContext) => (cause: unknown) =>
+    new AIError({
+      reason: new InvalidProviderOutputError({
+        route: input.id,
+        message: `Failed to read the ${input.name} response`,
+        http,
+        cause,
+      }),
+    })
 
   /**
    * Read a text body while retaining the original payload and HTTP context on every downstream error. `invalid` is a
@@ -216,19 +225,7 @@ export const identity = (input: { readonly id: string; readonly name: string; re
    */
   const text = Effect.fn("MediaProtocol.text")(function* (response: HttpClientResponse.HttpClientResponse) {
     const http = RequestExecutor.responseHttp(response)
-    const body = yield* response.text.pipe(
-      Effect.mapError(
-        (cause) =>
-          new AIError({
-            reason: new InvalidProviderOutputError({
-              route: input.id,
-              message: `Failed to read the ${input.name} response`,
-              http,
-              cause,
-            }),
-          }),
-      ),
-    )
+    const body = yield* response.text.pipe(Effect.mapError(readError(http)))
     return {
       body,
       http,
@@ -269,11 +266,19 @@ export const identity = (input: { readonly id: string; readonly name: string; re
     })
   }
 
+  /** Read a raw binary body, for providers that answer with the media bytes themselves. */
+  const bytes = (response: HttpClientResponse.HttpClientResponse) =>
+    response.arrayBuffer.pipe(
+      Effect.map((buffer) => new Uint8Array(buffer)),
+      Effect.mapError(readError(RequestExecutor.responseHttp(response))),
+    )
+
   return {
     id: input.id,
     name: input.name,
     provider,
     text,
+    bytes,
     decodeJson,
     /** Decode a submission response into the token and first snapshot. */
     decodeStarted: <A, Token>(schema: Schema.Codec<A, unknown>, started: (value: A) => Started<Token>) => {

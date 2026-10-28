@@ -1,6 +1,6 @@
 export * as PluginInternal from "./internal.js"
 
-import { LLMClient } from "@opencode/ai"
+import { LLMClient } from "@opencode/ai/effect"
 import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
@@ -57,7 +57,6 @@ import { Npm } from "@opencode/util/npm"
 import { Permission } from "../permission.js"
 import { Reference } from "../reference.js"
 import { WebSearch } from "../websearch.js"
-import { Voice } from "../voice.js"
 import { Ripgrep } from "../ripgrep.js"
 import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
@@ -153,7 +152,6 @@ const services = [
   SkillDiscovery.Service,
   Tool.Service,
   ToolOutput.Service,
-  Voice.Service,
   Watcher.Service,
   WellKnown.Service,
   Worktree.Service,
@@ -208,7 +206,6 @@ export const requirements = LayerNode.group([
   SkillDiscovery.node,
   Tool.node,
   ToolOutput.node,
-  Voice.node,
   Watcher.node,
   WellKnown.node,
   Worktree.node,

@@ -109,6 +109,11 @@
     overflow-wrap: anywhere;
   }
 
+  &[data-tool="shell"] [data-slot="basic-tool-tool-subtitle"],
+  &[data-tool="shell"] [data-slot="tool-error-card-subtitle"] {
+    font-family: var(--v2-font-family-code);
+  }
+
   [data-slot="tool-error-card-subtitle"] {
     max-height: 240px;
     overflow-y: auto;

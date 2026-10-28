@@ -1,7 +1,7 @@
 export * as ConfigNormalize from "./normalize.js"
 
 import { isDeepStrictEqual } from "node:util"
-import { isRecord } from "@opencode/ai/utils/record"
+import { isRecord } from "@opencode/util/record"
 import { Option, Schema } from "effect"
 import { Info } from "@opencode/schema/config"
 import { ConfigAgent } from "@opencode/schema/config/agent"
@@ -475,6 +475,24 @@ function normalizeExperimental(
           diagnostics,
         )
         if (value !== undefined) result.todo = value
+      }
+      if (own(experimental, "background_compaction")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.background_compaction,
+          experimental.background_compaction,
+          ["experimental", "background_compaction"],
+          diagnostics,
+        )
+        if (value !== undefined) result.background_compaction = value
+      }
+      if (own(experimental, "media_blob")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.media_blob,
+          experimental.media_blob,
+          ["experimental", "media_blob"],
+          diagnostics,
+        )
+        if (value !== undefined) result.media_blob = value
       }
       if (own(experimental, "subagent_depth")) {
         const value = decodeEncoded(

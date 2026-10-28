@@ -17,7 +17,7 @@ import {
   GithubCopilotPlugin,
   utilityTitle,
 } from "@opencode/core/plugin/provider/github-copilot"
-import { Message, SystemPart } from "@opencode/ai"
+import { Message, SystemPart } from "@opencode/ai/effect"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"

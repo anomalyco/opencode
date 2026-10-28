@@ -1,15 +1,20 @@
 import { describe, expect } from "bun:test"
-import { LLM } from "@opencode/ai"
+import { LLM } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
+import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Money } from "@opencode/schema/money"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Agent } from "@opencode/core/agent"
 import { App } from "@opencode/core/app"
+import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
+import { ConfigIntegration } from "@opencode/core/config/integration"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
+import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
+import { ConfigWebSearchPlugin } from "@opencode/core/config/plugin/websearch"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { ManagedPolicy } from "@opencode/core/managed-policy"
@@ -19,10 +24,10 @@ import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
+import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
-import { Voice } from "@opencode/core/voice"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
 import { emptyMcp } from "../fixture/mcp"
@@ -2029,148 +2034,415 @@ describe("OpencodePlugin", () => {
   )
 })
 
-describe("OpencodePlugin hosted voice", () => {
-  // A Console whose config offers hosted GPT-Live while `offered`, answering sessions with `reply`.
-  const voiceConsole = (reply: () => Response) =>
-    Effect.sync(() => {
-      const state = { offered: true }
-      const requests: { path: string; authorization: string | null; orgID: string | null; body: unknown }[] = []
-      const server = Bun.serve({
-        port: 0,
-        fetch: async (request) => {
-          const url = new URL(request.url)
-          if (url.pathname === "/api/v2/config")
-            return Response.json({
-              providers: {},
-              ...(state.offered
-                ? {
-                    voice: {
-                      baseURL: `${url.origin}/inference/openai/v1`,
-                      models: ["gpt-live-1"],
-                      workspace: "Anomaly",
-                    },
-                  }
-                : {}),
-            })
-          requests.push({
-            path: url.pathname,
-            authorization: request.headers.get("authorization"),
-            orgID: request.headers.get("x-org-id"),
-            body: await request.json(),
-          })
-          if (url.pathname.endsWith("/instructions")) return new Response(null, { status: 204 })
-          return reply()
-        },
-      })
-      return { server, state, requests }
-    })
+// A Console that marks its response with `$schema` serves a regular OpenCode config, merged as an integration document.
+describe("OpencodePlugin with a Console config", () => {
+  const $schema = "https://opencode.ai/config.json"
+  const consoleDocument = (config: Config.Interface) =>
+    config
+      .entries()
+      .pipe(
+        Effect.map((entries) =>
+          entries.find((entry): entry is ConfigIntegration.Document => entry instanceof ConfigIntegration.Document),
+        ),
+      )
+  const deny: ConfigPolicy.Info = { action: "tool.use", resource: "shell:*", effect: "deny" }
 
-  const connect = (server: ReturnType<typeof Bun.serve>) =>
-    Effect.gen(function* () {
-      const credentials = yield* Credential.Service
-      yield* credentials.create({
-        integrationID: Integration.ID.make("opencode"),
-        value: Credential.OAuth.make({
-          type: "oauth",
-          methodID: Integration.MethodID.make("device"),
-          access: "secret",
-          refresh: "refresh",
-          expires: Date.now() + 600_000,
-          metadata: { server: server.url.origin, orgID: "org_test" },
-        }),
-      })
-      yield* addPlugin().pipe(inProcess(server))
-    })
-
-  const offer = {
-    model: "gpt-live-1",
-    session: { audio: { output: { voice: "marin" } } },
-    transport: { type: "webrtc", sdp: "v=0" },
-  } as const
-
-  it.effect("starts GPT-Live sessions on the Console with the connection's credential while it offers them", () =>
+  it.effect("merges a response with $schema as config and applies one without it as before", () =>
     Effect.acquireUseRelease(
-      voiceConsole(() => Response.json({ session: { id: "sess_console" }, transport: { sdp: "answer:console" } })),
-      ({ server, state, requests }) =>
+      Effect.sync(() => {
+        const state = { schema: true }
+        const server = Bun.serve({
+          port: 0,
+          fetch: () =>
+            Response.json({
+              ...(state.schema ? { $schema } : {}),
+              providers: { remote: { name: "Remote" } },
+              policies: [deny],
+            }),
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
         Effect.gen(function* () {
-          const voice = yield* Voice.Service
-          yield* connect(server)
-          const live = Effect.map(voice.models(), (list) => list.models.find((item) => item.model === "gpt-live-1"))
-
-          expect(yield* live).toMatchObject({ integration: "opencode", workspace: "Anomaly" })
-          expect(yield* voice.session(offer)).toEqual({
-            transport: { type: "webrtc", sdp: "answer:console" },
-            id: "sess_console",
+          const credentials = yield* Credential.Service
+          const config = yield* Config.Service
+          const managed = yield* ManagedPolicy.Service
+          const hooks = yield* PluginHooks.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "secret",
+              metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
+            }),
           })
-          yield* voice.instruct({ id: "sess_console", instructions: "The screen shows ses_1." })
-          expect(requests).toEqual([
-            {
-              path: "/inference/openai/v1/live/sessions",
-              authorization: "Bearer secret",
-              orgID: "org_test",
-              body: {
-                session: { audio: { output: { voice: "marin" } }, model: "gpt-live-1" },
-                transport: { type: "webrtc", sdp: "v=0" },
-              },
-            },
-            {
-              path: "/inference/openai/v1/live/sessions/sess_console/instructions",
-              authorization: "Bearer secret",
-              orgID: "org_test",
-              body: { instructions: "The screen shows ses_1." },
-            },
-          ])
+          const host = yield* PluginHost.make(yield* Plugin.Service)
+          yield* OpencodePlugin.effect(host).pipe(inProcess(server))
+          yield* ConfigPolicyPlugin.Plugin.effect(host)
 
-          state.offered = false
+          const document = required(yield* consoleDocument(config))
+          expect(document.info.providers?.remote?.name).toBe("Remote")
+          expect(document.organization).toBe("Acme")
+          expect(managed.current()).toEqual({ statements: [], organization: "Acme" })
+          expect(
+            yield* hooks.trigger("permission", "evaluate", {
+              sessionID: Session.ID.make("ses_console_policy"),
+              action: "shell",
+              resources: ["ls"],
+              effect: "allow",
+            }),
+          ).toMatchObject({ effect: "deny", message: "Blocked by Acme's policy" })
+
+          state.schema = false
           yield* TestClock.adjust("1 minute")
           yield* drain
-          expect((yield* live)?.integration).not.toBe("opencode")
+          expect(yield* consoleDocument(config)).toBeUndefined()
+          expect(managed.current()).toEqual({ statements: [deny], organization: "Acme" })
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
   )
 
-  for (const item of [
-    {
-      name: "a refusal's reason",
-      reply: () =>
-        Response.json(
-          { error: { type: "permission_error", message: "GPT-Live isn't enabled for this workspace" } },
-          { status: 403 },
-        ),
-      expected: {
-        _tag: "Voice.UnavailableError",
-        service: "opencode",
-        message: "GPT-Live isn't enabled for this workspace",
-      },
-    },
-    {
-      name: "an invalid session as the caller's",
-      reply: () =>
-        Response.json(
-          { error: { type: "invalid_request_error", message: "Stored GPT-Live sessions aren't available" } },
-          { status: 400 },
-        ),
-      expected: { _tag: "Voice.InvalidRequestError", message: "Stored GPT-Live sessions aren't available" },
-    },
-    {
-      name: "a rejected credential as a reconnect",
-      reply: () => Response.json({ error: { message: "Invalid credential" } }, { status: 401 }),
-      expected: { _tag: "Voice.UnavailableError", message: "Reconnect OpenCode Console to continue." },
-    },
-  ])
-    it.effect(`reports ${item.name}`, () =>
+  it.effect(
+    "passes only providers, remote MCP servers, policies, and the web search selection, without credentials",
+    () =>
       Effect.acquireUseRelease(
-        voiceConsole(item.reply),
-        ({ server }) =>
-          Effect.gen(function* () {
-            const voice = yield* Voice.Service
-            yield* connect(server)
-            expect(yield* voice.session(offer).pipe(Effect.flip)).toMatchObject(item.expected)
+        Effect.sync(() =>
+          Bun.serve({
+            port: 0,
+            fetch: () =>
+              Response.json({
+                $schema,
+                providers: {
+                  remote: {
+                    env: ["REMOTE_API_KEY"],
+                    settings: { apiKey: "key", authToken: "auth", accessToken: "access", baseURL: "https://remote" },
+                    models: {
+                      chat: {
+                        settings: { apiKey: "key", temperature: 0.1 },
+                        variants: [{ id: "high", settings: { accessToken: "access", temperature: 0.2 } }],
+                      },
+                    },
+                  },
+                },
+                mcp: {
+                  servers: {
+                    remote: { type: "remote", url: "https://remote/mcp" },
+                    local: { type: "local", command: ["/tmp/console-mcp"] },
+                  },
+                },
+                policies: [deny],
+                websearch: { provider: "opencode" },
+                plugins: ["file:///tmp/console-plugin"],
+                shell: "/tmp/console-shell",
+                agents: { console: { prompt: "Console agent" } },
+                commands: { console: { template: "Console command" } },
+                permissions: [{ action: "shell", resource: "*", effect: "allow" }],
+                formatter: { console: { command: ["/tmp/console-formatter"] } },
+                instructions: ["/tmp/console-instructions.md"],
+              }),
           }),
-        ({ server }) => Effect.promise(() => server.stop(true)),
+        ),
+        (server) =>
+          Effect.gen(function* () {
+            const credentials = yield* Credential.Service
+            const config = yield* Config.Service
+            yield* credentials.create({
+              integrationID: Integration.ID.make("opencode"),
+              value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+            })
+            yield* addPlugin().pipe(inProcess(server))
+
+            const info = required(yield* consoleDocument(config)).info
+            expect(Object.keys(Schema.encodeSync(Info)(info)).toSorted()).toEqual([
+              "mcp",
+              "policies",
+              "providers",
+              "websearch",
+            ])
+            expect(Object.keys(info.mcp?.servers ?? {})).toEqual(["remote"])
+            const remote = required(info.providers?.remote)
+            expect(remote.env).toBeUndefined()
+            expect(remote.settings).toEqual({ baseURL: "https://remote" })
+            expect(remote.models?.chat?.settings).toEqual({ temperature: 0.1 })
+            expect(remote.models?.chat?.variants?.[0]?.settings).toEqual({ temperature: 0.2 })
+          }),
+        (server) => Effect.promise(() => server.stop(true)),
       ),
-    )
+  )
+
+  it.effect("keeps a newer Console config loadable despite values this version does not know", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: () =>
+            Response.json({
+              $schema,
+              providers: { remote: { name: "Remote" } },
+              policies: [{ action: "future.use", resource: "anything", effect: "deny" }, deny],
+              shell: 123,
+              future: { shape: 42 },
+            }),
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const config = yield* Config.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          yield* addPlugin().pipe(inProcess(server))
+
+          const info = required(yield* consoleDocument(config)).info
+          expect(info.providers?.remote?.name).toBe("Remote")
+          expect(info.policies).toEqual([deny])
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("layers Console providers below user config, bound to the Console connection", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: (request) =>
+            Response.json({
+              $schema,
+              providers: {
+                remote: {
+                  name: "Console",
+                  package: "aisdk:@ai-sdk/openai-compatible",
+                  settings: { baseURL: `${new URL(request.url).origin}/v1`, apiKey: "console-key", custom: "console" },
+                  headers: { "x-org-id": "console", "x-console": "true" },
+                  models: {
+                    chat: { name: "Console Chat", settings: { temperature: 0.1 } },
+                    other: { name: "Console Other" },
+                  },
+                },
+              },
+            }),
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const providers = yield* Provider.Service
+          const models = yield* Model.Service
+          const config = yield* Config.Test
+          yield* config.setEntries([
+            new Document({
+              type: "document",
+              info: Schema.decodeUnknownSync(Info)({
+                providers: {
+                  remote: {
+                    name: "Mine",
+                    settings: { apiKey: "my-key" },
+                    headers: { "x-org-id": "mine" },
+                    models: { chat: { name: "My Chat" } },
+                  },
+                },
+              }),
+            }),
+          ])
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          const host = yield* PluginHost.make(yield* Plugin.Service)
+          yield* OpencodePlugin.effect(host)
+          yield* ConfigProviderPlugin.Plugin.effect(host)
+
+          const provider = required(yield* providers.get(Provider.ID.make("remote")))
+          expect(provider.name).toBe("Mine")
+          expect(provider.integrationID).toBe(Integration.ID.make("opencode"))
+          expect(provider.headers).toEqual({ "x-org-id": "mine", "x-console": "true" })
+          expect(provider.settings).toEqual({
+            baseURL: `${server.url.origin}/v1`,
+            custom: "console",
+            apiKey: "my-key",
+            provider: "remote",
+          })
+          const chat = required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("chat")))
+          expect(chat.name).toBe("My Chat")
+          expect(chat.settings).toMatchObject({ temperature: 0.1 })
+          expect(required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("other"))).name).toBe(
+            "Console Other",
+          )
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("applies Console providers before provider plugins tune their canonical provider", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: () =>
+            Response.json({
+              $schema,
+              providers: { "console-openai": { canonical: "openai", name: "Console OpenAI" } },
+            }),
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const providers = yield* Provider.Service
+          yield* providers.transform((catalog) =>
+            catalog.update(Provider.ID.openai, (provider) => {
+              provider.package = "aisdk:@ai-sdk/openai"
+            }),
+          )
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          const host = yield* PluginHost.make(yield* Plugin.Service)
+          // Registered in production order: the OpenCode and OpenAI provider plugins, then config in `post`.
+          yield* OpencodePlugin.effect(host).pipe(inProcess(server))
+          yield* OpenAIPlugin.effect(host)
+          yield* ConfigProviderPlugin.Plugin.effect(host)
+
+          expect(required(yield* providers.get(Provider.ID.openai)).settings?.transport).toBe("websocket")
+          const consoleOpenAI = required(yield* providers.get(Provider.ID.make("console-openai")))
+          expect(consoleOpenAI.name).toBe("Console OpenAI")
+          expect(consoleOpenAI.integrationID).toBe(Integration.ID.make("opencode"))
+          expect(consoleOpenAI.settings?.transport).toBeUndefined()
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("registers Console web search without forcing it, so config selects it and user config wins", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { selected: false }
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            if (new URL(request.url).pathname === "/api/websearch")
+              return Response.json({ providerID: "opencode", results: [] })
+            return Response.json({ $schema, ...(state.selected ? { websearch: { provider: "opencode" } } : {}) })
+          },
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const websearch = yield* WebSearch.Service
+          const config = yield* Config.Test
+          const bus = yield* Bus.Service
+          const opencode = { id: WebSearch.ID.make("opencode"), name: "OpenCode Web Search" }
+          // Config.testLayer does not announce integration changes the way config reloads do.
+          const announced = (expected: typeof opencode | undefined) =>
+            bus
+              .publish(Event.Updated, {})
+              .pipe(Effect.andThen(eventually(websearch.default(), (value) => value?.id === expected?.id)))
+          yield* websearch.transform((editor) =>
+            editor.add({ id: WebSearch.ID.make("mine"), name: "Mine", execute: () => Effect.succeed([]) }),
+          )
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          const host = yield* PluginHost.make(yield* Plugin.Service)
+          yield* OpencodePlugin.effect(host).pipe(inProcess(server))
+          yield* ConfigWebSearchPlugin.Plugin.effect(host)
+          expect(yield* websearch.providers()).toContainEqual(opencode)
+          expect(yield* websearch.default()).toBeUndefined()
+
+          state.selected = true
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          expect(yield* announced(opencode)).toEqual(opencode)
+          expect((yield* websearch.query({ query: "console" })).providerID).toBe(opencode.id)
+
+          yield* config.setEntries([
+            new Document({
+              type: "document",
+              info: Schema.decodeUnknownSync(Info)({ websearch: { provider: "mine" } }),
+            }),
+          ])
+          expect(yield* announced({ id: WebSearch.ID.make("mine"), name: "Mine" })).toEqual({
+            id: WebSearch.ID.make("mine"),
+            name: "Mine",
+          })
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("replaces the Console config on an account switch and clears it on sign-out", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            const orgID = request.headers.get("x-org-id") ?? "none"
+            return Response.json({
+              $schema,
+              providers: { [orgID]: {} },
+              mcp: { servers: { [orgID]: { type: "remote", url: `https://${orgID}/mcp` } } },
+              policies: [{ action: "tool.use", resource: `shell:${orgID}`, effect: "deny" }],
+              websearch: { provider: "opencode" },
+            })
+          },
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const config = yield* Config.Service
+          const account = (orgID: string) =>
+            credentials.create({
+              integrationID: Integration.ID.make("opencode"),
+              value: Credential.Key.make({
+                type: "key",
+                key: orgID,
+                metadata: { server: server.url.origin, orgID, orgName: orgID },
+              }),
+            })
+          const contents = consoleDocument(config).pipe(
+            Effect.map(
+              (document) =>
+                document && {
+                  organization: document.organization,
+                  providers: Object.keys(document.info.providers ?? {}),
+                  mcp: Object.keys(document.info.mcp?.servers ?? {}),
+                  policies: document.info.policies?.map((policy) => policy.resource),
+                  websearch: document.info.websearch && String(document.info.websearch.provider),
+                },
+            ),
+          )
+          const expected = (orgID: string) => ({
+            organization: orgID,
+            providers: [orgID],
+            mcp: [orgID],
+            policies: [`shell:${orgID}`],
+            websearch: "opencode",
+          })
+          const alpha = yield* account("alpha")
+          yield* addPlugin().pipe(inProcess(server))
+          expect(yield* contents).toEqual(expected("alpha"))
+
+          const beta = yield* account("beta")
+          expect(yield* eventually(contents, (value) => value?.organization === "beta")).toEqual(expected("beta"))
+
+          yield* credentials.remove(beta.id)
+          expect(yield* eventually(contents, (value) => value?.organization === "alpha")).toEqual(expected("alpha"))
+
+          yield* credentials.remove(alpha.id)
+          expect(yield* eventually(contents, (value) => value === undefined)).toBeUndefined()
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
+  )
 })
 
 for (const key of [undefined, "secret"]) {

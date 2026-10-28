@@ -103,7 +103,7 @@ export const urlGlobal = <R>(ctx: Interpreter<R>) => {
         : (thisValue, value) => {
             const target = self(thisValue, name)
             try {
-              ;(target.url as unknown as Record<string, string>)[name] = coerceToString(value)
+              target.url[name] = coerceToString(value)
             } catch (error) {
               if (error instanceof PendingThrow) throw error
               throw typeError(`URL.${name} received an invalid value.`)

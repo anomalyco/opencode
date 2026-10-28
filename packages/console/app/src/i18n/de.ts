@@ -70,12 +70,8 @@ export const dict = {
   "home.what.title": "Was ist OpenCode?",
   "home.what.body":
     "OpenCode ist ein Open-Source-Agent, der dir hilft, Code in deinem Terminal, deiner IDE oder auf dem Desktop zu schreiben.",
-  "home.what.lsp.title": "LSP-fähig",
-  "home.what.lsp.body": "Lädt automatisch die richtigen LSPs für das LLM",
   "home.what.multiSession.title": "Multi-Session",
   "home.what.multiSession.body": "Starte mehrere Agenten parallel im selben Projekt",
-  "home.what.shareLinks.title": "Links teilen",
-  "home.what.shareLinks.body": "Teile einen Link zu jeder Sitzung als Referenz oder zum Debuggen",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Melde dich mit GitHub an, um deinen Copilot-Account zu nutzen",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -115,8 +111,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Du kannst sogar deine",
   "home.faq.a3.p4.localLink": "lokalen Modelle verbinden",
   "home.faq.q4": "Kann ich meine bestehenden AI-Abos mit OpenCode nutzen?",
-  "home.faq.a4.p1":
-    "Ja, OpenCode unterstützt Abos von allen großen Anbietern. Du kannst deine Claude Pro/Max, ChatGPT Plus/Pro oder GitHub Copilot Abos nutzen.",
+  "home.faq.a4.p1": "Ja, du kannst deine ChatGPT Plus/Pro- oder GitHub Copilot-Abos nutzen.",
   "home.faq.q5": "Kann ich OpenCode nur im Terminal nutzen?",
   "home.faq.a5.beforeDesktop": "Nicht mehr! OpenCode ist jetzt als App für",
   "home.faq.a5.desktop": "Desktop",
@@ -166,7 +161,7 @@ export const dict = {
     "Um die Kosten zu decken, fügt OpenCode nur eine kleine Bearbeitungsgebühr von $1.23 pro $20 Guthabenaufladung hinzu.",
   "zen.faq.q5": "Was ist mit Daten und Privatsphäre?",
   "zen.faq.a5.beforeExceptions":
-    "Alle Zen-Modelle werden in den USA gehostet. Anbieter folgen einer Zero-Retention-Policy und nutzen deine Daten nicht zum Trainieren von Modellen, mit den",
+    "Alle Zen-Modelle werden in den USA und der EU gehostet. Anbieter folgen einer Zero-Retention-Policy und nutzen deine Daten nicht zum Trainieren von Modellen, mit den",
   "zen.faq.a5.exceptionsLink": "folgenden Ausnahmen",
   "zen.faq.q6": "Kann ich Ausgabenlimits setzen?",
   "zen.faq.a6": "Ja, du kannst monatliche Ausgabenlimits in deinem Account setzen.",
@@ -199,13 +194,14 @@ export const dict = {
   "zen.how.step2.link": "zahle pro Anfrage",
   "zen.how.step2.afterLink": "ohne Aufschläge",
   "zen.how.step3.title": "Auto-Top-up",
-  "zen.how.step3.body": "wenn dein Guthaben $5 erreicht, fügen wir automatisch $20 hinzu",
+  "zen.how.step3.body":
+    "aktiviere die optionale automatische Aufladung und wähle deine Guthabenschwelle und den Aufladebetrag",
   "zen.privacy.title": "Deine Privatsphäre ist uns wichtig",
   "zen.privacy.beforeExceptions":
-    "Alle Zen-Modelle werden in den USA gehostet. Anbieter folgen einer Zero-Retention-Policy und nutzen deine Daten nicht für Modelltraining, mit den",
+    "Alle Zen-Modelle werden in den USA und der EU gehostet. Anbieter folgen einer Zero-Retention-Policy und nutzen deine Daten nicht für Modelltraining, mit den",
   "zen.privacy.exceptionsLink": "folgenden Ausnahmen",
 
-  "go.promo.minimaxM31FlashFree": "MiniMax M3.1 Flash Free ist jetzt in Go für begrenzte Zeit kostenlos verfügbar.",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro ist jetzt in Go verfügbar.",
   "go.title": "OpenCode Go | Kostengünstige Coding-Modelle für alle",
   "go.meta.description":
     "Go kostet $10/Monat, mit großzügigen Nutzungslimits und zuverlässigem Zugang zu führenden Coding-Modellen.",
@@ -287,8 +283,6 @@ export const dict = {
     "Für die Nutzung aller API-Funktionen werden Protokolle zur Missbrauchsüberwachung erstellt und bis zu 30 Tage lang aufbewahrt.",
   "go.faq.a5.museRetention":
     "Stark vergünstigte Tokenpreise im Gegenzug für die Erlaubnis, deine Prompts und Vervollständigungen zum Trainieren zukünftiger Meta-Modelle zu verwenden.",
-  "go.faq.a5.geminiRetention":
-    "Deine Prompts und Vervollständigungen können zum Trainieren zukünftiger Google-Modelle verwendet werden.",
   "go.faq.a5.learnMore": "Mehr erfahren",
   "go.faq.a5.deepseekRetention":
     "Die ZDR-Vereinbarung wird monatlich erneuert. Die aktuelle Vereinbarung gilt bis einschließlich 31. Oktober 2026.",
@@ -380,7 +374,7 @@ export const dict = {
     "Starten Sie einfach mit einem internen Testlauf mit Ihrem Team. OpenCode speichert standardmäßig weder Code noch Kontextdaten, was den Einstieg erleichtert. Kontaktieren Sie uns dann, um Preise und Implementierungsoptionen zu besprechen.",
   "enterprise.faq.q3": "Wie funktioniert das Enterprise-Pricing?",
   "enterprise.faq.a3":
-    "Wir bieten eine Preisgestaltung pro Arbeitsplatz (Seat) an. Wenn Sie Ihr eigenes LLM-Gateway haben, berechnen wir keine Gebühren für genutzte Token. Für weitere Details kontaktieren Sie uns für ein individuelles Angebot basierend auf den Anforderungen Ihrer Organisation.",
+    "Wenn Sie Ihr eigenes LLM-Gateway haben, berechnen wir keine Gebühren für genutzte Token. Für weitere Details kontaktieren Sie uns für ein individuelles Angebot basierend auf den Anforderungen Ihrer Organisation.",
   "enterprise.faq.q4": "Sind meine Daten mit OpenCode Enterprise sicher?",
   "enterprise.faq.a4":
     "Ja. OpenCode speichert weder Ihren Code noch Kontextdaten. Alle Verarbeitungen finden lokal oder über direkte API-Aufrufe an Ihren AI-Anbieter statt. Mit zentraler Konfiguration und SSO-Integration bleiben Ihre Daten sicher innerhalb der Infrastruktur Ihrer Organisation.",

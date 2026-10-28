@@ -1,14 +1,9 @@
 import { createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Popover } from "@kobalte/core/popover"
-import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
-import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
-import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
-import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
-import { RestrictToElement } from "@dnd-kit/dom/modifiers"
-import { ScrollView } from "@opencode/ui/scroll-view"
 import {
   displayName,
+  getProjectAvatarGenerated,
   getProjectAvatarSource,
   getProjectAvatarVariant,
   ProjectAvatar,
@@ -16,7 +11,7 @@ import {
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Button } from "@opencode/ui/button"
-import { Spinner } from "@opencode/ui/spinner"
+import { Loader } from "@opencode/ui/loader"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import type { HomeProjectSelection, LocalProject } from "@/shell/state/layout"
@@ -27,16 +22,17 @@ import { ServerRowMenuView, serverMenuLabels } from "@/servers/registry/row-menu
 import { ServerHealthIndicator } from "@/servers/registry/row"
 import { type ServerHealth } from "@/runtime/server/health"
 import { fileManagerApp } from "@/home/projects/file-manager"
+import { CollapsedSidebarToggleSpace } from "@/shell/sidebar-toggle"
 import "./view.css"
 
 const HOME_PROJECT_NAV_LABEL = "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
 
 const serverContextMenuID = (server: ServerConnection.Any) => `server:${ServerConnection.key(server)}`
 
-// Extension servers ask for sign-in themselves; an HTTP server that rejects its saved credentials needs a new
+// Plugin servers ask for sign-in themselves; an HTTP server that rejects its saved credentials needs a new
 // pairing link or password.
 const signInRequired = (server: ServerConnection.Any, health: ServerHealth | undefined) =>
-  (server.type === "extension" && server.authenticationRequired) || (server.type === "http" && !!health?.unauthorized)
+  (server.type === "plugin" && server.authenticationRequired) || (server.type === "http" && !!health?.unauthorized)
 
 const projectContextMenuID = (server: ServerConnection.Any, directory: string) =>
   `project:${ServerConnection.key(server)}:${directory}`
@@ -46,10 +42,9 @@ export type HomeProjectsViewProps = {
   language: ReturnType<typeof useLanguage>
   servers: ServerConnection.Any[]
   projects: LocalProject[]
-  recentlyClosed: LocalProject[]
   selection: HomeProjectSelection
-  homedir: string
   serverHealth: (server: ServerConnection.Any) => ServerHealth | undefined
+  serverLabel: (server: ServerConnection.Any) => string
   projectsForServer: (server: ServerConnection.Any) => LocalProject[]
   collapsed: (server: ServerConnection.Any) => boolean
   canRevealProject: (server: ServerConnection.Any) => boolean
@@ -64,16 +59,14 @@ export type HomeProjectsViewProps = {
   onRemoveServer: (server: ServerConnection.Any) => void
   canHideServer: (server: ServerConnection.Any) => boolean
   onHideServer: (server: ServerConnection.Any) => void
-  onMoveProject: (server: ServerConnection.Any, worktree: string, index: number) => void
   onSelectProject: (server: ServerConnection.Any, directory: string) => void
-  onAddProjects: (server: ServerConnection.Any, directories: string[]) => void
   onOpenProjectNewSession: (server: ServerConnection.Any, directory: string) => void
   canImportSession: boolean
   onImportSession: (server: ServerConnection.Any, project: LocalProject) => void
   onEditProject: (server: ServerConnection.Any, project: LocalProject) => void
   onRevealProject: (server: ServerConnection.Any, project: LocalProject) => void
   onClearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
-  onCloseProject: (server: ServerConnection.Any, directory: string) => void
+  onHideProject: (server: ServerConnection.Any, project: LocalProject) => void
   onOpenSettings: () => void
   onOpenHelp: () => void
 }
@@ -112,7 +105,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
             <Show when={props.servers.length > 1 && server()}>
               {(server) => (
                 <bdi class="truncate text-v2-text-text-muted opacity-70">
-                  {server().displayName ?? new URL(server().http.url).host}
+                  {props.serverLabel(server())}
                 </bdi>
               )}
             </Show>
@@ -143,10 +136,6 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
                 setState("open", false)
                 props.onChooseProject(server)
               }}
-              onAddProjects={(server, directories) => {
-                setState("open", false)
-                props.onAddProjects(server, directories)
-              }}
               onOpenProjectNewSession={(server, directory) => {
                 setState("open", false)
                 props.onOpenProjectNewSession(server, directory)
@@ -173,7 +162,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
         props.dropdown
           ? "flex max-h-[min(60dvh,calc(var(--kb-popper-content-available-height)-12px))] min-h-0 min-w-0 flex-col overflow-hidden"
           : `
-        mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden
+        mt-2.5 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden
         lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]
       `
       }
@@ -185,8 +174,14 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
     >
       <Show when={!props.dropdown}>
         <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
-          <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
-          <Show when={props.servers.length === 1 && !(props.projects.length === 0 && props.recentlyClosed.length > 0)}>
+          {/* Below lg, Projects heads the page on the collapsed sidebar toggle's line. Starting the space at the row's
+              edge (the shell's 8px inset plus the grid's 12px padding) keeps the row's 6px padding after the toggle,
+              which lines the label up with the icons that follow it in the session and settings headers. */}
+          <div class="flex min-w-0 items-center">
+            <CollapsedSidebarToggleSpace start={20} class="lg:hidden" />
+            <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
+          </div>
+          <Show when={props.servers.length === 1}>
             <Tooltip placement="bottom" value={props.language.t("home.project.add")}>
               <IconButton
                 data-action="home-add-project"
@@ -202,104 +197,103 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           </Show>
         </div>
       </Show>
-      <ScrollView data-slot="home-projects-scroll" class="min-h-0 min-w-0 shrink">
-        <Show when={props.dropdown && props.servers.length === 1}>
-          <HomeProjectNavButton
-            type="button"
-            class="mb-1"
-            data-selected={!props.selection.directory ? "" : undefined}
-            onClick={() => props.onFocusServer(props.servers[0])}
-          >
-            <Icon name="folder" size="small" />
-            <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.projects.all")}</span>
-          </HomeProjectNavButton>
-        </Show>
-        <Show
-          when={
-            props.servers.length > 1 ||
-            props.servers.some(
-              (server) =>
-                signInRequired(server, props.serverHealth(server)) ||
-                (server.type === "extension" && server.connecting),
-            )
-          }
-          fallback={
-            <Show when={props.servers[0]}>
-              {(server) => (
-                <div class={props.dropdown ? "" : "pr-3"}>
-                  <Show
-                    when={props.projects.length > 0}
-                    fallback={<HomeProjectEmpty {...props} server={server()} items={props.recentlyClosed} />}
-                  >
-                    <HomeProjectList {...props} {...contextMenuProps} server={server()} items={props.projects} />
-                    <Show when={props.dropdown}>
-                      <HomeProjectNavButton
-                        type="button"
-                        data-action="home-add-project-row"
-                        class="mt-1 disabled:opacity-60"
-                        disabled={props.serverHealth(server())?.healthy === false}
-                        onClick={() => props.onChooseProject(server())}
-                      >
-                        <Icon name="folder-add-left" size="small" />
-                        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.project.add")}</span>
-                      </HomeProjectNavButton>
-                    </Show>
-                  </Show>
-                </div>
-              )}
-            </Show>
-          }
-        >
-          <div class={`flex min-w-0 flex-col ${props.dropdown ? "gap-1" : "gap-4 pr-3"}`}>
-            <For each={props.servers}>
-              {(item) => {
-                const projects = () => props.projectsForServer(item)
-                const healthy = () => !!props.serverHealth(item)?.healthy
-                const hasProjects = () => projects().length > 0
-                const collapsed = () => props.collapsed(item)
-                const authentication = () => signInRequired(item, props.serverHealth(item))
-                const connecting = () => item.type === "extension" && item.connecting
-
-                return (
-                  <div class="flex min-w-0 flex-col gap-1">
-                    <HomeServerRow
-                      server={item}
-                      {...props}
-                      {...contextMenuProps}
-                      selected={props.selection.server === ServerConnection.key(item) && !props.selection.directory}
-                      collapsed={collapsed()}
-                      health={props.serverHealth(item)}
-                    />
-                    <Show when={authentication() || connecting()}>
-                      <div class="mx-3 h-px bg-v2-border-border-base" />
-                      <div class="px-1.5 py-1">
-                        <Button
-                          data-action="home-server-authenticate"
-                          class="w-full"
-                          size="small"
-                          variant="neutral"
-                          disabled={connecting()}
-                          aria-busy={!!connecting()}
-                          onClick={() => props.onAuthenticateServer?.(item)}
+      <div data-slot="home-projects-scroll" class="relative flex min-h-0 min-w-0 shrink flex-col">
+        <div data-slot="home-projects-viewport" data-scrollable class="min-h-0 flex-1 overflow-y-auto">
+          <Show when={props.dropdown && props.servers.length === 1}>
+            <HomeProjectNavButton
+              type="button"
+              class="mb-1"
+              data-selected={!props.selection.directory ? "" : undefined}
+              onClick={() => props.onFocusServer(props.servers[0])}
+            >
+              <Icon name="folder" size="small" />
+              <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.projects.all")}</span>
+            </HomeProjectNavButton>
+          </Show>
+          <Show
+            when={
+              props.servers.length > 1 ||
+              props.servers.some(
+                (server) =>
+                  signInRequired(server, props.serverHealth(server)) ||
+                  (server.type === "plugin" && server.connecting),
+              )
+            }
+            fallback={
+              <Show when={props.servers[0]}>
+                {(server) => (
+                  <div class={props.dropdown ? "" : "pr-3"}>
+                    <Show when={props.projects.length > 0} fallback={<HomeProjectEmpty {...props} server={server()} />}>
+                      <HomeProjectList {...props} {...contextMenuProps} server={server()} items={props.projects} />
+                      <Show when={props.dropdown}>
+                        <HomeProjectNavButton
+                          type="button"
+                          data-action="home-add-project-row"
+                          class="mt-1 disabled:opacity-60"
+                          disabled={props.serverHealth(server())?.healthy === false}
+                          onClick={() => props.onChooseProject(server())}
                         >
-                          <Show when={connecting()}>
-                            <Spinner class="size-3.5" />
-                          </Show>
-                          {props.language.t(connecting() ? "server.status.connecting" : "server.action.authenticate")}
-                        </Button>
-                      </div>
-                    </Show>
-                    <Show when={healthy() && !authentication() && !connecting() && hasProjects() && !collapsed()}>
-                      <div class="mx-3 h-px bg-v2-border-border-base" />
-                      <HomeProjectList {...props} {...contextMenuProps} server={item} items={projects()} />
+                          <Icon name="folder-add-left" size="small" />
+                          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.project.add")}</span>
+                        </HomeProjectNavButton>
+                      </Show>
                     </Show>
                   </div>
-                )
-              }}
-            </For>
-          </div>
-        </Show>
-      </ScrollView>
+                )}
+              </Show>
+            }
+          >
+            <div class={`flex min-w-0 flex-col ${props.dropdown ? "gap-1" : "gap-4 pr-3"}`}>
+              <For each={props.servers}>
+                {(item) => {
+                  const projects = () => props.projectsForServer(item)
+                  const healthy = () => !!props.serverHealth(item)?.healthy
+                  const hasProjects = () => projects().length > 0
+                  const collapsed = () => props.collapsed(item)
+                  const authentication = () => signInRequired(item, props.serverHealth(item))
+                  const connecting = () => item.type === "plugin" && item.connecting
+
+                  return (
+                    <div class="flex min-w-0 flex-col gap-1">
+                      <HomeServerRow
+                        server={item}
+                        {...props}
+                        {...contextMenuProps}
+                        selected={props.selection.server === ServerConnection.key(item) && !props.selection.directory}
+                        collapsed={collapsed()}
+                        health={props.serverHealth(item)}
+                      />
+                      <Show when={authentication() || connecting()}>
+                        <div class="mx-3 h-px bg-v2-border-border-base" />
+                        <div class="px-1.5 py-1">
+                          <Button
+                            data-action="home-server-authenticate"
+                            class="w-full"
+                            size="small"
+                            variant="neutral"
+                            disabled={connecting()}
+                            aria-busy={!!connecting()}
+                            onClick={() => props.onAuthenticateServer?.(item)}
+                          >
+                            <Show when={connecting()}>
+                              <Loader class="size-3.5" />
+                            </Show>
+                            {props.language.t(connecting() ? "server.status.connecting" : "server.action.authenticate")}
+                          </Button>
+                        </div>
+                      </Show>
+                      <Show when={healthy() && !authentication() && !connecting() && hasProjects() && !collapsed()}>
+                        <div class="mx-3 h-px bg-v2-border-border-base" />
+                        <HomeProjectList {...props} {...contextMenuProps} server={item} items={projects()} />
+                      </Show>
+                    </div>
+                  )
+                }}
+              </For>
+            </div>
+          </Show>
+        </div>
+      </div>
       <HomeUtilityNav
         class="mb-8 mt-4 hidden shrink-0 lg:flex"
         onOpenSettings={props.onOpenSettings}
@@ -342,6 +336,7 @@ export function HomeUtilityNav(props: {
 
 function HomeServerRow(props: {
   language: HomeProjectsViewProps["language"]
+  serverLabel: HomeProjectsViewProps["serverLabel"]
   projectsForServer: HomeProjectsViewProps["projectsForServer"]
   contextMenuOpen: HomeProjectsContextMenuProps["contextMenuOpen"]
   onFocusServer: HomeProjectsViewProps["onFocusServer"]
@@ -427,7 +422,7 @@ function HomeServerRow(props: {
           <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
             <ServerHealthIndicator
               health={props.health}
-              connecting={props.server.type === "extension" && props.server.connecting}
+              connecting={props.server.type === "plugin" && props.server.connecting}
               authenticationRequired={authentication()}
             />
           </div>
@@ -436,9 +431,7 @@ function HomeServerRow(props: {
             class="flex min-w-0 flex-1 items-center gap-1"
             classList={{ "opacity-60": !healthy() && !incompatible() }}
           >
-            <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-              {props.server.displayName ?? new URL(props.server.http.url).host}
-            </span>
+            <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{props.serverLabel(props.server)}</span>
             <Show when={props.server.label}>
               {(label) => (
                 <span
@@ -501,57 +494,35 @@ type HomeProjectListProps = HomeProjectsViewProps &
   }
 
 function HomeProjectList(props: HomeProjectListProps) {
-  let listRef!: HTMLDivElement
+  const [hover, setHover] = createStore({ active: false })
+
+  // The server orders projects by recent activity. While the pointer is over the list, rows keep their places so
+  // nothing moves under the cursor; new projects join at the end and the server order returns on leave.
+  const worktrees = createMemo<string[]>((previous) => {
+    const next = props.items.map((project) => project.worktree)
+
+    if (!hover.active) return next
+    const present = new Set(next)
+    const kept = previous.filter((worktree) => present.has(worktree))
+    const known = new Set(kept)
+
+    return [...kept, ...next.filter((worktree) => !known.has(worktree))]
+  }, [])
 
   return (
-    <DragDropProvider
-      sensors={(defaults) => [
-        ...defaults.filter((sensor) => sensor !== PointerSensor),
-        PointerSensor.configure({
-          activationConstraints: (event) =>
-            event.pointerType === "touch"
-              ? [new PointerActivationConstraints.Delay({ value: 250, tolerance: 5 })]
-              : [new PointerActivationConstraints.Distance({ value: 4 })],
-          preventActivation: (event) => event.target instanceof Element && !!event.target.closest("[data-action]"),
-        }),
-      ]}
-      modifiers={[RestrictToVerticalAxis, RestrictToElement.configure({ element: () => listRef })]}
-      plugins={(defaults) => [
-        ...defaults.filter((plugin) => plugin !== AutoScroller && plugin !== Feedback),
-        AutoScroller.configure({ acceleration: 8, threshold: { x: 0, y: 0.05 } }),
-        Feedback.configure({ dropAnimation: null }),
-      ]}
-      onDragEnd={(event) => {
-        const source = event.operation.source
-
-        if (event.canceled || !isSortable(source)) return
-
-        if (source.initialIndex !== source.index) props.onMoveProject(props.server, source.id.toString(), source.index)
-
-        if (props.selection.server !== ServerConnection.key(props.server))
-          props.onSelectProject(props.server, source.id.toString())
-      }}
+    <div
+      class="flex min-w-0 flex-col gap-1"
+      onPointerEnter={() => setHover("active", true)}
+      onPointerLeave={() => setHover("active", false)}
     >
-      <div class="flex min-w-0 flex-col gap-1" ref={listRef}>
-        {/* Keyed on worktree strings: the enriched project objects are
-            recreated on every store or sync update, so iterating them directly
-            remounts all rows — killing any in-flight drag activation (the
-            row's sortable unregisters on unmount) and discarding animations.
-            String keys keep row elements alive and move them on reorder. */}
-        <For each={props.items.map((project) => project.worktree)}>
-          {(worktree, index) => <HomeProjectSlot {...props} worktree={worktree} index={index()} />}
-        </For>
-      </div>
-    </DragDropProvider>
+      {/* Keyed on worktree strings: the project objects are recreated on every sync update, so iterating them
+          directly would remount every row. */}
+      <For each={worktrees()}>{(worktree) => <HomeProjectSlot {...props} worktree={worktree} />}</For>
+    </div>
   )
 }
 
-function HomeProjectSlot(
-  props: HomeProjectListProps & {
-    worktree: string
-    index: number
-  },
-) {
+function HomeProjectSlot(props: HomeProjectListProps & { worktree: string }) {
   const initial = props.items.find((item) => item.worktree === props.worktree)
 
   if (!initial) return
@@ -566,8 +537,6 @@ function HomeProjectSlot(
       {...props}
       project={project()}
       server={props.server}
-      index={props.index}
-      serverSelected={props.selection.server === ServerConnection.key(props.server)}
       selected={
         props.selection.server === ServerConnection.key(props.server) && props.selection.directory === props.worktree
       }
@@ -576,68 +545,20 @@ function HomeProjectSlot(
   )
 }
 
-function HomeProjectEmpty(
-  props: HomeProjectsViewProps & {
-    server: ServerConnection.Any
-    items: LocalProject[]
-  },
-) {
+function HomeProjectEmpty(props: HomeProjectsViewProps & { server: ServerConnection.Any }) {
   const unreachable = () => props.serverHealth(props.server)?.healthy === false
 
   return (
-    <div class="flex min-w-0 flex-col gap-1">
-      <HomeProjectNavButton
-        type="button"
-        data-action="home-add-project-row"
-        class="disabled:opacity-60 [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
-        disabled={unreachable()}
-        onClick={() => props.onChooseProject(props.server)}
-      >
-        <Icon name="folder-add-left" size="small" />
-        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.project.add")}</span>
-      </HomeProjectNavButton>
-      <Show when={props.items.length > 0}>
-        <div class="mt-3 flex h-7 min-w-0 shrink-0 items-center pl-1.5 pr-3">
-          <div class="text-v2-text-text-faint [font-weight:530]">{props.language.t("home.recentlyClosed")}</div>
-        </div>
-        <For each={props.items}>
-          {(project) => <HomeRecentlyClosedRow {...props} project={project} server={props.server} />}
-        </For>
-      </Show>
-    </div>
-  )
-}
-
-function HomeRecentlyClosedRow(
-  props: HomeProjectsViewProps & {
-    project: LocalProject
-    server: ServerConnection.Any
-  },
-) {
-  const unreachable = () => props.serverHealth(props.server)?.healthy === false
-
-  const path = () => {
-    const home = props.homedir
-    const worktree = props.project.worktree
-
-    if (home && (worktree === home || worktree.startsWith(`${home}/`))) return `~${worktree.slice(home.length)}`
-
-    return worktree
-  }
-
-  return (
-    <Tooltip placement="right" value={path()}>
-      <HomeProjectNavButton
-        type="button"
-        data-component="home-recently-closed-row"
-        class="disabled:opacity-60"
-        disabled={unreachable()}
-        onClick={() => props.onAddProjects(props.server, [props.project.worktree])}
-      >
-        <HomeProjectAvatar project={props.project} outline />
-        <span class={HOME_PROJECT_NAV_LABEL}>{displayName(props.project)}</span>
-      </HomeProjectNavButton>
-    </Tooltip>
+    <HomeProjectNavButton
+      type="button"
+      data-action="home-add-project-row"
+      class="disabled:opacity-60 [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+      disabled={unreachable()}
+      onClick={() => props.onChooseProject(props.server)}
+    >
+      <Icon name="folder-add-left" size="small" />
+      <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("home.project.add")}</span>
+    </HomeProjectNavButton>
   )
 }
 
@@ -646,8 +567,6 @@ function HomeProjectRow(
     HomeProjectsContextMenuProps & {
       project: LocalProject
       server: ServerConnection.Any
-      index: number
-      serverSelected: boolean
       selected: boolean
       unread: boolean
     },
@@ -655,16 +574,6 @@ function HomeProjectRow(
   const platform = usePlatform()
   const serverUnreachable = () => props.serverHealth(props.server)?.healthy === false
 
-  const sortable = useSortable({
-    get id() {
-      return props.project.worktree
-    },
-    get index() {
-      return props.index
-    },
-  })
-
-  let pointerDownSelected: boolean | undefined
   const contextMenuID = () => projectContextMenuID(props.server, props.project.worktree)
   onCleanup(() => {
     const id = contextMenuID()
@@ -674,12 +583,9 @@ function HomeProjectRow(
 
   return (
     <div
-      ref={sortable.ref}
       class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]"
-      classList={{ "z-10": sortable.isDragSource() }}
       data-home-row
       data-dimmed={serverUnreachable()}
-      data-dragging={sortable.isDragSource()}
       data-selected={props.selected ? "" : undefined}
       onContextMenu={(event) => {
         event.preventDefault()
@@ -690,47 +596,10 @@ function HomeProjectRow(
         type="button"
         data-component="home-project-row"
         class="disabled:opacity-60"
-        classList={{
-          "bg-v2-background-bg-layer-01 text-v2-text-text-base": sortable.isDragSource(),
-        }}
         data-selected={props.selected ? "" : undefined}
         aria-current={props.selected ? "page" : undefined}
         disabled={serverUnreachable()}
-        onPointerDown={(event) => {
-          // Same-server mouse selection happens on pointerdown (like tabs),
-          // but only ever selects; selectProject toggles, and deselecting here
-          // would fire on every drag before the threshold is met. Cross-server
-          // selection waits for click so reordering a remote server's projects
-          // does not focus that server and load its session index. Touch is
-          // excluded so flick-scrolling the list cannot select rows.
-          pointerDownSelected = undefined
-
-          if (props.dropdown) return
-
-          if (event.button !== 0 || event.pointerType === "touch") return
-
-          if (!props.serverSelected) return
-          pointerDownSelected = props.selected
-
-          if (!props.selected) props.onSelectProject(props.server, props.project.worktree)
-        }}
-        onClick={(event) => {
-          // The drag sensor calls preventDefault on post-drag clicks; never
-          // toggle selection as part of a reorder.
-          if (event.defaultPrevented) return
-
-          // Keyboard activation and touch taps keep the original toggle.
-          if (event.detail === 0 || pointerDownSelected === undefined) {
-            props.onSelectProject(props.server, props.project.worktree)
-
-            return
-          }
-
-          // Mouse: pointerdown already selected unselected rows; a plain click
-          // on an already-selected row toggles it off.
-          if (pointerDownSelected) props.onSelectProject(props.server, props.project.worktree)
-          pointerDownSelected = undefined
-        }}
+        onClick={() => props.onSelectProject(props.server, props.project.worktree)}
       >
         <HomeProjectAvatar project={props.project} />
         <span data-slot="home-row-label" class={HOME_PROJECT_NAV_LABEL}>
@@ -788,7 +657,7 @@ function HomeProjectRow(
                 {props.language.t("sidebar.project.clearNotifications")}
               </Menu.Item>
               <Menu.Separator />
-              <Menu.Item onSelect={() => props.onCloseProject(props.server, props.project.worktree)}>
+              <Menu.Item onSelect={() => props.onHideProject(props.server, props.project)}>
                 {props.language.t("common.close")}
               </Menu.Item>
             </Menu.Content>
@@ -838,6 +707,7 @@ function HomeProjectAvatar(props: { project: LocalProject; outline?: boolean }) 
       fallback={name()}
       src={props.outline ? undefined : getProjectAvatarSource(props.project.id, props.project.icon)}
       variant={props.outline ? "outline" : getProjectAvatarVariant(props.project.icon?.color)}
+      generated={props.outline ? undefined : getProjectAvatarGenerated(props.project)}
     />
   )
 }

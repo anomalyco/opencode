@@ -16,7 +16,6 @@ import { useProviderAccountActions } from "@/settings/providers/account-actions"
 import { useLanguage } from "@/runtime/i18n/language"
 import { type FormState, headerRow, modelRow, validateCustomProvider } from "./form"
 import { saveCustomProvider } from "./save"
-import { CustomManagedProviderIcon } from "@/providers/models/provider-group"
 
 export function CustomProviderForm(props: { autofocus?: boolean; directory?: string } = {}) {
   const dialog = useDialog()
@@ -184,16 +183,11 @@ export function CustomProviderForm(props: { autofocus?: boolean; directory?: str
   }
 
   return (
-    <div class="flex flex-col gap-6 px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
-      <div class="px-2.5 flex gap-4 items-center">
-        <CustomManagedProviderIcon class="size-5 shrink-0" />
-        <div class="text-16-medium text-text-strong">{language.t("provider.custom.title")}</div>
-      </div>
-
+    <div data-scrollable class="flex min-h-0 flex-col px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
       <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
         <p class="text-14-regular text-text-base">
           {language.t("provider.custom.description.prefix")}
-          <ExternalLink href="https://opencode.ai/docs/providers/#custom-provider" tabIndex={-1}>
+          <ExternalLink href="https://opencode.ai/v2/docs/providers/#custom" tabIndex={-1}>
             {language.t("provider.custom.description.link")}
           </ExternalLink>
           {language.t("provider.custom.description.suffix")}

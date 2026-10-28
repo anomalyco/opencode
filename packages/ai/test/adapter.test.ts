@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMRequest, LLMResponse } from "../src/index.js"
+import { LLM, LLMRequest, LLMResponse } from "../src/effect.js"
 import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { LanguageModel } from "../src/schema/index.js"

@@ -61,7 +61,7 @@ Ograničeni agent dizajniran za planiranje i analizu. Koristimo sistem dozvola k
 Prema zadanim postavkama, sve sljedeće je postavljeno na `ask`:
 
 - `file edits`: Sva upisivanja, zakrpe i uređivanja
-- `shell`: Sve shell komande
+- `bash`: Sve bash komande
 
 Ovaj agent je koristan kada želite da LLM analizira kod, predloži promjene ili kreira planove bez stvarnih modifikacija vaše baze koda.
 
@@ -151,12 +151,12 @@ Konfigurirajte agente u svom konfiguracijskom fajlu `opencode.json`:
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
         "edit": true,
-        "shell": true
+        "bash": true
       }
     },
     "plan": {
@@ -165,13 +165,13 @@ Konfigurirajte agente u svom konfiguracijskom fajlu `opencode.json`:
       "tools": {
         "write": false,
         "edit": false,
-        "shell": false
+        "bash": false
       }
     },
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -195,12 +195,12 @@ Također možete definirati agente koristeći markdown datoteke. Stavite ih u:
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
   edit: false
-  shell: false
+  bash: false
 ---
 
 You are in code review mode. Focus on:
@@ -366,7 +366,7 @@ Ako ne navedete model, primarni agenti koriste [model globalno konfiguriran](/do
 }
 ```
 
-ID modela u vašoj OpenCode konfiguraciji koristi format `provider/model-id`. Na primjer, ako koristite [OpenCode Zen](https://opencode.ai/v2/docs/console/), koristili biste `opencode/gpt-5.1-codex` za GPT 5.1 Codex.
+ID modela u vašoj OpenCode konfiguraciji koristi format `provider/model-id`. Na primjer, ako koristite [OpenCode Zen](https://opencode.ai/v2/docs/console/), koristili biste `opencode/gpt-6.1-sol` za GPT-6.1 Sol.
 
 ---
 
@@ -379,13 +379,13 @@ Kontrolirajte koji su alati dostupni u ovom agentu koristeći konfiguraciju `too
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "write": true,
-    "shell": true
+    "bash": true
   },
   "agent": {
     "plan": {
       "tools": {
         "write": false,
-        "shell": false
+        "bash": false
       }
     }
   }
@@ -419,7 +419,7 @@ Također možete koristiti zamjenske znakove za kontrolu više alata odjednom. N
 
 ### Dozvole
 
-Možete konfigurirati dozvole za upravljanje radnjama koje agent može poduzeti. Trenutno se dozvole za alate `edit`, `shell` i `webfetch` mogu konfigurirati na:
+Možete konfigurirati dozvole za upravljanje radnjama koje agent može poduzeti. Trenutno se dozvole za alate `edit`, `bash` i `webfetch` mogu konfigurirati na:
 
 - `"ask"` — Zatražite odobrenje prije pokretanja alata
 - `"allow"` — Dozvoli sve operacije bez odobrenja
@@ -460,7 +460,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell:
+  bash:
     "*": ask
     "git diff": allow
     "git log*": allow
@@ -471,7 +471,7 @@ permission:
 Only analyze code and suggest changes.
 ```
 
-Možete postaviti dozvole za određene shell komande.
+Možete postaviti dozvole za određene bash komande.
 
 ```json title="opencode.json" {7}
 {
@@ -479,7 +479,7 @@ Možete postaviti dozvole za određene shell komande.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git push": "ask",
           "grep *": "allow"
         }
@@ -497,7 +497,7 @@ Ovo može koristiti glob uzorak.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git *": "ask"
         }
       }
@@ -515,7 +515,7 @@ Budući da posljednje podudarno pravilo ima prednost, prvo postavite zamjenski z
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git status *": "allow"
         }
@@ -653,7 +653,7 @@ Na primjer, sa OpenAI-jevim modelima rezonovanja, možete kontrolisati napor ras
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -673,7 +673,7 @@ Pokrenite `opencode models` da vidite listu dostupnih modela.
 
 Novog agenta kreirate dodavanjem markdown datoteke u `.opencode/agents/` za projekat ili u `~/.config/opencode/agents/` globalno. Naziv datoteke postaje naziv agenta, a frontmatter konfiguriše njegov opis, način rada, model i dozvole. Format datoteke pogledajte u odjeljku [Markdown](#markdown) iznad.
 
-Pokrenite `opencode debug agents` da biste vidjeli listu agenata koje je OpenCode učitao.
+Pokrenite `opencode agent list` da biste vidjeli listu agenata koje je OpenCode učitao.
 
 ---
 
@@ -684,7 +684,7 @@ Evo nekoliko uobičajenih slučajeva upotrebe različitih agenata.
 - **Build agent**: Potpuni razvojni rad sa svim omogućenim alatima
 - **Plan agent**: Analiza i planiranje bez unošenja promjena
 - **Review agent**: Code review sa pristupom samo za čitanje plus alati za dokumentaciju
-- **Debug agent**: Fokusiran na istragu sa omogućenim shell i alatima za čitanje
+- **Debug agent**: Fokusiran na istragu sa omogućenim bash i alatima za čitanje
 - **Docs agent**: Pisanje dokumentacije sa operacijama datoteka, ali bez sistemskih naredbi
 
 ---
@@ -706,7 +706,7 @@ Imate li agenta kojeg biste željeli podijeliti? [Pošalji PR](https://github.co
 description: Writes and maintains project documentation
 mode: subagent
 tools:
-  shell: false
+  bash: false
 ---
 
 You are a technical writer. Create clear, comprehensive documentation.

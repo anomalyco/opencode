@@ -21,8 +21,9 @@ export const Plugin = define({
       Stream.runForEach(() => reload),
       Effect.forkScoped({ startImmediately: true }),
     )
-    // Authored documents reverse so user-global policy outranks repository policy; organization statements
-    // from the connected Console follow every authored one and have the final say.
+    // Documents reverse so earlier-loaded policy wins: managed policy, then a Console config document, then user
+    // and project files. Statements from a Console serving the legacy format follow every document and have the
+    // final say.
     const policies = () => ManagedPolicy.statements(loaded.entries, managed.current())
     const runSync = Effect.runSyncWith(yield* Effect.context())
     yield* ctx.provider.transform((providers) => {

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CompactionPart, CompactionResponse, LLMEvent, LLMResponse, Message, ProviderID } from "../src/schema/index.js"
-import { LLM, LLMClient, LLMRequest, LanguageModel } from "../src/index.js"
+import { LLM, LLMClient, LLMRequest, LanguageModel } from "../src/effect.js"
 import { OpenAI, Anthropic } from "../src/providers.js"
 import { testEffect } from "./lib/effect.js"
 import { fixedResponse } from "./lib/http.js"

@@ -4,8 +4,8 @@ import { Context, Effect, Layer, Option, Schema, Stream, Struct } from "effect"
 import { Provider } from "@opencode/schema/provider"
 import { Model } from "@opencode/schema/model"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { HttpTimeout, type ProviderPackageDefinition } from "@opencode/ai"
-import { isRecord } from "@opencode/ai/utils/record"
+import { HttpTimeout, type ProviderPackageDefinition } from "@opencode/ai/effect"
+import { isRecord } from "@opencode/util/record"
 import { Npm } from "@opencode/util/npm"
 import type { DeepMutable } from "./schema.js"
 import { importModule, resolveModule } from "@opencode/util/runtime-import"
@@ -50,6 +50,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/alibaba/chat", () => import("@opencode/ai/providers/alibaba/chat")],
   ["@opencode/ai/providers/alibaba/messages", () => import("@opencode/ai/providers/alibaba/messages")],
   ["@opencode/ai/providers/alibaba/responses", () => import("@opencode/ai/providers/alibaba/responses")],
+  ["@opencode/ai/providers/alibaba/images", () => import("@opencode/ai/providers/alibaba/images")],
   ["@opencode/ai/providers/amazon-bedrock", () => import("@opencode/ai/providers/amazon-bedrock")],
   ["@opencode/ai/providers/amazon-bedrock/mantle", () => import("@opencode/ai/providers/amazon-bedrock/mantle")],
   [
@@ -70,18 +71,35 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/azure", () => import("@opencode/ai/providers/azure")],
   ["@opencode/ai/providers/azure/chat", () => import("@opencode/ai/providers/azure/chat")],
   ["@opencode/ai/providers/azure/responses", () => import("@opencode/ai/providers/azure/responses")],
+  ["@opencode/ai/providers/azure/images", () => import("@opencode/ai/providers/azure/images")],
   ["@opencode/ai/providers/baseten", () => import("@opencode/ai/providers/baseten")],
+  ["@opencode/ai/providers/baseten/decisions", () => import("@opencode/ai/providers/baseten/decisions")],
   ["@opencode/ai/providers/cerebras", () => import("@opencode/ai/providers/cerebras")],
   ["@opencode/ai/providers/cloudflare-ai-gateway", () => import("@opencode/ai/providers/cloudflare-ai-gateway")],
+  [
+    "@opencode/ai/providers/cloudflare-ai-gateway/decisions",
+    () => import("@opencode/ai/providers/cloudflare-ai-gateway/decisions"),
+  ],
   ["@opencode/ai/providers/cloudflare-workers-ai", () => import("@opencode/ai/providers/cloudflare-workers-ai")],
+  [
+    "@opencode/ai/providers/cloudflare-workers-ai/decisions",
+    () => import("@opencode/ai/providers/cloudflare-workers-ai/decisions"),
+  ],
+  [
+    "@opencode/ai/providers/cloudflare-workers-ai/images",
+    () => import("@opencode/ai/providers/cloudflare-workers-ai/images"),
+  ],
   ["@opencode/ai/providers/cohere", () => import("@opencode/ai/providers/cohere")],
   ["@opencode/ai/providers/cohere/chat", () => import("@opencode/ai/providers/cohere/chat")],
   ["@opencode/ai/providers/deepinfra", () => import("@opencode/ai/providers/deepinfra")],
   ["@opencode/ai/providers/deepseek", () => import("@opencode/ai/providers/deepseek")],
   ["@opencode/ai/providers/digitalocean", () => import("@opencode/ai/providers/digitalocean")],
+  ["@opencode/ai/providers/digitalocean/decisions", () => import("@opencode/ai/providers/digitalocean/decisions")],
+  ["@opencode/ai/providers/digitalocean/images", () => import("@opencode/ai/providers/digitalocean/images")],
   ["@opencode/ai/providers/fireworks", () => import("@opencode/ai/providers/fireworks")],
   ["@opencode/ai/providers/google", () => import("@opencode/ai/providers/google")],
   ["@opencode/ai/providers/google/interactions", () => import("@opencode/ai/providers/google/interactions")],
+  ["@opencode/ai/providers/google/images", () => import("@opencode/ai/providers/google/images")],
   ["@opencode/ai/providers/google-vertex", () => import("@opencode/ai/providers/google-vertex")],
   ["@opencode/ai/providers/google-vertex/chat", () => import("@opencode/ai/providers/google-vertex/chat")],
   ["@opencode/ai/providers/google-vertex/gemini", () => import("@opencode/ai/providers/google-vertex/gemini")],
@@ -92,6 +110,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/google-vertex/messages", () => import("@opencode/ai/providers/google-vertex/messages")],
   ["@opencode/ai/providers/google-vertex/mistral", () => import("@opencode/ai/providers/google-vertex/mistral")],
   ["@opencode/ai/providers/google-vertex/responses", () => import("@opencode/ai/providers/google-vertex/responses")],
+  ["@opencode/ai/providers/google-vertex/images", () => import("@opencode/ai/providers/google-vertex/images")],
   ["@opencode/ai/providers/google-vertex-chat", () => import("@opencode/ai/providers/google-vertex-chat")],
   [
     "@opencode/ai/providers/google-vertex-interactions",
@@ -117,17 +136,23 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/openai", () => import("@opencode/ai/providers/openai")],
   ["@opencode/ai/providers/openai/chat", () => import("@opencode/ai/providers/openai/chat")],
   ["@opencode/ai/providers/openai/responses", () => import("@opencode/ai/providers/openai/responses")],
+  ["@opencode/ai/providers/openai/images", () => import("@opencode/ai/providers/openai/images")],
   ["@opencode/ai/providers/openai-compatible", () => import("@opencode/ai/providers/openai-compatible")],
   [
     "@opencode/ai/providers/openai-compatible/responses",
     () => import("@opencode/ai/providers/openai-compatible/responses"),
   ],
+  ["@opencode/ai/providers/openai-compatible/images", () => import("@opencode/ai/providers/openai-compatible/images")],
   [
     "@opencode/ai/providers/openai-compatible-responses",
     () => import("@opencode/ai/providers/openai-compatible-responses"),
   ],
+  ["@opencode/ai/providers/opencode/decisions", () => import("@opencode/ai/providers/opencode/decisions")],
   ["@opencode/ai/providers/openrouter", () => import("@opencode/ai/providers/openrouter")],
+  ["@opencode/ai/providers/openrouter/decisions", () => import("@opencode/ai/providers/openrouter/decisions")],
+  ["@opencode/ai/providers/openrouter/images", () => import("@opencode/ai/providers/openrouter/images")],
   ["@opencode/ai/providers/togetherai", () => import("@opencode/ai/providers/togetherai")],
+  ["@opencode/ai/providers/typesafe-ai/decisions", () => import("@opencode/ai/providers/typesafe-ai/decisions")],
   ["@opencode/ai/providers/venice", () => import("@opencode/ai/providers/venice")],
   ["@opencode/ai/providers/vercel-ai-gateway", () => import("@opencode/ai/providers/vercel-ai-gateway")],
   ["@opencode/ai/providers/vercel-ai-gateway/chat", () => import("@opencode/ai/providers/vercel-ai-gateway/chat")],
@@ -139,9 +164,16 @@ const builtins = new Map<string, () => Promise<unknown>>([
     "@opencode/ai/providers/vercel-ai-gateway/responses",
     () => import("@opencode/ai/providers/vercel-ai-gateway/responses"),
   ],
+  [
+    "@opencode/ai/providers/vercel-ai-gateway/decisions",
+    () => import("@opencode/ai/providers/vercel-ai-gateway/decisions"),
+  ],
+  ["@opencode/ai/providers/vercel-ai-gateway/images", () => import("@opencode/ai/providers/vercel-ai-gateway/images")],
   ["@opencode/ai/providers/xai", () => import("@opencode/ai/providers/xai")],
+  ["@opencode/ai/providers/xai/images", () => import("@opencode/ai/providers/xai/images")],
   ["@opencode/ai/providers/zai", () => import("@opencode/ai/providers/zai")],
   ["@opencode/ai/providers/zai/chat", () => import("@opencode/ai/providers/zai/chat")],
+  ["@opencode/ai/providers/zai/images", () => import("@opencode/ai/providers/zai/images")],
   ["@opencode/ai/providers/zai-coding-plan", () => import("@opencode/ai/providers/zai-coding-plan")],
   ["@opencode/ai/providers/zai-coding-plan/chat", () => import("@opencode/ai/providers/zai-coding-plan/chat")],
   ["@opencode/ai/providers/zai-coding-plan/messages", () => import("@opencode/ai/providers/zai-coding-plan/messages")],
@@ -183,16 +215,17 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
   return yield* importPackage(specifier, entrypoint)
 })
 
-/** opencode settings consumed in Core; native packages never receive them. */
-const CORE_KEYS = ["chunkTimeout", "compaction", "encoding", "fetch", "headerTimeout", "timeout", "transport"] as const
-const PROVIDER_ONLY_KEYS = ["chunkTimeout", "headerTimeout", "timeout", "transport"] as const
+const settingsKeys = Struct.keys(Provider.Settings.schema.fields)
+const providerOnlyKeys = settingsKeys.filter((key) => !(key in Model.Settings.schema.fields))
 
-export function nativeSettings(settings: Settings): Settings {
-  return Struct.omit(settings, CORE_KEYS)
+/** The provider options: every settings key OpenCode doesn't read itself. */
+export function nativeSettings(settings: Settings) {
+  return Struct.omit(settings, settingsKeys)
 }
 
+/** Settings a model inherits from its provider. */
 export function modelSettings(settings: Settings | undefined) {
-  return settings && Struct.omit(settings, PROVIDER_ONLY_KEYS)
+  return settings && Struct.omit(settings, providerOnlyKeys)
 }
 
 const decodeTimeout = Schema.decodeUnknownOption(HttpTimeout)
@@ -273,6 +306,9 @@ export type Request = Provider.Request
 
 export const Compaction = Provider.Compaction
 export type Compaction = Provider.Compaction
+
+export const Cache = Provider.Cache
+export type Cache = Provider.Cache
 
 export const Transport = Provider.Transport
 export type Transport = Provider.Transport

@@ -2,6 +2,7 @@ export * as ManagedPolicy from "./managed-policy.js"
 
 import { Document, type Entry } from "@opencode/schema/config"
 import { isDeepStrictEqual } from "node:util"
+import { ConfigIntegration } from "./config/integration.js"
 import { Wildcard } from "./util/wildcard.js"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Context, Effect, Layer, PubSub, Stream } from "effect"
@@ -52,15 +53,22 @@ export function statements(entries: readonly Entry[], organization: State) {
     ...entries
       .filter((entry): entry is Document => entry.type === "document")
       .toReversed()
-      .flatMap((entry) => entry.info.policies ?? [])
-      .map((policy) => ({ ...policy, message: "Blocked by configuration policy" })),
-    ...organization.statements.map((policy) => ({
-      ...policy,
-      message: organization.organization
-        ? `Blocked by ${organization.organization}'s policy`
-        : "Blocked by your organization's policy",
-    })),
+      .flatMap((entry) =>
+        (entry.info.policies ?? []).map((policy) => ({
+          ...policy,
+          // An integration document's policies are those of the organization behind its connection.
+          message:
+            entry instanceof ConfigIntegration.Document
+              ? blocked(entry.organization)
+              : "Blocked by configuration policy",
+        })),
+      ),
+    ...organization.statements.map((policy) => ({ ...policy, message: blocked(organization.organization) })),
   ]
+}
+
+function blocked(organization: string | undefined) {
+  return organization ? `Blocked by ${organization}'s policy` : "Blocked by your organization's policy"
 }
 
 export function decision(
