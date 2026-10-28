@@ -35,7 +35,7 @@ const EXTENSIONS: Record<string, string> = {
 const PREFERRED_FAMILIES = ["gpt-image", "gemini-flash", "gemini-pro", "grok", "flux"]
 
 export const description =
-  "Generate or edit an image. Pass images to edit them or to guide style and subject. To make several images, call the tool once per image with distinct prompts. Omit model to use the default; to choose one, find image models with the models tool and type: \"image\". Runs in the background: the call returns right away and you are notified when the image is saved; then use the read tool on its path to view it, and mention the path to the user. Don't poll or wait for it. Each call costs money, so don't regenerate unless asked or the result is clearly wrong."
+  "Generate or edit an image. Pass images to edit them or to guide style and subject. To make several images, call the tool once per image with distinct prompts. Omit model to use the default. Runs in the background: the call returns right away and you are notified when the image is saved; then use the read tool on its path to view it, and mention the path to the user. Don't poll or wait for it. Each call costs money, so don't regenerate unless asked or the result is clearly wrong."
 
 export const Input = Schema.Struct({
   prompt: Schema.String.check(Schema.isMinLength(1)).annotate({
@@ -50,7 +50,7 @@ export const Input = Schema.Struct({
   }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:
-      'NEVER set this unless the user explicitly asks for a particular image model or variant. The value is written as "providerID/modelID", or "providerID/modelID#variant" to include a variant. Do not guess the ID: look it up with the models tool using type: "image".',
+      'NEVER set this unless the user explicitly asks for a particular image model or variant. The value is written as "providerID/modelID", or "providerID/modelID#variant" to include a variant. Do not guess the ID: look it up with the models tool using type: "image", filtering to your own provider first.',
   }),
   path: Schema.optionalKey(Schema.String).annotate({
     description:
