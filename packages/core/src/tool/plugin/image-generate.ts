@@ -255,18 +255,15 @@ export const Plugin = {
               if (!image) return yield* new ToolFailure({ message: `${ref} returned no image.` })
               const bytes = Buffer.from(image.data, "base64")
               const mime = Mime.detect(bytes)
-              // Providers may return JPEG or WebP; core has no encoder, so the file keeps its real type.
-              const extension = EXTENSIONS[mime] ?? path.extname(requested)
-              const file =
-                path.extname(requested).toLowerCase() === extension
-                  ? requested
-                  : path.join(path.dirname(requested), path.basename(requested, path.extname(requested)) + extension)
+              // Providers may return JPEG or WebP and core has no encoder. A default path takes the real extension;
+              // an explicit path is kept as given, because only that exact path was approved and checked.
+              const extension = EXTENSIONS[mime] ?? ".png"
+              const file = target || extension === ".png" ? requested : requested.slice(0, -".png".length) + extension
               if (yield* exists(file))
                 return yield* new ToolFailure({ message: `${file} already exists. Choose a new path.` })
               yield* environment.files.write(file, bytes)
               const size = dimensions(bytes, mime)
-              const note =
-                file === requested ? "" : ` The model returned ${mime}, so it was saved with a ${extension} extension.`
+              const note = mime === "image/png" ? "" : ` The model returned ${mime}, so the file is in that format.`
               return {
                 output: { path: file, model: ref, ...size },
                 content: [

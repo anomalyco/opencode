@@ -153,10 +153,10 @@ describe("image_generate", () => {
     }),
   )
 
-  it.live("saves to the session temp folder by default and keeps the real type of a non-PNG result", () =>
+  it.live("saves to the session temp folder by default and handles a non-PNG result", () =>
     Effect.gen(function* () {
       yield* imageModel("test", "painter")
-      const { run, session } = yield* setup()
+      const { run, session, directory } = yield* setup()
       const global = yield* Global.Service
       fixture.result = { images: [{ type: "image", data: JPEG, mime: "image/jpeg" }] }
 
@@ -164,8 +164,13 @@ describe("image_generate", () => {
       expect(path.dirname(result.output.path)).toBe(path.join(global.tmp, "images", session.id))
       expect(path.extname(result.output.path)).toBe(".jpg")
       expect(result.output).toMatchObject({ width: 5, height: 3 })
-      expect(text(result)).toContain("The model returned image/jpeg, so it was saved with a .jpg extension.")
+      expect(text(result)).toContain("The model returned image/jpeg, so the file is in that format.")
       expect(yield* Effect.promise(() => Bun.file(result.output.path).exists())).toBe(true)
+
+      // An explicit path is kept exactly, since only that path was approved and checked before paying.
+      const explicit = yield* run({ prompt: "a cat", path: "cat.png" })
+      expect(explicit.output.path).toBe(path.join(directory, "cat.png"))
+      expect(text(explicit)).toContain("The model returned image/jpeg, so the file is in that format.")
     }),
   )
 
