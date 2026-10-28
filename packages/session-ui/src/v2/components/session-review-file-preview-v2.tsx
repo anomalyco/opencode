@@ -4,11 +4,15 @@ import { DiffChanges } from "@opencode/ui/diff-changes"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { useFileComponent } from "@opencode/ui/context/file"
 import { useI18n } from "@opencode/ui/context/i18n"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { showToast } from "@opencode/ui/toast"
 import { mediaKindFromPath } from "../../pierre/media"
 import { cloneSelectedLineRange, previewSelectedLines } from "../../pierre/selection-bridge"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import type { PresentationFileContent, PresentationFileDiff } from "../../file-presentation"
-import { createEffect, createMemo, onCleanup, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { normalize, text, type ViewDiff } from "../../components/session-diff"
@@ -107,10 +111,14 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
   let scrollRef: HTMLDivElement | undefined
   let focusToken = 0
 
-  const [store, setStore] = createStore({
-    selection: null as SelectedLineRange | null,
-    commenting: null as SelectedLineRange | null,
-    opened: null as string | null,
+  const [store, setStore] = createStore<{
+    selection: SelectedLineRange | null
+    commenting: SelectedLineRange | null
+    opened: string | null
+  }>({
+    selection: null,
+    commenting: null,
+    opened: null,
   })
 
   const view = createMemo(() => ({
@@ -123,6 +131,45 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
   const comments = createMemo(() => (props.comments ?? []).filter((comment) => comment.file === props.file))
   const commentedLines = createMemo(() => comments().map((comment) => comment.selection))
   const lineCommentsEnabled = () => props.onLineComment != null
+
+  const [copying, setCopying] = createSignal(false)
+
+  const deletedContent = createMemo(() => {
+    if (view().status !== "deleted") return undefined
+
+    if ("before" in props.diff && props.diff.before !== undefined) return props.diff.before
+
+    if (view().fileDiff.isPartial || view().deletions === 0) return undefined
+
+    return text(view(), "deletions")
+  })
+
+  const canCopy = () => (view().status === "deleted" ? deletedContent() !== undefined : !!props.readFile)
+
+  const copyContents = async () => {
+    if (copying()) return
+    setCopying(true)
+
+    try {
+      const content =
+        view().status === "deleted"
+          ? { type: "text", content: deletedContent() }
+          : await props.readFile?.(props.file)
+
+      if (content?.type !== "text" || content.content === undefined || content.content.includes("\0")) {
+        showToast({ variant: "error", title: i18n.t("ui.sessionReviewV2.copyUnavailable") })
+
+        return
+      }
+
+      await navigator.clipboard.writeText(content.content)
+      showToast({ variant: "success", title: i18n.t("ui.sessionReviewV2.copiedFileContents") })
+    } catch {
+      showToast({ variant: "error", title: i18n.t("ui.sessionReviewV2.copyFailed") })
+    } finally {
+      setCopying(false)
+    }
+  }
 
   const commentsUi = createLineCommentControllerV2<SessionReviewComment>({
     comments,
@@ -283,6 +330,16 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
         <div data-slot="session-review-v2-file-diff">
           <DiffChanges changes={view()} />
         </div>
+        <Tooltip value={i18n.t(canCopy() ? "ui.sessionReviewV2.copyFileContents" : "ui.sessionReviewV2.copyUnavailable")}>
+          <IconButton
+            icon={<Icon name="copy" />}
+            variant="ghost"
+            size="small"
+            aria-label={i18n.t("ui.sessionReviewV2.copyFileContents")}
+            disabled={!canCopy() || copying()}
+            onClick={() => void copyContents()}
+          />
+        </Tooltip>
       </div>
       <div
         ref={(el) => {
