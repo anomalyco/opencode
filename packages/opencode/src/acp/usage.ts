@@ -25,15 +25,6 @@ export type MessagesInput = {
   readonly directory: string
 }
 
-export type SDK = {
-  readonly session: {
-    readonly messages: (
-      parameters: { readonly sessionID: string; readonly directory: string },
-      options: { readonly throwOnError: true },
-    ) => Promise<{ readonly data?: readonly SessionMessage[] | null }>
-  }
-}
-
 export interface MessageLoaderInterface {
   readonly messages: (input: MessagesInput) => Effect.Effect<readonly SessionMessage[], unknown>
 }
@@ -69,19 +60,6 @@ export class ContextLimitLoader extends Context.Service<ContextLimitLoader, Cont
 ) {}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ACPUsage") {}
-
-export function messageLoaderFromSDK(sdk: SDK): MessageLoaderInterface {
-  return MessageLoader.of({
-    messages: (input) =>
-      Effect.promise(() =>
-        sdk.session
-          .messages({ sessionID: input.sessionID, directory: input.directory }, { throwOnError: true })
-          .then((response) => response.data ?? []),
-      ),
-  })
-}
-
-export const messageLoaderLayer = (sdk: SDK) => Layer.succeed(MessageLoader, messageLoaderFromSDK(sdk))
 
 export function contextTokens(message: AssistantTokenCost): number {
   return message.tokens.input + message.tokens.cache.read + message.tokens.cache.write
