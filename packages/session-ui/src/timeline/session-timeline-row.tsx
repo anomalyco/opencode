@@ -302,6 +302,13 @@ export function createSessionTimelineRowRenderer(input: {
 
       const key = () => `context:${row().group.key}`
 
+      // Auto-expand groups containing shell messages (unless explicitly closed by the user)
+      const hasShell = createMemo(() =>
+        parts().some((part) => part.type === "shell" || (part.type === "tool" && part.name === "shell"))
+      )
+
+      const groupDefaultOpen = () => hasShell() && input.disclosure.value(key()) !== false
+
       return (
         <div class="contents" data-notices-only={parts().every((part) => part.type === "notice") ? "" : undefined}>
           <SessionContextToolGroup
@@ -327,7 +334,9 @@ export function createSessionTimelineRowRenderer(input: {
             reasoningOpen={(id) => input.disclosure.value(id)}
             onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
             toolDefaultOpen={(tool) =>
-              input.timelineDetail || tool.name === "execute" ? contentDefaultOpen(tool) : false
+              input.timelineDetail || tool.name === "execute" || tool.name === "shell"
+                ? contentDefaultOpen(tool)
+                : false
             }
             toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
             onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
@@ -335,7 +344,7 @@ export function createSessionTimelineRowRenderer(input: {
               input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
             }
             onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
-            open={input.disclosure.value(key()) === true}
+            open={input.disclosure.value(key()) ?? groupDefaultOpen()}
             busy={
               workingTurn(row().userMessageID) &&
               input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key
@@ -482,7 +491,7 @@ export function createSessionTimelineRowRenderer(input: {
   }
 
   function contentDefaultOpen(item: SessionMessageAssistant["content"][number]) {
-    if (item.type === "tool" && item.name === "execute") return true
+    if (item.type === "tool" && (item.name === "execute" || item.name === "shell")) return true
 
     if (input.timelineDetail) {
       const category = timelineCategory(item)
@@ -816,13 +825,9 @@ export function createSessionTimelineRowRenderer(input: {
 
     const defaultOpen = createMemo(() => {
       if (!input.timelineDetail) return input.shellToolDefaultOpen()
-      const value = message()
 
-      return (
-        input.timelineDetail().shell.details === "expanded" ||
-        (input.timelineDetail().shell.placement === "hidden" &&
-          (value?.status === "timeout" || (value?.status === "exited" && value.exit !== undefined && value.exit !== 0)))
-      )
+      // Always expand shell messages by default (user can still collapse them manually)
+      return true
     })
 
     return (

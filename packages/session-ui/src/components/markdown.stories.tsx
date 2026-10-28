@@ -1,6 +1,7 @@
 import { markdown } from "@opencode/ui/storybook/fixtures"
 import { createSignal, onCleanup } from "solid-js"
 import { Markdown } from "./markdown"
+import { MarkdownProvider } from "../context/markdown"
 
 export default {
   title: "OpenCode/Conversation/Markdown response",
@@ -21,6 +22,33 @@ export const CompleteResponse = {
     <div class="mx-auto max-w-[760px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
       <Markdown text={markdown} />
     </div>
+  ),
+}
+
+// A host that can execute commands supplies `runCommand`, which makes shell blocks grow a run button beside copy. The
+// stubbed runner here resolves after a beat so the button's running spinner is visible.
+export const RunnableShellCommand = {
+  render: () => (
+    <MarkdownProvider runCommand={() => new Promise<void>((resolve) => setTimeout(resolve, 1200))}>
+      <div class="mx-auto max-w-[760px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
+        <Markdown
+          text={[
+            "Run the tests to confirm the change:",
+            "",
+            "```bash",
+            "bun test packages/session-ui",
+            "```",
+            "",
+            "A `console` transcript stays copy-only — no run button:",
+            "",
+            "```console",
+            "$ bun test",
+            "12 pass",
+            "```",
+          ].join("\n")}
+        />
+      </div>
+    </MarkdownProvider>
   ),
 }
 

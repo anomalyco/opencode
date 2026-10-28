@@ -14,6 +14,7 @@ import {
 import { isServer, render } from "solid-js/web"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
+import { Spinner } from "@opencode/ui/spinner"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { canReusePendingBlock, completedProjection } from "./markdown-projection"
 import type { Block, Projection } from "./markdown-stream"
@@ -36,6 +37,7 @@ import {
   type MarkdownCacheEntry,
 } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
+import { isRunnableCode } from "./markdown-runnable"
 import { renderMermaidSvg } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
 import {
@@ -43,6 +45,7 @@ import {
   type OpenMarkdownLocalFile,
   type ReadMarkdownImage,
   type MarkdownLocalFileExists,
+  type RunMarkdownCommand,
 } from "../context/markdown"
 import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
@@ -217,6 +220,121 @@ function disposeCopyButtons(root: Element) {
   ]
 
   hosts.forEach(disposeCopyButton)
+  // A code block carries both action buttons, so their lifetimes are torn down together.
+  disposeRunButtons(root)
+}
+
+type RunLabels = {
+  run: string
+  running: string
+}
+
+type RunButtonState = {
+  setLabels: Setter<RunLabels>
+  setRunning: Setter<boolean>
+  dispose: () => void
+}
+
+const runButtonState = new WeakMap<HTMLElement, RunButtonState>()
+
+function createRunButton(labels: RunLabels) {
+  const host = document.createElement("div")
+  host.setAttribute("data-slot", "markdown-run-button")
+
+  const state: Partial<RunButtonState> = {}
+
+  const dispose = render(() => {
+    const [labelState, setLabels] = createSignal(labels, { equals: false })
+    const [running, setRunning] = createSignal(false)
+    state.setLabels = setLabels
+    state.setRunning = setRunning
+
+    return <MarkdownRunButton labels={labelState()} running={running()} />
+  }, host)
+
+  state.dispose = dispose
+  // SAFETY: `render` runs its function synchronously, so both setters are assigned before this line.
+  runButtonState.set(host, state as RunButtonState)
+
+  return host
+}
+
+function MarkdownRunButton(props: { labels: RunLabels; running: boolean }) {
+  const label = () => (props.running ? props.labels.running : props.labels.run)
+
+  return (
+    <Tooltip placement="top" value={label()}>
+      <IconButton
+        type="button"
+        size="normal"
+        variant="ghost-muted"
+        aria-label={label()}
+        disabled={props.running}
+        icon={
+          <>
+            <Icon name="play" data-run-icon />
+            <Spinner data-run-spinner width={16} height={16} aria-hidden="true" />
+          </>
+        }
+      />
+    </Tooltip>
+  )
+}
+
+function setRunState(host: HTMLElement, labels: RunLabels, running: boolean) {
+  const state = runButtonState.get(host)
+  state?.setLabels(labels)
+  state?.setRunning(running)
+
+  if (running) {
+    host.setAttribute("data-running", "true")
+
+    return
+  }
+
+  host.removeAttribute("data-running")
+}
+
+function disposeRunButton(host: HTMLElement) {
+  runButtonState.get(host)?.dispose()
+  runButtonState.delete(host)
+}
+
+function disposeRunButtons(root: Element) {
+  const hosts = [
+    ...(root instanceof HTMLElement && root.getAttribute("data-slot") === "markdown-run-button" ? [root] : []),
+    ...Array.from(root.querySelectorAll('[data-slot="markdown-run-button"]')).filter(
+      (el): el is HTMLElement => el instanceof HTMLElement,
+    ),
+  ]
+
+  hosts.forEach(disposeRunButton)
+}
+
+// Adds or removes a code block's run button to match the current language and host capability. Called from both the
+// streaming and completed code paths, so a block that starts untyped and later resolves to a shell language gains its
+// button mid-stream (and loses it if the language changes away).
+function syncRunButton(wrapper: HTMLElement, enabled: boolean, labels: RunLabels) {
+  const existing = wrapper.querySelector<HTMLElement>(':scope > [data-slot="markdown-run-button"]')
+
+  if (enabled) {
+    if (existing) {
+      setRunState(existing, labels, existing.getAttribute("data-running") === "true")
+
+      return
+    }
+
+    // Run sits before copy so it reads left-to-right and takes focus first; layout is absolute, so order is cosmetic.
+    const copy = wrapper.querySelector(':scope > [data-slot="markdown-copy-button"]')
+    wrapper.insertBefore(createRunButton(labels), copy)
+
+    return
+  }
+
+  if (existing) {
+    disposeRunButton(existing)
+    existing.remove()
+  }
 }
 
 function disposeRenderedMarkdown(root: Element) {
@@ -557,6 +675,47 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   }
 }
 
+function setupCodeRun(
+  root: HTMLDivElement,
+  getRunner: () => RunMarkdownCommand | undefined,
+  getLabels: () => RunLabels,
+) {
+  const handleClick = async (event: MouseEvent) => {
+    if (event.defaultPrevented || event.button !== 0) return
+    const target = event.target
+
+    if (!(target instanceof Element)) return
+
+    const host = target.closest('[data-slot="markdown-run-button"]')
+
+    if (!(host instanceof HTMLElement)) return
+    // A command already in flight ignores further clicks until it settles.
+    if (host.getAttribute("data-running") === "true") return
+    const code = host.closest('[data-component="markdown-code"]')?.querySelector("code")
+    const command = code?.textContent ?? ""
+
+    if (!command.trim()) return
+    const runner = getRunner()
+
+    if (!runner) return
+    setRunState(host, getLabels(), true)
+
+    try {
+      await runner(command)
+    } finally {
+      // The host may have been disposed and replaced while the command ran; `setRunState` no-ops on an unknown host.
+      setRunState(host, getLabels(), false)
+    }
+  }
+
+  root.addEventListener("click", handleClick)
+
+  return () => {
+    root.removeEventListener("click", handleClick)
+    disposeRunButtons(root)
+  }
+}
+
 // Selections that leave this message keep the browser's copy, since surrounding UI may hold hidden content.
 function copySelection(event: ClipboardEvent & { currentTarget: HTMLDivElement }) {
   const selection = window.getSelection()
@@ -802,6 +961,7 @@ export function Markdown(
   )
 
   let copyCleanup: (() => void) | undefined
+  let runCleanup: (() => void) | undefined
   let linkCleanup: (() => void) | undefined
   let faviconCleanup: (() => void) | undefined
   let sessionLinkCleanup: (() => void) | undefined
@@ -843,6 +1003,13 @@ export function Markdown(
       copied: i18n.t("ui.message.copied"),
     }
 
+    const runLabels = {
+      run: i18n.t("ui.message.run"),
+      running: i18n.t("ui.message.running"),
+    }
+    // Shell blocks grow a run button only where the host can run commands (absent in read-only share/artifact views).
+    const canRun = !!markdown?.runCommand
+
     const nextCodeKeys = new Set(content.filter((block) => block.mode === "code").map((block) => block.key))
     activeCodeKeys.forEach((key) => {
       if (!nextCodeKeys.has(key)) disposeCode(key)
@@ -858,7 +1025,17 @@ export function Markdown(
       const check =
         renderedBlocks[index] === block && current instanceof HTMLDivElement
           ? inlineCodeChecks.get(current)?.pending
-          : updateBlock(container, index, block, labels, sessionLinks, lifetime.signal, localFileExists)
+          : updateBlock(
+              container,
+              index,
+              block,
+              labels,
+              canRun,
+              runLabels,
+              sessionLinks,
+              lifetime.signal,
+              localFileExists,
+            )
 
       return check ? [check] : []
     })
@@ -884,6 +1061,9 @@ export function Markdown(
     container
       .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
       .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
+    container
+      .querySelectorAll<HTMLElement>('[data-slot="markdown-run-button"]')
+      .forEach((button) => setRunState(button, runLabels, button.dataset.running === "true"))
 
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({
@@ -891,12 +1071,23 @@ export function Markdown(
         copied: i18n.t("ui.message.copied"),
       }))
 
+    if (!runCleanup)
+      runCleanup = setupCodeRun(
+        container,
+        () => markdown?.runCommand,
+        () => ({
+          run: i18n.t("ui.message.run"),
+          running: i18n.t("ui.message.running"),
+        }),
+      )
+
     if (!linkCleanup) linkCleanup = setupLocalLinks(container, () => markdown?.openLocalFile)
 
     if (!sessionLinkCleanup) sessionLinkCleanup = setupSessionLinks(container, () => markdown?.openSession)
 
     if (!faviconCleanup) faviconCleanup = setupExternalLinkFavicons(container)
     container.toggleAttribute("data-local-links", !!markdown?.openLocalFile)
+    container.toggleAttribute("data-code-run", canRun)
 
     if (!result?.ready || result.text !== local.text) return
 
@@ -919,6 +1110,8 @@ export function Markdown(
     images?.dispose()
 
     if (copyCleanup) copyCleanup()
+
+    if (runCleanup) runCleanup()
 
     if (linkCleanup) linkCleanup()
 
@@ -1000,6 +1193,8 @@ function updateBlock(
   index: number,
   block: RenderedBlock,
   labels: CopyLabels,
+  canRun: boolean,
+  runLabels: RunLabels,
   sessionLinks: ((id: string) => string | undefined) | undefined,
   signal: AbortSignal,
   localFileExists?: MarkdownLocalFileExists,
@@ -1007,7 +1202,7 @@ function updateBlock(
   const current = container.children[index]
 
   if (block.mode === "code") {
-    updateCodeBlock(container, current, block, labels)
+    updateCodeBlock(container, current, block, labels, canRun, runLabels)
 
     return
   }
@@ -1067,15 +1262,14 @@ function updateBlock(
       const pre = code.parentElement!
       const wrapper = document.createElement("div")
       wrapper.dataset.component = "markdown-code"
-      applyCodeMetadata(
-        wrapper,
-        Array.from(code.classList)
-          .find((name) => name.startsWith("language-"))
-          ?.slice(9),
-      )
+      const language = Array.from(code.classList)
+        .find((name) => name.startsWith("language-"))
+        ?.slice(9)
+      applyCodeMetadata(wrapper, language)
       pre.replaceWith(wrapper)
       wrapper.appendChild(pre)
       wrapper.appendChild(createCopyButton(labels))
+      syncRunButton(wrapper, canRun && isRunnableCode(language), runLabels)
       decorateMermaid(wrapper, code, true)
     })
   }
@@ -1100,6 +1294,8 @@ function updateCodeBlock(
   current: Element | undefined,
   block: Extract<RenderedBlock, { mode: "code" }>,
   labels: CopyLabels,
+  canRun: boolean,
+  runLabels: RunLabels,
 ) {
   const existing =
     current instanceof HTMLDivElement && current.dataset.markdownKey === block.key && renderedCodeTokens.has(current)
@@ -1119,6 +1315,8 @@ function updateCodeBlock(
     const wrapper = code.closest('[data-component="markdown-code"]')
 
     if (wrapper instanceof HTMLElement) applyCodeMetadata(wrapper, block.language)
+
+    if (wrapper instanceof HTMLElement) syncRunButton(wrapper, canRun && isRunnableCode(block.language), runLabels)
     code.className = `language-${block.language}`
     const previous = renderedCodeTokens.get(next)
 
@@ -1164,6 +1362,7 @@ function updateCodeBlock(
   pre.appendChild(codeElement)
   wrapper.appendChild(pre)
   wrapper.appendChild(createCopyButton(labels))
+  syncRunButton(wrapper, canRun && isRunnableCode(block.language), runLabels)
   decorateMermaid(wrapper, codeElement, block.complete)
   next.appendChild(wrapper)
   renderedCodeTokens.set(next, {

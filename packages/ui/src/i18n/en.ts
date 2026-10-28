@@ -289,6 +289,8 @@ const source = {
   "ui.message.copyResponse": "Copy response",
   "ui.message.copyOutput": "Copy output",
   "ui.message.copied": "Copied",
+  "ui.message.run": "Run command",
+  "ui.message.running": "Running…",
   "ui.message.thought": "Thought",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",

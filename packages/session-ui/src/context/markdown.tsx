@@ -11,12 +11,20 @@ export type OpenMarkdownLocalFile = (path: string) => void
  */
 export type MarkdownLocalFileExists = (path: string) => boolean | Promise<boolean>
 
+/**
+ * Execute a shell command from a fenced code block's run button. Provided only by hosts that can run commands against a
+ * live session; where it is absent (read-only share/artifact views) the run button is not rendered. Resolves when the
+ * command finishes so the button can show a running state.
+ */
+export type RunMarkdownCommand = (command: string) => void | Promise<void>
+
 const context = createContext<{
   readonly readImage?: ReadMarkdownImage
   readonly openLocalFile?: OpenMarkdownLocalFile
   readonly localFileExists?: MarkdownLocalFileExists
   readonly openSession?: (sessionID: string) => void
   readonly sessionTitle?: (sessionID: string) => string | undefined
+  readonly runCommand?: RunMarkdownCommand
 }>()
 
 export function MarkdownProvider(
@@ -26,6 +34,7 @@ export function MarkdownProvider(
     localFileExists?: MarkdownLocalFileExists
     openSession?: (id: string) => void
     sessionTitle?: (id: string) => string | undefined
+    runCommand?: RunMarkdownCommand
   }>,
 ) {
   const parent = useMarkdown()
@@ -47,6 +56,9 @@ export function MarkdownProvider(
         },
         get sessionTitle() {
           return props.sessionTitle ?? parent?.sessionTitle
+        },
+        get runCommand() {
+          return props.runCommand ?? parent?.runCommand
         },
       }}
     >

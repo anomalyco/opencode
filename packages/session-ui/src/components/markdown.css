@@ -348,17 +348,28 @@
     position: absolute;
     top: 4px;
     inset-inline-end: 4px;
-    transition: opacity 0.15s ease;
     z-index: 1;
-
-    @media (hover: hover) {
-      opacity: 0;
-    }
   }
 
-  [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"],
-  [data-slot="markdown-copy-button"]:focus-within {
-    opacity: 1;
+  /* Run sits just left of copy; the copy button is ~24px wide with a 4px edge inset, leaving a 2px gap between them. */
+  [data-slot="markdown-run-button"] {
+    position: absolute;
+    top: 4px;
+    inset-inline-end: 30px;
+    z-index: 1;
+  }
+
+  /* The play glyph gives way to the activity spinner while the command is in flight. */
+  [data-slot="markdown-run-button"] [data-run-spinner] {
+    display: none;
+  }
+
+  [data-slot="markdown-run-button"][data-running="true"] [data-run-icon] {
+    display: none;
+  }
+
+  [data-slot="markdown-run-button"][data-running="true"] [data-run-spinner] {
+    display: inline-flex;
   }
 
   [data-slot="markdown-copy-button"] [data-check-icon] {

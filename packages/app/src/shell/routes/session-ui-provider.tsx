@@ -73,6 +73,20 @@ export function SessionUIProvider(
     return session && !session.time.archived ? session.title || language.t("command.session.new") : undefined
   }
 
+  // Runs a command from a shell code block's run button in the current session's cwd — the same path the composer's
+  // shell mode uses. Output posts into the timeline as its own message; the agent loop is not involved.
+  const runCommand = async (command: string) => {
+    const sessionID = params.id
+
+    if (!sessionID) return
+
+    try {
+      await serverSDK.api.session.shell({ sessionID, command })
+    } catch {
+      showToast({ variant: "error", title: language.t("common.requestFailed") })
+    }
+  }
+
   const providers = useProviders(directory)
 
   const config = useQuery(() => ({
@@ -144,7 +158,12 @@ export function SessionUIProvider(
         onSessionHref={href}
         backgroundCompaction={backgroundCompaction()}
       >
-        <MarkdownProvider readImage={readImage()} openSession={openReferencedSession} sessionTitle={sessionTitle}>
+        <MarkdownProvider
+          readImage={readImage()}
+          openSession={openReferencedSession}
+          sessionTitle={sessionTitle}
+          runCommand={runCommand}
+        >
           {props.children}
         </MarkdownProvider>
       </DataProvider>
