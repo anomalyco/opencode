@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
+import { serviceVersion, shouldRetryEnsure } from "./cli-version"
 
 describe("cli-version", () => {
   test.each([
@@ -8,14 +8,6 @@ describe("cli-version", () => {
     { channel: "prod" as const, isolated: false, mode: "initial" as const, version: "2.0.32", expected: "2.0.32" },
   ])("serviceVersion($channel, isolated=$isolated) -> $expected", (input) => {
     expect(serviceVersion(input)).toBe(input.expected)
-  })
-
-  test.each([
-    { bundled: "0.0.0-beta-2", running: "0.0.0-beta-1", expected: ["0.0.0-beta-2-arm64", "0.0.0-beta-1-arm64"] },
-    { bundled: "0.0.0-beta-2", running: "0.0.0-beta-2", expected: ["0.0.0-beta-2-arm64"] },
-    { bundled: "2.0.32", running: undefined, expected: ["2.0.32-arm64"] },
-  ])("keptStages($bundled, $running)", (input) => {
-    expect(keptStages(input.bundled, input.running, "arm64")).toEqual(input.expected)
   })
 
   test.each([

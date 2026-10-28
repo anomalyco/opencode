@@ -140,7 +140,7 @@ const installCli = Effect.fn("DesktopCli.install")(function* (source: string, ve
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   // x64 and ARM64 installers share userData on Windows ARM64, so a same-version switch must not reuse the other copy.
-  const stage = stageName(version)
+  const stage = stageName(version, import.meta.env.OPENCODE_CHANNEL)
   const directory = path.join(app.getPath("userData"), "cli", stage)
   const destination = path.join(directory, executableName())
 
