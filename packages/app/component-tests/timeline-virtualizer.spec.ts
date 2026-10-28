@@ -55,6 +55,25 @@ story("bounds the cheap suffix and reveals only ready measured rows", async ({ p
   })
 })
 
+story("reveals at the reachable end under page zoom", async ({ page }) => {
+  // At 110% the browser stops scrolling more than a pixel short of scrollHeight - clientHeight. A mount that waited
+  // for that distance to close stayed blank, or froze the renderer in a microtask loop.
+  await page.evaluate(async (fixture) => {
+    document.documentElement.style.zoom = "1.1"
+    const { mountTimelineVirtualizer } = await import(fixture)
+    mountTimelineVirtualizer({ count: 2, rowHeight: 60.3, immediate: true, viewportHeight: 200.5 })
+  }, fixture)
+  const root = page.getByTestId("timeline-virtualizer-fixture")
+  const content = root.locator("[data-timeline-virtual-content]")
+  await root.getByRole("button", { name: "Complete Markdown", exact: true }).click()
+  await expect(content).toHaveCSS("visibility", "visible")
+  expect(
+    await root
+      .locator("[data-scrollable]")
+      .evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop),
+  ).toBeGreaterThan(1)
+})
+
 for (const input of [
   { name: "offset-only", count: 1, rowHeight: 600, reveal: { scrollTop: 0 } },
   { name: "zero-height", count: 4, rowHeight: 60, reveal: {} },

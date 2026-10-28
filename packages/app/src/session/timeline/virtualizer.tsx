@@ -611,11 +611,12 @@ export function createTimelineVirtualizer(input: Input) {
   let contentObserver: MutationObserver | undefined
   let viewportObserver: ResizeObserver | undefined
 
+  // Returns whether the view now rests at its end with that offset reported.
   const pinColdBottom = () => {
-    if (!active()) return
+    if (!active()) return false
     const root = listRoot()
 
-    if (!input.pinned() || !virtualContent || !root) return
+    if (!input.pinned() || !virtualContent || !root) return false
     // scrollToEnd computes its target from the DOM, not the new size cache.
     virtualContent.style.height = `${virtualizer.getTotalSize()}px`
 
@@ -624,6 +625,8 @@ export function createTimelineVirtualizer(input: Input) {
     // Report after core size adjustments finish so they cannot apply a delta
     // twice. This avoids waiting a frame for the native scroll event.
     if (virtualizer.scrollOffset !== root.scrollTop) reportOffset?.(root.scrollTop, false)
+
+    return true
   }
 
   const pendingMeasurements = () => {
@@ -655,12 +658,20 @@ export function createTimelineVirtualizer(input: Input) {
       })
 
       if (pendingSizes.size || pendingMeasurements()) return
-      pinColdBottom()
+      const pinned = input.pinned()
 
-      if (input.pinned() && Math.abs(root.scrollHeight - root.clientHeight - root.scrollTop) > 1) return
+      // Writing the end lands on the browser's reachable end. Under page zoom that can be more than a pixel short
+      // of scrollHeight - clientHeight, and TanStack keeps the offset it wrote rather than the one reached. Waiting
+      // for either distance to close never ends: each pass reports the offset again, which queues the next pass as
+      // a microtask, and the renderer freezes.
+      if (pinned && !pinColdBottom()) return
 
       // The scroll event must update the range before newly exposed rows can reveal.
-      if (root.scrollHeight > root.clientHeight && Math.abs((virtualizer.scrollOffset ?? 0) - root.scrollTop) > 1)
+      if (
+        !pinned &&
+        root.scrollHeight > root.clientHeight &&
+        Math.abs((virtualizer.scrollOffset ?? 0) - root.scrollTop) > 1
+      )
         return
 
       if (rendering.initialTail) {
