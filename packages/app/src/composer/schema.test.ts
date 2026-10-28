@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
+import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
 import { Persistence } from "@/runtime/persistence/schema"
 import { SessionMessage } from "@opencode/schema/session-message"
 import {
@@ -221,6 +222,23 @@ describe("composer persistence schemas", () => {
     const encoded = Schema.encodeSync(ComposerStore)(value)
     expect(JSON.stringify(encoded)).not.toContain("dataUrl")
     expect(decode(encoded)).toEqual(value)
+  })
+
+  test("persists a restored media:<hash> image as a reference without a URL", () => {
+    const ref = `media:${"a".repeat(64)}`
+
+    const value = decode({
+      prompt: [
+        { ...image, blob: createLegacyBlobReference(ref) },
+        { ...image, blob: { id: ref, url: ref } },
+      ],
+    })
+
+    expect(value.prompt).toEqual([
+      { ...image, blob: { id: ref, url: "" } },
+      { ...image, blob: { id: ref, url: "" } },
+    ])
+    expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
   })
 
   test("migrates legacy history arrays and recovers entries, parts, and comments independently", () => {

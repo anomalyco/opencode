@@ -244,6 +244,7 @@ function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
       if (update.time.archived) return rest
 
       const previous = projects.find((project) => project.id === update.id)
+
       // The wire payload carries no worktrees; keep the inventory this project already loaded.
       const next = withWorktreeInventory(
         previous ? updateProjectInfo(previous, update) : normalizeProjectInfo(update),
@@ -314,7 +315,7 @@ function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
   const updateConfigMutation = useMutation(() => ({
     mutationFn: async (config: Config) => {
       // TODO: Restore config updates when the V2 client exposes a config API.
-      // await serverSDK.api.config.update({ config })
+      // await serverSDK.api.experimental.config.update({ config })
       throw new Error(`Config updates are unavailable: ${Object.keys(config).length} fields were not saved`)
     },
     onSuccess: () => {
@@ -343,10 +344,10 @@ function createServerSyncContextInner(serverSDK: ServerSDK, data: Data) {
         await toggleMcp({
           status,
           connect: async () => {
-            await serverSDK.api.mcp.connect({ server: name, location: { directory: key } })
+            await serverSDK.api.experimental.mcp.connect({ server: name, location: { directory: key } })
           },
           disconnect: async () => {
-            await serverSDK.api.mcp.disconnect({ server: name, location: { directory: key } })
+            await serverSDK.api.experimental.mcp.disconnect({ server: name, location: { directory: key } })
           },
           authenticate: async () => {
             const server = (await serverSDK.api.mcp.list({ location: { directory: key } })).data.find(

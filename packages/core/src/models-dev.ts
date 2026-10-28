@@ -240,17 +240,16 @@ function entries<A>(record: Record<string, unknown> | undefined, decode: (input:
 }
 
 function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>): Route | undefined {
-  // A chat model uses its first API with a package. Other types (image, decision…) only run through
-  // opencode's own packages: among the ones this build can load, they prefer the entrypoint for their type
-  // (`providers/<P>/images`) over a chat API listed first, then their first API with one, and are skipped without one.
+  // A chat model uses its first API with a package. Other types (image, decision…) only run through the
+  // opencode entrypoint for their type (`providers/<P>/images`) that this build can load, and are skipped
+  // without one: a chat entrypoint loads a chat model, which can't generate images or decisions.
   const apis = entries(model.api, decodeApi).map(
     ([protocol, entry]) => [protocol, entry, loadable(entry.sdk?.opencodeai, unknown)] as const,
   )
   const [protocol, api, opencodeai] =
     (model.type === "chat"
       ? apis.find(([, entry, opencodeai]) => opencodeai || entry.sdk?.aisdk)
-      : (apis.find(([, , opencodeai]) => opencodeai?.endsWith(`/${model.type}s`)) ??
-        apis.find(([, , opencodeai]) => opencodeai))) ?? []
+      : apis.find(([, , opencodeai]) => opencodeai?.endsWith(`/${model.type}s`))) ?? []
   if (!protocol || !api) return undefined
   const aisdk = api.sdk?.aisdk
   const packageName =

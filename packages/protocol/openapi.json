@@ -3993,7 +3993,7 @@
     "/api/experimental/session/{sessionID}/log": {
       "get": {
         "tags": ["session"],
-        "operationId": "session.log",
+        "operationId": "experimental.session.log",
         "parameters": [
           {
             "name": "sessionID",
@@ -11732,7 +11732,7 @@
     "/api/experimental/session/{sessionID}/terminal/read": {
       "get": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.read",
+        "operationId": "experimental.persistentPty.read",
         "parameters": [
           {
             "name": "sessionID",
@@ -11822,7 +11822,7 @@
     "/api/experimental/session/{sessionID}/terminal": {
       "get": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.list",
+        "operationId": "experimental.persistentPty.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -11889,7 +11889,7 @@
       },
       "post": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.create",
+        "operationId": "experimental.persistentPty.create",
         "parameters": [
           {
             "name": "sessionID",
@@ -11965,7 +11965,7 @@
     "/api/experimental/persistent-pty/shutdown": {
       "post": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.shutdown",
+        "operationId": "experimental.persistentPty.shutdown",
         "parameters": [],
         "security": [],
         "responses": {
@@ -12008,7 +12008,7 @@
     "/api/experimental/persistent-pty/handoff": {
       "post": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.handoff",
+        "operationId": "experimental.persistentPty.handoff",
         "parameters": [],
         "security": [],
         "responses": {
@@ -12072,7 +12072,7 @@
     "/api/experimental/persistent-pty/{ptyID}": {
       "get": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.get",
+        "operationId": "experimental.persistentPty.get",
         "parameters": [
           {
             "name": "ptyID",
@@ -12146,7 +12146,7 @@
       },
       "put": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.update",
+        "operationId": "experimental.persistentPty.update",
         "parameters": [
           {
             "name": "ptyID",
@@ -12230,7 +12230,7 @@
       },
       "delete": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.remove",
+        "operationId": "experimental.persistentPty.remove",
         "parameters": [
           {
             "name": "ptyID",
@@ -12292,7 +12292,7 @@
     "/api/experimental/persistent-pty/{ptyID}/snapshot": {
       "get": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.snapshot",
+        "operationId": "experimental.persistentPty.snapshot",
         "parameters": [
           {
             "name": "ptyID",
@@ -12368,7 +12368,7 @@
     "/api/experimental/persistent-pty/{ptyID}/connect-token": {
       "post": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.connectToken",
+        "operationId": "experimental.persistentPty.connectToken",
         "parameters": [
           {
             "name": "ptyID",
@@ -12469,7 +12469,7 @@
     "/api/experimental/persistent-pty/{ptyID}/connect": {
       "get": {
         "tags": ["persistentPty"],
-        "operationId": "persistentPty.connect",
+        "operationId": "experimental.persistentPty.connect",
         "parameters": [
           {
             "name": "ptyID",
@@ -15508,6 +15508,9 @@
           "username": {
             "type": "string"
           },
+          "timezone": {
+            "type": "string"
+          },
           "permissions": {
             "$ref": "#/components/schemas/Permission.Ruleset"
           },
@@ -15785,6 +15788,9 @@
                 "type": "boolean"
               },
               "media_blob": {
+                "type": "boolean"
+              },
+              "schedules": {
                 "type": "boolean"
               },
               "subagent_depth": {

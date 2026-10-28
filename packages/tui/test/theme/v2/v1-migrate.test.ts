@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test"
+import type { RGBA } from "@opentui/core"
 import {
   migrateV1,
+  migrateV1NewDesigns,
   resolveThemeDocument,
+  rgbToOklch,
   selectThemeMode,
   themeModes,
   type HueScale,
@@ -284,6 +287,68 @@ test("keeps both modes when a shared background has different contrast", () => {
 
   expect(themeModes(migrated)).toEqual(["light", "dark"])
 })
+
+test("lays out V1 colors on the opencode2 steps under new designs", () => {
+  const migrated = migrateV1NewDesigns(DEFAULT_THEMES.tokyonight!)
+  expect(migrated.base.text?.base).toBe("$hue.neutral.100")
+  expect(migrated.base.text?.muted).toBe("$hue.neutral.200")
+  expect(migrated.base.text?.faint).toBe("$hue.neutral.300")
+  expect(migrated.base.background?.base).toBe("$hue.neutral.900")
+  expect(migrated.base.background?.action?.primary?.$focused).toBe("$hue.interactive.600")
+
+  for (const mode of ["dark", "light"] as const) {
+    const legacy = resolveV1(DEFAULT_THEMES.tokyonight!, mode)
+    const resolved = resolveThemeDocument(migrated, mode)
+    expect(hex(resolved.background.base)).toBe(hex(legacy.background))
+    expect(hex(resolved.text.base)).toBe(hex(legacy.text))
+    expect(hex(resolved.hue.interactive[400])).toBe(hex(legacy.primary))
+    expect(hex(resolved.text.action.primary.selected)).toBe(hex(legacy.primary))
+
+    // Raised surfaces step away from the page the way opencode2's do, and selection is a quiet tint.
+    const lightness = (color: RGBA) => rgbToOklch(color.r, color.g, color.b).l
+    const direction = mode === "dark" ? 1 : -1
+    const surfaces = [resolved.background.base, ...Object.values(resolved.background.raised)].map(lightness)
+    surfaces.slice(1).forEach((value, index) => expect((value - surfaces[index]!) * direction).toBeGreaterThan(0))
+    const focused = resolved.background.action.primary.focused
+    expect(contrast(resolved.text.base, focused)).toBeGreaterThan(contrast(legacy.text, legacy.background) * 0.6)
+    expect(rgbToOklch(focused.r, focused.g, focused.b).c).toBeLessThan(
+      rgbToOklch(legacy.primary.r, legacy.primary.g, legacy.primary.b).c / 2,
+    )
+  }
+})
+
+test("keeps transparent V1 surfaces transparent under new designs", () => {
+  const source = structuredClone(DEFAULT_THEMES.tokyonight!)
+  source.theme.background = "transparent"
+  source.theme.backgroundPanel = "none"
+  for (const mode of ["dark", "light"] as const) {
+    const resolved = resolveThemeDocument(migrateV1NewDesigns(source), mode)
+    expect(resolved.background.base.toInts()[3]).toBe(0)
+    expect(resolved.background.raised.base.toInts()[3]).toBe(0)
+    expect(resolved.background.raised.high.toInts()[3]).toBe(255)
+    expect(resolved.background.action.primary.focused.toInts()[3]).toBe(255)
+  }
+})
+
+test("migrates every built-in V1 theme under new designs", () => {
+  for (const source of Object.values(DEFAULT_THEMES)) {
+    const migrated = migrateV1NewDesigns(source)
+    for (const mode of themeModes(migrated)) {
+      const resolved = resolveThemeDocument(migrated, mode)
+      expect(resolved.text.faint).toBeDefined()
+      expect(resolved.surface("dialog").background.base).toBeDefined()
+    }
+  }
+})
+
+function contrast(first: RGBA, second: RGBA) {
+  const luminance = (color: RGBA) => {
+    const channel = (value: number) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
+  }
+  const [lighter, darker] = [luminance(first), luminance(second)].sort((a, b) => b - a)
+  return (lighter! + 0.05) / (darker! + 0.05)
+}
 
 function allHues(theme: ResolvedTheme) {
   return theme.hue as typeof theme.hue & Readonly<Record<string, HueScale>>

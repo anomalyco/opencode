@@ -758,7 +758,7 @@ export async function runNonInteractivePrompt(input: Input) {
       return
     }
 
-    const waiting = input.client.session.wait({ sessionID: input.sessionID })
+    const waiting = input.client.experimental.session.wait({ sessionID: input.sessionID })
     await Promise.race([waiting, completed.then(() => waiting)])
     finalizing = true
     const projected = await reconcile()

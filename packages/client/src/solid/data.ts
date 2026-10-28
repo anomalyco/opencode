@@ -1433,7 +1433,7 @@ export function createData(config: CreateDataInput) {
   }
 
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
-  const usageLimits = locationResource("usageLimits", (location) => api().usage.limits({ location }))
+  const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
     const ref = { directory: response.location.directory }

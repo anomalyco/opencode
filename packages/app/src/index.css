@@ -50,6 +50,13 @@
   font-display: swap;
 }
 
+/* Panel motion sets this on the one element whose own layout reads it. An inherited property would restyle every
+   element under that element each time a flight starts or lands. */
+@property --panel-hold-width {
+  syntax: "*";
+  inherits: false;
+}
+
 @media (display-mode: standalone) {
   /* WebKit excludes safe-area insets from dvh in installed apps. */
   #root {

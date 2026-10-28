@@ -59,7 +59,7 @@ export function createServerShellController(server: Accessor<ServerConnection.An
       const previous = state.latest
       actions.mutate({ ...previous, shell: value || undefined })
       void serverCtx()
-        .sdk.api.config.update({ shell: value || null })
+        .sdk.api.experimental.config.update({ shell: value || null })
         .catch((error) => {
           actions.mutate(previous)
           showToast({
