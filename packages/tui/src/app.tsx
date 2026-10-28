@@ -1304,6 +1304,27 @@ function App() {
     commands: appCommands(),
   }))
 
+  const clearScreen = () => {
+    if (renderer.isDestroyed) return
+    // Resizing to the current dimensions is the documented way to make the
+    // renderer repaint every visible cell of the alternate screen.
+    renderer.resize(renderer.terminalWidth, renderer.terminalHeight)
+  }
+
+  // The default "app.clear" keybind is ctrl+l; a no-op when unbound.
+  Keymap.createLayer(() => ({
+    mode: "global",
+    commands: [
+      {
+        id: "app.clear",
+        title: "Clear screen",
+        group: "System",
+        palette: true,
+        run: clearScreen,
+      },
+    ],
+  }))
+
   Keymap.createLayer(() => ({
     bindings: appBindingCommands,
   }))
