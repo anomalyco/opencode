@@ -41,7 +41,7 @@ import { SessionTodoPill } from "./todo-pill"
 import { sessionTodos, todoFinished } from "./todos"
 import { useOpenSessionRoute } from "../session-identity-header"
 import { resolveSessionComposerSelection } from "./selection"
-import { composerProviderName } from "@/composer/selection"
+import { composerModelLabelKey, composerModelLabels, composerProviderName } from "@/composer/model-label"
 import { useProviders } from "@/providers/catalog/providers"
 import { SubagentBar } from "./subagent-bar"
 import { createSessionRequestModel } from "../requests/model"
@@ -469,17 +469,30 @@ export function ActiveSessionComposerRegion(props: {
 
   const providers = useProviders(() => props.session.data.info()?.location.directory)
 
+  const modelLabels = createMemo(() =>
+    composerModelLabels(
+      providers.all(),
+      providers.connected().map((provider) => provider.id),
+    ),
+  )
+
   const subagentModel = () => {
     const ref =
       props.session.data.info()?.model ??
       props.session.history.messages().findLast((message) => message.type === "assistant")?.model
 
     if (!ref) return
-    const catalog = providers.all()
+    const label = modelLabels().get(composerModelLabelKey(ref.providerID, ref.id))
 
     return {
-      provider: composerProviderName(ref.providerID, catalog),
-      name: catalog.get(ref.providerID)?.models[ref.id]?.name.replace("(latest)", "").trim() ?? ref.id,
+      provider: label
+        ? label.provider
+        : composerProviderName(
+            ref.providerID,
+            providers.all(),
+            providers.connected().map((provider) => provider.id),
+          ),
+      name: label?.model ?? ref.id,
       variant: ref.variant,
     }
   }
