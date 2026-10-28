@@ -1554,7 +1554,7 @@ function currentModels(catalog: MockProviderCatalog) {
           variants: Object.entries(model.variants ?? {}).map(([id, settings]) =>
             Predicate.isObject(settings) ? { id, settings } : { id },
           ),
-          time: { released: Date.now() },
+          time: model.time ?? { released: Date.now() },
           cost: [{ input: model.cost?.input ?? 0, output: model.cost?.output ?? 0, cache: { read: 0, write: 0 } }],
           status: "active",
           enabled: true,
@@ -1687,6 +1687,7 @@ const decodeModel = Schema.decodeUnknownOption(
     cost: lenient(Schema.Struct({ input: lenient(Schema.Number), output: lenient(Schema.Number) })),
     capabilities: lenient(Model.Capabilities),
     variants: lenient(Schema.Record(Schema.String, Schema.Unknown)),
+    time: lenient(Schema.Struct({ released: Schema.Number })),
   }),
 )
 
