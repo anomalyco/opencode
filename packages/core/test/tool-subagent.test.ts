@@ -514,6 +514,15 @@ describe("SubagentTool", () => {
               message.type === "user" ? [message.payload.text] : [],
             ),
           ).toEqual(["You are a subagent spawned by another session.\nreview this", "continue this"])
+          // Both the first prompt and the continuation say which session sent them.
+          expect(
+            (yield* sessions.inbox(childID)).flatMap((message) =>
+              message.type === "user" ? [message.payload.metadata] : [],
+            ),
+          ).toEqual([
+            { "opencode.origin": { kind: "session", sessionID: parent.id } },
+            { "opencode.origin": { kind: "session", sessionID: parent.id } },
+          ])
           expect(second.content).toEqual([{ type: "text", text: completedOutput(childID) }])
         }),
       ),

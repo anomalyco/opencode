@@ -22,6 +22,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   schedules: Schema.Boolean.pipe(optional).annotate({
     description: "Enable experimental scheduled tasks that wake a session with a prompt. Defaults to false.",
   }),
+  message_context: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Tell the agent who sent each message, such as another session or a tool, from the message's metadata. Defaults to false.",
+  }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
   }),

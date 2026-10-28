@@ -560,7 +560,7 @@ export const layer = Layer.effect(
       const send = (request: LLMRequest) => {
         if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
           return Effect.gen(function* () {
-            const history = yield* SessionHistory.load(db, context.session.id, "local").pipe(Effect.orDie)
+            const history = yield* SessionHistory.loadForModel(db, context.session.id, "local").pipe(Effect.orDie)
             const retained = recentUserMessages(history, context.model, keep)
             const response = yield* llm.compact(request, { ...prepared.options, mechanism: "trigger" })
             return yield* toResult([...retained, Message.assistant(response.checkpoint)], response.usage)

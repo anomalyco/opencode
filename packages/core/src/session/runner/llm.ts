@@ -290,7 +290,9 @@ const layer = Layer.effect(
             // The Session is about to go idle, which leaves the background summary time to finish.
             if (!outcome.needsContinuation)
               yield* compaction.precompute(
-                store.context(sessionID).pipe(Effect.map((messages) => ({ ...loaded, messages }))),
+                SessionHistory.loadForModel(db, sessionID, "latest").pipe(
+                  Effect.map((messages) => ({ ...loaded, messages })),
+                ),
               )
             return outcome.needsContinuation
           }),

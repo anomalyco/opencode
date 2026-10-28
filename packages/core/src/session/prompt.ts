@@ -6,6 +6,8 @@ import { SessionInbox } from "@opencode/schema/session-inbox"
 import type { Session } from "@opencode/schema/session"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import { FSUtil } from "@opencode/util/fs-util"
+import { isFallbackTitle } from "@opencode/util/session-title-fallback"
+import { eq } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -17,6 +19,8 @@ import { PluginHooks } from "../plugin/hooks.js"
 import { Skill } from "../skill.js"
 import { SessionBlob } from "./blob.js"
 import { AttachmentError, SkillNotFoundError } from "./error.js"
+import { MessageContext } from "./message-context.js"
+import { SessionTable } from "./sql.js"
 import { SessionStored } from "./stored.js"
 
 // Image types the resizer can decode; others such as HEIC and AVIF go to the provider unchanged.
@@ -83,10 +87,35 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
       agents: input.agents,
       files,
       skills: selected?.length ? selected : undefined,
-      metadata: event.metadata,
+      metadata: yield* withSenderTitle(event.metadata),
     }),
     delivery: event.delivery,
   } satisfies SessionInbox.Item
+})
+
+// A session origin carries its sender's title from when it arrived, taken here and never from the caller. The agent
+// reads only this copy, so its line never changes once sent; an untitled sender stays untitled.
+const withSenderTitle = Effect.fnUntraced(function* (metadata: Record<string, unknown> | undefined) {
+  if (metadata === undefined) return metadata
+  const origin = Option.getOrUndefined(MessageContext.decodeOrigin(metadata[MessageContext.ORIGIN]))
+  if (origin?.kind !== "session") return metadata
+  const { db } = yield* Database.Service
+  const row = yield* db
+    .select({ title: SessionTable.title })
+    .from(SessionTable)
+    .where(eq(SessionTable.id, origin.sessionID))
+    .get()
+    .pipe(Effect.orDie)
+  const stored = row?.title ?? undefined
+  const title = isFallbackTitle(stored) ? undefined : MessageContext.cleanName(stored)
+  return {
+    ...metadata,
+    [MessageContext.ORIGIN]: {
+      kind: origin.kind,
+      sessionID: origin.sessionID,
+      ...(title === undefined ? {} : { title }),
+    },
+  }
 })
 
 const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(function* (

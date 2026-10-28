@@ -504,6 +504,15 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.schedules = value
       }
+      if (own(experimental, "message_context")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.message_context,
+          experimental.message_context,
+          ["experimental", "message_context"],
+          diagnostics,
+        )
+        if (value !== undefined) result.message_context = value
+      }
       if (own(experimental, "subagent_depth")) {
         const value = decodeEncoded(
           ConfigExperimental.Info.fields.subagent_depth,

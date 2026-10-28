@@ -96,6 +96,12 @@ describe("command subagents", () => {
         expect((yield* sessions.context(child.id)).filter((message) => message.type === "user")).toMatchObject([
           { text: "You are a subagent spawned by another session.\nReview changes: ready" },
         ])
+        // The stored message says which session sent it; the model reads it only with experimental.message_context.
+        expect(
+          (yield* sessions.messages({ sessionID: child.id })).flatMap((message) =>
+            message.type === "user" ? [message.metadata] : [],
+          ),
+        ).toEqual([{ "opencode.origin": { kind: "session", sessionID: parent.id, title: "Parent session" } }])
         yield* gate.release
         yield* llm.wait(2)
         yield* sessions.wait(parent.id)

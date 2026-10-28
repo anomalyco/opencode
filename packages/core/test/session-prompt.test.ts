@@ -79,6 +79,13 @@ const mediaBlob = Config.testLayer([
     info: new Info({ experimental: new ConfigExperimental.Info({ media_blob: true }) }),
   }),
 ])
+const contextDirectory = "/context"
+const messageContext = Config.testLayer([
+  new Document({
+    type: "document",
+    info: new Info({ experimental: new ConfigExperimental.Info({ message_context: true }) }),
+  }),
+])
 const locations = makeGlobalNode({
   service: LocationServiceMap.Service,
   layer: Layer.effect(
@@ -89,7 +96,11 @@ const locations = makeGlobalNode({
         (ref: Location.Ref) =>
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           Layer.mergeAll(
-            ref.directory === mediaDirectory ? mediaBlob : Layer.empty,
+            ref.directory === mediaDirectory
+              ? mediaBlob
+              : ref.directory === contextDirectory
+                ? messageContext
+                : Layer.empty,
             LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), {
               replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
             }),
@@ -449,6 +460,58 @@ describe("Session.prompt", () => {
       ])
       const stored = yield* admitted(message.id)
       expect(stored?.type === "user" ? stored.payload.files : undefined).toEqual(message.payload.files)
+    }),
+  )
+
+  it.effect("sets a session origin's title from the sender at admission, never from the caller", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* Session.Service
+      const insert = (id: Session.ID, directory: string, title: string | null) =>
+        db
+          .insert(SessionTable)
+          .values({ id, project_id: Project.ID.global, slug: id, directory, title, version: "test" })
+          .run()
+          .pipe(Effect.orDie)
+      const receiverID = Session.ID.make("ses_prompt_context")
+      const untitledID = Session.ID.make("ses_prompt_untitled")
+      const messyID = Session.ID.make("ses_prompt_messy")
+      yield* insert(receiverID, contextDirectory, "receiver")
+      yield* insert(untitledID, "/project", null)
+      yield* insert(messyID, "/project", `  Fix\nlogin ${"x".repeat(120)}`)
+      const send = (receiver: Session.ID, sender: Session.ID) =>
+        session
+          .prompt({
+            sessionID: receiver,
+            text: "from another session",
+            metadata: { "opencode.origin": { kind: "session", sessionID: sender, title: "Spoofed" }, source: "api" },
+            resume: false,
+          })
+          .pipe(Effect.map((message) => message.payload))
+
+      // The text is stored as sent; only the origin's title is the server's.
+      expect(yield* send(receiverID, sessionID)).toMatchObject({
+        text: "from another session",
+        metadata: { "opencode.origin": { kind: "session", sessionID, title: "test" }, source: "api" },
+      })
+      // The flag only decides what the agent reads, so the stored title is set the same way without it.
+      expect((yield* send(sessionID, sessionID)).metadata).toEqual({
+        "opencode.origin": { kind: "session", sessionID, title: "test" },
+        source: "api",
+      })
+      expect((yield* send(receiverID, untitledID)).metadata).toEqual({
+        "opencode.origin": { kind: "session", sessionID: untitledID },
+        source: "api",
+      })
+      expect((yield* send(receiverID, Session.ID.make("ses_prompt_deleted"))).metadata).toEqual({
+        "opencode.origin": { kind: "session", sessionID: "ses_prompt_deleted" },
+        source: "api",
+      })
+      expect((yield* send(receiverID, messyID)).metadata).toEqual({
+        "opencode.origin": { kind: "session", sessionID: messyID, title: `Fix login ${"x".repeat(90)}` },
+        source: "api",
+      })
     }),
   )
 
