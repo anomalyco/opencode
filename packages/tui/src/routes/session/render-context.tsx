@@ -1,5 +1,5 @@
 import { createContext, useContext } from "solid-js"
-import type { Renderable } from "@opentui/core"
+import type { Renderable, SyntaxStyle } from "@opentui/core"
 import type { ModelInfo } from "@opencode/client"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { useConfig } from "../../config"
@@ -30,6 +30,10 @@ export const context = createContext<{
   diffWrapMode: () => "word" | "none"
   models: () => ModelInfo[]
   messageIndex: (messageID: string) => number | undefined
+  /** Adds path-picker markers to assistant text while the picker is open. */
+  pathLinks?: (partID: string, text: string) => string | undefined
+  /** Red syntax for a part whose path markers are showing. */
+  pathLinkSyntax?: (partID: string) => SyntaxStyle | undefined
   /** True when the session has no idle markers, so turn footers end at the next prompt. */
   legacyTurns: () => boolean
   config: ReturnType<typeof useConfig>["data"]

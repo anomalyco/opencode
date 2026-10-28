@@ -7,6 +7,7 @@ import { sessionTabsStory } from "./session-tabs"
 import { sessionLocationMissingStory } from "./session-location-missing"
 import { oneCellSpinnerStory } from "./one-cell-spinner"
 import { linkClicksStory } from "./link-clicks"
+import { pathPickerStory } from "./path-picker"
 import { highlightsStory } from "./highlights"
 import { todoStory } from "./todo"
 
@@ -26,6 +27,7 @@ const stories: Story[] = [
   sessionLocationMissingStory,
   oneCellSpinnerStory,
   linkClicksStory,
+  pathPickerStory,
   highlightsStory,
   todoStory,
 ]

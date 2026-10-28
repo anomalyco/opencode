@@ -120,6 +120,28 @@ test("generates syntax with one categorical hue", () => {
   }
 })
 
+test("generates syntax that applies feature scope overrides last", () => {
+  const theme = resolveSource(complete("light", { categorical: ["red"] }), "light")
+  const red = theme.text.feedback.error.base
+  const inheritedOwner = new ResourceContext({ objectCapacity: 1, renderCellsMax: 1 })
+  const overriddenOwner = new ResourceContext({ objectCapacity: 1, renderCellsMax: 1 })
+  const inherited = generateSyntax(theme, inheritedOwner)
+  const overridden = generateSyntax(theme, overriddenOwner, { "markup.strikethrough": red })
+
+  try {
+    expect(overridden.getStyle("markup.strikethrough")?.fg?.equals(red)).toBeTrue()
+    expect(inherited.getStyle("markup.strikethrough")?.fg?.equals(theme.text.muted)).toBeTrue()
+    expect(
+      overridden.getStyle("markup.link.label")?.fg?.equals(inherited.getStyle("markup.link.label")!.fg!),
+    ).toBeTrue()
+  } finally {
+    overridden.destroy()
+    inherited.destroy()
+    overriddenOwner.destroy()
+    inheritedOwner.destroy()
+  }
+})
+
 test("rejects incomplete themes instead of merging defaults", () => {
   expect(() => resolveSource({ light: { hue: light.hue } }, "light")).toThrow("Invalid theme")
   expect(() => resolveSource({ light: { ...light, categorical: undefined } }, "light")).toThrow(

@@ -1,7 +1,14 @@
 import { SyntaxStyle, type NativeResourceOwner, type RGBA, type ThemeTokenStyle } from "@opentui/core"
 import type { ResolvedThemeTokens } from "./index.js"
 
-export function generateSyntax(theme: ResolvedThemeTokens, owner: NativeResourceOwner) {
+/** Feature-local scope colors that win over the theme's own rule for that scope. */
+export type SyntaxOverrides = Readonly<Record<string, RGBA>>
+
+export function generateSyntax(
+  theme: ResolvedThemeTokens,
+  owner: NativeResourceOwner,
+  overrides: SyntaxOverrides = {},
+) {
   const step = 200
   const syntax = theme.syntax
   const markdown = theme.markdown
@@ -83,6 +90,7 @@ export function generateSyntax(theme: ResolvedThemeTokens, owner: NativeResource
     rule(["warning"], feedback.warning.base, { bold: true }),
     rule(["info"], feedback.info.base),
   ]
+  for (const [scope, foreground] of Object.entries(overrides)) rules.push(rule([scope], foreground))
   return SyntaxStyle.fromTheme(rules, owner)
 }
 
