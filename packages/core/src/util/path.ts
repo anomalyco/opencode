@@ -12,12 +12,6 @@ export function getDirectory(path: string | undefined) {
   return parts.slice(0, parts.length - 1).join("/") + "/"
 }
 
-export function getFileExtension(path: string | undefined) {
-  if (!path) return ""
-  const parts = path.split(".")
-  return parts[parts.length - 1]
-}
-
 export function getFilenameTruncated(path: string | undefined, maxLength: number = 20) {
   const filename = getFilename(path)
   if (filename.length <= maxLength) return filename

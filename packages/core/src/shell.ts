@@ -1,15 +1,12 @@
 export * as Shell from "./shell"
 
 import path from "path"
-import { spawn, type ChildProcess } from "child_process"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
-import { setTimeout as sleep } from "node:timers/promises"
 import { Flag } from "./flag/flag"
 import { FSUtil } from "./fs-util"
 import { which } from "./util/which"
 
-const SIGKILL_TIMEOUT_MS = 200
 const META: Record<string, { deny?: boolean; login?: boolean; posix?: boolean; ps?: boolean }> = {
   bash: { login: true, posix: true },
   dash: { login: true, posix: true },
@@ -26,37 +23,6 @@ export type Item = {
   path: string
   name: string
   acceptable: boolean
-}
-
-export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
-  const pid = proc.pid
-  if (!pid || opts?.exited?.()) return
-
-  if (process.platform === "win32") {
-    await new Promise<void>((resolve) => {
-      const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], {
-        stdio: "ignore",
-        windowsHide: true,
-      })
-      killer.once("exit", () => resolve())
-      killer.once("error", () => resolve())
-    })
-    return
-  }
-
-  try {
-    process.kill(-pid, "SIGTERM")
-    await sleep(SIGKILL_TIMEOUT_MS)
-    if (!opts?.exited?.()) {
-      process.kill(-pid, "SIGKILL")
-    }
-  } catch {
-    proc.kill("SIGTERM")
-    await sleep(SIGKILL_TIMEOUT_MS)
-    if (!opts?.exited?.()) {
-      proc.kill("SIGKILL")
-    }
-  }
 }
 
 function stat(file: string) {
