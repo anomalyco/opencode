@@ -19,3 +19,25 @@ jobs:
 
       - name: Run typecheck
         run: bun typecheck
+
+  # Replaces the generate bot: pull requests must commit the regenerated SDK, OpenAPI document and formatting.
+  generated:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Generate
+        run: ./script/generate.ts
+
+      - name: Check generated files
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            git diff
+            echo "::error::Generated files are out of date. Run ./script/generate.ts and commit the result."
+            exit 1
+          fi
