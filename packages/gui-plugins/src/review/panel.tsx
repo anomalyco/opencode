@@ -208,7 +208,14 @@ function ReviewPanel(props: ReviewPanelProps) {
       }
       toolbarAction={
         <Show when={openIn()}>
-          {(openIn) => <Dynamic component={openIn().Button} screen={props.screen} session={props.session} />}
+          {(openIn) => (
+            <Dynamic
+              component={openIn().Button}
+              screen={props.screen}
+              session={props.session}
+              activeFile={activeDiff()}
+            />
+          )}
         </Show>
       }
       sidebar={

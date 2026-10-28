@@ -17,7 +17,7 @@ import {
 } from "@opencode/plugin/gui"
 import type { OpenApp } from "./apps"
 import { useShared, type OpenRequest } from "./context"
-import { openInAppParentPath } from "./path"
+import { openInAppParentPath, resolveOpenInAppPath } from "./path"
 
 const MAC_OPEN_APPS = [
   { id: "vscode", label: "open.app.vscode", icon: "vscode", openWith: "Visual Studio Code" },
@@ -214,13 +214,17 @@ export function OpenInAppMenuItem(props: { session: MountedSession }) {
   )
 }
 
-export default function OpenInAppButton(props: { session: MountedSession; screen: SessionScreen }) {
+export default function OpenInAppButton(props: {
+  session: MountedSession
+  screen: SessionScreen
+  activeFile?: string
+}) {
   const ctx = usePlugin()
-  const directory = () => props.screen.file.root
-  const state = useOpenInApp({ session: props.session, path: directory, request: useShared().request })
+  const path = () => resolveOpenInAppPath(props.screen.file.root, props.activeFile ?? "")
+  const state = useOpenInApp({ session: props.session, path, request: useShared().request })
 
   return (
-    <Show when={directory() && state.canOpen()}>
+    <Show when={path() && state.canOpen()}>
       <SplitButton class="session-review-v2-open-in-app" onPointerDown={(event) => event.stopPropagation()}>
         <Tooltip
           placement="bottom"

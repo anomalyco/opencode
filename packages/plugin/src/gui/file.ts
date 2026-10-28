@@ -75,6 +75,8 @@ export interface OpenInAppProps {
   readonly screen: SessionScreen
   /** The session whose workspace opens. */
   readonly session: MountedSession
+  /** The active file to open, relative to the workspace root. The root opens when it is omitted. */
+  readonly activeFile?: string
 }
 
 /** The desktop "Open in" button, for a panel header that shows it in place of the tab strip's. */
