@@ -1,7 +1,7 @@
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { Option, Schema } from "effect"
 
-export type BlobReference = { id: string; url: string }
+type BlobReference = { id: string; url: string }
 
 type Driver = {
   get(key: string): Promise<string | null>

@@ -34,6 +34,7 @@ import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
 import { Workspace } from "@opencode/core/workspace"
 import { Watcher } from "@opencode/core/filesystem/watcher"
+import { FileWatch } from "@opencode/core/filesystem/file-watch"
 import { HttpRouter } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Context, Effect, Layer, Option } from "effect"
@@ -77,6 +78,7 @@ const applicationServiceNodes = [
   LocationActivity.node,
   SessionRestart.node,
   Workspace.node,
+  FileWatch.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 
@@ -122,6 +124,7 @@ function makeRoutes<AuthError, AuthServices>(
     App.node.replace(App.configured(options.app)),
     ModelsDev.node.replace(ModelsDev.configured(options.models)),
     Watcher.node.replace(Watcher.configured({ enabled: options.fs?.filewatcher })),
+    FileWatch.node.replace(FileWatch.configured({ enabled: options.fs?.filewatcher })),
     FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: options.fs?.fff })),
     Global.node.replace(Global.layerWith(options.config?.directory ? { config: options.config.directory } : {})),
     Config.node.replace(

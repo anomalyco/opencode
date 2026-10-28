@@ -24,7 +24,8 @@ import {
 } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
-import { cacheControl } from "./utils/cache.js"
+import { placesMarkers, requestTTL } from "../cache-policy.js"
+import * as Cache from "./utils/cache.js"
 import { resolveParallelToolCalls } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -186,6 +187,8 @@ export const bodyFields = {
   stream_options: Schema.optional(Schema.Struct({ include_usage: Schema.Boolean })),
   store: Schema.optional(Schema.Boolean),
   prompt_cache_key: Schema.optional(Schema.String),
+  prompt_cache_retention: Schema.optional(Schema.String),
+  prompt_cache_options: Schema.optional(Schema.Struct({ ttl: Schema.optional(Schema.String) })),
   reasoning_effort: Schema.optional(OpenResponsesOptions.ReasoningEffort),
   verbosity: Schema.optional(OpenResponsesOptions.TextVerbositySchema),
   service_tier: Schema.optional(OpenResponsesOptions.ServiceTierSchema),
@@ -779,6 +782,8 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean, hasActiveTool
   return {
     ...(supportsStore ? { store: options.store ?? false } : {}),
     ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
+    // Inline markers carry the lifetime when the policy places them.
+    ...(placesMarkers(request) ? {} : Cache.openAIRequestTTL(requestTTL(request))),
     ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
     ...(options.textVerbosity ? { verbosity: options.textVerbosity } : {}),
     ...(options.serviceTier ? { service_tier: options.serviceTier } : {}),
@@ -841,7 +846,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
 
 // Provider wrappers that pass their own marker writer keep it; otherwise a declared cache format adds one.
 const declaredCacheControl = (request: LLMRequest) =>
-  request.model.compatibility?.cacheFormat === undefined ? undefined : cacheControl()
+  request.model.compatibility?.cacheFormat === undefined ? undefined : Cache.cacheControl()
 
 // =============================================================================
 // Stream Parsing

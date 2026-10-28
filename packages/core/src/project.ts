@@ -1,6 +1,6 @@
 export * as Project from "./project.js"
 
-import { Cache, Context, Duration, Effect, Layer, Schedule, Schema } from "effect"
+import { Cache, Context, Duration, Effect, Layer, Schedule, Schema, Scope } from "effect"
 import { ChildProcess } from "effect/process"
 import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
 import path from "path"
@@ -15,6 +15,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Hash } from "@opencode/util/hash"
 import { ProjectSchema } from "./project/schema.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
+import { ProjectIcon } from "./project/icon.js"
 import { WorktreeTable } from "./worktree/sql.js"
 
 export const ID = ProjectSchema.ID
@@ -46,16 +47,21 @@ export interface Resolved {
 }
 
 // Keep this filesystem-only; permission checks use it and should not execute VCS commands.
-export const root = Effect.fn("Project.root")(function* (
-  fs: FSUtil.Interface,
-  input: AbsolutePath,
-  markers: readonly string[] = [".git", ".hg"],
-) {
-  return yield* fs.up({ targets: [...markers], start: input, mode: "first" }).pipe(
-    Effect.map((matches) => (matches[0] ? AbsolutePath.make(path.dirname(matches[0])) : undefined)),
-    Effect.orElseSucceed(() => undefined),
-  )
-})
+export const root = Effect.fn("Project.root")(
+  function* (
+    fs: { readonly exists: (path: string) => Effect.Effect<boolean, unknown> },
+    input: AbsolutePath,
+    markers: readonly string[] = [".git", ".hg"],
+  ) {
+    for (let current: string = input; ; current = path.dirname(current)) {
+      for (const marker of markers) {
+        if (yield* fs.exists(path.join(current, marker))) return AbsolutePath.make(current)
+      }
+      if (path.dirname(current) === current) return undefined
+    }
+  },
+  Effect.orElseSucceed(() => undefined),
+)
 
 const ACTIVATE_INTERVAL = 60_000
 const SWEEP_INTERVAL = Duration.hours(1)
@@ -117,6 +123,7 @@ const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const bus = yield* Bus.Service
     const db = (yield* Database.Service).db
+    const scope = yield* Scope.Scope
 
     const announcing = new Set<string>()
     const persist = Effect.fnUntraced(function* (project: Resolved) {
@@ -149,6 +156,11 @@ const layer = Layer.effect(
           : undefined
       const changed = replaced ?? unarchived
       if (changed) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(changed))
+      yield* ProjectIcon.refresh(fs, db, project.id).pipe(
+        Effect.flatMap((row) => (row ? bus.publish(ProjectSchema.Event.Updated, fromRow(row)) : Effect.void)),
+        Effect.ignoreCause,
+        Effect.forkIn(scope),
+      )
       if (!project.vcs) return project
       const directories: Array<{ projectID: ID; directory: AbsolutePath; strategy?: Worktree.StrategyID }> = [
         { projectID: project.id, directory: project.canonical },

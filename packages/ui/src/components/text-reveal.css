@@ -138,7 +138,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   [data-component="text-reveal"] [data-slot="text-reveal-track"] {
     transition-duration: 0ms !important;
   }

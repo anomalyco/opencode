@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 import {
   DecisionResponse,
+  DecisionUsage,
   type DecisionAnswer,
   type DecisionModelCompatibility,
   type DecisionPart,
@@ -11,7 +12,7 @@ import type { Media } from "../media.js"
 import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaProtocol } from "../route/media-protocol.js"
-import { AIError, UnsupportedOperationError, Usage, mergeJsonRecords } from "../schema/index.js"
+import { AIError, UnsupportedOperationError, mergeJsonRecords } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import { JsonObject, ProviderShared } from "./shared.js"
 
@@ -19,8 +20,8 @@ export const DEFAULT_PATH = "/systemone"
 
 export const DEFAULT_BASE_URL = "https://api.typesafe.ai/v1"
 
-/** `messages` is Baseten's own placement (parts in a user message inside `state.messages`), set by its provider. */
-type ImageInput = NonNullable<DecisionModelCompatibility["imageInput"]> | "messages"
+/** `state.messages` is Baseten's own placement (parts in a user message inside `state.messages`), set by its provider. */
+type MediaInput = NonNullable<DecisionModelCompatibility["mediaInput"]> | "state.messages"
 
 const Probability = Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 }))
 const Answer = Schema.Union([
@@ -42,6 +43,7 @@ const NativeUsage = Schema.StructWithRest(
   Schema.Struct({
     input_tokens: Schema.optional(Schema.Number),
     output_tokens: Schema.optional(Schema.Number),
+    cost: Schema.optional(Schema.Number),
   }),
   [JsonObject],
 )
@@ -58,13 +60,13 @@ export type Response = Schema.Schema.Type<typeof Response>
 const ID = "system-one"
 const NAME = "System One"
 
-/** The System One body without `model`; media goes where the model's `imageInput` says, else `fallback`. */
+/** The System One body without `model`; media goes where the model's `mediaInput` says, else `fallback`. */
 export const encodeBody = Effect.fn("SystemOne.encodeBody")(function* (
   request: DecisionRequestFor,
-  fallback: ImageInput,
+  fallback: MediaInput,
 ) {
   const questions = yield* encodeQuestions(request.questions)
-  const placed = yield* placeMedia(request, request.model.compatibility?.imageInput ?? fallback)
+  const placed = yield* placeMedia(request, request.model.compatibility?.mediaInput ?? fallback)
   return { ...mergeJsonRecords(request.providerOptions, request.http?.body), ...placed, questions }
 })
 
@@ -103,7 +105,7 @@ const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
     ] as const)
   }).pipe(Effect.map(Object.fromEntries))
 
-const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, imageInput: ImageInput) {
+const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, mediaInput: MediaInput) {
   const parts = request.input
   const unsupported = (asset: Media.Asset, accepted: string) =>
     new AIError({
@@ -116,9 +118,9 @@ const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, ima
     })
   const media = parts.flatMap((part) => (part.type === "media" ? [part.media] : []))
   if (media.length === 0) return { state: state(parts.map(plain)) }
-  if (imageInput === "state") return { state: yield* Effect.forEach(parts, (part) => stateItem(part, unsupported)) }
+  if (mediaInput === "state") return { state: yield* Effect.forEach(parts, (part) => stateItem(part, unsupported)) }
   // Chat-style content in one user message: text and JSON as text parts, media as in `state`.
-  if (imageInput === "messages")
+  if (mediaInput === "state.messages")
     return {
       state: {
         messages: [
@@ -133,7 +135,7 @@ const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, ima
         ],
       },
     }
-  if (imageInput === "images") {
+  if (mediaInput === "root") {
     const lists = { image: "images", audio: "audio", video: "videos" } as const
     const unplaced = media.find((asset) => !Object.hasOwn(lists, asset.kind))
     if (unplaced !== undefined) return yield* unsupported(unplaced, "images, audio and video")
@@ -211,15 +213,16 @@ export const toResponse = (
       usage:
         data.usage === undefined
           ? undefined
-          : new Usage({
+          : new DecisionUsage({
               inputTokens: data.usage.input_tokens,
               outputTokens: data.usage.output_tokens,
               totalTokens: ProviderShared.totalTokens(data.usage.input_tokens, data.usage.output_tokens, undefined),
-              providerMetadata: { [providerMetadataKey]: data.usage },
+              cost: data.usage.cost,
             }),
       providerMetadata: {
         [providerMetadataKey]: {
           model: data.model,
+          ...(data.usage === undefined ? {} : { usage: data.usage }),
           ...(data.id === undefined ? {} : { responseId: data.id }),
           ...(data.provider === undefined ? {} : { provider: data.provider }),
           ...data.provider_metadata?.[providerMetadataKey],

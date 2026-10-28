@@ -49,11 +49,12 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
   expect(Object.keys(client.voice)).toEqual(["models", "session"])
   expect(Object.keys(client.usage)).toEqual(["limits"])
-  expect(Object.keys(client.file)).toEqual(["read", "list", "find", "write"])
+  expect(Object.keys(client.file)).toEqual(["read", "list", "find", "write", "watch", "unwatch"])
   expect(Object.keys(client.vcs)).toEqual(["init", "get", "base", "status", "branch", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
-  expect(Object.keys(client.experimental)).toEqual(["persistentPty"])
+  expect(Object.keys(client.experimental).sort()).toEqual(["media", "persistentPty"])
+  expect(Object.keys(client.experimental.media)).toEqual(["get"])
   expect(client.experimental.persistentPty.read).toBeFunction()
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "update"])
@@ -254,7 +255,7 @@ test("generate.text uses the locationless public contract", async () => {
   })
 
   expect(await client.generate.text({ prompt: "ping" })).toEqual({ text: "pong" })
-  expect(request?.url).toBe("http://localhost:3000/api/experimental/generate")
+  expect(request?.url).toBe("http://localhost:3000/api/experimental/generate/text")
   expect(await request?.json()).toEqual({ prompt: "ping" })
 })
 

@@ -2018,6 +2018,26 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("sends the cache TTL as prompt_cache_options, or prompt_cache_retention for 24h", () =>
+    Effect.gen(function* () {
+      const model = OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" })
+      const options = yield* compileRequest(
+        LLM.request({ model: model.model("gpt-5.6"), prompt: "hi", cache: { ttl: "30m" } }),
+      )
+      const retention = yield* compileRequest(
+        LLM.request({ model: model.model("gpt-5.5"), prompt: "hi", cache: { ttl: "24h" } }),
+      )
+      const unset = yield* compileRequest(LLM.request({ model: model.model("gpt-5.6"), prompt: "hi" }))
+
+      expect(options.body).toMatchObject({ prompt_cache_options: { ttl: "30m" } })
+      expect(options.body).not.toHaveProperty("prompt_cache_retention")
+      expect(retention.body).toMatchObject({ prompt_cache_retention: "24h" })
+      expect(retention.body).not.toHaveProperty("prompt_cache_options")
+      expect(unset.body).not.toHaveProperty("prompt_cache_options")
+      expect(unset.body).not.toHaveProperty("prompt_cache_retention")
+    }),
+  )
+
   it.effect("maps OpenAI provider options to Responses options", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

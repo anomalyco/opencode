@@ -4,10 +4,12 @@ import { pathToFileURL } from "node:url"
 import {
   MAX_LOCAL_ATTACHMENT_BYTES,
   parsePastedFilepaths,
+  promptFilesForServer,
   readLocalAttachmentWith,
   resolvePastedAttachments,
 } from "../../src/component/prompt/local-attachment"
 import type { LocalFiles } from "../../src/component/prompt/local-attachment"
+import type { PromptFile } from "../../src/prompt/history"
 import { tmpdir } from "../fixture/fixture"
 
 function files(input: { mime: string; text?: string; bytes?: Uint8Array }): LocalFiles {
@@ -97,7 +99,7 @@ describe("prompt local attachments", () => {
 
     for (const input of [file, `'${file}'`, pathToFileURL(file).href]) {
       expect(await resolvePastedAttachments(input, process.platform)).toEqual([
-        { type: "file", uri: "data:image/png;base64,AQID", filename: "one image.png" },
+        { type: "file", uri: "data:image/png;base64,AQID", filename: "one image.png", path: file },
       ])
     }
   })
@@ -113,8 +115,8 @@ describe("prompt local attachments", () => {
       `# dropped files\r\n${pathToFileURL(image).href}\r\n${pathToFileURL(pdf).href}`,
     ]) {
       expect(await resolvePastedAttachments(input, process.platform)).toEqual([
-        { type: "file", uri: "data:image/png;base64,AQID", filename: "one image.png" },
-        { type: "file", uri: "data:application/pdf;base64,BAUG", filename: "two file.pdf" },
+        { type: "file", uri: "data:image/png;base64,AQID", filename: "one image.png", path: image },
+        { type: "file", uri: "data:application/pdf;base64,BAUG", filename: "two file.pdf", path: pdf },
       ])
     }
   })
@@ -176,5 +178,50 @@ describe("prompt local attachments", () => {
 
     expect(await resolvePastedAttachments(Array(32).fill(file).join(" "), process.platform)).toHaveLength(32)
     expect(await resolvePastedAttachments(Array(33).fill(file).join(" "), process.platform)).toBeUndefined()
+  })
+
+  test("sends pasted files by path to a local server and by bytes otherwise", async () => {
+    await using tmp = await tmpdir()
+    const image = path.join(tmp.path, "scrëen shot.png")
+    const photo = path.join(tmp.path, "photo.jpg")
+    const pdf = path.join(tmp.path, "report.pdf")
+    await Promise.all([
+      Bun.write(image, new Uint8Array([1, 2, 3])),
+      Bun.write(photo, new Uint8Array([7, 8, 9])),
+      Bun.write(pdf, new Uint8Array([4, 5, 6])),
+    ])
+    const pasted = await resolvePastedAttachments(`'${image}' ${photo} "${pdf}"`, process.platform)
+    if (!pasted) throw new Error("expected attachments")
+    const files: PromptFile[] = [
+      ...pasted.map((file, index) => ({
+        uri: file.uri ?? "",
+        name: file.filename,
+        path: file.path,
+        mention: { start: index * 10, end: index * 10 + 9, text: `[Image ${index + 1}]` },
+      })),
+      { uri: "data:image/png;base64,Cg==", name: "clipboard" },
+    ]
+
+    const mentions = files.map((file) => file.mention)
+
+    expect(promptFilesForServer(files, true)).toEqual([
+      { uri: pathToFileURL(image).href, name: "scrëen shot.png", mention: mentions[0] },
+      { uri: pathToFileURL(photo).href, name: "photo.jpg", mention: mentions[1] },
+      { uri: pathToFileURL(pdf).href, name: "report.pdf", mention: mentions[2] },
+      { uri: "data:image/png;base64,Cg==", name: "clipboard" },
+    ])
+    expect(promptFilesForServer(files, false)).toEqual([
+      { uri: "data:image/png;base64,AQID", name: "scrëen shot.png", mention: mentions[0] },
+      { uri: "data:image/jpeg;base64,BwgJ", name: "photo.jpg", mention: mentions[1] },
+      { uri: "data:application/pdf;base64,BAUG", name: "report.pdf", mention: mentions[2] },
+      { uri: "data:image/png;base64,Cg==", name: "clipboard" },
+    ])
+
+    await Bun.file(image).delete()
+    expect(promptFilesForServer(files, true)?.[0]).toEqual({
+      uri: "data:image/png;base64,AQID",
+      name: "scrëen shot.png",
+      mention: mentions[0],
+    })
   })
 })

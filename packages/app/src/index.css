@@ -10,6 +10,14 @@
   font-style: normal;
 }
 
+/* The terminal draws bold cells with a bold canvas font. */
+@font-face {
+  font-family: "JetBrainsMono Nerd Font Mono";
+  src: url("/assets/JetBrainsMonoNerdFontMono-Bold.woff2") format("woff2");
+  font-weight: bold;
+  font-style: normal;
+}
+
 @font-face {
   font-family: "Inter";
   src: url("/assets/Inter.ttf") format("truetype");
@@ -17,12 +25,36 @@
   font-style: normal;
 }
 
+/* Text covers every weight below bold, so only bold syntax tokens and markup load the Bold face. */
 @font-face {
   font-family: "IBM Plex Mono";
   src: url("@ibm/plex/IBM-Plex-Mono/fonts/complete/woff2/IBMPlexMono-Text.woff2") format("woff2");
-  font-weight: 440;
+  font-weight: 100 599;
   font-style: normal;
   font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("@ibm/plex/IBM-Plex-Mono/fonts/complete/woff2/IBMPlexMono-Bold.woff2") format("woff2");
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("@ibm/plex/IBM-Plex-Mono/fonts/complete/woff2/IBMPlexMono-TextItalic.woff2") format("woff2");
+  font-weight: 100 599;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Panel motion sets this on the one element whose own layout reads it. An inherited property would restyle every
+   element under that element each time a flight starts or lands. */
+@property --panel-hold-width {
+  syntax: "*";
+  inherits: false;
 }
 
 @media (display-mode: standalone) {
@@ -39,20 +71,31 @@
 
 @layer components {
   [data-slot="session-chat-panel"][data-scrollbar-hidden="true"]
-    [data-slot="session-timeline-scroll"]
-    > .scroll-view__thumb {
+    [data-slot="session-timeline-visible"]
+    .scroll-view__thumb {
     visibility: hidden;
   }
 
-  [data-slot="session-side-panel-presence"][data-opened="true"] {
-    animation: side-region-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* The timeline scrolls on under the composer region, passing behind its floating pill, and fades out as it reaches
+     the region's opaque card. A mask fades the content itself, so the edge works over any theme's background;
+     smoothstep stops avoid a visible horizon. */
+  [data-slot="session-timeline-scroll"] > .scroll-view__viewport {
+    --session-timeline-fade-start: var(--session-timeline-inset, 0px);
+    scroll-padding-bottom: var(--session-timeline-inset, 0px);
+    mask-image: linear-gradient(
+      to top,
+      transparent var(--session-timeline-fade-start),
+      rgb(0 0 0 / 0.16) calc(var(--session-timeline-fade-start) + 5px),
+      rgb(0 0 0 / 0.5) calc(var(--session-timeline-fade-start) + 10px),
+      rgb(0 0 0 / 0.84) calc(var(--session-timeline-fade-start) + 15px),
+      #000 calc(var(--session-timeline-fade-start) + 20px)
+    );
   }
 
-  [data-slot="session-side-panel-presence"][data-opened="false"] {
-    animation: side-region-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  }
-
-  #review-panel {
+  /* The review panel's visible width, which the header fade below tracks while the panel animates. Its fixed-width
+     content holds nothing else that reads it. */
+  #review-panel,
+  #bottom-panel {
     container-type: inline-size;
   }
 
@@ -76,160 +119,6 @@
           transparent calc(100cqi - 40px)
         ),
         linear-gradient(to top, #000 1px, transparent 1px);
-    }
-  }
-
-  /* The panel's width animation supplies the slide; only fade its fixed-width contents. */
-  [data-slot="session-side-region-presence"][data-opened] [data-slot="session-review-content"] {
-    transition: opacity 200ms ease-out 40ms;
-  }
-
-  /* Cached contents must stay transparent even after the presence animation finishes. */
-  #review-panel[aria-hidden="true"] > [data-slot="session-review-content"] {
-    opacity: 0;
-  }
-
-  [data-slot="session-side-region-presence"][data-opened="false"] [data-slot="session-review-content"] {
-    transition: opacity 160ms ease-out;
-  }
-
-  @starting-style {
-    [data-slot="session-side-region-presence"][data-opened="true"] [data-slot="session-review-content"] {
-      opacity: 0;
-    }
-  }
-
-  [data-slot="session-side-region-presence"][data-opened="true"] {
-    animation: side-region-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  [data-slot="session-side-region-presence"][data-opened="false"] {
-    animation: side-region-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  }
-
-  /* A collapsing frame's elevation outlives its height as a flat line over the panel beside it, so it fades out. */
-  [data-slot="session-side-region-presence"][data-opened="false"] #review-panel {
-    animation: side-panel-frame-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  }
-
-  [data-slot="terminal-panel-presence"][data-opened="true"] {
-    animation: terminal-panel-presence-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  [data-slot="terminal-panel-presence"][data-opened="false"] {
-    animation: terminal-panel-presence-out 200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  }
-
-  [data-slot="side-terminal-panel-presence"][data-opened="true"] {
-    animation: side-terminal-panel-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  [data-slot="side-terminal-panel-presence"][data-opened="false"] {
-    animation: side-terminal-panel-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  }
-
-  [data-component="terminal-panel"][data-size-animated="true"][data-opened="true"] {
-    animation: terminal-panel-size-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  [data-component="terminal-panel"][data-size-animated="true"][data-opened="false"] {
-    animation: terminal-panel-size-out 200ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    [data-slot="terminal-panel-presence"],
-    [data-slot="side-terminal-panel-presence"],
-    [data-slot="session-side-panel-presence"],
-    [data-slot="session-review-content"],
-    [data-slot="session-side-region-presence"],
-    [data-slot="session-side-region-presence"] #review-panel,
-    [data-component="terminal-panel"] {
-      animation: none !important;
-    }
-
-    [data-slot="session-review-content"] {
-      transition: none !important;
-    }
-  }
-
-  @keyframes terminal-panel-presence-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  @keyframes terminal-panel-presence-out {
-    from {
-      opacity: 1;
-    }
-    to {
-      opacity: 0;
-    }
-  }
-
-  @keyframes side-terminal-panel-presence-in {
-    from {
-      opacity: 0.999999;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  /* Like `side-panel-frame-out`, the collapsing terminal frame drops its elevation. */
-  @keyframes side-terminal-panel-presence-out {
-    from {
-      opacity: 1;
-    }
-    to {
-      opacity: 0.999999;
-      visibility: hidden;
-      box-shadow: none;
-    }
-  }
-
-  @keyframes side-panel-frame-out {
-    to {
-      box-shadow: none;
-    }
-  }
-
-  /* Presence needs an animation lifetime, but the panel frame must never fade. */
-  @keyframes side-region-presence-in {
-    from,
-    to {
-      opacity: 1;
-    }
-  }
-
-  @keyframes side-region-presence-out {
-    from {
-      opacity: 1;
-    }
-    to {
-      opacity: 1;
-      visibility: hidden;
-    }
-  }
-
-  @keyframes terminal-panel-size-in {
-    from {
-      height: 0;
-    }
-    to {
-      height: var(--terminal-panel-height);
-    }
-  }
-
-  @keyframes terminal-panel-size-out {
-    from {
-      height: var(--terminal-panel-height);
-    }
-    to {
-      height: 0;
     }
   }
 
@@ -340,7 +229,7 @@
     transform-origin: 50% 50%;
   }
 
-  @media (prefers-reduced-motion: reduce) {
+  :root[data-motion="reduce"] {
     [data-slot="titlebar-update-loader"] {
       animation: none;
     }
@@ -424,7 +313,15 @@
     --session-dropzone-card: var(--v2-background-bg-layer-01);
   }
 
-  @media (prefers-reduced-motion: reduce) {
+  [data-component="timeline-quote"] {
+    background-color: var(--v2-background-bg-base);
+  }
+
+  [data-color-scheme="dark"] [data-component="timeline-quote"] {
+    background-color: var(--v2-background-bg-layer-01);
+  }
+
+  :root[data-motion="reduce"] {
     [data-component="session-dropzone"][data-visible="true"],
     [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-content"],
     [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-upload"],
@@ -437,18 +334,12 @@
     timeline-scope: --home-projects-scroll;
   }
 
-  [data-slot="model-selector-scroll"] {
-    timeline-scope: --model-selector-scroll;
-  }
-
   [data-slot="manage-models-scroll"] {
     timeline-scope: --manage-models-scroll;
   }
 
   [data-slot="home-projects-scroll"]::before,
   [data-slot="home-projects-scroll"]::after,
-  [data-slot="model-selector-scroll"]::before,
-  [data-slot="model-selector-scroll"]::after,
   [data-slot="manage-models-scroll"]::before {
     content: "";
     position: absolute;
@@ -465,30 +356,6 @@
     background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
   }
 
-  [data-slot="model-selector-scroll"]::before {
-    top: 0;
-    height: 12px;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 80%, transparent) 0%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 78.3336%, transparent) 4.7%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 76.4824%, transparent) 8.9%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 74.368%, transparent) 12.8%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 71.9123%, transparent) 16.56%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 69.037%, transparent) 20.37%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 65.664%, transparent) 24.4%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 61.715%, transparent) 28.83%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 57.1117%, transparent) 33.84%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 51.776%, transparent) 39.6%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 45.6296%, transparent) 46.3%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 38.5944%, transparent) 54.1%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 30.592%, transparent) 63.2%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 21.5443%, transparent) 73.76%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 11.373%, transparent) 85.97%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 0%, transparent) 100%
-    );
-  }
-
   [data-slot="manage-models-scroll"]::before {
     top: 0;
     background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
@@ -499,32 +366,8 @@
     background: linear-gradient(to top, var(--v2-background-bg-base), transparent);
   }
 
-  [data-slot="model-selector-scroll"]::after {
-    bottom: 0;
-    height: 12px;
-    background: linear-gradient(
-      0deg,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 80%, transparent) 0%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 78.3336%, transparent) 4.7%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 76.4824%, transparent) 8.9%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 74.368%, transparent) 12.8%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 71.9123%, transparent) 16.56%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 69.037%, transparent) 20.37%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 65.664%, transparent) 24.4%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 61.715%, transparent) 28.83%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 57.1117%, transparent) 33.84%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 51.776%, transparent) 39.6%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 45.6296%, transparent) 46.3%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 38.5944%, transparent) 54.1%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 30.592%, transparent) 63.2%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 21.5443%, transparent) 73.76%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 11.373%, transparent) 85.97%,
-      color-mix(in srgb, var(--v2-background-bg-layer-01) 0%, transparent) 100%
-    );
-  }
-
   @supports (animation-timeline: --home-projects-scroll) and (timeline-scope: --home-projects-scroll) {
-    [data-slot="home-projects-scroll"] .scroll-view__viewport {
+    [data-slot="home-projects-viewport"] {
       scroll-timeline: --home-projects-scroll y;
     }
 
@@ -537,24 +380,6 @@
     [data-slot="home-projects-scroll"]::after {
       animation: home-projects-fade-bottom linear both;
       animation-timeline: --home-projects-scroll;
-      animation-range: calc(100% - 1.1px) calc(100% - 1px);
-    }
-  }
-
-  @supports (animation-timeline: --model-selector-scroll) and (timeline-scope: --model-selector-scroll) {
-    [data-slot="model-selector-scroll"] .scroll-view__viewport {
-      scroll-timeline: --model-selector-scroll y;
-    }
-
-    [data-slot="model-selector-scroll"]::before {
-      animation: home-projects-fade-top linear both;
-      animation-timeline: --model-selector-scroll;
-      animation-range: 0 0.1px;
-    }
-
-    [data-slot="model-selector-scroll"]::after {
-      animation: home-projects-fade-bottom linear both;
-      animation-timeline: --model-selector-scroll;
       animation-range: calc(100% - 1.1px) calc(100% - 1px);
     }
   }

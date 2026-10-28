@@ -214,13 +214,14 @@ const layer = Layer.effect(
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
         initial = undefined
-        const compacted = yield* compaction.compact({ reason: "auto", context: loaded })
+        const estimate = SessionCompaction.estimatePrompt(loaded)
+        const compacted = yield* compaction.compact({ reason: "auto", context: loaded, estimate })
         if (compacted.status === "failed") return yield* new StepFailedError({ error: compacted.error })
         if (compacted.status === "completed") {
           assistantMessageID = SessionMessage.ID.create()
           continue
         }
-        yield* compaction.precompute(Effect.succeed(loaded))
+        yield* compaction.precompute(Effect.succeed(loaded), estimate)
         const stepLimitReached = loaded.agent.info.steps !== undefined && step >= loaded.agent.info.steps
         const transcript = SessionModelRequest.baseTranscript({
           agent: loaded.agent.info,
@@ -229,20 +230,32 @@ const layer = Layer.effect(
           initial: loaded.initial,
           messages: loaded.messages,
         })
-        const prepared = yield* context.request.primary({
-          session: loaded.session,
-          agent: loaded.agent.id,
-          model: loaded.model,
-          tools: loaded.tools,
-          system: transcript.system,
-          messages: stepLimitReached
-            ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
-            : transcript.messages,
-          // Keep tool definitions on the final Step to preserve the provider's cached prefix.
-          toolChoice: stepLimitReached ? "none" : undefined,
-          webSocket: "session",
-          inputTokens: SessionCompaction.estimatePrompt(loaded),
-        })
+        const prepared = yield* context.request
+          .primary({
+            session: loaded.session,
+            agent: loaded.agent.id,
+            model: loaded.model,
+            tools: loaded.tools,
+            system: transcript.system,
+            messages: stepLimitReached
+              ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
+              : transcript.messages,
+            // Keep tool definitions on the final Step to preserve the provider's cached prefix.
+            toolChoice: stepLimitReached ? "none" : undefined,
+            webSocket: "session",
+            inputTokens: estimate,
+          })
+          .pipe(
+            // The hook event holds every message from before images are bounded, screenshots included, and is a separate
+            // copy once a plugin hook has rewritten it. The step and its tool callbacks live as long as the slowest tool,
+            // so they keep only what they use.
+            Effect.map((prepared) => ({
+              request: prepared.request,
+              options: prepared.options,
+              retry: prepared.retry,
+              executeTool: prepared.executeTool,
+            })),
+          )
         const outcome = yield* steps.attempt({
           isLocationClosed: lifecycle.isClosed,
           sessionID,
@@ -267,7 +280,7 @@ const layer = Layer.effect(
           recoverOverflow: Effect.suspend(() =>
             recoverOverflow
               ? compaction
-                  .compact({ reason: "overflow", context: loaded })
+                  .compact({ reason: "overflow", context: loaded, estimate })
                   .pipe(Effect.map((result) => result.status === "completed"))
               : Effect.succeed(false),
           ),

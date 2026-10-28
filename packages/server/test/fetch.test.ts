@@ -42,7 +42,6 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
       "/api/model",
       "/api/integration",
       `/api/session/${session.id}/permission`,
-      `/api/session/${session.id}/form`,
       "/api/session/global/form",
     ]
     for (const endpoint of endpoints) {

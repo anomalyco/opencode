@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, Schema, Stream } from "effect"
 import { Auth } from "./auth.js"
 import { Endpoint, type EndpointPatch } from "./endpoint.js"
 import { RequestExecutor } from "./executor.js"
@@ -335,7 +335,8 @@ const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent,
     let terminal = false
     return events.pipe(
       Stream.mapEffect((event) => {
-        if (terminal)
+        // Raw events carry provider frames that may trail the terminal event.
+        if (terminal && !LLMEvent.is.raw(event))
           return Effect.fail(
             ProviderShared.eventError(route, `Provider emitted ${event.type} after the terminal event`),
           )
@@ -345,6 +346,19 @@ const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent,
       Stream.onEnd(Effect.suspend(() => (terminal ? Effect.void : Effect.fail(incompleteStreamError(route))))),
     )
   })
+
+const decodeJsonOption = Schema.decodeUnknownOption(ProviderShared.Json)
+
+// JSON text frames are parsed; non-JSON sentinels such as `[DONE]` stay strings.
+const rawFrame = (frame: unknown) =>
+  typeof frame === "string" ? Option.getOrElse(decodeJsonOption(frame), () => frame) : frame
+
+// Transports may interleave their own marker objects with provider frames, e.g. Gemini's continuation boundary.
+const isProviderFrame = (frame: unknown) =>
+  typeof frame !== "object" ||
+  frame === null ||
+  Array.isArray(frame) ||
+  Object.getPrototypeOf(frame) === Object.prototype
 
 function makeFromTransport<Body, Prepared, Frame, Event, State>(
   input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
@@ -456,7 +470,9 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                       ),
                       Effect.map(([next, output]) => {
                         state = next
-                        return output
+                        return request.includeRaw && isProviderFrame(frame)
+                          ? [LLMEvent.raw({ data: execution.raw?.(frame) ?? rawFrame(frame) }), ...output]
+                          : output
                       }),
                       Effect.mapError(frameError(frame, event)),
                     ),
@@ -592,7 +608,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
   }
 })
 
-/** @internal Test-only projection of the execution compiler; not exported from package barrels. */
+/** Test-only projection of the execution compiler; exported from `@opencode/ai/testing`. */
 export const compileRequest = Effect.fn("LLM.compileRequest")(function* (request: LLMRequest) {
   const compiled = yield* compile(request)
   return {

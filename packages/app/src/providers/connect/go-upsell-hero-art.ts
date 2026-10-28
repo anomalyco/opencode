@@ -4,7 +4,7 @@
 
 type RGB = readonly [number, number, number]
 
-export type HeroPalette = {
+type HeroPalette = {
   light: boolean
   dot: RGB
   dotAlpha: number
@@ -127,7 +127,7 @@ const RING_ORIGIN = BRAKE_RING_START - PERIOD * BRAKE_RING_KICK
 const LOOP_START = RING_ORIGIN + SPACING * 2
 
 /** A settled loop frame for reduced motion: one ring mid-field, the next just leaving GO. */
-export const STILL_TIME = LOOP_START + PERIOD * 0.42
+const STILL_TIME = LOOP_START + PERIOD * 0.42
 
 /** Distance the warp has travelled (ms of full speed): the integral of its velocity. */
 function warpDistance(t: number) {
@@ -560,7 +560,7 @@ function parseColor(ctx: CanvasRenderingContext2D, value: string, fallback: RGB)
 }
 
 /** The hero's colours, read from the v2 theme tokens so it follows light, dark and custom themes. */
-export function readPalette(el: Element, ctx: CanvasRenderingContext2D): HeroPalette {
+function readPalette(el: Element, ctx: CanvasRenderingContext2D): HeroPalette {
   const style = getComputedStyle(el)
   const token = (name: string, fallback: RGB) => parseColor(ctx, style.getPropertyValue(name).trim(), fallback)
   const surface = token("--v2-background-bg-layer-01", [36, 36, 36])

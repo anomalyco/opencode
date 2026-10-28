@@ -5,8 +5,6 @@ import { unwrap } from "solid-js/store"
 
 export { pathKey as directoryKey, type PathKey as DirectoryKey } from "@/workspaces/path-key"
 
-export const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
-
 const providerCatalogs = new WeakMap<
   ProviderListOutput["data"],
   WeakMap<ModelListOutput["data"], ProviderListResponse>

@@ -67,12 +67,12 @@ const projectTransport = createWorkerTransport<Extract<MarkdownWorkerRequest, { 
 })
 
 export function parseMarkdown(text: string, signal: AbortSignal) {
-  if (signal.aborted) return Promise.reject(new MarkdownWorkerDisposedError())
+  if (signal.aborted) return Promise.reject(markdownWorkerDisposed)
   const instance = getWorker()
   const id = ++nextID
 
   const abort = () => {
-    parses.get(id)?.reject(new MarkdownWorkerDisposedError())
+    parses.get(id)?.reject(markdownWorkerDisposed)
     parses.delete(id)
   }
 
@@ -101,7 +101,7 @@ export function disposeMarkdownProjection(key: string) {
   projects.forEach((request, id) => {
     if (request.key !== key) return
     projects.delete(id)
-    request.reject(new MarkdownWorkerDisposedError())
+    request.reject(markdownWorkerDisposed)
   })
   worker?.postMessage({ type: "dispose", key } satisfies MarkdownWorkerRequest)
 }
@@ -129,12 +129,16 @@ export function disposeStreamingCode(key: string) {
   pending.forEach((request, id) => {
     if (request.key !== key) return
     pending.delete(id)
-    request.reject(new MarkdownWorkerDisposedError())
+    request.reject(markdownWorkerDisposed)
   })
   worker?.postMessage({ type: "dispose", key } satisfies MarkdownWorkerRequest)
 }
 
 export class MarkdownWorkerDisposedError extends Error {}
+
+// Made once: disposal rejects from inside a Solid cleanup, and a new error there would record that stack and keep the
+// whole disposing batch alive for as long as the rejected promise is reachable.
+export const markdownWorkerDisposed = new MarkdownWorkerDisposedError()
 
 export class MarkdownWorkerSupersededError extends Error {}
 
@@ -226,7 +230,7 @@ function getWorker() {
     pending.delete(event.data.id)
 
     if (!keys.has(key)) {
-      result.reject(new MarkdownWorkerDisposedError())
+      result.reject(markdownWorkerDisposed)
       transport.complete(key, event.data.id)
 
       return

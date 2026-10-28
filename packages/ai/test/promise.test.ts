@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { AIError, LLMEvent, Media, SpeechEvent, TranscriptionEvent } from "../src/effect.js"
 import { RequestExecutor } from "../src/route.js"
 import { AI } from "../src/index.js"
 import { AssemblyAI, OpenAI, Replicate, Runway } from "../src/providers.js"
 import { handlerLayer, json } from "./lib/http.js"
+import { finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
 import { sseEvents } from "./lib/sse.js"
 
 const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
@@ -385,6 +386,87 @@ describe("AI promise client", () => {
     }
     controller.abort()
     expect(deltas).toEqual(["Hello"])
+    await ai.dispose()
+  })
+
+  test("loops with async tools and sends rejections back to the model as error results", async () => {
+    const bodies: Array<string> = []
+    const ai = AI.make({
+      layer: RequestExecutor.layer.pipe(
+        Layer.provide(
+          handlerLayer((input) => {
+            bodies.push(input.text)
+            return Effect.succeed(
+              input.respond(
+                bodies.length === 1
+                  ? sseEvents(
+                      toolCallChunk("call-1", "read_file", JSON.stringify({ path: "a.txt" })),
+                      toolCallChunk("call-2", "read_file", JSON.stringify({ path: "missing.txt" }), 1),
+                      toolCallChunk("call-3", "read_file", JSON.stringify({ path: "empty.txt" }), 2),
+                      finishChunk("tool_calls"),
+                    )
+                  : chatBody,
+                { headers: { "content-type": "text/event-stream" } },
+              ),
+            )
+          }),
+        ),
+      ),
+    })
+    const read_file = AI.tool({
+      description: "Read a file.",
+      parameters: Schema.Struct({ path: Schema.String }),
+      execute: async ({ path }) => {
+        if (path === "missing.txt") throw new Error(`No such file: ${path}`)
+        if (path === "empty.txt") return
+        return "hello"
+      },
+    })
+
+    const events = await Array.fromAsync(
+      ai.llm.loop({ model: openai.chat("gpt-4o-mini"), prompt: "Read the files.", tools: { read_file } }),
+    )
+
+    expect(events.filter(LLMEvent.is.toolResult).map((event) => event.result)).toEqual([
+      { type: "text", value: "hello" },
+      { type: "error", value: "No such file: missing.txt" },
+      { type: "json", value: null },
+    ])
+    expect(JSON.parse(bodies[1]).messages.filter((message: { role: string }) => message.role === "tool")).toEqual([
+      expect.objectContaining({ tool_call_id: "call-1", content: "hello" }),
+      expect.objectContaining({ tool_call_id: "call-2", content: "No such file: missing.txt" }),
+      expect.objectContaining({ tool_call_id: "call-3", content: "null" }),
+    ])
+    expect(events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["Hello", " world"])
+    await ai.dispose()
+  })
+
+  test("generates a decoded object", async () => {
+    const ai = AI.make({
+      layer: RequestExecutor.layer.pipe(
+        Layer.provide(
+          handlerLayer((input) =>
+            Effect.succeed(
+              input.respond(
+                sseEvents(
+                  toolCallChunk("call-1", "generate_object", JSON.stringify({ city: "Paris" })),
+                  finishChunk("tool_calls"),
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              ),
+            ),
+          ),
+        ),
+      ),
+    })
+
+    const response = await ai.llm.generateObject({
+      model: openai.chat("gpt-4o-mini"),
+      prompt: "Pick a city.",
+      schema: Schema.Struct({ city: Schema.String }),
+    })
+
+    expect(response.object.city).toBe("Paris")
     await ai.dispose()
   })
 
