@@ -43,6 +43,16 @@
   min-width: 0;
 }
 
+[data-component="line-comment-v2"][data-variant="display"][data-clickable] {
+  cursor: pointer;
+}
+
+[data-component="line-comment-v2"][data-variant="display"][data-clickable]:hover [data-slot="line-comment-v2-shell"] {
+  background:
+    linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
+    var(--v2-background-bg-layer-01);
+}
+
 [data-component="line-comment-v2"][data-variant="display"] [data-slot="line-comment-v2-text"] {
   margin: 0;
   width: 100%;
@@ -53,6 +63,8 @@
   letter-spacing: -0.04px;
   color: var(--v2-text-text-base);
   font-variation-settings: "slnt" 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 [data-component="line-comment-v2"][data-variant="display"] [data-slot="line-comment-v2-meta"] {
@@ -130,36 +142,19 @@
   min-width: 0;
 }
 
-[data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-label"] {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  width: 100%;
-  font-size: 13px;
-  font-style: normal;
-  font-weight: 530;
-  line-height: var(--line-height-compact);
-  letter-spacing: -0.04px;
-  color: var(--v2-text-text-base);
-  user-select: none;
-}
-
 [data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-textarea"] {
   display: block;
   width: 100%;
   min-width: 0;
-  min-height: 80px;
-  padding: 8px;
+  padding: 0;
   margin: 0;
-  resize: vertical;
-  border: 1px solid var(--v2-border-border-base);
-  border-radius: 6px;
-  background:
-    linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
+  resize: none;
+  border: none;
+  background: transparent;
   font-size: 13px;
   font-style: normal;
   font-weight: 440;
-  line-height: 1.35;
+  line-height: var(--line-height-compact);
   letter-spacing: -0.04px;
   color: var(--v2-text-text-base);
   font-variation-settings: "slnt" 0;
@@ -169,10 +164,6 @@
 [data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-textarea"]::placeholder {
   color: var(--v2-text-text-faint);
   user-select: none;
-}
-
-[data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-textarea"]:focus {
-  border-color: var(--v2-border-border-focus);
 }
 
 [data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-footer"] {
@@ -202,6 +193,7 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  margin-inline-start: auto;
 }
 
 [data-component="line-comment-v2"][data-variant="editor"] [data-slot="line-comment-v2-mention-list"] {

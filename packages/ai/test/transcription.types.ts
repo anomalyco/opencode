@@ -5,7 +5,7 @@ import {
   TranscriptionModel,
   type TranscriptionEvent,
   type TranscriptionOptions,
-} from "../src/index.js"
+} from "../src/effect.js"
 import { AssemblyAI, Deepgram, OpenAI } from "../src/providers.js"
 
 type StreamItem<T> = T extends Stream.Stream<infer A, infer _E, infer _R> ? A : never

@@ -13,6 +13,7 @@ import {
   type LLMRequest,
   type LanguageModel,
   type ProviderMetadata,
+  type ProviderOptions,
   type ReasoningPart,
   type ToolCallPart,
   type ToolDefinition,
@@ -24,7 +25,7 @@ import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
 import { BedrockAuth } from "./utils/bedrock-auth.js"
 import { BedrockCache } from "./utils/bedrock-cache.js"
 import { BedrockMedia } from "./utils/bedrock-media.js"
-import { supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
+import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { MistralToolID } from "./utils/mistral-tool-id.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -125,6 +126,12 @@ const BedrockToolChoice = Schema.Union([
   Schema.Struct({ tool: Schema.Struct({ name: Schema.String }) }),
 ])
 
+// Value sets from the Converse API reference. Unknown values pass through for forward compatibility.
+const ServiceTierType = ProviderShared.knownString<"priority" | "default" | "flex" | "reserved">()
+const GuardrailTrace = ProviderShared.knownString<"enabled" | "disabled" | "enabled_full">()
+const GuardrailStreamProcessingMode = ProviderShared.knownString<"sync" | "async">()
+const TextFormatType = ProviderShared.knownString<"json_schema">()
+
 const BedrockBodyFields = {
   modelId: Schema.String,
   messages: Schema.Array(BedrockMessage),
@@ -144,6 +151,30 @@ const BedrockBodyFields = {
     }),
   ),
   additionalModelRequestFields: Schema.optional(JsonObject),
+  serviceTier: Schema.optional(Schema.Struct({ type: ServiceTierType })),
+  guardrailConfig: Schema.optional(
+    Schema.Struct({
+      guardrailIdentifier: Schema.String,
+      guardrailVersion: Schema.String,
+      trace: Schema.optional(GuardrailTrace),
+      streamProcessingMode: Schema.optional(GuardrailStreamProcessingMode),
+    }),
+  ),
+  outputConfig: Schema.optional(
+    Schema.Struct({
+      textFormat: Schema.Struct({
+        type: TextFormatType,
+        structure: Schema.Struct({
+          jsonSchema: Schema.Struct({
+            schema: Schema.String,
+            name: Schema.optional(Schema.String),
+            description: Schema.optional(Schema.String),
+          }),
+        }),
+      }),
+    }),
+  ),
+  requestMetadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 }
 const BedrockConverseBody = Schema.Struct(BedrockBodyFields)
 export type BedrockConverseBody = Schema.Schema.Type<typeof BedrockConverseBody>
@@ -467,10 +498,57 @@ const isHighReasoningEffort = Schema.is(
   }),
 )
 
+// Claude 4.6+ pairs effort with adaptive thinking; earlier Claude models take effort beside a manual budget.
+const supportsAdaptiveThinking = (model: LanguageModel) => {
+  const version = claudeVersion(model.id)
+  return version !== undefined && (version.major > 4 || (version.major === 4 && version.minor >= 6))
+}
+
+const effortFields = (model: LanguageModel, effort: string) => {
+  if (model.id.includes("anthropic")) return { output_config: { effort } }
+  // gpt-oss takes the flat chat-completions spelling; newer OpenAI and xAI models take the Responses one.
+  if (model.id.includes("openai.gpt-oss")) return { reasoning_effort: effort }
+  if (model.id.includes("openai.") || model.id.includes("xai.")) return { reasoning: { effort } }
+  return { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } }
+}
+
 const Options = Schema.Struct({
-  thinking: Schema.optional(Schema.Struct({ type: Schema.Literal("enabled"), budgetTokens: Schema.Number })),
+  /** Claude thinking. `adaptive` and `disabled` apply to Claude models only. */
+  thinking: Schema.optional(
+    Schema.Union([
+      Schema.Struct({ type: Schema.Literal("enabled"), budgetTokens: Schema.Number }),
+      Schema.Struct({
+        type: Schema.Literal("adaptive"),
+        display: Schema.optional(ProviderShared.knownString<"summarized" | "omitted">()),
+      }),
+      Schema.Struct({ type: Schema.Literal("disabled") }),
+    ]),
+  ),
+  /** Reasoning effort, sent in the field each model family reads. */
+  effort: Schema.optional(ProviderShared.knownString<"low" | "medium" | "high" | "xhigh" | "max">()),
+  serviceTier: Schema.optional(ServiceTierType),
+  /** Constrains the response text to a JSON schema. */
+  outputFormat: Schema.optional(
+    Schema.Struct({
+      type: TextFormatType,
+      schema: JsonObject,
+      name: Schema.optional(Schema.String),
+      description: Schema.optional(Schema.String),
+    }),
+  ),
+  guardrail: Schema.optional(
+    Schema.Struct({
+      identifier: Schema.String,
+      version: Schema.String,
+      trace: Schema.optional(GuardrailTrace),
+      streamProcessingMode: Schema.optional(GuardrailStreamProcessingMode),
+    }),
+  ),
+  /** Key-value pairs for filtering invocation logs. */
+  requestMetadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 })
-export type OptionsInput = typeof Options.Type
+/** Caller-facing provider options; unknown keys are accepted and ignored. */
+export type OptionsInput = ProviderOptions & typeof Options.Encoded
 const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))
 // Claude on Bedrock requires the thinking budget below `maxTokens`, with a minimum of 1,024.
 const MIN_THINKING_BUDGET = 1_024
@@ -486,7 +564,7 @@ const isThinkingDisabled = Schema.is(
 // Claude 5.1+ binds each thinking signature to the prefix above it. Ask Bedrock to drop the affected blocks instead of
 // failing when that prefix changes. `http.body` overlays this field by field, so callers can still override it.
 const applyThinkingBindingDefault = (request: LLMRequest, thinking: Readonly<Record<string, unknown>> | undefined) => {
-  if (isThinkingDisabled(request.http?.body)) return thinking
+  if (thinking?.type === "disabled" || isThinkingDisabled(request.http?.body)) return thinking
   if (!supportsThinkingBlockBinding(request.model)) return thinking
   return {
     ...(thinking ?? { type: "adaptive" as const }),
@@ -500,20 +578,32 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   const generation = request.generation
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const maxTokens =
-    isNova2(request.model) && isHighReasoningEffort(request.http?.body) ? undefined : generation?.maxTokens
+    isNova2(request.model) && (options.effort === "high" || isHighReasoningEffort(request.http?.body))
+      ? undefined
+      : generation?.maxTokens
   const thinking = applyThinkingBindingDefault(
     request,
-    options.thinking === undefined
-      ? undefined
-      : {
+    (() => {
+      if (options.thinking?.type === "enabled")
+        return {
           type: "enabled",
           budget_tokens: ProviderShared.fitThinkingBudget(
             options.thinking.budgetTokens,
             maxTokens,
             MIN_THINKING_BUDGET,
           ),
-        },
+        }
+      if (options.thinking !== undefined) return options.thinking
+      if (options.effort !== undefined && supportsAdaptiveThinking(request.model)) return { type: "adaptive" }
+    })(),
   )
+  const additionalModelRequestFields = {
+    ...(generation?.topK === undefined ? {} : { top_k: generation.topK }),
+    ...(thinking === undefined ? {} : { thinking }),
+    ...(options.effort === undefined ? {} : effortFields(request.model, options.effort)),
+    // Converse takes Anthropic betas in the body, and Bedrock rejects `block_binding` without this one.
+    ...(thinking?.block_binding === undefined ? {} : { anthropic_beta: [THINKING_BINDING_BETA] }),
+  }
   // Bedrock-Claude shares Anthropic's 4-breakpoint cap. Spend the budget in
   // tools → system → messages order to favour the highest-impact prefixes.
   const breakpoints = BedrockCache.breakpoints(request.model)
@@ -554,17 +644,36 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
     system,
     inferenceConfig,
     toolConfig,
-    // Converse's base inferenceConfig has no topK or thinking; Anthropic/Nova accept them
+    // Converse's base inferenceConfig has no topK, thinking or effort; models accept them
     // as model-specific fields, so they go through additionalModelRequestFields.
     additionalModelRequestFields:
-      generation?.topK === undefined && thinking === undefined
+      Object.keys(additionalModelRequestFields).length === 0 ? undefined : additionalModelRequestFields,
+    serviceTier: options.serviceTier === undefined ? undefined : { type: options.serviceTier },
+    guardrailConfig:
+      options.guardrail === undefined
         ? undefined
         : {
-            ...(generation?.topK === undefined ? {} : { top_k: generation.topK }),
-            ...(thinking === undefined ? {} : { thinking }),
-            // Converse takes Anthropic betas in the body, and Bedrock rejects `block_binding` without this one.
-            ...(thinking?.block_binding === undefined ? {} : { anthropic_beta: [THINKING_BINDING_BETA] }),
+            guardrailIdentifier: options.guardrail.identifier,
+            guardrailVersion: options.guardrail.version,
+            trace: options.guardrail.trace,
+            streamProcessingMode: options.guardrail.streamProcessingMode,
           },
+    outputConfig:
+      options.outputFormat === undefined
+        ? undefined
+        : {
+            textFormat: {
+              type: options.outputFormat.type,
+              structure: {
+                jsonSchema: {
+                  schema: ProviderShared.encodeJson(options.outputFormat.schema),
+                  name: options.outputFormat.name,
+                  description: options.outputFormat.description,
+                },
+              },
+            },
+          },
+    requestMetadata: options.requestMetadata,
   }
 })
 

@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, LLM, LLMEvent, LLMRequest, Media, Message } from "../../src/index.js"
+import { Image, LLM, LLMEvent, LLMRequest, Media, Message } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"

@@ -155,6 +155,9 @@ const Interaction = Schema.StructWithRest(
     id: Schema.optional(Schema.String),
     status: Schema.String,
     usage: Schema.optional(RawUsage),
+    errors: Schema.optional(
+      Schema.Array(Schema.Struct({ code: Schema.optional(Schema.String), message: Schema.optional(Schema.String) })),
+    ),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
@@ -521,14 +524,17 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
       })
     case "interaction.completed": {
       const interaction = event.interaction
-      if (interaction.status === "failed" || interaction.status === "cancelled")
+      if (interaction.status === "failed" || interaction.status === "cancelled") {
+        const messages = (interaction.errors ?? []).flatMap((error) => (error.message?.trim() ? [error.message] : []))
         return yield* new AIError({
           reason: classifyProviderFailure({
-            message: `Google Interactions ${interaction.status}`,
-            data: interaction,
+            message: messages.length > 0 ? messages.join("\n") : `Google Interactions ${interaction.status}`,
+            // The first coded error decides the classification; every message stays visible.
+            data: interaction.errors?.find((error) => error.code) ?? interaction,
             rawBody: encodeJson(event),
           }),
         })
+      }
       if (!["completed", "requires_action", "incomplete"].includes(interaction.status))
         return yield* ProviderShared.eventError(
           ADAPTER,

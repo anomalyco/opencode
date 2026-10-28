@@ -8,8 +8,6 @@
 }
 
 [data-component="user-message"] {
-  --user-message-mention-prefix-color: var(--v2-blue-500);
-
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base);
   font-style: normal;
@@ -151,7 +149,6 @@
     border-radius: 9999px;
     background: var(--v2-background-bg-layer-03);
     box-shadow: 0 0 0 2px var(--v2-background-bg-base);
-    color: var(--v2-icon-icon-muted);
 
     [data-component="tooltip-v2-trigger"] {
       width: 100%;
@@ -162,9 +159,23 @@
     }
 
     [data-slot="icon-svg"] {
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
     }
+  }
+
+  [data-slot="user-message-voice"] {
+    color: var(--v2-icon-icon-muted);
+  }
+
+  [data-slot="user-message-pending"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 14px;
+    height: 16px;
+    color: var(--v2-icon-icon-faint);
   }
 
   [data-slot="user-message-text"] {
@@ -177,28 +188,38 @@
     border: none;
     padding: 8px 12px;
     border-radius: 10px;
+    /* Where two bubbles of a run meet, their trailing corners tighten to 4px. */
+    border-start-end-radius: calc(10px - 6px * var(--user-run-top, 0));
+    border-end-end-radius: calc(10px - 6px * var(--user-run-bottom, 0));
     transition:
-      background-color 200ms ease,
-      color 200ms ease;
+      background-color 150ms ease-out,
+      color 150ms ease-out;
 
-    @media (prefers-reduced-motion: reduce) {
+    :root[data-motion="reduce"] & {
       transition: none;
     }
 
     [data-highlight="file"],
     [data-highlight="agent"] {
-      color: inherit;
-      font-weight: 600;
+      color: var(--v2-text-text-accent);
+      font-weight: 440;
       direction: ltr;
       unicode-bidi: isolate;
     }
 
     [data-slot="user-message-mention-prefix"] {
-      color: var(--user-message-mention-prefix-color);
-      transition: color 200ms ease;
+      color: var(--v2-text-text-accent);
+    }
 
-      @media (prefers-reduced-motion: reduce) {
-        transition: none;
+    [data-slot="user-message-link"] {
+      color: inherit;
+      text-decoration: underline;
+      text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
+      text-underline-offset: 2px;
+      cursor: pointer;
+
+      &:hover {
+        text-decoration-color: currentColor;
       }
     }
 
@@ -206,16 +227,15 @@
   }
 
   [data-slot="user-message-copy-wrapper"] {
-    min-height: 24px;
-    margin-top: 4px;
+    height: calc(20px * var(--user-run-meta, 1));
+    margin-top: calc(4px * var(--user-run-meta, 1));
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
-    transition: opacity 0.15s ease;
-    will-change: opacity;
 
+    /* Hover actions show and hide at once, without a fade. */
     @media (hover: hover) {
       opacity: 0;
       pointer-events: none;
@@ -228,13 +248,53 @@
   }
 
   [data-slot="user-message-meta"] {
+    --user-message-transition-gap: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
     user-select: none;
     text-align: end;
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  [data-slot="user-message-meta-label"] {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  [data-slot="user-message-meta-item"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    /* The variant reads as a qualifier of the model before it, so it is dimmer and never the part that truncates. */
+    &[data-variant] {
+      flex: none;
+      opacity: 0.66;
+    }
+  }
+
+  [data-slot="user-message-meta-separator"] {
+    flex: none;
+    opacity: 0.66;
+  }
+
+  [data-slot="user-message-meta-wrap"],
+  [data-slot="user-message-meta-tail"] {
+    font-family: var(--v2-font-family-sans);
+    font-size: 12px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    color: var(--v2-text-text-faint);
+    cursor: default;
   }
 
   [data-slot="user-message-meta-wrap"] {
@@ -248,15 +308,127 @@
   }
 
   [data-slot="user-message-meta-tail"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     user-select: none;
     flex: 0 0 auto;
     white-space: nowrap;
     text-align: end;
+
+    @media (hover: hover) {
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
+
+  [data-slot="user-message-actions"] {
+    --user-message-transition-gap: 6px;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+  }
+
+  [data-slot="user-message-transition"] {
+    display: inline-grid;
+    grid-template-columns: 0fr;
+    flex: none;
+    min-width: 0;
+    opacity: 0;
+    visibility: hidden;
+    margin-inline-end: calc(-1 * var(--user-message-transition-gap));
+
+    /* Labels and actions slide in as they arrive and leave at once, like the Pending label on delivery. Active ones
+       inherit visibility, so a folded message's hidden footer also hides them. */
+    &[data-active="true"] {
+      grid-template-columns: 1fr;
+      margin-inline-end: 0;
+      opacity: 1;
+      visibility: inherit;
+      transition:
+        grid-template-columns 200ms ease-out,
+        margin-inline-end 200ms ease-out,
+        opacity 200ms ease-out;
+    }
+  }
+
+  [data-slot="user-message-transition-inner"] {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--user-message-transition-gap);
+    min-width: 0;
+    overflow: clip;
+    white-space: nowrap;
+  }
+
+  [data-slot="user-message-transition"][data-active="true"]:focus-within [data-slot="user-message-transition-inner"] {
+    overflow: visible;
+  }
+
+  /* Delivery swaps Pending for the time at once, and a growing row settles its labels in place: its pending status
+     can land a few frames after it appears. */
+  :root[data-motion="reduce"] &,
+  &[data-delivering],
+  [data-timeline-grow] & {
+    [data-slot="user-message-transition"] {
+      transition: none;
+    }
   }
 
   &:hover [data-slot="user-message-copy-wrapper"],
   &:focus-within [data-slot="user-message-copy-wrapper"],
-  [data-slot="user-message-copy-wrapper"]:has([data-expanded]) {
+  [data-slot="user-message-copy-wrapper"]:has([data-expanded]),
+  &:hover [data-slot="user-message-meta-tail"],
+  &:focus-within [data-slot="user-message-meta-tail"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* A pending steer keeps its Pending label and actions in view. */
+  &[data-pending] [data-slot="user-message-copy-wrapper"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  [data-slot="user-message-copy-wrapper"] > * {
+    opacity: var(--user-run-meta, 1);
+  }
+
+  /* The last message of a run carries the meta line; the others fold theirs away and offer their actions beside
+     the bubble. */
+  &[data-run-folded] {
+    [data-slot="user-message-body"] {
+      position: relative;
+    }
+
+    [data-slot="user-message-copy-wrapper"] {
+      overflow: clip;
+      pointer-events: none;
+    }
+  }
+
+  &[data-run-meta-hidden] [data-slot="user-message-copy-wrapper"] {
+    visibility: hidden;
+  }
+
+  [data-slot="user-message-run-actions"] {
+    position: absolute;
+    /* Centered on the bubble's last line. */
+    bottom: calc(8px + (1lh - 20px) / 2);
+    inset-inline-end: calc(100% + 4px);
+    display: flex;
+    align-items: center;
+
+    @media (hover: hover) {
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
+
+  &:hover [data-slot="user-message-run-actions"],
+  &:focus-within [data-slot="user-message-run-actions"],
+  [data-slot="user-message-run-actions"]:has([data-expanded]) {
     opacity: 1;
     pointer-events: auto;
   }
@@ -279,15 +451,14 @@
   }
 
   [data-slot="text-part-copy-wrapper"] {
-    min-height: 24px;
+    height: 20px;
     margin-top: 4px;
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 10px;
-    transition: opacity 0.15s ease;
-    will-change: opacity;
+    gap: 8px;
 
+    /* Hover actions show and hide at once, without a fade. */
     @media (hover: hover) {
       opacity: 0;
       pointer-events: none;
@@ -295,18 +466,52 @@
 
     [data-component="tooltip-v2-trigger"] {
       display: inline-flex;
+      flex: none;
       width: fit-content;
     }
   }
 
   [data-slot="text-part-meta"] {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    font-family: var(--v2-font-family-sans);
+    font-size: 12px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: 0.05px;
+    color: var(--v2-text-text-faint);
+    cursor: default;
     user-select: none;
+  }
+
+  [data-slot="text-part-meta-item"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    &[data-variant] {
+      flex: none;
+      opacity: 0.66;
+    }
+  }
+
+  [data-slot="text-part-meta-separator"] {
+    flex: none;
+    opacity: 0.66;
   }
 
   [data-slot="text-part-copy-wrapper"][data-interrupted] {
     width: 100%;
     justify-content: flex-end;
-    gap: 12px;
+    gap: 8px;
+  }
+
+  :root[data-motion="reduce"] & [data-slot="text-part-copy-wrapper"] {
+    transition: none;
   }
 
   &:hover [data-slot="text-part-copy-wrapper"],
@@ -422,6 +627,18 @@
   }
 }
 
+[data-slot="linked-text-link"] {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
+  text-underline-offset: 2px;
+
+  &:hover {
+    color: var(--v2-text-text-base);
+    text-decoration-color: currentColor;
+  }
+}
+
 [data-component="bash-output"] {
   direction: ltr;
   unicode-bidi: isolate;
@@ -479,21 +696,34 @@
   &[data-variant="shell"] {
     background: var(--v2-background-bg-base);
 
-    [data-slot="bash-pre"] {
-      padding: 0;
-    }
-
     [data-slot="bash-pre"] code {
+      display: block;
       font-family: var(--v2-font-family-code);
       font-weight: 440;
       line-height: var(--line-height-base);
       letter-spacing: -0.04px;
     }
 
+    /* Each section stacks its copy button over its text in one grid cell, so the sticky button stays in view
+       while that section scrolls and never leaves its own section. */
     [data-slot="bash-command"],
     [data-slot="bash-result"] {
-      display: block;
-      padding: 12px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    [data-slot="bash-pre"],
+    [data-slot="bash-copy"] {
+      grid-area: 1 / 1;
+    }
+
+    [data-slot="bash-copy"] {
+      position: sticky;
+      top: 4px;
+      z-index: 1;
+      justify-self: end;
+      align-self: start;
+      margin: 4px;
     }
 
     [data-slot="bash-result"] {
@@ -502,14 +732,20 @@
       color: var(--v2-text-text-muted);
     }
 
+    /* Code Mode results have no command line above them. */
+    [data-slot="bash-result"]:first-child {
+      border-block-start: 0;
+    }
+
     [data-slot="bash-command"] {
       color: var(--v2-text-text-base);
     }
   }
 }
 
+/* Only a shell's own card; an Execute output card opens inside the content and must not move the rows above it. */
 [data-component="collapsible"].tool-collapsible:has(
-    > [data-slot="collapsible-content"] [data-component="bash-output"][data-variant="shell"]
+    > [data-slot="collapsible-content"] > [data-component="bash-output"][data-variant="shell"]
   ) {
   --tool-content-gap: 8px;
 }
@@ -560,6 +796,220 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+[data-component="execute-tool-calls"] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+  font-family: var(--v2-font-family-code);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-base);
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-muted);
+
+  [data-slot="execute-tool-call"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  [data-slot="execute-tool-call-marker"] {
+    display: inline-flex;
+    justify-content: center;
+    width: 14px;
+    flex-shrink: 0;
+    color: var(--v2-text-text-faint);
+
+    /* Centre on the lowercase code text rather than its line box. */
+    [data-slot="icon-svg"] {
+      transform: translateY(1px);
+    }
+  }
+
+  [data-slot="execute-tool-call-name"] {
+    flex-shrink: 0;
+    color: var(--v2-text-text-base);
+  }
+
+  [data-slot="execute-tool-call-args"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  [data-slot="execute-tool-call"][role="button"] {
+    cursor: pointer;
+
+    &:hover [data-slot="execute-tool-call-name"],
+    &:hover [data-slot="execute-tool-call-args"] {
+      color: var(--v2-text-text-base);
+    }
+
+    &:focus-visible {
+      outline: 1px solid var(--v2-text-text-accent);
+      outline-offset: 2px;
+    }
+  }
+
+  [data-slot="execute-tool-call-input"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 4px 0 2px 4px;
+    padding-inline-start: 13px;
+    border-inline-start: 0.5px solid var(--v2-border-border-base);
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  [data-slot="execute-tool-call-input-entry"] {
+    display: flex;
+    gap: 6px;
+    min-width: 0;
+
+    dt {
+      flex-shrink: 0;
+    }
+
+    dd {
+      margin: 0;
+      min-width: 0;
+      color: var(--v2-text-text-base);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  [data-slot="execute-tool-call-arrow"] {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--v2-text-text-faint);
+    transition: transform 0.15s ease;
+  }
+
+  [data-slot="execute-tool-call"][aria-expanded="true"] [data-slot="execute-tool-call-arrow"] {
+    transform: rotate(90deg);
+  }
+
+  [data-slot="execute-tool-call"][data-status="error"] [data-slot="execute-tool-call-marker"],
+  [data-slot="execute-tool-error"] {
+    color: var(--v2-state-fg-danger);
+  }
+
+  [data-slot="execute-tool-output"] {
+    margin-top: 4px;
+    padding-inline-start: 20px;
+  }
+
+  [data-slot="execute-tool-error"] {
+    margin-top: 4px;
+    max-height: 240px;
+    overflow-y: auto;
+    padding-inline-start: 20px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
+[data-slot="execute-tool-call-marker"] [data-slot="icon-svg"] {
+  color: inherit;
+}
+
+[data-slot="execute-details-title"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+
+  [data-slot="execute-details-status"] {
+    padding: 0 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: var(--line-height-base);
+    color: var(--v2-text-text-muted);
+    background: var(--v2-background-bg-layer-02);
+  }
+
+  [data-slot="execute-details-status"][data-status="error"] {
+    color: var(--v2-state-fg-danger);
+  }
+
+  [data-slot="execute-details-meta"] {
+    font-size: 12px;
+    color: var(--v2-text-text-faint);
+  }
+}
+
+[data-component="execute-details"] {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 16px 16px;
+
+  [data-slot="execute-details-section"] {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  [data-slot="execute-details-section-header"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 24px;
+
+    > :last-child {
+      margin-inline-start: auto;
+    }
+  }
+
+  [data-slot="execute-details-section-label"] {
+    font-size: 13px;
+    font-weight: 530;
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="execute-details-section-meta"] {
+    font-size: 12px;
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="execute-details-source"] {
+    max-height: 360px;
+    overflow: auto;
+    border-radius: 8px;
+    box-shadow: 0 0 0 0.5px var(--v2-border-border-base);
+
+    /* The file wrapper sets Pierre's defaults inline, so override them on the shadow host below that wrapper. */
+    diffs-container {
+      --diffs-min-number-column-width: var(--execute-details-number-width, 1ch);
+      --opencode-diffs-number-inset: 12px;
+      --diffs-gap-block: 4px;
+      /* Wrapped blocks never scroll sideways; Pierre would otherwise subtract a scrollbar track from the bottom gap. */
+      --diffs-scrollbar-gutter-override: 0px;
+    }
+  }
+
+  [data-slot="execute-details-error"] {
+    margin: 0;
+    padding: 12px 14px;
+    font-family: var(--v2-font-family-code);
+    font-size: 13px;
+    line-height: var(--line-height-base);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--v2-state-fg-danger);
+    background: var(--v2-background-bg-layer-01);
+  }
 }
 
 [data-component="exa-tool-output"] {
@@ -743,6 +1193,11 @@
       width: 100%;
     }
 
+    /* Grouped commentary follows the list rhythm instead of the timeline's text spacing. */
+    > [data-component="text-part"] {
+      margin-top: 0;
+    }
+
     > [data-component="tool-part-wrapper"]
       > [data-component="collapsible"]
       > [data-slot="collapsible-trigger"]:not([data-hide-details="true"]) {
@@ -854,12 +1309,24 @@
   scroll-margin-top: var(--sticky-accordion-top, 0px);
 }
 
-[data-component="dock-prompt"][data-kind="permission"] {
+[data-component="dock-prompt"] {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0;
   min-height: 0;
+  background-color: var(--v2-background-bg-base);
+  border-radius: 12px;
+  box-shadow:
+    var(--v2-elevation-raised),
+    0 0 0 0.5px var(--v2-background-bg-base);
+  overflow: clip;
+
+  [data-color-scheme="dark"] & {
+    background-color: var(--v2-background-bg-layer-01);
+  }
+}
+
+[data-component="dock-prompt"][data-kind="permission"] {
   max-height: 100dvh;
 
   [data-slot="permission-body"] {
@@ -940,8 +1407,11 @@
     }
 
     code {
-      font-size: 14px;
-      line-height: var(--line-height-large);
+      font-family: var(--v2-font-family-code);
+      font-size: 13px;
+      font-weight: 440;
+      line-height: var(--line-height-base);
+      letter-spacing: -0.04px;
     }
   }
 
@@ -950,8 +1420,7 @@
     align-items: center;
     justify-content: space-between;
     flex-shrink: 0;
-    padding: 32px 8px 8px;
-    margin-top: -24px;
+    padding: 8px;
   }
 
   [data-slot="permission-footer-actions"] {
@@ -1022,8 +1491,9 @@
 }
 
 [data-component="accordion"][data-scope="apply-patch"] {
-  [data-slot="accordion-trigger"] {
-    background-color: var(--v2-background-bg-base) !important;
+  /* Keep the sticky header square so its page-colored corners hide the diff scrolling under the rounded trigger. */
+  [data-slot="accordion-header"] {
+    background-color: var(--v2-background-bg-base);
   }
 
   [data-slot="apply-patch-trigger-content"] {
@@ -1038,7 +1508,7 @@
     flex-grow: 1;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     min-width: 0;
   }
 
@@ -1195,7 +1665,7 @@
       opacity: 1;
     }
 
-    @media (prefers-reduced-motion: reduce) {
+    :root[data-motion="reduce"] & {
       transition: none;
     }
   }
@@ -1234,7 +1704,8 @@
   font-weight: 440;
 
   [data-slot="user-message-text"] {
-    background: var(--v2-background-bg-layer-01);
+    background: var(--v2-background-bg-layer-02);
+    color: var(--v2-text-text-base);
   }
 
   [data-slot="user-message-comments"] {
@@ -1275,53 +1746,10 @@
   }
 }
 
-:root[data-color-scheme="light"] body [data-component="user-message"] [data-slot="user-message-text"] {
-  background: var(--v2-background-bg-layer-02);
-}
-
-:root
-  body
-  [data-workspace-session]
-  [data-component="user-message"]:not([data-pending])
-  [data-slot="user-message-text"] {
-  --user-message-mention-prefix-color: var(--v2-blue-300);
-
-  background: var(--v2-background-bg-accent);
-  color: var(--v2-text-text-contrast);
-}
-
-:root body [data-local-session] [data-component="user-message"] [data-slot="user-message-text"] {
-  border-radius: 8px;
-}
-
-:root[data-color-scheme="light"]
-  body
-  [data-local-session]
-  [data-component="user-message"]:not([data-pending])
-  [data-slot="user-message-text"] {
-  background: var(--v2-blue-100);
-  color: var(--v2-blue-700);
-}
-
-:root[data-color-scheme="dark"]
-  body
-  [data-local-session]
-  [data-component="user-message"]:not([data-pending])
-  [data-slot="user-message-text"] {
-  background: var(--v2-blue-1200);
-  color: var(--v2-blue-300);
-}
-
 /* Only delivery animates. A steer can render once before its admission marks it pending, and must not fade from the
    delivered color. */
 :root body [data-component="user-message"][data-pending] [data-slot="user-message-text"] {
-  --user-message-mention-prefix-color: currentColor;
-
-  background: var(--v2-background-bg-layer-02);
-  color: var(--v2-text-text-base);
+  background: var(--v2-background-bg-layer-01);
+  color: var(--v2-text-text-muted);
   transition: none;
-
-  [data-slot="user-message-mention-prefix"] {
-    transition: none;
-  }
 }

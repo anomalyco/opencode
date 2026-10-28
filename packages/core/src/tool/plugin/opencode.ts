@@ -1,6 +1,6 @@
 export * as OpenCodeTools from "./opencode.js"
 
-import { SystemPart, ToolFailure } from "@opencode/ai"
+import { SystemPart, ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"

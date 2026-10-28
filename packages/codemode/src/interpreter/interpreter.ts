@@ -6,10 +6,12 @@ import type {
   ArrowFunctionExpression,
   AssignmentExpression,
   AssignmentProperty,
+  AwaitExpression,
   BinaryExpression,
   BlockStatement,
   BreakStatement,
   CallExpression,
+  ChainExpression,
   ConditionalExpression,
   ContinueStatement,
   DoWhileStatement,
@@ -19,6 +21,7 @@ import type {
   ForStatement,
   FunctionDeclaration,
   FunctionExpression,
+  Identifier,
   IfStatement,
   LabeledStatement,
   LogicalExpression,
@@ -29,6 +32,8 @@ import type {
   Pattern,
   Program,
   Property,
+  ReturnStatement,
+  SequenceExpression,
   SpreadElement,
   Statement,
   Super,
@@ -44,15 +49,13 @@ import type {
   WhileStatement,
   YieldExpression,
 } from "acorn"
-import { Cause, Deferred, Effect, Exit } from "effect"
+import type { Context } from "effect"
 import { fromJson, type Json, toBoundary } from "../data.js"
 import { ToolReference, type ToolRuntime } from "../tool-runtime.js"
 import {
   type AstNode,
   AsyncIteratorSymbol,
   type Binding,
-  CallSite,
-  type GeneratorRequestKind,
   GeneratorReturn,
   IteratorSymbol,
   OptionalShortCircuit,
@@ -88,21 +91,38 @@ import {
   GeneratorObj,
   Obj,
   PromiseObj,
-  record,
+  iteratorResult,
   remove,
   set,
   coerceToNumber,
   coerceToString,
+  type NativeResult,
+  type Step,
   type Value,
 } from "./objects.js"
 import { type Hint, preserveConsumerError, toPrimitive } from "./callback.js"
-import { Pending, resolvePromise, resolvePromiseValue } from "./promises.js"
+import {
+  AsyncBoundary,
+  Await,
+  Call,
+  type Eval,
+  type GeneratorRequest,
+  Interruption,
+  isEval,
+  MAX_CALL_DEPTH,
+  Runner,
+  Slice,
+  Task,
+  Yield,
+  normal,
+} from "./runner.js"
 import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from "./references.js"
+import { fn } from "./native.js"
+import { capability } from "./promises.js"
 import { ScopeStack } from "./scope.js"
 import { constructRegExp } from "../stdlib/regexp.js"
 import { enumerableSource } from "../stdlib/object.js"
 import { compoundOperators } from "../stdlib/value.js"
-
 /** The binary operators that convert object operands through ToPrimitive before acting on primitives. */
 const primitiveOperators = new Set([
   "+",
@@ -222,6 +242,27 @@ const usesArguments = (fn: Fn): boolean => {
   return found
 }
 
+// Whether evaluating a node can create a function, which could capture a loop's per-iteration bindings.
+const closures = new WeakMap<AnyNode, boolean>()
+const createsClosure = (node: AnyNode): boolean => {
+  const cached = closures.get(node)
+  if (cached !== undefined) return cached
+  const found = (function visit(item: AnyNode | null): boolean {
+    if (item === null || typeof item !== "object") return false
+    if (
+      item.type === "FunctionExpression" ||
+      item.type === "ArrowFunctionExpression" ||
+      item.type === "FunctionDeclaration"
+    )
+      return true
+    return Object.values(item).some((child) =>
+      Array.isArray(child) ? child.some((entry) => visit(entry)) : visit(child as AnyNode | null),
+    )
+  })(node)
+  closures.set(node, found)
+  return found
+}
+
 // `var` names declared anywhere in a function body except inside nested functions, which own theirs.
 // Memoized per body: a function's var names never change, and hoisting runs on every call.
 const varNames = new WeakMap<ReadonlyArray<Statement | ModuleDeclaration>, ReadonlyArray<string>>()
@@ -294,26 +335,48 @@ type MemberReference = {
   receiver: Value
 }
 
-type GeneratorRequest = {
-  kind: GeneratorRequestKind
-  value: Value
-  response: Deferred.Deferred<Value, unknown>
+const none: StatementResult = { kind: "none" }
+
+/** Marks an operand a fast path has not evaluated yet, since `undefined` is a value. */
+const unevaluated: unique symbol = Symbol("codemode.unevaluated")
+
+type Reference = MemberReference | ToolReference | { value: Value } | typeof OptionalShortCircuit
+
+// Parameter lists of plain names bind without evaluating anything, so a call needs no binding work.
+const simpleParameters = new WeakMap<ReadonlyArray<Pattern>, boolean>()
+const isSimple = (parameters: ReadonlyArray<Pattern>): boolean => {
+  const cached = simpleParameters.get(parameters)
+  if (cached !== undefined) return cached
+  const simple = parameters.every((parameter) => parameter.type === "Identifier")
+  simpleParameters.set(parameters, simple)
+  return simple
 }
 
-type GeneratorState = {
-  started: boolean
-  completed: boolean
-  draining: boolean
-  active?: GeneratorRequest
-  pending: Array<GeneratorRequest>
-  pendingIndex: number
-  available?: Deferred.Deferred<void>
+// A block that declares nothing lexically needs no scope of its own.
+const blockScopes = new WeakMap<ReadonlyArray<Statement | ModuleDeclaration>, boolean>()
+const declaresLexically = (statements: ReadonlyArray<Statement | ModuleDeclaration>): boolean => {
+  const cached = blockScopes.get(statements)
+  if (cached !== undefined) return cached
+  const declares = statements.some(
+    (statement) =>
+      statement.type === "FunctionDeclaration" ||
+      (statement.type === "VariableDeclaration" && statement.kind !== "var"),
+  )
+  blockScopes.set(statements, declares)
+  return declares
 }
 
-/** One program execution: the tool bridge, promise scheduler, captured logs, and the global scope built once. */
+const isAbrupt = (result: StatementResult): boolean =>
+  result.kind === "return" || result.kind === "break" || result.kind === "continue"
+
+// A thenable the program's implicit async body adopts before copy-out.
+const isThenable = (value: Value): boolean =>
+  value instanceof PromiseObj || (value instanceof Obj && typeofValue(get(value, "then")) === "function")
+
+/** One program execution: the tool bridge, job queue, captured logs, and the global scope built once. */
 export class Interpreter<R> {
   readonly tools: ToolRuntime<R>
-  readonly pending: Pending<R>
+  readonly runner: Runner<R>
   readonly builtins: Builtins
   readonly logs: Array<string>
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
@@ -322,15 +385,16 @@ export class Interpreter<R> {
 
   constructor(options: {
     readonly tools: ToolRuntime<R>
-    readonly pending: Pending<R>
+    /** The caller's services, which host work runs with. */
+    readonly services: Context.Context<R>
     readonly builtins: Builtins
     readonly logs?: Array<string>
     readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
   }) {
     this.tools = options.tools
-    this.pending = options.pending
     this.builtins = options.builtins
     this.logs = options.logs ?? []
+    this.runner = new Runner(this, options.services)
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     const globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
     // Calling back into the program never reads frame state, so any frame serves; the root is always alive.
@@ -340,16 +404,19 @@ export class Interpreter<R> {
     }
   }
 
-  run(program: Program): Effect.Effect<Value, unknown, R> {
-    return this.root.run(program)
+  /** The program's body, as the first job: its completion value, copied out for the host. */
+  *main(program: Program): Eval<Json | undefined> {
+    return yield* toBoundary(this, yield* this.root.run(program))
   }
 
-  call(callable: Value, thisValue: Value, args: Array<Value>): Effect.Effect<Value, unknown, R> {
-    return this.root.call(callable, thisValue, args)
+  /** Calls into the program; a built-in passes its own call site so failures inside are located there. */
+  call(callable: Value, thisValue: Value, args: Array<Value>, site?: AstNode): Eval<Value> {
+    return this.root.call(callable, thisValue, args, site)
   }
 
-  await(promise: PromiseObj): Effect.Effect<Value, unknown, never> {
-    return this.root.await(promise)
+  /** Await: suspends the innermost async body until `value` settles. */
+  *awaitValue(value: Value, node?: AstNode): Eval<Value> {
+    return (yield new Await(value, node)) as Value
   }
 
   iterate(value: Value) {
@@ -360,48 +427,39 @@ export class Interpreter<R> {
     return this.root.iterateDirect(value)
   }
 
-  /** Runs one host tool: arguments cross as JSON and the result comes back as program values. */
-  tool(
-    run: (args: Array<Json | undefined>) => Effect.Effect<Json | undefined, unknown, R>,
-    args: Array<Value>,
-  ): Effect.Effect<Value, unknown, R> {
-    const ctx = this
-    return Effect.gen(function* () {
-      const json = yield* Effect.forEach(args, (arg) => toBoundary(ctx, arg))
-      return fromJson(ctx, yield* run(json))
-    })
+  /** Runs one host call to completion before any other job: arguments cross as JSON, the result comes back as values. */
+  *tool(run: ToolRuntime<R>["search"], args: Array<Value>) {
+    const json: Array<Json | undefined> = []
+    for (const arg of args) json.push(yield* toBoundary(this, arg))
+    return fromJson(this, (yield this.runner.blocking(run(json))) as Json | undefined)
   }
 }
 
-const MAX_CALL_DEPTH = 10_000
-
 /** One activation: the top-level program or a single function call, evaluating against its own scope chain. */
 class Frame<R> {
-  private generatorState?: GeneratorState
+  /** The body of a generator function, where `yield` suspends. */
+  private generator = false
   private generatorAsync = false
 
   constructor(
     private readonly ctx: Interpreter<R>,
     private scopes: ScopeStack,
-    /** Nested call depth; resets when an await resumes, since the continuation runs from the job queue. */
-    private depth = 0,
   ) {}
 
-  run(program: Program): Effect.Effect<Value, unknown, R> {
-    const self = this
+  *run(program: Program): Eval<Value> {
     // Keep top-level declarations separate so they can shadow builtins.
     this.scopes.push()
-    return Effect.gen(function* () {
-      self.predeclareLexical(program.body)
-      self.hoistFunctions(program.body)
-      self.hoistVars(program.body)
+    try {
+      this.predeclareLexical(program.body)
+      this.hoistFunctions(program.body)
+      this.hoistVars(program.body)
       let value: Value = undefined
       for (const [index, statement] of program.body.entries()) {
         if (index === program.body.length - 1 && statement.type === "ExpressionStatement") {
-          value = yield* self.evaluateExpression(statement.expression)
+          value = yield* this.evaluateExpression(statement.expression)
           break
         }
-        const result = yield* self.evaluateStatement(statement)
+        const result = yield* this.evaluateStatement(statement)
 
         if (result.kind === "return") {
           value = result.value
@@ -414,46 +472,64 @@ class Frame<R> {
       }
 
       // The implicit async body adopts returned promises before copy-out.
-      value = yield* resolvePromiseValue(self.ctx, value)
-      return value
-    }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
+      return isThenable(value) ? yield* this.awaitValue(value) : value
+    } finally {
+      this.scopes.pop()
+    }
   }
 
-  // Fork at the call site so admission and hooks occur when the call is made. Arguments cross on the caller's turn,
-  // since `toJSON` is program code; the host call runs without it, so tool calls stay concurrent.
-  private createToolCallPromise(path: ReadonlyArray<string>, args: Array<Value>): Effect.Effect<PromiseObj, never, R> {
-    const pending = this.ctx.pending
-    return pending.create(this.ctx.tool((json) => pending.turn.leave(this.ctx.tools.execute(path, json)), args))
-  }
-
-  // Fiber exits make settlement idempotent; yielding prevents inline continuation.
-  await(promise: PromiseObj): Effect.Effect<Value, unknown, never> {
-    const pending = this.ctx.pending
-    return Effect.suspend(() => {
-      pending.markObserved(promise)
-      return Effect.flatten(
-        pending.turn.suspend(Effect.flatMap(pending.await(promise), (exit) => Effect.as(Effect.yieldNow, exit))),
+  // The call returns its promise at once. Arguments cross on the caller's stack, since `toJSON` is program code, and a
+  // promise argument is awaited first; the host call starts once they have crossed, so admission and hooks happen at
+  // the call site, and runs concurrently with the program.
+  private *createToolCallPromise(
+    path: ReadonlyArray<string>,
+    args: Array<Value>,
+    site: AstNode | undefined,
+  ): Eval<Value> {
+    const ctx = this.ctx
+    const runner = ctx.runner
+    const promise = runner.newPromise()
+    const resolving = runner.resolving(promise)
+    const body = function* (): Eval<void> {
+      const json: Array<Json | undefined> = []
+      for (const arg of args) json.push(yield* toBoundary(ctx, arg))
+      runner.host(
+        ctx.tools.execute(path, json),
+        (settled) =>
+          settled.ok
+            ? resolving.resolve(fromJson(ctx, settled.value as Json | undefined))
+            : resolving.reject(settled.error),
+        site,
       )
-    })
+    }
+    return (yield new Call(
+      body(),
+      new AsyncBoundary((completion) => {
+        if (!completion.ok) resolving.reject(completion.error)
+      }, promise),
+    )) as Value
   }
 
-  // End this job; the program continues in a later one, after the jobs already waiting.
-  nextJob(): Effect.Effect<void> {
-    return this.ctx.pending.turn.suspend(Effect.yieldNow)
+  awaitValue(value: Value, node?: AstNode): Eval<Value> {
+    return this.ctx.awaitValue(value, node)
   }
 
-  private evaluateStatement(node: Statement | ModuleDeclaration): Effect.Effect<StatementResult, unknown, R> {
+  private *evaluateStatement(node: Statement | ModuleDeclaration): Eval<StatementResult> {
+    const result = this.execute(node)
+    return isEval(result) ? yield* result : result
+  }
+
+  // Like `evaluate`: statements that cannot run program code complete without a generator.
+  private execute(node: Statement | ModuleDeclaration): StatementResult | Eval<StatementResult> {
     switch (node.type) {
-      case "ExpressionStatement":
-        return Effect.as(this.evaluateExpression(node.expression), { kind: "none" })
-      case "VariableDeclaration":
-        return Effect.map(this.evaluateVariableDeclaration(node), () => ({ kind: "none" }))
-      case "ReturnStatement": {
-        const argumentNode = node.argument
-        return argumentNode
-          ? Effect.map(this.evaluateExpression(argumentNode), (value) => ({ kind: "return", value }))
-          : Effect.succeed({ kind: "return", value: undefined })
+      case "ExpressionStatement": {
+        const result = this.evaluate(node.expression)
+        return isEval(result) ? this.finishExpressionStatement(result) : none
       }
+      case "VariableDeclaration":
+        return this.evaluateVariableStatement(node)
+      case "ReturnStatement":
+        return this.evaluateReturnStatement(node)
       case "BlockStatement":
         return this.evaluateBlock(node)
       case "IfStatement":
@@ -473,40 +549,60 @@ class Frame<R> {
       case "ForInStatement":
         return this.evaluateForInStatement(node)
       case "BreakStatement":
-        return Effect.succeed(this.evaluateBreakStatement(node))
+        return this.evaluateBreakStatement(node)
       case "ContinueStatement":
-        return Effect.succeed(this.evaluateContinueStatement(node))
+        return this.evaluateContinueStatement(node)
       case "ThrowStatement":
         return this.evaluateThrowStatement(node)
       case "TryStatement":
         return this.evaluateTryStatement(node)
       case "EmptyStatement":
-        return Effect.succeed({ kind: "none" })
+        return none
       case "FunctionDeclaration":
-        return Effect.succeed({ kind: "none" })
+        return none
       default:
         throw unsupportedSyntax(node.type, node)
     }
   }
 
-  private evaluateBlock(node: BlockStatement): Effect.Effect<StatementResult, unknown, R> {
-    this.scopes.push()
-    const self = this
-    return Effect.gen(function* () {
-      const body = node.body
-      self.predeclareLexical(body)
-      self.hoistFunctions(body)
+  private *finishExpressionStatement(work: Eval<Value>): Eval<StatementResult> {
+    yield* work
+    return none
+  }
 
+  private *evaluateVariableStatement(node: VariableDeclaration): Eval<StatementResult> {
+    yield* this.evaluateVariableDeclaration(node)
+    return none
+  }
+
+  private *evaluateReturnStatement(node: ReturnStatement): Eval<StatementResult> {
+    const argumentNode = node.argument
+    if (!argumentNode) return { kind: "return", value: undefined }
+    const evaluated = this.evaluate(argumentNode)
+    const value = isEval(evaluated) ? yield* evaluated : evaluated
+    // An async generator awaits what it returns, as it awaits what it yields.
+    return { kind: "return", value: this.generatorAsync ? yield* this.awaitValue(value, node) : value }
+  }
+
+  private *evaluateBlock(node: BlockStatement): Eval<StatementResult> {
+    const body = node.body
+    const scoped = declaresLexically(body)
+    if (scoped) {
+      this.scopes.push()
+      this.predeclareLexical(body)
+      this.hoistFunctions(body)
+    }
+    try {
       for (const statement of body) {
-        const result = yield* self.evaluateStatement(statement)
-
-        if (result.kind !== "none") {
-          return result
-        }
+        const executed = this.execute(statement)
+        const result = isEval(executed) ? yield* executed : executed
+        if (result.kind !== "none") return result
       }
 
-      return { kind: "none" } satisfies StatementResult
-    }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
+      return none
+    } finally {
+      if (scoped) this.scopes.pop()
+    }
   }
 
   private createFunction(
@@ -535,11 +631,11 @@ class Frame<R> {
   }
 
   // NamedEvaluation: an anonymous function definition takes the name of what it is assigned to.
-  private evaluateNamed(node: Expression, name: string): Effect.Effect<Value, unknown, R> {
+  private *evaluateNamed(node: Expression, name: string): Eval<Value> {
     if (node.type === "ArrowFunctionExpression" || (node.type === "FunctionExpression" && !node.id)) {
-      return Effect.sync(() => this.createFunction(node, name))
+      return this.createFunction(node, name)
     }
-    return this.evaluateExpression(node)
+    return yield* this.evaluateExpression(node)
   }
 
   // Repeated `function` declarations and `var` clashes are legal: the last declaration wins.
@@ -581,256 +677,340 @@ class Frame<R> {
     for (const name of collectPatternNames(pattern)) this.scopes.reserve(name, mutable, node)
   }
 
-  private evaluateIfStatement(node: IfStatement): Effect.Effect<StatementResult, unknown, R> {
-    return Effect.flatMap(this.evaluateExpression(node.test), (test) =>
-      test
-        ? this.evaluateStatement(node.consequent)
-        : node.alternate
-          ? this.evaluateStatement(node.alternate)
-          : Effect.succeed({ kind: "none" }),
-    )
+  private *evaluateIfStatement(node: IfStatement): Eval<StatementResult> {
+    const test = this.evaluate(node.test)
+    const branch = (isEval(test) ? yield* test : test) ? node.consequent : node.alternate
+    if (!branch) return none
+    const result = this.execute(branch)
+    return isEval(result) ? yield* result : result
   }
 
-  private evaluateSwitchStatement(node: SwitchStatement): Effect.Effect<StatementResult, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      const discriminant = yield* self.evaluateExpression(node.discriminant)
-      self.scopes.push()
-      return yield* Effect.gen(function* () {
-        const cases = node.cases
-        const statements = cases.flatMap((branch) => branch.consequent)
-        self.predeclareLexical(statements)
-        self.hoistFunctions(statements)
-        let defaultIndex: number | undefined
-        let selected: number | undefined
-        for (const [index, branch] of cases.entries()) {
-          const test = branch.test
-          if (!test) {
-            defaultIndex = index
-            continue
-          }
-          if ((yield* self.evaluateExpression(test)) === discriminant) {
-            selected = index
-            break
-          }
-        }
-        const start = selected ?? defaultIndex
-        if (start === undefined) return { kind: "none" } satisfies StatementResult
-        for (let index = start; index < cases.length; index += 1) {
-          for (const statement of cases[index]!.consequent) {
-            const result = yield* self.evaluateStatement(statement)
-            if (result.kind === "break") {
-              if (result.label === undefined) return { kind: "none" } satisfies StatementResult
-              return result
-            }
-            if (result.kind === "return" || result.kind === "continue") return result
-          }
-        }
-        return { kind: "none" } satisfies StatementResult
-      }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
-    })
-  }
-
-  private evaluateWhileStatement(
-    node: WhileStatement,
-    labels?: ReadonlySet<string>,
-  ): Effect.Effect<StatementResult, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      while (yield* self.evaluateExpression(node.test)) {
-        const exit = loopExit(yield* self.evaluateStatement(node.body), labels)
-        if (exit !== undefined) return exit
-      }
-
-      return { kind: "none" } satisfies StatementResult
-    })
-  }
-
-  private evaluateDoWhileStatement(
-    node: DoWhileStatement,
-    labels?: ReadonlySet<string>,
-  ): Effect.Effect<StatementResult, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      do {
-        const exit = loopExit(yield* self.evaluateStatement(node.body), labels)
-        if (exit !== undefined) return exit
-      } while (yield* self.evaluateExpression(node.test))
-
-      return { kind: "none" } satisfies StatementResult
-    })
-  }
-
-  private evaluateForStatement(
-    node: ForStatement,
-    labels?: ReadonlySet<string>,
-  ): Effect.Effect<StatementResult, unknown, R> {
+  private *evaluateSwitchStatement(node: SwitchStatement): Eval<StatementResult> {
+    const discriminant = yield* this.evaluateExpression(node.discriminant)
     this.scopes.push()
-    const self = this
-    return Effect.gen(function* () {
+    try {
+      const cases = node.cases
+      const statements = cases.flatMap((branch) => branch.consequent)
+      this.predeclareLexical(statements)
+      this.hoistFunctions(statements)
+      let defaultIndex: number | undefined
+      let selected: number | undefined
+      for (const [index, branch] of cases.entries()) {
+        const test = branch.test
+        if (!test) {
+          defaultIndex = index
+          continue
+        }
+        if ((yield* this.evaluateExpression(test)) === discriminant) {
+          selected = index
+          break
+        }
+      }
+      const start = selected ?? defaultIndex
+      if (start === undefined) return none
+      for (let index = start; index < cases.length; index += 1) {
+        for (const statement of cases[index]!.consequent) {
+          const result = yield* this.evaluateStatement(statement)
+          if (result.kind === "break") {
+            if (result.label === undefined) return none
+            return result
+          }
+          if (result.kind === "return" || result.kind === "continue") return result
+        }
+      }
+      return none
+    } finally {
+      this.scopes.pop()
+    }
+  }
+
+  private *evaluateWhileStatement(node: WhileStatement, labels?: ReadonlySet<string>): Eval<StatementResult> {
+    const runner = this.ctx.runner
+    while (true) {
+      const test = this.evaluate(node.test)
+      if (!(isEval(test) ? yield* test : test)) break
+      const executed = this.execute(node.body)
+      const exit = loopExit(isEval(executed) ? yield* executed : executed, labels)
+      if (exit !== undefined) return exit
+      if (runner.tick()) yield Slice
+    }
+
+    return none
+  }
+
+  private *evaluateDoWhileStatement(node: DoWhileStatement, labels?: ReadonlySet<string>): Eval<StatementResult> {
+    const runner = this.ctx.runner
+    do {
+      const exit = loopExit(yield* this.evaluateStatement(node.body), labels)
+      if (exit !== undefined) return exit
+      if (runner.tick()) yield Slice
+    } while (yield* this.evaluateExpression(node.test))
+
+    return none
+  }
+
+  private *evaluateForStatement(node: ForStatement, labels?: ReadonlySet<string>): Eval<StatementResult> {
+    const runner = this.ctx.runner
+    this.scopes.push()
+    try {
       const initNode = node.init
       const testNode = node.test
       const updateNode = node.update
 
       if (initNode?.type === "VariableDeclaration" && initNode.kind !== "var") {
-        self.predeclareLexical([initNode])
+        this.predeclareLexical([initNode])
       }
 
       if (initNode) {
         if (initNode.type === "VariableDeclaration") {
-          yield* self.evaluateVariableDeclaration(initNode)
+          yield* this.evaluateVariableDeclaration(initNode)
         } else {
-          yield* self.evaluateExpression(initNode)
+          yield* this.evaluateExpression(initNode)
         }
       }
 
+      // Each iteration gets fresh copies of the loop's `let` bindings, but only closures can tell them apart.
       const perIterationBindings =
-        initNode?.type === "VariableDeclaration" && initNode.kind !== "var"
-          ? Array.from(self.scopes.current().keys())
+        initNode?.type === "VariableDeclaration" &&
+        initNode.kind !== "var" &&
+        [node.init, node.test, node.update, node.body].some((part) => part && createsClosure(part))
+          ? Array.from(this.scopes.current().keys())
           : []
 
       const nextIteration = () => {
         if (perIterationBindings.length === 0) return
-        const current = self.scopes.current()
-        self.scopes.pop()
-        self.scopes.push(
+        const current = this.scopes.current()
+        this.scopes.pop()
+        this.scopes.push(
           new Map(perIterationBindings.map((name): [string, Binding] => [name, { ...current.get(name)! }])),
         )
       }
       nextIteration()
 
-      while (testNode ? yield* self.evaluateExpression(testNode) : true) {
-        const exit = loopExit(yield* self.evaluateStatement(node.body), labels)
+      while (true) {
+        if (testNode) {
+          const test = this.evaluate(testNode)
+          if (!(isEval(test) ? yield* test : test)) break
+        }
+        const executed = this.execute(node.body)
+        const exit = loopExit(isEval(executed) ? yield* executed : executed, labels)
         if (exit !== undefined) return exit
 
         nextIteration()
         if (updateNode) {
-          yield* self.evaluateExpression(updateNode)
+          const update = this.evaluate(updateNode)
+          if (isEval(update)) yield* update
         }
+        if (runner.tick()) yield Slice
       }
 
-      return { kind: "none" } satisfies StatementResult
-    }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
+      return none
+    } finally {
+      this.scopes.pop()
+    }
   }
 
-  private evaluateForOfStatement(
-    node: ForOfStatement,
-    labels?: ReadonlySet<string>,
-  ): Effect.Effect<StatementResult, unknown, R> {
+  private *evaluateForOfStatement(node: ForOfStatement, labels?: ReadonlySet<string>): Eval<StatementResult> {
+    const runner = this.ctx.runner
     const awaiting = node.await
     const left = node.left
     const declared = loopDeclaration(left, "for...of")
     if (declared?.lexical) this.scopes.push()
 
-    const self = this
-    return Effect.gen(function* () {
-      if (declared?.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
-      const right = yield* self.evaluateExpression(node.right)
+    try {
+      if (declared?.lexical) this.predeclarePattern(declared.pattern, declared.mutable, left)
+      const right = yield* this.evaluateExpression(node.right)
 
-      const cursor = self.builtinCursor(right)
-      const iterator = cursor === undefined ? yield* self.customIterator(right, node, awaiting) : undefined
-      if (iterator === undefined && cursor === undefined) {
+      const builtin = this.builtinCursor(right)
+      const custom = builtin === undefined ? yield* this.customIterator(right, node, awaiting) : undefined
+      if (custom === undefined && builtin === undefined) {
         throw invalidData(
           `${awaiting ? "for await...of" : "for...of"} requires an iterable value, received ${describeValue(right)}.`,
           node,
         )
       }
-      const close = () =>
-        iterator
-          ? self.closeIterator(iterator, node, awaiting)
-          : awaiting
-            ? Effect.andThen(cursor?.close ?? Effect.void, self.nextJob())
-            : (cursor?.close ?? Effect.void)
+      // `for await` over a synchronous iterator drives it through CreateAsyncFromSyncIterator, as JS does.
+      const iterator = awaiting && !custom?.asynchronous ? this.asyncFromSync(builtin, custom, node) : custom
+      const cursor = iterator === undefined ? builtin : undefined
+      const self = this
+      const close = function* (): Eval<void> {
+        if (iterator) return yield* self.closeIterator(iterator, node)
+        yield* cursor!.close()
+      }
 
       if (left.type === "RestElement" || left.type === "AssignmentPattern") {
         throw typeError("Unsupported for...of binding.", left)
       }
       const assignment = left.type === "VariableDeclaration" ? undefined : left
+      // Each iteration gets a fresh binding, but only a closure in the body can tell; without one, a single
+      // `for (const x of ...)` binding is reused.
+      const reused =
+        declared?.lexical && declared.pattern.type === "Identifier" && !createsClosure(node.body)
+          ? { mutable: declared.mutable, value: undefined as Value, initialized: false }
+          : undefined
+      if (reused !== undefined) this.scopes.push(new Map([[(declared!.pattern as Identifier).name, reused]]))
 
-      const evaluateBody = (value: Value) =>
-        Effect.gen(function* () {
-          if (declared?.lexical) {
-            self.scopes.push()
-            self.predeclarePattern(declared.pattern, declared.mutable, left)
-            yield* self.declarePattern(declared.pattern, value, declared.mutable, left, true)
-          } else if (declared) {
-            yield* self.assignPattern(declared.pattern, value, left)
-          } else if (assignment) {
-            yield* self.assignPattern(assignment, value, left)
+      try {
+        while (true) {
+          const step: Step = iterator ? yield* this.nextIteratorResult(iterator, node) : yield* cursor!.next()
+          if (step.done) return none
+          let result: StatementResult
+          try {
+            if (reused !== undefined) {
+              reused.value = step.value
+              reused.initialized = true
+              const executed = this.execute(node.body)
+              result = isEval(executed) ? yield* executed : executed
+            } else if (declared?.lexical) {
+              this.scopes.push()
+              try {
+                this.predeclarePattern(declared.pattern, declared.mutable, left)
+                yield* this.declarePattern(declared.pattern, step.value, declared.mutable, left, true)
+                result = yield* this.evaluateStatement(node.body)
+              } finally {
+                this.scopes.pop()
+              }
+            } else {
+              if (declared) yield* this.assignPattern(declared.pattern, step.value, left)
+              else if (assignment) yield* this.assignPattern(assignment, step.value, left)
+              result = yield* this.evaluateStatement(node.body)
+            }
+          } catch (error) {
+            return yield* preserveConsumerError(close, thrower(error))
           }
-          return yield* self.evaluateStatement(node.body)
-        }).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              if (declared?.lexical) self.scopes.pop()
-            }),
-          ),
-        )
-
-      while (true) {
-        const current = iterator
-          ? yield* self.nextIteratorResult(iterator, node, awaiting)
-          : yield* cursor?.next ?? Effect.die(typeError("Iterator is unavailable.", node))
-        const step = cursor && awaiting ? { done: current.done, value: yield* self.awaitValue(current.value) } : current
-        if (step.done) return { kind: "none" } satisfies StatementResult
-        const bodyExit = yield* Effect.exit(evaluateBody(step.value))
-        if (!Exit.isSuccess(bodyExit)) {
-          // Process interruption must remain prompt; user cleanup cannot extend a timeout.
-          if (Cause.hasInterruptsOnly(bodyExit.cause)) return yield* Effect.failCause(bodyExit.cause)
-          return yield* preserveConsumerError(close(), Effect.failCause(bodyExit.cause))
+          const exit = loopExit(result, labels)
+          if (exit !== undefined) {
+            yield* close()
+            return exit
+          }
+          if (runner.tick()) yield Slice
         }
-        const exit = loopExit(bodyExit.value, labels)
-        if (exit !== undefined) {
-          yield* close()
-          return exit
-        }
+      } finally {
+        if (reused !== undefined) this.scopes.pop()
       }
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          if (declared?.lexical) self.scopes.pop()
-        }),
-      ),
-    )
+    } finally {
+      if (declared?.lexical) this.scopes.pop()
+    }
   }
 
-  private awaitValue(value: Value): Effect.Effect<Value, unknown, R> {
-    return Effect.flatMap(resolvePromise(this.ctx, value), (promise) =>
-      Effect.ensuring(
-        this.await(promise),
-        Effect.sync(() => (this.depth = 0)),
-      ),
-    )
-  }
-
-  private awaitAsyncFromSyncValue(
-    iterator: CustomIterator,
-    value: Value,
+  // CreateAsyncFromSyncIterator: an async iterator over a synchronous one. Each `next()` promise settles a job after
+  // the value does, and a rejected value closes the synchronous iterator first; `return()` calls the synchronous
+  // iterator's own `return`, or settles at once when it has none.
+  private asyncFromSync(
+    builtin: Cursor | undefined,
+    custom: CustomIterator | undefined,
     node: AstNode | undefined,
-    closeOnRejection: boolean,
-  ): Effect.Effect<Value, unknown, R> {
+  ): CustomIterator {
+    const ctx = this.ctx
+    const runner = ctx.runner
+    const builtins = ctx.builtins
+    const result = (value: Value, done: boolean) => iteratorResult(builtins.Object, value, done)
     const self = this
-    return Effect.gen(function* () {
-      const settled = yield* Effect.exit(self.awaitValue(value))
-      if (Exit.isSuccess(settled)) return settled.value
-      if (closeOnRejection && !Cause.hasInterruptsOnly(settled.cause)) {
-        yield* Effect.exit(self.closeIterator(iterator, node, false))
+    // IteratorNext passes the value `next` received, when it received one.
+    const syncNext = function* (args: Array<Value>): Eval<Step> {
+      if (!custom) return yield* builtin!.next()
+      const object = self.requireIteratorObject(
+        yield* self.call(custom.next, custom.iterator, args, node),
+        "Iterator next() result",
+        node,
+      )
+      return { done: Boolean(get(object, "done")), value: get(object, "value") }
+    }
+    // The synchronous iterator's `return`, looked up when it is needed; built-in collection iterators have none.
+    const syncReturn = (): Value => (custom ? get(custom.iterator, "return") : undefined)
+    const settle = (step: Step, closeOnRejection: boolean, made: ReturnType<typeof capability>) => {
+      const rejected = (reason: unknown) => {
+        if (step.done || !closeOnRejection || reason instanceof Interruption) return made.reject(reason)
+        const body = function* (): Eval<void> {
+          try {
+            if (custom) yield* self.closeIterator(custom, node)
+            else yield* builtin!.close()
+          } catch {
+            // The rejection wins over a failing close.
+          }
+          made.reject(reason)
+        }
+        return { task: new Task([{ body: body(), boundary: undefined }]), input: normal(undefined) }
       }
-      return yield* Effect.failCause(settled.cause)
+      let wrapper: PromiseObj
+      try {
+        wrapper = runner.promiseResolve(step.value)
+      } catch (error) {
+        const start = rejected(error)
+        if (start !== undefined) runner.enqueue(() => start)
+        return
+      }
+      runner.then(wrapper, (settled) =>
+        settled.ok ? made.resolve(result(settled.value as Value, step.done)) : rejected(settled.error),
+      )
+    }
+    const next = fn(builtins, "next", 1, function* (_, args) {
+      const made = capability(ctx, node)
+      try {
+        settle(yield* syncNext(args), true, made)
+      } catch (error) {
+        made.reject(error)
+      }
+      return made.promise
     })
+    const close = fn(builtins, "return", 1, function* (_, args) {
+      const made = capability(ctx, node)
+      try {
+        const method = syncReturn()
+        if (method === undefined || method === null) {
+          if (builtin !== undefined) yield* builtin.close()
+          made.resolve(result(args[0], true))
+          return made.promise
+        }
+        const returned = self.requireIteratorObject(
+          yield* self.call(self.requireIteratorMethod(method, "Iterator return", node), custom!.iterator, args, node),
+          "Iterator return() result",
+          node,
+        )
+        settle({ done: Boolean(get(returned, "done")), value: get(returned, "value") }, false, made)
+      } catch (error) {
+        made.reject(error)
+      }
+      return made.promise
+    })
+    const raise = fn(builtins, "throw", 1, function* (_, args) {
+      const made = capability(ctx, node)
+      try {
+        const method = custom ? get(custom.iterator, "throw") : undefined
+        if (method === undefined || method === null) {
+          if (custom) yield* self.closeIterator(custom, node)
+          else yield* builtin!.close()
+          made.reject(typeError("The delegated iterator does not provide a throw() method.", node))
+          return made.promise
+        }
+        const thrown = self.requireIteratorObject(
+          yield* self.call(self.requireIteratorMethod(method, "Iterator throw", node), custom!.iterator, args, node),
+          "Iterator throw() result",
+          node,
+        )
+        settle({ done: Boolean(get(thrown, "done")), value: get(thrown, "value") }, true, made)
+      } catch (error) {
+        made.reject(error)
+      }
+      return made.promise
+    })
+    const adapter = new Obj(builtins.Object)
+    define(adapter, "next", next, hidden)
+    define(adapter, "return", close, hidden)
+    define(adapter, "throw", raise, hidden)
+    return { iterator: adapter, next, asynchronous: true }
   }
 
-  iterate(value: Value, node?: AstNode): Effect.Effect<Cursor<R> | undefined, unknown, R> {
+  *iterate(value: Value, node?: AstNode): Eval<Cursor | undefined> {
     const cursor = this.builtinCursor(value)
-    if (cursor !== undefined) return Effect.succeed(cursor)
-    return Effect.map(this.customIterator(value, node, false), (iterator) =>
-      iterator === undefined ? undefined : this.customCursor(iterator, node),
-    )
+    if (cursor !== undefined) return cursor
+    const iterator = yield* this.customIterator(value, node, false)
+    return iterator === undefined ? undefined : this.customCursor(iterator, node)
   }
 
   /** GetIteratorDirect: drive an iterator by its own `next`, without asking for `[Symbol.iterator]`. */
-  iterateDirect(value: Value, node?: AstNode): Cursor<R> {
-    if (value instanceof IteratorObj) return value.cursor as Cursor<R>
+  iterateDirect(value: Value, node?: AstNode): Cursor {
+    if (value instanceof IteratorObj) return value.cursor
     if (!(value instanceof Obj)) {
       throw typeError(`An iterator must be an object, received ${describeValue(value)}.`, node)
     }
@@ -844,16 +1024,15 @@ class Frame<R> {
     )
   }
 
-  private customCursor(iterator: CustomIterator, node: AstNode | undefined): Cursor<R> {
+  private customCursor(iterator: CustomIterator, node: AstNode | undefined): Cursor {
     return {
-      next: this.nextIteratorResult(iterator, node, false),
-      close: Effect.suspend(() => this.closeIterator(iterator, node, false)),
+      next: () => this.nextIteratorResult(iterator, node),
+      close: () => this.closeIterator(iterator, node),
     }
   }
 
-  private builtinCursor(value: Value): Cursor<R> | undefined {
-    // Natives build their cursors without knowing R, like `lift` in native.ts.
-    if (value instanceof IteratorObj) return value.cursor as Cursor<R>
+  private builtinCursor(value: Value): Cursor | undefined {
+    if (value instanceof IteratorObj) return value.cursor
     const iterator =
       typeof value === "string"
         ? value[Symbol.iterator]()
@@ -863,96 +1042,44 @@ class Frame<R> {
     return iterator === undefined ? undefined : hostCursor(iterator)
   }
 
-  private customIterator(value: Value, node: AstNode | undefined, allowAsync = true) {
-    if (!(value instanceof Obj)) return Effect.undefined
+  private *customIterator(
+    value: Value,
+    node: AstNode | undefined,
+    allowAsync = true,
+  ): Eval<CustomIterator | undefined> {
+    if (!(value instanceof Obj)) return undefined
     const asyncMethod = allowAsync ? get(value, AsyncIteratorSymbol) : undefined
     const method = asyncMethod ?? get(value, IteratorSymbol)
-    if (method === undefined || method === null) return Effect.undefined
-    const self = this
-    return Effect.map(
-      this.call(this.requireIteratorMethod(method, "Iterator method", node), value, [], node),
-      (iterator) => {
-        const object = self.requireIteratorObject(iterator, "Iterator method result", node)
-        return {
-          iterator: object,
-          next: self.requireIteratorMethod(get(object, "next"), "Iterator next", node),
-          asynchronous: asyncMethod !== undefined && asyncMethod !== null,
-        }
-      },
-    )
-  }
-
-  private nextIteratorResult(iterator: CustomIterator, node: AstNode | undefined, awaiting: boolean) {
-    const self = this
-    return Effect.gen(function* () {
-      if (iterator.asynchronous) {
-        const object = self.requireIteratorObject(
-          yield* self.awaitValue(yield* self.call(iterator.next, iterator.iterator, [], node)),
-          "Iterator next() result",
-          node,
-        )
-        return { done: Boolean(get(object, "done")), value: get(object, "value") }
-      }
-
-      const called = yield* Effect.exit(self.call(iterator.next, iterator.iterator, [], node))
-      if (!Exit.isSuccess(called)) {
-        if (awaiting) yield* self.nextJob()
-        return yield* Effect.failCause(called.cause)
-      }
-      const captured = yield* Effect.exit(
-        Effect.sync(() => {
-          const object = self.requireIteratorObject(called.value, "Iterator next() result", node)
-          return { done: Boolean(get(object, "done")), value: get(object, "value") }
-        }),
-      )
-      if (!Exit.isSuccess(captured)) {
-        if (awaiting) yield* self.nextJob()
-        return yield* Effect.failCause(captured.cause)
-      }
-      return {
-        done: captured.value.done,
-        value: awaiting
-          ? yield* self.awaitAsyncFromSyncValue(iterator, captured.value.value, node, !captured.value.done)
-          : captured.value.value,
-      }
-    })
-  }
-
-  private closeIterator(
-    iterator: CustomIterator,
-    node: AstNode | undefined,
-    awaiting = true,
-  ): Effect.Effect<void, unknown, R> {
-    const close = get(iterator.iterator, "return")
-    if (close === undefined || close === null) {
-      return iterator.asynchronous || !awaiting ? Effect.void : this.nextJob()
+    if (method === undefined || method === null) return undefined
+    const iterator = yield* this.call(this.requireIteratorMethod(method, "Iterator method", node), value, [], node)
+    const object = this.requireIteratorObject(iterator, "Iterator method result", node)
+    return {
+      iterator: object,
+      next: this.requireIteratorMethod(get(object, "next"), "Iterator next", node),
+      asynchronous: asyncMethod !== undefined && asyncMethod !== null,
     }
-    const self = this
-    return Effect.gen(function* () {
-      const method = self.requireIteratorMethod(close, "Iterator return", node)
-      if (iterator.asynchronous) {
-        self.requireIteratorObject(
-          yield* self.awaitValue(yield* self.call(method, iterator.iterator, [], node)),
-          "Iterator return() result",
-          node,
-        )
-        return
-      }
+  }
 
-      const called = yield* Effect.exit(self.call(method, iterator.iterator, [], node))
-      if (!Exit.isSuccess(called)) {
-        if (awaiting) yield* self.nextJob()
-        return yield* Effect.failCause(called.cause)
-      }
-      const captured = yield* Effect.exit(
-        Effect.sync(() => get(self.requireIteratorObject(called.value, "Iterator return() result", node), "value")),
-      )
-      if (!Exit.isSuccess(captured)) {
-        if (awaiting) yield* self.nextJob()
-        return yield* Effect.failCause(captured.cause)
-      }
-      if (awaiting) yield* self.awaitValue(captured.value)
-    })
+  private *nextIteratorResult(iterator: CustomIterator, node: AstNode | undefined): Eval<Step> {
+    const called = yield* this.call(iterator.next, iterator.iterator, [], node)
+    const object = this.requireIteratorObject(
+      iterator.asynchronous ? yield* this.awaitValue(called, node) : called,
+      "Iterator next() result",
+      node,
+    )
+    return { done: Boolean(get(object, "done")), value: get(object, "value") }
+  }
+
+  private *closeIterator(iterator: CustomIterator, node: AstNode | undefined): Eval<void> {
+    const close = get(iterator.iterator, "return")
+    if (close === undefined || close === null) return
+    const method = this.requireIteratorMethod(close, "Iterator return", node)
+    const called = yield* this.call(method, iterator.iterator, [], node)
+    this.requireIteratorObject(
+      iterator.asynchronous ? yield* this.awaitValue(called, node) : called,
+      "Iterator return() result",
+      node,
+    )
   }
 
   private requireIteratorObject(value: Value, context: string, node?: AstNode): Obj {
@@ -972,20 +1099,17 @@ class Frame<R> {
     return keys(enumerableSource(this.ctx, "for...in", value, node))
   }
 
-  private evaluateForInStatement(
-    node: ForInStatement,
-    labels?: ReadonlySet<string>,
-  ): Effect.Effect<StatementResult, unknown, R> {
+  private *evaluateForInStatement(node: ForInStatement, labels?: ReadonlySet<string>): Eval<StatementResult> {
+    const runner = this.ctx.runner
     const left = node.left
     const declared = loopDeclaration(left, "for...in")
     if (declared?.lexical) this.scopes.push()
 
-    const self = this
-    return Effect.gen(function* () {
-      if (declared?.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
-      const right = yield* self.evaluateExpression(node.right)
+    try {
+      if (declared?.lexical) this.predeclarePattern(declared.pattern, declared.mutable, left)
+      const right = yield* this.evaluateExpression(node.right)
 
-      const keys = self.enumerableKeys(right, node.right)
+      const keys = this.enumerableKeys(right, node.right)
 
       if (left.type === "RestElement" || left.type === "AssignmentPattern") {
         throw typeError("Unsupported for...in binding.", left)
@@ -993,37 +1117,31 @@ class Frame<R> {
       const assignment = left.type === "VariableDeclaration" ? undefined : left
 
       for (const key of keys) {
-        const result = yield* Effect.gen(function* () {
-          if (declared?.lexical) {
-            self.scopes.push()
-            self.predeclarePattern(declared.pattern, declared.mutable, left)
-            yield* self.declarePattern(declared.pattern, key, declared.mutable, left, true)
-          } else if (declared) {
-            yield* self.assignPattern(declared.pattern, key, left)
-          } else if (assignment) {
-            yield* self.assignPattern(assignment, key, left)
+        let result: StatementResult
+        if (declared?.lexical) {
+          this.scopes.push()
+          try {
+            this.predeclarePattern(declared.pattern, declared.mutable, left)
+            yield* this.declarePattern(declared.pattern, key, declared.mutable, left, true)
+            result = yield* this.evaluateStatement(node.body)
+          } finally {
+            this.scopes.pop()
           }
-          return yield* self.evaluateStatement(node.body)
-        }).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              if (declared?.lexical) self.scopes.pop()
-            }),
-          ),
-        )
+        } else {
+          if (declared) yield* this.assignPattern(declared.pattern, key, left)
+          else if (assignment) yield* this.assignPattern(assignment, key, left)
+          result = yield* this.evaluateStatement(node.body)
+        }
 
         const exit = loopExit(result, labels)
         if (exit !== undefined) return exit
+        if (runner.tick()) yield Slice
       }
 
-      return { kind: "none" } satisfies StatementResult
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          if (declared?.lexical) self.scopes.pop()
-        }),
-      ),
-    )
+      return none
+    } finally {
+      if (declared?.lexical) this.scopes.pop()
+    }
   }
 
   private evaluateBreakStatement(node: BreakStatement): StatementResult {
@@ -1034,7 +1152,7 @@ class Frame<R> {
     return node.label ? { kind: "continue", label: node.label.name } : { kind: "continue" }
   }
 
-  private evaluateLabeledStatement(node: LabeledStatement): Effect.Effect<StatementResult, unknown, R> {
+  private *evaluateLabeledStatement(node: LabeledStatement): Eval<StatementResult> {
     const labels = new Set<string>()
     let body: Statement = node
     while (body.type === "LabeledStatement") {
@@ -1042,303 +1160,329 @@ class Frame<R> {
       body = body.body
     }
 
-    const evaluated = (() => {
-      if (body.type === "WhileStatement") return this.evaluateWhileStatement(body, labels)
-      if (body.type === "DoWhileStatement") return this.evaluateDoWhileStatement(body, labels)
-      if (body.type === "ForStatement") return this.evaluateForStatement(body, labels)
-      if (body.type === "ForOfStatement") return this.evaluateForOfStatement(body, labels)
-      if (body.type === "ForInStatement") return this.evaluateForInStatement(body, labels)
-      return this.evaluateStatement(body)
-    })()
+    const result =
+      body.type === "WhileStatement"
+        ? yield* this.evaluateWhileStatement(body, labels)
+        : body.type === "DoWhileStatement"
+          ? yield* this.evaluateDoWhileStatement(body, labels)
+          : body.type === "ForStatement"
+            ? yield* this.evaluateForStatement(body, labels)
+            : body.type === "ForOfStatement"
+              ? yield* this.evaluateForOfStatement(body, labels)
+              : body.type === "ForInStatement"
+                ? yield* this.evaluateForInStatement(body, labels)
+                : yield* this.evaluateStatement(body)
 
-    return Effect.map(evaluated, (result) =>
-      result.kind === "break" && result.label !== undefined && labels.has(result.label)
-        ? ({ kind: "none" } satisfies StatementResult)
-        : result,
-    )
+    return result.kind === "break" && result.label !== undefined && labels.has(result.label) ? none : result
   }
 
-  private evaluateThrowStatement(node: ThrowStatement): Effect.Effect<StatementResult, unknown, R> {
-    return Effect.flatMap(this.evaluateExpression(node.argument), (value) => Effect.fail(new Throw(value)))
+  private *evaluateThrowStatement(node: ThrowStatement): Eval<StatementResult> {
+    throw new Throw(yield* this.evaluateExpression(node.argument))
   }
 
-  private evaluateTryStatement(node: TryStatement): Effect.Effect<StatementResult, unknown, R> {
-    const body = node.block
+  private *evaluateTryStatement(node: TryStatement): Eval<StatementResult> {
     const handler = node.handler
     const finalizer = node.finalizer
-    const self = this
+    let result: StatementResult = none
+    let failure: { readonly error: unknown } | undefined
 
-    const attempted = Effect.matchCauseEffect(this.evaluateStatement(body), {
-      onFailure: (cause) => {
-        if (cause.reasons.some(Cause.isInterruptReason) || Cause.squash(cause) instanceof GeneratorReturn || !handler) {
-          return Effect.failCause(cause)
-        }
-
-        const caught = materialize(self.ctx, Cause.squash(cause))
+    try {
+      result = yield* this.evaluateStatement(node.block)
+    } catch (error) {
+      if (error instanceof Interruption) throw error
+      // A generator's return() unwinds through `finally` but is not an exception `catch` sees.
+      if (error instanceof GeneratorReturn || !handler) {
+        if (!finalizer) throw error
+        failure = { error }
+      } else {
+        const caught = materialize(this.ctx, error)
         const parameter = handler.param
-        self.scopes.push()
-        return Effect.gen(function* () {
-          if (parameter) yield* self.declarePattern(parameter, caught, true, handler)
-          return yield* self.evaluateStatement(handler.body)
-        }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
-      },
-      onSuccess: Effect.succeed,
-    })
-
-    if (!finalizer) return attempted
-
-    const isAbrupt = (result: StatementResult): boolean =>
-      result.kind === "return" || result.kind === "break" || result.kind === "continue"
-
-    return Effect.matchCauseEffect(attempted, {
-      onFailure: (cause) =>
-        cause.reasons.some(Cause.isInterruptReason)
-          ? Effect.failCause(cause)
-          : Effect.flatMap(this.evaluateStatement(finalizer), (final) =>
-              isAbrupt(final) ? Effect.succeed(final) : Effect.failCause(cause),
-            ),
-      onSuccess: (result) =>
-        Effect.flatMap(this.evaluateStatement(finalizer), (final) =>
-          isAbrupt(final) ? Effect.succeed(final) : Effect.succeed(result),
-        ),
-    })
-  }
-
-  private evaluateVariableDeclaration(node: VariableDeclaration): Effect.Effect<void, unknown, R> {
-    const kind = node.kind
-    const self = this
-    return Effect.gen(function* () {
-      for (const declaration of node.declarations) {
-        if (declaration.type !== "VariableDeclarator") {
-          throw typeError("Unsupported variable declaration shape.", declaration)
+        this.scopes.push()
+        try {
+          if (parameter) yield* this.declarePattern(parameter, caught, true, handler)
+          result = yield* this.evaluateStatement(handler.body)
+        } catch (error) {
+          if (!finalizer || error instanceof Interruption) throw error
+          failure = { error }
+        } finally {
+          this.scopes.pop()
         }
-
-        const init = declaration.init
-        // `var x` alone is a no-op: the binding was hoisted on function entry.
-        const id = declaration.id
-        const evaluate = (init: Expression) =>
-          id.type === "Identifier" ? self.evaluateNamed(init, id.name) : self.evaluateExpression(init)
-        if (kind === "var") {
-          if (init) yield* self.assignPattern(id, yield* evaluate(init), declaration)
-          continue
-        }
-        const value = init ? yield* evaluate(init) : undefined
-        yield* self.declarePattern(declaration.id, value, kind !== "const", declaration, true)
       }
-    })
+    }
+
+    if (!finalizer) return result
+    const final = yield* this.evaluateStatement(finalizer)
+    if (isAbrupt(final)) return final
+    if (failure) throw failure.error
+    return result
   }
 
-  private declarePattern(
+  private *evaluateVariableDeclaration(node: VariableDeclaration): Eval<void> {
+    const kind = node.kind
+    for (const declaration of node.declarations) {
+      if (declaration.type !== "VariableDeclarator") {
+        throw typeError("Unsupported variable declaration shape.", declaration)
+      }
+
+      const init = declaration.init
+      // `var x` alone is a no-op: the binding was hoisted on function entry.
+      const id = declaration.id
+      if (kind === "var") {
+        if (init) {
+          const value =
+            id.type === "Identifier" ? yield* this.evaluateNamed(init, id.name) : yield* this.evaluateExpression(init)
+          yield* this.assignPattern(id, value, declaration)
+        }
+        continue
+      }
+      const value = !init
+        ? undefined
+        : id.type === "Identifier"
+          ? yield* this.evaluateNamed(init, id.name)
+          : yield* this.evaluateExpression(init)
+      yield* this.declarePattern(declaration.id, value, kind !== "const", declaration, true)
+    }
+  }
+
+  private *declarePattern(
     pattern: Pattern,
     value: Value,
     mutable: boolean,
     node: AstNode,
     initialize = false,
-  ): Effect.Effect<void, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      if (pattern.type === "Identifier") {
-        const name = pattern.name
-        if (initialize) self.scopes.initialize(name, value, node)
-        else self.scopes.declare(name, value, mutable, node)
-        return
+  ): Eval<void> {
+    if (pattern.type === "Identifier") {
+      const name = pattern.name
+      if (initialize) this.scopes.initialize(name, value, node)
+      else this.scopes.declare(name, value, mutable, node)
+      return
+    }
+
+    if (pattern.type === "AssignmentPattern") {
+      const resolved = value === undefined ? yield* this.evaluateDefault(pattern) : value
+      yield* this.declarePattern(pattern.left, resolved, mutable, node, initialize)
+      return
+    }
+
+    if (pattern.type === "ObjectPattern") {
+      if (value === null || value === undefined) {
+        throw typeError(`Cannot destructure ${describeValue(value)} as it is ${value}.`, pattern)
       }
 
-      if (pattern.type === "AssignmentPattern") {
-        const resolved = value === undefined ? yield* self.evaluateDefault(pattern) : value
-        yield* self.declarePattern(pattern.left, resolved, mutable, node, initialize)
-        return
-      }
-
-      if (pattern.type === "ObjectPattern") {
-        if (value === null || value === undefined) {
-          throw typeError(`Cannot destructure ${describeValue(value)} as it is ${value}.`, pattern)
+      const consumed = new Set<PropertyKey>()
+      for (const property of pattern.properties) {
+        if (property.type === "RestElement") {
+          const rest = new Obj(this.ctx.builtins.Object)
+          assign(rest, enumerableSource(this.ctx, "Object destructuring", value, pattern), consumed)
+          yield* this.declarePattern(property.argument, rest, mutable, property, initialize)
+          continue
         }
 
-        const consumed = new Set<PropertyKey>()
-        for (const property of pattern.properties) {
-          if (property.type === "RestElement") {
-            const rest = new Obj(self.ctx.builtins.Object)
-            assign(rest, enumerableSource(self.ctx, "Object destructuring", value, pattern), consumed)
-            yield* self.declarePattern(property.argument, rest, mutable, property, initialize)
-            continue
-          }
-
-          const key = yield* self.destructuringPropertyKey(property)
-          consumed.add(typeof key === "symbol" ? key : String(key))
-          yield* self.declarePattern(
-            property.value,
-            self.destructuredProperty(value, key, property),
-            mutable,
-            property,
-            initialize,
-          )
-        }
-        return
-      }
-
-      if (pattern.type === "ArrayPattern") {
-        return yield* self.destructureArrayPattern(pattern, value, (target, item, context) =>
-          self.declarePattern(target, item, mutable, context, initialize),
+        const key = yield* this.destructuringPropertyKey(property)
+        consumed.add(typeof key === "symbol" ? key : String(key))
+        yield* this.declarePattern(
+          property.value,
+          this.destructuredProperty(value, key, property),
+          mutable,
+          property,
+          initialize,
         )
       }
+      return
+    }
 
-      throw typeError(`Unsupported binding pattern '${pattern.type}'.`, pattern)
-    })
+    if (pattern.type === "ArrayPattern") {
+      return yield* this.destructureArrayPattern(pattern, value, (target, item, context) =>
+        this.declarePattern(target, item, mutable, context, initialize),
+      )
+    }
+
+    throw typeError(`Unsupported binding pattern '${pattern.type}'.`, pattern)
   }
 
-  private assignPattern(pattern: Pattern, value: Value, node: AstNode): Effect.Effect<void, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      if (pattern.type === "Identifier") {
-        self.scopes.set(pattern.name, value, pattern)
-        return
+  private *assignPattern(pattern: Pattern, value: Value, node: AstNode): Eval<void> {
+    if (pattern.type === "Identifier") {
+      this.scopes.set(pattern.name, value, pattern)
+      return
+    }
+
+    if (pattern.type === "MemberExpression") {
+      yield* this.writeMember(pattern, value)
+      return
+    }
+
+    if (pattern.type === "AssignmentPattern") {
+      const resolved = value === undefined ? yield* this.evaluateDefault(pattern) : value
+      yield* this.assignPattern(pattern.left, resolved, node)
+      return
+    }
+
+    if (pattern.type === "ObjectPattern") {
+      if (value === null || value === undefined) {
+        throw typeError(`Cannot destructure ${describeValue(value)} as it is ${value}.`, pattern)
       }
 
-      if (pattern.type === "MemberExpression") {
-        yield* self.writeMember(pattern, value)
-        return
-      }
-
-      if (pattern.type === "AssignmentPattern") {
-        const resolved = value === undefined ? yield* self.evaluateDefault(pattern) : value
-        yield* self.assignPattern(pattern.left, resolved, node)
-        return
-      }
-
-      if (pattern.type === "ObjectPattern") {
-        if (value === null || value === undefined) {
-          throw typeError(`Cannot destructure ${describeValue(value)} as it is ${value}.`, pattern)
+      const consumed = new Set<PropertyKey>()
+      for (const property of pattern.properties) {
+        if (property.type === "RestElement") {
+          const rest = new Obj(this.ctx.builtins.Object)
+          assign(rest, enumerableSource(this.ctx, "Object destructuring", value, pattern), consumed)
+          yield* this.assignPattern(property.argument, rest, property)
+          continue
         }
-
-        const consumed = new Set<PropertyKey>()
-        for (const property of pattern.properties) {
-          if (property.type === "RestElement") {
-            const rest = new Obj(self.ctx.builtins.Object)
-            assign(rest, enumerableSource(self.ctx, "Object destructuring", value, pattern), consumed)
-            yield* self.assignPattern(property.argument, rest, property)
-            continue
-          }
-          const key = yield* self.destructuringPropertyKey(property)
-          consumed.add(typeof key === "symbol" ? key : String(key))
-          yield* self.assignPattern(property.value, self.destructuredProperty(value, key, property), property)
-        }
-        return
+        const key = yield* this.destructuringPropertyKey(property)
+        consumed.add(typeof key === "symbol" ? key : String(key))
+        yield* this.assignPattern(property.value, this.destructuredProperty(value, key, property), property)
       }
+      return
+    }
 
-      if (pattern.type === "ArrayPattern") {
-        return yield* self.destructureArrayPattern(pattern, value, (target, item, context) =>
-          self.assignPattern(target, item, context),
-        )
-      }
+    if (pattern.type === "ArrayPattern") {
+      return yield* this.destructureArrayPattern(pattern, value, (target, item, context) =>
+        this.assignPattern(target, item, context),
+      )
+    }
 
-      throw typeError(`Unsupported assignment pattern '${pattern.type}'.`, node)
-    })
+    throw typeError(`Unsupported assignment pattern '${pattern.type}'.`, node)
   }
 
-  private evaluateDefault(pattern: AssignmentPattern): Effect.Effect<Value, unknown, R> {
+  private evaluateDefault(pattern: AssignmentPattern): Eval<Value> {
     return pattern.left.type === "Identifier"
       ? this.evaluateNamed(pattern.right, pattern.left.name)
       : this.evaluateExpression(pattern.right)
   }
 
-  private destructureArrayPattern(
+  private *destructureArrayPattern(
     pattern: ArrayPattern,
     value: Value,
-    consume: (target: Pattern, value: Value, context: AstNode) => Effect.Effect<void, unknown, R>,
-  ): Effect.Effect<void, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      const cursor = yield* self.iterate(value, pattern)
-      if (cursor === undefined) {
-        throw typeError("Array destructuring requires a supported iterable value.", pattern)
-      }
-      let done = false
-      for (const element of pattern.elements) {
-        if (done) {
-          if (element === null) continue
-          yield* consume(
-            element.type === "RestElement" ? element.argument : element,
-            element.type === "RestElement" ? new Arr(self.ctx.builtins.Array) : undefined,
-            element,
-          )
-          if (element.type === "RestElement") return
-          continue
-        }
-        const step = yield* cursor.next
-        done = step.done
+    consume: (target: Pattern, value: Value, context: AstNode) => Eval<void>,
+  ): Eval<void> {
+    const cursor = yield* this.iterate(value, pattern)
+    if (cursor === undefined) {
+      throw typeError("Array destructuring requires a supported iterable value.", pattern)
+    }
+    let done = false
+    for (const element of pattern.elements) {
+      if (done) {
         if (element === null) continue
-        if (element.type === "RestElement") {
-          const rest: Array<Value> = []
-          if (!step.done) rest.push(step.value)
-          while (!done) {
-            const next = yield* cursor.next
-            done = next.done
-            if (!done) rest.push(next.value)
-          }
-          yield* consume(element.argument, new Arr(self.ctx.builtins.Array, rest), element)
-          return
-        }
-        const consumed = consume(element, step.done ? undefined : step.value, pattern)
-        yield* step.done ? consumed : preserveConsumerError(cursor.close, consumed)
+        yield* consume(
+          element.type === "RestElement" ? element.argument : element,
+          element.type === "RestElement" ? new Arr(this.ctx.builtins.Array) : undefined,
+          element,
+        )
+        if (element.type === "RestElement") return
+        continue
       }
-      if (!done) yield* cursor.close
-    })
+      const step = yield* cursor.next()
+      done = step.done
+      if (element === null) continue
+      if (element.type === "RestElement") {
+        const rest: Array<Value> = []
+        if (!step.done) rest.push(step.value)
+        while (!done) {
+          const next = yield* cursor.next()
+          done = next.done
+          if (!done) rest.push(next.value)
+        }
+        yield* consume(element.argument, new Arr(this.ctx.builtins.Array, rest), element)
+        return
+      }
+      const consumed = consume(element, step.done ? undefined : step.value, pattern)
+      yield* step.done ? consumed : preserveConsumerError(cursor.close, consumed)
+    }
+    if (!done) yield* cursor.close()
   }
 
-  private destructuringPropertyKey(property: Property | AssignmentProperty): Effect.Effect<PropertyKey, unknown, R> {
+  private *destructuringPropertyKey(property: Property | AssignmentProperty): Eval<PropertyKey> {
     if (property.type !== "Property" || property.kind !== "init") {
       throw typeError("Unsupported object destructuring property.", property)
     }
     const keyNode = property.key
-    if (property.computed) {
-      return Effect.flatMap(this.evaluateExpression(keyNode), (value) => this.toPropertyKey(value, keyNode))
-    }
-    if (keyNode.type === "Identifier") return Effect.succeed(keyNode.name)
-    if (keyNode.type === "Literal") return Effect.succeed(String(keyNode.value))
+    if (property.computed) return yield* this.toPropertyKey(yield* this.evaluateExpression(keyNode), keyNode)
+    if (keyNode.type === "Identifier") return keyNode.name
+    if (keyNode.type === "Literal") return String(keyNode.value)
     throw unsupportedSyntax(keyNode.type, keyNode)
   }
 
-  private evaluateExpression(node: Expression): Effect.Effect<Value, unknown, R> {
+  private *evaluateExpression(node: Expression): Eval<Value> {
+    const result = this.evaluate(node)
+    return isEval(result) ? yield* result : result
+  }
+
+  // Evaluates leaves directly and returns the work for anything that may run program code, so the common cases cost
+  // no generator; callers finish the work with `yield*`.
+  private evaluate(node: Expression): Value | Eval<Value> {
     switch (node.type) {
       case "Literal": {
         const regex = node.regex
-        if (regex) return Effect.sync(() => constructRegExp(this.ctx.builtins, [regex.pattern, regex.flags]))
-        return Effect.succeed(literal(node))
+        if (regex) return constructRegExp(this.ctx.builtins, [regex.pattern, regex.flags])
+        return literal(node)
       }
       case "Identifier":
-        return Effect.sync(() => this.scopes.get(node.name, node))
+        return this.scopes.get(node.name, node)
       case "ThisExpression":
-        return Effect.sync(() => this.scopes.get("this", node))
-      case "BinaryExpression":
-        return this.evaluateBinaryExpression(node)
+        return this.scopes.get("this", node)
+      case "BinaryExpression": {
+        const operator = node.operator
+        if (node.left.type === "PrivateIdentifier") throw unsupportedSyntax(node.left.type, node.left)
+        const left = this.evaluate(node.left)
+        if (isEval(left)) return this.evaluateBinaryExpression(node, left)
+        const right = this.evaluate(node.right)
+        if (isEval(right)) return this.evaluateBinaryExpression(node, left, right)
+        if (operator === "instanceof") return instanceofValue(left, right, node)
+        if (left instanceof Obj || right instanceof Obj) return this.applyOperator(operator, left, right, node)
+        return this.applyBinaryOperator(operator, left, right, node)
+      }
       case "LogicalExpression":
         return this.evaluateLogicalExpression(node)
       case "UnaryExpression":
         return this.evaluateUnaryExpression(node)
-      case "AssignmentExpression":
-        return this.evaluateAssignmentExpression(node)
-      case "SequenceExpression": {
-        const self = this
-        return Effect.gen(function* () {
-          let result: Value
-          for (const expression of node.expressions) {
-            result = yield* self.evaluateExpression(expression)
-          }
-          return result
-        })
+      case "AssignmentExpression": {
+        const left = node.left
+        if (left.type !== "Identifier") return this.evaluateAssignmentExpression(node)
+        if (node.operator === "=") {
+          const right =
+            node.right.type === "ArrowFunctionExpression" ||
+            (node.right.type === "FunctionExpression" && !node.right.id)
+              ? this.createFunction(node.right, left.name)
+              : this.evaluate(node.right)
+          return isEval(right) ? this.assignAfter(left, right) : this.scopes.set(left.name, right, left)
+        }
+        if (!compoundOperators.has(node.operator)) return this.evaluateAssignmentExpression(node)
+        const current = this.scopes.get(left.name, left)
+        const right = this.evaluate(node.right)
+        if (isEval(right) || current instanceof Obj || right instanceof Obj)
+          return this.compoundAfter(node, current, right)
+        return this.scopes.set(
+          left.name,
+          this.applyBinaryOperator(node.operator.slice(0, -1), current, right, node),
+          left,
+        )
       }
+      case "SequenceExpression":
+        return this.evaluateSequenceExpression(node)
       case "CallExpression":
         return this.evaluateCallExpression(node)
       case "ArrowFunctionExpression":
       case "FunctionExpression":
-        return Effect.sync(() => this.createFunction(node))
-      case "MemberExpression":
-        return this.readMember(node)
+        return this.createFunction(node)
+      case "MemberExpression": {
+        const objectNode = node.object
+        const propertyNode = node.property
+        if (objectNode.type === "Super") throw unsupportedSyntax(objectNode.type, objectNode)
+        if (propertyNode.type === "PrivateIdentifier") throw unsupportedSyntax(propertyNode.type, propertyNode)
+        const object = this.evaluate(objectNode)
+        if (isEval(object)) return this.readMember(node, object)
+        if (object === OptionalShortCircuit) return OptionalShortCircuit
+        if ((object === null || object === undefined) && node.optional) return OptionalShortCircuit
+        const key =
+          !node.computed && propertyNode.type === "Identifier" ? propertyNode.name : this.evaluate(propertyNode)
+        if (isEval(key)) return this.readMember(node, object, key)
+        const reference = this.memberReference(node, object, key)
+        return isEval(reference) ? this.readMember(node, object, key) : this.readResolved(node, reference)
+      }
       case "ChainExpression":
-        return Effect.map(this.evaluateExpression(node.expression), (value) =>
-          value === OptionalShortCircuit ? undefined : value,
-        )
+        return this.evaluateChainExpression(node)
       case "ObjectExpression":
         return this.evaluateObjectExpression(node)
       case "ArrayExpression":
@@ -1349,12 +1493,15 @@ class Frame<R> {
         return this.evaluateTaggedTemplate(node)
       case "ConditionalExpression":
         return this.evaluateConditionalExpression(node)
-      case "UpdateExpression":
-        return this.evaluateUpdateExpression(node)
-      case "AwaitExpression": {
-        // Await always suspends, including for plain values.
-        return Effect.flatMap(this.evaluateExpression(node.argument), (value) => this.awaitValue(value))
+      case "UpdateExpression": {
+        const argument = node.argument
+        if (argument.type !== "Identifier") return this.evaluateUpdateExpression(node)
+        const current = this.scopes.get(argument.name, argument)
+        if (current instanceof Obj) return this.evaluateUpdateExpression(node)
+        return this.update(node, argument, current)
       }
+      case "AwaitExpression":
+        return this.evaluateAwaitExpression(node)
       case "YieldExpression":
         return this.evaluateYieldExpression(node)
       case "NewExpression":
@@ -1364,73 +1511,93 @@ class Frame<R> {
     }
   }
 
-  private evaluateNewExpression(node: NewExpression): Effect.Effect<Value, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      const callee = yield* self.evaluateExpression(node.callee)
-      // Globals are built with this interpreter's R; `instanceof` cannot recover the type argument.
-      const construct = callee instanceof Native ? (callee as Native<R>).construct : undefined
-      if (construct === undefined) {
-        // `new` itself is supported, so a non-constructible callee is a TypeError like JS rather than
-        // unsupported syntax. Built-ins like Number are real constructors in JS, so do not claim
-        // otherwise; say `new` is unsupported for them and point at the plain call.
-        const name = calleeDescription(node.callee) ?? "The called value"
-        const message =
-          callee instanceof Fn
-            ? `${name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.`
-            : callee instanceof Native
-              ? `new ${name}(...) is not supported; call ${name}(...) without new instead.`
-              : `${name} is not a constructor.`
-        throw typeError(message, node)
-      }
-      const args = yield* self.evaluateCallArguments(node.arguments)
-      return yield* self.native(() => construct(args, callee as Native<R>), node)
-    })
+  private *evaluateSequenceExpression(node: SequenceExpression): Eval<Value> {
+    let result: Value
+    for (const expression of node.expressions) {
+      const value = this.evaluate(expression)
+      result = isEval(value) ? yield* value : value
+    }
+    return result
   }
 
-  private evaluateBinaryExpression(node: BinaryExpression): Effect.Effect<Value, unknown, R> {
+  private *evaluateChainExpression(node: ChainExpression): Eval<Value> {
+    const value = yield* this.evaluateExpression(node.expression)
+    return value === OptionalShortCircuit ? undefined : value
+  }
+
+  private *evaluateConditionalExpression(node: ConditionalExpression): Eval<Value> {
+    const test = this.evaluate(node.test)
+    const branch = this.evaluate((isEval(test) ? yield* test : test) ? node.consequent : node.alternate)
+    return isEval(branch) ? yield* branch : branch
+  }
+
+  private *evaluateAwaitExpression(node: AwaitExpression): Eval<Value> {
+    // Await always suspends, including for plain values.
+    return yield* this.awaitValue(yield* this.evaluateExpression(node.argument), node)
+  }
+
+  private *evaluateNewExpression(node: NewExpression): Eval<Value> {
+    const callee = yield* this.evaluateExpression(node.callee)
+    const construct = callee instanceof Native ? callee.construct : undefined
+    if (construct === undefined) {
+      // `new` itself is supported, so a non-constructible callee is a TypeError like JS rather than
+      // unsupported syntax. Built-ins like Number are real constructors in JS, so do not claim
+      // otherwise; say `new` is unsupported for them and point at the plain call.
+      const name = calleeDescription(node.callee) ?? "The called value"
+      const message =
+        callee instanceof Fn
+          ? `${name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.`
+          : callee instanceof Native
+            ? `new ${name}(...) is not supported; call ${name}(...) without new instead.`
+            : `${name} is not a constructor.`
+      throw typeError(message, node)
+    }
+    const args = yield* this.evaluateCallArguments(node.arguments)
+    const result = this.native(() => construct(args, callee as Native, node), node)
+    return isEval(result) ? yield* result : result
+  }
+
+  // Finishes a binary expression whose left operand (and maybe right) `evaluate` already started.
+  private *evaluateBinaryExpression(
+    node: BinaryExpression,
+    leftValue: Value | Eval<Value>,
+    started: Value | Eval<Value> | typeof unevaluated = unevaluated,
+  ): Eval<Value> {
     const operator = node.operator
-    const left = node.left
-    if (left.type === "PrivateIdentifier") throw unsupportedSyntax(left.type, left)
-    const self = this
-    return Effect.gen(function* () {
-      const lhs = yield* self.evaluateExpression(left)
-      const rhs = yield* self.evaluateExpression(node.right)
-      if (operator === "instanceof") return instanceofValue(lhs, rhs, node)
-      if (lhs instanceof Obj || rhs instanceof Obj) return yield* self.applyOperator(operator, lhs, rhs, node)
-      return self.applyBinaryOperator(operator, lhs, rhs, node)
-    })
+    const lhs = isEval(leftValue) ? yield* leftValue : leftValue
+    const rightValue = started === unevaluated ? this.evaluate(node.right) : started
+    const rhs = isEval(rightValue) ? yield* rightValue : rightValue
+    if (operator === "instanceof") return instanceofValue(lhs, rhs, node)
+    if (lhs instanceof Obj || rhs instanceof Obj) return yield* this.applyOperator(operator, lhs, rhs, node)
+    return this.applyBinaryOperator(operator, lhs, rhs, node)
   }
 
   /** ToPrimitive for an operand: data objects run their own methods; opaque values stay for the data gates below. */
-  private toPrimitive(value: Value, hint: Hint, node: AstNode) {
-    return this.native(() => toPrimitive(this.ctx, value, hint), node)
+  private *toPrimitive(value: Value, hint: Hint, node: AstNode): Eval<Value> {
+    const result = this.native(() => toPrimitive(this.ctx, value, hint), node)
+    return isEval(result) ? yield* result : result
   }
 
   // Arithmetic, relational, and bitwise operators convert both operands first, left then right, so a `valueOf`
   // runs (and throws) in spec order; `+` asks for the default hint and the rest for a number.
-  private applyOperator(operator: string, lhs: Value, rhs: Value, node: AstNode): Effect.Effect<Value, unknown, R> {
-    if (!(lhs instanceof Obj || rhs instanceof Obj))
-      return Effect.succeed(this.applyBinaryOperator(operator, lhs, rhs, node))
+  private *applyOperator(operator: string, lhs: Value, rhs: Value, node: AstNode): Eval<Value> {
+    if (!(lhs instanceof Obj || rhs instanceof Obj)) return this.applyBinaryOperator(operator, lhs, rhs, node)
     // IsLooselyEqual converts only an object facing a non-nullish primitive; two objects (including tool
     // references, which are not Obj) compare by identity.
     const equality = operator === "==" || operator === "!="
     // `in` checks the right operand before ToPropertyKey on the left, so a bad right side wins over a bad key.
     if (operator === "in" && lhs instanceof Obj && !isOpaque(lhs) && rhs instanceof Obj) {
-      return Effect.map(this.toPropertyKey(lhs, node), (key) => has(rhs, key))
+      return has(rhs, yield* this.toPropertyKey(lhs, node))
     }
     const other = lhs instanceof Obj ? rhs : lhs
     const converts =
       primitiveOperators.has(operator) ||
       (equality && other !== null && other !== undefined && typeof other !== "object")
-    if (!converts) return Effect.succeed(this.applyBinaryOperator(operator, lhs, rhs, node))
+    if (!converts) return this.applyBinaryOperator(operator, lhs, rhs, node)
     const hint = operator === "+" || equality ? "default" : "number"
-    const self = this
-    return Effect.gen(function* () {
-      const l = yield* self.toPrimitive(lhs, hint, node)
-      const r = yield* self.toPrimitive(rhs, hint, node)
-      return self.applyBinaryOperator(operator, l, r, node)
-    })
+    const l = yield* this.toPrimitive(lhs, hint, node)
+    const r = yield* this.toPrimitive(rhs, hint, node)
+    return this.applyBinaryOperator(operator, l, r, node)
   }
 
   private applyBinaryOperator(operator: string, lhs: Value, rhs: Value, node: AstNode): Value {
@@ -1498,133 +1665,134 @@ class Frame<R> {
     throw invalidData("Binary operators require data values.", node)
   }
 
-  private evaluateLogicalExpression(node: LogicalExpression): Effect.Effect<Value, unknown, R> {
+  private *evaluateLogicalExpression(node: LogicalExpression): Eval<Value> {
     const operator = node.operator
-    return Effect.flatMap(this.evaluateExpression(node.left), (left) => {
-      if (operator === "&&") return left ? this.evaluateExpression(node.right) : Effect.succeed(left)
-      if (operator === "||") return left ? Effect.succeed(left) : this.evaluateExpression(node.right)
-      if (operator === "??")
-        return left !== null && left !== undefined ? Effect.succeed(left) : this.evaluateExpression(node.right)
-      throw typeError(`Unsupported logical operator '${operator}'.`, node)
-    })
+    const leftValue = this.evaluate(node.left)
+    const left = isEval(leftValue) ? yield* leftValue : leftValue
+    if (operator === "&&") return left ? yield* this.evaluateExpression(node.right) : left
+    if (operator === "||") return left ? left : yield* this.evaluateExpression(node.right)
+    if (operator === "??")
+      return left !== null && left !== undefined ? left : yield* this.evaluateExpression(node.right)
+    throw typeError(`Unsupported logical operator '${operator}'.`, node)
   }
 
-  private evaluateUnaryExpression(node: UnaryExpression): Effect.Effect<Value, unknown, R> {
+  private *evaluateUnaryExpression(node: UnaryExpression): Eval<Value> {
     const operator = node.operator
     const argument = node.argument
-    if (operator === "delete") return this.evaluateDeleteExpression(argument)
+    if (operator === "delete") return yield* this.evaluateDeleteExpression(argument)
     // Undeclared names short-circuit, but declared TDZ bindings must still throw.
     if (operator === "typeof" && argument.type === "Identifier" && !this.scopes.resolve(argument.name)) {
-      return Effect.succeed("undefined")
+      return "undefined"
     }
-    const self = this
-    return Effect.gen(function* () {
-      const value = yield* self.evaluateExpression(argument)
-      if (operator === "typeof") return typeofValue(value)
-      if (operator === "!") return !value
-      if (operator === "void") return undefined
-      const operand = yield* self.toPrimitive(value, "number", node)
-      if (isOpaque(operand)) {
-        throw invalidData("Unary operators require data values.", node)
-      }
-      let result: Value
-      switch (operator) {
-        case "+":
-          result = +(operand as number)
-          break
-        case "-":
-          result = -(operand as number)
-          break
-        case "~":
-          result = ~(operand as number)
-          break
-        default:
-          throw typeError(`Unsupported unary operator '${operator}'.`, node)
-      }
-      return result
-    })
+    const value = yield* this.evaluateExpression(argument)
+    if (operator === "typeof") return typeofValue(value)
+    if (operator === "!") return !value
+    if (operator === "void") return undefined
+    const operand = yield* this.toPrimitive(value, "number", node)
+    if (isOpaque(operand)) {
+      throw invalidData("Unary operators require data values.", node)
+    }
+    switch (operator) {
+      case "+":
+        return +(operand as number)
+      case "-":
+        return -(operand as number)
+      case "~":
+        return ~(operand as number)
+      default:
+        throw typeError(`Unsupported unary operator '${operator}'.`, node)
+    }
   }
 
-  private evaluateAssignmentExpression(node: AssignmentExpression): Effect.Effect<Value, unknown, R> {
+  private *evaluateAssignmentExpression(node: AssignmentExpression): Eval<Value> {
     const left = node.left
     const operator = node.operator
     // The binary operator a compound assignment applies: `+=` is `+`.
     const binary = operator.slice(0, -1)
-    const self = this
-    return Effect.gen(function* () {
-      if (operator === "??=" || operator === "||=" || operator === "&&=") {
-        return yield* self.evaluateLogicalAssignment(node, left, operator)
-      }
-      if (operator !== "=" && !compoundOperators.has(operator)) {
-        throw typeError(`Unsupported assignment operator '${operator}'.`, node)
-      }
-      if (operator === "=" && (left.type === "ObjectPattern" || left.type === "ArrayPattern")) {
-        const rightValue = yield* self.evaluateExpression(node.right)
-        yield* self.assignPattern(left, rightValue, node)
-        return rightValue
-      }
-      if (left.type === "Identifier") {
-        const name = left.name
-        if (operator !== "=") {
-          const current = self.scopes.get(name, left)
-          const rightValue = yield* self.evaluateExpression(node.right)
-          const next =
-            current instanceof Obj || rightValue instanceof Obj
-              ? yield* self.applyOperator(binary, current, rightValue, node)
-              : self.applyBinaryOperator(binary, current, rightValue, node)
-          return self.scopes.set(name, next, left)
-        }
-        const rightValue = yield* self.evaluateNamed(node.right, name)
-        return self.scopes.set(name, rightValue, left)
-      }
-      if (left.type === "MemberExpression") {
-        return yield* self.modifyMember(left, (current) =>
-          Effect.flatMap(self.evaluateExpression(node.right), (rightValue) => {
-            if (operator === "=") return Effect.succeed({ write: true, next: rightValue, result: rightValue })
-            return Effect.map(self.applyOperator(binary, current, rightValue, node), (next) => ({
-              write: true,
-              next,
-              result: next,
-            }))
-          }),
-        )
-      }
-      throw typeError("Assignment target must be an Identifier or MemberExpression.", left)
-    })
-  }
-
-  private evaluateLogicalAssignment(
-    node: AssignmentExpression,
-    left: Pattern,
-    operator: string,
-  ): Effect.Effect<Value, unknown, R> {
-    const self = this
-    const shouldAssign = (current: Value): boolean =>
-      operator === "??=" ? current === null || current === undefined : operator === "||=" ? !current : Boolean(current)
+    if (operator === "??=" || operator === "||=" || operator === "&&=") {
+      return yield* this.evaluateLogicalAssignment(node, left, operator)
+    }
+    if (operator !== "=" && !compoundOperators.has(operator)) {
+      throw typeError(`Unsupported assignment operator '${operator}'.`, node)
+    }
+    if (operator === "=" && (left.type === "ObjectPattern" || left.type === "ArrayPattern")) {
+      const rightValue = yield* this.evaluateExpression(node.right)
+      yield* this.assignPattern(left, rightValue, node)
+      return rightValue
+    }
     if (left.type === "Identifier") {
       const name = left.name
-      return Effect.gen(function* () {
-        const current = self.scopes.get(name, left)
-        if (!shouldAssign(current)) return current
-        const rightValue = yield* self.evaluateNamed(node.right, name)
-        return self.scopes.set(name, rightValue, left)
-      })
+      if (operator !== "=") {
+        const current = this.scopes.get(name, left)
+        const evaluated = this.evaluate(node.right)
+        const rightValue = isEval(evaluated) ? yield* evaluated : evaluated
+        const next =
+          current instanceof Obj || rightValue instanceof Obj
+            ? yield* this.applyOperator(binary, current, rightValue, node)
+            : this.applyBinaryOperator(binary, current, rightValue, node)
+        return this.scopes.set(name, next, left)
+      }
+      const rightValue = yield* this.evaluateNamed(node.right, name)
+      return this.scopes.set(name, rightValue, left)
     }
     if (left.type === "MemberExpression") {
-      return self.modifyMember(left, (current) =>
-        shouldAssign(current)
-          ? Effect.map(self.evaluateExpression(node.right), (rightValue) => ({
-              write: true,
-              next: rightValue,
-              result: rightValue,
-            }))
-          : Effect.succeed({ write: false, next: current, result: current }),
-      )
+      const self = this
+      return yield* this.modifyMember(left, function* (current) {
+        const rightValue = yield* self.evaluateExpression(node.right)
+        if (operator === "=") return { write: true, next: rightValue, result: rightValue }
+        const next = yield* self.applyOperator(binary, current, rightValue, node)
+        return { write: true, next, result: next }
+      })
     }
     throw typeError("Assignment target must be an Identifier or MemberExpression.", left)
   }
 
-  private evaluateUpdateExpression(node: UpdateExpression): Effect.Effect<Value, unknown, R> {
+  private *assignAfter(left: Identifier, right: Eval<Value>): Eval<Value> {
+    return this.scopes.set(left.name, yield* right, left)
+  }
+
+  private *compoundAfter(node: AssignmentExpression, current: Value, started: Value | Eval<Value>): Eval<Value> {
+    const left = node.left as Identifier
+    const binary = node.operator.slice(0, -1)
+    const right = isEval(started) ? yield* started : started
+    const next =
+      current instanceof Obj || right instanceof Obj
+        ? yield* this.applyOperator(binary, current, right, node)
+        : this.applyBinaryOperator(binary, current, right, node)
+    return this.scopes.set(left.name, next, left)
+  }
+
+  // `++`/`--` on a name whose value is already primitive.
+  private update(node: UpdateExpression, argument: Identifier, current: Value): Value {
+    if (isOpaque(current)) throw invalidData(`'${node.operator}' requires a data value.`, argument)
+    const before = coerceToNumber(current)
+    const next = node.operator === "++" ? before + 1 : before - 1
+    this.scopes.set(argument.name, next, argument)
+    return node.prefix ? next : before
+  }
+
+  private *evaluateLogicalAssignment(node: AssignmentExpression, left: Pattern, operator: string): Eval<Value> {
+    const shouldAssign = (current: Value): boolean =>
+      operator === "??=" ? current === null || current === undefined : operator === "||=" ? !current : Boolean(current)
+    if (left.type === "Identifier") {
+      const name = left.name
+      const current = this.scopes.get(name, left)
+      if (!shouldAssign(current)) return current
+      const rightValue = yield* this.evaluateNamed(node.right, name)
+      return this.scopes.set(name, rightValue, left)
+    }
+    if (left.type === "MemberExpression") {
+      const self = this
+      return yield* this.modifyMember(left, function* (current) {
+        if (!shouldAssign(current)) return { write: false, next: current, result: current }
+        const rightValue = yield* self.evaluateExpression(node.right)
+        return { write: true, next: rightValue, result: rightValue }
+      })
+    }
+    throw typeError("Assignment target must be an Identifier or MemberExpression.", left)
+  }
+
+  private *evaluateUpdateExpression(node: UpdateExpression): Eval<Value> {
     const operator = node.operator
     const argument = node.argument
     const prefix = node.prefix
@@ -1646,526 +1814,397 @@ class Frame<R> {
     if (argument.type === "Identifier") {
       const name = argument.name
       const current = this.scopes.get(name, argument)
-      const update = (value: Value) => {
-        const before = operand(value)
-        const next = before + increment
-        this.scopes.set(name, next, argument)
-        return prefix ? next : before
-      }
-      if (!(current instanceof Obj)) return Effect.sync(() => update(current))
-      return Effect.map(this.toPrimitive(current, "number", argument), update)
+      const before = operand(current instanceof Obj ? yield* this.toPrimitive(current, "number", argument) : current)
+      const next = before + increment
+      this.scopes.set(name, next, argument)
+      return prefix ? next : before
     }
 
     if (argument.type === "MemberExpression") {
-      return this.modifyMember(argument, (current) =>
-        Effect.map(this.toPrimitive(current, "number", argument), (primitive) => {
-          const value = operand(primitive)
-          const next = value + increment
-          return { write: true, next, result: prefix ? next : value }
-        }),
-      )
+      const self = this
+      return yield* this.modifyMember(argument, function* (current) {
+        const value = operand(yield* self.toPrimitive(current, "number", argument))
+        const next = value + increment
+        return { write: true, next, result: prefix ? next : value }
+      })
     }
 
     throw typeError("Update target must be an Identifier or MemberExpression.", argument)
   }
 
   // EvaluateCall: a member callee supplies its base object as `this`; anything else calls with undefined.
-  private evaluateCallExpression(node: CallExpression): Effect.Effect<Value, unknown, R> {
+  private *evaluateCallExpression(node: CallExpression): Eval<Value> {
     const callee = node.callee
+    if (callee.type === "Super") throw unsupportedSyntax(callee.type, callee)
+    const { callable, thisValue } =
+      callee.type === "MemberExpression"
+        ? yield* this.readMethod(callee)
+        : { callable: yield* this.evaluateExpression(callee), thisValue: undefined }
+    if (callable === OptionalShortCircuit) return OptionalShortCircuit
+    if ((callable === null || callable === undefined) && node.optional) return OptionalShortCircuit
 
-    const self = this
-    return Effect.gen(function* () {
-      if (callee.type === "Super") throw unsupportedSyntax(callee.type, callee)
-      const { callable, thisValue } =
-        callee.type === "MemberExpression"
-          ? yield* self.readMethod(callee)
-          : { callable: yield* self.evaluateExpression(callee), thisValue: undefined }
-      if (callable === OptionalShortCircuit) return OptionalShortCircuit
-      if ((callable === null || callable === undefined) && node.optional) return OptionalShortCircuit
-
-      const args = yield* self.evaluateCallArguments(node.arguments)
-      return yield* self.call(callable, thisValue, args, node, callee)
-    })
+    const args = yield* this.evaluateCallArguments(node.arguments)
+    const result = this.dispatch(callable, thisValue, args, node, callee)
+    return isEval(result) ? yield* result : result instanceof Call ? ((yield result) as Value) : result
   }
 
-  private readMethod(node: MemberExpression): Effect.Effect<{ callable: Value; thisValue: Value }, unknown, R> {
-    return Effect.map(this.getMemberReference(node), (reference) => {
-      if (reference === OptionalShortCircuit) return { callable: OptionalShortCircuit, thisValue: undefined }
-      if (reference instanceof ToolReference) return { callable: reference, thisValue: undefined }
-      if ("value" in reference) return { callable: reference.value, thisValue: undefined }
-      return { callable: this.readReference(reference, node), thisValue: reference.receiver }
-    })
+  private *readMethod(node: MemberExpression): Eval<{ callable: Value; thisValue: Value }> {
+    const reference = yield* this.getMemberReference(node)
+    if (reference === OptionalShortCircuit) return { callable: OptionalShortCircuit, thisValue: undefined }
+    if (reference instanceof ToolReference) return { callable: reference, thisValue: undefined }
+    if ("value" in reference) return { callable: reference.value, thisValue: undefined }
+    return { callable: this.readReference(reference, node), thisValue: reference.receiver }
   }
 
-  // The single dispatch for every invocation: call expressions and callbacks share it.
-  call(
+  *call(callable: Value, thisValue: Value, args: Array<Value>, node?: AstNode, callee?: Expression): Eval<Value> {
+    const result = this.dispatch(callable, thisValue, args, node, callee)
+    return isEval(result) ? yield* result : result instanceof Call ? ((yield result) as Value) : result
+  }
+
+  // The single dispatch for every invocation: call expressions and callbacks share it. A program function is a `Call`
+  // for the caller to yield; a built-in that returns a value needs no generator.
+  private dispatch(
     callable: Value,
     thisValue: Value,
     args: Array<Value>,
     node?: AstNode,
     callee?: Expression,
-  ): Effect.Effect<Value, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      if (callable instanceof ToolReference) {
-        if (callable.path.length === 0) {
-          throw typeError("The tools root is not callable.", callee ?? node)
+  ): Value | Eval<Value> | Call {
+    if (callable instanceof Fn) return this.invokeFunction(callable, thisValue, args, node)
+    if (callable instanceof Native) {
+      // A loop made only of built-in calls has no program call or loop back-edge to count, so count the call.
+      if (this.ctx.runner.tick()) return afterSlice(() => this.native(() => callable.call(thisValue, args, node), node))
+      return this.native(() => callable.call(thisValue, args, node), node)
+    }
+    if (callable instanceof ToolReference) {
+      if (callable.path.length === 0) {
+        throw typeError("The tools root is not callable.", callee ?? node)
+      }
+      return this.createToolCallPromise(callable.path, args, node)
+    }
+    throw typeError(`${calleeDescription(callee) ?? "The called value"} is not a function.`, callee ?? node)
+  }
+
+  // Built-ins throw without a location, synchronously or inside their work; the call site supplies it.
+  private native(body: () => NativeResult, node?: AstNode): Value | Eval<Value> {
+    let result: NativeResult
+    try {
+      result = body()
+    } catch (error) {
+      throw locate(error, node)
+    }
+    return isEval(result) ? located(result, node) : result
+  }
+
+  private *evaluateCallArguments(argNodes: ReadonlyArray<Expression | SpreadElement>): Eval<Array<Value>> {
+    const args: Array<Value> = []
+    for (const argNode of argNodes) {
+      if (argNode.type === "SpreadElement") {
+        const spread = yield* this.evaluateExpression(argNode.argument)
+        const cursor = yield* this.iterate(spread, argNode)
+        if (cursor === undefined) throw typeError("Spread arguments require a synchronous iterable.", argNode)
+        while (true) {
+          const step = yield* cursor.next()
+          if (step.done) break
+          args.push(step.value)
         }
-        return yield* self.createToolCallPromise(callable.path, args)
+      } else {
+        const value = this.evaluate(argNode)
+        args.push(isEval(value) ? yield* value : value)
       }
-      if (callable instanceof Fn) return yield* self.invokeFunction(callable, thisValue, args, node)
-      if (callable instanceof Native) {
-        return yield* self.native(() => (callable as Native<R>).call(thisValue, args), node)
-      }
-      throw typeError(`${calleeDescription(callee) ?? "The called value"} is not a function.`, callee ?? node)
-    })
+    }
+    return args
   }
 
-  // Built-ins throw without a location, synchronously or inside their Effect; the call site supplies it.
-  private native(body: () => Effect.Effect<Value, unknown, R>, node?: AstNode): Effect.Effect<Value, unknown, R> {
-    return Effect.provideService(
-      Effect.catchDefect(Effect.suspend(body), (defect) => Effect.die(locate(defect, node))),
-      CallSite,
-      { node, depth: this.depth },
-    )
-  }
-
-  private evaluateCallArguments(
-    argNodes: ReadonlyArray<Expression | SpreadElement>,
-  ): Effect.Effect<Array<Value>, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      const args: Array<Value> = []
-      for (const argNode of argNodes) {
-        if (argNode.type === "SpreadElement") {
-          const spread = yield* self.evaluateExpression(argNode.argument)
-          const cursor = yield* self.iterate(spread, argNode)
-          if (cursor === undefined) throw typeError("Spread arguments require a synchronous iterable.", argNode)
-          while (true) {
-            const step = yield* cursor.next
-            if (step.done) break
-            args.push(step.value)
-          }
-        } else {
-          args.push(yield* self.evaluateExpression(argNode))
-        }
+  // A program call runs as its own activation on the explicit stack, so it is a `Call` for the caller to yield. An
+  // async call returns its promise when the body first suspends or ends; a generator call binds its parameters and
+  // returns the generator without running the body.
+  invokeFunction(fn: Fn, thisValue: Value, args: Array<Value>, node?: AstNode): Call | Value | Eval<Value> {
+    const runner = this.ctx.runner
+    // The program's own activation is at the bottom of the stack.
+    if (runner.depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
+    const invocation = new Frame(this.ctx, new ScopeStack([...fn.capturedScopes, new Map()]))
+    const paramScope = invocation.scopes.current()
+    // `this` and `arguments` are scope bindings so arrows resolve them lexically; a parameter named
+    // `arguments` shadows the object, as in JS.
+    if (!fn.arrow) paramScope.set("this", { mutable: false, value: thisValue, initialized: true })
+    if (!fn.arrow && usesArguments(fn)) {
+      paramScope.set("arguments", {
+        mutable: true,
+        value: new Arguments(this.ctx.builtins.Object, args),
+        initialized: true,
+      })
+    }
+    const simple = isSimple(fn.parameters)
+    if (simple) {
+      // A repeated name takes the last argument for it, as in JS.
+      for (const [index, parameter] of fn.parameters.entries()) {
+        paramScope.set((parameter as Identifier).name, { mutable: true, value: args[index], initialized: true })
       }
-      return args
-    })
-  }
-
-  // A callback invoked by a built-in runs below the call that invoked the built-in, so the deeper of the two counts.
-  invokeFunction(fn: Fn, thisValue: Value, args: Array<Value>, node?: AstNode): Effect.Effect<Value, unknown, R> {
-    const self = this
-    return Effect.flatMap(CallSite, (site) => {
-      const depth = Math.max(self.depth, site.depth) + 1
-      if (depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
-      const invocation = new Frame(this.ctx, new ScopeStack([...fn.capturedScopes, new Map()]), depth)
-      const paramScope = invocation.scopes.current()
-      // `this` and `arguments` are scope bindings so arrows resolve them lexically; a parameter named
-      // `arguments` shadows the object, as in JS.
-      if (!fn.arrow) paramScope.set("this", { mutable: false, value: thisValue, initialized: true })
-      if (!fn.arrow && usesArguments(fn)) {
-        paramScope.set("arguments", {
-          mutable: true,
-          value: new Arguments(self.ctx.builtins.Object, args),
-          initialized: true,
-        })
-      }
+    } else {
       // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
       for (const parameter of fn.parameters) {
         for (const name of collectPatternNames(parameter)) {
           paramScope.set(name, { mutable: true, value: undefined, initialized: false })
         }
       }
-      const parameters = fn.parameters.map((parameter) =>
-        parameter.type === "Identifier" ? parameter.name : undefined,
-      )
-      const bind = Effect.gen(function* () {
-        for (const [index, parameter] of fn.parameters.entries()) {
-          if (parameter.type === "RestElement") {
-            yield* invocation.declarePattern(
-              parameter.argument,
-              new Arr(self.ctx.builtins.Array, args.slice(index)),
-              true,
-              parameter,
-              true,
-            )
-            break
-          }
-          // A sloppy simple parameter list may repeat a name; the last occurrence wins, as in JS.
-          if (parameter.type === "Identifier" && parameters.lastIndexOf(parameter.name) !== index) continue
-          yield* invocation.declarePattern(parameter, args[index], true, parameter, true)
-        }
-      })
-      const body = Effect.gen(function* () {
-        if (fn.body.type === "BlockStatement") {
-          invocation.scopes.push()
-          invocation.hoistVars(fn.body.body, paramScope)
-          const result = yield* invocation.evaluateStatement(fn.body)
-          return result.kind === "return" ? result.value : undefined
-        }
-
-        return yield* invocation.evaluateExpression(fn.body)
-      })
-      // Generators bind parameters at the call and defer only the body to the first `next()`, as in JS.
-      if (fn.generator) return Effect.map(bind, () => this.createGenerator(invocation, body, fn))
-      const run = Effect.andThen(bind, body)
-      if (!fn.async) return run
-      return this.ctx.pending.createWithSelf((self) =>
-        Effect.flatMap(run, (value) => resolvePromiseValue(invocation.ctx, value, self)),
-      )
-    })
-  }
-
-  private createGenerator(invocation: Frame<R>, run: Effect.Effect<Value, unknown, R>, fn: Fn): GeneratorObj {
-    const asynchronous = fn.async
-    const state: GeneratorState = { started: false, completed: false, draining: false, pending: [], pendingIndex: 0 }
-    invocation.generatorState = state
-    invocation.generatorAsync = asynchronous
-    const builtins = this.ctx.builtins
-    const result = (value: Value, done: boolean) => record(builtins.Object, { value, done })
-    const turn = this.ctx.pending.turn
-    const request = (kind: GeneratorRequestKind, value: Value) => {
-      const request = { kind, value, response: Deferred.makeUnsafe<Value, unknown>() }
-      // A body that ran on the caller's turn has answered or suspended when it hands the turn back. An answer still
-      // pending can only be an async generator's: its promise settles when the body answers, without the turn.
-      const answer = Effect.suspend(() =>
-        Deferred.isDoneUnsafe(request.response)
-          ? Deferred.await(request.response)
-          : turn.leave(Deferred.await(request.response)),
-      )
-      if (!asynchronous && state.active) return Effect.die(typeError("Generator is already running."))
-      if (asynchronous && (state.completed || (!state.started && kind !== "next"))) {
-        state.started = true
-        state.completed = true
-        state.pending.push(request)
-        if (state.draining) return answer
-        state.draining = true
-        return Effect.andThen(
-          this.ctx.pending.fork(
-            invocation
-              .completeGeneratorRequests(state, true)
-              .pipe(Effect.ensuring(Effect.sync(() => (state.draining = false)))),
-          ),
-          answer,
-        )
-      }
-      if (state.completed) {
-        if (kind === "throw") return Effect.fail(new Throw(value))
-        return Effect.succeed(result(kind === "return" ? value : undefined, true))
-      }
-      if (!state.started && kind !== "next") {
-        state.completed = true
-        if (kind === "throw") return Effect.fail(new Throw(value))
-        return Effect.succeed(result(value, true))
-      }
-
-      state.pending.push(request)
-      if (state.available) {
-        // The body is parked waiting for a request: it runs this step on the caller's turn.
-        const available = state.available
-        state.available = undefined
-        return Effect.andThen(
-          turn.handOff(Effect.sync(() => Deferred.doneUnsafe(available, Exit.succeed(undefined)))),
-          answer,
-        )
-      }
-      if (!state.started) {
-        state.started = true
-        const body = Effect.gen(function* () {
-          state.active = yield* invocation.takeGeneratorRequest(state)
-          const exit = yield* Effect.exit(
-            run.pipe(
-              Effect.flatMap((result) => (asynchronous ? invocation.awaitValue(result) : Effect.succeed(result))),
-              Effect.catch((error) =>
-                error instanceof GeneratorReturn
-                  ? asynchronous
-                    ? invocation.awaitValue(error.value)
-                    : Effect.succeed(error.value)
-                  : Effect.fail(error),
-              ),
-            ),
-          )
-          const active = state.active
-          state.active = undefined
-          if (active) {
-            Deferred.doneUnsafe(active.response, Exit.isSuccess(exit) ? Exit.succeed(result(exit.value, true)) : exit)
-          }
-          yield* invocation.completeGeneratorRequests(state, asynchronous)
-          state.completed = true
-        })
-        return Effect.andThen(this.ctx.pending.fork(body), answer)
-      }
-      return answer
     }
-    const proto = get(fn, "prototype")
-    return new GeneratorObj(proto instanceof Obj ? proto : builtins.Generator, asynchronous, request)
-  }
-
-  private completeGeneratorRequests(state: GeneratorState, asynchronous: boolean): Effect.Effect<void, never, R> {
-    const self = this
-    const result = (value: Value, done: boolean) => record(self.ctx.builtins.Object, { value, done })
-    return Effect.gen(function* () {
-      while (true) {
-        const pending = self.dequeueGeneratorRequest(state)
-        if (!pending) return
-        if (pending.kind === "throw") {
-          Deferred.doneUnsafe(pending.response, Exit.fail(new Throw(pending.value)))
-          continue
-        }
-        if (asynchronous && pending.kind === "return") {
-          const resolved = yield* Effect.exit(self.awaitValue(pending.value))
-          Deferred.doneUnsafe(
-            pending.response,
-            Exit.isSuccess(resolved) ? Exit.succeed(result(resolved.value, true)) : resolved,
-          )
-          continue
-        }
-        Deferred.doneUnsafe(
-          pending.response,
-          Exit.succeed(result(pending.kind === "return" ? pending.value : undefined, true)),
+    if (fn.generator) {
+      invocation.generator = true
+      invocation.generatorAsync = fn.async
+      // The prototype is read after the parameters bind, since a default may replace it.
+      const create = () => {
+        const proto = get(fn, "prototype")
+        return new GeneratorObj(
+          proto instanceof Obj ? proto : fn.async ? this.ctx.builtins.AsyncGenerator : this.ctx.builtins.Generator,
+          fn.async,
+          generatorBody(invocation.functionBody(fn, paramScope)),
         )
       }
-    })
-  }
-
-  private takeGeneratorRequest(state: GeneratorState): Effect.Effect<GeneratorRequest> {
-    const next = this.dequeueGeneratorRequest(state)
-    if (next) return Effect.succeed(next)
-    state.available = Deferred.makeUnsafe<void>()
-    return Effect.andThen(
-      this.ctx.pending.turn.park(Deferred.await(state.available)),
-      Effect.sync(() => this.dequeueGeneratorRequest(state)!),
+      if (simple) return create()
+      return (function* () {
+        yield* invocation.bindParameters(fn, args)
+        return create()
+      })()
+    }
+    const body = simple ? invocation.functionBody(fn, paramScope) : invocation.enter(fn, args, paramScope)
+    if (!fn.async) return new Call(body)
+    const promise = runner.newPromise()
+    const resolving = runner.resolving(promise)
+    return new Call(
+      body,
+      new AsyncBoundary(
+        (completion) =>
+          completion.ok ? resolving.resolve(completion.value as Value) : resolving.reject(completion.error),
+        promise,
+      ),
     )
   }
 
-  private dequeueGeneratorRequest(state: GeneratorState): GeneratorRequest | undefined {
-    const request = state.pending[state.pendingIndex]
-    if (!request) return undefined
-    state.pendingIndex += 1
-    if (state.pendingIndex === state.pending.length) {
-      state.pending = []
-      state.pendingIndex = 0
-    }
-    return request
+  private *enter(fn: Fn, args: Array<Value>, paramScope: Map<string, Binding>): Eval<Value> {
+    yield* this.bindParameters(fn, args)
+    return yield* this.functionBody(fn, paramScope)
   }
 
-  private evaluateYieldExpression(node: YieldExpression): Effect.Effect<Value, unknown, R> {
-    const argument = node.argument
-    const self = this
-    return Effect.gen(function* () {
-      if (!self.generatorState) throw typeError("yield is only valid inside a generator.", node)
-      if (node.delegate) {
-        const value = argument ? yield* self.evaluateExpression(argument) : undefined
-        return yield* self.delegateYield(value, node)
+  private *bindParameters(fn: Fn, args: Array<Value>): Eval<void> {
+    const parameters = fn.parameters
+    for (const [index, parameter] of parameters.entries()) {
+      if (parameter.type === "RestElement") {
+        yield* this.declarePattern(
+          parameter.argument,
+          new Arr(this.ctx.builtins.Array, args.slice(index)),
+          true,
+          parameter,
+          true,
+        )
+        break
       }
-      const value = argument ? yield* self.evaluateExpression(argument) : undefined
-      const yielded = self.generatorAsync ? yield* self.awaitValue(value) : value
-      return yield* self.suspendGenerator(yielded, node)
-    })
+      if (parameter.type === "Identifier") {
+        // A sloppy simple parameter list may repeat a name; the last occurrence wins, as in JS.
+        if (parameters.findLastIndex((other) => other.type === "Identifier" && other.name === parameter.name) !== index)
+          continue
+        this.scopes.initialize(parameter.name, args[index], parameter)
+        continue
+      }
+      yield* this.declarePattern(parameter, args[index], true, parameter, true)
+    }
   }
 
-  private suspendGenerator(value: Value, node: AstNode): Effect.Effect<Value, unknown, R> {
-    const state = this.generatorState
-    if (!state?.active) throw typeError("Generator has no active request.", node)
-    Deferred.doneUnsafe(state.active.response, Exit.succeed(record(this.ctx.builtins.Object, { value, done: false })))
-    state.active = undefined
-    return Effect.flatMap(this.takeGeneratorRequest(state), (request) => {
-      state.active = request
-      if (request.kind === "next") return Effect.succeed(request.value)
-      if (request.kind === "throw") return Effect.fail(new Throw(request.value))
-      return this.generatorAsync
-        ? Effect.flatMap(this.awaitValue(request.value), (value) => Effect.fail(new GeneratorReturn(value)))
-        : Effect.fail(new GeneratorReturn(request.value))
-    })
+  private *functionBody(fn: Fn, paramScope: Map<string, Binding>): Eval<Value> {
+    if (fn.body.type === "BlockStatement") {
+      this.scopes.push()
+      this.hoistVars(fn.body.body, paramScope)
+      const result = yield* this.evaluateBlock(fn.body)
+      return result.kind === "return" ? result.value : undefined
+    }
+    const result = this.evaluate(fn.body)
+    return isEval(result) ? yield* result : result
   }
 
-  private delegateYield(value: Value, node: AstNode): Effect.Effect<Value, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      const cursor = self.builtinCursor(value)
-      if (cursor !== undefined) {
-        while (true) {
-          const step = yield* cursor.next
-          if (step.done) return undefined
-          const resumed = yield* Effect.exit(
-            self.suspendGenerator(self.generatorAsync ? yield* self.awaitValue(step.value) : step.value, node),
-          )
-          if (Exit.isSuccess(resumed)) continue
-          const error = Cause.squash(resumed.cause)
+  private *evaluateYieldExpression(node: YieldExpression): Eval<Value> {
+    const argument = node.argument
+    if (!this.generator) throw typeError("yield is only valid inside a generator.", node)
+    const value = argument ? yield* this.evaluateExpression(argument) : undefined
+    if (node.delegate) return yield* this.delegateYield(value, node)
+    return yield* this.suspendGenerator(this.generatorAsync ? yield* this.awaitValue(value, node) : value)
+  }
+
+  // Yield `value` and continue with the request that resumes the body: `next` supplies the value of the `yield`,
+  // `throw` throws there, and `return` unwinds through `finally` blocks (an async generator awaits the value first).
+  private *suspendGenerator(value: Value): Eval<Value> {
+    const request = (yield new Yield(value)) as GeneratorRequest
+    if (request.kind === "next") return request.value
+    if (request.kind === "throw") throw new Throw(request.value)
+    throw new GeneratorReturn(this.generatorAsync ? yield* this.awaitValue(request.value) : request.value)
+  }
+
+  private *delegateYield(value: Value, node: AstNode): Eval<Value> {
+    const builtin = this.builtinCursor(value)
+    if (builtin !== undefined && !this.generatorAsync) {
+      while (true) {
+        const step = yield* builtin.next()
+        if (step.done) return undefined
+        try {
+          yield* this.suspendGenerator(step.value)
+        } catch (error) {
           if (error instanceof GeneratorReturn) {
-            yield* cursor.close
-            return yield* Effect.fail(error)
+            yield* builtin.close()
+            throw error
           }
           if (error instanceof Throw) {
-            yield* cursor.close
+            yield* builtin.close()
             throw typeError("The delegated iterator does not provide a throw() method.", node)
           }
-          return yield* Effect.failCause(resumed.cause)
+          throw error
         }
       }
+    }
 
-      const iterator = yield* self.customIterator(value, node, self.generatorAsync)
-      if (!iterator) throw typeError("yield* requires a compatible iterable value.", node)
-      let kind: GeneratorRequestKind = "next"
-      let input: Value = undefined
-      while (true) {
-        const method = kind === "next" ? iterator.next : get(iterator.iterator, kind)
-        if (method === undefined || method === null) {
-          if (kind === "return") return yield* Effect.fail(new GeneratorReturn(input))
-          yield* self.closeIterator(iterator, node, self.generatorAsync)
-          throw typeError("The delegated iterator does not provide a throw() method.", node)
-        }
-        const called = yield* self.call(
-          self.requireIteratorMethod(method, `Iterator ${kind}`, node),
-          iterator.iterator,
-          [input],
-          node,
-        )
-        const result = self.requireIteratorObject(
-          iterator.asynchronous ? yield* self.awaitValue(called) : called,
-          `Iterator ${kind}() result`,
-          node,
-        )
-        const done = Boolean(get(result, "done"))
-        const resultValue: Value =
-          self.generatorAsync && !iterator.asynchronous
-            ? yield* self.awaitAsyncFromSyncValue(iterator, get(result, "value"), node, kind !== "return" && !done)
-            : get(result, "value")
-        if (done) {
-          if (kind === "return") return yield* Effect.fail(new GeneratorReturn(resultValue))
-          return resultValue
-        }
+    const custom = builtin === undefined ? yield* this.customIterator(value, node, this.generatorAsync) : undefined
+    if (builtin === undefined && !custom) throw typeError("yield* requires a compatible iterable value.", node)
+    // An async generator delegates to a synchronous iterator through CreateAsyncFromSyncIterator, as JS does.
+    const iterator = this.generatorAsync && !custom?.asynchronous ? this.asyncFromSync(builtin, custom, node) : custom!
+    let kind: GeneratorRequest["kind"] = "next"
+    let input: Value = undefined
+    while (true) {
+      const method = kind === "next" ? iterator.next : get(iterator.iterator, kind)
+      if (method === undefined || method === null) {
+        if (kind === "return")
+          throw new GeneratorReturn(this.generatorAsync ? yield* this.awaitValue(input, node) : input)
+        yield* this.closeIterator(iterator, node)
+        throw typeError("The delegated iterator does not provide a throw() method.", node)
+      }
+      const called = yield* this.call(
+        this.requireIteratorMethod(method, `Iterator ${kind}`, node),
+        iterator.iterator,
+        [input],
+        node,
+      )
+      const result = this.requireIteratorObject(
+        iterator.asynchronous ? yield* this.awaitValue(called, node) : called,
+        `Iterator ${kind}() result`,
+        node,
+      )
+      const done = Boolean(get(result, "done"))
+      const resultValue = get(result, "value")
+      if (done) {
+        if (kind === "return") throw new GeneratorReturn(resultValue)
+        return resultValue
+      }
 
-        const resumed: Exit.Exit<Value, unknown> = yield* Effect.exit(self.suspendGenerator(resultValue, node))
-        if (Exit.isSuccess(resumed)) {
-          kind = "next"
-          input = resumed.value
-          continue
-        }
-        const error: unknown = Cause.squash(resumed.cause)
-        if (!(error instanceof GeneratorReturn) && !(error instanceof Throw)) {
-          return yield* Effect.failCause(resumed.cause)
-        }
+      try {
+        // Delegated values are yielded as they are; an async generator's inner promise already settled them.
+        input = yield* this.suspendGenerator(resultValue)
+        kind = "next"
+      } catch (error) {
+        if (!(error instanceof GeneratorReturn) && !(error instanceof Throw)) throw error
         kind = error instanceof GeneratorReturn ? "return" : "throw"
         input = error.value
       }
-    })
+    }
   }
 
-  private evaluateObjectExpression(node: ObjectExpression): Effect.Effect<Obj, unknown, R> {
+  private *evaluateObjectExpression(node: ObjectExpression): Eval<Obj> {
     const objectValue = new Obj(this.ctx.builtins.Object)
-    const self = this
-    return Effect.gen(function* () {
-      for (const property of node.properties) {
-        if (property.type === "SpreadElement") {
-          const spread = yield* self.evaluateExpression(property.argument)
-          if (spread === null || spread === undefined) continue
-          assign(objectValue, enumerableSource(self.ctx, "Object spread", spread, property))
-          continue
-        }
-
-        if (property.kind !== "init") {
-          throw typeError("Only init object properties are supported.", property)
-        }
-
-        const keyNode = property.key
-
-        let key: PropertyKey
-
-        if (property.computed) {
-          key = yield* self.toPropertyKey(yield* self.evaluateExpression(keyNode), keyNode)
-        } else if (keyNode.type === "Identifier") {
-          key = keyNode.name
-        } else if (keyNode.type === "Literal") {
-          key = propertyKey(literal(keyNode))
-        } else {
-          throw typeError("Unsupported object property key shape.", keyNode)
-        }
-
-        const name =
-          key === IteratorSymbol
-            ? "[Symbol.iterator]"
-            : key === AsyncIteratorSymbol
-              ? "[Symbol.asyncIterator]"
-              : String(key)
-        define(objectValue, key, yield* self.evaluateNamed(property.value, name))
+    for (const property of node.properties) {
+      if (property.type === "SpreadElement") {
+        const spread = yield* this.evaluateExpression(property.argument)
+        if (spread === null || spread === undefined) continue
+        assign(objectValue, enumerableSource(this.ctx, "Object spread", spread, property))
+        continue
       }
 
-      return objectValue
-    })
+      if (property.kind !== "init") {
+        throw typeError("Only init object properties are supported.", property)
+      }
+
+      const keyNode = property.key
+
+      let key: PropertyKey
+
+      if (property.computed) {
+        key = yield* this.toPropertyKey(yield* this.evaluateExpression(keyNode), keyNode)
+      } else if (keyNode.type === "Identifier") {
+        key = keyNode.name
+      } else if (keyNode.type === "Literal") {
+        key = propertyKey(literal(keyNode))
+      } else {
+        throw typeError("Unsupported object property key shape.", keyNode)
+      }
+
+      const name =
+        key === IteratorSymbol
+          ? "[Symbol.iterator]"
+          : key === AsyncIteratorSymbol
+            ? "[Symbol.asyncIterator]"
+            : String(key)
+      define(objectValue, key, yield* this.evaluateNamed(property.value, name))
+    }
+
+    return objectValue
   }
 
-  private evaluateArrayExpression(node: ArrayExpression): Effect.Effect<Arr, unknown, R> {
+  private *evaluateArrayExpression(node: ArrayExpression): Eval<Arr> {
     const values: Array<Value> = []
 
-    const self = this
-    return Effect.gen(function* () {
-      for (const element of node.elements) {
-        if (element === null) {
-          // A literal elision is a real hole, like JS: extend length without an own index.
-          values.length += 1
-          continue
-        }
-        if (element.type === "SpreadElement") {
-          const spread = yield* self.evaluateExpression(element.argument)
-          const cursor = yield* self.iterate(spread, element)
-          if (cursor === undefined) throw typeError("Array spread requires a synchronous iterable.", element)
-          while (true) {
-            const step = yield* cursor.next
-            if (step.done) break
-            values.push(step.value)
-          }
-        } else {
-          values.push(yield* self.evaluateExpression(element))
-        }
+    for (const element of node.elements) {
+      if (element === null) {
+        // A literal elision is a real hole, like JS: extend length without an own index.
+        values.length += 1
+        continue
       }
-      return new Arr(self.ctx.builtins.Array, values)
-    })
+      if (element.type === "SpreadElement") {
+        const spread = yield* this.evaluateExpression(element.argument)
+        const cursor = yield* this.iterate(spread, element)
+        if (cursor === undefined) throw typeError("Array spread requires a synchronous iterable.", element)
+        while (true) {
+          const step = yield* cursor.next()
+          if (step.done) break
+          values.push(step.value)
+        }
+      } else {
+        values.push(yield* this.evaluateExpression(element))
+      }
+    }
+    return new Arr(this.ctx.builtins.Array, values)
   }
 
-  private evaluateTemplateLiteral(node: TemplateLiteral): Effect.Effect<string, unknown, R> {
+  private *evaluateTemplateLiteral(node: TemplateLiteral): Eval<string> {
     const quasis = node.quasis
     const expressions = node.expressions
 
     let output = ""
 
-    const self = this
-    return Effect.gen(function* () {
-      for (let index = 0; index < quasis.length; index += 1) {
-        const quasi = quasis[index]!
-        // acorn only omits `cooked` for invalid escapes, which are a parse error outside a tagged template.
-        if (typeof quasi.value.cooked !== "string") {
-          throw typeError("Invalid template literal quasi.", quasi)
-        }
-        output += quasi.value.cooked
-        checkStringLength(output.length)
-
-        if (index < expressions.length) {
-          const raw = yield* self.evaluateExpression(expressions[index])
-          output += coerceToString(yield* self.toPrimitive(raw, "string", expressions[index]))
-          checkStringLength(output.length)
-        }
+    for (let index = 0; index < quasis.length; index += 1) {
+      const quasi = quasis[index]!
+      // acorn only omits `cooked` for invalid escapes, which are a parse error outside a tagged template.
+      if (typeof quasi.value.cooked !== "string") {
+        throw typeError("Invalid template literal quasi.", quasi)
       }
+      output += quasi.value.cooked
+      checkStringLength(output.length)
 
-      return output
-    })
+      if (index < expressions.length) {
+        const raw = yield* this.evaluateExpression(expressions[index])
+        output += coerceToString(yield* this.toPrimitive(raw, "string", expressions[index]))
+        checkStringLength(output.length)
+      }
+    }
+
+    return output
   }
 
   // `tag\`a${x}b\`` is `tag(strings, x)`: the tag is read like a callee (a member keeps its receiver), the
   // substitutions are evaluated in order, and `strings` carries the escaped source as `strings.raw`.
-  private evaluateTaggedTemplate(node: TaggedTemplateExpression): Effect.Effect<Value, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      const { callable, thisValue } =
-        node.tag.type === "MemberExpression"
-          ? yield* self.readMethod(node.tag)
-          : { callable: yield* self.evaluateExpression(node.tag), thisValue: undefined }
-      const strings = self.ctx.templates.get(node) ?? self.createTemplateObject(node)
-      const values = yield* Effect.forEach(node.quasi.expressions, (expression) => self.evaluateExpression(expression))
-      return yield* self.call(callable, thisValue, [strings, ...values], node, node.tag)
-    })
+  private *evaluateTaggedTemplate(node: TaggedTemplateExpression): Eval<Value> {
+    const { callable, thisValue } =
+      node.tag.type === "MemberExpression"
+        ? yield* this.readMethod(node.tag)
+        : { callable: yield* this.evaluateExpression(node.tag), thisValue: undefined }
+    const strings = this.ctx.templates.get(node) ?? this.createTemplateObject(node)
+    const values: Array<Value> = []
+    for (const expression of node.quasi.expressions) values.push(yield* this.evaluateExpression(expression))
+    return yield* this.call(callable, thisValue, [strings, ...values], node, node.tag)
   }
 
   private createTemplateObject(node: TaggedTemplateExpression): Arr {
@@ -2188,37 +2227,52 @@ class Frame<R> {
     return strings
   }
 
-  private evaluateConditionalExpression(node: ConditionalExpression): Effect.Effect<Value, unknown, R> {
-    return Effect.flatMap(this.evaluateExpression(node.test), (test) =>
-      this.evaluateExpression(test ? node.consequent : node.alternate),
-    )
-  }
-
-  private getMemberReference(
+  private *getMemberReference(
     node: MemberExpression,
-  ): Effect.Effect<MemberReference | ToolReference | { value: Value } | typeof OptionalShortCircuit, unknown, R> {
+    object: Value | Eval<Value> | typeof unevaluated = unevaluated,
+    key: Value | Eval<Value> | typeof unevaluated = unevaluated,
+  ): Eval<Reference> {
     const objectNode = node.object
     const propertyNode = node.property
     if (objectNode.type === "Super") throw unsupportedSyntax(objectNode.type, objectNode)
     if (propertyNode.type === "PrivateIdentifier") throw unsupportedSyntax(propertyNode.type, propertyNode)
-    const self = this
-    return Effect.gen(function* () {
-      const objectValue = yield* self.evaluateExpression(objectNode)
-      if (objectValue === OptionalShortCircuit) return OptionalShortCircuit
-      if ((objectValue === null || objectValue === undefined) && node.optional) return OptionalShortCircuit
+    const evaluated = object === unevaluated ? this.evaluate(objectNode) : object
+    const objectValue = isEval(evaluated) ? yield* evaluated : evaluated
+    if (objectValue === OptionalShortCircuit) return OptionalShortCircuit
+    if ((objectValue === null || objectValue === undefined) && node.optional) return OptionalShortCircuit
 
-      const keyValue =
-        !node.computed && propertyNode.type === "Identifier"
+    const computed =
+      key !== unevaluated
+        ? key
+        : !node.computed && propertyNode.type === "Identifier"
           ? propertyNode.name
-          : yield* self.evaluateExpression(propertyNode)
-      // GetValue applies ToObject to the base before ToPropertyKey, so a nullish base throws before the key's own
-      // toString runs.
-      if (objectValue === null || objectValue === undefined) {
-        throw typeError(`Cannot read properties of ${objectValue} (reading '${coerceToString(keyValue)}').`, objectNode)
-      }
-      const key = yield* self.toPropertyKey(keyValue, propertyNode)
-      return self.resolveProperty(objectValue, key, objectNode, propertyNode)
-    })
+          : this.evaluate(propertyNode)
+    const keyValue = isEval(computed) ? yield* computed : computed
+    const reference = this.memberReference(node, objectValue, keyValue)
+    return isEval(reference) ? yield* reference : reference
+  }
+
+  // The reference once the object and key are evaluated: ToPropertyKey on an object key may run program code.
+  // GetValue applies ToObject to the base before ToPropertyKey, so a nullish base throws before the key's own
+  // toString runs.
+  private memberReference(node: MemberExpression, objectValue: Value, keyValue: Value): Reference | Eval<Reference> {
+    if (objectValue === null || objectValue === undefined) {
+      throw typeError(`Cannot read properties of ${objectValue} (reading '${coerceToString(keyValue)}').`, node.object)
+    }
+    if (keyValue instanceof Obj) return this.resolveAfterKey(node, objectValue, keyValue)
+    return this.resolveProperty(objectValue, propertyKey(keyValue), node.object, node.property)
+  }
+
+  private *resolveAfterKey(node: MemberExpression, objectValue: Value, keyValue: Obj): Eval<Reference> {
+    const key = yield* this.toPropertyKey(keyValue, node.property)
+    return this.resolveProperty(objectValue, key, node.object, node.property)
+  }
+
+  private readResolved(node: MemberExpression, reference: Reference): Value {
+    if (reference === OptionalShortCircuit) return OptionalShortCircuit
+    if (reference instanceof ToolReference) return reference
+    if ("value" in reference) return reference.value
+    return this.readReference(reference, node)
   }
 
   private resolveProperty(
@@ -2279,56 +2333,56 @@ class Frame<R> {
     }
   }
 
-  private readMember(node: MemberExpression): Effect.Effect<Value, unknown, R> {
-    return Effect.map(this.getMemberReference(node), (reference) => {
-      if (reference === OptionalShortCircuit) return OptionalShortCircuit
-      if (reference instanceof ToolReference) return reference
-      if ("value" in reference) return reference.value
-      return this.readReference(reference, node)
+  private *readMember(
+    node: MemberExpression,
+    object: Value | Eval<Value> | typeof unevaluated = unevaluated,
+    key: Value | Eval<Value> | typeof unevaluated = unevaluated,
+  ): Eval<Value> {
+    return this.readResolved(node, yield* this.getMemberReference(node, object, key))
+  }
+
+  private writeMember(node: MemberExpression, value: Value): Eval<Value> {
+    return this.modifyMember(node, function* () {
+      return { write: true, next: value, result: value }
     })
   }
 
-  private writeMember(node: MemberExpression, value: Value): Effect.Effect<Value, unknown, R> {
-    return this.modifyMember(node, () => Effect.succeed({ write: true, next: value, result: value }))
-  }
-
-  private evaluateDeleteExpression(argument: Expression): Effect.Effect<boolean, unknown, R> {
+  private *evaluateDeleteExpression(argument: Expression): Eval<boolean> {
     const target = argument.type === "ChainExpression" ? argument.expression : argument
     if (target.type === "Identifier") throw typeError("Only data fields may be deleted.", argument)
     // `delete <non-reference>` evaluates the operand and is true, as in JS.
-    if (target.type !== "MemberExpression") return Effect.map(this.evaluateExpression(target), () => true)
-    return Effect.map(this.getMemberReference(target), (reference) => {
-      if (reference === OptionalShortCircuit) return true
-      if (reference instanceof ToolReference || "value" in reference || reference.receiver !== reference.target) {
-        throw invalidData("Only data fields may be deleted.", target)
-      }
-      if (remove(reference.target, reference.key)) return true
-      throw typeError(`Cannot delete property '${String(reference.key)}'.`, target)
-    })
+    if (target.type !== "MemberExpression") {
+      yield* this.evaluateExpression(target)
+      return true
+    }
+    const reference = yield* this.getMemberReference(target)
+    if (reference === OptionalShortCircuit) return true
+    if (reference instanceof ToolReference || "value" in reference || reference.receiver !== reference.target) {
+      throw invalidData("Only data fields may be deleted.", target)
+    }
+    if (remove(reference.target, reference.key)) return true
+    throw typeError(`Cannot delete property '${String(reference.key)}'.`, target)
   }
 
   // Resolve side-effecting object and key expressions exactly once.
-  private modifyMember(
+  private *modifyMember(
     node: MemberExpression,
-    compute: (current: Value) => Effect.Effect<{ write: boolean; next: Value; result: Value }, unknown, R>,
-  ): Effect.Effect<Value, unknown, R> {
-    const self = this
-    return Effect.gen(function* () {
-      const reference = yield* self.getMemberReference(node)
-      if (reference === OptionalShortCircuit || reference instanceof ToolReference || "value" in reference) {
-        throw typeError("Only data fields may be assigned.", node)
-      }
-      if (reference.receiver !== reference.target) {
-        throw typeError(
-          `Cannot create property '${String(reference.key)}' on ${typeof reference.receiver} '${String(reference.receiver)}'.`,
-          node,
-        )
-      }
-      const key = reference.key
-      const { write, next, result } = yield* compute(self.readReference(reference, node))
-      if (write) self.assignToReference(reference.target, key, next, node)
-      return result
-    })
+    compute: (current: Value) => Eval<{ write: boolean; next: Value; result: Value }>,
+  ): Eval<Value> {
+    const reference = yield* this.getMemberReference(node)
+    if (reference === OptionalShortCircuit || reference instanceof ToolReference || "value" in reference) {
+      throw typeError("Only data fields may be assigned.", node)
+    }
+    if (reference.receiver !== reference.target) {
+      throw typeError(
+        `Cannot create property '${String(reference.key)}' on ${typeof reference.receiver} '${String(reference.receiver)}'.`,
+        node,
+      )
+    }
+    const key = reference.key
+    const { write, next, result } = yield* compute(this.readReference(reference, node))
+    if (write) this.assignToReference(reference.target, key, next, node)
+    return result
   }
 
   private assignToReference(target: Obj, key: PropertyKey, next: Value, node: AstNode): void {
@@ -2350,8 +2404,39 @@ class Frame<R> {
 
   // ToPropertyKey: a data object converts through its own `toString`/`valueOf` first; anything else becomes its
   // string form synchronously, so `counts[row.category]` works when the field is null.
-  private toPropertyKey(value: Value, node: AstNode): Effect.Effect<PropertyKey, unknown, R> {
-    if (!(value instanceof Obj)) return Effect.succeed(propertyKey(value))
-    return Effect.map(this.toPrimitive(value, "string", node), propertyKey)
+  private *toPropertyKey(value: Value, node: AstNode): Eval<PropertyKey> {
+    if (!(value instanceof Obj)) return propertyKey(value)
+    return propertyKey(yield* this.toPrimitive(value, "string", node))
   }
+}
+
+// The body a generator object resumes: a `return()` request ends it with the returned value.
+function* generatorBody(body: Eval<Value>): Eval<Value> {
+  try {
+    return yield* body
+  } catch (error) {
+    if (error instanceof GeneratorReturn) return error.value
+    throw error
+  }
+}
+
+// Rethrows inside interpreter work, so a failure already caught can pass through `preserveConsumerError`.
+function* thrower(error: unknown): Eval<never> {
+  throw error
+}
+
+// Finishes a built-in's work, locating a failure at the call that started it.
+function* located(work: Eval<Value>, node: AstNode | undefined): Eval<Value> {
+  try {
+    return yield* work
+  } catch (error) {
+    throw locate(error, node)
+  }
+}
+
+// Lets the host run first, then starts the work.
+function* afterSlice(start: () => Value | Eval<Value>): Eval<Value> {
+  yield Slice
+  const result = start()
+  return isEval(result) ? yield* result : result
 }

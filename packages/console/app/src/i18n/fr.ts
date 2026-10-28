@@ -286,8 +286,6 @@ export const dict = {
     "Des journaux de surveillance des abus sont générés pour toute utilisation des fonctionnalités API et conservés pendant un maximum de 30 jours.",
   "go.faq.a5.museRetention":
     "Des tarifs de tokens fortement réduits en échange de l’autorisation d’utiliser vos prompts et vos complétions pour entraîner de futurs modèles Meta.",
-  "go.faq.a5.geminiRetention":
-    "Vos prompts et vos complétions peuvent être utilisés pour entraîner de futurs modèles Google.",
   "go.faq.a5.learnMore": "En savoir plus",
   "go.faq.a5.deepseekRetention":
     "L’accord ZDR est renouvelé chaque mois. L’accord actuel est valable jusqu’au 31 octobre 2026.",

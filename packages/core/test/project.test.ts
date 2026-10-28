@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Stream } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
@@ -13,6 +13,7 @@ import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Hash } from "@opencode/util/hash"
 import { initGit } from "./fixture/git"
+import { countingSpawner } from "./fixture/spawn"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -745,6 +746,93 @@ describe("Project.resolve", () => {
         sandboxes: [abs("/preserved-sandbox")],
         time: { created: 1 },
       })
+    }),
+  )
+
+  const counted = (fail?: (args: readonly string[]) => boolean) => {
+    const counter = countingSpawner(fail)
+    return {
+      spawns: counter.spawns,
+      layer: AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, Bus.node]), [counter.node]),
+    }
+  }
+
+  testEffect(Layer.empty).live("reuses git discovery until git metadata changes", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const nested = path.join(tmp.path, "packages", "app")
+      yield* Effect.promise(async () => {
+        await initRepo(tmp.path, { commit: true })
+        await fs.mkdir(nested, { recursive: true })
+      })
+      const rootSha = Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path)))
+      const { layer, spawns } = counted()
+      yield* Effect.gen(function* () {
+        const project = yield* Project.Service
+        expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
+        expect(spawns()).toBeGreaterThan(0)
+
+        const before = spawns()
+        expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(rootSha)
+        expect(spawns()).toBe(before)
+
+        yield* Effect.promise(() => $`git remote add origin git@github.com:owner/repo.git`.cwd(tmp.path).quiet())
+        expect((yield* project.resolve(abs(nested))).id).toBe(remoteID("github.com/owner/repo"))
+        expect(spawns()).toBeGreaterThan(before)
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  testEffect(Layer.empty).live("does not cache a transient git failure", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      let failRemote = true
+      const { layer } = counted((args) => {
+        if (!failRemote || !args.includes("remote")) return false
+        failRemote = false
+        return true
+      })
+      yield* Effect.gen(function* () {
+        const project = yield* Project.Service
+        // Falls back like dev: the remote spawn failed, so identity comes from the root commit.
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(
+          Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))),
+        )
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(remoteID("github.com/owner/repo"))
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  testEffect(Layer.empty).live("sees the first commit in a reftable repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const supported = yield* Effect.promise(
+        async () => (await $`git init -q --ref-format=reftable ${tmp.path}`.nothrow().quiet()).exitCode === 0,
+      )
+      if (!supported) return
+      yield* Effect.gen(function* () {
+        const project = yield* Project.Service
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(Project.ID.global)
+        yield* Effect.promise(() =>
+          $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -qm root`
+            .cwd(tmp.path)
+            .quiet(),
+        )
+        expect((yield* project.resolve(abs(tmp.path))).id).toBe(
+          Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))),
+        )
+      }).pipe(Effect.provide(counted().layer))
     }),
   )
 })

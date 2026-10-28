@@ -8,7 +8,7 @@ export const id = ProviderID.make("mistral")
 
 export type ProviderOptions = MistralChat.ProviderOptionsInput
 
-export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptions
@@ -23,7 +23,7 @@ export type Settings = ProviderPackage.Settings &
 export const route = MistralChat.route
 export const routes = [route]
 
-export const configure = (input: LanguageModelOptions = {}) => {
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL, ...defaults } = input
   const configured = route.with({
     ...defaults,
@@ -39,9 +39,9 @@ export const configure = (input: LanguageModelOptions = {}) => {
 
 export const provider = configure()
 
-export const model: ProviderPackage.Definition<Settings, ProviderOptions>["model"] = (
+export const model: ProviderPackage.Model<Settings, ProviderOptions> = (
   modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
+  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
 ) =>
   configure({
     apiKey,

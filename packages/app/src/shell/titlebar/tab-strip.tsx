@@ -5,7 +5,7 @@ import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
 import { Accessibility, AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/dom"
 import { RestrictToHorizontalAxis, RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
-import { arrayMove } from "@dnd-kit/helpers"
+import { arrayMove } from "@/runtime/array-move"
 import { tabHref, tabKey, type SessionTab, type Tab } from "@/shell/tabs/tabs"
 import { ServerConnection } from "@/runtime/server/registry"
 import { DraftTabItem, TabNavItem } from "@/shell/titlebar/tab-nav"
@@ -18,7 +18,19 @@ import { createTabComposerState } from "@/composer/persistence"
 import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
+import { Button } from "@opencode/ui/button"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
+import { sessionTreeIDs } from "@/session/requests/session-request-tree"
+import { sessionTitle } from "@/session/title"
+import { errorMessage } from "@/shell/layout/helpers"
+import { notifySessionTabsRemoved } from "./session-events"
+import { setSidebarUnread } from "@/shell/sidebar-peek"
 import type { SessionInfo } from "@opencode/client/promise"
+
+export const previousSessionCommand = { id: "session.previous", keybind: "alt+arrowup" }
+
+export const nextSessionCommand = { id: "session.next", keybind: "alt+arrowdown" }
 
 function SessionTabSlot(props: {
   tab: SessionTab
@@ -29,11 +41,15 @@ function SessionTabSlot(props: {
   session: SessionInfo | undefined
   preparing: boolean
   unread: boolean
+  attention: boolean
   loading: boolean
   fallbackTitle?: string
+  fallbackDirectory?: string
   onRename: (title: string) => Promise<void>
+  onDelete: () => void
   onNavigate: (element: HTMLDivElement) => void
   onClose: () => void
+  onIntent: (hovered: boolean) => void
 }) {
   const sortable = useSortable({
     get id() {
@@ -58,6 +74,8 @@ function SessionTabSlot(props: {
         "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
         "w-full shrink-0": props.orientation === "vertical",
       }}
+      onPointerEnter={() => props.onIntent(true)}
+      onPointerLeave={() => props.onIntent(false)}
     >
       <TabNavItem
         ref={(el) => {
@@ -68,9 +86,12 @@ function SessionTabSlot(props: {
         session={props.session}
         preparing={props.preparing}
         unread={props.unread}
+        attention={props.attention}
         loading={props.loading}
         fallbackTitle={props.fallbackTitle}
+        fallbackDirectory={props.fallbackDirectory}
         onRename={props.onRename}
+        onDelete={props.onDelete}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
         active={props.active}
@@ -83,6 +104,7 @@ function SessionTabSlot(props: {
 
 function SessionTabEntry(props: {
   tab: SessionTab
+  currentTab?: Tab
   id: string
   index: number
   active: boolean
@@ -95,6 +117,7 @@ function SessionTabEntry(props: {
 }) {
   const tabs = useTabs()
   const language = useLanguage()
+  const dialog = useDialog()
   const sdk = createMemo(() => props.serverCtx?.sdk ?? null)
   const pending = createMemo(() => tabs.pendingSession(props.tab.server, props.tab.sessionId))
   const cachedSession = createMemo(() => props.serverCtx?.data.session.get(props.tab.sessionId))
@@ -111,7 +134,7 @@ function SessionTabEntry(props: {
 
   const [loadedSession] = createResource(
     () => {
-      if (pending()) return null
+      if (pending() || (!props.active && persisted()?.title)) return null
       const ctx = props.serverCtx
 
       return ctx ? { id: props.tab.sessionId, ctx } : null
@@ -141,7 +164,9 @@ function SessionTabEntry(props: {
       const current = session()
       const currentCtx = props.serverCtx
 
-      if (current && currentCtx) currentCtx.data.session.remember({ ...current, title: value.title })
+      // A newer rename may have replaced this title while the save was in flight.
+      if (current && currentCtx && current.title === title)
+        currentCtx.data.session.remember({ ...current, title: value.title })
       showToast({
         title: language.t("common.requestFailed"),
         description: err instanceof Error ? err.message : undefined,
@@ -149,30 +174,113 @@ function SessionTabEntry(props: {
     }
   }
 
+  function DeleteDialog() {
+    const confirm = async () => {
+      const value = session()
+      const ctx = props.serverCtx
+
+      dialog.close()
+
+      if (!value || !ctx) return
+      const ids = sessionTreeIDs(ctx.data.session.list(), value.id)
+
+      try {
+        await ctx.data.session.remove(value.id)
+        notifySessionTabsRemoved({ server: props.tab.server, directory: value.location.directory, sessionIDs: ids })
+      } catch (cause) {
+        showToast({
+          title: language.t("session.delete.failed.title"),
+          description: errorMessage(cause, language.t("session.delete.failed.title")),
+        })
+      }
+    }
+
+    return (
+      <Dialog fit>
+        <DialogHeader hideClose>
+          <DialogTitleGroup
+            title={language.t("session.delete.title")}
+            description={language.t("session.delete.confirm", {
+              name: sessionTitle(session()?.title) ?? language.t("session.tab.session"),
+            })}
+          />
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="ghost" autofocus onClick={() => dialog.close()}>
+            {language.t("common.cancel")}
+          </Button>
+          <Button variant="danger" onClick={confirm}>
+            {language.t("session.delete.button")}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    )
+  }
+
   createEffect(() => props.onVisibleChange(visible()))
   createEffect(() => props.onUnreadChange(unread()))
 
   createEffect(() => {
     const ctx = props.serverCtx
-    const value = session()
+    const id = props.tab.sessionId
 
-    if (!ctx || !value || props.active || ctx.sdk.connection.status() !== "connected") return
+    if (
+      pending() ||
+      !ctx ||
+      props.active ||
+      (!session() && !persisted()?.title) ||
+      ctx.sdk.connection.status() !== "connected"
+    )
+      return
+
+    const current = props.currentTab
+
+    if (current?.type === "session" && current.server === props.tab.server && current.sessionId !== id) {
+      const active = ctx.data.session.get(current.sessionId)
+
+      if (
+        !active ||
+        ctx.data.location.agent.list(active.location) === undefined ||
+        ctx.data.location.provider.list(active.location) === undefined ||
+        ctx.data.location.model.list(active.location) === undefined ||
+        ctx.data.location.skill.list(active.location) === undefined
+      )
+        return
+    }
+
+    const running = [id, ...ctx.data.session.family(id)].some(
+      (sessionID) => ctx.data.session.status(sessionID) === "running",
+    )
 
     const timer = window.setTimeout(
       () =>
         void Promise.allSettled([
-          ctx.data.session.sync(value.id, { children: true }),
-          // The selected timeline loads the transcript; inactive tabs need attention, metadata, and the inbox,
-          // whose waiting work keeps the tab busy.
-          ctx.data.session.permission.sync(value.id),
-          ctx.data.session.form.sync(value.id),
-          ctx.data.session.pending.sync(value.id),
+          ctx.data.session.sync(id, { children: true }),
+          // The selected timeline loads the transcript; inactive tabs need metadata and the inbox,
+          // whose waiting work keeps the tab busy. Only a running session can wait on a permission
+          // or form, and reading either boots the session's location on the server.
+          ...(running ? [ctx.data.session.permission.sync(id), ctx.data.session.form.sync(id)] : []),
+          ctx.data.session.pending.sync(id),
         ]),
       300 + props.index * 50,
     )
 
     onCleanup(() => window.clearTimeout(timer))
   })
+
+  // A pointer resting on a tab usually clicks it next, so its transcript loads during the dwell. Passing over loads nothing.
+  let intent: number | undefined
+
+  const hover = (hovered: boolean) => {
+    window.clearTimeout(intent)
+    const ctx = props.serverCtx
+    const value = session()
+
+    if (!hovered || !ctx || !value || props.active || ctx.sdk.connection.status() !== "connected") return
+    intent = window.setTimeout(() => void ctx.data.session.message.sync(value.id).catch(() => undefined), 100)
+  }
+
+  onCleanup(() => window.clearTimeout(intent))
 
   createEffect(() => {
     const value = session()
@@ -203,15 +311,19 @@ function SessionTabEntry(props: {
         session={session()}
         preparing={!!pending()}
         unread={unread()}
+        attention={status.attention()}
         loading={status.loading()}
         fallbackTitle={
           pending()
             ? language.t("session.tab.session")
             : (persisted()?.title ?? (missingSession() ? language.t("session.tab.unknown") : undefined))
         }
+        fallbackDirectory={pending()?.draft.directory ?? persisted()?.directory}
         onRename={rename}
+        onDelete={() => dialog.show(() => <DeleteDialog />)}
         onNavigate={props.onNavigate}
         onClose={props.onClose}
+        onIntent={hover}
       />
     </Show>
   )
@@ -285,6 +397,13 @@ export function TitlebarTabStrip(props: {
   const visibleTabs = createMemo(() => props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
+  // Tells the closed sidebar's toggle whether any row here shows its unread dot, which the current tab never does.
+  createEffect(() => {
+    if (!vertical()) return
+    setSidebarUnread(props.tabs.some((tab) => tab !== props.currentTab && !!unread[tabKey(tab)]))
+    onCleanup(() => setSidebarUnread(false))
+  })
+
   command.register("titlebar-tab-cycle", () => [
     {
       id: `tab.prev`,
@@ -303,17 +422,15 @@ export function TitlebarTabStrip(props: {
       onSelect: () => selectAdjacentTab(1),
     },
     {
-      id: "session.previous",
+      ...previousSessionCommand,
       category: language.t("command.category.session"),
       title: language.t("command.session.previous"),
-      keybind: "alt+arrowup",
       onSelect: () => selectAdjacentTab(-1),
     },
     {
-      id: "session.next",
+      ...nextSessionCommand,
       category: language.t("command.category.session"),
       title: language.t("command.session.next"),
-      keybind: "alt+arrowdown",
       onSelect: () => selectAdjacentTab(1),
     },
     {
@@ -331,6 +448,23 @@ export function TitlebarTabStrip(props: {
       onSelect: () => selectAdjacentTab(1, (key) => !!unread[key]),
     },
   ])
+
+  // One registration numbers the visible tabs, so a reorder, a close or a tab coming into view never leaves two tabs
+  // holding the same number while their owners update.
+  const tabRefs = new Map<string, () => HTMLDivElement | undefined>()
+
+  command.register("titlebar-tab-numbers", () =>
+    visibleTabs()
+      .slice(0, 9)
+      .map((tab, index) => ({
+        id: `tab.${index + 1}`,
+        category: "tab",
+        title: "",
+        keybind: `mod+${index + 1}`,
+        hidden: true,
+        onSelect: () => props.onNavigate(tab, tabRefs.get(tabKey(tab))?.()),
+      })),
+  )
 
   function selectAdjacentTab(offset: -1 | 1, include?: (key: string) => boolean) {
     const current = props.currentTab
@@ -419,7 +553,11 @@ export function TitlebarTabStrip(props: {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
                 const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
-                useTabShortcut(visibleIndex, () => props.onNavigate(tab, ref))
+                const element = () => ref
+                tabRefs.set(id, element)
+                onCleanup(() => {
+                  if (tabRefs.get(id) === element) tabRefs.delete(id)
+                })
 
                 const serverCtx = useServerCtx(() => {
                   if (tab.type !== "session") return
@@ -431,6 +569,7 @@ export function TitlebarTabStrip(props: {
                   return (
                     <SessionTabEntry
                       tab={tab}
+                      currentTab={props.currentTab}
                       id={id}
                       index={visibleIndex()}
                       active={props.currentTab === tab}
@@ -481,25 +620,4 @@ export function TitlebarTabStrip(props: {
       </Show>
     </div>
   )
-}
-
-function useTabShortcut(index: () => number, onSelect: () => void) {
-  const command = useCommand()
-
-  command.register(() => {
-    const number = index() + 1
-
-    if (number < 1 || number > 9) return []
-
-    return [
-      {
-        id: `tab.${number}`,
-        category: "tab",
-        title: "",
-        keybind: `mod+${number}`,
-        hidden: true,
-        onSelect,
-      },
-    ]
-  })
 }

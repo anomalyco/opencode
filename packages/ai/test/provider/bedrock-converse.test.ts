@@ -18,7 +18,7 @@ import {
   ToolChoice,
   ToolDefinition,
   ToolRuntime,
-} from "../../src/index.js"
+} from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
@@ -846,6 +846,28 @@ describe("Bedrock Converse route", () => {
         outputTokens: 2,
         totalTokens: 7,
       })
+    }),
+  )
+
+  it.effect("raw events carry the event payload without decoder fields or padding", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { text: "Hi" }, p: "abc" }],
+        ["messageStop", { stopReason: "end_turn" }],
+        ["metadata", { usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6 } }],
+      )
+      const events = Array.from(
+        yield* LLMClient.stream(LLMRequest.update(baseRequest, { includeRaw: true })).pipe(
+          Stream.runCollect,
+          Effect.provide(fixedBytes(body)),
+        ),
+      )
+
+      expect(events.filter((event) => event.type === "raw").map((event) => event.data)).toEqual([
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: "Hi" } } },
+        { messageStop: { stopReason: "end_turn" } },
+        { metadata: { usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6 } } },
+      ])
     }),
   )
 
@@ -2325,9 +2347,9 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("maps ttlSeconds >= 3600 to cachePoint ttl: '1h'", () =>
+  it.effect("sends the hint ttl on cachePoint", () =>
     Effect.gen(function* () {
-      const cache = new CacheHint({ type: "ephemeral", ttlSeconds: 3600 })
+      const cache = new CacheHint({ type: "ephemeral", ttl: "1h" })
       const prepared = yield* compileRequest(
         LLM.request({
           model,

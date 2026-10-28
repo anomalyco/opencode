@@ -786,6 +786,28 @@ describe("HttpApiCodegen.generate", () => {
     expect(types).not.toContain("Referenced1")
   })
 
+  test("emits flat Promise input field types", () => {
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.get("subscribe", "/session/:id/event", {
+            params: { id: Schema.String },
+            query: Schema.Struct({
+              types: Schema.optional(Schema.ArrayEnsure(Schema.Literals(["created", "deleted"]))),
+              cursor: Schema.optionalKey(Schema.String),
+            }).annotate({ identifier: "SubscribeQuery" }),
+            success: Schema.String,
+          }),
+        ),
+      ),
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain(
+      'export type SessionSubscribeInput = { readonly "id": string; readonly "types"?: ReadonlyArray<"created" | "deleted"> | undefined; readonly "cursor"?: string | undefined }',
+    )
+  })
+
   test("inlines shared anonymous Promise wire types", () => {
     const Shared = Schema.Struct({ value: Schema.String })
     const output = emitPromise(

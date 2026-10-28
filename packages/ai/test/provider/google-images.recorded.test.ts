@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, Media } from "../../src/index.js"
+import { Image, Media } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"

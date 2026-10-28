@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM, LLMRequest, Message, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMRequest, Message, ToolDefinition } from "../../src/effect.js"
 import { LLMClient, Route } from "../../src/route/client.js"
 import { Auth } from "../../src/route/auth.js"
 import { Endpoint } from "../../src/route/endpoint.js"

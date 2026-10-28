@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMClient } from "../../src/index.js"
+import { LLM, LLMClient } from "../../src/effect.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { Azure, Meta, OpenAI, XAI } from "../../src/providers/index.js"
 import { WebSocketTransport } from "../../src/route.js"

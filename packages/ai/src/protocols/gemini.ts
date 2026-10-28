@@ -229,6 +229,7 @@ const GeminiUsage = Schema.Struct({
   promptTokenCount: optionalNull(Schema.Number),
   candidatesTokenCount: optionalNull(Schema.Number),
   totalTokenCount: optionalNull(Schema.Number),
+  ...ProviderShared.ReportedBilling.fields,
 })
 type GeminiUsage = Schema.Schema.Type<typeof GeminiUsage>
 
@@ -539,6 +540,7 @@ const mapUsage = (
     cacheReadInputTokens: cached,
     reasoningTokens: thoughts,
     totalTokens: ProviderShared.totalTokens(promptTokens, outputTokens, usage.totalTokenCount ?? undefined),
+    cost: usage.cost,
     providerMetadata: providerMetadata(metadataKey, metadata),
   })
 }
@@ -555,6 +557,8 @@ const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: st
       cachedContentTokenCount: requests[0].cachedContentTokenCount,
       candidatesTokenCount: sum("candidatesTokenCount"),
       thoughtsTokenCount: sum("thoughtsTokenCount"),
+      // Every continued request is billed on its own.
+      cost: sum("cost"),
     },
     metadataKey,
     {

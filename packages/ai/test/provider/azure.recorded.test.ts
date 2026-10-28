@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, Message, ToolDefinition, ToolCallPart } from "../../src/index.js"
+import { LLM, Message, ToolDefinition, ToolCallPart } from "../../src/effect.js"
 import { Azure } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"

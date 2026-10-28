@@ -193,7 +193,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(καμία απάντηση)",
   "ui.question.review.notAnswered": "(δεν απαντήθηκε)",
   "ui.question.multiHint": "Επιλογή όλων των απαντήσεων που ισχύουν",
-  "ui.question.singleHint": "Επιλέξτε μία απάντηση",
   "ui.question.custom.placeholder": "Πληκτρολογήστε την απάντησή σας…",
   "ui.tool.loadedFile": "Φορτώθηκε το {{path}}",
   "ui.tool.loadedSkill": "Φορτώθηκε η δεξιότητα {{name}}",

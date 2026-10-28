@@ -46,7 +46,7 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings, OpenResponsesProviderOptionsInput>["model"] = (
+export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (
   modelID,
   { apiKey, baseURL, body, headers, provider, ...providerOptions },
 ) =>

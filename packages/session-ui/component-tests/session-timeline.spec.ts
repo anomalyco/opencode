@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 story("spaces an error between a shell result and expanded updates", async ({ mount }) => {
   const timeline = await mount("current-session-error-spacing--error-and-updates")

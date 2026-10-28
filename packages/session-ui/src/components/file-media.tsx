@@ -245,7 +245,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
 
             if (deleted()) {
               return (
-                <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-text-weak">
+                <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-v2-text-text-faint">
                   {i18n.t("ui.fileMedia.state.removed", { kind: label })}
                 </div>
               )
@@ -253,7 +253,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
 
             if (status() === "loading") {
               return (
-                <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-text-weak">
+                <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-v2-text-text-faint">
                   {i18n.t("ui.fileMedia.state.loading", { kind: label })}
                 </div>
               )
@@ -261,14 +261,14 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
 
             if (status() === "error") {
               return (
-                <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-text-weak">
+                <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-v2-text-text-faint">
                   {i18n.t("ui.fileMedia.state.error", { kind: label })}
                 </div>
               )
             }
 
             return (
-              <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-text-weak">
+              <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-v2-text-text-faint">
                 {i18n.t("ui.fileMedia.state.unavailable", { kind: label })}
               </div>
             )
@@ -285,7 +285,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
                   <img
                     src={value()}
                     alt={cfg()?.path}
-                    class="max-h-[60vh] max-w-full rounded border border-border-weak-base bg-background-base object-contain"
+                    class="max-h-[60vh] max-w-full rounded border border-v2-border-border-base bg-background-base object-contain"
                     onLoad={onLoad}
                   />
                 </div>
@@ -315,7 +315,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
                     <img
                       src={value()}
                       alt={cfg()?.path}
-                      class="max-h-[60vh] max-w-full rounded border border-border-weak-base bg-background-base object-contain"
+                      class="max-h-[60vh] max-w-full rounded border border-v2-border-border-base bg-background-base object-contain"
                       onLoad={onLoad}
                     />
                   </div>
@@ -327,10 +327,10 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
       </Match>
       <Match when={isBinary()}>
         <div class="flex min-h-56 flex-col items-center justify-center gap-2 px-6 py-10 text-center">
-          <div class="text-14-semibold text-text-strong">
+          <div class="text-14-semibold text-v2-text-text-base">
             {cfg()?.path?.split("/").pop() ?? i18n.t("ui.fileMedia.binary.title")}
           </div>
-          <div class="text-14-regular text-text-weak">
+          <div class="text-14-regular text-v2-text-text-faint">
             {(() => {
               const path = cfg()?.path
 

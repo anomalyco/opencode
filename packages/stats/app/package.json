@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/stats-app",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -30,7 +30,6 @@
     "vite": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
     "@types/bun": "catalog:",
     "@types/d3-scale": "4.0.9",
     "@typescript/native": "catalog:",

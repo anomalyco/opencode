@@ -7,7 +7,7 @@ import {
   type ImageModelOptions,
   type ImageOptions,
   type ImageRequestFor,
-} from "../src/index.js"
+} from "../src/effect.js"
 import type { Service } from "../src/image-client.js"
 import { Anthropic, BlackForestLabs, Google, OpenAI, Stability, XAI, ZAI } from "../src/providers.js"
 
