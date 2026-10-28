@@ -1,12 +1,12 @@
 import { app } from "electron"
 
-type Channel = "local" | "dev" | "beta" | "prod"
+type Channel = "dev" | "beta" | "prod"
 
 const raw = import.meta.env.OPENCODE_CHANNEL
 
-export const CHANNEL: Channel = raw === "local" || raw === "dev" || raw === "beta" || raw === "prod" ? raw : "dev"
-
-export const DEFAULT_SERVER_CHANNEL = import.meta.env.OPENCODE_DESKTOP_SERVER_CHANNEL
+// Local renderer/server mode still uses the dev application identity and updater policy.
+export const CHANNEL: Channel =
+  raw === "latest" ? "prod" : raw === "dev" || raw === "beta" || raw === "prod" ? raw : "dev"
 
 export const VERSION = app.isPackaged ? app.getVersion() : (process.env.OPENCODE_VERSION ?? app.getVersion())
 

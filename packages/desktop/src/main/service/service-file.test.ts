@@ -6,12 +6,15 @@ import path from "node:path"
 import { serviceFile } from "./service-file"
 
 test.each([
-  { channel: undefined, name: "service.json" },
-  { channel: "", name: "service.json" },
-  { channel: "beta", name: "service.json" },
-  { channel: "prod", name: "service-prod.json" },
-  { channel: "local", name: "service-local.json" },
-])("discovers the selected owner with channel $channel", async (input) => {
+  { channel: "latest", override: undefined, name: "service.json" },
+  { channel: "prod", override: undefined, name: "service-prod.json" },
+  { channel: "local", override: undefined, name: "service.json" },
+  { channel: "local", override: "local", name: "service-local.json" },
+  { channel: "prod", override: "", name: "service.json" },
+  { channel: "prod", override: "beta", name: "service.json" },
+  { channel: "prod", override: "local", name: "service-local.json" },
+  { channel: "latest", override: "prod", name: "service-prod.json" },
+])("discovers the selected owner for $channel with override $override", async (input) => {
   await using fixture = await registrations()
   const owner = await fixture.start(input.name)
   await Promise.all(
@@ -21,7 +24,7 @@ test.each([
   )
 
   const endpoint = await Service.discover({
-    file: serviceFile(path.join(fixture.root, "service.json"), input.channel),
+    file: serviceFile(path.join(fixture.root, "service.json"), input.channel, input.override),
     version: "test",
   })
 

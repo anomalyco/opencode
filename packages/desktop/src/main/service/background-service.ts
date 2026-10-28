@@ -1,6 +1,6 @@
 import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
-import { CHANNEL, DEFAULT_SERVER_CHANNEL } from "../constants"
+import { CHANNEL } from "../constants"
 import { BackgroundServiceState } from "./background-service-state"
 import { cleanStages } from "./cli-stages"
 import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
@@ -46,7 +46,11 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
-  const file = serviceFile(client.fallback(), process.env.OPENCODE_DESKTOP_SERVER_CHANNEL ?? DEFAULT_SERVER_CHANNEL)
+  const file = serviceFile(
+    client.fallback(),
+    import.meta.env.OPENCODE_CHANNEL,
+    process.env.OPENCODE_DESKTOP_SERVER_CHANNEL,
+  )
 
   const ensure = (required = version) =>
     client.Service.ensure({

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import path from "node:path"
 import { app } from "electron"
 import type { Endpoint } from "@opencode/client/service"
-import { CHANNEL, DEFAULT_SERVER_CHANNEL } from "../constants"
+import { CHANNEL } from "../constants"
 import { serviceFile } from "./service-file"
 
 // The main thread idles between showing the first window and evaluating the main bundle, waiting
@@ -21,7 +21,12 @@ export function startSidecarProbe() {
   if (version === "") return
   probe = import("@opencode/client/service")
     .then((client) => {
-      const file = serviceFile(client.fallback(), process.env.OPENCODE_DESKTOP_SERVER_CHANNEL ?? DEFAULT_SERVER_CHANNEL)
+      const file = serviceFile(
+        client.fallback(),
+        import.meta.env.OPENCODE_CHANNEL,
+        process.env.OPENCODE_DESKTOP_SERVER_CHANNEL,
+      )
+
       probeFile = file
 
       return client.Service.discover({ file, version })

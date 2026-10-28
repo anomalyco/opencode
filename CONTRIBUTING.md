@@ -75,19 +75,11 @@ Follow the repository [style guide](./AGENTS.md).
 
 ### Nix packaging
 
-Nix uses archive URLs and integrity hashes from `bun.lock`. Bun installs workspaces, peer dependencies and patches from bun2nix's offline cache, shared by CLI and Desktop. Updating `bun.lock` requires no additional dependency lockfile or aggregate `node_modules` hash.
-
-The lock reader supports Bun lockfile v1 registry, GitHub and HTTP sources with recorded integrity. HTTP cache entries use the format required by the selected Bun version.
-
-The Nix CLI keeps the `prod` channel for service registration and TUI state. Desktop uses `OPENCODE_DESKTOP_SERVER_CHANNEL=prod` to discover that service.
-
-On Linux, Nix patches the PTY helper before embedding it through `OPENCODE_PTY_BIN`. Runtime checks exercise the embedded helper and preserve terminals across service upgrades.
-
-Build the packages and run the cache and runtime checks:
+Nix builds use dependency versions and checksums recorded in `bun.lock`.
 
 ```bash
 nix build .#opencode .#opencode-desktop
-nix build ".#checks.$(nix eval --impure --raw --expr builtins.currentSystem).runtime"
+nix flake check
 ```
 
 [GitHub archive recompression](https://docs.github.com/en/repositories/working-with-files/using-files/downloading-source-code-archives#stability-of-source-code-archives) can invalidate Bun's recorded checksum. Nix rejects changed archive bytes.

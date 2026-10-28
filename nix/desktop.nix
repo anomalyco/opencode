@@ -61,7 +61,6 @@ stdenv.mkDerivation (finalAttrs: {
   });
 
   env = opencode.env // {
-    OPENCODE_DESKTOP_SERVER_CHANNEL = "prod";
     ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
   };
 
