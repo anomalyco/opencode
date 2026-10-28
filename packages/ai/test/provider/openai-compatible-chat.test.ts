@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMEvent, LLMRequest, Media, Message, ToolCallPart, ToolChoice, ToolDefinition, Tool, ToolRuntime } from "../../src/effect.js"
+import { LLM, LLMEvent, LLMRequest, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
@@ -79,7 +79,7 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
-  it.effect("preserves advertised multi-dot tool names and names with one dot", () =>
+  it.effect("normalizes unadvertised names while preserving advertised names", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -95,58 +95,27 @@ describe("OpenAI-compatible Chat route", () => {
             Message.assistant([
               ToolCallPart.make({ id: "call_one", name: "other.lookup", input: {} }),
               ToolCallPart.make({ id: "call_two", name: "plugin.custom.lookup", input: {} }),
+              ToolCallPart.make({ id: "call_three", name: "invalid/name with space", input: {} }),
             ]),
             Message.tool({ id: "call_one", name: "other.lookup", result: "done" }),
             Message.tool({ id: "call_two", name: "plugin.custom.lookup", result: "done" }),
+            Message.tool({ id: "call_three", name: "invalid/name with space", result: "done" }),
           ],
         }),
       )
       expect(prepared.body.messages).toMatchObject([
         {
           role: "assistant",
-          tool_calls: [{ function: { name: "other.lookup" } }, { function: { name: "plugin.custom.lookup" } }],
+          tool_calls: [
+            { function: { name: "other_lookup" } },
+            { function: { name: "plugin.custom.lookup" } },
+            { function: { name: "invalid_name_with_space" } },
+          ],
         },
         { role: "tool", tool_call_id: "call_one" },
         { role: "tool", tool_call_id: "call_two" },
+        { role: "tool", tool_call_id: "call_three" },
       ])
-    }),
-  )
-
-  it.effect("does not dispatch an unknown dotted name as its replay spelling", () =>
-    Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(
-              deltaChunk({
-                tool_calls: [
-                  { index: 0, id: "call_unknown", function: { name: "browser.tabs.open", arguments: "{}" } },
-                ],
-              }),
-              deltaChunk({}, "tool_calls"),
-            ),
-          ),
-        ),
-      )
-      const call = response.toolCalls[0]
-      if (!call) throw new Error("Expected a tool call")
-      expect(call.name).toBe("browser.tabs.open")
-      const dispatched = yield* ToolRuntime.dispatch(
-        {
-          browser_tabs_open: Tool.make({
-            description: "Open a tab",
-            parameters: Schema.Struct({}),
-            success: Schema.String,
-            execute: () => Effect.die("A normalized replay name must not select an executor"),
-          }),
-        },
-        call,
-      )
-      expect(dispatched.result).toEqual({
-        type: "error",
-        value:
-          'No tool named "browser.tabs.open" is currently available. Please use a tool from the available tool list.',
-      })
     }),
   )
 

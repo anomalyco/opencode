@@ -45,7 +45,7 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
-  it.effect("preserves advertised multi-dot tool names and names with one dot", () =>
+  it.effect("normalizes unadvertised names while preserving advertised names", () =>
     Effect.gen(function* () {
       const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
         "example-model",
@@ -64,17 +64,21 @@ describe("Open Responses-compatible route", () => {
             Message.assistant([
               { type: "tool-call", id: "call_one", name: "other.lookup", input: {} },
               { type: "tool-call", id: "call_two", name: "plugin.custom.lookup", input: {} },
+              { type: "tool-call", id: "call_three", name: "invalid/name with space", input: {} },
             ]),
             Message.tool({ id: "call_one", name: "other.lookup", result: "done" }),
             Message.tool({ id: "call_two", name: "plugin.custom.lookup", result: "done" }),
+            Message.tool({ id: "call_three", name: "invalid/name with space", result: "done" }),
           ],
         }),
       )
       expect(prepared.body.input).toMatchObject([
-        { type: "function_call", call_id: "call_one", name: "other.lookup" },
+        { type: "function_call", call_id: "call_one", name: "other_lookup" },
         { type: "function_call", call_id: "call_two", name: "plugin.custom.lookup" },
+        { type: "function_call", call_id: "call_three", name: "invalid_name_with_space" },
         { type: "function_call_output", call_id: "call_one" },
         { type: "function_call_output", call_id: "call_two" },
+        { type: "function_call_output", call_id: "call_three" },
       ])
     }),
   )
