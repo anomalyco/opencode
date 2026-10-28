@@ -1,0 +1,332 @@
+import { Button } from "@opencode/ui/button"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { useMutation } from "@tanstack/solid-query"
+import { TextField } from "@opencode/ui/text-field"
+import { showToast } from "@/shell/notifications/toast"
+import { batch, For } from "solid-js"
+import { createStore, produce } from "solid-js/store"
+import { ExternalLink } from "@/runtime/platform/external-link"
+import { useData } from "@/runtime/server/current"
+import { useServerSDK } from "@/runtime/server/client"
+import { useGlobal } from "@/runtime/server/runtime"
+import { formatServerError } from "@/runtime/server/errors"
+import { useProviderAccountActions } from "@/settings/providers/account-actions"
+import { useLanguage } from "@/runtime/i18n/language"
+import { type FormState, headerRow, modelRow, validateCustomProvider } from "./form"
+import { saveCustomProvider } from "./save"
+
+export function CustomProviderForm(props: { autofocus?: boolean; directory?: string } = {}) {
+  const dialog = useDialog()
+  const data = useData()
+  const language = useLanguage()
+  const sdk = useServerSDK()
+  const global = useGlobal()
+  const accounts = useProviderAccountActions(() => props.directory)
+  const location = () => (props.directory ? { directory: props.directory } : undefined)
+
+  const [form, setForm] = createStore<FormState>({
+    providerID: "",
+    name: "",
+    baseURL: "",
+    apiKey: "",
+    models: [modelRow()],
+    headers: [headerRow()],
+    err: {},
+  })
+
+  const addModel = () => {
+    setForm(
+      "models",
+      produce((rows) => {
+        rows.push(modelRow())
+      }),
+    )
+  }
+
+  const removeModel = (index: number) => {
+    if (form.models.length <= 1) return
+    setForm(
+      "models",
+      produce((rows) => {
+        rows.splice(index, 1)
+      }),
+    )
+  }
+
+  const addHeader = () => {
+    setForm(
+      "headers",
+      produce((rows) => {
+        rows.push(headerRow())
+      }),
+    )
+  }
+
+  const removeHeader = (index: number) => {
+    if (form.headers.length <= 1) return
+    setForm(
+      "headers",
+      produce((rows) => {
+        rows.splice(index, 1)
+      }),
+    )
+  }
+
+  const setField = (key: "providerID" | "name" | "baseURL" | "apiKey", value: string) => {
+    setForm(key, value)
+
+    if (key === "apiKey") return
+    setForm("err", key, undefined)
+  }
+
+  const setModel = (index: number, key: "id" | "name", value: string) => {
+    batch(() => {
+      setForm("models", index, key, value)
+      setForm("models", index, "err", key, undefined)
+    })
+  }
+
+  const setHeader = (index: number, key: "key" | "value", value: string) => {
+    batch(() => {
+      setForm("headers", index, key, value)
+      setForm("headers", index, "err", key, undefined)
+    })
+  }
+
+  const validate = () => {
+    const output = validateCustomProvider({
+      form,
+      t: language.t,
+      // TODO: Restore disabled-provider validation when V2 exposes config reads.
+      disabledProviders: [],
+      existingProviderIDs: new Set((data.location.provider.list(location()) ?? []).map((provider) => provider.id)),
+    })
+
+    batch(() => {
+      setForm("err", output.err)
+      output.models.forEach((err, index) => setForm("models", index, "err", err))
+      output.headers.forEach((err, index) => setForm("headers", index, "err", err))
+    })
+
+    return output.result
+  }
+
+  const refresh = async (providerID: string, modelIDs: string[]) => {
+    // Config writes return before the server's debounced catalog reload finishes.
+    const deadline = Date.now() + 10_000
+
+    while (true) {
+      await accounts.refresh()
+      const providers = data.location.provider.list(location()) ?? []
+      const models = data.location.model.list(location()) ?? []
+      if (
+        providers.some((provider) => provider.id === providerID) &&
+        modelIDs.every((id) =>
+          models.some((model) => model.providerID === providerID && model.id === id && model.enabled),
+        )
+      )
+        return
+
+      if (Date.now() >= deadline) throw new Error(language.t("provider.custom.error.notLoaded"))
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+  }
+
+  const saveMutation = useMutation(() => ({
+    mutationFn: async (result: NonNullable<ReturnType<typeof validate>>): Promise<typeof result> => {
+      await saveCustomProvider(sdk.api, result)
+
+      return result
+    },
+    onSuccess: async (result) => {
+      // The picker only lists the newest model per family, which would hide what was just defined.
+      global.models.show(
+        Object.keys(result.config.models).map((modelID) => ({ providerID: result.providerID, modelID })),
+      )
+      const loaded = await refresh(result.providerID, Object.keys(result.config.models))
+        .then(() => true)
+        .catch((error: unknown) => {
+          // Persistence succeeded. Close the form so a refresh failure cannot resubmit its credential.
+          showToast({
+            title: language.t("provider.custom.saved.title", { provider: result.name }),
+            description: language.t("provider.custom.error.refreshFailed", {
+              error: formatServerError(error, language.t),
+            }),
+          })
+          return false
+        })
+      dialog.close()
+      if (!loaded) return
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("provider.connect.toast.connected.title", { provider: result.name }),
+        description: language.t("provider.connect.toast.connected.description", { provider: result.name }),
+      })
+    },
+    onError: (err) => {
+      showToast({ title: language.t("common.requestFailed"), description: formatServerError(err, language.t) })
+    },
+  }))
+
+  const save = (e: SubmitEvent) => {
+    e.preventDefault()
+
+    if (saveMutation.isPending) return
+
+    const result = validate()
+
+    if (!result) return
+    saveMutation.mutate(result)
+  }
+
+  return (
+    <div data-scrollable class="flex min-h-0 flex-col px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
+      <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
+        <p class="text-14-regular text-text-base">
+          {language.t("provider.custom.description.prefix")}
+          <ExternalLink href="https://opencode.ai/v2/docs/providers/#custom" tabIndex={-1}>
+            {language.t("provider.custom.description.link")}
+          </ExternalLink>
+          {language.t("provider.custom.description.suffix")}
+        </p>
+
+        <div class="flex flex-col gap-4">
+          <TextField
+            autofocus={props.autofocus ?? true}
+            label={language.t("provider.custom.field.providerID.label")}
+            placeholder={language.t("provider.custom.field.providerID.placeholder")}
+            description={language.t("provider.custom.field.providerID.description")}
+            value={form.providerID}
+            onChange={(v) => setField("providerID", v)}
+            validationState={form.err.providerID ? "invalid" : undefined}
+            error={form.err.providerID}
+          />
+          <TextField
+            label={language.t("provider.custom.field.name.label")}
+            placeholder={language.t("provider.custom.field.name.placeholder")}
+            value={form.name}
+            onChange={(v) => setField("name", v)}
+            validationState={form.err.name ? "invalid" : undefined}
+            error={form.err.name}
+          />
+          <TextField
+            label={language.t("provider.custom.field.baseURL.label")}
+            placeholder={language.t("provider.custom.field.baseURL.placeholder")}
+            value={form.baseURL}
+            onChange={(v) => setField("baseURL", v)}
+            validationState={form.err.baseURL ? "invalid" : undefined}
+            error={form.err.baseURL}
+          />
+          <TextField
+            label={language.t("provider.custom.field.apiKey.label")}
+            placeholder={language.t("provider.custom.field.apiKey.placeholder")}
+            description={language.t("provider.custom.field.apiKey.description")}
+            value={form.apiKey}
+            onChange={(v) => setField("apiKey", v)}
+          />
+        </div>
+
+        <div class="flex flex-col gap-3">
+          <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
+          <For each={form.models}>
+            {(m, i) => (
+              <div class="flex gap-2 items-start" data-row={m.row}>
+                <div class="flex-1">
+                  <TextField
+                    label={language.t("provider.custom.models.id.label")}
+                    hideLabel
+                    placeholder={language.t("provider.custom.models.id.placeholder")}
+                    value={m.id}
+                    onChange={(v) => setModel(i(), "id", v)}
+                    validationState={m.err.id ? "invalid" : undefined}
+                    error={m.err.id}
+                  />
+                </div>
+                <div class="flex-1">
+                  <TextField
+                    label={language.t("provider.custom.models.name.label")}
+                    hideLabel
+                    placeholder={language.t("provider.custom.models.name.placeholder")}
+                    value={m.name}
+                    onChange={(v) => setModel(i(), "name", v)}
+                    validationState={m.err.name ? "invalid" : undefined}
+                    error={m.err.name}
+                  />
+                </div>
+                <IconButton
+                  type="button"
+                  icon={<Icon name="trash" />}
+                  variant="ghost"
+                  class="mt-1.5"
+                  onClick={() => removeModel(i())}
+                  disabled={form.models.length <= 1}
+                  aria-label={language.t("provider.custom.models.remove")}
+                />
+              </div>
+            )}
+          </For>
+          <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addModel} class="self-start">
+            {language.t("provider.custom.models.add")}
+          </Button>
+        </div>
+
+        <div class="flex flex-col gap-3">
+          <label class="text-12-medium text-text-weak">{language.t("provider.custom.headers.label")}</label>
+          <For each={form.headers}>
+            {(h, i) => (
+              <div class="flex gap-2 items-start" data-row={h.row}>
+                <div class="flex-1">
+                  <TextField
+                    label={language.t("provider.custom.headers.key.label")}
+                    hideLabel
+                    placeholder={language.t("provider.custom.headers.key.placeholder")}
+                    value={h.key}
+                    onChange={(v) => setHeader(i(), "key", v)}
+                    validationState={h.err.key ? "invalid" : undefined}
+                    error={h.err.key}
+                  />
+                </div>
+                <div class="flex-1">
+                  <TextField
+                    label={language.t("provider.custom.headers.value.label")}
+                    hideLabel
+                    placeholder={language.t("provider.custom.headers.value.placeholder")}
+                    value={h.value}
+                    onChange={(v) => setHeader(i(), "value", v)}
+                    validationState={h.err.value ? "invalid" : undefined}
+                    error={h.err.value}
+                  />
+                </div>
+                <IconButton
+                  type="button"
+                  icon={<Icon name="trash" />}
+                  variant="ghost"
+                  class="mt-1.5"
+                  onClick={() => removeHeader(i())}
+                  disabled={form.headers.length <= 1}
+                  aria-label={language.t("provider.custom.headers.remove")}
+                />
+              </div>
+            )}
+          </For>
+          <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addHeader} class="self-start">
+            {language.t("provider.custom.headers.add")}
+          </Button>
+        </div>
+
+        <Button
+          class="w-auto self-start"
+          type="submit"
+          size="large"
+          variant="contrast"
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? language.t("common.saving") : language.t("common.submit")}
+        </Button>
+      </form>
+    </div>
+  )
+}

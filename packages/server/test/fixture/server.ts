@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { HttpServer } from "effect/http"
 import { ServerProcess } from "../../src/process"
 
-export const startServer = Effect.fnUntraced(function* (directory: string) {
+export const startServer = Effect.fnUntraced(function* (directory: string, options?: { filewatcher?: boolean }) {
   const server = yield* ServerProcess.start<never, never>({
     hostname: "127.0.0.1",
     port: 0,
@@ -10,7 +10,7 @@ export const startServer = Effect.fnUntraced(function* (directory: string) {
     app: { version: "test-version" },
     database: { path: ":memory:" },
     config: { directory },
-    fs: { filewatcher: false },
+    fs: { filewatcher: options?.filewatcher ?? false },
     models: { fetch: false },
   })
   return {

@@ -54,9 +54,12 @@ import { authServerName, RemoteAuthNotice } from "./remote"
 import { providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
 import { AccountNameInput } from "@/settings/providers/account-name"
 import { useProviderAccountActions } from "@/settings/providers/account-actions"
+import { CustomProviderForm } from "@/providers/credentials/dialog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import "./models.css"
+
+const CUSTOM_ID = "_custom"
 
 export function useProviderConnectController() {
   const [store, setStore] = createStore<{ selected?: string }>({})
@@ -102,6 +105,7 @@ export const DialogConnectProvider: Component<{
 
   const language = useLanguage()
   const dialog = useDialog()
+  const params = useParams()
 
   const [welcome, setWelcome, , welcomeReady] = persisted(
     Persist.global("chatgpt-plan-welcome.v1"),
@@ -112,6 +116,7 @@ export const DialogConnectProvider: Component<{
   const reset = controller.reset
   const back = { current: reset }
   const consoleSelected = () => controller.selected() === CONSOLE_INTEGRATION
+  const customSelected = () => controller.selected() === CUSTOM_ID
   let focusHost: HTMLDivElement | undefined
   const holdFocus = () => focusHost?.focus({ preventScroll: true })
 
@@ -124,6 +129,12 @@ export const DialogConnectProvider: Component<{
   function Content() {
     return (
       <Switch>
+        <Match when={customSelected()}>
+          <CustomProviderForm
+            autofocus={false}
+            directory={props.defaultLocation ? undefined : (props.directory ?? decode64(params.dir))}
+          />
+        </Match>
         <Match keyed when={controller.selected()}>
           {(provider) => (
             <ProviderConnection
@@ -205,10 +216,13 @@ export const DialogConnectProvider: Component<{
                   </button>
                 </Show>
                 <ProviderModelIcon
-                  provider={{ id: provider(), name: state.title }}
+                  provider={{
+                    id: provider(),
+                    name: customSelected() ? language.t("provider.custom.title") : state.title,
+                  }}
                   class="shrink-0 text-v2-icon-icon-base"
                 />
-                <DialogTitle>{state.title}</DialogTitle>
+                <DialogTitle>{customSelected() ? language.t("provider.custom.title") : state.title}</DialogTitle>
               </div>
             )}
           </Match>
@@ -250,6 +264,10 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     return integrations.list().filter((row) => `${row.id} ${row.name}`.toLowerCase().includes(query))
   })
 
+  const custom = createMemo(() =>
+    language.t("dialog.provider.custom.label").toLowerCase().includes(store.filter.trim().toLowerCase()),
+  )
+
   const mcp = createMemo(() =>
     all()
       .filter((row) => row.metadata?.source === "mcp")
@@ -277,7 +295,10 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   // An integration that only reads environment variables has nothing to connect from here.
   const disabled = (row: IntegrationInfo) => connectMethods(row).length === 0 && providerAccounts(row).length === 0
 
-  const rows = createMemo(() => [...mcp(), ...popular(), ...services()].filter((row) => !disabled(row)))
+  const rows = createMemo(() => [
+    ...[...mcp(), ...popular(), ...services()].filter((row) => !disabled(row)),
+    ...(custom() ? [{ id: CUSTOM_ID }] : []),
+  ])
 
   let picker: HTMLDivElement | undefined
   let search: HTMLInputElement | undefined
@@ -415,7 +436,25 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
               </Show>
             )}
           </For>
-          <Show when={all().length === 0}>
+          <Show when={custom()}>
+            <button
+              type="button"
+              data-provider-id={CUSTOM_ID}
+              class="flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2.5 text-start text-[13px] leading-text-compact tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
+              classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === CUSTOM_ID }}
+              onMouseEnter={() => setStore("active", CUSTOM_ID)}
+              onClick={() => connect(CUSTOM_ID)}
+            >
+              <ProviderModelIcon
+                provider={{ id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") }}
+                class="shrink-0 text-v2-icon-icon-base"
+              />
+              <span class="min-w-0 truncate font-[530] text-v2-text-text-base">
+                {language.t("dialog.provider.custom.label")}
+              </span>
+            </button>
+          </Show>
+          <Show when={all().length === 0 && !custom()}>
             <div class="flex h-24 items-center justify-center text-[13px] font-[440] text-v2-text-text-muted">
               {language.t("dialog.provider.empty")}
             </div>
