@@ -154,6 +154,13 @@ const layer = Layer.effect(
                       tokens_cache_write: input.data.info.tokens.cache.write,
                       time_created: DateTime.toEpochMillis(input.data.info.time.created),
                       time_updated: importedAt,
+                      time_busy:
+                        input.data.info.time.idle && input.data.info.time.busy
+                          ? Math.min(
+                              DateTime.toEpochMillis(input.data.info.time.idle),
+                              DateTime.toEpochMillis(input.data.info.time.busy),
+                            )
+                          : null,
                       time_idle: input.data.info.time.idle ? DateTime.toEpochMillis(input.data.info.time.idle) : null,
                       time_viewed:
                         input.data.info.time.idle && input.data.info.time.viewed

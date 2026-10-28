@@ -787,6 +787,20 @@ const layer = Layer.effectDiscard(
         delivery: event.data.delivery,
       }),
     )
+    yield* bus.project(SessionEvent.Execution.Started, (event) =>
+      db
+        .update(SessionTable)
+        .set({ time_busy: event.created, time_updated: sql`${SessionTable.time_updated}` })
+        .where(
+          and(
+            eq(SessionTable.id, event.data.sessionID),
+            // A turn resumed after shutdown or a crash never reached idle, so it keeps its original start.
+            or(isNull(SessionTable.time_busy), gte(SessionTable.time_idle, SessionTable.time_busy)),
+          ),
+        )
+        .run()
+        .pipe(Effect.orDie),
+    )
     yield* bus.project(SessionEvent.Execution.Succeeded, (event) => projectIdle(db, event))
     yield* bus.project(SessionEvent.Execution.Failed, (event) => projectIdle(db, event))
     yield* bus.project(SessionEvent.Execution.Interrupted, (event) => projectIdle(db, event))

@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "dc16dd12-cb76-432f-8108-0c3aadaf54bb",
-  "prevIds": ["23940db2-8b4e-4a5e-a404-70d785bd788c"],
+  "id": "e5daa0af-cae7-4057-919a-ebf44dfced0a",
+  "prevIds": ["dc16dd12-cb76-432f-8108-0c3aadaf54bb"],
   "ddl": [
     {
       "name": "account_state",
@@ -1669,6 +1669,16 @@
       "default": null,
       "generated": null,
       "name": "time_updated",
+      "entityType": "columns",
+      "table": "session_v2"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_busy",
       "entityType": "columns",
       "table": "session_v2"
     },

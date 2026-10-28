@@ -2232,7 +2232,7 @@ export type SessionInfo = {
   cost: MoneyUSD
   tokens: TokenUsageInfo
   outcome?: "succeeded" | "failed" | "interrupted"
-  time: { created: number; updated: number; idle?: number; viewed?: number; archived?: number }
+  time: { created: number; updated: number; busy?: number; idle?: number; viewed?: number; archived?: number }
   title?: string
   subpath?: RelativePath
   metadata?: SessionMetadata
@@ -3685,6 +3685,7 @@ export type ExperimentalSessionImportInput = {
     readonly time: {
       readonly created: number
       readonly updated: number
+      readonly busy?: number
       readonly idle?: number
       readonly viewed?: number
       readonly archived?: number
