@@ -73,10 +73,14 @@ jobs:
           INPUT_BUMP: ${{ inputs.bump }}
           INPUT_VERSION: ${{ inputs.version }}
 
+  nix:
+    needs: plan
+    uses: ./.github/workflows/check-nix.yml
+
   # A versioned release builds from a commit with its versions and changelog on the dispatched dev commit,
   # tagged v<version>. Runs git only.
   tag:
-    needs: plan
+    needs: [plan, nix]
     runs-on: ubuntu-24.04
     # Stable tags are pushed with the release deploy key, the only non-releasers actor the v* tag ruleset admits.
     environment: ${{ needs.plan.outputs.channel == 'latest' && needs.plan.outputs.dry_run != 'true' && 'release' || '' }}

@@ -7,6 +7,7 @@ on:
     branches: [dev]
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,6 +17,35 @@ permissions:
   contents: read
 
 jobs:
+  nix-deps:
+    name: nix-deps (${{ matrix.system }})
+    if: ${{ !github.event.pull_request.draft }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - system: aarch64-linux
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
+          - system: aarch64-darwin
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Nix
+        uses: nixbuild/nix-quick-install-action@2c9db80fb984ceb1bcaa77cdda3fdf8cfba92035 # v34
+
+      - name: Build node_modules with the declared hash
+        env:
+          SYSTEM: ${{ matrix.system }}
+        run: nix build ".#packages.${SYSTEM}.opencode.node_modules" --no-link --print-build-logs
+
   nix-eval:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
