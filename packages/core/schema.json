@@ -1,9 +1,13 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "44bd8ca5-689a-410e-a46a-958eb5accd97",
-  "prevIds": ["f1f14616-b6a1-483d-87b0-d5b7a9132580"],
+  "id": "b615d923-c552-420a-b411-07ff6dbf8fad",
+  "prevIds": ["44bd8ca5-689a-410e-a46a-958eb5accd97"],
   "ddl": [
+    {
+      "name": "mcp_trusted_host",
+      "entityType": "tables"
+    },
     {
       "name": "account_state",
       "entityType": "tables"
@@ -83,6 +87,86 @@
     {
       "name": "worktree",
       "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "project_id",
+      "entityType": "columns",
+      "table": "mcp_trusted_host"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "host",
+      "entityType": "columns",
+      "table": "mcp_trusted_host"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "port",
+      "entityType": "columns",
+      "table": "mcp_trusted_host"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "fingerprint",
+      "entityType": "columns",
+      "table": "mcp_trusted_host"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "subject",
+      "entityType": "columns",
+      "table": "mcp_trusted_host"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "valid_to",
+      "entityType": "columns",
+      "table": "mcp_trusted_host"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "mcp_trusted_host"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "mcp_trusted_host"
     },
     {
       "type": "integer",
@@ -1575,6 +1659,17 @@
       "table": "worktree"
     },
     {
+      "columns": ["project_id"],
+      "tableTo": "project",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_mcp_trusted_host_project_id_project_id_fk",
+      "entityType": "fks",
+      "table": "mcp_trusted_host"
+    },
+    {
       "columns": ["active_account_id"],
       "tableTo": "account",
       "columnsTo": ["id"],
@@ -1705,6 +1800,13 @@
       "name": "fk_worktree_project_id_project_id_fk",
       "entityType": "fks",
       "table": "worktree"
+    },
+    {
+      "columns": ["project_id", "host", "port"],
+      "nameExplicit": false,
+      "name": "mcp_trusted_host_pk",
+      "entityType": "pks",
+      "table": "mcp_trusted_host"
     },
     {
       "columns": ["email", "url"],

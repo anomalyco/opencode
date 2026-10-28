@@ -1690,6 +1690,24 @@ export type McpDisconnectInput = {
 export type McpDisconnectOutput = void
 export type McpDisconnectOperation<E = never> = (input: McpDisconnectInput) => Effect.Effect<McpDisconnectOutput, E>
 
+export type McpTrustInspectInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly url: string
+}
+export type McpTrustInspectOutput = { readonly location: Location.PublicRef; readonly data: Mcp.TrustInspect }
+export type McpTrustInspectOperation<E = never> = (
+  input: McpTrustInspectInput,
+) => Effect.Effect<McpTrustInspectOutput, E>
+
+export type McpTrustPinInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly url: string
+  readonly force?: boolean | undefined
+  readonly expectFingerprint?: string | undefined
+}
+export type McpTrustPinOutput = { readonly location: Location.PublicRef; readonly data: Mcp.TrustResult }
+export type McpTrustPinOperation<E = never> = (input: McpTrustPinInput) => Effect.Effect<McpTrustPinOutput, E>
+
 export type McpResourceCatalogInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type McpResourceCatalogOutput = { readonly location: Location.PublicRef; readonly data: Mcp.ResourceCatalog }
 export type McpResourceCatalogOperation<E = never> = (
@@ -1710,6 +1728,7 @@ export interface McpApi<E = never> {
   readonly remove: McpRemoveOperation<E>
   readonly connect: McpConnectOperation<E>
   readonly disconnect: McpDisconnectOperation<E>
+  readonly trust: { readonly inspect: McpTrustInspectOperation<E>; readonly pin: McpTrustPinOperation<E> }
   readonly resource: { readonly catalog: McpResourceCatalogOperation<E> }
   readonly client: { readonly token: McpClientTokenOperation<E> }
 }

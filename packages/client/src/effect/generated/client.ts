@@ -162,6 +162,10 @@ import type {
   McpConnectOutput,
   McpDisconnectInput,
   McpDisconnectOutput,
+  McpTrustInspectInput,
+  McpTrustInspectOutput,
+  McpTrustPinInput,
+  McpTrustPinOutput,
   McpResourceCatalogInput,
   McpResourceCatalogOutput,
   McpClientTokenInput,
@@ -1129,6 +1133,21 @@ const EndpointMcpDisconnect = (raw: RawClient["server.mcp"]) => (input: McpDisco
     ),
   )
 
+const EndpointMcpTrustInspect = (raw: RawClient["server.mcp"]) => (input: McpTrustInspectInput) =>
+  preserveEffect<McpTrustInspectOutput>()(
+    raw["mcp.trust.inspect"]({ query: { location: input["location"] }, payload: { url: input["url"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointMcpTrustPin = (raw: RawClient["server.mcp"]) => (input: McpTrustPinInput) =>
+  preserveEffect<McpTrustPinOutput>()(
+    raw["mcp.trust.pin"]({
+      query: { location: input["location"] },
+      payload: { url: input["url"], force: input["force"], expectFingerprint: input["expectFingerprint"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointMcpResourceCatalog = (raw: RawClient["server.mcp"]) => (input?: McpResourceCatalogInput) =>
   preserveEffect<McpResourceCatalogOutput>()(
     raw["mcp.resource.catalog"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1148,6 +1167,7 @@ const adaptGroupMcp = (raw: RawClient["server.mcp"]) => ({
   remove: EndpointMcpRemove(raw),
   connect: EndpointMcpConnect(raw),
   disconnect: EndpointMcpDisconnect(raw),
+  trust: { inspect: EndpointMcpTrustInspect(raw), pin: EndpointMcpTrustPin(raw) },
   resource: { catalog: EndpointMcpResourceCatalog(raw) },
   client: { token: EndpointMcpClientToken(raw) },
 })
