@@ -9,7 +9,9 @@ import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useSync } from "../context/sync"
 
-export function DialogModel(props: { providerID?: string }) {
+// `current` puts the cursor on another model than the selected one, e.g. the
+// model a past turn ran on.
+export function DialogModel(props: { providerID?: string; current?: { providerID: string; modelID: string } }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
@@ -178,7 +180,7 @@ export function DialogModel(props: { providerID?: string }) {
       flat={true}
       skipFilter={true}
       title={title()}
-      current={local.model.current()}
+      current={props.current ?? local.model.current()}
     />
   )
 }

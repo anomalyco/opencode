@@ -1,0 +1,72 @@
+diff --git a/chunk-bun-t2myhmwd.js b/chunk-bun-t2myhmwd.js
+index 701d70dea2174e98ab56f4d614e678e868561479..c4b73d0825c4b46a99e5ec4f2811a40a3bc4e3ae 100644
+--- a/chunk-bun-t2myhmwd.js
++++ b/chunk-bun-t2myhmwd.js
+@@ -9647,11 +9647,11 @@ class ExtmarksController {
+         return;
+       }
+       this.saveSnapshot();
+-      const startOffset = this.positionToOffset(startLine, startCol);
+-      const endOffset = this.positionToOffset(endLine, endCol);
+-      const length = endOffset - startOffset;
+-      this.originalDeleteRange(startLine, startCol, endLine, endCol);
+-      this.adjustExtmarksAfterDeletion(startOffset, length);
++      const [startOffset, endOffset] = this.expandToVirtualExtmarks(this.positionToOffset(startLine, startCol), this.positionToOffset(endLine, endCol));
++      const start = this.offsetToPosition(startOffset);
++      const end = this.offsetToPosition(endOffset);
++      this.originalDeleteRange(start.row, start.col, end.row, end.col);
++      this.adjustExtmarksAfterDeletion(startOffset, endOffset - startOffset);
+     };
+     this.editBuffer.deleteLine = () => {
+       if (this.destroyed) {
+@@ -9781,6 +9781,14 @@ class ExtmarksController {
+       this.metadata.delete(id);
+     }
+   }
++  expandToVirtualExtmarks(start, end) {
++    if (start >= end)
++      return [start, end];
++    const cut = [...this.extmarks.values()].find((extmark) => extmark.virtual && extmark.start < end && extmark.end > start && (extmark.start < start || extmark.end > end));
++    if (!cut)
++      return [start, end];
++    return this.expandToVirtualExtmarks(Math.min(start, cut.start), Math.max(end, cut.end));
++  }
+   findVirtualExtmarkContaining(offset) {
+     for (const extmark of this.extmarks.values()) {
+       if (extmark.virtual && offset >= extmark.start && offset < extmark.end) {
+diff --git a/chunk-node-q0cwyvm9.js b/chunk-node-q0cwyvm9.js
+index be7df0e11bc6eac9ac8aacacdf2a4686670f09e1..39a9a428700d041c109f4a53bb3a4fd0094e53ee 100644
+--- a/chunk-node-q0cwyvm9.js
++++ b/chunk-node-q0cwyvm9.js
+@@ -9626,11 +9626,11 @@ class ExtmarksController {
+         return;
+       }
+       this.saveSnapshot();
+-      const startOffset = this.positionToOffset(startLine, startCol);
+-      const endOffset = this.positionToOffset(endLine, endCol);
+-      const length = endOffset - startOffset;
+-      this.originalDeleteRange(startLine, startCol, endLine, endCol);
+-      this.adjustExtmarksAfterDeletion(startOffset, length);
++      const [startOffset, endOffset] = this.expandToVirtualExtmarks(this.positionToOffset(startLine, startCol), this.positionToOffset(endLine, endCol));
++      const start = this.offsetToPosition(startOffset);
++      const end = this.offsetToPosition(endOffset);
++      this.originalDeleteRange(start.row, start.col, end.row, end.col);
++      this.adjustExtmarksAfterDeletion(startOffset, endOffset - startOffset);
+     };
+     this.editBuffer.deleteLine = () => {
+       if (this.destroyed) {
+@@ -9760,6 +9760,14 @@ class ExtmarksController {
+       this.metadata.delete(id);
+     }
+   }
++  expandToVirtualExtmarks(start, end) {
++    if (start >= end)
++      return [start, end];
++    const cut = [...this.extmarks.values()].find((extmark) => extmark.virtual && extmark.start < end && extmark.end > start && (extmark.start < start || extmark.end > end));
++    if (!cut)
++      return [start, end];
++    return this.expandToVirtualExtmarks(Math.min(start, cut.start), Math.max(end, cut.end));
++  }
+   findVirtualExtmarkContaining(offset) {
+     for (const extmark of this.extmarks.values()) {
+       if (extmark.virtual && offset >= extmark.start && offset < extmark.end) {
