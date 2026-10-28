@@ -22,12 +22,16 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
   const providers = useProviders(() => sdk().directory)
   const models = useGlobal().models
 
-  const providerName = (providerID: string, catalog = providers.all()) => {
+  const providerName = (
+    providerID: string,
+    catalog = providers.all(),
+    connected = providers.connected().map((provider) => provider.id),
+  ) => {
     const provider = catalog.get(providerID)
 
     if (providerID === "opencode" && (!provider?.integrationID || provider.integrationID === "opencode")) return
 
-    return composerProviderName(providerID, catalog, { origin: "OpenCode" })
+    return composerProviderName(providerID, catalog, { connected, origin: "OpenCode" })
   }
 
   const labels = (catalog: ReturnType<typeof providers.all>, connected: readonly string[]) => {
@@ -105,7 +109,7 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
     const variants = Object.keys(match.model.variants ?? {})
 
     return {
-      provider: providerName(expected.model.providerID, match.all),
+      provider: providerName(expected.model.providerID, match.all, match.connected),
       model: match.model.name.replace("(latest)", "").trim(),
       label: labels(match.all, match.connected).get(
         composerModelLabelKey(expected.model.providerID, expected.model.modelID),
