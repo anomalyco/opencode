@@ -13,6 +13,8 @@ describe("inlineCodeKind", () => {
     "console.log",
     "Dockerfile",
     "Makefile:12",
+    "my docs/notes.md",
+    "C:\\Program Files\\app\\file.txt",
   ])("treats %s as a possible path", (text) => {
     expect(inlineCodeKind(text)).toBe("path")
   })

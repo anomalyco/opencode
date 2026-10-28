@@ -23,7 +23,7 @@ const fileNames = new Set([
 export function inlineCodeKind(text: string): "path" | "url" | undefined {
   if (/^https?:\/\//i.test(text)) return "url"
 
-  if (!text || /\s/.test(text) || /^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return
+  if (!text || /^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return
 
   // Code, globs and markup, not paths.
   if (/[{}<>"'`;=|&*,]/.test(text)) return
