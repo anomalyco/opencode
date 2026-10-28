@@ -17,6 +17,7 @@ export type SessionActivityItem = {
   target: string
   // When the work started running, from the server's record of it.
   started: number
+  depth?: number
 }
 
 type DurationKey =
@@ -173,7 +174,7 @@ export function SessionActivityChips(props: {
             >
               <For each={props.subagents}>
                 {(item) => (
-                  <Menu.Item {...row(item)}>
+                  <Menu.Item {...row(item)} style={{ "padding-inline-start": `${12 + (item.depth ?? 0) * 16}px` }}>
                     <SessionProgressIndicatorV2 class="shrink-0 text-v2-icon-icon-muted" />
                     <span class="shrink-0 font-[530]">
                       <bdi>

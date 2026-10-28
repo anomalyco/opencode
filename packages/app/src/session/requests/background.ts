@@ -18,6 +18,7 @@ type Subagent = {
   label: string | undefined
   agent?: string
   started: number
+  depth?: number
 }
 
 type Task =
@@ -106,11 +107,10 @@ export function createSessionBackground(input: {
       return false
     }
 
-    // A call names its child once the child exists; until the call reports it, the child's title is its description.
+    // Only the child session ID identifies a call; titles can repeat.
     const calls = current.blocking.flatMap((item) => (item.type === "subagent" ? [item] : []))
 
-    const child = (item: (typeof calls)[number], info: SessionInfo) =>
-      item.id ? info.id === item.id : !!item.label && info.parentID === id && info.title === item.label
+    const child = (item: (typeof calls)[number], info: SessionInfo) => item.id === info.id
 
     const running = sessions.flatMap((info): Subagent[] => {
       if (input.status(info.id) !== "running" || !descends(info.id)) return []
@@ -130,7 +130,7 @@ export function createSessionBackground(input: {
     })
 
     const pending = calls.flatMap((item): Subagent[] =>
-      sessions.some((info) => child(item, info))
+      !item.id || sessions.some((info) => child(item, info))
         ? []
         : [
             {
@@ -145,8 +145,23 @@ export function createSessionBackground(input: {
           ],
     )
 
-    // Work that blocks the run comes before work already in the background.
-    return [...pending, ...running.filter((task) => task.partID), ...running.filter((task) => !task.partID)]
+    const entries = new Map(running.map((task) => [task.id, task]))
+    const children = new Map<string, string[]>()
+    sessions.forEach((info) => {
+      if (!info.parentID) return
+      children.set(info.parentID, [...(children.get(info.parentID) ?? []), info.id])
+    })
+
+    const seen = new Set([id])
+    const visit = (parentID: string, depth: number): Subagent[] =>
+      (children.get(parentID) ?? []).flatMap((childID) => {
+        if (seen.has(childID)) return []
+        seen.add(childID)
+        const item = entries.get(childID)
+        return [...(item ? [{ ...item, depth }] : []), ...visit(childID, depth + (item ? 1 : 0))]
+      })
+
+    return [...pending, ...visit(id, 0)]
   })
 
   // Background work: running subagents whose call no longer blocks the run, and the session's live shells outside

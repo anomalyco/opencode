@@ -6,6 +6,7 @@ import { currentSession } from "../utils/mock-server"
 import { assistantMessage, session, sessionID, setupTimeline, textPart, userMessage } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 import { mockWorkspace } from "../utils/workspace"
+import { mockNestedWorkers, mockStartingWorkers, nestedWorkers } from "../utils/nested-workers"
 
 const directory = "C:/OpenCode/SubagentNavigation"
 
@@ -61,7 +62,9 @@ test("keeps the parent title anchored when opening a subagent", async ({ page })
     // Measuring before then can read the detached heading, whose empty bounds put the start at 0.
     const card = page.locator(`a[href="${sessionHref(childID)}"]`)
     await expect(card).toBeVisible()
-    const start = await titleInlineStart(page.locator("[data-session-title]").getByRole("heading", { name: parentTitle }))
+    const start = await titleInlineStart(
+      page.locator("[data-session-title]").getByRole("heading", { name: parentTitle }),
+    )
 
     await card.click()
     await expectSessionTitle(page, taskDescription)
@@ -113,6 +116,86 @@ test("navigates from a running subagent card and hides background controls in th
   await page.locator('[data-component="task-tool-card"]').click()
   await expect(page).toHaveURL(new RegExp(`/session/${runningChildID}$`))
   await expect(hint).toHaveCount(0)
+})
+
+test("lists working descendants in tree order and updates when nested work finishes", async ({ page }) => {
+  const workspace = await mockNestedWorkers(page)
+  await page.goto(sessionHref(nestedWorkers.root))
+  await expect(page.getByRole("button", { name: /move running work to the background/i })).toBeVisible()
+
+  const chip = page.locator('[data-slot="session-activity-chip"]')
+  await expect(chip).toBeVisible()
+  await chip.click()
+  const rows = page.locator('[data-slot="session-activity-panel"]').getByRole("menuitem")
+  await expect(rows).toHaveCount(2)
+  await expect(rows.nth(0)).toContainText("Outer worker")
+  await expect(rows.nth(1)).toContainText("Inner worker")
+  await expect
+    .poll(() =>
+      rows.evaluateAll((items) => items.map((item) => Number.parseFloat(getComputedStyle(item).paddingInlineStart))),
+    )
+    .toEqual([12, 28])
+
+  await rows.nth(1).click()
+  await expect(page).toHaveURL(sessionHref(nestedWorkers.inner))
+  await expectSessionTitle(page, "Inner worker")
+  await expect(chip).toHaveCount(0)
+
+  const header = page.locator("[data-session-title]")
+  await header.locator('[data-slot="session-title-parent"]').click()
+  await expect(page).toHaveURL(sessionHref(nestedWorkers.outer))
+  await expect(chip).toBeVisible()
+  await chip.click()
+  await expect(rows).toHaveCount(1)
+  await expect(rows).toContainText("Inner worker")
+  await rows.click()
+  await expect(page).toHaveURL(sessionHref(nestedWorkers.inner))
+
+  await header.locator(`[data-slot="session-title-ancestor"][data-session-id="${nestedWorkers.root}"]`).click()
+  await expect(page).toHaveURL(sessionHref(nestedWorkers.root))
+  await expect(chip).toBeVisible()
+  await workspace.finish(nestedWorkers.inner, nestedWorkers.outer)
+  await chip.click()
+  await expect(rows).toHaveCount(1)
+  await expect(rows).toContainText("Outer worker")
+  await page.keyboard.press("Escape")
+  await workspace.finish(nestedWorkers.outer, nestedWorkers.root)
+  await expect(chip).toHaveCount(0)
+})
+
+test("keeps repeated worker descriptions separate until session IDs arrive", async ({ page }) => {
+  const workspace = await mockStartingWorkers(page)
+  await page.goto(sessionHref(workspace.old))
+  await expectSessionTitle(page, "Inspect code")
+
+  const header = page.locator("[data-session-title]")
+  await header.locator('[data-slot="session-title-parent"]').click()
+  await expect(page.getByRole("button", { name: /move running work to the background/i })).toBeVisible()
+  const chip = page.locator('[data-slot="session-activity-chip"]')
+  await workspace.start(workspace.first, "call_first")
+  await expect(chip).toBeVisible()
+  await workspace.start(workspace.second)
+  await chip.click()
+
+  const rows = page.locator('[data-slot="session-activity-panel"]').getByRole("menuitem")
+  await expect(rows).toHaveCount(2)
+  await expect(rows.nth(0)).toContainText("Inspect code")
+  await expect(rows.nth(1)).toContainText("Inspect code")
+  await rows.nth(0).click()
+  await expect(page).toHaveURL(sessionHref(workspace.first))
+  await expectSessionTitle(page, "Inspect code")
+  await header.locator('[data-slot="session-title-parent"]').click()
+  await chip.click()
+  await rows.nth(1).hover()
+
+  const interrupted = page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/interrupt"),
+  )
+
+  await rows.nth(1).getByRole("button", { name: "Interrupt subagent", exact: true }).click()
+  expect(new URL((await interrupted).url()).pathname).toBe(`/api/session/${workspace.second}/interrupt`)
+  await workspace.interrupted(workspace.second)
+  await expect(rows).toHaveCount(1)
 })
 
 test("opens a directly linked nested subagent in its root session tab", async ({ page }) => {

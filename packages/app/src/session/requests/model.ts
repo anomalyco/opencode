@@ -29,6 +29,16 @@ export function createSessionRequestModel() {
     )
   })
 
+  // Active child sessions may not be in the cached tree when a session is opened directly.
+  const activeSessions = createMemo(() => data.session.active(), [], {
+    equals: (a, b) => a.join() === b.join(),
+  })
+
+  createEffect(() => {
+    if (!params.id || serverSDK.connection.status() !== "connected") return
+    void Promise.all(activeSessions().map((sessionID) => data.session.sync(sessionID))).catch(() => undefined)
+  })
+
   // Only a running Session can hold a pending form, and events keep loaded forms current. Comparing by value
   // keeps every session update in a large subagent tree from re-requesting forms.
   const formSessions = createMemo(

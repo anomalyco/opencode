@@ -29,6 +29,7 @@ import { useCommand } from "@/shell/commands/command"
 import { usePluginScoped } from "@/runtime/plugin/commands"
 import {
   SessionAncestorTrail,
+  SessionChildActivity,
   SessionHeaderLayout,
   SessionLocation,
   SessionTitleHeader,
@@ -541,6 +542,9 @@ function MessageTimelineView(
                 <Show when={sessionID()} keyed>
                   {(_id) => (
                     <>
+                      <Show when={parentID()}>
+                        <SessionChildActivity sessionID={_id} />
+                      </Show>
                       {props.search}
                       <PluginSlot
                         at="session.header"

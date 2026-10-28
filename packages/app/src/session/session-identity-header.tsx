@@ -25,6 +25,7 @@ import { createStore } from "solid-js/store"
 import { PluginSlot } from "@/runtime/plugin/render"
 import { containsDirectory, getFilename } from "@opencode/util/path"
 import { useServer } from "@/runtime/server/current"
+import { useServerSDK } from "@/runtime/server/client"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { ServerLabel } from "@/servers/registry/label"
 import { fileManagerApp } from "@/home/projects/file-manager"
@@ -42,6 +43,8 @@ import { sessionTitle } from "./title"
 import { SessionHeaderSeparator } from "./header/separator"
 import { createSessionHeaderFit } from "./header/fit"
 import { SessionWorkingIndicator } from "./header/session-working-indicator"
+import { SessionActivityChips, type SessionActivityItem } from "./composer/activity-chips"
+import { createSessionBackground } from "./requests/background"
 import { CollapsedSidebarToggleSpace } from "@/shell/sidebar-toggle"
 import "./session-identity-header.css"
 
@@ -601,6 +604,7 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
       <SessionTitleHeader>
         <SessionHeaderLayout
           title={title()}
+          actions={parentID() ? <SessionChildActivity sessionID={props.sessionID} /> : undefined}
           location={
             <>
               <SessionLocation
@@ -638,5 +642,47 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
         </SessionHeaderLayout>
       </SessionTitleHeader>
     </Show>
+  )
+}
+
+export function SessionChildActivity(props: { sessionID: string }) {
+  const server = useServer()
+  const sdk = useServerSDK()
+  const language = useLanguage()
+  const openRoute = useOpenSessionRoute()
+  const data = server.ctx.data
+  const running = createSessionBackground({
+    sessionID: () => props.sessionID,
+    messages: data.session.message.list,
+    sessions: data.session.list,
+    status: data.session.status,
+    shells: () => [],
+  })
+  const subagents = createMemo<SessionActivityItem[]>(() =>
+    running.subagents().map((task) => ({
+      ...task,
+      agent: task.agent ?? (task.sessionID ? data.session.get(task.sessionID)?.agent : undefined),
+      key: task.id,
+      target: task.partID ?? task.id,
+    })),
+  )
+
+  return (
+    <SessionActivityChips
+      subagents={subagents()}
+      shells={[]}
+      onOpen={(item) => {
+        if (item.sessionID) openRoute(props.sessionID, item.sessionID)
+      }}
+      onStop={(item) => {
+        if (!item.sessionID) return
+        void sdk.api.session.interrupt({ sessionID: item.sessionID }).catch((error) =>
+          showToast({
+            title: language.t("common.requestFailed"),
+            description: errorMessage(error, language.t("common.requestFailed")),
+          }),
+        )
+      }}
+    />
   )
 }
