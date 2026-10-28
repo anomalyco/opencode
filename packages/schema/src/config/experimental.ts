@@ -22,6 +22,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
   }),
+  secret_shield: Schema.Literals(["off", "warn", "mask", "block"]).pipe(optional).annotate({
+    description:
+      "Scan outbound messages for credential patterns before sending to the model provider. Defaults to off.",
+  }),
   location_idle_timeout: Schema.Union([Schema.DurationFromString, Schema.Literal(false)])
     .pipe(optional)
     .annotate({

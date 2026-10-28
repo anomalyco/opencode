@@ -241,3 +241,5 @@ export type {
   Definition as ProviderPackageDefinition,
   Settings as ProviderPackageSettings,
 } from "./provider-package.js"
+export { applySecretShield, isSecretShieldMode } from "./secret-shield.js"
+export type { SecretShieldMode, ShieldResult, ShieldReport } from "./secret-shield.js"
