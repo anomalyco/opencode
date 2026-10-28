@@ -7,7 +7,7 @@ export function parseFileLineRange(input: string) {
   if (!match) return { base }
 
   const startLine = Number(match[1])
-  const endLine = match[2] && startLine < Number(match[2]) ? Number(match[2]) : undefined
+  const endLine = match[2] && startLine <= Number(match[2]) ? Number(match[2]) : undefined
   return { base, lineRange: { startLine, endLine } }
 }
 

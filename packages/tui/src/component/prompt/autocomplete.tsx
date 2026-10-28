@@ -299,7 +299,7 @@ export function Autocomplete(props: {
     const item = normalizeMentionPath(input.filePath)
     const lineRange = {
       startLine: input.lineStart,
-      endLine: input.lineEnd > input.lineStart ? input.lineEnd : undefined,
+      endLine: input.lineEnd >= input.lineStart ? input.lineEnd : undefined,
     }
     const { filename, part } = createFilePart({ path: item, type: "file" }, input.filePath, lineRange)
     const index = store.visible === "reference" ? store.index : props.input().cursorOffset
