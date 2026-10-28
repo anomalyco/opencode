@@ -3,6 +3,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
 import { Provider } from "../../provider.js"
 import { configuredSettings } from "./configured.js"
+import { credentialSettings, metadataSettings } from "./credential-settings.js"
 
 const providerID = Provider.ID.make("cloudflare-workers-ai")
 
@@ -36,12 +37,16 @@ export const CloudflareWorkersAIPlugin = define({
         },
       })
     })
+    // The key method's form answer is stored as credential metadata.
+    const login = yield* credentialSettings(ctx, providerID, (value) =>
+      value.type === "key" ? metadataSettings(value.metadata, ["accountId"]) : {},
+    )
     yield* ctx.provider.transform((evt) => {
       const item = evt.get(providerID)
       if (!item) return
       evt.update(item.provider.id, (provider) => {
         if (typeof provider.settings?.baseURL === "string") return
-        const accountId = resolveAccountId(provider.settings ?? {})
+        const accountId = resolveAccountId({ ...provider.settings, ...login.settings })
         if (!accountId) return
         provider.settings =
           provider.package === "@opencode/ai/providers/cloudflare-workers-ai"
