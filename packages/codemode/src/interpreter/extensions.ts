@@ -137,34 +137,49 @@ export const extensionGlobals = <R>(
   // A host function as a program function. Arguments cross in; a global's call runs inside the host's extension
   // hooks, which see the host's own error on failure; then whatever came back, or was thrown, crosses out so the
   // program catches a copy. Functions inside results are part of a value's API and skip the hooks.
+  // The before hook runs before the host function is called, so a call it refuses never reaches the host.
   const wrap = (value: Function, label: string, describe?: (args: ReadonlyArray<unknown>) => ExtensionInvocation) =>
     fn(builtins, value.name, value.length, (_, values, site) => {
       const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
       const hooks = ctx.tools.hooks
+      const call = describe?.(args)
+      const runner = ctx.runner
+      const toProgram = Effect.mapError((reason: unknown) => new Throw(fromHost(reason, label)))
+      const before =
+        call === undefined || hooks["extension.before"] === undefined
+          ? undefined
+          : hooks["extension.before"](call).pipe(toProgram)
       const settle = (run: Effect.Effect<unknown, unknown, R>) =>
-        (describe === undefined
-          ? run
-          : hooked(describe(args), hooks["extension.before"], hooks["extension.after"], run)
-        ).pipe(
-          Effect.mapError((reason) => new Throw(fromHost(reason, label))),
+        (call === undefined ? run : hooked(call, undefined, hooks["extension.after"], run)).pipe(
+          toProgram,
           Effect.map((settled) => fromHost(settled, label)),
         )
-      let result: unknown
-      try {
-        result = value.apply(undefined, args)
-      } catch (reason) {
-        return blocking(ctx.runner.blocking(settle(Effect.fail(reason))))
+      const later = (run: Effect.Effect<Value, unknown, R>) => {
+        const promise = runner.newPromise()
+        const resolving = runner.resolving(promise, site)
+        runner.host(
+          run,
+          (settled) => (settled.ok ? resolving.resolve(settled.value as Value) : resolving.reject(settled.error)),
+          site,
+        )
+        return promise
       }
-      if (!(result instanceof Promise)) return blocking(ctx.runner.blocking(settle(Effect.succeed(result))))
-      const runner = ctx.runner
-      const promise = runner.newPromise()
-      const resolving = runner.resolving(promise, site)
-      runner.host(
-        settle(Effect.tryPromise({ try: () => result, catch: (reason) => reason })),
-        (settled) => (settled.ok ? resolving.resolve(settled.value as Value) : resolving.reject(settled.error)),
-        site,
-      )
-      return promise
+      // A refused async function rejects its promise, as its own failure would.
+      if (value instanceof AsyncFunction) {
+        const run = settle(Effect.tryPromise({ try: () => value.apply(undefined, args), catch: (reason) => reason }))
+        return later(before === undefined ? run : Effect.andThen(before, run))
+      }
+      return (function* () {
+        if (before !== undefined) yield runner.blocking(before)
+        let result: unknown
+        try {
+          result = value.apply(undefined, args)
+        } catch (reason) {
+          return yield* blocking(runner.blocking(settle(Effect.fail(reason))))
+        }
+        if (!(result instanceof Promise)) return yield* blocking(runner.blocking(settle(Effect.succeed(result))))
+        return later(settle(Effect.tryPromise({ try: () => result, catch: (reason) => reason })))
+      })()
     })
 
   return extensions.flatMap((extension) =>
@@ -194,6 +209,8 @@ const crossing = <T>(convert: () => T): T | typeof left => {
     throw reason
   }
 }
+
+const AsyncFunction = (async () => {}).constructor
 
 const hostErrors = new Map<string, ErrorConstructor>([
   ["TypeError", TypeError],
