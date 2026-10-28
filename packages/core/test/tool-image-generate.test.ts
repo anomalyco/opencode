@@ -1,6 +1,8 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
 import { Generate } from "@opencode/core/generate"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
@@ -12,6 +14,8 @@ import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { ImageGenerateTool } from "@opencode/core/tool/plugin/image-generate"
 import { OpenCodeTools } from "@opencode/core/tool/plugin/opencode"
+import { Document, Event, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import type { ImageRequest, ImageResult } from "@opencode/schema/generate"
 import { Global } from "@opencode/util/global"
 import { Effect, Layer, Schedule } from "effect"
@@ -82,6 +86,33 @@ const setup = (providerID = "test") =>
     return { session, run, directory: location.directory }
   })
 
+const configure = (image_generation: ConfigExperimental.Info["image_generation"]) =>
+  Effect.gen(function* () {
+    const config = yield* Config.Test
+    yield* config.setEntries([
+      new Document({
+        type: "document",
+        info: new Info({ experimental: new ConfigExperimental.Info({ image_generation }) }),
+      }),
+    ])
+    const bus = yield* Bus.Service
+    yield* bus.publish(Event.Updated, {})
+  })
+
+const configuredModel = (providerID: string, model: string) => ({
+  model: { providerID: Provider.ID.make(providerID), model: Model.ID.make(model) },
+})
+
+const registered = Tool.Service.use((registry) => toolDefinitions(registry)).pipe(
+  Effect.map((tools) => tools.some((tool) => tool.name === ImageGenerateTool.name)),
+)
+// Catalog and config changes reach the tool through events, so wait for them instead of a fixed delay.
+const until = (expected: boolean) =>
+  registered.pipe(
+    Effect.repeat({ until: (value) => value === expected, schedule: Schedule.spaced("5 millis") }),
+    Effect.timeout("10 seconds"),
+  )
+
 const text = (result: { readonly content?: ReadonlyArray<Tool.Content> }) =>
   result.content?.[0]?.type === "text" ? result.content[0].text : undefined
 const failure = (result: { readonly error?: { readonly message: string } }) => result.error?.message
@@ -90,23 +121,55 @@ describe("image_generate", () => {
   it.live("is registered only while an image model is available", () =>
     Effect.gen(function* () {
       yield* setup()
-      const registry = yield* Tool.Service
-      const registered = toolDefinitions(registry).pipe(
-        Effect.map((tools) => tools.some((tool) => tool.name === ImageGenerateTool.name)),
-      )
-      // The catalog change reaches the tool through model.updated, so wait for it instead of a fixed delay.
-      const until = (expected: boolean) =>
-        registered.pipe(
-          Effect.repeat({ until: (value) => value === expected, schedule: Schedule.spaced("5 millis") }),
-          Effect.timeout("10 seconds"),
-        )
-
       expect(yield* registered).toBe(false)
       yield* imageModel("test", "painter")
       expect(yield* until(true)).toBe(true)
       const catalog = yield* Provider.Service
       yield* catalog.transform((editor) => editor.models.remove(Provider.ID.make("test"), Model.ID.make("painter")))
       expect(yield* until(false)).toBe(false)
+    }),
+  )
+
+  it.live("is not registered while config turns it off", () =>
+    Effect.gen(function* () {
+      yield* imageModel("test", "painter")
+      yield* configure(false)
+      yield* setup()
+      expect(yield* registered).toBe(false)
+      yield* configure({})
+      expect(yield* until(true)).toBe(true)
+      yield* configure(false)
+      expect(yield* until(false)).toBe(false)
+    }),
+  )
+
+  it.live("uses the configured model unless the agent picks one, and falls back with a note", () =>
+    Effect.gen(function* () {
+      yield* imageModel("test", "painter", (model) => {
+        model.capabilities.input = ["text", "image"]
+      })
+      yield* imageModel("other", "text-only", (model) => {
+        model.capabilities.input = ["text"]
+      })
+      yield* configure(configuredModel("other", "text-only"))
+      const { run, directory } = yield* setup()
+      yield* Effect.promise(() => fs.writeFile(path.join(directory, "in.png"), Buffer.from(PNG, "base64")))
+
+      // The configured model beats the session's provider, and an explicit model beats both.
+      const configured = yield* run({ prompt: "x" })
+      expect(configured.output).toMatchObject({ model: "other/text-only" })
+      expect(text(configured)).not.toContain("used")
+      expect((yield* run({ prompt: "x", model: "test/painter" })).output).toMatchObject({ model: "test/painter" })
+
+      // A configured model that can't serve the call is skipped, and the result says why.
+      const edit = yield* run({ prompt: "x", images: ["in.png"] })
+      expect(edit.output).toMatchObject({ model: "test/painter" })
+      expect(text(edit)).toContain("other/text-only doesn't accept input images; used test/painter.")
+
+      yield* configure(configuredModel("gone", "model"))
+      const missing = yield* run({ prompt: "x" })
+      expect(missing.output).toMatchObject({ model: "test/painter" })
+      expect(text(missing)).toContain("gone/model isn't available; used test/painter.")
     }),
   )
 

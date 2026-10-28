@@ -2,6 +2,7 @@ export * as ConfigExperimental from "./experimental.js"
 
 import { Schema } from "effect"
 import { NonNegativeInt, optional } from "../schema.js"
+import { ConfigModel } from "./model.js"
 import { ConfigPolicy } from "./policy.js"
 
 export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
@@ -19,6 +20,15 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     description:
       "Store new session media once in a deduplicated blob table instead of inline in every message row. Defaults to false.",
   }),
+  image_generation: Schema.Union([
+    Schema.Literal(false),
+    Schema.Struct({ model: ConfigModel.Selection.pipe(optional) }),
+  ])
+    .pipe(optional)
+    .annotate({
+      description:
+        "Image generation tool settings. `model` sets the default image model (providerID/modelID) used when the agent doesn't choose one; set to false to disable the image_generate tool.",
+    }),
   schedules: Schema.Boolean.pipe(optional).annotate({
     description: "Enable experimental scheduled tasks that wake a session with a prompt. Defaults to false.",
   }),

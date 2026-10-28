@@ -3,11 +3,13 @@ export * as ImageGenerateTool from "./image-generate.js"
 import path from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
+import type { Document, Entry } from "@opencode/schema/config"
 import { Identifier } from "@opencode/schema/identifier"
 import type { Session } from "@opencode/schema/session"
 import { Global } from "@opencode/util/global"
 import { Duration, Effect, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
 import { FileAccess } from "../../file-access.js"
 import { Generate } from "../../generate.js"
@@ -67,6 +69,7 @@ export const Plugin = {
     const generate = yield* Generate.Service
     const global = yield* Global.Service
     const http = yield* HttpClient.HttpClient
+    const config = yield* Config.Service
     const models = yield* Model.Service
     const permission = yield* Permission.Service
 
@@ -77,12 +80,25 @@ export const Plugin = {
     ) {
       const available = yield* models.available(["image"])
       if (!input) {
+        // A configured default is a preference: when it can't serve this call, pick automatically and say so.
+        const settings = settingsFrom(yield* config.entries())
+        const configured = settings ? settings.model : undefined
+        const preferred = configured
+          ? available.find((model) => model.providerID === configured.providerID && model.id === configured.model)
+          : undefined
+        if (preferred && (!images || acceptsImages(preferred))) return { model: preferred }
         const providerID = (yield* ctx.session.get({ sessionID })).model?.providerID
         const model = defaultModel(available, { providerID, images })
-        if (model) return model
-        return yield* new ToolFailure({
-          message: images ? "None of the available image models accept input images." : "No image model is available.",
-        })
+        if (!model)
+          return yield* new ToolFailure({
+            message: images
+              ? "None of the available image models accept input images."
+              : "No image model is available.",
+          })
+        if (!configured) return { model }
+        const ref = `${configured.providerID}/${configured.model}`
+        const reason = preferred ? "doesn't accept input images" : "isn't available"
+        return { model, note: ` ${ref} ${reason}; used ${model.providerID}/${model.id}.` }
       }
       const ref = yield* Effect.try({
         try: () => Model.Ref.parse(input),
@@ -102,7 +118,7 @@ export const Plugin = {
               : `Model "${ref.providerID}/${ref.id}" does not accept input images. Image models that do: ${capable.map((model) => `${model.providerID}/${model.id}`).join(", ")}.`,
         })
       }
-      return model
+      return { model }
     })
 
     const readImage = Effect.fn("ImageGenerateTool.readImage")(function* (
@@ -161,21 +177,24 @@ export const Plugin = {
         Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
       )
 
-    // Registered only while an image model is available, and re-evaluated whenever the model catalog changes.
-    // Subscribing before the first read keeps a change in between from being missed.
+    // Registered only while an image model is available and config doesn't turn the tool off, re-evaluated
+    // whenever either changes. Subscribing before the first read keeps a change in between from being missed.
+    const wanted = Effect.all([config.entries(), models.available(["image"])]).pipe(
+      Effect.map(([entries, available]) => settingsFrom(entries) !== false && available.length > 0),
+    )
     let enabled = false
-    const refresh = models.available(["image"]).pipe(
-      Effect.flatMap((available) => {
-        if (available.length > 0 === enabled) return Effect.void
-        enabled = available.length > 0
+    const refresh = wanted.pipe(
+      Effect.flatMap((next) => {
+        if (next === enabled) return Effect.void
+        enabled = next
         return ctx.tool.reload()
       }),
     )
-    yield* ctx.event.subscribe({ types: ["model.updated"] }).pipe(
+    yield* ctx.event.subscribe({ types: ["model.updated", "config.updated"] }).pipe(
       Stream.runForEach(() => refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
-    enabled = (yield* models.available(["image"])).length > 0
+    enabled = yield* wanted
 
     yield* ctx.tool
       .transform((editor) => {
@@ -189,7 +208,8 @@ export const Plugin = {
           execute: (input, context) =>
             Effect.gen(function* () {
               const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
-              const model = yield* resolveModel(input.model, context.sessionID, input.images !== undefined)
+              const resolved = yield* resolveModel(input.model, context.sessionID, input.images !== undefined)
+              const model = resolved.model
               const ref = `${model.providerID}/${model.id}`
               const target = input.path ? yield* access.resolve({ path: input.path, kind: "file" }) : undefined
               const requested =
@@ -250,7 +270,9 @@ export const Plugin = {
               if (yield* exists(file))
                 return yield* new ToolFailure({ message: `${file} already exists. Choose a new path.` })
               yield* environment.files.write(file, bytes)
-              const note = mime === "image/png" ? "" : ` The model returned ${mime}, so the file is in that format.`
+              const note =
+                (resolved.note ?? "") +
+                (mime === "image/png" ? "" : ` The model returned ${mime}, so the file is in that format.`)
               return {
                 output: { path: file, model: ref },
                 content: [
@@ -282,6 +304,13 @@ export function defaultModel(
   const own = candidates.filter((model) => model.providerID === input.providerID)
   const pool = own.length > 0 ? own : candidates
   return PREFERRED_FAMILIES.flatMap((family) => pool.find((model) => model.family === family) ?? [])[0] ?? pool[0]
+}
+
+// Read per field so a later config that sets other experimental options doesn't hide this one.
+function settingsFrom(entries: readonly Entry[]) {
+  return entries.findLast(
+    (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_generation !== undefined,
+  )?.info.experimental?.image_generation
 }
 
 function acceptsImages(model: Model.Info) {
