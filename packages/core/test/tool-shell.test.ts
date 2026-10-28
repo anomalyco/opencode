@@ -34,7 +34,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
-import { ID } from "@opencode/schema/shell"
+import { Event, ID } from "@opencode/schema/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Tool } from "@opencode/core/tool"
@@ -1607,6 +1607,41 @@ describe("ShellTool", () => {
     ),
   )
 
+  it.live("publishes initial background intent for each shell sharing a tool call", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const bus = yield* Bus.Service
+            const created = yield* bus.subscribe(Event.Created).pipe(
+              Stream.take(3),
+              Stream.runCollect,
+              Effect.forkScoped({ startImmediately: true }),
+            )
+            const first = yield* executeTool(registry, call({ command: idleCommand, background: true }, "shared-call"))
+            const second = yield* executeTool(registry, call({ command: idleCommand, background: true }, "shared-call"))
+            yield* executeTool(registry, call({ command: helloCommand }, "shared-call"))
+            const events = Array.from(yield* Fiber.join(created))
+            expect(events.map((event) => event.data.info.metadata)).toEqual([
+              { sessionID, background: true },
+              { sessionID, background: true },
+              { sessionID, background: false },
+            ])
+            expect(events[0]?.data.info.id).toBe(first.metadata?.shellID)
+            expect(events[1]?.data.info.id).toBe(second.metadata?.shellID)
+            expect(events[0]?.data.info.id).not.toBe(events[1]?.data.info.id)
+            const shell = yield* Shell.Service
+            yield* shell.remove(events[0]!.data.info.id)
+            yield* shell.remove(events[1]!.data.info.id)
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   it.live("preserves a background command's non-zero exit", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -1820,6 +1855,11 @@ describe("ShellTool", () => {
           Effect.gen(function* () {
             const jobs = yield* Job.Service
             const scope = yield* Scope.Scope
+            const bus = yield* Bus.Service
+            const created = yield* bus.subscribe(Event.Created).pipe(
+              Stream.runHead,
+              Effect.forkScoped({ startImmediately: true }),
+            )
             const waiting = yield* executeTool(
               registry,
               call({ command: idleCommand, timeout: 50 }, "call-background-signal"),
@@ -1844,6 +1884,11 @@ describe("ShellTool", () => {
             if (!shellID) return
             const id = ID.make(shellID)
             const info = yield* shell.get(id)
+            expect((yield* Fiber.join(created)).valueOrUndefined?.data.info.metadata).toEqual({
+              sessionID,
+              background: false,
+            })
+            expect(info.metadata.background).toBe(false)
             expect(settled.content?.[0]).toEqual({
               type: "text",
               text: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${info.file}`,
