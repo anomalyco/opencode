@@ -133,7 +133,10 @@ export const Plugin = {
           kind: "directory",
         }),
       )
-      yield* access.authorizeExternal([target, ...directories], context)
+      const pathTargets = yield* Effect.forEach(parsed.paths ?? [], (p) =>
+        access.resolve({ path: FileAccess.resolvePath(target.absolute, p) }),
+      )
+      yield* access.authorizeExternal([target, ...directories, ...pathTargets], context)
       if (parsed.commands.length > 0)
         yield* permission.assert({
           action: name,
