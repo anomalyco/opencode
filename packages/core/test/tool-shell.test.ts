@@ -41,6 +41,7 @@ import { Tool } from "@opencode/core/tool"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
+import { bash32 } from "./fixture/bash"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { Expected } from "./lib/session-message"
@@ -532,7 +533,9 @@ describe("ShellTool conditional process substitution", () => {
     ))
 
   for (const reply of ["reject", "once", "always"] as const) {
-    test(`conditional substitutions respect ${reply}`, () =>
+    // Bash 3.2 loses the process-substitution child before wait; rejection still exercises permissions.
+    const run = bash32 && reply !== "reject" ? permissionIt.live.skip : test
+    run(`conditional substitutions respect ${reply}`, () =>
       withScanner(
         (registry, directory) =>
           Effect.gen(function* () {
