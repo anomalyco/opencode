@@ -226,6 +226,7 @@ describe("composer persistence schemas", () => {
 
   test("persists a restored media:<hash> image as a reference without a URL", () => {
     const ref = `media:${"a".repeat(64)}`
+
     const value = decode({
       prompt: [
         { ...image, blob: createLegacyBlobReference(ref) },

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { resolveObjectURL } from "node:buffer"
 import { resolveBlobUrl, setMediaBlobLoader } from "../persistence/drafts"
 import { createApiForServer } from "./api"
 import { readLocalImage } from "./image"
@@ -11,6 +12,7 @@ function setup(
 
   const api = createApiForServer({
     server: { url: "https://server.example:4096", password: "secret" },
+    // SAFETY: the API client only calls fetch with a URL and init, which this stub accepts.
     fetch: (async (input: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: new URL(input instanceof Request ? input.url : input), init })
 
@@ -104,11 +106,13 @@ describe("readLocalImage", () => {
     expect(requests).toHaveLength(0)
   })
 
+  // oxlint-disable anti-slop-effect/no-manual-tagged-construction -- these are the JSON error bodies the server sends
   test.each([
     [400, { _tag: "RequestError", message: "Cannot read image" }],
     [401, { _tag: "RequestError", message: "Cannot read image" }],
     [404, { _tag: "FileNotFoundError", path: "image.png", message: "File not found: image.png" }],
   ])("propagates declared API errors (%s)", async (status, error) => {
+    // oxlint-enable anti-slop-effect/no-manual-tagged-construction
     const { api } = setup(() => Response.json(error, { status }))
     await expect(readLocalImage(api, "/repo", "image.png", new AbortController().signal)).rejects.toMatchObject(error)
   })
@@ -143,15 +147,30 @@ describe("readLocalImage", () => {
     await expect(result).rejects.toMatchObject({ reason: "Transport", cause: controller.signal.reason })
   })
 
-  test("createMediaCache fetches media:<hash> refs from /api/experimental/media/:hash with auth, evicts LRU entries, and checks disposed before createObjectURL", async () => {
+  test("createMediaCache keeps every object URL it handed out valid until dispose", async () => {
+    const { api } = setup(() => new Response(new Uint8Array([137, 80, 78, 71])))
+    const cache = createMediaCache(() => api)
+    const hashes = Array.from({ length: 200 }, (_, index) => index.toString(16).padStart(64, "0"))
+    const first = await cache.load(`media:${hashes[0]}`, "image/png")
+
+    await Promise.all(hashes.map((hash) => cache.load(`media:${hash}`, "image/png")))
+
+    expect(cache.peek(`media:${hashes[0]}`, "image/png")).toBe(first)
+    expect(await resolveObjectURL(first!)?.bytes()).toEqual(new Uint8Array([137, 80, 78, 71]))
+    cache.dispose()
+    expect(cache.peek(`media:${hashes[0]}`, "image/png")).toBeUndefined()
+    expect(resolveObjectURL(first!)).toBeUndefined()
+  })
+
+  test("createMediaCache fetches media:<hash> refs from /api/experimental/media/:hash with auth and checks disposed before createObjectURL", async () => {
     const hashA = "a".repeat(64)
     const hashB = "b".repeat(64)
-    const hashC = "c".repeat(64)
     const { api, requests } = setup(() => new Response(new Uint8Array([137, 80, 78, 71])))
-    const cache = createMediaCache(() => api, { maxEntries: 2 })
+    const cache = createMediaCache(() => api)
 
     try {
       expect(cache.peek(`media:${hashA}`, "image/png")).toBeUndefined()
+
       const [first, second] = await Promise.all([
         cache.load(`media:${hashA}`, "image/png"),
         cache.load(`media:${hashA}`, "image/png"),
@@ -166,13 +185,8 @@ describe("readLocalImage", () => {
 
       const urlB = await cache.load(`media:${hashB}`, "image/png")
       expect(urlB).toStartWith("blob:")
-      // Touch hashA so hashB becomes oldest, then load hashC to evict hashB
+      expect(cache.peek(`media:${hashB}`, "image/png")).toBe(urlB)
       expect(cache.peek(`media:${hashA}`, "image/png")).toBe(first)
-      const urlC = await cache.load(`media:${hashC}`, "image/png")
-      expect(urlC).toStartWith("blob:")
-      expect(cache.peek(`media:${hashB}`, "image/png")).toBeUndefined()
-      expect(cache.peek(`media:${hashA}`, "image/png")).toBe(first)
-      expect(cache.peek(`media:${hashC}`, "image/png")).toBe(urlC)
     } finally {
       cache.dispose()
     }

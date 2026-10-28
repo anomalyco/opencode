@@ -8,15 +8,13 @@ export function imageAttachmentPlaceholderStyle(input: {
   readonly height?: number
   readonly loaded: boolean
 }) {
+  if (input.width && input.height && input.loaded) return { "aspect-ratio": `${input.width} / ${input.height}` }
+
   if (input.width && input.height) {
     return {
       "aspect-ratio": `${input.width} / ${input.height}`,
-      ...(input.loaded
-        ? {}
-        : {
-            "min-width": `${Math.min(input.width, MIN_IMAGE_PLACEHOLDER_PX)}px`,
-            "min-height": `${Math.min(input.height, MIN_IMAGE_PLACEHOLDER_PX)}px`,
-          }),
+      "min-width": `${Math.min(input.width, MIN_IMAGE_PLACEHOLDER_PX)}px`,
+      "min-height": `${Math.min(input.height, MIN_IMAGE_PLACEHOLDER_PX)}px`,
     }
   }
 
@@ -32,6 +30,7 @@ export function attached(file: PromptAttachment) {
   if (file.mention) return false
 
   const source = file.source
+
   if (!source || source.type === "inline") return true
 
   return source.uri.startsWith("data:") || source.uri.startsWith("blob:")

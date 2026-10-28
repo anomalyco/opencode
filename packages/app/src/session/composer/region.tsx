@@ -108,6 +108,7 @@ export function createActiveSessionRegion(input: {
     const source = file.source
     const fileData = "data" in file ? file.data : undefined
     const fileUri = "uri" in file ? file.uri : undefined
+
     const inlineUrl =
       source?.type === "uri" ? source.uri : fileData !== undefined ? `data:${file.mime};base64,${fileData}` : undefined
 

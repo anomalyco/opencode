@@ -26,6 +26,7 @@ export function authFromToken(token: string | null) {
 }
 
 export const MEDIA_URI_CAPABILITY = "experimental-media-uri"
+
 export const CAPABILITIES_HEADER = "X-OpenCode-Capabilities"
 
 /** `mediaRefs: false` reads stored media as inline bytes, for callers such as export that need self-contained messages. */
@@ -79,6 +80,7 @@ function mediaRefOptions(options: ServerRequestOptions | undefined): OpenCode.Re
   if (options?.mediaRefs === false) return options
   const headers = new Headers(options?.headers)
   headers.set(CAPABILITIES_HEADER, MEDIA_URI_CAPABILITY)
+
   return { ...options, headers }
 }
 

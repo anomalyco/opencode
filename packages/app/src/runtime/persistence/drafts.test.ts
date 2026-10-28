@@ -23,10 +23,12 @@ function memoryDriver() {
       // missing is refused.
       set: async (key: string, value: string, strict: boolean) => {
         const ids = new Set<string>()
+        // oxlint-disable anti-slop/no-runtime-typeof, anti-slop/no-unknown-parameters -- mirrors the stores' scan of opaque serialized documents
         JSON.parse(value, (_key, item) => {
           if (item?.blob && typeof item.blob.id === "string") ids.add(item.blob.id)
 
           if (item?.blob && Array.isArray(item.blob.ids)) item.blob.ids.forEach((id: unknown) => ids.add(String(id)))
+          // oxlint-enable anti-slop/no-runtime-typeof, anti-slop/no-unknown-parameters
 
           return item
         })
@@ -366,6 +368,7 @@ describe("draft store media refs", () => {
     const ref = `media:${hash}`
     const server = new Map([[hash, pngDataUrl]])
     const media = serveMedia("srv-draft-media", server)
+
     try {
       const memory = memoryDriver()
       const store = createDraftStore(memory.driver)
@@ -401,6 +404,7 @@ describe("draft store media refs", () => {
     const media = serveMedia("srv-draft-media-gone", new Map())
     const error = console.error
     console.error = () => {}
+
     try {
       const memory = memoryDriver()
       const store = createDraftStore(memory.driver)

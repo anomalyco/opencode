@@ -167,6 +167,7 @@ describe("queuedPromptAttachments", () => {
     setMediaBlobLoader("queue-test", async (uri) => {
       events.push(`load:${uri}`)
       const found = blobs.get(uri.slice("media:".length))
+
       return found ? `data:image/png;base64,${Buffer.from(found).toString("base64")}` : undefined
     })
 
@@ -185,19 +186,22 @@ describe("queuedPromptAttachments", () => {
 
       const imagePart = pinned.find((part) => part.type === "image")
       expect(imagePart?.type).toBe("image")
+
       if (imagePart?.type !== "image") return
       expect(imagePart.blob.id).not.toStartWith("media:")
       expect(await blobDataUrl(imagePart.blob, imagePart.mime)).toBe(`data:image/png;base64,${pngBase64}`)
 
       // Media nothing serves anymore fails the pin, so the item is never cancelled.
       const cancels = events.length
-      const failed = await undoQueuedPrompt({
-        prompt: extracted,
-        cancelInboxItem: async () => {
-          events.push("cancelInboxItem")
-        },
-      }).catch((error: unknown) => error)
-      expect(failed).toBeInstanceOf(Error)
+
+      await expect(
+        undoQueuedPrompt({
+          prompt: extracted,
+          cancelInboxItem: async () => {
+            events.push("cancelInboxItem")
+          },
+        }),
+      ).rejects.toBeInstanceOf(Error)
       expect(events.slice(cancels)).toEqual([`load:${mediaUri}`])
     } finally {
       setMediaBlobLoader("queue-test", undefined)

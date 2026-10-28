@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
-import type { ServerApi } from "@/runtime/server/api"
+import type { ServerApi, ServerRequestOptions } from "@/runtime/server/api"
 import type { Platform } from "@/runtime/platform/platform"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "./export"
+
+/* oxlint-disable anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-chained-type-assertions -- partial fixtures stand in for API records the export only passes through */
 
 describe("sessionExportFilename", () => {
   test.each([
@@ -24,7 +26,7 @@ describe("fetchSessionExport", () => {
     const api = {
       session: { get: async () => info },
       message: {
-        list: async (input: { cursor?: string }, options: unknown) => {
+        list: async (input: { cursor?: string }, options: ServerRequestOptions) => {
           calls.push([input, options])
 
           if (!input.cursor) return { data: [first], cursor: { next: "page-2" } }
@@ -57,7 +59,9 @@ describe("saveSessionExport", () => {
       },
     }
 
-    expect(await saveSessionExport("session.json", { id: "ses_1" }, platform)).toBe(saved)
-    expect(writes).toEqual([["session.json", '{\n  "id": "ses_1"\n}']])
+    const data = { info: { id: "ses_1" } as SessionInfo, messages: [] }
+
+    expect(await saveSessionExport("session.json", data, platform)).toBe(saved)
+    expect(writes).toEqual([["session.json", '{\n  "info": {\n    "id": "ses_1"\n  },\n  "messages": []\n}']])
   })
 })

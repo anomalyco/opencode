@@ -20,6 +20,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
 
 type QueuedPromptFile = PromptAttachment
+
 export type QueuedPrompt = Extract<SessionInboxInfo, { type: "user" }>
 
 // An edit confirmed from the composer while the server catches up. The strip shows it in place of
@@ -112,6 +113,7 @@ export function createSessionQueue(input: {
           cancelInboxItem: () =>
             server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id }),
         })
+
         hide([change.item.id])
         const prompt = mergePrompt(input.draft.current(), rehydrated)
 
@@ -411,11 +413,13 @@ export function createSessionQueue(input: {
       (pinned) => {
         if (state.editing?.id !== id) return
         const blobs = new Map<string, BlobReference>()
+
         for (const part of pinned) if (part.type === "image") blobs.set(part.id, part.blob)
         const current = input.draft.current()
         input.draft.set(
           current.map((part) => {
             const blob = part.type === "image" ? blobs.get(part.id) : undefined
+
             return blob && part.type === "image" ? { ...part, blob } : part
           }),
           input.draft.cursor() ?? promptLength(current),
@@ -578,18 +582,18 @@ export function queuedPromptText(item: QueuedPrompt) {
 export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPart | PathAttachmentPart)[] {
   // Opted-in reads leave stored files as `media:` refs, which the generated inbox type does not describe.
   const files: readonly QueuedPromptFile[] = item.payload.files ?? []
+  const inline = files.filter((file) => isComposerAttachment(file))
+
   return [
-    ...files
-      .filter((file) => isComposerAttachment(file))
-      .map(
-        (file, index): ImageAttachmentPart => ({
-          type: "image",
-          id: `${item.id}:file:${index}`,
-          filename: file.name ?? "attachment",
-          mime: file.mime,
-          blob: createLegacyBlobReference("uri" in file ? file.uri : `data:${file.mime};base64,${file.data}`),
-        }),
-      ),
+    ...inline.map(
+      (file, index): ImageAttachmentPart => ({
+        type: "image",
+        id: `${item.id}:file:${index}`,
+        filename: file.name ?? "attachment",
+        mime: file.mime,
+        blob: createLegacyBlobReference("uri" in file ? file.uri : `data:${file.mime};base64,${file.data}`),
+      }),
+    ),
     ...(readPromptPresentation(item.payload.metadata)?.attachments ?? []).map(
       (file, index): PathAttachmentPart => ({
         type: "path",
@@ -604,12 +608,13 @@ export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPar
 
 // Pin `media:<hash>` attachments before cancelling: the cancel releases the item's blob refs and sweeps blobs
 // nothing else references, so a pin that fails leaves the item queued.
-export async function undoQueuedPrompt(input: {
+export async function undoQueuedPrompt<A>(input: {
   prompt: Prompt
-  cancelInboxItem: () => Promise<unknown>
+  cancelInboxItem: () => Promise<A>
 }): Promise<Prompt> {
   const pinned = await pinPromptMedia(input.prompt)
   await input.cancelInboxItem()
+
   return pinned
 }
 
@@ -617,11 +622,13 @@ export async function undoQueuedPrompt(input: {
 // provenance (review comment files stay recognizable) instead of turning into an inline snapshot.
 function storedFileUri(file: QueuedPromptFile) {
   const source = file.source
+
   return source?.type === "uri" ? source.uri : "uri" in file ? file.uri : `data:${file.mime};base64,${file.data}`
 }
 
 function isComposerAttachment(file: QueuedPromptFile) {
   const source = file.source
+
   return !file.mention && (!source || source.type === "inline")
 }
 

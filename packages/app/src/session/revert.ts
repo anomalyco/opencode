@@ -21,6 +21,7 @@ export function createSessionRevert(input: {
   const location = useWorkspaceLocation()
   const language = useLanguage()
 
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a rejected request is opaque; the toast formats it
   const fail = (error: unknown) =>
     showToast({
       title: language.t("common.requestFailed"),
@@ -74,6 +75,7 @@ export function createSessionRevert(input: {
       })
 
       if (!restored) return
+
       if (!(await request(() => server.api.session.inbox.cancel({ sessionID, inboxID: message.id })))) return
       restore(target, message, restored)
       owner.run(() => input.setActiveMessage(previous))

@@ -2,7 +2,7 @@ import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
 import type { Platform } from "@/runtime/platform/platform"
 
-type SessionExportData = {
+export type SessionExportData = {
   info: SessionInfo
   messages: SessionMessageInfo[]
 }
@@ -48,7 +48,7 @@ export function sessionExportFilename(session: { id: string; title?: string; slu
   return `${clean || session.id}.json`
 }
 
-export function downloadSessionExport(filename: string, data: unknown) {
+export function downloadSessionExport(filename: string, data: SessionExportData) {
   const json = JSON.stringify(data, null, 2)
   const blob = new Blob([json], { type: "application/json" })
   const url = URL.createObjectURL(blob)
@@ -61,7 +61,11 @@ export function downloadSessionExport(filename: string, data: unknown) {
   URL.revokeObjectURL(url)
 }
 
-export async function saveSessionExport(filename: string, data: unknown, platform: Pick<Platform, "saveFile">) {
+export async function saveSessionExport(
+  filename: string,
+  data: SessionExportData,
+  platform: Pick<Platform, "saveFile">,
+) {
   if (!platform.saveFile) {
     downloadSessionExport(filename, data)
 

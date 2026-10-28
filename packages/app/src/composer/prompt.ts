@@ -110,6 +110,7 @@ export function extractPromptFromMessage(
     const source = file.source
     const fileUri = "uri" in file ? file.uri : undefined
     const fileData = "data" in file ? file.data : undefined
+
     const uri =
       source.type === "uri"
         ? source.uri
@@ -210,6 +211,7 @@ export function extractPromptContext(message: PromptSource, opts?: { directory?:
 
   const files = (message.files ?? []).flatMap((file): FileContextItem[] => {
     const source = file.source
+
     if (file.mention || source.type !== "uri" || !source.uri.startsWith("file:")) return []
 
     if (regenerated.has(source.uri)) return []

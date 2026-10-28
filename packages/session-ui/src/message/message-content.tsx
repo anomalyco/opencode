@@ -326,6 +326,7 @@ export function CurrentUserMessageDisplay(props: {
   const status = createMemo(() => props.actions?.pending?.status(props.message.id))
   const pending = createMemo(() => status() !== undefined && status() !== "queued")
   const waiting = createMemo(() => status() === "steering" || status() === "stranded")
+  // SAFETY: opted-in reads leave stored files as `media:` refs, a PromptAttachment variant the generated message type does not list.
   const files = createMemo(() => (props.message.files ?? []) as PromptAttachment[])
   const attachments = createMemo(() => files().filter(attached))
   const references = createMemo(() => props.references ?? [])
@@ -358,7 +359,6 @@ export function CurrentUserMessageDisplay(props: {
 
     return i18n.t(RELATIVE_TIME_KEYS[relative.unit], { count: numfmt().format(relative.count) })
   })
-
 
   // In a run, only the last message keeps the meta line; the others offer their actions beside the bubble.
   // Bubble corners tighten where two bubbles meet, as in the iOS app's grouped corners.
@@ -618,14 +618,19 @@ export function CurrentUserMessageDisplay(props: {
             const url = () => directUrl() ?? resolvedUrl()
             const name = () => file().name ?? i18n.t("ui.message.attachment.alt")
             const image = () => file().mime.startsWith("image/")
+
             const width = () => {
               const current = file()
+
               return "width" in current ? current.width : undefined
             }
+
             const height = () => {
               const current = file()
+
               return "height" in current ? current.height : undefined
             }
+
             const placeholderStyle = () =>
               imageAttachmentPlaceholderStyle({
                 width: width(),

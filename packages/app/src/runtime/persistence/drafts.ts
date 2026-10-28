@@ -2,6 +2,8 @@ import type { AsyncStorage } from "@solid-primitives/storage"
 import { Option, Schema } from "effect"
 import { mediaHashFromUri } from "@/runtime/server/media"
 
+/* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-unknown-returns, anti-slop/no-runtime-typeof, anti-slop/no-unsafe-dictionary-type, anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-known-value-widening -- the store walks opaque persisted JSON in every shape earlier releases wrote, and IndexedDB hands back untyped values */
+
 export type BlobReference = { id: string; url: string }
 
 type Driver = {
@@ -55,31 +57,33 @@ const aliases = new Map<string, string>()
 type MediaBlobLoader = (uri: string) => Promise<string | undefined>
 
 let loader: ((id: string) => Promise<string | undefined>) | undefined
+
 const mediaLoaders = new Map<string, MediaBlobLoader>()
 
-export function setMediaBlobLoader(
-  keyOrLoader: string | MediaBlobLoader | undefined,
-  maybeLoader?: MediaBlobLoader | undefined,
-) {
-  const key = typeof keyOrLoader === "string" ? keyOrLoader : "default"
-  const next = typeof keyOrLoader === "string" ? maybeLoader : keyOrLoader
+export function setMediaBlobLoader(key: string, next: MediaBlobLoader | undefined) {
   mediaLoaders.delete(key)
+
   if (next) mediaLoaders.set(key, next)
 }
 
 async function loadMediaBlobUrl(uri: string, serverKey?: string) {
   if (serverKey) {
     const keyed = mediaLoaders.get(serverKey)
+
     if (keyed) {
       const url = await keyed(uri).catch(() => undefined)
+
       if (url) return url
     }
   }
+
   for (const [key, candidate] of [...mediaLoaders.entries()].reverse()) {
     if (key === serverKey) continue
     const url = await candidate(uri).catch(() => undefined)
+
     if (url) return url
   }
+
   return undefined
 }
 
@@ -87,6 +91,7 @@ async function loadMediaBlobUrl(uri: string, serverKey?: string) {
 // fetchable itself. Undefined once no server can serve it (swept, offline, or the flag is off).
 async function loadMediaBlob(uri: string, serverKey?: string) {
   const url = await loadMediaBlobUrl(uri, serverKey).catch(() => undefined)
+
   if (!url) return undefined
 
   return fetch(url).then(
@@ -101,7 +106,9 @@ export function resolveBlobUrl(blob: { id: string; url?: string; server?: string
   const existing = retained.get(aliases.get(blob.id) ?? blob.id)
 
   if (existing) return Promise.resolve(existing.url)
+
   if (mediaHashFromUri(blob.id)) return loadMediaBlobUrl(blob.id, blob.server)
+
   if (blob.url) return Promise.resolve(blob.url)
 
   return loader?.(blob.id) ?? Promise.resolve(undefined)
@@ -616,6 +623,7 @@ export async function blobDataUrl(blob: BlobReference, mime: string) {
   const url = kept ? undefined : await resolveBlobUrl(blob)
 
   if (!kept && !url && mediaHashFromUri(blob.id)) return blob.id
+
   if (!kept && !url) throw new Error(`Attachment ${blob.id} has no stored bytes`)
   const data = kept ? kept.blob : await fetch(url!).then((response) => response.blob())
 

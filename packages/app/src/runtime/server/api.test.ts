@@ -26,13 +26,16 @@ test("fileStreamUrl never puts a credential in a media URL", () => {
 
 test("only message and inbox reads ask for media refs, so other cross-origin requests stay unpreflighted", async () => {
   const requests: Array<{ path: string; headers: Headers }> = []
+
   const api = createApiForServer({
     server: { url: "https://server.example:4096", password: "secret" },
+    // SAFETY: the API client only calls fetch with a URL and init, which this stub accepts.
     fetch: (async (input: string | URL | Request, init?: RequestInit) => {
       requests.push({
         path: new URL(input instanceof Request ? input.url : input).pathname,
         headers: new Headers(init?.headers),
       })
+
       return Response.json({ data: [], cursor: {} })
     }) as typeof fetch,
   })
