@@ -5,23 +5,25 @@ import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { Document, Entry } from "@opencode/schema/config"
 import { Identifier } from "@opencode/schema/identifier"
-import type { Session } from "@opencode/schema/session"
 import { Global } from "@opencode/util/global"
-import { Duration, Effect, Schema, Stream } from "effect"
+import { Duration, Effect, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
 import { FileAccess } from "../../file-access.js"
 import { Generate } from "../../generate.js"
+import { Job } from "../../job.js"
 import { Mime } from "../../mime.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
+import { Session } from "../../session.js"
+import { SessionSchema } from "../../session/schema.js"
 import { collectBoundedResponseBody } from "../http-body.js"
 
 export const name = "image_generate"
 export const MAX_INPUT_BYTES = 20 * 1024 * 1024
 const DOWNLOAD_TIMEOUT = Duration.seconds(30)
-const GENERATE_TIMEOUT = Duration.minutes(5)
+const GENERATE_TIMEOUT = Duration.minutes(30)
 const INPUT_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"]
 const EXTENSIONS: Record<string, string> = {
   "image/png": ".png",
@@ -33,7 +35,7 @@ const EXTENSIONS: Record<string, string> = {
 const PREFERRED_FAMILIES = ["gpt-image", "gemini-flash", "gemini-pro", "grok", "flux"]
 
 export const description =
-  'Generate or edit an image. Pass images to edit them or to guide style and subject. To make several images, call the tool once per image with distinct prompts. Omit model to use the default; to choose one, find image models with the models tool and type: "image". The result is saved as an image file and shown to you; mention its path to the user. Each call costs money, so don\'t regenerate unless asked or the result is clearly wrong.'
+  "Generate or edit an image. Pass images to edit them or to guide style and subject. To make several images, call the tool once per image with distinct prompts. Omit model to use the default; to choose one, find image models with the models tool and type: \"image\". Runs in the background: the call returns right away and you are notified when the image is saved; then use the read tool on its path to view it, and mention the path to the user. Don't poll or wait for it. Each call costs money, so don't regenerate unless asked or the result is clearly wrong."
 
 export const Input = Schema.Struct({
   prompt: Schema.String.check(Schema.isMinLength(1)).annotate({
@@ -70,12 +72,15 @@ export const Plugin = {
     const global = yield* Global.Service
     const http = yield* HttpClient.HttpClient
     const config = yield* Config.Service
+    const jobs = yield* Job.Service
+    const scope = yield* Scope.Scope
+    const sessions = yield* Session.Service
     const models = yield* Model.Service
     const permission = yield* Permission.Service
 
     const resolveModel = Effect.fn("ImageGenerateTool.resolveModel")(function* (
       input: string | undefined,
-      sessionID: Session.ID,
+      sessionID: SessionSchema.ID,
       images: boolean,
     ) {
       const available = yield* models.available(["image"])
@@ -171,6 +176,27 @@ export const Plugin = {
       return (yield* environment.files.read(target.absolute)).bytes
     })
 
+    const notifyWhenDone = Effect.fn("ImageGenerateTool.notifyWhenDone")(
+      function* (sessionID: SessionSchema.ID, id: string, file: string) {
+        const info = (yield* jobs.wait({ id })).info
+        if (!info || info.status === "running") return
+        yield* sessions.synthetic({
+          ...(info.notificationID ? { id: info.notificationID } : {}),
+          sessionID,
+          description: "Image generation",
+          text:
+            info.status === "completed"
+              ? (info.output ?? "")
+              : info.status === "error"
+                ? (info.error ?? `Image request failed for ${file}.`)
+                : `Image request for ${file} was cancelled.`,
+          metadata: { source: name, jobID: id, state: info.status, path: file },
+        })
+        if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
+      },
+      Effect.forkIn(scope, { startImmediately: true }),
+    )
+
     const exists = (file: string) =>
       environment.files.stat(file).pipe(
         Effect.as(true),
@@ -242,47 +268,52 @@ export const Plugin = {
                 ? yield* Effect.forEach(input.images, (image) => readImage(image, context))
                 : undefined
 
-              const result = yield* generate
-                .image({
-                  model: Model.Ref.make({ providerID: model.providerID, id: model.id }),
-                  prompt: input.prompt,
-                  n: 1,
-                  ...(images ? { images } : {}),
-                })
-                .pipe(
-                  Effect.mapError(
-                    (error) => new ToolFailure({ message: `Image generation failed: ${error.message}`, error }),
-                  ),
-                  Effect.timeoutOrElse({
-                    duration: GENERATE_TIMEOUT,
-                    orElse: () =>
-                      Effect.fail(new ToolFailure({ message: "Image generation timed out after 5 minutes." })),
-                  }),
-                )
-              const image = result.images[0]
-              if (!image) return yield* new ToolFailure({ message: `${ref} returned no image.` })
-              const bytes = Buffer.from(image.data, "base64")
-              const mime = Mime.detect(bytes)
-              // Providers may return JPEG or WebP and core has no encoder. A default path takes the real extension;
-              // an explicit path is kept as given, because only that exact path was approved and checked.
-              const extension = EXTENSIONS[mime] ?? ".png"
-              const file = target || extension === ".png" ? requested : requested.slice(0, -".png".length) + extension
-              if (yield* exists(file))
-                return yield* new ToolFailure({ message: `${file} already exists. Choose a new path.` })
-              yield* environment.files.write(file, bytes)
-              const note =
-                (resolved.note ?? "") +
-                (mime === "image/png" ? "" : ` The model returned ${mime}, so the file is in that format.`)
+              // Everything that needs the user or can fail fast happened above; the paid call runs as a background job.
+              const run = Effect.gen(function* () {
+                const result = yield* generate
+                  .image({
+                    model: Model.Ref.make({ providerID: model.providerID, id: model.id }),
+                    prompt: input.prompt,
+                    n: 1,
+                    ...(images ? { images } : {}),
+                  })
+                  .pipe(
+                    Effect.timeoutOrElse({
+                      duration: GENERATE_TIMEOUT,
+                      orElse: () => Effect.fail(new Error("Image generation timed out after 30 minutes.")),
+                    }),
+                  )
+                const image = result.images[0]
+                if (!image) return yield* Effect.fail(new Error(`${ref} returned no image.`))
+                const bytes = Buffer.from(image.data, "base64")
+                const mime = Mime.detect(bytes)
+                // Providers may return JPEG or WebP and core has no encoder. A default path takes the real extension;
+                // an explicit path is kept as given, because only that exact path was approved and checked.
+                const extension = EXTENSIONS[mime] ?? ".png"
+                const file = target || extension === ".png" ? requested : requested.slice(0, -".png".length) + extension
+                if (yield* exists(file)) return yield* Effect.fail(new Error(`${file} already exists.`))
+                yield* environment.files.write(file, bytes)
+                const note = mime === "image/png" ? "" : ` The model returned ${mime}, so the file is in that format.`
+                return `Image request finished. Saved image: ${file} (${ref}).${note}\nUse the read tool on this path to view the image.`
+              }).pipe(
+                // The job keeps this text, so a restart can still deliver the outcome.
+                Effect.mapError((error) => new Error(`Image request failed for ${requested}: ${error.message}`)),
+              )
+              const id = `image_${Identifier.create(false)}`
+              const job = yield* jobs.start({
+                id,
+                type: name,
+                title: input.prompt,
+                metadata: { sessionID: context.sessionID, path: requested, model: ref },
+                recovery: { kind: "image", sessionID: context.sessionID, path: requested, model: ref },
+                run,
+              })
+              yield* jobs.background(job.id)
+              yield* notifyWhenDone(context.sessionID, job.id, requested)
               return {
-                output: { path: file, model: ref },
-                content: [
-                  {
-                    type: "text" as const,
-                    text: `Saved image to ${file} (${ref}).${note}`,
-                  },
-                  { type: "file" as const, uri: `data:${mime};base64,${image.data}`, mime, name: file },
-                ],
-                metadata: { path: file, model: ref },
+                output: { path: requested, model: ref },
+                content: `Image request started in the background with ${ref}. Output path: ${requested}. You will be notified when it finishes or fails. Do not poll; use the read tool on the path after completion.${resolved.note ?? ""}`,
+                metadata: { path: requested, model: ref, jobID: job.id },
               }
             }).pipe(
               Effect.mapError((error) =>

@@ -16,6 +16,7 @@ import { Global } from "@opencode/util/global"
 import { Form } from "@opencode/core/form"
 import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
+import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -43,6 +44,7 @@ import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
 import { Effect, Layer } from "effect"
 import { tempLocationLayer } from "../fixture/location"
 import { emptyMcpLayer } from "../fixture/mcp"
+import { offlineModels } from "../fixture/models"
 
 const npmLayer = Layer.succeed(
   Npm.Service,
@@ -105,6 +107,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Model.node,
       Command.node,
       Integration.node,
+      Job.node,
       KV.node,
       Mcp.node,
       Session.node,
@@ -131,6 +134,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Mcp.node.replace(emptyMcpLayer),
       Generate.node.replace(generate),
       Permission.node.replace(permission),
+      offlineModels,
     ],
   ).pipe(Layer.provideMerge(configLayer))
 
