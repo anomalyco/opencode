@@ -46,9 +46,10 @@ test("highlights a registered language through the shared parser worker", async 
 })
 
 test("resolves a registered alias to its language", async () => {
-  Languages.set("config", [{ ...language("testlang-alias", [".tla"]), aliases: ["testlang"] }])
+  // OpenTUI never unregisters parsers, so the alias must be a name no other test registers.
+  Languages.set("config", [{ ...language("testlang-alias", [".tla"]), aliases: ["tla"] }])
 
-  const result = await getTreeSitterClient().highlightOnce("const answer: u32 = 42;", "testlang")
+  const result = await getTreeSitterClient().highlightOnce("const answer: u32 = 42;", "tla")
   expect(result.error).toBeUndefined()
   expect(result.highlights?.length).toBeGreaterThan(0)
 })
