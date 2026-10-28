@@ -451,6 +451,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
               Flag.withDescription("Limit to N most recent sessions (default: 100)"),
               Flag.optional,
             ),
+            search: Flag.String("search").pipe(Flag.withDescription("Filter sessions by title"), Flag.optional),
             format: Flag.Literals("format", ["table", "json"]).pipe(
               Flag.withDescription("Output format"),
               Flag.withDefault("table"),
