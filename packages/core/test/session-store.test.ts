@@ -365,4 +365,38 @@ describe("SessionStore", () => {
       expect(listed.toSorted()).toEqual(["ses_new", "ses_old"])
     }),
   )
+  it.effect("does not list sessions of the global project row that shares the worktree", () =>
+    Effect.gen(function* () {
+      const database = (yield* Database.Service).db
+      const bus = yield* Bus.Service
+      const folder = AbsolutePath.make("/committed")
+      const commitless = AbsolutePath.make("/commitless")
+      yield* database
+        .insert(ProjectTable)
+        .values([
+          { id: Project.ID.global, worktree: folder, sandboxes: [] },
+          { id: Project.ID.make("proj_committed"), worktree: folder, sandboxes: [] },
+        ])
+        .run()
+      yield* Effect.forEach(
+        [
+          { id: "ses_commitless", projectID: Project.ID.global, directory: commitless },
+          { id: "ses_committed", projectID: Project.ID.make("proj_committed"), directory: folder },
+        ],
+        (row) =>
+          bus.publish(SessionEvent.Created, {
+            sessionID: Session.ID.make(row.id),
+            projectID: row.projectID,
+            location: { directory: row.directory },
+            slug: "store-test",
+            version: "test",
+          }),
+      )
+      const store = yield* SessionStore.Service
+      const listed = (yield* store.list({ project: Project.ID.make("proj_committed") })).map((session) =>
+        String(session.id),
+      )
+      expect(listed).toEqual(["ses_committed"])
+    }),
+  )
 })

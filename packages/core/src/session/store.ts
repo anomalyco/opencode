@@ -1,6 +1,6 @@
 export * as SessionStore from "./store.js"
 
-import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, notInArray, or, sql, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, ne, notInArray, or, sql, type SQL } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Project } from "@opencode/schema/project"
 import { Workspace } from "@opencode/schema/workspace"
@@ -274,8 +274,13 @@ const layer = Layer.effect(
  * Project rows that share a worktree with `project`. A worktree's identity changes with its git fingerprint —
  * adding a remote is enough — and each identity is a separate row, so a project-scoped list that matched one row
  * would hide the sessions filed under the others. Rows are the same folder to the caller.
+ *
+ * The `global` row is the exception at both ends. Its `worktree` is whichever commitless repository resolved to it
+ * first rather than the folder its sessions belong to, so matching it would list sessions from directories that
+ * are not this one at all; and a global caller has no folder identity to expand.
  */
 function projectRowsFor(db: Database.Interface["db"], project: Project.ID) {
+  if (project === Project.ID.global) return Effect.succeed([project])
   return Effect.gen(function* () {
     const row = yield* db
       .select({ worktree: ProjectTable.worktree })
@@ -287,7 +292,7 @@ function projectRowsFor(db: Database.Interface["db"], project: Project.ID) {
     const rows = yield* db
       .select({ id: ProjectTable.id })
       .from(ProjectTable)
-      .where(eq(ProjectTable.worktree, row.worktree))
+      .where(and(eq(ProjectTable.worktree, row.worktree), ne(ProjectTable.id, Project.ID.global)))
       .all()
       .pipe(Effect.orDie)
     return rows.map((item) => item.id)
