@@ -57,8 +57,6 @@ export const Input = Schema.Struct({
 export const Output = Schema.Struct({
   path: Schema.String,
   model: Schema.String.annotate({ description: "providerID/modelID" }),
-  width: Schema.optionalKey(Schema.Int),
-  height: Schema.optionalKey(Schema.Int),
 })
 
 export const Plugin = {
@@ -252,14 +250,13 @@ export const Plugin = {
               if (yield* exists(file))
                 return yield* new ToolFailure({ message: `${file} already exists. Choose a new path.` })
               yield* environment.files.write(file, bytes)
-              const size = dimensions(bytes, mime)
               const note = mime === "image/png" ? "" : ` The model returned ${mime}, so the file is in that format.`
               return {
-                output: { path: file, model: ref, ...size },
+                output: { path: file, model: ref },
                 content: [
                   {
                     type: "text" as const,
-                    text: `Saved ${size ? `${size.width}x${size.height} ` : ""}image to ${file} (${ref}).${note}`,
+                    text: `Saved image to ${file} (${ref}).${note}`,
                   },
                   { type: "file" as const, uri: `data:${mime};base64,${image.data}`, mime, name: file },
                 ],
@@ -289,35 +286,4 @@ export function defaultModel(
 
 function acceptsImages(model: Model.Info) {
   return model.capabilities.input.some((item) => item.startsWith("image"))
-}
-
-/** Reads pixel dimensions from the image header. */
-export function dimensions(bytes: Uint8Array, mime: string) {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  if (mime === "image/png" && bytes.length >= 24) return { width: view.getUint32(16), height: view.getUint32(20) }
-  if (mime === "image/gif" && bytes.length >= 10)
-    return { width: view.getUint16(6, true), height: view.getUint16(8, true) }
-  if (mime === "image/webp" && bytes.length >= 31) {
-    const chunk = String.fromCharCode(...bytes.subarray(12, 16))
-    if (chunk === "VP8 ") return { width: view.getUint16(26, true) & 0x3fff, height: view.getUint16(28, true) & 0x3fff }
-    if (chunk === "VP8L") {
-      const bits = view.getUint32(21, true)
-      return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 }
-    }
-    if (chunk === "VP8X")
-      return {
-        width: (view.getUint32(24, true) & 0xffffff) + 1,
-        height: (view.getUint32(27, true) & 0xffffff) + 1,
-      }
-  }
-  if (mime === "image/jpeg") {
-    let offset = 2
-    while (offset + 9 < bytes.length && bytes[offset] === 0xff) {
-      const marker = bytes[offset + 1]!
-      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc)
-        return { width: view.getUint16(offset + 7), height: view.getUint16(offset + 5) }
-      offset += 2 + view.getUint16(offset + 2)
-    }
-  }
-  return undefined
 }

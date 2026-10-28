@@ -21,7 +21,6 @@ import { executeTool, toolDefinitions, toolIdentity } from "./lib/tool"
 import { makePluginTestLayer } from "./plugin/fixture"
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-// 5x3, with EXIF and Photoshop segments ahead of the frame header.
 const JPEG =
   "/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAABaADAAQAAAABAAAAAwAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAAwAFAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMAAgICAgICAwICAwUDAwMFBgUFBQUGCAYGBgYGCAoICAgICAgKCgoKCgoKCgwMDAwMDA4ODg4ODw8PDw8PDw8PD//bAEMBAgICBAQEBwQEBxALCQsQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEP/dAAQAAf/aAAwDAQACEQMRAD8A7iiiiv8AQA+XP//Z"
 
@@ -121,10 +120,10 @@ describe("image_generate", () => {
 
       const result = yield* run({ prompt: "make it blue", images: ["in.png"], path: "out.png" })
       const file = path.join(directory, "out.png")
-      expect(result.output).toEqual({ path: file, model: "test/painter", width: 1, height: 1 })
+      expect(result.output).toEqual({ path: file, model: "test/painter" })
       expect(result.content?.[0]).toEqual({
         type: "text",
-        text: `Saved 1x1 image to ${file} (test/painter).`,
+        text: `Saved image to ${file} (test/painter).`,
       })
       expect(result.content?.[1]).toMatchObject({ type: "file", mime: "image/png", name: file })
       expect((yield* Effect.promise(() => fs.readFile(file))).toString("base64")).toBe(PNG)
@@ -162,7 +161,6 @@ describe("image_generate", () => {
       const result = yield* run({ prompt: "a cat" })
       expect(path.dirname(result.output.path)).toBe(path.join(global.tmp, "images", session.id))
       expect(path.extname(result.output.path)).toBe(".jpg")
-      expect(result.output).toMatchObject({ width: 5, height: 3 })
       expect(text(result)).toContain("The model returned image/jpeg, so the file is in that format.")
       expect(yield* Effect.promise(() => Bun.file(result.output.path).exists())).toBe(true)
 
