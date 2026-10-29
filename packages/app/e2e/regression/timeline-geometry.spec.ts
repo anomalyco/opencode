@@ -196,8 +196,9 @@ test("keeps a file diff anchored while it expands and collapses", async ({ page 
       timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } },
     },
     messages: [
-      userMessage([userText("Preceding context ".repeat(120))]),
+      userMessage(),
       assistantMessage([
+        textPart("prt_file_projection_preceding", "Preceding context ".repeat(240)),
         toolPart(
           id,
           "patch",
@@ -753,4 +754,169 @@ test("groups consecutive sent prompts under the last one's meta line, with each 
   await bubble(first).hover()
   await expect(first.locator('[data-slot="user-message-run-actions"]')).toHaveCSS("opacity", "1")
   await expect(first.getByRole("button", { name: "Copy message" })).toHaveCount(1)
+})
+
+test("leaves a long prompt unfolded while Fold long messages is off", async ({ page }) => {
+  const text = Array.from({ length: 20 }, (_, index) => `Long line ${index + 1}`).join("\n")
+
+  await setupTimeline(page, {
+    messages: [
+      userMessage([userText(text, { id: "prt_msg_0001_nofold_text" })], {
+        id: "msg_0001_nofold",
+        created: 1700000000000,
+      }),
+    ],
+    viewport: { width: 1200, height: 700 },
+  })
+
+  const row = page.locator('[data-timeline-row="UserMessage"][data-message-id="msg_0001_nofold"]')
+  await expect(row).toContainText("Long line 20")
+  await expect(row.locator('[data-slot="user-message-fold"]')).toHaveCount(0)
+  await expect(row.getByRole("button", { name: "Read more" })).toHaveCount(0)
+})
+
+test("folds a prompt past 12 lines to its first 8 and keeps it open after scrolling out of view", async ({ page }) => {
+  const lines = (name: string, count: number) =>
+    Array.from({ length: count }, (_, index) => `${name} line ${index + 1}`).join("\n")
+
+  const prompt = (id: string, text: string, created: number) =>
+    userMessage([userText(text, { id: `prt_${id}_text` })], { id, created })
+
+  const reply = (id: string, parentID: string, created: number) =>
+    assistantMessage(
+      [{ id: `prt_${id}_text`, type: "text", text: `Reply ${id}. ${"Later work fills the timeline. ".repeat(12)}` }],
+      { id, parentID, created },
+    )
+
+  await setupTimeline(page, {
+    messages: [
+      prompt("msg_0001_fold_edge", lines("Edge", 12), 1700000000000),
+      reply("msg_0002_fold_edge", "msg_0001_fold_edge", 1700000001000),
+      prompt("msg_0003_fold_long", lines("Long", 13), 1700000002000),
+      reply("msg_0004_fold_long", "msg_0003_fold_long", 1700000003000),
+      ...Array.from({ length: 16 }, (_, index) => {
+        const created = 1700000010000 + index * 2_000
+        const id = `msg_${String(100 + index * 2).padStart(4, "0")}_fold_later`
+
+        return [prompt(id, `Later prompt ${index}`, created), reply(`${id}_reply`, id, created + 1_000)]
+      }).flat(),
+    ],
+    settings: { foldUserMessages: true },
+    viewport: { width: 1200, height: 700 },
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+
+  const row = (id: string) =>
+    page.locator(`[data-timeline-virtual-content] [data-timeline-row="UserMessage"][data-message-id="${id}"]`)
+
+  const edge = row("msg_0001_fold_edge")
+  const long = row("msg_0003_fold_long")
+  const bubble = long.locator('[data-slot="user-message-text"]')
+  const fold = long.locator('[data-slot="user-message-fold"]')
+  const lastLater = row("msg_0130_fold_later")
+  await expect(lastLater).toBeVisible()
+
+  // A wheel, not a scroll write, so the timeline stops following its end.
+  await scroller.hover()
+  await page.mouse.wheel(0, -100_000)
+  await expect(long).toBeVisible()
+
+  // 12 lines show in full; 13 fold to 8, and all 13 stay in the text for copy and select-all.
+  await expect(edge.locator('[data-slot="user-message-fold"]')).toContainText("Edge line 12")
+  await expect(edge.getByRole("button", { name: "Read more" })).toHaveCount(0)
+  const toggle = long.getByRole("button", { name: /^(Read more|Show less)$/ })
+  await expect(toggle).toHaveAccessibleName("Read more")
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  const lineHeight = await fold.evaluate((element) => parseFloat(getComputedStyle(element).lineHeight))
+  await expect.poll(async () => Math.round((await fold.boundingBox())!.height / lineHeight)).toBe(8)
+  expect(
+    await fold.evaluate((element) => {
+      const selection = getSelection()!
+      selection.selectAllChildren(element)
+      const text = selection.toString()
+      selection.removeAllRanges()
+
+      return text
+    }),
+  ).toContain("Long line 13")
+
+  // A cached tab's timeline is detached while hidden; the message stays folded rather than measuring 0 lines.
+  expect(
+    await bubble.evaluate(async (element) => {
+      const parent = element.parentElement!
+      const next = element.nextSibling
+      element.remove()
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      const folded = element.querySelector('[data-slot="user-message-fold"]')!.hasAttribute("data-folded")
+      parent.insertBefore(element, next)
+
+      return folded
+    }),
+  ).toBe(true)
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+
+  // Opening grows the bubble downward, and the virtual row takes its new height.
+  await bubble.evaluate((element) => element.scrollIntoView({ block: "center" }))
+  const top = (await bubble.boundingBox())!.y
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(toggle).toHaveAccessibleName("Show less")
+  await expect.poll(async () => Math.round((await fold.boundingBox())!.height / lineHeight)).toBe(13)
+  expect(Math.abs((await bubble.boundingBox())!.y - top)).toBeLessThanOrEqual(1)
+  await expect
+    .poll(() =>
+      long.evaluate((element) => {
+        const allocated = element.closest<HTMLElement>("[data-timeline-key]")!.getBoundingClientRect().height
+        const content = element.closest<HTMLElement>("[data-index]")!.getBoundingClientRect().height
+
+        return Math.abs(allocated - content)
+      }),
+    )
+    .toBeLessThanOrEqual(1)
+
+  // The row unmounts at the end of the timeline and comes back open.
+  await page.mouse.wheel(0, 100_000)
+  await expect(lastLater).toBeVisible()
+  await expect(long).toHaveCount(0)
+  await page.mouse.wheel(0, -100_000)
+  await expect(long.getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true")
+  await expect.poll(async () => Math.round((await fold.boundingBox())!.height / lineHeight)).toBe(13)
+
+  // Closing a message whose top is on screen shrinks it in place, without scrolling the timeline.
+  await scroller.evaluate(
+    (element, target) => {
+      element.scrollTop += target!.y - element.getBoundingClientRect().top - 100
+    },
+    await bubble.boundingBox(),
+  )
+
+  const closing = {
+    top: (await bubble.boundingBox())!.y,
+    scroll: await scroller.evaluate((element) => element.scrollTop),
+  }
+
+  expect(closing.scroll).toBeGreaterThan(150)
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  expect(Math.abs((await bubble.boundingBox())!.y - closing.top)).toBeLessThanOrEqual(1)
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBe(closing.scroll)
+
+  // Find skips the Read more button, and a match hidden in the fold opens the message.
+  const highlights = () =>
+    page.evaluate(() =>
+      ["timeline-search-hit", "timeline-search-hit-active"].reduce(
+        (count, name) => count + (CSS.highlights.get(name)?.size ?? 0),
+        0,
+      ),
+    )
+
+  await page.keyboard.press("ControlOrMeta+f")
+  const search = page.locator('[data-component="timeline-search-bar"] input')
+  await expect(search).toBeFocused()
+  await search.fill("more")
+  await expect.poll(highlights).toBe(0)
+  await search.fill("Long line 13")
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect.poll(highlights).toBe(1)
 })

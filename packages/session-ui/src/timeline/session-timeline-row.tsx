@@ -90,6 +90,7 @@ export function createSessionTimelineRowRenderer(input: {
   shellToolDefaultOpen: Accessor<boolean>
   editToolDefaultOpen: Accessor<boolean>
   timelineDetail?: Accessor<TimelineDetail>
+  foldUserMessages?: Accessor<boolean>
   disclosure: {
     value: (key: string) => boolean | undefined
     set: (key: string, open: boolean) => void
@@ -960,6 +961,9 @@ export function createSessionTimelineRowRenderer(input: {
                       historicalModel={context()?.model ?? { id: "", providerID: "" }}
                       actions={input.actions}
                       run={joined()}
+                      fold={input.foldUserMessages?.()}
+                      expanded={input.disclosure.value(`user-expanded:${message().id}`)}
+                      onExpandedChange={(open) => input.disclosure.set(`user-expanded:${message().id}`, open)}
                     />
                   </div>
                 </div>

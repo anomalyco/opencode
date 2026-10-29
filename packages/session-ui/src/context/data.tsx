@@ -51,6 +51,10 @@ export type NavigateToSessionFn = (sessionID: string) => void
 
 export type SessionHrefFn = (sessionID: string) => string
 
+export type ReadMediaUrlFn = (uri: string, mime: string, signal?: AbortSignal) => Promise<string | undefined>
+
+export type PeekMediaUrlFn = (uri: string, mime: string) => string | undefined
+
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: {
@@ -62,6 +66,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     shellRunning?: (id: string) => boolean
     shellOutput?: (input: ShellOutputInput) => Promise<ShellOutputOutput>
     turnDiff?: TurnDiffSource
+    readMedia?: ReadMediaUrlFn
+    peekMedia?: PeekMediaUrlFn
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
     /** Whether `experimental.background_compaction` is on for this location; automatic compactions then show quietly. */
@@ -88,6 +94,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       shellRunning: props.shellRunning,
       shellOutput: props.shellOutput,
       turnDiff: props.turnDiff,
+      readMedia: props.readMedia,
+      peekMedia: props.peekMedia,
     }
   },
 })

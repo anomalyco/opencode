@@ -80,6 +80,7 @@ import {
   IteratorObj,
   type Cursor,
   has,
+  hasOwn,
   hidden,
   hasPrototype,
   keys,
@@ -118,7 +119,7 @@ import {
 } from "./runner.js"
 import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from "./references.js"
 import { fn } from "./native.js"
-import { capability } from "./promises.js"
+import { capability, promiseLike } from "./promises.js"
 import { ScopeStack } from "./scope.js"
 import { constructRegExp } from "../stdlib/regexp.js"
 import { enumerableSource } from "../stdlib/object.js"
@@ -432,6 +433,11 @@ export class Interpreter<R> {
     const json: Array<Json | undefined> = []
     for (const arg of args) json.push(yield* toBoundary(this, arg))
     return fromJson(this, (yield this.runner.blocking(run(json))) as Json | undefined)
+  }
+
+  /** The built-in search: its result is usable directly, and can also be awaited or chained like a Promise. */
+  *search(args: Array<Value>) {
+    return promiseLike(this, yield* this.tool(this.tools.search, args))
   }
 }
 
@@ -1092,11 +1098,23 @@ class Frame<R> {
     throw typeError(`${context} must be a function.`, node)
   }
 
-  // for...in over null/undefined iterates nothing, like JS.
+  // for...in over null/undefined iterates nothing, like JS. After the own keys come each prototype's enumerable
+  // string keys, skipping any key a nearer level has, even as a non-enumerable property.
   private enumerableKeys(value: Value, node: AstNode): Array<string> {
     if (value instanceof ToolReference) return [...this.ctx.tools.keys(value.path)]
     if (value === null || value === undefined) return []
-    return keys(enumerableSource(this.ctx, "for...in", value, node))
+    const source = enumerableSource(this.ctx, "for...in", value, node)
+    const chain = [source]
+    // A string's characters stand in an array, but its prototype is String.prototype.
+    let proto = primitivePrototype(this.ctx.builtins, value) ?? source.proto
+    while (proto !== null) {
+      chain.push(proto)
+      proto = proto.proto
+    }
+    return chain.flatMap((target, depth) => {
+      const nearer = chain.slice(0, depth)
+      return keys(target).filter((key) => !nearer.some((level) => hasOwn(level, key)))
+    })
   }
 
   private *evaluateForInStatement(node: ForInStatement, labels?: ReadonlySet<string>): Eval<StatementResult> {

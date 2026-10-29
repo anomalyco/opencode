@@ -16,6 +16,7 @@ import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { sessionTabTitle } from "./tab-title"
 import { sessionTitle } from "@/session/title"
 import { createSessionInbox, inboxArchived, inboxBusy, type InboxEntry, type InboxStatus } from "./inbox-model"
+import { compareWorking, workingSince } from "./inbox-working"
 
 // `since` is when the inbox was first used; Recent only lists sessions that finished a run after it.
 const InboxState = Persistence.struct({
@@ -35,6 +36,7 @@ export function SidebarInbox() {
 
   const sections = createMemo(() => {
     const list = inbox.entries()
+
     // The most recently finished session comes first.
     const finished = list
       .filter((entry) => {
@@ -48,7 +50,8 @@ export function SidebarInbox() {
       needs: list.filter((entry) => entry.status === "approval" || entry.status === "input"),
       inbox: finished.filter((entry) => !inboxArchived(entry)),
       archived: finished.filter(inboxArchived),
-      working: list.filter((entry) => entry.status === "working"),
+      // `time.updated` moves with every message of a run, so order by when each run started to keep rows in place.
+      working: list.filter((entry) => entry.status === "working").toSorted(compareWorking),
     }
   })
 
@@ -77,6 +80,7 @@ export function SidebarInbox() {
       await inbox.remove(props.entry)
       dialog.close()
     }
+
     return (
       <Dialog fit>
         <DialogHeader hideClose>
@@ -251,12 +255,21 @@ function InboxRow(props: {
     return language.plural("sidebar.inbox.elapsed.days", Math.floor(seconds / 86_400))
   }
 
-  const elapsed = () => {
-    // `time.updated` moves when a prompt is enqueued, so it marks when the current run was requested.
-    const seconds = Math.max(0, Math.floor((props.now - props.entry.session.time.updated) / 1000))
+  // Without the current run's start yet, say only that the session is working.
+  const working = () => {
+    const since = workingSince(props.entry.session)
 
-    return seconds < 60 ? language.plural("sidebar.inbox.elapsed.seconds", seconds) : compact(seconds)
+    if (since === undefined) return language.t("sidebar.inbox.status.working")
+
+    const seconds = Math.max(0, Math.floor((props.now - since) / 1000))
+    const duration = seconds < 60 ? language.plural("sidebar.inbox.elapsed.seconds", seconds) : compact(seconds)
+
+    return language.t("sidebar.inbox.status.workingFor", { duration })
   }
+
+  // Ready rows show their age instead of a status.
+  const statusLabel = (value: InboxStatus) =>
+    value === "ready" ? undefined : language.t(`sidebar.inbox.status.${value}`)
 
   const age = () => {
     const seconds = Math.max(
@@ -304,10 +317,7 @@ function InboxRow(props: {
                   "text-v2-state-fg-success": status() === "done",
                 }}
               >
-                <Show
-                  when={status() === "working"}
-                  fallback={language.t(`sidebar.inbox.status.${status() as Exclude<InboxStatus, "ready">}`)}
-                >
+                <Show when={status() === "working"} fallback={statusLabel(status())}>
                   {/* Announce only the status: the ticking duration would be re-read every second. */}
                   <span class="sr-only">{language.t("sidebar.inbox.status.working")}</span>
                   {/* Keep the status colour under the sweep. */}
@@ -315,7 +325,7 @@ function InboxRow(props: {
                     aria-hidden="true"
                     class="[&_[data-component=text-shimmer]]:[--text-shimmer-base-color:var(--v2-state-fg-info)]"
                   >
-                    <TextShimmer text={language.t("sidebar.inbox.status.workingFor", { duration: elapsed() })} active />
+                    <TextShimmer text={working()} active />
                   </span>
                 </Show>
               </span>
