@@ -1,21 +1,22 @@
-import { onCleanup, Show } from "solid-js"
+import { Match, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
-import { ComposerPill, createKeyed, type ComposerPillProps, type Plugin } from "@opencode/plugin/gui"
+import { ComposerPill, createKeyed, Style, type ComposerPillProps, type Plugin } from "@opencode/plugin/gui"
 import { Goal } from "@opencode/schema/goal"
 import { Button } from "@opencode/ui/button"
 import { showToast } from "@opencode/ui/toast"
+import styles from "./goal.css?inline"
 import type GoalDefinition from "./index"
 
 const status = {
-  active: { label: "title", icon: "outline-steer", tone: undefined },
-  paused: { label: "paused", icon: "circle-exclamation", tone: "warning" },
-  complete: { label: "met", icon: "circle-check", tone: "success" },
+  active: { label: "active", status: "statusActive" },
+  paused: { label: "paused", status: "statusPaused" },
+  complete: { label: "reached", status: "statusFinished" },
 } as const
 
 /**
- * The session's `/goal` above its composer: the status as a pill, and a popover headed by the objective with the
- * actions that apply. The server's goal plugin owns the goal and serves it over its RPC; a bare `/goal` shows the last
- * reason.
+ * The session's `/goal` above its composer: the status as a pill with its own glyph, and a popover with the
+ * objective, the last reason and the actions that apply. The server's goal plugin owns the goal and serves it over
+ * its RPC; a bare `/goal` shows the last reason.
  */
 const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
   // The last goal heard for each server and session. A session switched back to shows it until the refetch lands.
@@ -75,6 +76,8 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
         }),
       )
 
+  ctx.add(Style, styles)
+
   ctx.add(ComposerPill, {
     id: "goal",
     show: (input) => {
@@ -82,10 +85,9 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
 
       if (!current) return
 
-      const view = status[current.status]
-
-      return { label: ctx.t(view.label), icon: view.icon, tone: view.tone, title: current.objective }
+      return { label: ctx.t(status[current.status].label) }
     },
+    icon: (input) => <GoalGlyph status={goal(input)?.status ?? "active"} />,
     menu: (input) => {
       const run = (text: "pause" | "resume" | "clear") => {
         input.close()
@@ -93,24 +95,90 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
       }
 
       return (
-        <div class="flex justify-end gap-1 px-1 pt-1">
-          <Show when={goal(input)?.status === "active"}>
-            <Button size="small" variant="ghost" icon="stop" onClick={() => run("pause")}>
-              {ctx.t("pause")}
-            </Button>
-          </Show>
-          <Show when={goal(input)?.status === "paused"}>
-            <Button size="small" variant="ghost" icon="refresh" onClick={() => run("resume")}>
-              {ctx.t("resume")}
-            </Button>
-          </Show>
-          <Button size="small" variant="ghost" icon="outline-trash" onClick={() => run("clear")}>
-            {ctx.t("clear")}
-          </Button>
-        </div>
+        <Show when={goal(input)}>
+          {(current) => (
+            <div data-component="goal-panel">
+              <p dir="auto" data-slot="goal-objective" data-scrollable>
+                {current().objective}
+              </p>
+              {/* Until the goal has a reason, the status is the pill's alone. */}
+              <Show when={current().reason}>
+                {(reason) => (
+                  <>
+                    <div data-slot="goal-divider" aria-hidden="true" />
+                    <div class="flex flex-col">
+                      <span data-slot="goal-status" data-status={current().status}>
+                        {ctx.t(status[current().status].status)}
+                      </span>
+                      <p dir="auto" data-slot="goal-reason">
+                        {reason()}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </Show>
+              <div class="flex flex-wrap gap-2 pt-1">
+                <Switch>
+                  <Match when={current().status === "active"}>
+                    <Button data-action="goal-pause" size="small" onClick={() => run("pause")}>
+                      {ctx.t("pause")}
+                    </Button>
+                  </Match>
+                  <Match when={current().status === "paused"}>
+                    <Button data-action="goal-resume" size="small" onClick={() => run("resume")}>
+                      {ctx.t("resume")}
+                    </Button>
+                  </Match>
+                </Switch>
+                <Show
+                  when={current().status === "complete"}
+                  fallback={
+                    <Button data-action="goal-clear" size="small" variant="danger" onClick={() => run("clear")}>
+                      {ctx.t("clear")}
+                    </Button>
+                  }
+                >
+                  {/* A reached goal has nothing left to stop, so clearing it only dismisses the pill. */}
+                  <Button data-action="goal-dismiss" size="small" onClick={() => run("clear")}>
+                    {ctx.t("dismiss")}
+                  </Button>
+                </Show>
+              </div>
+            </div>
+          )}
+        </Show>
       )
     },
   })
+}
+
+function GoalGlyph(props: { status: Goal.Status }) {
+  return (
+    <svg
+      data-slot="goal-glyph"
+      data-status={props.status}
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+      <Switch>
+        <Match when={props.status === "active"}>
+          {/* The core sends out a ripple that fades as it spreads, then grows back. */}
+          <circle data-slot="goal-ripple" cx="8" cy="8" r="2" fill="currentColor" />
+          <circle data-slot="goal-core" cx="8" cy="8" r="2" fill="currentColor" />
+        </Match>
+        <Match when={props.status === "paused"}>
+          <circle cx="8" cy="8" r="4" fill="currentColor" opacity="0.5" />
+        </Match>
+        <Match when={props.status === "complete"}>
+          <path d="M5 8 7.5 11 11 5.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+        </Match>
+      </Switch>
+    </svg>
+  )
 }
 
 export default setup
