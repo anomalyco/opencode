@@ -51,7 +51,7 @@ export const Input = Schema.Struct({
     Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
   ).annotate({
     description:
-      "Images to edit or use as references, in order. Local file paths (relative to the session directory or absolute) or http(s) URLs. Omit to create a new image.",
+      "Images to edit, or to use as references for style and subject when creating a new image, in order. Local file paths (relative to the session directory or absolute) or http(s) URLs.",
   }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:
