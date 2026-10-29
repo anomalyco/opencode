@@ -1,5 +1,6 @@
 export * as CodeModeCatalog from "./catalog.js"
 
+import { createHash } from "crypto"
 import { Schema } from "effect"
 
 export type Tool = {
@@ -24,6 +25,8 @@ export type Inventory = {
 const Listing = Schema.Struct({
   path: Schema.String,
   line: Schema.String,
+  // Selection input, never rendered: pinned tools are always inlined.
+  pinned: Schema.optionalKey(Schema.Boolean),
 })
 
 const NamespaceSummary = Schema.Struct({
@@ -40,6 +43,25 @@ export const Summary = Schema.Struct({
 })
 export type Summary = typeof Summary.Type
 
+const SnapshotNamespace = Schema.Struct({
+  name: Schema.String,
+  description: Schema.optionalKey(Schema.String),
+  listings: Schema.Array(Listing),
+})
+
+/**
+ * The catalog identity carried between steps: every listing of the inventory in
+ * sorted order, plus a fingerprint over the sorted `path`+`line` pairs. It never
+ * holds the inline sample, so rotating that sample cannot look like a catalog
+ * change, and a real change can be described as an exact incremental delta.
+ */
+export const Snapshot = Schema.Struct({
+  total: Schema.Number,
+  fingerprint: Schema.String,
+  namespaces: Schema.Array(SnapshotNamespace),
+})
+export type Snapshot = typeof Snapshot.Type
+
 export type Options = {
   readonly budget?: number
 }
@@ -48,10 +70,8 @@ const DESCRIPTION_LIMIT = 120
 const CHARACTERS_PER_TOKEN = 4
 const INLINE_BUDGET = 2_000
 
-// Keep every namespace visible, then select full listings one per namespace per round,
-// considering shorter listings first until the inline budget is exhausted.
-export function summarize(inventory: Inventory, options: Options = {}): Summary {
-  const budget = options.budget ?? INLINE_BUDGET
+/** Full inventory listing, independent of how much of it will be inlined. */
+export function snapshot(inventory: Inventory): Snapshot {
   const flattened = flatten(inventory.tools)
   const namespaces = [...Map.groupBy(flattened.tools, (tool) => tool.path.split(".", 1)[0] ?? tool.path)]
     .sort(([left], [right]) => {
@@ -59,39 +79,36 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
       if (left > right) return 1
       return 0
     })
-    .map(([name, namespaceEntries]) => {
+    .map(([name, entries]) => {
       const description = flattened.namespaces.get(name)?.description
-      const listings = namespaceEntries
-        .map((entry) => {
-          const firstLine = entry.description.split("\n", 1)[0]?.trim() ?? ""
-          const description =
-            firstLine.length > DESCRIPTION_LIMIT ? firstLine.slice(0, DESCRIPTION_LIMIT - 3) + "..." : firstLine
-          const suffix = description.length === 0 ? "" : ` // ${description}`
-          return { path: entry.path, line: `  - ${entry.signature}${suffix}` }
-        })
-        .toSorted((left, right) => {
-          if (left.path < right.path) return -1
-          if (left.path > right.path) return 1
-          return 0
-        })
-      const ranked = rankListings(listings)
-      const pinned = new Set(
-        namespaceEntries
-          .filter((entry) => entry.pinned)
-          .map((entry) => listings.find((listing) => listing.path === entry.path))
-          .filter((listing) => listing !== undefined),
-      )
       return {
         name,
         ...(description === undefined ? {} : { description }),
-        listings,
-        selectionOrder: ranked.filter((candidate) => !pinned.has(candidate.listing)),
-        selectedListings: pinned,
-        selectionIndex: 0,
+        listings: entries.map(listing).toSorted((left, right) => {
+          if (left.path < right.path) return -1
+          if (left.path > right.path) return 1
+          return 0
+        }),
       }
     })
+  return {
+    total: flattened.tools.length,
+    fingerprint: fingerprint(namespaces),
+    namespaces,
+  }
+}
 
-  const active = new Set(namespaces)
+// Keep every namespace visible, then select full listings one per namespace per round,
+// considering shorter listings first until the inline budget is exhausted.
+export function select(snapshot: Snapshot, options: Options = {}): Summary {
+  const budget = options.budget ?? INLINE_BUDGET
+  const namespaces = snapshot.namespaces.map((namespace) => ({
+    ...namespace,
+    selected: new Set(namespace.listings.filter((listing) => listing.pinned === true)),
+    order: rankListings(namespace.listings.filter((listing) => listing.pinned !== true)),
+    index: 0,
+  }))
+
   // TODO: Bound namespace discovery once large namespace inventories and descriptions can no longer stay inline.
   let remaining =
     budget -
@@ -109,19 +126,20 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
       0,
     ) -
     namespaces
-      .flatMap((namespace) => namespace.listings.filter((listing) => namespace.selectedListings.has(listing)))
+      .flatMap((namespace) => namespace.listings.filter((listing) => namespace.selected.has(listing)))
       .reduce((total, listing) => total + cost(listing.line), 0)
+  const active = new Set(namespaces)
   while (active.size > 0) {
     for (const namespace of active) {
-      const candidate = namespace.selectionOrder[namespace.selectionIndex]
+      const candidate = namespace.order[namespace.index]
       if (!candidate || candidate.cost > remaining) {
         active.delete(namespace)
         continue
       }
-      namespace.selectedListings.add(candidate.listing)
-      namespace.selectionIndex += 1
+      namespace.selected.add(candidate.listing)
+      namespace.index += 1
       remaining -= candidate.cost
-      if (namespace.selectionIndex === namespace.selectionOrder.length) active.delete(namespace)
+      if (namespace.index === namespace.order.length) active.delete(namespace)
     }
   }
 
@@ -129,13 +147,18 @@ export function summarize(inventory: Inventory, options: Options = {}): Summary 
     name: namespace.name,
     ...(namespace.description === undefined ? {} : { description: namespace.description }),
     count: namespace.listings.length,
-    entries: namespace.listings.filter((listing) => namespace.selectedListings.has(listing)),
+    entries: namespace.listings.filter((listing) => namespace.selected.has(listing)),
   }))
   return {
-    total: flattened.tools.length,
+    total: snapshot.total,
     shown: namespaceSummaries.reduce((total, namespace) => total + namespace.entries.length, 0),
     namespaces: namespaceSummaries,
   }
+}
+
+/** The rendered sample of a full inventory. */
+export function summarize(inventory: Inventory, options: Options = {}): Summary {
+  return select(snapshot(inventory), options)
 }
 
 function flatten(entries: ReadonlyArray<Tool | Namespace>, path: ReadonlyArray<string> = []) {
@@ -159,6 +182,29 @@ function flatten(entries: ReadonlyArray<Tool | Namespace>, path: ReadonlyArray<s
     for (const [name, namespace] of nested.namespaces) namespaces.set(name, namespace)
   }
   return { tools, namespaces }
+}
+
+function listing(entry: Omit<Tool, "name"> & { readonly path: string }): typeof Listing.Type {
+  const firstLine = entry.description.split("\n", 1)[0]?.trim() ?? ""
+  const description =
+    firstLine.length > DESCRIPTION_LIMIT ? firstLine.slice(0, DESCRIPTION_LIMIT - 3) + "..." : firstLine
+  const suffix = description.length === 0 ? "" : ` // ${description}`
+  return {
+    path: entry.path,
+    line: `  - ${entry.signature}${suffix}`,
+    ...(entry.pinned === true ? { pinned: true } : {}),
+  }
+}
+
+function fingerprint(namespaces: ReadonlyArray<typeof SnapshotNamespace.Type>) {
+  return createHash("sha256")
+    .update(
+      namespaces
+        .flatMap((namespace) => namespace.listings.map((listing) => `${listing.path}\u0000${listing.line}`))
+        .toSorted()
+        .join("\n"),
+    )
+    .digest("hex")
 }
 
 export function namespaceLine(namespace: typeof NamespaceSummary.Type) {

@@ -29,112 +29,127 @@ export function render(catalog: CodeModeCatalog.Summary) {
 ${tools.join("\n")}`
 }
 
-export function update(previous: CodeModeCatalog.Summary, current: CodeModeCatalog.Summary) {
+/**
+ * Describes what moved between two full inventories. The persisted identity holds
+ * every listing rather than the inline sample, so a partial catalog needs no
+ * whole-block restatement when the sample rotates: only the difference is sent.
+ */
+export function update(
+  previous: CodeModeCatalog.Snapshot,
+  current: CodeModeCatalog.Snapshot,
+  options: CodeModeCatalog.Options = {},
+) {
+  const selected = CodeModeCatalog.select(current, options)
   const replacement = `The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.
 
-${render(current)}`
+${render(selected)}`
+  // An emptied catalog restates the no-tools notice the model must obey.
   if (current.total === 0) return replacement
-  const previousComplete = previous.shown === previous.total
-  const currentComplete = current.shown === current.total
-  if (previousComplete !== currentComplete) return replacement
-
-  const descriptions = Instructions.diffByKey(
-    previous.namespaces.filter((namespace) => namespace.description !== undefined),
-    current.namespaces.filter((namespace) => namespace.description !== undefined),
-    (namespace) => namespace.name,
-    (before, after) => before.description !== after.description,
-  )
-  if (descriptions.added.length > 0 || descriptions.removed.length > 0 || descriptions.changed.length > 0)
-    return replacement
-
-  const diff = Instructions.diffByKey(
-    previous.namespaces.flatMap((namespace) => namespace.entries),
-    current.namespaces.flatMap((namespace) => namespace.entries),
-    (entry) => entry.path,
-    (before, after) => before.line !== after.line,
-  )
-  const entriesChanged = diff.added.length > 0 || diff.removed.length > 0 || diff.changed.length > 0
-
-  if (!currentComplete) {
-    if (entriesChanged) return replacement
-    const namespaces = Instructions.diffByKey(
-      previous.namespaces,
-      current.namespaces,
-      (namespace) => namespace.name,
-      (before, after) => before.count !== after.count,
-    )
-    const changed = namespaces.added.length > 0 || namespaces.removed.length > 0 || namespaces.changed.length > 0
-    if (!changed) return replacement
-
-    const parts = ["The Code Mode tool catalog has changed."]
-    if (namespaces.added.length > 0) {
-      parts.push(
-        `New tool namespaces are available: ${namespaces.added
-          .map((namespace) => `\`${namespace.name}\` (${namespace.count} tools)`)
-          .join(", ")}.`,
-      )
-    }
-    if (namespaces.changed.length > 0) {
-      parts.push(
-        `The following namespace inventories changed; search them again before relying on previous results: ${namespaces.changed
-          .map((change) => `\`${change.current.name}\` now has ${change.current.count} tools`)
-          .join(", ")}.`,
-      )
-    }
-    if (namespaces.removed.length > 0) {
-      parts.push(
-        `The following tool namespaces are no longer available and must not be used: ${namespaces.removed
-          .map((namespace) => `\`${namespace.name}\``)
-          .join(", ")}.`,
-      )
-    }
-    const delta = parts.join("\n\n")
-    if (delta.length < replacement.length) return delta
-    return replacement
-  }
-
-  if (!entriesChanged) return replacement
-  const parts = ["The Code Mode tool catalog has changed."]
-  if (diff.added.length > 0) {
-    parts.push(
-      [
-        "New tools are available in addition to those previously listed:",
-        ...diff.added.map((entry) => entry.line),
-      ].join("\n"),
-    )
-  }
-  if (diff.changed.length > 0) {
-    parts.push(
-      [
-        "Changed tool listings supersede the previously listed ones:",
-        ...diff.changed.map((change) => change.current.line),
-      ].join("\n"),
-    )
-  }
-  if (diff.removed.length > 0) {
-    parts.push(
-      `The following tools are no longer available and must not be called: ${diff.removed
-        .map((entry) => toolExpression(entry.path))
-        .join(", ")}.`,
-    )
-  }
-  const delta = parts.join("\n\n")
+  const delta = incremental(previous, current, selected, selected.shown === selected.total)
+  if (delta.length === 0) return replacement
   if (delta.length < replacement.length) return delta
   return replacement
 }
 
-const key = Instructions.Key.make("core/codemode")
-const codec = Schema.toCodecJson(CodeModeCatalog.Summary)
+const listings = (catalog: CodeModeCatalog.Snapshot) =>
+  catalog.namespaces.flatMap((namespace) => namespace.listings)
 
-export const make = (inventory?: CodeModeCatalog.Inventory): Instructions.List => {
-  const catalog = inventory === undefined ? Instructions.removed : CodeModeCatalog.summarize(inventory)
+function incremental(
+  previous: CodeModeCatalog.Snapshot,
+  current: CodeModeCatalog.Snapshot,
+  selected: CodeModeCatalog.Summary,
+  complete: boolean,
+) {
+  const tools = Instructions.diffByKey(
+    listings(previous),
+    listings(current),
+    (listing) => listing.path,
+    (before, after) => before.line !== after.line,
+  )
+  const namespaces = Instructions.diffByKey(
+    previous.namespaces,
+    current.namespaces,
+    (namespace) => namespace.name,
+    (before, after) => before.listings.length !== after.listings.length,
+  )
+  const descriptions = Instructions.diffByKey(
+    previous.namespaces,
+    current.namespaces,
+    (namespace) => namespace.name,
+    (before, after) => before.description !== after.description,
+  )
+
+  const parts: Array<string> = []
+  if (namespaces.added.length > 0) {
+    parts.push(
+      `New tool namespaces are available: ${namespaces.added
+        .map((namespace) => `\`${namespace.name}\` (${namespace.listings.length} tools)`)
+        .join(", ")}.`,
+    )
+  }
+  if (namespaces.changed.length > 0) {
+    parts.push(
+      `The following namespace inventories changed; search them again before relying on previous results: ${namespaces.changed
+        .map((change) => `\`${change.current.name}\` now has ${change.current.listings.length} tools`)
+        .join(", ")}.`,
+    )
+  }
+  if (descriptions.changed.length > 0) {
+    // Restate the same namespace lines the catalog renders, so the shown counts stay true.
+    const lines = new Map(selected.namespaces.map((namespace) => [namespace.name, namespace]))
+    parts.push(
+      [
+        "The following namespace summaries supersede the previously listed ones:",
+        ...descriptions.changed.map((change) => CodeModeCatalog.namespaceLine(lines.get(change.current.name)!)),
+      ].join("\n"),
+    )
+  }
+  if (tools.added.length > 0) {
+    // A partial catalog already namespaces more than it inlines, so a new namespace is
+    // announced by name and found through search. Its restated listings could dwarf that line.
+    const fresh = new Set(namespaces.added.map((namespace) => namespace.name))
+    const listed = tools.added.filter(
+      (entry) => complete || !fresh.has(entry.path.split(".", 1)[0] ?? entry.path),
+    )
+    if (listed.length > 0) {
+      parts.push(
+        ["New tools are available in addition to those previously listed:", ...listed.map((entry) => entry.line)].join(
+          "\n",
+        ),
+      )
+    }
+  }
+  if (tools.changed.length > 0) {
+    parts.push(
+      [
+        "Changed tool listings supersede the previously listed ones:",
+        ...tools.changed.map((change) => change.current.line),
+      ].join("\n"),
+    )
+  }
+  if (tools.removed.length > 0) {
+    parts.push(
+      `The following tools are no longer available and must not be called: ${tools.removed
+        .map((entry) => toolExpression(entry.path))
+        .join(", ")}.`,
+    )
+  }
+  if (parts.length === 0) return ""
+  return ["The Code Mode tool catalog has changed.", ...parts].join("\n\n")
+}
+
+const key = Instructions.Key.make("core/codemode")
+const codec = Schema.toCodecJson(CodeModeCatalog.Snapshot)
+
+export const make = (inventory?: CodeModeCatalog.Inventory, options: CodeModeCatalog.Options = {}): Instructions.List => {
+  const catalog = inventory === undefined ? Instructions.removed : CodeModeCatalog.snapshot(inventory)
   return Instructions.make({
     key,
     codec,
     read: Effect.succeed(catalog),
     render: {
-      initial: render,
-      changed: update,
+      initial: (catalog) => render(CodeModeCatalog.select(catalog, options)),
+      changed: (previous, current) => update(previous, current, options),
       removed: () => "Code Mode tools are no longer available. Do not use any previously listed Code Mode tools.",
     },
   })

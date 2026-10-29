@@ -25,8 +25,21 @@ const update = (
   budget?: number,
 ) =>
   CodeModeInstructions.update(
-    CodeModeCatalog.summarize({ tools: previous }, budget === undefined ? {} : { budget }),
-    CodeModeCatalog.summarize({ tools: current }, budget === undefined ? {} : { budget }),
+    CodeModeCatalog.snapshot({ tools: previous }),
+    CodeModeCatalog.snapshot({ tools: current }),
+    budget === undefined ? {} : { budget },
+  )
+
+const catalogFor = (tools: CodeModeCatalog.Inventory["tools"]) => CodeModeCatalog.summarize({ tools })
+
+/** Signatures long enough that only part of the inventory fits the inline budget. */
+const bulky = (namespace: string, count: number) =>
+  Array.from({ length: count }, (_, index) =>
+    entry(
+      `${namespace}.tool${index}`,
+      `Tool ${index}`,
+      `tools.${namespace}.tool${index}({\n  ${"a".repeat(160)}: string,\n}): Promise<string>`,
+    ),
   )
 
 describe("CodeModeCatalog.summarize", () => {
@@ -209,27 +222,44 @@ describe("CodeModeInstructions.update", () => {
     )
   })
 
-  test("restates namespace descriptions when they change", () => {
-    const previous = CodeModeCatalog.summarize({
-      tools: [{ type: "namespace", name: "notes", description: "Old description", tools: [echo] }],
-    })
-    const current = CodeModeCatalog.summarize({
-      tools: [{ type: "namespace", name: "notes", description: "New description", tools: [echo] }],
-    })
-    const text = CodeModeInstructions.update(previous, current)
-    expect(text).toContain("This catalog supersedes the previous Code Mode tool catalog.")
-    expect(text).toContain("- notes (1 tool) // New description")
-    expect(text).not.toContain("Old description")
+  test("sends only the new line when a listing changes", () => {
+    const stable = Array.from({ length: 5 }, (_, index) => entry(`stable.tool${index}`, `Stable ${index}`))
+    const changed = { ...echo, signature: "tools.notes.echo({\n  text: string,\n  upper?: boolean,\n}): Promise<string>" }
+    const text = update([echo, ...stable], [changed, ...stable])
+    expect(text).toBe(
+      "The Code Mode tool catalog has changed.\n\n" +
+        "Changed tool listings supersede the previously listed ones:\n" +
+        `  - ${changed.signature} // Echo text`,
+    )
   })
 
-  test("restates the full catalog when the rendering mode crosses full and compact", () => {
-    const wide = Array.from({ length: 40 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`))
-    const text = update([echo], [echo, ...wide], 30)
-    expect(text).toContain(
-      "The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.",
+  test("restates changed namespace descriptions without restating the catalog", () => {
+    const text = update(
+      [{ type: "namespace", name: "notes", description: "Old description", tools: [echo] }],
+      [{ type: "namespace", name: "notes", description: "New description", tools: [echo] }],
     )
-    expect(text).toContain("The catalog is partial.")
-    expect(text).toContain("## Code Mode tools (call only inside `execute`)")
+    expect(text).toContain("The Code Mode tool catalog has changed.\n\n")
+    expect(text).toContain("The following namespace summaries supersede the previously listed ones:\n- notes (1 tool) // New description")
+    expect(text).not.toContain("Old description")
+    expect(text).not.toContain("## Code Mode tools (call only inside `execute`)")
+  })
+
+  test("keeps the delta when the rendering mode crosses complete and partial", () => {
+    const tools = bulky("heavy", 40)
+    const crossing = tools.findIndex(
+      (_, index) => catalogFor(tools.slice(0, index + 1)).shown < index + 1,
+    )
+    const previous = tools.slice(0, crossing)
+    const current = tools.slice(0, crossing + 1)
+    // The crossing itself is what used to force a whole-block restatement.
+    expect(catalogFor(previous).shown).toBe(previous.length)
+    expect(catalogFor(current).shown).toBeLessThan(current.length)
+
+    const text = update(previous, current)
+    expect(text).toContain("New tools are available in addition to those previously listed:")
+    expect(text).toContain(`  - ${current.at(-1)!.signature} // Tool ${crossing}`)
+    expect(text).not.toContain("This catalog supersedes the previous Code Mode tool catalog.")
+    expect(text).not.toContain("## Code Mode tools (call only inside `execute`)")
   })
 
   test("falls back to full replacement when the delta is larger than the catalog", () => {
@@ -241,12 +271,36 @@ describe("CodeModeInstructions.update", () => {
     expect(text).not.toContain("The following tools are no longer available")
   })
 
-  test("renders namespace-only deltas without persisting hidden tool entries", () => {
+  test("names added tools in partial catalogs instead of restating their namespace", () => {
     const alpha = Array.from({ length: 10 }, (_, index) => entry(`alpha.tool${index}`, `Tool ${index}`))
-    const text = update(alpha, [...alpha, entry("alpha.tool10", "Tool 10")], 0)
+    const added = entry("alpha.tool10", "Tool 10")
+    const text = update(alpha, [...alpha, added], 0)
     expect(text).toContain("`alpha` now has 11 tools")
     expect(text).toContain("search them again before relying on previous results")
-    expect(text).not.toContain("tools.alpha.tool10(input:")
+    expect(text).toContain(`New tools are available in addition to those previously listed:\n  - ${added.signature}`)
+    expect(text).not.toContain(alpha[0]!.signature)
     expect(text).not.toContain("## Code Mode tools (call only inside `execute`)")
+  })
+
+  test("keeps repeated plugin churn to small incremental injections", () => {
+    const stable = [...bulky("blender", 40), ...bulky("codemode", 4)]
+    const volatile = [
+      entry("session.session_task_add", "Add a task to the session"),
+      entry("subagent.history", "Read the subagent history"),
+      entry("subagent.search", "Search subagent transcripts"),
+      entry("delegate.jev", "Delegate a task to jev"),
+    ]
+    const catalog = catalogFor([...stable, ...volatile])
+    // The scenario only matters while the catalog is partial: the inline sample rotates
+    // on every change, which used to be mistaken for a catalog change.
+    expect(catalog.shown).toBeLessThan(catalog.total)
+    const block = CodeModeInstructions.render(catalog).length
+
+    const inventories = [stable, [...stable, ...volatile]]
+    const injections = Array.from({ length: 8 }, (_, round) =>
+      update(inventories[round % 2]!, inventories[(round + 1) % 2]!),
+    )
+    expect(injections.every((text) => text.length < 1_500)).toBe(true)
+    expect(injections.join("").length).toBeLessThan(block)
   })
 })
