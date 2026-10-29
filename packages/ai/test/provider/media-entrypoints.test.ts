@@ -125,6 +125,15 @@ const images: ReadonlyArray<Case<ImageModel>> = [
     provider: "azure",
   },
   {
+    name: "meta",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/meta/images")
+      return model("muse-image-1.0", { ...shared, apiKey: "meta-key" })
+    },
+    url: "https://api.meta.ai/v1/images/generations",
+    auth: ["authorization", "Bearer meta-key"],
+  },
+  {
     name: "xai",
     load: async () => {
       const { model } = await import("@opencode/ai/providers/xai/images")
