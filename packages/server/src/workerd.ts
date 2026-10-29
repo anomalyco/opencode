@@ -28,7 +28,8 @@ import type { ServerOptions } from "./options"
  *   `workerd` bundle condition.
  * - Bare locations use a typed no-execution-plane process spawner; FileSystem,
  *   FileSystemSearch, and Pty fail with a clear defect until a remote sandbox
- *   backs them; Snapshot and Vcs degrade to no-op results.
+ *   backs them; Npm fails package installs with a typed workerd error; Snapshot
+ *   and Vcs degrade to no-op results.
  * - Config is injected as a string (no filesystem); plugin discovery is
  *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
  *

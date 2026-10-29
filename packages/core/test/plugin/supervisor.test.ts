@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Duration, Effect, Layer, LayerMap, Stream } from "effect"
 import { TestClock } from "effect/testing"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { define } from "@opencode/plugin/effect/plugin"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -333,13 +334,13 @@ describe("PluginSupervisor", () => {
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
       const providerID = Provider.ID.make("cloudflare")
-      const fakeLanguageModel = {
-        specificationVersion: "v3" as const,
+      const fakeLanguageModel: LanguageModelV3 = {
+        specificationVersion: "v3",
         provider: "cloudflare",
         modelId: "workers-ai",
         supportedUrls: {},
-        doGenerate: async () => ({ content: [], finishReason: "stop" as const, usage: {} }) as any,
-        doStream: async () => ({ stream: new ReadableStream() }) as any,
+        doGenerate: () => Promise.reject(new Error("unused")),
+        doStream: () => Promise.reject(new Error("unused")),
       }
       yield* sdk.register(
         define({
