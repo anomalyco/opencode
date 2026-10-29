@@ -140,12 +140,27 @@ export function createComposerAttachments(
     if (path) addPath(target, { filename: file.name, mime, path })
   }
 
-  const addAttachments = async (files: File[], target = capture()) => {
-    return files.reduce(async (result, file) => {
+  // Callers start this without awaiting it, so a failed file (for example a blob write on a full
+  // disk) is reported through onError instead of escaping as an unhandled rejection. The remaining
+  // files are still added, and a batch reports only its first failure.
+  const addAttachments = async (files: File[], target = capture(), clipboard = false) => {
+    const errors: unknown[] = []
+
+    const added = await files.reduce(async (result, file) => {
       const previous = await result
 
-      return (await add(file, target)) || previous
+      const next = await add(file, target, clipboard).catch((error) => {
+        errors.push(error)
+
+        return false
+      })
+
+      return next || previous
     }, Promise.resolve(false))
+
+    if (errors.length > 0) input.onError(errors[0])
+
+    return added
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
@@ -176,7 +191,7 @@ export function createComposerAttachments(
     if (input.readClipboardImage && !plainText) {
       const file = await input.readClipboardImage()
 
-      if (file && (await add(file, target, true))) return
+      if (file && (await addAttachments([file], target, true))) return
     }
 
     if (!plainText) return
@@ -218,13 +233,6 @@ export function createComposerAttachments(
     if (files) await addAttachments(Array.from(files))
   }
 
-  // Callers start these operations without awaiting them, so a failed blob write is reported here
-  // instead of escaping as an unhandled rejection.
-  const reported =
-    <Args extends unknown[], Result>(operation: (...args: Args) => Promise<Result>) =>
-    (...args: Args) =>
-      operation(...args).catch(input.onError)
-
   onMount(() => {
     const cancel = input.onDragCancel?.(clearDrag)
 
@@ -242,13 +250,13 @@ export function createComposerAttachments(
     makeEventListener(document, "keydown", (event) => {
       if (event.key === "Escape") clearDrag()
     })
-    makeEventListener(document, "drop", reported(handleDrop))
+    makeEventListener(document, "drop", handleDrop)
   })
 
   return {
-    addAttachments: reported(addAttachments),
-    handlePaste: reported(handlePaste),
-    handleDrop: reported(handleDrop),
+    addAttachments,
+    handlePaste,
+    handleDrop,
     /** Uploads still in flight for this composer; sending waits for them. */
     pending: () => uploads.items().filter((item) => pending.ids.includes(item.id)),
     cancel(id: string) {
