@@ -1,16 +1,16 @@
 [data-component="legal"] [data-slot="status"] {
   --status-dot: var(--color-text-weak);
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
   white-space: nowrap;
 }
 
+/* An inline dot keeps the label on the same baseline as the rest of the row. */
 [data-component="legal"] [data-slot="status"]::before {
   content: "";
-  flex: none;
+  display: inline-block;
   width: 6px;
   height: 6px;
+  margin-right: 10px;
+  vertical-align: 0.1em;
   background: var(--status-dot);
 }
 
