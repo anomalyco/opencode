@@ -80,6 +80,7 @@ import {
   IteratorObj,
   type Cursor,
   has,
+  hasOwn,
   hidden,
   hasPrototype,
   keys,
@@ -1097,11 +1098,23 @@ class Frame<R> {
     throw typeError(`${context} must be a function.`, node)
   }
 
-  // for...in over null/undefined iterates nothing, like JS.
+  // for...in over null/undefined iterates nothing, like JS. After the own keys come each prototype's enumerable
+  // string keys, skipping any key a nearer level has, even as a non-enumerable property.
   private enumerableKeys(value: Value, node: AstNode): Array<string> {
     if (value instanceof ToolReference) return [...this.ctx.tools.keys(value.path)]
     if (value === null || value === undefined) return []
-    return keys(enumerableSource(this.ctx, "for...in", value, node))
+    const source = enumerableSource(this.ctx, "for...in", value, node)
+    const chain = [source]
+    // A string's characters stand in an array, but its prototype is String.prototype.
+    let proto = primitivePrototype(this.ctx.builtins, value) ?? source.proto
+    while (proto !== null) {
+      chain.push(proto)
+      proto = proto.proto
+    }
+    return chain.flatMap((target, depth) => {
+      const nearer = chain.slice(0, depth)
+      return keys(target).filter((key) => !nearer.some((level) => hasOwn(level, key)))
+    })
   }
 
   private *evaluateForInStatement(node: ForInStatement, labels?: ReadonlySet<string>): Eval<StatementResult> {

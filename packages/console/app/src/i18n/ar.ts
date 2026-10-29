@@ -29,6 +29,10 @@ export const dict = {
   "legal.brand": "العلامة التجارية",
   "legal.privacy": "الخصوصية",
   "legal.terms": "الشروط",
+  "legal.status.operational": "كل الأنظمة تعمل",
+  "legal.status.degraded": "أداء متراجع",
+  "legal.status.outage": "انقطاع في الخدمة",
+  "legal.status.unknown": "حالة النظام",
 
   "email.title": "كن الأول في المعرفة عند إطلاق منتجات جديدة",
   "email.subtitle": "انضم إلى قائمة الانتظار للحصول على وصول مبكر.",

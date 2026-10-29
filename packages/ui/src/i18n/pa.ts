@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "سیشن تبدیلیاں",
   "ui.sessionReview.title.git": "Git تبدیلیاں",
   "ui.sessionReview.title.branch": "برانچ تبدیلیاں",
@@ -72,10 +72,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "$10/مہینہ وچ بہترین اوپن سورس ماڈلاں تک بھروسے جوگی رسائی لئی OpenCode Go دی رکنیت لوو۔",
   "dialog.usageExceeded.freeTier.actionLabel": "سبسکرائب کرو",
-  "dialog.usageExceeded.accountRateLimit.title": "Go دی حد پوری ہو گئی",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "ورتوں دی حد پوری ہو گئی۔ ہن ایہہ ماڈل ورتدے رہن لئی اپنے دستیاب بیلنس توں ورتوں چالو کرو",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "ترتیبات کھولو",
   "ui.sessionTurn.status.delegating": "کم سونپیا جا رہیا اے",
   "ui.sessionTurn.status.planning": "اگلے قدماں دی ویونت بندی ہو رہی اے",
   "ui.sessionTurn.status.gatheringContext": "کھوج ہو رہی اے",

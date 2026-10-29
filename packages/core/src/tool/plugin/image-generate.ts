@@ -9,9 +9,11 @@ import { Global } from "@opencode/util/global"
 import { Duration, Effect, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
 import { FileAccess } from "../../file-access.js"
 import { Generate } from "../../generate.js"
+import { ImageNotice } from "../../image/notice.js"
 import { Job } from "../../job.js"
 import { Mime } from "../../mime.js"
 import { Model } from "../../model.js"
@@ -21,7 +23,7 @@ import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { collectBoundedResponseBody } from "../http-body.js"
 
-export const name = "image_generate"
+export const name = "experimental_image_generate"
 export const MAX_INPUT_BYTES = 20 * 1024 * 1024
 const DOWNLOAD_TIMEOUT = Duration.seconds(30)
 const GENERATE_TIMEOUT = Duration.minutes(30)
@@ -33,8 +35,14 @@ const EXTENSIONS: Record<string, string> = {
   "image/gif": ".gif",
 }
 
-export const description =
-  "Generate or edit an image. Pass images to edit them or to guide style and subject. To make several images, call the tool once per image with distinct prompts. Omit model to use the default. Runs in the background: the call returns right away and you are notified automatically when the image is saved or fails. DO NOT sleep, poll, or check whether the file exists while it runs; continue with other work or end your response. After the notice, use the read tool on the path to view the image and mention the path to the user. Each call costs money, so don't regenerate unless asked or the result is clearly wrong."
+export const description = [
+  "Generates a new image, or edits existing ones.",
+  "Only call this when the user asks you to create or edit an image. If you think an image would help but the user didn't ask for one, ask them first instead of generating it.",
+  "Images you pass are used as the source to edit, or as references for style and subject.",
+  "Each call makes one image. For several images, call it once per image.",
+  "It runs in the background: the call starts a job and returns right away, and you are notified automatically when the image is saved, with its path. Never poll, sleep, or check for the file while you wait.",
+  "Don't repeat a request unless the user asks.",
+].join("\n")
 
 export const Input = Schema.Struct({
   prompt: Schema.String.check(Schema.isMinLength(1)).annotate({
@@ -45,7 +53,7 @@ export const Input = Schema.Struct({
     Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
   ).annotate({
     description:
-      "Images to edit or use as references, in order. Local file paths (relative to the session directory or absolute) or http(s) URLs. Omit to create a new image.",
+      "Images to edit, or to use as references for style and subject when creating a new image, in order. Local file paths (relative to the session directory or absolute) or http(s) URLs.",
   }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:
@@ -58,6 +66,7 @@ export const Input = Schema.Struct({
 })
 
 export const Output = Schema.Struct({
+  id: Schema.String.annotate({ description: "The image job's ID, repeated in its completion notice" }),
   path: Schema.String.annotate({ description: "Where the image is saved, without its extension" }),
   model: Schema.String.annotate({ description: "providerID/modelID" }),
 })
@@ -191,25 +200,34 @@ export const Plugin = {
     })
 
     const notifyWhenDone = Effect.fn("ImageGenerateTool.notifyWhenDone")(
-      function* (sessionID: SessionSchema.ID, id: string, notificationID: SessionMessage.ID, file: string) {
-        const info = (yield* jobs.wait({ id })).info
+      function* (input: { sessionID: SessionSchema.ID; id: string; notificationID: SessionMessage.ID; file: string }) {
+        const info = (yield* jobs.wait({ id: input.id })).info
         if (!info || info.status === "running") return
         yield* sessions.synthetic({
-          id: notificationID,
-          sessionID,
+          id: input.notificationID,
+          sessionID: input.sessionID,
           description: "Image generation",
-          text:
-            info.status === "completed"
-              ? (info.output ?? "")
-              : info.status === "error"
-                ? (info.error ?? `Image request failed for ${file}.`)
-                : `Image request for ${file} was cancelled.`,
-          metadata: { source: name, jobID: id, state: info.status, path: file },
+          text: ImageNotice.text({
+            id: input.id,
+            state: info.status,
+            body:
+              info.status === "completed"
+                ? (info.output ?? "")
+                : info.status === "error"
+                  ? (info.error ?? `Image request failed for ${input.file}.`)
+                  : `Image request for ${input.file} was cancelled.`,
+          }),
+          metadata: { source: name, jobID: input.id, state: info.status, path: input.file },
         })
-        yield* jobs.completeBackground(notificationID)
+        yield* jobs.completeBackground(input.notificationID)
       },
       Effect.forkIn(scope, { startImmediately: true }),
     )
+
+    // On by default. `experimental.image_generate: false` is still honored for configs from when the tool was opt-in;
+    // permissions are the supported way to turn it off. Internal plugins are not re-run on config changes, so reload the
+    // tool transform instead.
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
 
     // Registered only while an image model is available, re-evaluated whenever the catalog changes.
     // Subscribing before the first read keeps a change in between from being missed.
@@ -230,7 +248,7 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((editor) => {
-        if (!enabled) return
+        if (!enabled || imageGenerate(loaded.entries) === false) return
         editor.add({
           name,
           options: { codemode: false },
@@ -334,7 +352,7 @@ export const Plugin = {
               )
               const id = `image_${Identifier.create(false)}`
               const notificationID = SessionMessage.ID.create()
-              const job = yield* jobs.start({
+              yield* jobs.start({
                 id,
                 notificationID,
                 type: name,
@@ -343,17 +361,17 @@ export const Plugin = {
                 recovery: { kind: "image", sessionID: context.sessionID, path: stem, model: ref },
                 run,
               })
-              yield* jobs.background(job.id)
-              yield* notifyWhenDone(context.sessionID, job.id, notificationID, stem)
+              yield* jobs.background(id)
+              yield* notifyWhenDone({ sessionID: context.sessionID, id, notificationID, file: stem })
               return {
-                output: { path: stem, model: ref },
+                output: { id, path: stem, model: ref },
                 content: [
-                  `Image request started in the background with ${ref}. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.${resolved.note ?? ""}`,
+                  `Image job ${id} started in the background with ${ref}. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.${resolved.note ?? ""}`,
                   "You will be notified automatically when it finishes or fails.",
                   "DO NOT sleep, poll, check whether the file exists, or request the same image again while it runs.",
                   "Work on other tasks, or briefly tell the user what you started and end your response.",
                 ].join("\n"),
-                metadata: { path: stem, model: ref, jobID: job.id },
+                metadata: { path: stem, model: ref, jobID: id },
               }
             }).pipe(
               Effect.mapError((error) =>
@@ -376,10 +394,15 @@ export function defaultModel(
 }
 
 // Read per field so a later config that sets other experimental options doesn't hide this one.
-function configuredModel(entries: readonly Entry[]) {
+function imageGenerate(entries: readonly Entry[]) {
   return entries.findLast(
-    (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_model !== undefined,
-  )?.info.experimental?.image_model
+    (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_generate !== undefined,
+  )?.info.experimental?.image_generate
+}
+
+function configuredModel(entries: readonly Entry[]) {
+  const value = imageGenerate(entries)
+  return typeof value === "object" ? value.model : undefined
 }
 
 function acceptsImages(model: Model.Info) {

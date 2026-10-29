@@ -31,6 +31,10 @@ export const dict = {
   "legal.brand": "Brand",
   "legal.privacy": "Privacy",
   "legal.terms": "Terms",
+  "legal.status.operational": "All systems operational",
+  "legal.status.degraded": "Degraded performance",
+  "legal.status.outage": "Service disruption",
+  "legal.status.unknown": "System status",
 
   "email.title": "Be the first to know when we release new products",
   "email.subtitle": "Join the waitlist for early access.",

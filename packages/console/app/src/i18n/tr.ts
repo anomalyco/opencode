@@ -30,6 +30,10 @@ export const dict = {
   "legal.brand": "Marka",
   "legal.privacy": "Gizlilik",
   "legal.terms": "Koşullar",
+  "legal.status.operational": "Tüm sistemler çalışıyor",
+  "legal.status.degraded": "Düşük performans",
+  "legal.status.outage": "Hizmet kesintisi",
+  "legal.status.unknown": "Sistem durumu",
 
   "email.title": "Yeni ürünler yayınladığımızda ilk siz haberdar olun",
   "email.subtitle": "Erken erişim için bekleme listesine katılın.",

@@ -1,5 +1,6 @@
 import { activeQuestionRequest, questionPendingDocument } from "@opencode/session-ui/storybook"
 import { SessionPreview } from "./story-model"
+import { SettingsExperimental } from "@/settings/experimental/experimental"
 
 export default {
   title: "OpenCode/Session/Question switch",
@@ -12,13 +13,25 @@ export default {
     docs: {
       description: {
         component:
-          "A pending question dock with five questions of different heights. Step through them with ← and →, or the Replay buttons under Knobs → Timeline → Question. Its motion is off until Question dock motion is turned on there.",
+          "Compare the original question cards with the New question UI experiment. With the experiment enabled, step through questions with ← and →. Its motion is off until Question dock motion is turned on under Knobs → Timeline → Question.",
       },
     },
   },
 }
 
-// Several questions of different lengths and kinds in a row, to step through with ← and →.
+export const Experiments = {
+  render: () => (
+    <SessionPreview
+      title="Choose a Session layout"
+      description="opencode · question UI experiments"
+      document={questionPendingDocument}
+      request={{ type: "question", value: activeQuestionRequest }}
+      side={<SettingsExperimental />}
+    />
+  ),
+}
+
+// Several questions of different lengths and kinds in a row.
 export const QuestionSeries = {
   render: () => (
     <SessionPreview

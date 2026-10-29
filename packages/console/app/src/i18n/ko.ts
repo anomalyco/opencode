@@ -30,6 +30,10 @@ export const dict = {
   "legal.brand": "브랜드",
   "legal.privacy": "개인정보처리방침",
   "legal.terms": "이용약관",
+  "legal.status.operational": "모든 시스템 정상 운영 중",
+  "legal.status.degraded": "성능 저하",
+  "legal.status.outage": "서비스 장애",
+  "legal.status.unknown": "시스템 상태",
 
   "email.title": "새로운 제품 출시 소식을 가장 먼저 받아보세요",
   "email.subtitle": "대기 명단에 등록하여 조기 이용 권한을 받으세요.",

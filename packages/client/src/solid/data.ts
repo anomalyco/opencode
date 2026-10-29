@@ -1108,6 +1108,10 @@ export function createData(config: CreateDataInput) {
         return
       case "session.execution.started":
         setSessionActive(event.data.sessionID, "running")
+        // Revalidate so `time.busy` follows the projected execution start.
+        if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
+        result.session.invalidate(event.data.sessionID)
+        refresh(() => result.session.sync(event.data.sessionID))
         return
       case "session.compaction.started":
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
