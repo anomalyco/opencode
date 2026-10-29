@@ -161,46 +161,20 @@ for providers, selection, rate limits, and disabling the tool.
 
 ### Image generate
 
-<Callout type="warning">
-  `image_generate` is experimental. Its behavior and configuration may change in any release.
-</Callout>
-
-`image_generate` creates a new image from a `prompt`, or edits existing ones.
-It is off by default; turn it on with
-[`experimental.image_generate`](/config#image-generation). Once enabled, it is
-offered only while a connected provider has an image model in the catalog, and
-appears or disappears as the catalog or config changes.
+`image_generate` creates a new image from a prompt, or edits existing ones. It
+is experimental and off by default; turn it on with
+[`experimental.image_generate`](/config#image-generation). It appears only
+while a connected provider has an image model.
 
 ```text
 Generate a flat app icon of a paper plane on a blue background and save it to assets/icon.png.
 ```
 
-Pass up to eight `images` to edit, or to use as references for style and
-subject. Each can be a local path, relative to the session directory or
-absolute, or an HTTP or HTTPS URL. Inputs must be PNG, JPEG, WebP, or GIF and at
-most 20 MiB each.
+Give it a `prompt`, and optionally `images` to edit or use as references, a
+specific `model`, or a `path` to save to. It runs in the background and
+notifies the session with the saved path when the image is ready.
 
-`path` sets where the image is saved. Its extension is replaced with the
-image's real format, and an existing file is overwritten. Without it, the image
-is saved in a per-session temp folder, under `images/<sessionID>/` in the
-OpenCode temp directory.
-
-Each call makes one image and runs in the background: it returns right away,
-and a notice arrives in the session with the saved path when the image is ready
-or the request fails.
-
-The agent sets `model` only when you ask for a specific image model, written as
-`providerID/modelID` or `providerID/modelID#variant`. Otherwise OpenCode uses
-the configured default, or picks the newest image model from the session's
-provider, then the newest from any connected provider. Edits only consider
-models that accept image input. If the configured default can't serve a call,
-OpenCode picks another model and tells the agent why.
-
-Permission: `image_generate` with the selected `providerID/modelID` as its
-resource. An explicit `path` also checks `edit` and, outside the project,
-`external_directory`. Local input images check `read`, and URL inputs check
-`webfetch`. A `deny` rule for `image_generate` with resource `*` removes the
-tool.
+Permission: `image_generate` with the selected model as its resource.
 
 ## Interaction
 
