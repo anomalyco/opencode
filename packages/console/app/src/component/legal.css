@@ -1,0 +1,27 @@
+[data-component="legal"] [data-slot="status"] {
+  --status-dot: var(--color-text-weak);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+[data-component="legal"] [data-slot="status"]::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--status-dot);
+}
+
+[data-component="legal"] [data-slot="status"][data-status="operational"] {
+  --status-dot: #198b43;
+}
+
+[data-component="legal"] [data-slot="status"][data-status="degraded"] {
+  --status-dot: #c48a00;
+}
+
+[data-component="legal"] [data-slot="status"][data-status="outage"] {
+  --status-dot: #d93636;
+}

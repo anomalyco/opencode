@@ -30,6 +30,10 @@ export const dict = {
   "legal.brand": "品牌",
   "legal.privacy": "隐私",
   "legal.terms": "条款",
+  "legal.status.operational": "所有系统运行正常",
+  "legal.status.degraded": "性能下降",
+  "legal.status.outage": "服务中断",
+  "legal.status.unknown": "系统状态",
 
   "email.title": "第一时间获知我们的新产品发布",
   "email.subtitle": "加入候补名单，获取抢先体验资格。",

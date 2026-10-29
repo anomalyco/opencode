@@ -31,6 +31,10 @@ export const dict = {
   "legal.brand": "Marque",
   "legal.privacy": "Confidentialité",
   "legal.terms": "Conditions",
+  "legal.status.operational": "Tous les systèmes sont opérationnels",
+  "legal.status.degraded": "Performances dégradées",
+  "legal.status.outage": "Interruption de service",
+  "legal.status.unknown": "État du système",
 
   "email.title": "Soyez le premier à être informé de nos nouveaux produits",
   "email.subtitle": "Inscrivez-vous à la liste d'attente pour un accès anticipé.",
