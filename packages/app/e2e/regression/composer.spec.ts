@@ -370,12 +370,14 @@ for (const action of ["tray", "picker"] as const) {
     await expect(await popup).toHaveURL("https://opencode.ai/console/wrk_go_limit/go")
 
     if (action === "tray") await tray.getByRole("button", { name: "Switch to a free model", exact: true }).click()
+
     if (action === "picker") {
       await page.locator('[data-action="composer-model"]').click()
       const picker = page.getByRole("dialog", { name: "Select model", exact: true })
       await picker.getByRole("combobox", { name: "Search models", exact: true }).fill("Big Pickle")
       await picker.getByRole("option", { name: /Big Pickle/ }).click()
     }
+
     await expect(page.locator('[data-action="composer-model"]')).toContainText("Big Pickle")
     await expect(tray).toHaveCount(0)
     await expect(view.editor).toHaveText("Refactor the parser")
@@ -853,9 +855,7 @@ test("keeps a line added at the end of a scrolling prompt clear of the bottom fa
         const viewport = element.closest('[data-component="composer-scroll"]')!
         const range = document.createRange()
         range.selectNodeContents(element)
-        const line = Array.from(range.getClientRects()).reduce((last, rect) =>
-          rect.bottom > last.bottom ? rect : last,
-        )
+        const line = Array.from(range.getClientRects()).reduce((last, rect) => (rect.bottom > last.bottom ? rect : last))
         const fade = parseFloat(getComputedStyle(viewport).getPropertyValue("--composer-fade-bottom"))
 
         return Math.max(0, Math.round(line.bottom - (viewport.getBoundingClientRect().bottom - fade)))

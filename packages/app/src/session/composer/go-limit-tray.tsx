@@ -45,6 +45,7 @@ export function SessionGoLimitTray(props: {
   const platform = usePlatform()
   const location = useWorkspaceLocation()
   const [limit, setLimit] = createSignal<GoLimit>()
+
   const model = createMemo(() => {
     const current = props.selection()?.current()
 
