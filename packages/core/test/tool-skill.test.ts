@@ -9,6 +9,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Skill } from "@opencode/core/skill"
 import { Config } from "@opencode/core/config"
+import { Bus } from "@opencode/core/bus"
 import { SkillTool } from "@opencode/core/tool/plugin/skill"
 import { Tool } from "@opencode/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
@@ -56,7 +57,7 @@ describe("SkillTool", () => {
       ).toEqual({ status: "error", error: { type: "tool.execution", message: "Unable to load skill private" } })
     }).pipe(
       Effect.provide(
-        AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode, Skill.node, Config.node]), [
+        AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode, Skill.node, Config.node, Bus.node]), [
           Config.node.replace(Config.testLayer()),
           Permission.node.replace(permissionLayer({ assert: () => Effect.die("Blocked skill reached authorization") })),
           Image.node.replace(imagePassthrough),

@@ -634,21 +634,20 @@ describe("shell scanner permission impact", () => {
           yield* saved.add({ projectID: Project.ID.global, action: "shell", resources: scenario.saved })
           const service = yield* Permission.Service
 
-          for (const [index, portable] of [false, true].entries()) {
-            const parsed = yield* ShellParse.scan(fixture.command, fixture.shell, "/project", { portable })
-            expect(parsed.commands.length).toBeGreaterThan(0)
-            expect(parsed.directories).toEqual([])
-            const result = yield* service.ask(
-              assertion({
-                action: "shell",
-                resources: parsed.commands.map((command) => command.resource),
-                save: parsed.commands.map((command) => command.save),
-              }),
-            )
-            expect(result.effect, portable ? "native" : "legacy").toBe(scenario.expected[index])
-            const pending = yield* service.list()
-            expect(pending).toHaveLength(result.effect === "ask" ? 1 : 0)
-            if (result.effect !== "ask") continue
+          const parsed = yield* ShellParse.scan(fixture.command, fixture.shell, "/project")
+          expect(parsed.commands.length).toBeGreaterThan(0)
+          expect(parsed.directories).toEqual([])
+          const result = yield* service.ask(
+            assertion({
+              action: "shell",
+              resources: parsed.commands.map((command) => command.resource),
+              save: parsed.commands.map((command) => command.save),
+            }),
+          )
+          expect(result.effect).toBe(scenario.expected[1])
+          const pending = yield* service.list()
+          expect(pending).toHaveLength(result.effect === "ask" ? 1 : 0)
+          if (result.effect === "ask") {
             expect(pending[0]?.resources).toEqual(parsed.commands.map((command) => command.resource))
             expect(pending[0]?.save).toEqual(parsed.commands.map((command) => command.save))
             yield* service.reply({ requestID: result.id, reply: "once" })
@@ -741,47 +740,41 @@ describe("shell scanner permission impact", () => {
       nextEffect: ["ask", "ask"],
     },
   ] as const) {
-    for (const [origin, portable] of [false, true].entries()) {
-      it.live(`${fixture.name}: always allow from ${portable ? "native" : "legacy"}, then use either parser`, () =>
-        Effect.gen(function* () {
-          yield* setup()
-          const service = yield* Permission.Service
-          const saved = yield* PermissionSaved.Service
-          const parsed = yield* ShellParse.scan(fixture.command, fixture.shell, "/project", { portable })
-          const first = yield* service.ask(
+    it.live(`${fixture.name}: always allow covers repeat execution and narrows prefix scope`, () =>
+      Effect.gen(function* () {
+        yield* setup()
+        const service = yield* Permission.Service
+        const saved = yield* PermissionSaved.Service
+        const parsed = yield* ShellParse.scan(fixture.command, fixture.shell, "/project")
+        const first = yield* service.ask(
+          assertion({
+            action: "shell",
+            resources: parsed.commands.map((command) => command.resource),
+            save: parsed.commands.map((command) => command.save),
+          }),
+        )
+        expect(first.effect).toBe("ask")
+        expect(yield* service.list()).toHaveLength(1)
+        yield* service.reply({ requestID: first.id, reply: "always" })
+        expect(yield* service.list()).toEqual([])
+        expect((yield* saved.list({ projectID: Project.ID.global })).map((rule) => rule.resource).sort()).toEqual(
+          [...fixture.grants[1]].sort(),
+        )
+
+        for (const command of [fixture.command, fixture.next]) {
+          const parsed = yield* ShellParse.scan(command, fixture.shell, "/project")
+          const result = yield* service.ask(
             assertion({
               action: "shell",
               resources: parsed.commands.map((command) => command.resource),
               save: parsed.commands.map((command) => command.save),
             }),
           )
-          expect(first.effect).toBe("ask")
-          expect(yield* service.list()).toHaveLength(1)
-          yield* service.reply({ requestID: first.id, reply: "always" })
+          expect(result.effect, command).toBe(command === fixture.next ? fixture.nextEffect[1] : fixture.repeat[1]?.[1])
+          if (result.effect === "ask") yield* service.reply({ requestID: result.id, reply: "once" })
           expect(yield* service.list()).toEqual([])
-          expect((yield* saved.list({ projectID: Project.ID.global })).map((rule) => rule.resource).sort()).toEqual(
-            [...fixture.grants[portable ? 1 : 0]].sort(),
-          )
-
-          for (const [index, target] of [false, true].entries()) {
-            for (const command of [fixture.command, fixture.next]) {
-              const parsed = yield* ShellParse.scan(command, fixture.shell, "/project", { portable: target })
-              const result = yield* service.ask(
-                assertion({
-                  action: "shell",
-                  resources: parsed.commands.map((command) => command.resource),
-                  save: parsed.commands.map((command) => command.save),
-                }),
-              )
-              expect(result.effect, `${target ? "native" : "legacy"}: ${command}`).toBe(
-                command === fixture.next ? fixture.nextEffect[origin] : fixture.repeat[origin]?.[index],
-              )
-              if (result.effect === "ask") yield* service.reply({ requestID: result.id, reply: "once" })
-              expect(yield* service.list()).toEqual([])
-            }
-          }
-        }),
-      )
-    }
+        }
+      }),
+    )
   }
 })

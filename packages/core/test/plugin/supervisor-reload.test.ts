@@ -355,7 +355,7 @@ it.live("applies organization integration changes to running external plugins", 
         configuration,
         JSON.stringify({
           plugins: [root],
-          experimental: { policies: [{ action: "integration.use", resource: "plugin:*", effect: "deny" }] },
+          experimental: { policies: [{ action: "plugin.use", resource: "*", effect: "deny" }] },
         }),
       )
     })
@@ -377,7 +377,7 @@ it.live("applies organization integration changes to running external plugins", 
       expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(true)
       yield* config.integration?.(
         Integration.ID.make("opencode"),
-        organizationPolicy([{ action: "integration.use", resource: `plugin:${root}`, effect: "deny" }]),
+        organizationPolicy([{ action: "plugin.use", resource: root, effect: "deny" }]),
       ) ?? Effect.void
       yield* commands.get("policy-greet").pipe(
         Effect.flatMap((command) => (command ? Effect.fail("pending") : Effect.void)),

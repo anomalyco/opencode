@@ -31,7 +31,7 @@ import { expandPromptInputPastedText, realignPromptInputMentions } from "../../p
 import { parseSlashHead } from "../../prompt/parse"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
-import { saveDraft, takeDraft } from "./draft-stash"
+import { registerComposer, saveDraft, takeDraft } from "./draft-stash"
 import { Skill } from "@opencode/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
@@ -353,7 +353,7 @@ export function Prompt(props: PromptProps) {
   createEffect(() => {
     if (!input || input.isDestroyed) return
     input.cursorColor = disabled() ? theme.background.raised.base : theme.text.base
-    if (config.cursor) input.cursorStyle = config.cursor
+    input.cursorStyle = config.cursor
   })
 
   const [store, setStore] = createStore<{
@@ -717,6 +717,7 @@ export function Prompt(props: PromptProps) {
   const stashSessionID = props.sessionID
 
   onMount(() => {
+    onCleanup(registerComposer(stashSessionID, ref))
     const saved = takeDraft(stashSessionID)
     if (store.prompt.text) return
     if (saved && saved.prompt.text) {
@@ -1773,7 +1774,7 @@ export function Prompt(props: PromptProps) {
               focusedTextColor={muted() ? theme.text.muted : theme.text.base}
               minHeight={1}
               maxHeight={maxHeight()}
-              cursorStyle={config.cursor}
+              cursorStyle={{ ...config.cursor }}
               onContentChange={() => {
                 const value = input.plainText
                 setStore("prompt", "text", value)
@@ -1832,7 +1833,7 @@ export function Prompt(props: PromptProps) {
                   // setTimeout is a workaround and needs to be addressed properly
                   if (!input || input.isDestroyed) return
                   input.cursorColor = disabled() ? theme.background.raised.base : theme.text.base
-                  if (config.cursor) input.cursorStyle = config.cursor
+                  input.cursorStyle = config.cursor
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => {

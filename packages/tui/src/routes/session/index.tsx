@@ -33,15 +33,17 @@ import {
   type Renderable,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
-import type {
-  SessionMessageInfo,
-  SessionMessageAssistant,
-  SessionMessageAssistantReasoning,
-  SessionMessageAssistantText,
-  SessionMessageAssistantTool,
-  SessionMessageUser,
-  SessionInfo,
-  ModelInfo,
+import {
+  mediaHashFromUri,
+  type PromptAttachment,
+  type SessionMessageInfo,
+  type SessionMessageAssistant,
+  type SessionMessageAssistantReasoning,
+  type SessionMessageAssistantText,
+  type SessionMessageAssistantTool,
+  type SessionMessageUser,
+  type SessionInfo,
+  type ModelInfo,
 } from "@opencode/client"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
@@ -66,6 +68,7 @@ import { DialogSelect } from "../../ui/dialog-select"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { TodoItem } from "../../component/todo-item"
 import { DialogImagePreview } from "../../component/dialog-image-preview"
+import { createMediaSource } from "../../component/media-source"
 import { statusLabel } from "../../component/dialog-workspace-file-changes"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
@@ -80,8 +83,9 @@ import { errorMessage } from "../../util/error"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
-import { projectedPromptInput } from "../../prompt/codec"
-import { appendPrompt } from "../../prompt/history"
+import { usePromptRestore } from "../../prompt/restore"
+import { appendToSessionPrompt } from "../../component/prompt/draft-stash"
+import type { ProjectedPrompt } from "../../prompt/codec"
 import { deduplicateVisibleImages } from "../../prompt/attachment"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
@@ -260,6 +264,7 @@ export function Session(props: {
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const toast = useToast()
+  const restorePrompt = usePromptRestore()
   const client = useClient()
   const autoApproved = new Set<string>()
   createEffect(() => {
@@ -642,32 +647,39 @@ export function Session(props: {
   // Restore the prompt when the free allowance or an OpenCode Go limit stops it, and offer OpenCode Go on the first free
   // allowance hit in a day.
   onCleanup(
-    data.on("session.step.failed", (event) => {
+    data.on("session.step.failed", async (event) => {
       const type = event.data.error.type
       if (event.data.sessionID !== route.sessionID) return
       if (type !== "provider.free-limit" && type !== "provider.go-limit") return
       if (handledLimits.has(event.data.assistantMessageID)) return
       handledLimits.add(event.data.assistantMessageID)
-      const current = prompt()
-      const wasEmpty = Boolean(
-        current &&
-          !current.current.text.trim() &&
-          !current.current.files?.length &&
-          !current.current.agents?.length &&
-          !current.current.skills?.length &&
-          !current.current.pasted.length,
-      )
-      if (!wasEmpty || !current) return
+      const empty = (ref: PromptRef | undefined): ref is PromptRef =>
+        !!ref &&
+        !ref.current.text.trim() &&
+        !ref.current.files?.length &&
+        !ref.current.agents?.length &&
+        !ref.current.skills?.length &&
+        !ref.current.pasted.length
+      if (!empty(prompt())) return
       const list = messages()
       const end = list.findIndex((item) => item.id === event.data.assistantMessageID)
-      for (let i = end - 1; i >= 0; i--) {
+      let recalled: SessionMessageUser | undefined
+      for (let i = end - 1; i >= 0 && !recalled; i--) {
         const item = list[i]
         if (!item || item.type === "shell" || item.type === "idle") break
-        if (item.type === "user" && !data.session.input.has(route.sessionID, item.id)) {
-          current.set({ ...projectedPromptInput(item), pasted: [] })
-          break
-        }
+        if (item.type === "user" && !data.session.input.has(route.sessionID, item.id)) recalled = item
       }
+      const restored = recalled
+        ? await restorePrompt(recalled).catch((error) => {
+            toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
+            return null
+          })
+        : undefined
+      // Media refs load before the prompt comes back; typing or a shell command meanwhile keeps it and skips the offer.
+      if (restored === null || sessionDisposed || route.sessionID !== event.data.sessionID) return
+      const current = prompt()
+      if (!empty(current) || current.mode !== "normal") return
+      if (restored) current.set(restored)
       if (type === "provider.go-limit" || dialog.stack.length > 0) return
       if (goUpsell.dontShow || goUpsellMemory.dontShow) return
       const now = Date.now()
@@ -747,25 +759,33 @@ export function Session(props: {
     }),
   )
   const runPendingAction = createSingleFlight<string>()
-  const mutatePending = async (action: PendingAction, inboxID: string, failureLabel?: string) => {
-    const result = await runPendingAction(inboxID, async () => {
-      const request =
-        action === "steer"
-          ? client.api.session.inbox.update({ sessionID: route.sessionID, inboxID, delivery: "steer" })
-          : action === "queue"
-            ? client.api.session.inbox.update({ sessionID: route.sessionID, inboxID, delivery: "queue" })
-            : client.api.session.inbox.cancel({ sessionID: route.sessionID, inboxID })
-      const error = await request.then(
-        () => undefined,
-        (error) => error,
-      )
-      if (!error) return true
-      const label = failureLabel ?? (action === "cancel" ? "delete" : action)
-      toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
-      return false
-    })
-    return result ?? false
+  // Uses the captured sessionID: after an await, route.sessionID may already name another tab, or none.
+  const requestPending = async (action: PendingAction, inboxID: string, failureLabel?: string) => {
+    const request =
+      action === "steer"
+        ? client.api.session.inbox.update({ sessionID, inboxID, delivery: "steer" })
+        : action === "queue"
+          ? client.api.session.inbox.update({ sessionID, inboxID, delivery: "queue" })
+          : client.api.session.inbox.cancel({ sessionID, inboxID })
+    const error = await request.then(
+      () => undefined,
+      (error) => error,
+    )
+    if (!error) return true
+    const label = failureLabel ?? (action === "cancel" ? "delete" : action)
+    toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
+    return false
   }
+  const mutatePending = async (action: PendingAction, inboxID: string) =>
+    (await runPendingAction(inboxID, () => requestPending(action, inboxID))) ?? false
+  // The cancel releases blobs nothing else references, so media refs load into the draft first. Resolves with the
+  // composer it wrote to, if any, once the prompt is back; undefined if the cancel failed or was already running.
+  const undoPending = (inboxID: string, message: ProjectedPrompt, failureLabel?: string) =>
+    runPendingAction(inboxID, async () => {
+      const restored = await restorePrompt(message)
+      if (!(await requestPending("cancel", inboxID, failureLabel))) return
+      return { composer: appendToSessionPrompt(sessionID, restored, renderer.widthMethod) }
+    })
   const openQueuedPrompts = () =>
     dialog.replace(() => (
       <DialogSelect
@@ -804,19 +824,19 @@ export function Session(props: {
                 toast.show({ message: "Leave shell mode before undoing a queued prompt", variant: "error" })
                 return
               }
-              void mutatePending("cancel", queued.id, "undo").then((undone) => {
-                if (!undone) return
-                target.setMode("normal")
-                target.set(
-                  appendPrompt(
-                    target.current,
-                    { ...projectedPromptInput(queued.payload), pasted: [] },
-                    renderer.widthMethod,
-                  ),
+              void undoPending(queued.id, queued.payload, "undo")
+                .then((undone) => {
+                  if (!undone || sessionDisposed) return
+                  dialog.clear()
+                  undone.composer?.focus()
+                })
+                .catch((error) =>
+                  toast.show({
+                    title: "Failed to undo pending prompt",
+                    message: errorMessage(error),
+                    variant: "error",
+                  }),
                 )
-                dialog.clear()
-                target.focus()
-              })
             },
           },
         ]}
@@ -1053,13 +1073,7 @@ export function Session(props: {
       group: "Session",
       slash: { name: "timeline" },
       run: () => {
-        dialog.replace(() => (
-          <DialogTimeline
-            sessionID={route.sessionID}
-            onMove={jumpToMessage}
-            setPrompt={(value) => promptRef.current?.set(value)}
-          />
-        ))
+        dialog.replace(() => <DialogTimeline sessionID={route.sessionID} onMove={jumpToMessage} />)
       },
     },
     {
@@ -1117,21 +1131,16 @@ export function Session(props: {
           dialog.clear()
           return
         }
-        const sessionID = route.sessionID
-        const target = prompt()
-        void (async () => {
-          if (pendingDeliveries().has(message.id)) {
-            if (!(await mutatePending("cancel", message.id))) return
-          } else {
-            await client.api.session.interrupt({ sessionID })
-            await client.api.experimental.session.wait({ sessionID })
-            await client.api.session.revert.stage({ sessionID, messageID: message.id })
-          }
-          target?.set({
-            ...projectedPromptInput(message),
-            pasted: [],
-          })
-        })().catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
+        const undo = pendingDeliveries().has(message.id)
+          ? undoPending(message.id, message)
+          : (async () => {
+              const restored = await restorePrompt(message)
+              await client.api.session.interrupt({ sessionID })
+              await client.api.experimental.session.wait({ sessionID })
+              await client.api.session.revert.stage({ sessionID, messageID: message.id })
+              appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
+            })()
+        void undo.catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
         dialog.clear()
       },
     },
@@ -2354,11 +2363,14 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const newDesigns = useNewDesigns()
   const data = useData()
   const local = useLocal()
-  const files = createMemo(() => deduplicateVisibleImages(props.message.files ?? []))
+  // Opted-in reads leave stored files as `media:` refs, a PromptAttachment variant the generated message type omits.
+  const files = createMemo(() => deduplicateVisibleImages<PromptAttachment>(props.message.files ?? []))
   const skills = createMemo(() => props.message.skills ?? [])
   const images = createMemo(() =>
     files().flatMap((file) =>
-      file.mime.startsWith("image/") ? [{ uri: `data:${file.mime};base64,${file.data}` }] : [],
+      file.mime.startsWith("image/")
+        ? [{ uri: "uri" in file ? file.uri : `data:${file.mime};base64,${file.data}` }]
+        : [],
     ),
   )
   const themes = useThemes()
@@ -2369,7 +2381,6 @@ function UserMessage(props: { message: SessionMessageUser }) {
   const delivery = createMemo(() => ctx.pendingDelivery(props.message.id))
   const dialog = useDialog()
   const renderer = useRenderer()
-  const promptRef = usePromptRef()
 
   const updatePendingSteer = async (action: "queue" | "cancel") => {
     if (await ctx.mutatePending(action, props.message.id)) dialog.clear()
@@ -2411,13 +2422,7 @@ function UserMessage(props: { message: SessionMessageUser }) {
             }
             // The dialog outlives this row, whose props go stale when a resync drops the message.
             const messageID = props.message.id
-            dialog.replace(() => (
-              <DialogMessage
-                messageID={messageID}
-                sessionID={ctx.sessionID}
-                setPrompt={(value) => promptRef.current?.set(value)}
-              />
-            ))
+            dialog.replace(() => <DialogMessage messageID={messageID} sessionID={ctx.sessionID} />)
           }}
           paddingTop={1}
           paddingBottom={1}
@@ -2675,7 +2680,7 @@ function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?
       >
         <For each={visible()}>
           {(image, index) => {
-            const [failed, setFailed] = createSignal(false)
+            const media = createMediaSource(() => image.uri)
             return (
               <box
                 width={height() * 2}
@@ -2690,14 +2695,14 @@ function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?
                   dialog.replace(() => <DialogImagePreview images={images()} initial={index()} />)
                 }}
               >
-                <Show when={!failed()} fallback={<text>No preview</text>}>
+                <Show when={!media.failed()} fallback={<text>No preview</text>}>
                   <image
-                    source={image.uri}
+                    source={media.source()}
                     fit="cover"
                     protocol="auto"
                     width="100%"
                     height="100%"
-                    onError={() => setFailed(true)}
+                    onError={media.onError}
                   />
                 </Show>
               </box>
@@ -2718,7 +2723,9 @@ function SessionImages(props: { images: readonly { uri: string }[]; paddingLeft?
 
 function inlineToolImages(part: SessionMessageAssistantTool) {
   return toolDisplayContent(part.state).flatMap((content) =>
-    content.type === "file" && content.mime.startsWith("image/") && content.uri.startsWith("data:image/")
+    content.type === "file" &&
+    content.mime.startsWith("image/") &&
+    (content.uri.startsWith("data:image/") || mediaHashFromUri(content.uri))
       ? [{ uri: content.uri }]
       : [],
   )

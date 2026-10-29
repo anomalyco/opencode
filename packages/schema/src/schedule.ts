@@ -84,8 +84,19 @@ export const ShellCondition = Schema.Struct({
 }).annotate({ identifier: "Schedule.Condition.Shell" })
 export type ShellCondition = typeof ShellCondition.Type
 
+/**
+ * Runs `code` in a confined Code Mode runtime before firing, with no model call and no `fetch`. Tools called statically
+ * as `tools.<path>(...)` are extracted from the AST and authorized at creation; the program receives `state` (initially
+ * `null`), `now` (epoch ms) and `runs` (completed checks), and returns a boolean or `{ wake, state?, message? }`.
+ */
+export const CodeCondition = Schema.Struct({
+  type: Schema.tag("code"),
+  code: Schema.String,
+}).annotate({ identifier: "Schedule.Condition.Code" })
+export type CodeCondition = typeof CodeCondition.Type
+
 /** Checked before firing; the schedule wakes the Session only when the condition passes. */
-export const Condition = Schema.Union([ShellCondition]).pipe(
+export const Condition = Schema.Union([ShellCondition, CodeCondition]).pipe(
   Schema.toTaggedUnion("type"),
   Schema.annotate({ identifier: "Schedule.Condition" }),
 )
@@ -148,7 +159,7 @@ export const CreateInput = Schema.Struct({
 }).annotate({ identifier: "Schedule.CreateInput" })
 export type CreateInput = typeof CreateInput.Type
 
-/** Declares a trigger absent, so `{ in, every }` fails instead of decoding as a one-shot. */
+/** Declares a variant field absent, so `{ in, every }` or `{ run, code }` fails instead of silently dropping one. */
 const absent = Schema.optionalKey(Schema.Never)
 
 /** The `when` callers write: exactly one of `in`, `at`, `every` or `cron`, with an optional `tz`. */
@@ -173,9 +184,31 @@ export const ShellConditionInput = Schema.Struct({
   changes: Schema.Boolean.pipe(optional).annotate({
     description: "Wake when exit is 0 and stdout differs from the previous check.",
   }),
-}).annotate({ identifier: "Schedule.ConditionInput" })
-export type ConditionInput = typeof ShellConditionInput.Type
-export const ConditionInput = ShellConditionInput
+}).annotate({ identifier: "Schedule.ShellConditionInput" })
+
+export const CodeConditionInput = Schema.Struct({
+  code: Schema.String.check(Schema.isMinLength(1)).annotate({
+    description: [
+      "Code Mode JavaScript check (no fetch; 30s, 20 tool calls, 32 KB output cap).",
+      'Call tools statically as tools.<ns>.<tool>(...) or tools["ns-name"].tool(...); each is authorized once at creation to run unattended.',
+      "Runs once at creation with state = null (if baselines state without waking; until matches immediately if true), with globals state, now (epoch ms) and runs.",
+      "Return a boolean or { wake, state?, message? } (message is appended to prompt on wake), e.g.:",
+      'const t = await tools.slack.read_thread({ id }); return { wake: state !== null && t.count > state.count, state: { count: t.count }, message: "New reply" }',
+    ].join(" "),
+  }),
+}).annotate({ identifier: "Schedule.CodeConditionInput" })
+
+export const ConditionInput = Schema.Union([
+  Schema.Struct({ ...ShellConditionInput.fields, code: absent }),
+  Schema.Struct({
+    ...CodeConditionInput.fields,
+    run: absent,
+    is: absent,
+    matches: absent,
+    changes: absent,
+  }),
+]).annotate({ identifier: "Schedule.ConditionInput" })
+export type ConditionInput = typeof ConditionInput.Type
 
 /** A schedule as callers describe it: when it fires, optional condition, when it stops, and the prompt it sends. */
 export const Request = Schema.Struct({
@@ -185,11 +218,12 @@ export const Request = Schema.Struct({
       'When it fires: { in: "20 minutes" }, { at: "2026-10-27T09:00" }, { every: "1 hour" } or { cron: "0 9 * * 1-5" }. Optional with `until` (defaults to { every: "30 seconds" }).',
   }),
   if: ConditionInput.pipe(optional).annotate({
-    description: "Recurring gate: check on each slot with no model call, and wake on every slot where it passes.",
+    description:
+      "Recurring gate ({ run } shell command or { code } Code Mode script): check on each slot with no model call, and wake on every slot where it passes.",
   }),
   until: ConditionInput.pipe(optional).annotate({
     description:
-      'One-shot gate: poll with no model call, wake once when it passes, and stop. Defaults ends.after to "24 hours".',
+      'One-shot gate ({ run } shell command or { code } Code Mode script): poll with no model call, wake once when it passes, and stop. Defaults ends.after to "24 hours".',
   }),
   ends: Ends.pipe(optional).annotate({
     description: 'Stops a repeating schedule at the first limit reached: { after: "8 hours" }, { at }, { times: 3 }.',
@@ -210,13 +244,16 @@ export const toCreateInput = (sessionID: SessionID, request: Request): CreateInp
   action: { type: "prompt", prompt: request.prompt },
 })
 
-const toCondition = (condition: ConditionInput): Condition => ({
-  type: "shell",
-  run: condition.run,
-  is: condition.is,
-  matches: condition.matches,
-  changes: condition.changes,
-})
+const toCondition = (condition: ConditionInput): Condition => {
+  if (condition.code !== undefined) return { type: "code", code: condition.code }
+  return {
+    type: "shell",
+    run: condition.run,
+    is: condition.is,
+    matches: condition.matches,
+    changes: condition.changes,
+  }
+}
 
 const toWhen = (when: WhenInput): When => {
   if (when.in !== undefined) return { type: "in", in: when.in, tz: when.tz }

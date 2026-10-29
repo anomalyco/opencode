@@ -322,6 +322,12 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.post("sessionView", "/api/session/:sessionID/view", {
+      params: SessionParams,
+      success: NoContent,
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("sessionShell", "/api/session/:sessionID/shell", {
       params: SessionParams,
       success: NoContent,

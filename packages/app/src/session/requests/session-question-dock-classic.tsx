@@ -122,6 +122,7 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
   onCleanup(observeReducedMotion(() => setStore("reducedMotion", prefersReducedMotion())))
 
   let root: HTMLDivElement | undefined
+  let detailsRef: HTMLDivElement | undefined
   let optionsRef: HTMLDivElement | undefined
   let customRef: HTMLButtonElement | undefined
   let customInput: HTMLInputElement | undefined
@@ -197,7 +198,10 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
     const dock = root.closest('[data-component="session-composer-dock"]')
     // In the app this row can have zero height and overflow upward; the containing panel bounds the question.
     const column = bounds(dock?.parentElement)
-    const bottom = Math.min(window.innerHeight, column?.bottom ?? window.innerHeight)
+    const parent = dock?.parentElement?.getBoundingClientRect()
+    const edge = parent && parent.width > 0 ? parent.bottom : Infinity
+    const view = window.visualViewport ? window.visualViewport.offsetTop + window.visualViewport.height : Infinity
+    const bottom = Math.min(window.innerHeight, view, column?.bottom ?? Infinity, edge)
 
     const around =
       dock instanceof HTMLElement
@@ -232,7 +236,14 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
     focusFrame = requestAnimationFrame(() => {
       focusFrame = undefined
       const el = next === options().length ? customRef : optsRef[next]
-      el?.focus()
+      el?.focus({ preventScroll: true })
+      const row = el?.closest<HTMLElement>('[data-slot="question-option"]')
+
+      if (!row || !optionsRef) return
+      optionsRef.scrollTop = Math.min(
+        row.offsetTop,
+        Math.max(optionsRef.scrollTop, row.offsetTop + row.offsetHeight - optionsRef.clientHeight),
+      )
     })
   }
 
@@ -247,8 +258,13 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
       })
     }
 
-    update()
+    measure()
     makeEventListener(window, "resize", update)
+
+    if (window.visualViewport) {
+      makeEventListener(window.visualViewport, "resize", update)
+      makeEventListener(window.visualViewport, "scroll", update)
+    }
 
     const dock = root?.closest('[data-component="session-composer-dock"]')
     const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
@@ -527,7 +543,12 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
     setStore("tab", tab)
     setStore("editing", false)
 
-    if (optionsRef) setStore("optionsHeight", optionsRef.scrollHeight)
+    if (detailsRef) detailsRef.scrollTop = 0
+
+    if (optionsRef) {
+      optionsRef.scrollTop = 0
+      setStore("optionsHeight", optionsRef.scrollHeight)
+    }
 
     if (!store.minimized) focus(pickFocus(tab))
   }
@@ -547,6 +568,8 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
 
   const minimize = () => {
     if (sending()) return
+
+    if (optionsRef) setStore("optionsHeight", optionsRef.offsetHeight)
     setStore("editing", false)
     setStore("minimized", true)
   }
@@ -606,7 +629,11 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
                 />
               </div>
             </div>
-            <div data-slot="question-details">
+            <div
+              data-slot="question-details"
+              data-scrollable={!store.minimized || undefined}
+              ref={(el) => (detailsRef = el)}
+            >
               <div
                 data-slot="question-text"
                 style={{
@@ -694,7 +721,7 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
           aria-hidden={store.minimized || optionsOff() ? "true" : undefined}
           classList={{ "pointer-events-none": hidden() > 0.1 }}
           style={{
-            "max-height": `${Math.max(0, store.optionsHeight * (1 - hidden()))}px`,
+            "max-height": hidden() > 0 ? `${Math.max(0, store.optionsHeight * (1 - hidden()))}px` : undefined,
             opacity: `${Math.max(0, Math.min(1, 1 - hidden()))}`,
             visibility: optionsOff() ? "hidden" : "visible",
           }}
