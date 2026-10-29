@@ -148,6 +148,46 @@ describe("ShellParse", () => {
     ])
   })
 
+  test.each([
+    ['git grep -n "x" -- README.md', "git grep *"],
+    ["git rev-parse HEAD --", "git rev-parse *"],
+    ['node -e "console.log(1)" --', "node *"],
+    ["Get-Content README.md -TotalCount 1 --", "Get-Content *"],
+  ])("finds PowerShell commands containing a bare -- (%s)", async (command, save) => {
+    const result = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace", { portable: false }))
+    expect(result.commands).toEqual([{ resource: command, save }])
+  })
+
+  test.each([
+    [
+      "git status --short; echo MIXED-RAN --",
+      [
+        { resource: "git status --short", save: "git status *" },
+        { resource: "echo MIXED-RAN --", save: "echo *" },
+      ],
+    ],
+    [
+      "git status; Remove-Item victim --",
+      [
+        { resource: "git status", save: "git status *" },
+        { resource: "Remove-Item victim --", save: "Remove-Item *" },
+      ],
+    ],
+    [
+      "Remove-Item x --; Get-ChildItem",
+      [
+        { resource: "Remove-Item x --", save: "Remove-Item *" },
+        { resource: "Get-ChildItem", save: "Get-ChildItem *" },
+      ],
+    ],
+  ])(
+    "finds every PowerShell command when a bare -- hides one beside a parsed command (%s)",
+    async (command, commands) => {
+      const result = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace", { portable: false }))
+      expect(result.commands).toEqual(commands)
+    },
+  )
+
   test("does not permission directory changes separately", async () => {
     const result = await Effect.runPromise(ShellParse.scan("cd 'src dir' && git status", "/bin/bash", "/workspace"))
     expect(result).toEqual({
