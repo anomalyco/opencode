@@ -786,7 +786,8 @@ export const dict = {
   "settings.experimental.row.newIcons.title": "New icons",
   "settings.experimental.row.newIcons.description": "Preview the updated icon set",
   "settings.experimental.row.foldUserMessages.title": "Fold long messages",
-  "settings.experimental.row.foldUserMessages.description": "Fold your messages past 12 lines behind a Read more button",
+  "settings.experimental.row.foldUserMessages.description":
+    "Fold your messages past 12 lines behind a Read more button",
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.plugins.reload": "Reload",
@@ -847,6 +848,11 @@ export const dict = {
   "settings.general.row.interfaceMode.inbox": "Inbox",
   "settings.general.row.interfaceMode.inbox.description":
     "Every session across your servers, sorted by what needs you next.",
+  "settings.general.row.tabOrder.title": "Tab order",
+  "settings.general.row.tabOrder.description":
+    "Whether the side tab list follows the session you worked on last or the order you opened tabs in.",
+  "settings.general.row.tabOrder.recent": "Recent activity",
+  "settings.general.row.tabOrder.opened": "Opened order",
   "settings.general.row.interfaceMode.experimental": "Experimental",
   "settings.appearance.row.zoom.title": "Zoom",
   "settings.appearance.row.zoom.description": "Make text and controls larger across the app",

@@ -22,3 +22,14 @@ export function mergeVisibleTabOrder(all: string[], current: string[], next: str
 
   return all.map((key) => (visible.has(key) ? (reordered.next().value ?? key) : key))
 }
+
+/**
+ * Newest activity first. Tabs without a known time fall after the ones that have one, and ties keep
+ * their stored order so a strip that has no activity yet does not reshuffle.
+ */
+export function orderTabsByRecency<T>(tabs: readonly T[], time: (tab: T) => number | undefined): T[] {
+  return tabs
+    .map((tab, index) => ({ tab, index, time: time(tab) }))
+    .toSorted((a, b) => (b.time ?? -1) - (a.time ?? -1) || a.index - b.index)
+    .map((entry) => entry.tab)
+}

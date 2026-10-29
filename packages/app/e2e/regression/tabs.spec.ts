@@ -506,6 +506,35 @@ test("icon-only inactive tabs retain their avatar and attention badge instead of
   await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCount(0)
 })
 
+test("side tabs follow recent activity while top tabs keep the opened order", async ({ page }) => {
+  const sessions = [
+    { ...a, time: { created: 1_000, updated: 1_000, idle: 1_000 } },
+    { ...b, time: { created: 2_000, updated: 2_000, idle: 2_000 } },
+    { ...c, time: { created: 3_000, updated: 3_000, idle: 3_000 } },
+  ]
+
+  await mockWorkspace(page, {
+    name: "Tabs",
+    sessions,
+    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+  })
+  await page.goto(sessionHref(a.id))
+
+  const sideRows = page.locator('[data-slot="vertical-tabs-sidebar"] [data-titlebar-tab]')
+  await expect(sideRows.locator("[data-titlebar-tab-title]")).toHaveText([c.title, b.title, a.title])
+
+  // The top strip keeps the browser convention: tabs stay where they were opened.
+  await page.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem("settings.v3") ?? "{}")
+    stored.appearance = { ...stored.appearance, tabLayout: "horizontal" }
+    localStorage.setItem("settings.v3", JSON.stringify(stored))
+  })
+  await page.reload()
+
+  const topRows = page.locator('[data-slot="titlebar-tabs"] [data-titlebar-tab]')
+  await expect(topRows.locator("[data-titlebar-tab-title]")).toHaveText([a.title, b.title, c.title])
+})
+
 test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 480 })
   const directory = "C:/OpenCode/Tabs"
@@ -629,7 +658,8 @@ test("vertical tab gaps hover and select the nearest row", async ({ page }) => {
   await mockWorkspace(page, {
     name: "Tabs",
     sessions: [a, b, c],
-    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+    // The gaps and the drag belong to the manual order, which is what `opened` keeps.
+    seed: { settings: { appearance: { tabLayout: "vertical", tabOrder: "opened" } } },
   })
   await page.goto(sessionHref(a.id))
 
@@ -691,7 +721,8 @@ test("tab preview opens cold, switches immediately between tabs, and closes outs
   await mockWorkspace(page, {
     name: "Tabs",
     sessions: [a, b, c, d],
-    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+    // The drag at the end belongs to the manual order, so pin the strip to `opened`.
+    seed: { settings: { appearance: { tabLayout: "vertical", tabOrder: "opened" } } },
   })
   await page.goto(sessionHref(a.id))
   const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')

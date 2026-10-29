@@ -17,7 +17,8 @@ import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { createTabComposerState } from "@/composer/persistence"
 import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
-import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
+import { adjacentTabKey, mergeVisibleTabOrder, orderTabsByRecency } from "./tab-order"
+import { useSettings } from "@/settings/model"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
@@ -390,11 +391,26 @@ export function TitlebarTabStrip(props: {
   const global = useGlobal()
   const language = useLanguage()
   const command = useCommand()
+  const settings = useSettings()
   const vertical = () => props.orientation === "vertical"
   let listRef!: HTMLDivElement
   const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
   const [unread, setUnread] = createStore<Record<string, boolean>>({})
-  const visibleTabs = createMemo(() => props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
+
+  // A rail that follows activity has no manual order left to drag into, so drag only exists for the opened order.
+  const recentOrder = () => settings.appearance.tabOrder() === "recent"
+
+  // `time.updated` moves with every message of a run, so a chat you are in would jump to the top mid-turn. The end of
+  // the last run is the last meaningful activity; sessions that never finished one fall back to their last update.
+  const activity = (tab: Tab) => {
+    if (tab.type === "draft") return Number.MAX_SAFE_INTEGER
+    const session = global.serverCtx(tab.server)?.data.session.get(tab.sessionId)
+    if (!session) return undefined
+    return session.time.idle ?? session.time.updated
+  }
+
+  const orderedTabs = createMemo(() => (recentOrder() ? orderTabsByRecency(props.tabs, activity) : props.tabs))
+  const visibleTabs = createMemo(() => orderedTabs().filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
   // Tells the closed sidebar's toggle whether any row here shows its unread dot, which the current tab never does.
@@ -469,7 +485,7 @@ export function TitlebarTabStrip(props: {
   function selectAdjacentTab(offset: -1 | 1, include?: (key: string) => boolean) {
     const current = props.currentTab
     const key = adjacentTabKey(visibleTabIds(), current ? tabKey(current) : undefined, offset, include)
-    const next = props.tabs.find((tab) => tabKey(tab) === key)
+    const next = orderedTabs().find((tab) => tabKey(tab) === key)
 
     if (next) props.onNavigate(next)
   }
@@ -490,17 +506,23 @@ export function TitlebarTabStrip(props: {
         }}
       >
         <DragDropProvider
-          sensors={[
-            PointerSensor.configure({
-              activationConstraints: (event) =>
-                event.pointerType === "touch"
-                  ? [new PointerActivationConstraints.Distance({ value: 8 })]
-                  : [new PointerActivationConstraints.Distance({ value: 4 })],
-              preventActivation: (event) =>
-                event.target instanceof Element &&
-                !!event.target.closest('[data-slot="tab-close"], [contenteditable="true"], [contenteditable="plaintext-only"]'),
-            }),
-          ]}
+          sensors={
+            recentOrder()
+              ? []
+              : [
+                  PointerSensor.configure({
+                    activationConstraints: (event) =>
+                      event.pointerType === "touch"
+                        ? [new PointerActivationConstraints.Distance({ value: 8 })]
+                        : [new PointerActivationConstraints.Distance({ value: 4 })],
+                    preventActivation: (event) =>
+                      event.target instanceof Element &&
+                      !!event.target.closest(
+                        '[data-slot="tab-close"], [contenteditable="true"], [contenteditable="plaintext-only"]',
+                      ),
+                  }),
+                ]
+          }
           modifiers={[
             vertical() ? RestrictToVerticalAxis : RestrictToHorizontalAxis,
             RestrictToElement.configure({ element: () => listRef }),
@@ -548,7 +570,7 @@ export function TitlebarTabStrip(props: {
             classList={{ "flex-row items-center": !vertical(), "flex-col items-stretch": vertical() }}
             ref={listRef}
           >
-            <For each={props.tabs}>
+            <For each={orderedTabs()}>
               {(tab) => {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement

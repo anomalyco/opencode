@@ -9,6 +9,7 @@ import { PluginSettingsSections } from "@/runtime/plugin/settings-page-view"
 import {
   type BackgroundActivity,
   type FollowUpBehavior,
+  type TabOrder,
   type TimelineWidth,
   type WorkspaceDefaultDestination,
   useSettings,
@@ -36,6 +37,34 @@ const AutoApprovePermissionsSetting: Component = () => {
           onChange={(checked) => settings.permissions.setAutoApproveDefault(checked)}
         />
       </div>
+    </SettingsRow>
+  )
+}
+
+const TabOrderSetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+
+  const options = createMemo((): { value: TabOrder; label: string }[] => [
+    { value: "recent", label: language.t("settings.general.row.tabOrder.recent") },
+    { value: "opened", label: language.t("settings.general.row.tabOrder.opened") },
+  ])
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.tabOrder.title")}
+      description={language.t("settings.general.row.tabOrder.description")}
+    >
+      <Select
+        data-action="settings-tab-order"
+        options={options()}
+        current={options().find((option) => option.value === settings.appearance.tabOrder())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        placement="bottom-end"
+        gutter={6}
+        onSelect={(option) => option && settings.appearance.setTabOrder(option.value)}
+      />
     </SettingsRow>
   )
 }
@@ -255,6 +284,8 @@ export const SettingsGeneral: Component = () => {
       <InterfaceModeSetting />
       <SettingsList>
         <LanguageSetting />
+
+        <TabOrderSetting />
 
         <WorkspaceDestinationSetting />
         <AutoApprovePermissionsSetting />
