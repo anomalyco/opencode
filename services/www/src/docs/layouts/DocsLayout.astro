@@ -1,6 +1,7 @@
 ---
 import type { MarkdownHeading } from "astro"
 import { ClientRouter } from "astro:transitions"
+import DocsFooter from "../components/DocsFooter.astro"
 import DocsHeader from "../components/DocsHeader.astro"
 import DocsSidebar from "../components/DocsSidebar.astro"
 import DocsTableOfContents from "../components/DocsTableOfContents.astro"
@@ -93,6 +94,7 @@ const canonical = new URL(docsHref(Astro.props.currentSlug), "https://opencode.a
         </>
       )
     }
+    <DocsFooter />
     <script is:inline>
       const addHeadingAnchors = () => {
         for (const heading of document.querySelectorAll(".prose :is(h2, h3)[id]")) {
