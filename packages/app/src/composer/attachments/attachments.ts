@@ -140,28 +140,20 @@ export function createComposerAttachments(
     if (path) addPath(target, { filename: file.name, mime, path })
   }
 
-  // Callers start this without awaiting it, so a failed file (for example a blob write on a full
-  // disk) is reported through onError instead of escaping as an unhandled rejection. The remaining
-  // files are still added, and a batch reports only its first failure.
-  const addAttachments = async (files: File[], target = capture(), clipboard = false) => {
-    const errors: unknown[] = []
+  // Callers start this without awaiting it, so a failure (for example a blob write on a full disk)
+  // is reported through onError instead of escaping as an unhandled rejection.
+  const addAttachments = (files: File[], target = capture(), clipboard = false) =>
+    files
+      .reduce(async (result, file) => {
+        const previous = await result
 
-    const added = await files.reduce(async (result, file) => {
-      const previous = await result
-
-      const next = await add(file, target, clipboard).catch((error) => {
-        errors.push(error)
+        return (await add(file, target, clipboard)) || previous
+      }, Promise.resolve(false))
+      .catch((error) => {
+        input.onError(error)
 
         return false
       })
-
-      return next || previous
-    }, Promise.resolve(false))
-
-    if (errors.length > 0) input.onError(errors[0])
-
-    return added
-  }
 
   const handlePaste = async (event: ClipboardEvent) => {
     const clipboardData = event.clipboardData

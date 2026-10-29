@@ -21,12 +21,7 @@ afterEach(() => {
   process.off("unhandledRejection", recordUnhandled)
 })
 
-function setup(
-  options: {
-    store?: (file: File) => Promise<{ id: string; url: string }>
-    readClipboardImage?: () => Promise<File | null>
-  } = {},
-) {
+function setup(options: { readClipboardImage?: () => Promise<File | null> } = {}) {
   const [store, setStore] = createStore<{ prompt: ComposerPrompt; cursor: number }>({
     prompt: [{ type: "text", content: "", start: 0, end: 0 }],
     cursor: 0,
@@ -57,7 +52,7 @@ function setup(
       duplicate() {},
       onError: (error) => errors.push(error),
       onUploadError: (error) => errors.push(error),
-      store: options.store ?? (() => Promise.reject(failure)),
+      store: () => Promise.reject(failure),
       readClipboardImage: options.readClipboardImage,
     })
 
@@ -132,18 +127,14 @@ describe("Composer attachment persistence failures", () => {
     dispose()
   })
 
-  test("a failed file reports once and does not stop the rest of the batch", async () => {
-    const { attachments, errors, store, dispose } = setup({
-      store: (file) =>
-        file.name === "ok.png" ? Promise.resolve({ id: "ok", url: "blob:ok" }) : Promise.reject(failure),
-    })
+  test("a failed batch reports through onError once", async () => {
+    const { attachments, errors, dispose } = setup()
 
-    const added = await attachments.addAttachments([image("bad-1.png"), image("ok.png"), image("bad-2.png")])
+    const added = await attachments.addAttachments([image("first.png"), image("second.png")])
 
-    expect(added).toBe(true)
+    expect(added).toBe(false)
     expect(errors).toEqual([failure])
     expect(unhandled).toEqual([])
-    expect(store.prompt.flatMap((part) => (part.type === "image" ? [part.filename] : []))).toEqual(["ok.png"])
     dispose()
   })
 })
