@@ -16,7 +16,7 @@ import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { sessionTabTitle } from "./tab-title"
 import { sessionTitle } from "@/session/title"
 import { createSessionInbox, inboxArchived, inboxBusy, type InboxEntry, type InboxStatus } from "./inbox-model"
-import { compareWorking, workingSince } from "./inbox-working"
+import { compareWorking, workingDuration } from "./inbox-working"
 
 // `since` is when the inbox was first used; Recent only lists sessions that finished a run after it.
 const InboxState = Persistence.struct({
@@ -257,14 +257,10 @@ function InboxRow(props: {
 
   // Without the current run's start yet, say only that the session is working.
   const working = () => {
-    const since = workingSince(props.entry.session)
-
-    if (since === undefined) return language.t("sidebar.inbox.status.working")
-
-    const seconds = Math.max(0, Math.floor((props.now - since) / 1000))
-    const duration = seconds < 60 ? language.plural("sidebar.inbox.elapsed.seconds", seconds) : compact(seconds)
-
-    return language.t("sidebar.inbox.status.workingFor", { duration })
+    const duration = workingDuration(props.entry.session, props.now, language)
+    return duration === undefined
+      ? language.t("sidebar.inbox.status.working")
+      : language.t("sidebar.inbox.status.workingFor", { duration })
   }
 
   // Ready rows show their age instead of a status.

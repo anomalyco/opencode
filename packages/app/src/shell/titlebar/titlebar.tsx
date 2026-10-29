@@ -18,6 +18,7 @@ import { applyPath, backPath, forwardPath, type HistoryLocation } from "./histor
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
 import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
+import { ActiveSessions } from "@/shell/titlebar/active-sessions"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
@@ -857,12 +858,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               />
                             </div>
                             <div class="h-4 w-full shrink-0" aria-hidden="true" />
+                            <ActiveSessions />
                             <div class="flex min-h-0 flex-1 flex-col gap-1">
                               <Show
                                 when={settings.appearance.tabLayout() === "inbox"}
                                 fallback={
                                   <TitlebarTabStrip
                                     orientation="vertical"
+                                    grouping
                                     tabs={tabsStore}
                                     currentTab={currentTab()}
                                     onNavigate={(tab, el) => {

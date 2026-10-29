@@ -28,6 +28,7 @@ export interface TabPreviewData {
   title?: string
   path?: string
   serverName?: string
+  lastRun?: string
 }
 
 export function TabPreviewPopover(props: {
@@ -152,6 +153,11 @@ export function TabPreviewPopover(props: {
 
           <Show when={props.data.serverName}>
             <div data-slot="server">{props.data.serverName}</div>
+          </Show>
+          <Show when={props.data.lastRun}>
+            <div data-slot="row">
+              <span data-slot="detail">{props.data.lastRun}</span>
+            </div>
           </Show>
         </HoverCard.Content>
       </HoverCard.Portal>

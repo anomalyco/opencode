@@ -335,7 +335,8 @@ function createServerController(
       used,
       add,
       forDirectory,
-      forSession: (session: SessionInfo): Project | undefined => projectForSession(session, list()),
+      forSession: (session: Pick<SessionInfo, "projectID" | "location">): Project | undefined =>
+        projectForSession(session, list()),
       last: () => list().find((project) => project.id === projects.last()),
       // Marks the project of a directory as used from this client, and as the last one.
       touch(directory: string) {
