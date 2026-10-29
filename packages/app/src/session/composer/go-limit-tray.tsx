@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js"
 import { Option, Schema } from "effect"
 import type { SessionStepFailed } from "@opencode/client/promise"
 import { Button } from "@opencode/ui/button"
@@ -45,6 +45,13 @@ export function SessionGoLimitTray(props: {
   const platform = usePlatform()
   const location = useWorkspaceLocation()
   const [limit, setLimit] = createSignal<GoLimit>()
+  const model = createMemo(() => {
+    const current = props.selection()?.current()
+
+    return current && `${current.provider.id}:${current.id}`
+  })
+
+  createEffect(on(model, () => setLimit(undefined), { defer: true }))
 
   onCleanup(
     location().event.on("session.step.failed", (event) => {
