@@ -2294,7 +2294,14 @@ export type ConfigEntry =
         timezone?: string
         permissions?: PermissionRuleset
         policies?: Array<{
-          action: "provider.use" | "tool.use" | "integration.use"
+          action:
+            | "provider.use"
+            | "tool.use"
+            | "integration.connect"
+            | "integration.use"
+            | "mcp.use"
+            | "skill.use"
+            | "plugin.use"
           resource: string
           effect: "allow" | "deny"
         }>
@@ -2457,7 +2464,14 @@ export type ConfigEntry =
           subagent_depth?: number
           location_idle_timeout?: string | false
           policies?: Array<{
-            action: "provider.use" | "tool.use" | "integration.use"
+            action:
+              | "provider.use"
+              | "tool.use"
+              | "integration.connect"
+              | "integration.use"
+              | "mcp.use"
+              | "skill.use"
+              | "plugin.use"
             resource: string
             effect: "allow" | "deny"
           }>

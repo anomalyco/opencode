@@ -8474,7 +8474,7 @@
             }
           }
         },
-        "description": "Store an integration credential. It becomes the integration's active credential unless activate is false and the integration already has one. Fails with a conflict when the requested ID already exists.",
+        "description": "Store an integration credential. It becomes the integration's active credential unless activate is false and the integration already has one. Fails with a conflict when the requested ID already exists, and with an invalid request when an `integration.connect` policy denies the integration.",
         "summary": "Create credential",
         "requestBody": {
           "content": {
@@ -15974,7 +15974,15 @@
               "properties": {
                 "action": {
                   "type": "string",
-                  "enum": ["provider.use", "tool.use", "integration.use"]
+                  "enum": [
+                    "provider.use",
+                    "tool.use",
+                    "integration.connect",
+                    "integration.use",
+                    "mcp.use",
+                    "skill.use",
+                    "plugin.use"
+                  ]
                 },
                 "resource": {
                   "type": "string"
@@ -16319,7 +16327,15 @@
                   "properties": {
                     "action": {
                       "type": "string",
-                      "enum": ["provider.use", "tool.use", "integration.use"]
+                      "enum": [
+                        "provider.use",
+                        "tool.use",
+                        "integration.connect",
+                        "integration.use",
+                        "mcp.use",
+                        "skill.use",
+                        "plugin.use"
+                      ]
                     },
                     "resource": {
                       "type": "string"

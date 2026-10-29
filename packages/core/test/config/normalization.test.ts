@@ -596,6 +596,22 @@ describe("ConfigNormalize", () => {
     ).toEqual({ policies: [{ action: "provider.use", resource: "*", effect: "deny" }] })
   })
 
+  test("converts legacy prefixed integration.use statements from config and MDM files", () => {
+    expect(
+      normalized({
+        policies: [
+          { action: "integration.use", resource: "mcp:github", effect: "deny" },
+          { action: "integration.use", resource: "*", effect: "deny" },
+        ],
+      }).encoded,
+    ).toEqual({
+      policies: [
+        { action: "mcp.use", resource: "github", effect: "deny" },
+        { action: "integration.use", resource: "*", effect: "deny" },
+      ],
+    })
+  })
+
   test("reports unsupported legacy settings without including their values", () => {
     const secret = "do-not-log-this-value"
     const result = normalized({
