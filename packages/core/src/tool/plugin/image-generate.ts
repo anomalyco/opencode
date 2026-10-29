@@ -37,7 +37,7 @@ const EXTENSIONS: Record<string, string> = {
 
 export const description = [
   "Generates a new image, or edits existing ones.",
-  "Only call this when the user asks you to create or edit an image.",
+  "Only call this when the user asks you to create or edit an image. If you think an image would help but the user didn't ask for one, ask them first instead of generating it.",
   "Images you pass are used as the source to edit, or as references for style and subject.",
   "Each call makes one image. For several images, call it once per image.",
   "It runs in the background: the call starts a job and returns right away, and you are notified automatically when the image is saved, with its path. Never poll, sleep, or check for the file while you wait.",
