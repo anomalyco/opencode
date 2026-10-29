@@ -730,6 +730,7 @@ export const dict = {
   "dialog.server.menu.remove": "Fjarlægja",
   "home.workspaceTip": "Byrjaðu næstu lotu á nýju vinnusvæði til að halda breytingum einangruðum",
   "session.tab.add": "Bæta við flipa",
+  "session.tab.closeOthers": "Loka öðrum flipum",
   "session.queue.attachments.one": "Auk {{count}} viðhengi",
   "session.queue.attachments.other": "Auk {{count}} viðhengja",
   "settings.backToSettings": "Til baka í stillingar",
