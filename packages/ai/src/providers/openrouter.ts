@@ -228,7 +228,14 @@ export const configure = (input: Config = {}) => {
   })
   const media = MediaRoute.deployment({ ...input, baseURL: input.baseURL ?? baseURL }, auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions, sizing: imageSizing })
+    OpenAIImages.model({
+      ...media,
+      id: modelID,
+      provider: id,
+      providerOptions,
+      sizing: imageSizing,
+      imageInput: "references",
+    })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model<OpenRouterDecisionOptions>({
       id: modelID,

@@ -526,6 +526,60 @@ describe("Image", () => {
     ),
   )
 
+  describe("OpenRouter image inputs", () => {
+    const openrouter = OpenRouter.configure({ apiKey: "test", baseURL: "https://openrouter.test/v1" })
+    const sent = (expected: Record<string, unknown>) =>
+      layer((input) =>
+        Effect.gen(function* () {
+          const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+          expect(request.url).toBe("https://openrouter.test/v1/images/generations")
+          expect(request.headers.get("content-type")).toBe("application/json")
+          expect(JSON.parse(input.text)).toEqual(expected)
+          return json(input, { data: [{ b64_json: "AQID" }] })
+        }),
+      )
+
+    it.effect("sends a plain generation unchanged", () =>
+      Image.generate({ model: openrouter.image("openai/gpt-image-1-mini"), prompt: "A lighthouse" }).pipe(
+        Effect.provide(sent({ model: "openai/gpt-image-1-mini", prompt: "A lighthouse" })),
+      ),
+    )
+
+    it.effect("sends input images as input references on the generations endpoint", () =>
+      Image.generate({
+        model: openrouter.image("openai/gpt-image-1-mini"),
+        prompt: "Combine these images",
+        images: [Media.bytes(Uint8Array.from([1, 2, 3]), "image/png"), Media.url("https://example.test/source.png")],
+        providerOptions: { quality: "low" },
+      }).pipe(
+        Effect.provide(
+          sent({
+            model: "openai/gpt-image-1-mini",
+            prompt: "Combine these images",
+            input_references: [
+              { type: "image_url", image_url: { url: "data:image/png;base64,AQID" } },
+              { type: "image_url", image_url: { url: "https://example.test/source.png" } },
+            ],
+            quality: "low",
+          }),
+        ),
+      ),
+    )
+
+    it.effect("rejects a mask", () =>
+      Effect.gen(function* () {
+        const error = yield* Image.generate({
+          model: openrouter.image("openai/gpt-image-1-mini"),
+          prompt: "Paint the masked area",
+          images: [Media.bytes(Uint8Array.from([1, 2, 3]), "image/png")],
+          providerOptions: { mask: Media.bytes(Uint8Array.from([7, 8, 9]), "image/png") },
+        }).pipe(Effect.flip)
+        expect(error.reason._tag).toBe("UnsupportedOperation")
+        expect(error.message).toContain("openrouter image edits take no mask")
+      }).pipe(Effect.provide(layer(() => Effect.die("no request expected")))),
+    )
+  })
+
   it.effect("routes ordered xAI image inputs through JSON edits", () =>
     Image.generate({
       model: XAI.configure({ apiKey: "test", baseURL: "https://api.xai.test/v1" }).image("future-model"),

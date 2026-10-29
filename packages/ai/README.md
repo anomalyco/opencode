@@ -708,7 +708,7 @@ table before swapping only the `model`:
 | Alibaba               | ✓   | width × height       | width × height        | ✓                                | `size`, `seed`                                     |
 | MiniMax               | ✓   | preset or w × h⁴     | preset or w × h⁴      | 1 (portrait subject)             | `aspect_ratio`, `width`, `height`, `seed`          |
 | Vercel AI Gateway     | ✓   | as OpenAI³           | as OpenAI³            | per model                        | as OpenAI                                          |
-| OpenRouter            | ✓   | ✓ (`aspect_ratio`)   | tier⁵                 | per model                        | as OpenAI                                          |
+| OpenRouter            | ✓   | ✓ (`aspect_ratio`)   | tier⁵                 | per model⁵                       | `size`, `outputFormat` (no `mask`)                 |
 | Cloudflare Workers AI | 1   | width × height²      | width × height²       | ✗                                | `width`, `height`, `seed`                          |
 
 ✓ lowers natively; ✗ fails whenever the field is set (including `n: 1`); `1` means `n > 1` fails. "width × height"
@@ -721,7 +721,8 @@ forwards `outputFormat` but does not apply it, so the returned bytes keep the up
 Recraft, reject sizes outside it. Grok (`spacexai/*`, `xai/*`) ignores `size`, so it gets `providerOptions.xai`
 `aspect_ratio` and `1k`/`2k` instead. ⁴ MiniMax sends its `aspect_ratio` preset for a preset aspect at about `1K` and an
 exact width × height (512–2048 px, steps of 8) otherwise; `image-01-live` takes only the presets, minus `21:9`.
-⁵ OpenRouter takes `512`, `768`, `1K`, `1.5K`, `2K` or `4K` rather than pixels; other values are left out.
+⁵ OpenRouter takes `512`, `768`, `1K`, `1.5K`, `2K` or `4K` rather than pixels; other values are left out. It has no
+edits endpoint, so input images go to `/images/generations` as `input_references` (data URLs or http(s) URLs).
 
 `Media.Asset` is the one asset type shared by image requests, image responses, LLM messages, and tool results.
 `asset.source` is the serializable `Media.Source` (`bytes`, `base64`, `url`, or `ref`); `asset.bytes()`,

@@ -202,12 +202,22 @@ const reference = (asset: Media.Asset, provider: ProviderID) =>
     Effect.map((item) => (item.type === "ref" ? { file_id: item.value } : { image_url: item.value })),
   )
 
+/**
+ * How input images travel. `edits` is OpenAI's `/images/edits`; `references` keeps every request on
+ * `/images/generations` and lists them as `input_references`, for gateways without an edits endpoint (OpenRouter).
+ */
+export type OpenAIImageInput = "edits" | "references"
+
+type Options = { readonly sizing: OpenAIImageSizing; readonly imageInput: OpenAIImageInput }
+
 const fromRequest = Effect.fn("OpenAIImages.fromRequest")(function* (
   request: MediaProtocol.Addressed<Request>,
-  sizing: OpenAIImageSizing,
+  options: Options,
 ) {
   const images = request.images ?? []
   const mask = request.providerOptions?.mask
+  if (options.imageInput === "references" && mask !== undefined)
+    return yield* route.unsupported("media.mask", `${request.model.provider} image edits take no mask`)
   if (mask !== undefined && images.length === 0)
     return yield* ProviderShared.invalidRequest("An OpenAI image mask requires at least one input image")
   if (request.providerOptions?.size !== undefined && ImageSizing.isRequested(request))
@@ -217,12 +227,31 @@ const fromRequest = Effect.fn("OpenAIImages.fromRequest")(function* (
   const fields = mergeJsonRecords(
     {
       n: request.n,
-      ...sizing(request),
+      ...options.sizing(request),
       ...(yield* streamOptions(request)),
     },
     nativeOptions(request.providerOptions),
     request.http?.body,
   )
+
+  if (options.imageInput === "references") {
+    const references = yield* Effect.forEach(images, (image) =>
+      ProviderShared.mediaReference(image, undefined, route.name),
+    )
+    return MediaProtocol.json(
+      mergeJsonRecords(
+        {
+          model: request.model.id,
+          prompt: request.prompt,
+          input_references:
+            references.length === 0
+              ? undefined
+              : references.map((item) => ({ type: "image_url", image_url: { url: item.value } })),
+        },
+        fields,
+      ) ?? {},
+    )
+  }
 
   // Owned bytes go through multipart edits; remote URLs and file IDs use the JSON edits body instead.
   if (images.length > 0 && images.every(isInline) && (mask === undefined || isInline(mask))) {
@@ -359,9 +388,9 @@ const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) =
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-const makeProtocol = (sizing: OpenAIImageSizing) =>
+const makeProtocol = (options: Options) =>
   MediaProtocol.stream<Request, ImageEvent, Frame, State>(route, {
-    body: { from: (request) => fromRequest(request, sizing) },
+    body: { from: (request) => fromRequest(request, options) },
     frames: (bytes, context) =>
       context.request.mode === "stream"
         ? Framing.sse.frame(bytes)
@@ -371,21 +400,29 @@ const makeProtocol = (sizing: OpenAIImageSizing) =>
     finish,
   })
 
-export const protocol = makeProtocol(pixelSize)
+export const protocol = makeProtocol({ sizing: pixelSize, imageInput: "edits" })
 
 /**
  * `provider` attributes models, refs, and metadata to an OpenAI-compatible host; it defaults to `openai`. `sizing`
- * replaces the `size` that `aspect` and `resolution` lower to.
+ * replaces the `size` that `aspect` and `resolution` lower to, and `imageInput` how input images are sent.
  */
 export const model = (
-  input: MediaRoute.ModelInput & { readonly provider?: string; readonly sizing?: OpenAIImageSizing },
+  input: MediaRoute.ModelInput & {
+    readonly provider?: string
+    readonly sizing?: OpenAIImageSizing
+    readonly imageInput?: OpenAIImageInput
+  },
 ) => {
-  const base = input.sizing === undefined ? protocol : makeProtocol(input.sizing)
+  const imageInput = input.imageInput ?? "edits"
+  const base =
+    input.sizing === undefined && imageInput === "edits"
+      ? protocol
+      : makeProtocol({ sizing: input.sizing ?? pixelSize, imageInput })
   return ImageModel.fromRoute<OpenAIImageOptions, Frame, State>(
     {
       protocol: input.provider === undefined ? base : { ...base, provider: ProviderID.make(input.provider) },
       baseURL: DEFAULT_BASE_URL,
-      path: ({ request }) => (isEdit(request) ? EDIT_PATH : PATH),
+      path: ({ request }) => (imageInput === "edits" && isEdit(request) ? EDIT_PATH : PATH),
     },
     input,
   )
