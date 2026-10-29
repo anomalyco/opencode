@@ -217,7 +217,7 @@ export const dict = {
   "go.plans.individuals": "Enkeltpersoner",
   "go.plans.teams": "Teams",
   "go.plans.month": "om måneden",
-  "go.plans.memberMonth": "pr. medlem om måneden",
+  "go.plans.memberMonth": "pr. medlem\nom måneden",
   "go.plans.plus.cta": "Abonnér på Go Plus",
   "go.plans.plus.description": "Go Plus koster $40/måned og giver højere brugsgrænser.",
   "go.plans.teams.cta": "Abonnér på Go Teams",

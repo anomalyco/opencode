@@ -145,22 +145,18 @@ describe("Bash redirect resource oracle", () => {
     },
   )
 
-  test("known gap: assignment then redirect on a pipeline RHS retains the native command", async () => {
+  test("assignment then redirect on a pipeline RHS retains the command", async () => {
     const source = "printf ok | FOO=bar >output git status 3>tail"
-    const legacy = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
-    const native = await Effect.runPromise(ShellParse.scanPortable(source, "/bin/bash", "/workspace"))
-    expect(legacy.commands).toEqual([{ resource: "printf ok", save: "printf *" }])
+    const native = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
     expect(native.commands).toEqual([
       { resource: "printf ok", save: "printf *" },
       { resource: "FOO=bar >output git status", save: "git status *" },
     ])
   })
 
-  test("known gap: redirect before cd operand retains the target directory natively", async () => {
+  test("redirect before cd operand retains the target directory", async () => {
     const source = "pwd && cd >out /outside"
-    const legacy = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
-    const native = await Effect.runPromise(ShellParse.scanPortable(source, "/bin/bash", "/workspace"))
-    expect(legacy).toEqual({ commands: [{ resource: "pwd", save: "pwd *" }], directories: [] })
+    const native = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
     expect(native).toEqual({ commands: [{ resource: "pwd", save: "pwd *" }], directories: ["/outside"] })
   })
 })

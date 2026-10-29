@@ -212,7 +212,7 @@ export const dict = {
   "go.plans.individuals": "개인",
   "go.plans.teams": "팀",
   "go.plans.month": "/월",
-  "go.plans.memberMonth": "/멤버/월",
+  "go.plans.memberMonth": "/멤버\n/월",
   "go.plans.plus.cta": "Go Plus 구독하기",
   "go.plans.plus.description": "Go Plus는 월 $40로 더 높은 사용 한도를 제공합니다.",
   "go.plans.teams.cta": "Go Teams 구독하기",

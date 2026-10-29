@@ -216,7 +216,7 @@ export const dict = {
   "go.plans.individuals": "個人",
   "go.plans.teams": "チーム",
   "go.plans.month": "/月",
-  "go.plans.memberMonth": "/メンバー/月",
+  "go.plans.memberMonth": "/メンバー\n/月",
   "go.plans.plus.cta": "Go Plus に登録",
   "go.plans.plus.description": "Go Plus は月額$40で、より高い利用枠を提供します。",
   "go.plans.teams.cta": "Go Teams に登録",

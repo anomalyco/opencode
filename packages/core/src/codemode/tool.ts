@@ -121,16 +121,11 @@ export const create = (
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
                   const executed = yield* executeTool(name, tool, input, context)
-                  const content =
-                    typeof executed.content === "string"
-                      ? [{ type: "text" as const, text: executed.content }]
-                      : (executed.content ?? [])
+                  const content = resultContent(executed)
                   const outputFileParts = outputFiles(content)
                   if (outputFileParts.length > 0)
                     yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-                  if (executed.output !== undefined) return executed.output
-                  const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
-                  return text === "" ? null : text
+                  return resultValue(executed)
                 }),
               hooks: progressHooks(record),
             }),
@@ -258,6 +253,36 @@ const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run>>()
 function runtime(inventory: Inventory) {
   const cached = runtimes.get(inventory)
   if (cached) return cached
+  const tools = inventoryTools(inventory)
+  const created = CodeMode.make<typeof tools, [typeof CodeModeWeb.extension]>({
+    tools,
+    extensions: [CodeModeWeb.extension],
+    hooks: runHooks,
+  })
+  runtimes.set(inventory, created)
+  return created
+}
+
+/**
+ * Runs one program over `inventory` alone with no model step and no `fetch`, binding `bindings` as outer globals.
+ */
+export const check = (
+  inventory: Inventory,
+  code: string,
+  bindings: Readonly<Record<string, CodeMode.DataValue>>,
+  limits: CodeMode.ExecutionLimits,
+  executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
+) =>
+  CodeMode.make({ tools: inventoryTools(inventory), hooks: runHooks, limits })
+    .execute(code, bindings)
+    .pipe(
+      Effect.provideService(Run, {
+        executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
+        hooks: {},
+      }),
+    )
+
+function inventoryTools(inventory: Inventory) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
@@ -270,14 +295,21 @@ function runtime(inventory: Inventory) {
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })
   }
-  const tools = renderTools(root)
-  const created = CodeMode.make<typeof tools, [typeof CodeModeWeb.extension]>({
-    tools,
-    extensions: [CodeModeWeb.extension],
-    hooks: runHooks,
-  })
-  runtimes.set(inventory, created)
-  return created
+  return renderTools(root)
+}
+
+function resultContent(executed: Result) {
+  return typeof executed.content === "string"
+    ? [{ type: "text" as const, text: executed.content }]
+    : (executed.content ?? [])
+}
+
+function resultValue(executed: Result) {
+  if (executed.output !== undefined) return executed.output
+  const text = resultContent(executed)
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("\n")
+  return text === "" ? null : text
 }
 
 const runHooks = {
@@ -341,7 +373,7 @@ function flattenTools(node: ToolNode, path: ReadonlyArray<string>, tools: Tools)
   for (const [name, child] of node.children) flattenTools(child, [...path, name], tools)
 }
 
-function qualifiedName(registration: Info) {
+export function qualifiedName(registration: Info) {
   const normalized = normalizedName(registration)
   if (registration.options?.namespace === undefined) return normalized
   return `${registration.options.namespace}.${normalized}`

@@ -21206,8 +21206,25 @@
         "anyOf": [
           {
             "$ref": "#/components/schemas/Schedule.Condition.Shell"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Condition.Code"
           }
         ]
+      },
+      "Schedule.Condition.Code": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["code"]
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "code"],
+        "additionalProperties": false
       },
       "Schedule.Condition.Shell": {
         "type": "object",
@@ -21233,25 +21250,56 @@
         "additionalProperties": false
       },
       "Schedule.ConditionInput": {
-        "type": "object",
-        "properties": {
-          "run": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Shell command to run in the Session's directory. Alone, exit 0 wakes and stdout is appended."
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "run": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Shell command to run in the Session's directory. Alone, exit 0 wakes and stdout is appended."
+              },
+              "is": {
+                "type": "string"
+              },
+              "matches": {
+                "type": "string"
+              },
+              "changes": {
+                "type": "boolean"
+              },
+              "code": {
+                "not": {}
+              }
+            },
+            "required": ["run"],
+            "additionalProperties": false
           },
-          "is": {
-            "type": "string"
-          },
-          "matches": {
-            "type": "string"
-          },
-          "changes": {
-            "type": "boolean"
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Code Mode JavaScript program. Static tools.<path>(...) calls are authorized at creation; gets state, now and runs, and returns a boolean or { wake, state?, message? }."
+              },
+              "run": {
+                "not": {}
+              },
+              "is": {
+                "not": {}
+              },
+              "matches": {
+                "not": {}
+              },
+              "changes": {
+                "not": {}
+              }
+            },
+            "required": ["code"],
+            "additionalProperties": false
           }
-        },
-        "required": ["run"],
-        "additionalProperties": false
+        ]
       },
       "Schedule.CreatePayload": {
         "type": "object",

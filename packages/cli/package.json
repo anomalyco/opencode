@@ -49,8 +49,6 @@
     "jsonc-parser": "3.3.1",
     "picocolors": "1.1.1",
     "solid-js": "catalog:",
-    "tree-sitter-bash": "0.25.0",
-    "tree-sitter-powershell": "0.25.10",
     "web-tree-sitter": "0.25.10",
     "ws": "8.21.0"
   },

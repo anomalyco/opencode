@@ -213,7 +213,7 @@ export const dict = {
   "go.plans.individuals": "الأفراد",
   "go.plans.teams": "الفرق",
   "go.plans.month": "شهريًا",
-  "go.plans.memberMonth": "لكل عضو شهريًا",
+  "go.plans.memberMonth": "لكل عضو\nشهريًا",
   "go.plans.plus.cta": "الاشتراك في Go Plus",
   "go.plans.plus.description": "تبلغ تكلفة Go Plus ‏$40/شهر مع حدود استخدام أعلى.",
   "go.plans.teams.cta": "الاشتراك في Go Teams",

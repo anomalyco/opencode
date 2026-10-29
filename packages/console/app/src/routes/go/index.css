@@ -1113,21 +1113,44 @@ body {
     }
   }
 
+  /* Both audiences share one grid cell, so the cards are as tall as the tallest set and switching never shifts the
+     page below. */
+  [data-slot="plans-stack"] {
+    display: grid;
+
+    > [data-slot="plans"] {
+      grid-area: 1 / 1;
+    }
+  }
+
   [data-slot="plans"] {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 24px;
     font-size: 16px;
     line-height: 1.5;
+    transition:
+      opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+      transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
 
-    &[data-audience="teams"] {
-      grid-template-columns: minmax(0, 1fr);
+    &[aria-hidden="true"] {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+      pointer-events: none;
     }
 
-    [data-slot="plan"][data-plan="go-teams"] ul {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px 24px;
+    @media (prefers-reduced-motion: reduce) {
+      transition: opacity 200ms ease;
+
+      &[aria-hidden="true"] {
+        transform: none;
+      }
+    }
+
+    /* Go Teams is one card as wide as each individual plan, centred. */
+    &[data-audience="teams"] {
+      grid-template-columns: minmax(0, calc((100% - 24px) / 2));
+      justify-content: center;
     }
 
     [data-slot="plan"] {
@@ -1149,21 +1172,26 @@ body {
     [data-slot="name"] {
       font-weight: 500;
       color: var(--color-text);
+      text-transform: uppercase;
     }
 
     [data-slot="price"] {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 12px;
       font-size: 64px;
       font-weight: 500;
       line-height: 1.25;
       color: var(--color-text-strong);
 
+      /* Set high beside the figures: the tops of its tall letters level with theirs (12px at 64px, 8px at 48px).
+         Go Teams breaks it onto two lines where the translation has a line break. */
       span {
+        margin-top: 12px;
         font-size: 16px;
         line-height: 1.5;
         color: var(--color-text);
+        white-space: pre-line;
       }
     }
 
@@ -1176,13 +1204,15 @@ body {
       color: var(--color-text);
     }
 
+    /* Markers sit on the first line of a feature that wraps: 16px icons centred in its 24px line. */
     li {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 16px;
 
       svg {
         flex: none;
+        margin-top: 4px;
         color: var(--color-icon);
       }
     }
@@ -1209,31 +1239,63 @@ body {
       background: var(--color-background-strong-hover);
     }
 
+    /* Go subscribes with an outline button, its label set like the plan's features. */
+    [data-plan="go"] a {
+      border: 1px solid var(--color-border-weak);
+      font-weight: inherit;
+      background: transparent;
+      color: var(--color-text);
+      box-shadow: none;
+    }
+
+    [data-plan="go"] a:hover {
+      background: transparent;
+      border-color: var(--color-border);
+      color: var(--color-text-strong);
+    }
+
     a:focus-visible {
       outline: 2px solid var(--color-text-strong);
       outline-offset: 2px;
     }
 
+    /* Stacked on phones the sets differ a lot in height, so the hidden one leaves the layout and the shown one fades
+       in on its own. */
     @media (max-width: 42rem) {
       grid-template-columns: 1fr;
 
-      [data-slot="plan"][data-plan="go-teams"] ul {
+      &[aria-hidden="true"] {
+        display: none;
+      }
+
+      @starting-style {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+      }
+
+      &[data-audience="teams"] {
         grid-template-columns: 1fr;
       }
 
       [data-slot="price"] {
         font-size: 48px;
+
+        span {
+          margin-top: 8px;
+        }
       }
     }
   }
 
+  /* The limits band takes the plan cards' muted background rather than the chart's own lighter one. */
   [data-component="comparison"] {
+    --go-console-bg: var(--color-background-weak);
     background: var(--go-console-bg);
     border-top: 0;
   }
 
   [data-component="hero"] {
-    padding-bottom: 2rem;
+    padding-bottom: 4rem;
   }
 
   [data-slot="section-title"] {
