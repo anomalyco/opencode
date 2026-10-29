@@ -52,6 +52,7 @@ const edited = (id: string) => ({ id, text: "edited", attachments: 1, pending: t
 // cancelled last first, then settled once the server's queue reflects it, or rolled back on failure.
 describe("queuedPromptRows", () => {
   const quote = { type: "quote" as const, text: "Earlier answer" }
+
   const annotation = {
     type: "note" as const,
     origin: "browser",
@@ -60,7 +61,9 @@ describe("queuedPromptRows", () => {
     subject: 'the "Save" button',
     comment: "",
   }
+
   const file = { path: "src/app.ts", comment: "Keep this" }
+
   const files = [
     {
       data: "aGk=",
