@@ -77,18 +77,21 @@ export function readCaFile(filePath: string, workspaceDir: string): string {
 
 /**
  * The trust rules a server's connections are subject to. `ca` is a PEM trust anchor bundle;
- * `fingerprint` pins one exact certificate, making its SHA256 fingerprint the identity check.
+ * `fingerprint` pins one exact certificate, whose SHA256 fingerprint is re-checked on every
+ * handshake.
  */
-export type ResolvedTls =
-  | { readonly ca: string }
-  | { readonly fingerprint: string }
+export type ResolvedTls = {
+  readonly ca: string
+  readonly fingerprint?: string
+}
 
 /**
  * Resolve a server's TLS config into the trust rules for its connections. An undefined result
  * means "use the system trust store". A pinned fingerprint opens one pre-flight TLS connection;
- * the presented certificate must match it exactly. Name matching is deliberately not enforced:
- * LAN appliance certificates often omit the IP SANs a hostname check would require, and the
- * fingerprint already identifies the certificate the user pinned.
+ * the presented certificate must match it exactly and becomes the trust anchor for the real
+ * connection, so chain verification only accepts that certificate. Name matching is deliberately
+ * not enforced: LAN appliance certificates often omit the IP SANs a hostname check would require,
+ * and the fingerprint already identifies the certificate the user pinned.
  */
 export async function resolveTls(
   config: ConfigMCP.Tls,
@@ -100,7 +103,7 @@ export async function resolveTls(
     const cert = await probeCertificate(url.hostname, port(url))
     if (cert.fingerprint !== expected)
       throw new Error(`Certificate fingerprint mismatch.\nExpected: ${expected}\nGot:      ${cert.fingerprint}`)
-    return { fingerprint: expected }
+    return { ca: cert.pem, fingerprint: expected }
   }
   if (config.ca_pem !== undefined) validatePemCert(config.ca_pem, "ca_pem config entry")
   const ca = [
@@ -115,24 +118,22 @@ export async function resolveTls(
 /**
  * Wrap a fetch so its requests apply the resolved TLS trust rules. The trust is scoped to the
  * returned fetch and does not affect other connections, including redirects it follows. A pinned
- * fingerprint disables certificate and name validation on the real connection: the pre-flight
- * comparison is the effective check on current runtimes, and the identity hook is the check on
- * runtimes that honor it.
+ * fingerprint anchors chain verification to the pinned certificate itself, and the identity hook
+ * replaces the hostname check while re-checking the fingerprint on every handshake.
  */
 export function withTls(
   resolved: ResolvedTls,
   base: (url: string | URL, init?: RequestInit) => Promise<Response>,
 ): (url: string | URL, init?: RequestInit) => Promise<Response> {
-  if ("fingerprint" in resolved) {
-    const fingerprint = resolved.fingerprint
+  const fingerprint = resolved.fingerprint
+  if (fingerprint !== undefined) {
     return (url, init) =>
       base(url, {
         ...init,
         tls: {
-          rejectUnauthorized: false,
-          // Current runtimes ignore this callback's result when rejectUnauthorized is false, so
-          // the pre-flight comparison is the effective check; the callback is the check on
-          // runtimes that enforce it.
+          ca: resolved.ca,
+          // Replaces the hostname check: returning undefined accepts the certificate (even one
+          // without an IP SAN), returning an Error rejects it.
           checkServerIdentity: (_hostname: string, cert: PeerCertificate) => {
             const presented = createHash("sha256").update(cert.raw).digest("hex")
             if (presented !== fingerprint)
