@@ -41,6 +41,11 @@ export const CancelDrainTimeout = Context.Reference<Duration.Input>("@opencode/c
   defaultValue: () => "5 seconds",
 })
 
+/** How long a command prompt waits for its expanded prompt to start before it settles at dispatch. */
+export const CommandTurnStartGrace = Context.Reference<Duration.Input>("@opencode/cli/acp/Turn/CommandTurnStartGrace", {
+  defaultValue: () => "2 seconds",
+})
+
 type Subscription = {
   readonly scope: Scope.Closeable
   readonly events: Queue.Dequeue<OpenCodeEvent, unknown>
@@ -65,6 +70,7 @@ export const make = Effect.fnUntraced(function* (input: {
 }) {
   const scope = yield* Effect.scope
   const drainTimeout = yield* CancelDrainTimeout
+  const commandTurnStartGrace = yield* CommandTurnStartGrace
   const turns = yield* FiberMap.make<string, PromptResponse, ACPError.Failure>()
 
   const open = Effect.fnUntraced(function* (ctx: ACPTranslate.TurnContext, state: Ref.Ref<ACPTranslate.TurnState>) {
@@ -287,8 +293,24 @@ export const make = Effect.fnUntraced(function* (input: {
       const events = yield* consume(turn).pipe(Effect.forkScoped)
       return yield* Effect.gen(function* () {
         yield* submit(attached, prompt)
-        if (prompt.command) return "succeeded" as const
-        return yield* Fiber.join(events)
+        if (!prompt.command) return yield* Fiber.join(events)
+        // A prompt-expanding command (a `commands/` file or plugin that calls
+        // session.prompt) re-admits the message under its own id; its run then
+        // streams like any prompt, and the response waits for it. Any other
+        // command — a subagent launch or a side effect — settles at dispatch,
+        // so give the expanded prompt a moment to start before answering.
+        return yield* Effect.raceFirst(
+          Fiber.join(events),
+          Effect.sleep(commandTurnStartGrace).pipe(
+            Effect.andThen(
+              Ref.get(turn.state).pipe(
+                Effect.flatMap((current) =>
+                  current.started ? Fiber.join(events) : Effect.succeed("succeeded" as const),
+                ),
+              ),
+            ),
+          ),
+        )
       }).pipe(Effect.onInterrupt(() => windDown(turn, events)))
     }).pipe(Effect.scoped)
 

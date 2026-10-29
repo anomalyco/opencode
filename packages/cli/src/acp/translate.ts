@@ -18,7 +18,16 @@ import {
 
 const RetryMeta = "opencode/retry"
 
-export type TurnStart = { readonly type: "input" | "compaction"; readonly id: SessionMessage.ID }
+export type TurnStart = {
+  readonly type: "input" | "compaction"
+  readonly id: SessionMessage.ID
+  /**
+   * The submission expands to a prompt the server admits under its own id, not
+   * `start.id` — a slash command's run. Its `session.inbox.delivered` is the next
+   * one this session sees, so `started` waits on the id alone, not the start id.
+   */
+  readonly expands?: boolean
+}
 
 export type Terminal = "succeeded" | "failed" | "interrupted"
 
@@ -123,7 +132,10 @@ export function fold(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): 
     return { state: { ...state, asks }, outputs: [{ _tag: "AskSettled", id: settledID }] }
   }
   if (!sessionID || (sessionID !== ctx.sessionID && !child)) return { state, outputs: [] }
-  if (event.type === "session.inbox.delivered" && event.data.inboxID === ctx.start.id)
+  if (
+    event.type === "session.inbox.delivered" &&
+    (event.data.inboxID === ctx.start.id || ctx.start.expands === true)
+  )
     return { state: { ...state, started: true }, outputs: [] }
   if (!state.started) return { state, outputs: [] }
   return child ? childEvent(state, event, ctx, child) : rootEvent(state, event, ctx)

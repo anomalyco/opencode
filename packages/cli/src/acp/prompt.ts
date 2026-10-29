@@ -28,17 +28,18 @@ export const prepare = Effect.fnUntraced(function* (catalog: Catalog, content: r
   const visible = parts.filter((part) => part.type !== "text" || (!part.synthetic && !part.ignored))
   const text = visible.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
   const slash = detectSlashCommand(text)
+  const command = slash ? catalog.commands.find((item) => item.name === slash.name) : undefined
   const id = SessionMessage.ID.create()
   return {
     start:
       slash && builtinCommands.get(slash.name)?.start === "compaction"
         ? { type: "compaction", id }
-        : { type: "input", id },
+        : { type: "input", id, expands: command !== undefined },
     text,
     files: visible.flatMap((part) => (part.type === "file" ? [{ uri: part.url, name: part.filename }] : [])),
     synthetic: parts.flatMap((part) => (part.type === "text" && part.synthetic ? [part.text] : [])),
     slash,
-    command: slash ? catalog.commands.find((item) => item.name === slash.name) : undefined,
+    command,
   } satisfies Prepared
 })
 

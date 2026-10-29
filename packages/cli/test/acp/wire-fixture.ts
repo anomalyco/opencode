@@ -134,6 +134,11 @@ export type WireOptions = {
     readonly text: string
     readonly signal: AbortSignal
   }>
+  readonly onCommand?: Hook<{
+    readonly sessionID: string
+    readonly name: string
+    readonly text: string
+  }>
   readonly onInterrupt?: Hook<{ readonly sessionID: string }>
   readonly onFormCancel?: Hook<{ readonly sessionID: string; readonly formID: string }>
   readonly onFormReply?: Hook<FormReply>
@@ -146,6 +151,7 @@ export type WireOptions = {
     signal: AbortSignal,
   ) => CreateElicitationResponse | Promise<CreateElicitationResponse>
   readonly cancelDrainTimeout?: Duration.Input
+  readonly commandTurnStartGrace?: Duration.Input
 }
 
 type FormReply = {
@@ -436,6 +442,10 @@ export async function startWire(options: WireOptions = {}) {
         options.cancelDrainTimeout === undefined
           ? effect
           : Effect.provideService(effect, ACPTurn.CancelDrainTimeout, options.cancelDrainTimeout),
+      (effect) =>
+        options.commandTurnStartGrace === undefined
+          ? effect
+          : Effect.provideService(effect, ACPTurn.CommandTurnStartGrace, options.commandTurnStartGrace),
       Effect.provide(Logger.layer([Logger.make((log) => logs.push({ message: log.message, cause: log.cause }))])),
     ),
   )
@@ -789,8 +799,12 @@ function startServer(options: WireOptions, changed: () => void) {
         }),
       },
       "/api/session/:sessionID/command": {
-        POST: body(CommandBody, (req, input) => {
-          fake.submissions.push({ kind: "command", sessionID: req.params.sessionID, ...input })
+        POST: body(CommandBody, async (req, input) => {
+          const sessionID = req.params.sessionID
+          fake.submissions.push({ kind: "command", sessionID, ...input })
+          // A command that expands to a prompt re-admits its text under a new
+          // inbox id and runs it; the wire events arrive on the same session.
+          await emit(options.onCommand?.({ sessionID, name: input.name, text: input.text }))
           return noContent()
         }),
       },

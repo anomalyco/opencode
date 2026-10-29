@@ -136,6 +136,31 @@ describe("acp turn events over the wire", () => {
     },
   )
 
+  test("streams a slash command's expanded run and waits for it", async () => {
+    // The expanded prompt is admitted under a new inbox id, so the turn only
+    // starts tracking once its `session.inbox.delivered` lands.
+    const expandedID = "msg_expanded"
+    await using acp = await startSession({
+      onCommand: ({ sessionID }) =>
+        turn(sessionID, expandedID, textDelta(sessionID, "msg_assistant", "committing")),
+    })
+
+    const response = await acp.prompt(acp.sessionId, "/review")
+    expect(response.stopReason).toBe("end_turn")
+    expect(
+      acp.updates
+        .filter((item) => item.update.sessionUpdate === "agent_message_chunk")
+        .map((item) => item.update),
+    ).toHaveLength(1)
+  })
+
+  test("a command that expands to no prompt still settles at dispatch", async () => {
+    // A subagent or side-effect command admits no root prompt; nothing streams,
+    // so the response must not wait on the event feed.
+    await using acp = await startSession({ onCommand: () => undefined, commandTurnStartGrace: "100 millis" })
+    expect((await acp.prompt(acp.sessionId, "/review")).stopReason).toBe("end_turn")
+  })
+
   test("cancels unsupported session forms so execution can continue", async () => {
     await using acp = await startSession({
       onPrompt: ({ sessionID, id }) => [
