@@ -193,7 +193,11 @@ function Content(props: {
       <Show when={props.pill.icon} fallback={<PillIcon name={props.view.icon} tone={props.view.tone} />}>
         {(icon) => (
           // Its own contribution: an icon that throws shows nothing and the pill keeps working.
-          <span data-slot="session-plugin-pill-icon" class="flex size-4 shrink-0 items-center justify-center">
+          <span
+            data-slot="session-plugin-pill-icon"
+            data-composer-pill-icon
+            class="flex size-4 shrink-0 items-center justify-center"
+          >
             <Contribution plugin={props.plugin}>{() => icon()(props.input)}</Contribution>
           </span>
         )}
@@ -209,11 +213,13 @@ function PillIcon(props: { name?: IconName; tone?: ComposerPillTone }) {
   return (
     <Show when={props.name}>
       {(name) => (
-        <Icon
-          name={name()}
-          size="small"
-          class={`shrink-0 ${props.tone ? tones[props.tone] : "text-v2-icon-icon-muted"}`}
-        />
+        <span data-composer-pill-icon class="flex size-4 shrink-0 items-center justify-center">
+          <Icon
+            name={name()}
+            size="small"
+            class={`shrink-0 ${props.tone ? tones[props.tone] : "text-v2-icon-icon-muted"}`}
+          />
+        </span>
       )}
     </Show>
   )

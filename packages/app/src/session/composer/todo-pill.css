@@ -1,8 +1,3 @@
-[data-composer-pill][data-slot="session-todo-pill"] {
-  gap: 6px;
-  padding-inline-start: 8px;
-}
-
 [data-composer-pill-panel][data-slot="session-todo-panel"] {
   width: max-content;
   min-width: max(var(--kb-popper-anchor-width, 0px), 240px);
