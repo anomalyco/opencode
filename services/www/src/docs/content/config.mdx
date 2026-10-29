@@ -627,6 +627,7 @@ All experimental settings live under the `experimental` key:
     "subagent_depth": 2,
     "portable_shell_scanner": true,
     "background_compaction": true,
+    "image_generate": true,
     "location_idle_timeout": "4 hours",
   },
 }
@@ -656,6 +657,24 @@ automatic compaction doesn't pause the session. Defaults to `false`. See
 {
   "experimental": {
     "background_compaction": true,
+  },
+}
+```
+
+### Image generation
+
+Set `image_generate` to `true` to give agents the [`image_generate`](/tools#image-generate) tool for creating and
+editing images. It is offered only while a connected provider has an image model. Defaults to `false`.
+
+To set a default model, use an object with `model` as `providerID/modelID`, optionally with `#variant`. When that model
+isn't available or can't handle a request, OpenCode picks another image model automatically.
+
+```jsonc
+{
+  "experimental": {
+    "image_generate": {
+      "model": "openai/gpt-image-2",
+    },
   },
 }
 ```
