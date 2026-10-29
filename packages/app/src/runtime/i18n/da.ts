@@ -37,6 +37,7 @@ export const dict = {
   "dialog.server.menu.remove": "Fjern",
   "home.workspaceTip": "Start næste session i et nyt arbejdsområde for at holde ændringer isoleret",
   "session.tab.add": "Tilføj fane",
+  "session.tab.closeOthers": "Luk andre faner",
   "session.queue.attachments.one": "Plus {{count}} vedhæftning",
   "session.queue.attachments.other": "Plus {{count}} vedhæftede filer",
   "settings.backToSettings": "Tilbage til indstillinger",

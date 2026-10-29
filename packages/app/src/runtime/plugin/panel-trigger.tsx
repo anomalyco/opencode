@@ -122,7 +122,7 @@ export function PanelTrigger(props: {
     >
       <Switch
         fallback={
-          <div class="relative">
+          <div class="relative min-w-0">
             <Tabs.Trigger
               value={props.value}
               id={props.tab.dom?.tab}
