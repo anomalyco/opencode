@@ -267,6 +267,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   keybinds: TuiKeybind.BindingLookupView
   leader: { timeout: number }
   mouse: boolean
+  animations: boolean
   cursor?: {
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
@@ -315,6 +316,7 @@ export function resolve(
     }),
     leader: { timeout: input.leader?.timeout ?? 2000 },
     mouse: input.mouse ?? true,
+    animations: input.animations ?? (options.environment ?? process.env).HERDR_ENV !== "1",
     cursor: input.cursor
       ? {
           style: input.cursor.style ?? "block",
