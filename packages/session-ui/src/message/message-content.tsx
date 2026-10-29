@@ -290,7 +290,7 @@ function UserMessageComments(props: { comments: SessionUserComment[]; bounded: b
           <CommentCard
             comment={comment.comment ?? ""}
             target={commentCardTarget(comment)}
-            title={comment.type === "quote" ? quoteTooltip(comment) : comment.comment}
+            title={comment.type === "quote" ? quoteTooltip(comment) : comment.comment || undefined}
             tooltip
             wide
           />

@@ -23,6 +23,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@/runtime/persistence/uuid"
 import { contextItemKey } from "@/composer/schema"
 import type { QuoteSource } from "@/composer/quote-source"
+import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import { useComposerCommands } from "@/composer/commands"
@@ -353,16 +354,16 @@ export function createActiveSessionRegion(input: {
       source: () => prompt.capture().quoteSource,
       // A child session has no composer to quote into, and a shell command takes no quotes.
       available: () => !input.session.data.isChild() && prompt.capture().mode.current() !== "shell",
-      add: (text: string, comment: boolean, source: QuoteSource) => {
+      add: (text: string, source: QuoteSource, anchor?: ComposerQuoteAnchor) => {
         const item = { type: "quote" as const, text, commentID: uuid() }
         prompt.context.add(item)
 
         if (source.length) prompt.capture().quoteSource.add(contextItemKey(item), source)
 
-        if (comment) {
+        if (anchor) {
           prompt.capture().quoteSource.pend(contextItemKey(item))
 
-          return prompt.capture().quoteComment.set(contextItemKey(item))
+          return prompt.capture().quoteComment.set(contextItemKey(item), anchor)
         }
 
         focusPrompt()

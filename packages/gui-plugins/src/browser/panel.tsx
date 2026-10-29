@@ -64,6 +64,8 @@ type PaneState = {
   note: { sessionKey: string; tabID: Browser.TabID; url: string; title: string; draft: string } | undefined
   size: { width: number; height: number }
   editorHeight: number
+  /** Opening measurement, frozen so typing never chooses a different side of the element. */
+  editorInitialHeight: number
 }
 
 /** Suggestions the address field lists, and pages the new tab page lists. */
@@ -109,6 +111,7 @@ export default function SessionBrowserPane(props: {
     note: undefined,
     size: { width: 0, height: 0 },
     editorHeight: 0,
+    editorInitialHeight: 0,
   })
 
   // Finished loads, counted. A submitted address that lands on the URL the page already had (say "example.com" on
@@ -287,6 +290,7 @@ export default function SessionBrowserPane(props: {
         origin: plugin.id,
         tabID: current.tabID,
         url: current.url,
+        subtitle: plugin.t("comment.annotation"),
         element: {
           ref: live ? current.element.ref : undefined,
           selector: current.element.selector,
@@ -364,21 +368,26 @@ export default function SessionBrowserPane(props: {
 
     if (!rect) return
     const gap = 8
-    const width = Math.max(0, Math.min(400, store.size.width - gap * 2))
+    const width = Math.max(0, Math.min(320, store.size.width - gap * 2))
     // The editor scrolls rather than growing past the surface, so its actions stay reachable.
-    const maxHeight = Math.max(0, store.size.height - gap * 2)
-    // Until the editor has been measured once, assume its default three-row height.
-    const height = Math.min(store.editorHeight || 176, maxHeight)
+    const surfaceHeight = Math.max(0, store.size.height - gap * 2)
+    // Pick the opening side from its first measurement, then grow upward from that bottom edge.
+    const initialHeight = Math.min(store.editorInitialHeight || 80, surfaceHeight)
     const left = Math.min(Math.max(gap, rect.x), Math.max(gap, store.size.width - width - gap))
     const below = rect.y + rect.height + gap
-    const above = rect.y - gap - height
+    const above = rect.y - gap - initialHeight
 
-    const top =
-      below + height <= store.size.height - gap
+    const openingTop =
+      below + initialHeight <= store.size.height - gap
         ? below
         : above >= gap
           ? above
-          : Math.max(gap, store.size.height - height - gap)
+          : Math.max(gap, store.size.height - initialHeight - gap)
+
+    const bottom = Math.min(openingTop + initialHeight, store.size.height - gap)
+    const maxHeight = Math.max(0, bottom - gap)
+    const height = Math.min(store.editorHeight || initialHeight, maxHeight)
+    const top = Math.max(gap, bottom - height)
 
     return { left, top, width, maxHeight }
   }
@@ -446,13 +455,17 @@ export default function SessionBrowserPane(props: {
             return
           }
 
-          setStore("comment", {
-            sessionKey,
-            tabID: tab.id,
-            url: tab.url,
-            generation: tab.generation,
-            element: event.element,
-            draft: "",
+          setStore({
+            editorHeight: 0,
+            editorInitialHeight: 0,
+            comment: {
+              sessionKey,
+              tabID: tab.id,
+              url: tab.url,
+              generation: tab.generation,
+              element: event.element,
+              draft: "",
+            },
           })
         }),
       ),
@@ -962,11 +975,17 @@ export default function SessionBrowserPane(props: {
                 {(position) => (
                   <div
                     ref={(element) =>
-                      createResizeObserver(element, (rect) => setStore("editorHeight", Math.ceil(rect.height)))
+                      createResizeObserver(element, (rect) =>
+                        setStore({
+                          editorHeight: Math.ceil(rect.height),
+                          editorInitialHeight: store.editorInitialHeight || Math.ceil(rect.height),
+                        }),
+                      )
                     }
                     data-slot="browser-comment-editor"
                     data-prevent-autofocus
-                    class="absolute overflow-y-auto rounded-[6px] shadow-[var(--v2-elevation-raised)]"
+                    data-scrollable
+                    class="absolute overflow-y-auto rounded-[8px] shadow-[var(--v2-elevation-floating)]"
                     style={{
                       left: `${position().left}px`,
                       top: `${position().top}px`,
@@ -975,6 +994,16 @@ export default function SessionBrowserPane(props: {
                     }}
                   >
                     <LineCommentEditor
+                      variant="compact"
+                      label={plugin.t("comment.label")}
+                      placeholder={plugin.t("comment.placeholder")}
+                      cancelLabel={plugin.t("comment.cancel")}
+                      submitLabel={plugin.t(current().draft.trim() ? "comment.submit" : "comment.attach")}
+                      allowEmpty
+                      style={{
+                        "--line-comment-preview-lines": 2,
+                        "--line-comment-max-height": `${position().maxHeight}px`,
+                      }}
                       value={current().draft}
                       onInput={(value) => setStore("comment", "draft", value)}
                       onCancel={closeComment}
@@ -983,11 +1012,34 @@ export default function SessionBrowserPane(props: {
                         items: (query) => props.screen.file.search(query, { kind: "any" }),
                       }}
                       selection={
-                        <span class="flex min-w-0 items-center gap-1" dir="ltr">
-                          <Icon name="select-element" size="small" class="shrink-0" />
-                          <span class="min-w-0 truncate leading-[var(--line-height-tight)]">
-                            {current().element.label}
-                          </span>
+                        <span>
+                          <Tooltip
+                            placement="top"
+                            contentStyle={{ "pointer-events": "none" }}
+                            value={
+                              <span
+                                dir="ltr"
+                                style={{ "font-family": "var(--font-family-mono)", "unicode-bidi": "isolate" }}
+                              >
+                                {current().element.selector || current().element.label}
+                              </span>
+                            }
+                          >
+                            <span
+                              dir="ltr"
+                              style={{
+                                "font-family": "var(--font-family-mono)",
+                                "unicode-bidi": "isolate",
+                                display: "-webkit-box",
+                                "-webkit-box-orient": "vertical",
+                                "-webkit-line-clamp": "var(--line-comment-preview-lines)",
+                                overflow: "hidden",
+                                "overflow-wrap": "anywhere",
+                              }}
+                            >
+                              {current().element.selector || current().element.label}
+                            </span>
+                          </Tooltip>
                         </span>
                       }
                     />
