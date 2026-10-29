@@ -450,4 +450,61 @@ describe("Job", () => {
       expect((yield* jobs.get(job.id))?.status).toBe("running")
     }),
   )
+
+  it.live("cancels running jobs owned by the session and leaves foreign work alone", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const owner = SessionSchema.ID.make("ses_owner")
+      const other = SessionSchema.ID.make("ses_other")
+      const latch = yield* Deferred.make<void>()
+      const finish = Deferred.await(latch).pipe(Effect.as("done"))
+      const owned = yield* jobs.start({
+        id: "job_owned_shell",
+        type: "shell",
+        metadata: { sessionID: owner },
+        run: finish,
+      })
+      const foreign = yield* jobs.start({
+        id: "job_foreign_shell",
+        type: "shell",
+        metadata: { sessionID: other },
+        run: finish,
+      })
+      const unowned = yield* jobs.start({ id: "job_unowned", type: "test", run: finish })
+
+      const cancelled = yield* jobs.cancelAll({ sessionID: owner })
+
+      expect(cancelled.map((info) => info.id)).toEqual([owned.id])
+      expect(yield* jobs.get(owned.id)).toMatchObject({ status: "cancelled" })
+      expect(yield* jobs.get(foreign.id)).toMatchObject({ status: "running" })
+      expect(yield* jobs.get(unowned.id)).toMatchObject({ status: "running" })
+      yield* Deferred.succeed(latch, undefined)
+      expect((yield* jobs.wait({ id: foreign.id })).info).toMatchObject({ status: "completed" })
+      expect((yield* jobs.wait({ id: unowned.id })).info).toMatchObject({ status: "completed" })
+      expect((yield* jobs.wait({ id: owned.id })).info).toMatchObject({ status: "cancelled" })
+    }),
+  )
+
+  it.live("filters cancelAll by job type", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const owner = SessionSchema.ID.make("ses_filter")
+      const latch = yield* Deferred.make<void>()
+      const finish = Deferred.await(latch).pipe(Effect.as("done"))
+      yield* jobs.start({ id: "job_filter_shell", type: "shell", metadata: { sessionID: owner }, run: finish })
+      const image = yield* jobs.start({
+        id: "job_filter_image",
+        type: "image",
+        metadata: { sessionID: owner },
+        run: finish,
+      })
+
+      const cancelled = yield* jobs.cancelAll({ sessionID: owner, type: "image" })
+
+      expect(cancelled.map((info) => info.id)).toEqual([image.id])
+      expect(yield* jobs.get("job_filter_shell")).toMatchObject({ status: "running" })
+      yield* Deferred.succeed(latch, undefined)
+      expect((yield* jobs.wait({ id: "job_filter_shell" })).info).toMatchObject({ status: "completed" })
+    }),
+  )
 })

@@ -130,6 +130,11 @@ export type BackgroundAllInput = {
   type?: string
 }
 
+export type CancelAllInput = {
+  sessionID: SessionSchema.ID
+  type?: string
+}
+
 export interface Interface {
   readonly get: (id: string) => Effect.Effect<Info | undefined>
   readonly start: (input: StartInput) => Effect.Effect<Info>
@@ -138,6 +143,7 @@ export interface Interface {
   readonly background: (id: string) => Effect.Effect<Info | undefined>
   readonly backgroundAll: (input: BackgroundAllInput) => Effect.Effect<Info[]>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
+  readonly cancelAll: (input: CancelAllInput) => Effect.Effect<Info[]>
   readonly pendingBackground: Effect.Effect<readonly Background[]>
   readonly runningBackground: Effect.Effect<readonly Recovery[]>
   readonly completeBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
@@ -445,6 +451,28 @@ export const make = Effect.gen(function* () {
     return result.info
   })
 
+  const cancelAll: Interface["cancelAll"] = Effect.fn("Job.cancelAll")(function* (input) {
+    const owned = yield* SynchronizedRef.modifyEffect(
+      state.jobs,
+      Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [string[], Map<string, Active>]> {
+        const ids: string[] = []
+        for (const [id, job] of jobs) {
+          if (job.info.status !== "running") continue
+          if (input.type !== undefined && job.info.type !== input.type) continue
+          if (job.info.metadata?.sessionID !== input.sessionID) continue
+          ids.push(id)
+        }
+        return [ids, jobs]
+      }),
+    )
+    const cancelled: Info[] = []
+    for (const id of owned) {
+      const info = yield* cancel(id)
+      if (info) cancelled.push(info)
+    }
+    return cancelled
+  })
+
   const pendingBackground: Interface["pendingBackground"] = Effect.gen(function* () {
     const recovered: Background[] = []
     let after: string | undefined
@@ -486,6 +514,7 @@ export const make = Effect.gen(function* () {
     background,
     backgroundAll,
     cancel,
+    cancelAll,
     pendingBackground,
     runningBackground,
     completeBackground,

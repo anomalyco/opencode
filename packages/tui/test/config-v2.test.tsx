@@ -91,6 +91,15 @@ test("resolves automatic tabs from the terminal environment", () => {
   ).toMatchObject({ mode: "on", enabled: true })
 })
 
+test("resolves animations off by default inside herdr panes", () => {
+  expect(resolve({}, { terminalSuspend: true, environment: {} }).animations).toBe(true)
+  expect(resolve({}, { terminalSuspend: true, environment: { HERDR_ENV: "1" } }).animations).toBe(false)
+  expect(resolve({ animations: true }, { terminalSuspend: true, environment: { HERDR_ENV: "1" } }).animations).toBe(
+    true,
+  )
+  expect(resolve({ animations: false }, { terminalSuspend: true, environment: {} }).animations).toBe(false)
+})
+
 test("shows resolved tab defaults in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "tabs.mode")).toMatchObject({
     default: "auto",
