@@ -103,7 +103,13 @@ export const Plugin = define({
         const providerID = definition.providerID
         for (const [id, config] of Object.entries(item.models ?? {})) {
           const source = definition.models.get(id)
-          const inherit = source?.inherit || !models.get(providerID, id)
+          // Preserve variants already supplied by an earlier transform (e.g. a spec-pack plugin)
+          // unless the model was repackaged for a different package, in which case the inherited
+          // variants are spelled for the old package and must be regenerated.
+          const existing = models.get(providerID, id)
+          const existingPackage = existing?.package
+          const hasExistingVariants = (existing?.variants?.length ?? 0) > 0
+          const inherit = source?.inherit || !existing
           overlay(
             models,
             models.provider.get(providerID)?.provider.package,
@@ -119,10 +125,19 @@ export const Plugin = define({
             source?.base !== undefined &&
             source.base.variants.length > 0 &&
             models.get(providerID, id)?.package !== source.base.package
+          // A config-level package override repackages the model for a different SDK/package,
+          // so variants spelled for the previous package must be regenerated even when no
+          // catalog base is present (e.g. a custom model supplied by a plugin transform).
+          // Compare the normalized package after overlay() against the pre-overlay package:
+          // the raw config.package may use the aisdk: prefix form for the same package.
+          // Catalog models are excluded here; `repackaged` above already handles them.
+          const packageChangedViaConfig =
+            !source?.base && models.get(providerID, id)?.package !== existingPackage
           if (
             config.variants === undefined &&
             config.capabilities?.reasoning === undefined &&
-            (!source?.base || repackaged)
+            (!source?.base || repackaged || packageChangedViaConfig) &&
+            !(hasExistingVariants && !repackaged && !packageChangedViaConfig)
           )
             models.update(providerID, id, (model) => {
               model.variants = [
