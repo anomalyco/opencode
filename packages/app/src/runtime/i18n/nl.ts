@@ -37,6 +37,7 @@ export const dict = {
   "dialog.server.menu.remove": "Verwijderen",
   "home.workspaceTip": "Start de volgende sessie in een nieuwe werkruimte om wijzigingen geïsoleerd te houden",
   "session.tab.add": "Tabblad toevoegen",
+  "session.tab.closeOthers": "Andere tabbladen sluiten",
   "session.queue.attachments.one": "Plus {{count}}-hulpstuk",
   "session.queue.attachments.other": "Plus {{count}}-hulpstukken",
   "settings.backToSettings": "Terug naar instellingen",
