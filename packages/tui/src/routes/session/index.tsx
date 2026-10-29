@@ -3001,6 +3001,7 @@ function ShellDisplay(props: {
   error?: string
 }) {
   const theme = useTheme()
+  const { currentSyntax: syntax } = useThemes()
   const ctx = use()
   const client = useClient()
   const data = useData()
@@ -3116,13 +3117,15 @@ function ShellDisplay(props: {
           <Show
             when={isRunning()}
             fallback={
-              <text
+              <code
+                conceal={false}
                 fg={theme.text.base}
+                filetype="bash"
+                syntaxStyle={syntax()}
+                content={limitedInput()}
                 wrapMode={expanded() ? "word" : "char"}
                 maxHeight={expanded() ? undefined : 2}
-              >
-                {limitedInput()}
-              </text>
+              />
             }
           >
             <box flexDirection="row" gap={1}>
