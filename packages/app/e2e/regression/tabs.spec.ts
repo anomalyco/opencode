@@ -1360,11 +1360,13 @@ async function emptySidePanel(page: Page) {
 
 test("opening a session from the inbox keeps the list's scroll position and rows", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 480 })
+
   const sessions = Array.from({ length: 24 }, (_, index) => ({
     id: `ses_inbox_${String(index).padStart(2, "0")}`,
     title: `Inbox session ${index}`,
     time: { created: T0, updated: T0 + index, idle: T0 + index },
   }))
+
   await mockWorkspace(page, {
     name: "Inbox",
     sessions,
