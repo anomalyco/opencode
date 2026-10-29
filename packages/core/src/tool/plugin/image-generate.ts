@@ -23,7 +23,7 @@ import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { collectBoundedResponseBody } from "../http-body.js"
 
-export const name = "image_generate"
+export const name = "experimental_image_generate"
 export const MAX_INPUT_BYTES = 20 * 1024 * 1024
 const DOWNLOAD_TIMEOUT = Duration.seconds(30)
 const GENERATE_TIMEOUT = Duration.minutes(30)
@@ -224,8 +224,8 @@ export const Plugin = {
       Effect.forkIn(scope, { startImmediately: true }),
     )
 
-    // Opt-in through experimental.image_generate. Internal plugins are not re-run on config changes, so reload the
-    // tool transform instead.
+    // On by default; experimental.image_generate: false turns it off. Internal plugins are not re-run on config changes,
+    // so reload the tool transform instead.
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
 
     // Registered only while an image model is available, re-evaluated whenever the catalog changes.
@@ -247,7 +247,7 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((editor) => {
-        if (!enabled || !optedIn(loaded.entries)) return
+        if (!enabled || imageGenerate(loaded.entries) === false) return
         editor.add({
           name,
           options: { codemode: false },
@@ -397,11 +397,6 @@ function imageGenerate(entries: readonly Entry[]) {
   return entries.findLast(
     (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_generate !== undefined,
   )?.info.experimental?.image_generate
-}
-
-function optedIn(entries: readonly Entry[]) {
-  const value = imageGenerate(entries)
-  return value !== undefined && value !== false
 }
 
 function configuredModel(entries: readonly Entry[]) {
