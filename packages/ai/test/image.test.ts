@@ -164,7 +164,10 @@ describe("Image", () => {
       const bodies: Array<unknown> = []
       const compatible = OpenAICompatible.configure({ apiKey: "test", baseURL: "https://compatible.test/v1" })
       const xai = XAI.configure({ apiKey: "test", baseURL: "https://api.xai.test/v1" })
-      const generate = (model: Parameters<typeof Image.generate>[0]["model"], providerOptions?: Record<string, unknown>) =>
+      const generate = (
+        model: Parameters<typeof Image.generate>[0]["model"],
+        providerOptions?: Record<string, unknown>,
+      ) =>
         Image.generate({ model, prompt: "A lighthouse", providerOptions }).pipe(
           Effect.provide(
             layer((input) => {
@@ -579,6 +582,32 @@ describe("Image", () => {
       }).pipe(Effect.provide(layer(() => Effect.die("no request expected")))),
     )
   })
+
+  it.effect("sends OpenAI edits as JSON to the ChatGPT backend, which rejects multipart", () =>
+    Image.generate({
+      model: OpenAI.configure({ apiKey: "test", baseURL: "https://chatgpt.com/backend-api/codex" }).image(
+        "gpt-image-2",
+      ),
+      prompt: "Add a red cap",
+      images: [Media.bytes(Uint8Array.from([1, 2, 3]), "image/png")],
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          Effect.gen(function* () {
+            const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+            expect(request.url).toBe("https://chatgpt.com/backend-api/codex/images/edits")
+            expect(request.headers.get("content-type")).toBe("application/json")
+            expect(JSON.parse(input.text)).toEqual({
+              model: "gpt-image-2",
+              prompt: "Add a red cap",
+              images: [{ image_url: "data:image/png;base64,AQID" }],
+            })
+            return json(input, { data: [{ b64_json: "AQID" }] })
+          }),
+        ),
+      ),
+    ),
+  )
 
   it.effect("routes ordered xAI image inputs through JSON edits", () =>
     Image.generate({

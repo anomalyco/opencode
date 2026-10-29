@@ -285,6 +285,11 @@ export const OpenAIPlugin = define({
             return
           }
           const apiID = draft.modelID ?? draft.id
+          // The ChatGPT backend serves image models on /images, as the Codex client uses them.
+          if (draft.type === "image") {
+            draft.cost = []
+            return
+          }
           const match = apiID.match(/^gpt-(\d+)(?:\.(\d+))?/)
           const major = Number(match?.[1])
           const minor = Number(match?.[2] ?? 0)

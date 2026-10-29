@@ -127,6 +127,16 @@ describe("OpenAIPlugin", () => {
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-4.99"), () => {})
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-image-2"), (model) => {
+          model.type = "image"
+          model.cost = [
+            {
+              input: Money.USDPerMillionTokens.make(8),
+              output: Money.USDPerMillionTokens.make(30),
+              cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+            },
+          ]
+        })
       })
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
@@ -184,6 +194,13 @@ describe("OpenAIPlugin", () => {
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-4.99"))).enabled).toBe(false)
+      // The ChatGPT backend serves image models too, covered by the subscription.
+      const image = required(
+        (yield* models.available(["image"])).find(
+          (model) => model.providerID === Provider.ID.openai && model.id === Model.ID.make("gpt-image-2"),
+        ),
+      )
+      expect(image.cost).toEqual([])
     }),
   )
 
