@@ -119,7 +119,7 @@ describe("settings schema", () => {
         permissionsEnabled: true,
         permissions: "staplebops-02",
         questionsEnabled: true,
-        questions: "staplebops-02",
+        questions: "staplebops-05",
         errorsEnabled: true,
         errors: "nope-03",
         interfaceEnabled: true,

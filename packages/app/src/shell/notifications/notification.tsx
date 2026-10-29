@@ -287,11 +287,7 @@ export function createServerNotificationState(input: {
     })
   }
 
-  const handleRequest = async (
-    kind: "permission" | "question" | "mcp-elicitation" | "websearch.provider",
-    sessionID: string,
-    requestID: string,
-  ) => {
+  const handleRequest = async (kind: keyof typeof requestTitles, sessionID: string, requestID: string) => {
     const session = await lookup(sessionID)
 
     if (!session || disposed.value) return
@@ -314,18 +310,17 @@ export function createServerNotificationState(input: {
       return input.data.session.permission.list(sessionID)?.some((request) => request.id === requestID)
     }
 
+    if (!pending()) return
+
     const key = `${input.key}\0${kind}:${requestID}`
 
-    const soundEnabled =
-      category === "questions" ? settings.sounds.questionsEnabled : settings.sounds.permissionsEnabled
-
-    if (soundEnabled() && pending()) {
+    if (settings.sounds[`${category}Enabled`]()) {
       void input.coordinator.sound(key, () => {
         if (pending()) return playSoundById(settings.sounds[category]())
       })
     }
 
-    if (!settings.notifications[category]() || !pending()) return
+    if (!settings.notifications[category]()) return
 
     void input.coordinator.system(key, () => {
       if (!pending()) return
