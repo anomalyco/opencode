@@ -84,6 +84,36 @@ describe("Ripgrep", () => {
     ),
   )
 
+  it.live("keeps newline filenames intact across stdout chunk boundaries", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          // Windows does not permit control characters in filenames.
+          if (process.platform === "win32") return
+          // rg --files --null arrives through a pipe in 64 KiB chunks, so ~190 KiB of names
+          // guarantees records straddling a boundary, and the embedded newline makes a split visible.
+          const names = Array.from(
+            { length: 2_000 },
+            (_, index) => `chunk-${String(index).padStart(4, "0")}\nbreak-${"x".repeat(72)}.ts`,
+          )
+          // Sequential writes keep the open-file count under the default ulimit.
+          for (const name of names) {
+            yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, name), ""))
+          }
+          const ripgrep = yield* Ripgrep.Service
+          const expected = names.map((name) => RelativePath.make(name)).sort()
+
+          const globbed = yield* ripgrep.glob({ cwd: tmp.path, pattern: "**/*.ts", limit: names.length })
+          expect(globbed.map((item) => item.path).sort()).toEqual(expected)
+
+          const found = yield* ripgrep.find({ cwd: tmp.path, pattern: "**/*.ts", limit: names.length })
+          expect(found.map((item) => item.path).sort()).toEqual(expected)
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("greps files with include filtering", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
