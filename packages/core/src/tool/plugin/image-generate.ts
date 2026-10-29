@@ -33,8 +33,14 @@ const EXTENSIONS: Record<string, string> = {
   "image/gif": ".gif",
 }
 
-export const description =
-  "Generate or edit an image. Pass images to edit them or to guide style and subject. To make several images, call the tool once per image with distinct prompts. Omit model to use the default. Runs in the background: the call returns right away and you are notified automatically when the image is saved or fails. DO NOT sleep, poll, or check whether the file exists while it runs; continue with other work or end your response. After the notice, use the read tool on the path to view the image and mention the path to the user. Each call costs money, so don't regenerate unless asked or the result is clearly wrong."
+export const description = [
+  "Generates a new image, or edits existing ones.",
+  "Only call this when the user asks you to create or edit an image.",
+  "Images you pass are used as the source to edit, or as references for style and subject.",
+  "Each call makes one image. For several images, call it once per image.",
+  "It runs in the background: the call starts a job and returns right away, and you are notified automatically when the image is saved, with its path. Never poll, sleep, or check for the file while you wait.",
+  "Don't repeat a request unless the user asks.",
+].join("\n")
 
 export const Input = Schema.Struct({
   prompt: Schema.String.check(Schema.isMinLength(1)).annotate({
@@ -45,7 +51,7 @@ export const Input = Schema.Struct({
     Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
   ).annotate({
     description:
-      "Images to edit or use as references, in order. Local file paths (relative to the session directory or absolute) or http(s) URLs. Omit to create a new image.",
+      "Images to edit, or to use as references for style and subject when creating a new image, in order. Local file paths (relative to the session directory or absolute) or http(s) URLs.",
   }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:

@@ -203,10 +203,12 @@ const reference = (asset: Media.Asset, provider: ProviderID) =>
   )
 
 /**
- * How input images travel. `edits` is OpenAI's `/images/edits`; `references` keeps every request on
- * `/images/generations` and lists them as `input_references`, for gateways without an edits endpoint (OpenRouter).
+ * How input images travel. `edits` is OpenAI's `/images/edits`, uploading owned bytes as multipart; `json-edits` sends
+ * every edit there as JSON with data URLs, for hosts that reject multipart (the ChatGPT backend); `references` keeps
+ * every request on `/images/generations` and lists them as `input_references`, for gateways without an edits endpoint
+ * (OpenRouter).
  */
-export type OpenAIImageInput = "edits" | "references"
+export type OpenAIImageInput = "edits" | "json-edits" | "references"
 
 type Options = { readonly sizing: OpenAIImageSizing; readonly imageInput: OpenAIImageInput }
 
@@ -253,8 +255,13 @@ const fromRequest = Effect.fn("OpenAIImages.fromRequest")(function* (
     )
   }
 
-  // Owned bytes go through multipart edits; remote URLs and file IDs use the JSON edits body instead.
-  if (images.length > 0 && images.every(isInline) && (mask === undefined || isInline(mask))) {
+  // Owned bytes go through multipart edits; remote URLs, file IDs and `json-edits` hosts use the JSON edits body.
+  if (
+    options.imageInput === "edits" &&
+    images.length > 0 &&
+    images.every(isInline) &&
+    (mask === undefined || isInline(mask))
+  ) {
     const form = new FormData()
     MediaInput.appendFields(
       form,
@@ -422,7 +429,7 @@ export const model = (
     {
       protocol: input.provider === undefined ? base : { ...base, provider: ProviderID.make(input.provider) },
       baseURL: DEFAULT_BASE_URL,
-      path: ({ request }) => (imageInput === "edits" && isEdit(request) ? EDIT_PATH : PATH),
+      path: ({ request }) => (imageInput !== "references" && isEdit(request) ? EDIT_PATH : PATH),
     },
     input,
   )
