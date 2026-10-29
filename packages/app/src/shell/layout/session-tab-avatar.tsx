@@ -39,6 +39,14 @@ export function SessionTabAvatarView(props: {
   unread: boolean
   loading?: boolean
 }) {
+  const tint = () => {
+    const icon = props.project?.icon
+
+    if (!icon?.color || getProjectAvatarSource(props.project?.id, icon)) return
+
+    return `var(--v2-avatar-border-${getProjectAvatarVariant(icon.color)})`
+  }
+
   return (
     <Show
       when={props.loading}
@@ -52,7 +60,7 @@ export function SessionTabAvatarView(props: {
         />
       }
     >
-      <SessionProgressIndicatorV2 />
+      <SessionProgressIndicatorV2 style={{ color: tint() }} />
     </Show>
   )
 }

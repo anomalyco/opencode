@@ -802,6 +802,34 @@ test("a remote tab stays busy while a child session runs", async ({ page }) => {
   await expect(tabA.locator('[data-component="activity-ring"]')).toBeHidden()
 })
 
+test("a working tab tints its progress indicator with the project color", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "TintedTab",
+    project: { icon: { color: "blue" } },
+    sessions: [a],
+    sessionStatus: { [a.id]: { type: "running" } },
+  })
+  await page.goto(sessionHref(a.id))
+
+  const spinner = page.locator(
+    `[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"]) [data-component="session-progress-indicator-v2"]`,
+  )
+
+  await expect(spinner).toBeVisible()
+
+  const tint = await page.evaluate(() => {
+    const probe = document.createElement("span")
+    probe.style.color = "var(--v2-avatar-border-blue)"
+    document.body.append(probe)
+    const color = getComputedStyle(probe).color
+    probe.remove()
+
+    return color
+  })
+
+  await expect(spinner).toHaveCSS("color", tint)
+})
+
 test("inactive tabs stay busy while work waits in their inbox, and pulse on a new prompt, as in the TUI", async ({
   page,
 }) => {
