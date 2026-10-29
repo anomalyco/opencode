@@ -343,7 +343,7 @@
   [data-slot="option-description"] {
     min-inline-size: 0;
     font-family: var(--v2-font-family-sans);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 440;
     line-height: var(--line-height-tight);
     letter-spacing: 0.05px;
