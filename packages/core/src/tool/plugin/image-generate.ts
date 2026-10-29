@@ -31,8 +31,6 @@ const EXTENSIONS: Record<string, string> = {
   "image/webp": ".webp",
   "image/gif": ".gif",
 }
-// Families tried in order when the session's provider has no image model, before falling back to the newest.
-const PREFERRED_FAMILIES = ["gpt-image", "gemini-flash", "gemini-pro", "grok", "flux"]
 
 export const description =
   "Generate or edit an image. Pass images to edit them or to guide style and subject. To make several images, call the tool once per image with distinct prompts. Omit model to use the default. Runs in the background: the call returns right away and you are notified automatically when the image is saved or fails. DO NOT sleep, poll, or check whether the file exists while it runs; continue with other work or end your response. After the notice, use the read tool on the path to view the image and mention the path to the user. Each call costs money, so don't regenerate unless asked or the result is clearly wrong."
@@ -148,8 +146,9 @@ export const Plugin = {
     const readImage = Effect.fn("ImageGenerateTool.readImage")(function* (
       source: string,
       context: FileAccess.Invocation,
+      fetchAllowed: (url: string) => ReturnType<typeof permission.assert>,
     ) {
-      const bytes = yield* readBytes(source, context)
+      const bytes = yield* readBytes(source, context, fetchAllowed)
       const mime = Mime.detect(bytes)
       if (!INPUT_TYPES.includes(mime))
         return yield* new ToolFailure({ message: `${source} is not a PNG, JPEG, WebP or GIF image.` })
@@ -159,10 +158,13 @@ export const Plugin = {
     const readBytes = Effect.fn("ImageGenerateTool.readBytes")(function* (
       source: string,
       context: FileAccess.Invocation,
+      fetchAllowed: (url: string) => ReturnType<typeof permission.assert>,
     ) {
       if (/^https?:\/\//i.test(source)) {
         if (!source.toLowerCase().startsWith("https://"))
           return yield* new ToolFailure({ message: `Image URLs must use https: ${source}` })
+        // Downloads follow the same rule as the webfetch tool, so denying web access also covers image URLs.
+        yield* fetchAllowed(source)
         return yield* Effect.gen(function* () {
           const response = yield* http
             .execute(HttpClientRequest.get(source))
@@ -285,7 +287,19 @@ export const Plugin = {
                 })
               }
               const images = input.images
-                ? yield* Effect.forEach(input.images, (image) => readImage(image, context))
+                ? yield* Effect.forEach(input.images, (image) =>
+                    readImage(image, context, (url) =>
+                      permission.assert({
+                        action: "webfetch",
+                        resources: [url],
+                        save: ["*"],
+                        metadata: { url },
+                        sessionID: context.sessionID,
+                        agent: context.agent,
+                        source,
+                      }),
+                    ),
+                  )
                 : undefined
 
               // Everything that needs the user or can fail fast happened above; the paid call runs as a background job.
@@ -355,15 +369,13 @@ export const Plugin = {
   }),
 }
 
-/** Same provider as the session first, then preferred families, then the newest. */
+/** The newest image model from the session's provider, otherwise the newest available one. */
 export function defaultModel(
   available: readonly Model.Info[],
   input: { readonly providerID?: string; readonly images: boolean },
 ) {
   const candidates = input.images ? available.filter(acceptsImages) : available
-  const own = candidates.filter((model) => model.providerID === input.providerID)
-  const pool = own.length > 0 ? own : candidates
-  return PREFERRED_FAMILIES.flatMap((family) => pool.find((model) => model.family === family) ?? [])[0] ?? pool[0]
+  return candidates.find((model) => model.providerID === input.providerID) ?? candidates[0]
 }
 
 // Read per field so a later config that sets other experimental options doesn't hide this one.

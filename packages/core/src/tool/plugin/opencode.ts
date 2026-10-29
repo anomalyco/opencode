@@ -50,12 +50,11 @@ export const ModelsInput = Schema.Struct({
   provider: Schema.optionalKey(Schema.String).annotate({
     description: "Provider ID or name to filter by. Try your own provider first.",
   }),
-  type: Schema.optionalKey(Schema.Literals(["chat", "image", "decision"])).annotate({
+  type: Schema.optionalKey(Schema.Literals(["chat", "image"])).annotate({
     description: [
       'Which kind of model to list. Defaults to "chat".',
       '"chat": a language model (LLM). Powers sessions, agents and subagents, and can call tools.',
       '"image": generates or edits images from a prompt. It can\'t chat or call tools.',
-      '"decision": a fast classifier, not an LLM. Given some input and a set of questions, it returns structured answers (a label, a score, or yes/no). It can\'t chat, call tools, or run a subagent.',
     ].join("\n"),
   }),
   all: Schema.optionalKey(Schema.Boolean).annotate({

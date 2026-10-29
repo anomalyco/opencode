@@ -411,6 +411,23 @@ describe("image_generate", () => {
     }),
   )
 
+  it.live("asks webfetch permission before downloading an image URL", () =>
+    Effect.gen(function* () {
+      yield* imageModel("test", "painter", (model) => {
+        model.capabilities.input = ["text", "image"]
+      })
+      const { run } = yield* setup()
+      fixture.deny = "webfetch"
+      const result = yield* run({ prompt: "x", images: ["https://example.invalid/cat.png"] })
+      expect(result.status).toBe("error")
+      expect(fixture.assertions.map((item) => [item.action, item.resources])).toEqual([
+        ["image_generate", ["test/painter"]],
+        ["webfetch", ["https://example.invalid/cat.png"]],
+      ])
+      expect(fixture.requests).toEqual([])
+    }),
+  )
+
   it.live("rejects input files that are not images", () =>
     Effect.gen(function* () {
       yield* imageModel("test", "painter")
@@ -469,19 +486,16 @@ describe("defaultModel", () => {
     return model && `${model.providerID}/${model.id}`
   }
 
-  it.effect("prefers the session's provider, then known families, then the newest", () =>
+  it.effect("prefers the session's provider, then the newest", () =>
     Effect.sync(() => {
       const newest = info("fresh", "newest")
-      const flux = info("bfl", "flux-2", "flux")
-      const gemini = info("google", "nano-banana", "gemini-flash")
-      const gpt = info("openai", "gpt-image-2", "gpt-image")
+      const older = info("openai", "gpt-image-2", "gpt-image")
       const own = info("mine", "own-image")
-      const all = [newest, flux, gemini, gpt, own]
+      const all = [newest, older, own]
 
       expect(pick(all, "mine")).toBe("mine/own-image")
-      expect(pick(all, "elsewhere")).toBe("openai/gpt-image-2")
-      expect(pick([newest, flux, gemini])).toBe("google/nano-banana")
-      expect(pick([newest, info("x", "unknown", "mystery")])).toBe("fresh/newest")
+      expect(pick(all, "elsewhere")).toBe("fresh/newest")
+      expect(pick(all)).toBe("fresh/newest")
       expect(pick([])).toBeUndefined()
     }),
   )
