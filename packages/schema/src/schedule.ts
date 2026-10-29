@@ -188,8 +188,13 @@ export const ShellConditionInput = Schema.Struct({
 
 export const CodeConditionInput = Schema.Struct({
   code: Schema.String.check(Schema.isMinLength(1)).annotate({
-    description:
-      "Code Mode JavaScript program. Static tools.<path>(...) calls are authorized at creation; gets state, now and runs, and returns a boolean or { wake, state?, message? }.",
+    description: [
+      "Code Mode JavaScript check (no fetch; 30s, 20 tool calls, 32 KB output cap).",
+      'Call tools statically as tools.<ns>.<tool>(...) or tools["ns-name"].tool(...); each is authorized once at creation to run unattended.',
+      "Runs once at creation with state = null (if baselines state without waking; until matches immediately if true), with globals state, now (epoch ms) and runs.",
+      "Return a boolean or { wake, state?, message? } (message is appended to prompt on wake), e.g.:",
+      'const t = await tools.slack.read_thread({ id }); return { wake: state !== null && t.count > state.count, state: { count: t.count }, message: "New reply" }',
+    ].join(" "),
   }),
 }).annotate({ identifier: "Schedule.CodeConditionInput" })
 
