@@ -19,7 +19,7 @@ const run = Effect.fn("cli.mcp.trust.run")(function* (url: string, force: boolea
   intro("Trust an MCP server certificate")
   const { endpoint } = yield* ServerConnection.resolve()
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
-  const inspect = yield* request((signal) => client.mcp.trust.inspect({ location, url }, { signal }))
+  const inspect = yield* request((signal) => client.experimental.mcp.trust.inspect({ location, url }, { signal }))
   const cert = inspect.data.cert
   log.info(`Host: ${cert.host}:${cert.port}`)
   log.info(`Subject: ${cert.subject}`)
@@ -43,7 +43,7 @@ const run = Effect.fn("cli.mcp.trust.run")(function* (url: string, force: boolea
     }
   }
   const result = yield* request((signal) =>
-    client.mcp.trust.pin({ location, url, force, expectFingerprint: cert.fingerprint }, { signal }),
+    client.experimental.mcp.trust.pin({ location, url, force, expectFingerprint: cert.fingerprint }, { signal }),
   )
   outro(result.data.replaced ? "Re-pinned the certificate" : "Trusted the certificate")
 })
