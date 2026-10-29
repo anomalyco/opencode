@@ -23,6 +23,13 @@ export type TimelineWidth = Settings["general"]["timelineWidth"]
 
 export type TabLayout = Settings["appearance"]["tabLayout"]
 
+export type TabOrder = "recent" | "opened"
+
+/** An explicit order wins; otherwise the side tabs follow activity while the top strip keeps the opened order. */
+export function resolveTabOrder(tabLayout: TabLayout, tabOrder: TabOrder | undefined): TabOrder {
+  return tabOrder ?? (tabLayout === "vertical" ? "recent" : "opened")
+}
+
 export type ReduceMotion = Settings["appearance"]["reduceMotion"]
 
 export type NotificationSettings = Settings["notifications"]
@@ -146,6 +153,8 @@ const appearanceSchema = Persistence.struct({
   terminal: Schema.String,
   // "inbox" is experimental: the vertical layout with a server-wide session inbox in place of tabs.
   tabLayout: Schema.Literals(["horizontal", "vertical", "inbox"]),
+  // Unset follows the layout: recent activity for the side tabs, opened order for the top strip.
+  tabOrder: Persistence.optional(Schema.Literals(["recent", "opened"])),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),
 })
@@ -336,6 +345,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
     )
+    const tabLayout = withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout)
 
     createEffect(() => {
       if (typeof document === "undefined") return
@@ -451,9 +461,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setTerminalFont(value: string) {
           setStore("appearance", "terminal", value.trim() ? value : "")
         },
-        tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
+        tabLayout,
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
+        },
+        tabOrder: createMemo(() => resolveTabOrder(tabLayout(), store.appearance?.tabOrder)),
+        setTabOrder(value: TabOrder) {
+          setStore("appearance", "tabOrder", value)
         },
         sidebarOpen: withFallback(() => store.appearance?.sidebarOpen, true),
         setSidebarOpen(value: boolean) {

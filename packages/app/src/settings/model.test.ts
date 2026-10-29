@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { Persistence } from "@/runtime/persistence/schema"
 import {
+  resolveTabOrder,
   settingsSchema,
   settingsPersistence,
   defaultSettings,
@@ -215,4 +216,21 @@ test.each([
   { name: "terminal", family: terminalFontFamily, font: undefined, prefix: '"JetBrainsMono Nerd Font Mono", ' },
 ])("$name font family for $font starts with $prefix", ({ family, font, prefix }) => {
   expect(family(font)).toStartWith(prefix)
+})
+
+describe("tab order", () => {
+  test("follows the layout until an explicit order is saved", () => {
+    expect(resolveTabOrder("vertical", undefined)).toBe("recent")
+    expect(resolveTabOrder("horizontal", undefined)).toBe("opened")
+    expect(resolveTabOrder("vertical", "opened")).toBe("opened")
+    expect(resolveTabOrder("horizontal", "recent")).toBe("recent")
+  })
+
+  test("round trips an explicit order and drops unknown values", () => {
+    const stored = decode({ appearance: { tabOrder: "opened" } })
+    expect(stored.appearance.tabOrder).toBe("opened")
+    expect(decode(encode(stored)).appearance.tabOrder).toBe("opened")
+    // An unreadable value falls back to the layout default instead of failing the whole settings read.
+    expect(decode({ appearance: { tabOrder: "manual" as never } }).appearance.tabOrder).toBeUndefined()
+  })
 })
