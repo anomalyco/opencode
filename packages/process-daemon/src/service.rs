@@ -888,7 +888,9 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                 );
                 if let Some(title) = terminal.take_title() {
                     osc_title = Some(title).filter(|title| !title.is_empty());
-                    if let Some(title) = refresh_title(&info, osc_title.as_deref(), &create_title) {
+                    if let Ok(Some(title)) =
+                        refresh_title(&info, None, osc_title.as_deref(), &create_title)
+                    {
                         broadcast(
                             &shutdown,
                             &mut subscribers,
@@ -1046,22 +1048,24 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                 let _ = reply.send(result);
             }
             Ok(ActorMessage::Rename { title, reply }) => {
-                let result = info
-                    .write()
-                    .map(|mut value| value.user_title = title.filter(|title| !title.is_empty()))
-                    .map_err(|_| anyhow!("terminal info lock poisoned"));
-                if result.is_ok()
-                    && let Some(title) = refresh_title(&info, osc_title.as_deref(), &create_title)
-                {
+                let result = refresh_title(
+                    &info,
+                    Some(title.filter(|title| !title.is_empty())),
+                    osc_title.as_deref(),
+                    &create_title,
+                );
+                if let Ok(Some(title)) = &result {
                     broadcast(
                         &shutdown,
                         &mut subscribers,
                         &mut controller,
                         &mut controller_generation,
-                        StreamEvent::TitleChanged { title },
+                        StreamEvent::TitleChanged {
+                            title: title.clone(),
+                        },
                     );
                 }
-                let _ = reply.send(result);
+                let _ = reply.send(result.map(|_| ()));
             }
             Ok(ActorMessage::Replay { offset, reply }) => {
                 let _ = reply.send(replay.read_from(offset));
@@ -1430,13 +1434,20 @@ fn run_writer(
     }
 }
 
-/// Stores the effective title and returns it only when it changed.
+/// Applies an optional user-title update and stores the effective title under
+/// one write guard, returning the title only when it changed.
 fn refresh_title(
     info: &Arc<RwLock<TerminalInfo>>,
+    user_title: Option<Option<String>>,
     osc_title: Option<&str>,
     create_title: &str,
-) -> Option<String> {
-    let mut value = info.write().ok()?;
+) -> Result<Option<String>> {
+    let mut value = info
+        .write()
+        .map_err(|_| anyhow!("terminal info lock poisoned"))?;
+    if let Some(user_title) = user_title {
+        value.user_title = user_title;
+    }
     let title = value
         .user_title
         .as_deref()
@@ -1444,10 +1455,10 @@ fn refresh_title(
         .unwrap_or(create_title)
         .to_string();
     if value.title == title {
-        return None;
+        return Ok(None);
     }
     value.title = title.clone();
-    Some(title)
+    Ok(Some(title))
 }
 
 fn make_snapshot(

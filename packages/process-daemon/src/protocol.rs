@@ -310,6 +310,10 @@ mod tests {
             serde_json::from_str::<Request>(r#"{"op":"rename","id":1,"title":null}"#).unwrap(),
             Request::Rename { id: 1, title: None }
         ));
+        assert!(matches!(
+            serde_json::from_str::<Request>(r#"{"op":"rename","id":1}"#).unwrap(),
+            Request::Rename { id: 1, title: None }
+        ));
         let terminal = serde_json::json!({
             "id": 1,
             "pid": null,
