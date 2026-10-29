@@ -149,7 +149,10 @@ export function DialogSessionList() {
     const query = filter().trim()
     const current = data.location.info(pickerLocation())
     const pinned = local.session.pinned().flatMap((sessionID) => {
-      const session = sessionMap.get(sessionID) ?? (query ? undefined : data.session.get(sessionID))
+      const fetched = sessionMap.get(sessionID)
+      if (fetched) return [fetched]
+      if (query) return []
+      const session = data.session.get(sessionID)
       if (!session || session.parentID) return []
       if (
         !allProjects() &&

@@ -132,14 +132,14 @@ test("scopes sessions to the active session location", async () => {
 
 test("shows pinned sessions outside the fetched page when tabs are enabled", async () => {
   const events = createEventStream()
-  const session = (id: string, title: string, updated: number) => ({
+  const session = (id: string, title: string, updated: number, directory = process.cwd()) => ({
     id,
     projectID: "proj_test",
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 1, updated },
     title,
-    location: { directory: process.cwd() },
+    location: { directory },
   })
   const calls = createFetch((url) => {
     if (url.pathname === "/api/location") {
@@ -150,10 +150,13 @@ test("shows pinned sessions outside the fetched page when tabs are enabled", asy
     if (url.pathname !== "/api/session") return undefined
     const parentID = url.searchParams.get("parentID")
     if (parentID && parentID !== "null") return json({ data: [], cursor: {} })
-    return json({ data: [session("ses_recent", "Recent session", 2)], cursor: {} })
+    return json({
+      data: [session("ses_recent", "Recent session", 2, "/tmp/opencode/worktree-b")],
+      cursor: {},
+    })
   }, events)
   const temporary = await tmpdir()
-  await Bun.write(path.join(temporary.path, "session.json"), JSON.stringify({ pinned: ["ses_old"] }))
+  await Bun.write(path.join(temporary.path, "session.json"), JSON.stringify({ pinned: ["ses_old", "ses_recent"] }))
   let storage!: ReturnType<typeof useStorage>
 
   function Probe() {
@@ -208,6 +211,7 @@ test("shows pinned sessions outside the fetched page when tabs are enabled", asy
       (value) => value.includes("Old pinned session") && value.includes("Recent session"),
     )
     expect(frame).toContain("Pinned")
+    expect(frame).not.toContain("1970")
   } finally {
     app.renderer.destroy()
     await storage.flush()
