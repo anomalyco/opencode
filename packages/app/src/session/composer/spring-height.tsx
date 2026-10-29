@@ -81,7 +81,7 @@ const fade: DurationOptions = { duration: 0.15, bounce: 0 }
 const snap = (px: number, dpr = window.devicePixelRatio || 1) => Math.round(px * dpr) / dpr
 
 const surface =
-  "data-[moving]:overflow-clip data-[dock-border-underlay]:rounded-xl data-[dock-border-underlay]:bg-v2-background-bg-base [[data-color-scheme=dark]_&[data-dock-border-underlay]]:bg-v2-background-bg-layer-01"
+  "data-[moving]:overflow-clip data-[dock-border-underlay]:rounded-[12px] data-[dock-border-underlay]:bg-v2-background-bg-base [[data-color-scheme=dark]_&[data-dock-border-underlay]]:bg-v2-background-bg-layer-01"
 
 type Face<T> = {
   key: string

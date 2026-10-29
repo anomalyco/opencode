@@ -1839,7 +1839,7 @@ ToolRegistry.register({
       >
         <div
           data-component="task-tool-delegating"
-          class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[8px] bg-v2-background-bg-layer-02 px-3 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-base"
+          class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[10px] bg-v2-background-bg-layer-02 px-3 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-base"
         >
           <SessionProgressIndicatorV2 />
           <span class="min-w-0 truncate">{i18n.t("ui.tool.agent.delegating")}</span>

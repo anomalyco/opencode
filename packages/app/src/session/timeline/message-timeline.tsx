@@ -467,10 +467,12 @@ function MessageTimelineView(
           </div>
         </Show>
         <Show when={live() && backgroundHintPresence.present()}>
+          {/* Leading the row, the small ghost button's 9px inline padding is pulled into the gutter so its label lines
+              up with the timeline text above it. */}
           <div
             ref={setBackgroundHintRef}
             data-component="session-background-hint-row"
-            class="duration-150 motion-reduce:animate-none"
+            class="duration-150 first:-ms-[9px] motion-reduce:animate-none"
             classList={{
               "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
               "animate-out fade-out fill-mode-forwards":

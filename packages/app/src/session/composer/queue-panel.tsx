@@ -79,7 +79,7 @@ export function SessionQueuePanel(props: { queue: SessionQueueView; hidden?: boo
       <div
         data-component="session-queue-panel"
         inert={!open()}
-        class="relative z-0 -mb-3 rounded-xl bg-v2-background-bg-base px-1.5 pt-1.5 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)]"
+        class="relative z-0 -mb-3 rounded-[12px] bg-v2-background-bg-base px-1.5 pt-1.5 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)]"
         // Match the composer overlap so the scroll crop meets the input edge.
         classList={{ "pb-3": count() > 4, "pb-[18px]": count() <= 4 }}
       >

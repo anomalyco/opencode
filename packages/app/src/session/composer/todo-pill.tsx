@@ -34,7 +34,7 @@ export function SessionTodoPill(props: { todos: readonly Todo[]; defaultOpen?: b
           type="button"
           data-slot="session-todo-pill"
           aria-label={label()}
-          class="pointer-events-auto flex h-7 min-w-0 max-w-full items-center gap-2 rounded-[12px] border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-base ps-2.5 pe-2.5 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] whitespace-nowrap text-v2-text-text-base shadow-[var(--v2-elevation-raised)] outline-none"
+          class="pointer-events-auto flex h-7 min-w-0 max-w-full items-center gap-2 rounded-[8px] border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-base ps-2.5 pe-2.5 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] whitespace-nowrap text-v2-text-text-base shadow-[var(--v2-elevation-raised)] outline-none"
         >
           <ProgressCircle
             percentage={props.todos.length ? (finished() / props.todos.length) * 100 : 0}

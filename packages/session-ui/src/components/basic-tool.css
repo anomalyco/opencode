@@ -366,7 +366,7 @@
     [data-component="task-tool-surface"] {
       padding: 8px 12px;
       gap: 0;
-      border-radius: 8px;
+      border-radius: 10px;
       background: var(--v2-background-bg-layer-02);
     }
 
