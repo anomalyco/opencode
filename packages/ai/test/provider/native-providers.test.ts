@@ -120,7 +120,8 @@ describe("native OpenAI-compatible providers", () => {
             model: OpenAICompatible.configure({ ...settings, provider: provider.id }).model("test-model"),
           }),
         )
-        expect(native.body).toEqual(generic.body)
+        expect(native.body.tool_choice).toBeUndefined()
+        expect(generic.body).toEqual({ ...native.body, tool_choice: "auto" })
       }
     }),
   )
