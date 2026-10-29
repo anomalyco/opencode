@@ -15,6 +15,7 @@ import { LocationActivity } from "@opencode/core/location-activity"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
+import { Pty } from "@opencode/core/pty"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
@@ -30,13 +31,29 @@ import { testEffect } from "./lib/effect"
 // Per-workspace experimental.location_idle_timeout, read by each location's Config.
 const idleTimeouts = new Map<string, Duration.Duration | false>()
 
+const locationOf = (ref: Location.Ref) =>
+  Location.Service.of({
+    directory: ref.directory,
+    workspaceID: ref.workspaceID,
+    project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
+  })
+
+const fixtureMap = (lookup: (ref: Location.Ref) => Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>) =>
+  Effect.map(LayerMap.make(lookup, { idleTimeToLive: Duration.infinity }), (map) => ({
+    ...map,
+    get: (ref: Location.Ref) => map.get(LocationServiceMap.canonical(ref)),
+    contextEffect: (ref: Location.Ref) => map.contextEffect(LocationServiceMap.canonical(ref)),
+    contextEffectOption: (ref: Location.Ref) => map.contextEffectOption(LocationServiceMap.canonical(ref)),
+    invalidate: (ref: Location.Ref) => map.invalidate(LocationServiceMap.canonical(ref)),
+  }))
+
 // Keep real execution ownership, location caching, forms, and eviction. The fixture
 // runner waits on a form instead of making a model request before asking a question.
 const locations = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const map = yield* LayerMap.make(
+    return yield* fixtureMap(
       (ref: Location.Ref) =>
         // The fixture only exercises these four Location services.
         // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
@@ -55,14 +72,7 @@ const locations = Layer.effect(
                 ]
               : [],
           ),
-          Layer.succeed(
-            Location.Service,
-            Location.Service.of({
-              directory: ref.directory,
-              workspaceID: ref.workspaceID,
-              project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
-            }),
-          ),
+          Layer.succeed(Location.Service, locationOf(ref)),
           Layer.effect(
             SessionRunner.Service,
             Effect.gen(function* () {
@@ -88,40 +98,56 @@ const locations = Layer.effect(
           Layer.provide(Layer.succeed(Bus.Service, bus)),
           Layer.fresh,
         ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
-      { idleTimeToLive: Duration.infinity },
     )
-    return {
-      ...map,
-      get: (ref: Location.Ref) => map.get(LocationServiceMap.canonical(ref)),
-      contextEffect: (ref: Location.Ref) => map.contextEffect(LocationServiceMap.canonical(ref)),
-      contextEffectOption: (ref: Location.Ref) => map.contextEffectOption(LocationServiceMap.canonical(ref)),
-      invalidate: (ref: Location.Ref) => map.invalidate(LocationServiceMap.canonical(ref)),
-    }
   }),
 )
 
-const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([
-      Database.node,
-      Bus.node,
-      Job.node,
-      SessionStore.node,
-      LocationServiceMap.node,
-      SessionExecution.node,
-      LocationActivity.node,
-    ]),
-    [
-      LocationServiceMap.node.replace(
-        makeGlobalNode({
-          service: LocationServiceMap.Service,
-          layer: locations,
-          deps: [Bus.node],
+// Real terminals: the location graph is the compiled Pty node over the fixture Location,
+// plus the Location and Config services the sweep and the tests read from the graph.
+const terminalLocations = Layer.effect(
+  LocationServiceMap.Service,
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    return yield* fixtureMap((ref: Location.Ref) => {
+      const location = Layer.succeed(Location.Service, locationOf(ref))
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      return Layer.mergeAll(
+        Config.testLayer([]),
+        location,
+        LayerNode.compile(Pty.node, {
+          replacements: [Location.node.replace(location), Bus.node.replace(Layer.succeed(Bus.Service, bus))],
         }),
-      ),
-    ],
-  ),
+      ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>
+    })
+  }),
 )
+
+const harness = (locations: Layer.Layer<LocationServiceMap.Service, never, Bus.Service>) =>
+  testEffect(
+    AppNodeBuilder.build(
+      LayerNode.group([
+        Database.node,
+        Bus.node,
+        Job.node,
+        SessionStore.node,
+        LocationServiceMap.node,
+        SessionExecution.node,
+        LocationActivity.node,
+      ]),
+      [
+        LocationServiceMap.node.replace(
+          makeGlobalNode({
+            service: LocationServiceMap.Service,
+            layer: locations,
+            deps: [Bus.node],
+          }),
+        ),
+      ],
+    ),
+  )
+
+const it = harness(locations)
+const terminalIt = harness(terminalLocations)
 
 describe("LocationActivity eviction", () => {
   for (const count of [1, 2]) {
@@ -260,6 +286,31 @@ describe("LocationActivity eviction", () => {
         expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
       }),
     )
+
+  // A terminal is a user-owned process; it emits no session events while it runs.
+  const terminalTest = process.platform === "win32" ? terminalIt.effect.skip : terminalIt.effect
+  terminalTest("keeps a location with a running terminal until the terminal is removed", () =>
+    Effect.gen(function* () {
+      const map = yield* LocationServiceMap.Service
+      const ref = LocationServiceMap.canonical({ directory: AbsolutePath.make("/tmp") })
+      const idle = Location.Ref.make({ directory: ref.directory, workspaceID: Workspace.ID.make("wrk_idle") })
+      const context = yield* map.contextEffect(ref).pipe(Effect.scoped)
+      const pty = Context.get(context, Pty.Service)
+      const info = yield* pty.create({ command: "cat", cwd: "/tmp", env: { TERM: "xterm-256color" } })
+      yield* Effect.addFinalizer(() => pty.remove(info.id).pipe(Effect.ignore))
+      yield* Location.Service.pipe(Effect.provide(map.get(idle)), Effect.scoped)
+
+      yield* TestClock.adjust("1 minute")
+      yield* TestClock.adjust("62 minutes")
+      // The idle sibling expired in the same sweep; the terminal keeps its location.
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([ref])
+      expect((yield* pty.get(info.id)).status).toBe("running")
+
+      yield* pty.remove(info.id)
+      yield* TestClock.adjust("62 minutes")
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
+    }),
+  )
 
   for (const [timeout, after, evicted] of [
     ["10 minutes", "11 minutes", true],
