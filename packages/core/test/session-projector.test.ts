@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Fiber, Option, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { asc, eq, sql } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
 import { Agent } from "@opencode/core/agent"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -780,21 +780,33 @@ describe("SessionProjector", () => {
       expect(JSON.parse(replayed?.data ?? "{}")).toMatchObject({ native: { step: "replayed" } })
       expect(JSON.parse(replayed?.data ?? "{}")).not.toHaveProperty("providerState")
 
-      // Projecting onto the legacy row wrote it back in the current shape.
-      const rewritten = JSON.parse(
-        (yield* db.get<{ data: string }>(sql`SELECT data FROM session_message WHERE id = ${assistantID}`))?.data ??
-          "{}",
-      )
+      // An envelope update rewrites the legacy row in the current shape but leaves its inline parts where they are.
+      const messageData = () =>
+        db
+          .get<{ data: string }>(sql`SELECT data FROM session_message WHERE id = ${assistantID}`)
+          .pipe(Effect.map((row) => JSON.parse(row?.data ?? "{}")))
+      const rewritten = yield* messageData()
       expect(rewritten).not.toHaveProperty("providerState")
-      expect(rewritten).toMatchObject({
-        native: { step: "replayed" },
-        content: [
-          { type: "text", native: { signature: "text" } },
-          { type: "reasoning", native: { signature: "reasoning" } },
-          { type: "tool", native: { call: "kept", result: "kept" } },
-        ],
-      })
-      expect(rewritten.content.map((part: Record<string, unknown>) => Object.keys(part).toSorted())).toEqual([
+      expect(rewritten).toMatchObject({ native: { step: "replayed" } })
+      expect(rewritten.content).toHaveLength(3)
+
+      // The first part write splits the legacy parts into session_part in the current shape.
+      yield* bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID: assistantID, ordinal: 3 })
+      expect(yield* messageData()).toMatchObject({ native: { step: "replayed" }, content: [] })
+      const partRows = yield* db
+        .select({ data: SessionPartTable.data })
+        .from(SessionPartTable)
+        .where(eq(SessionPartTable.message_id, assistantID))
+        .orderBy(asc(SessionPartTable.ordinal))
+        .all()
+        .pipe(Effect.orDie)
+      const rewrittenParts = partRows.map((row) => row.data).slice(0, 3)
+      expect(rewrittenParts).toMatchObject([
+        { type: "text", native: { signature: "text" } },
+        { type: "reasoning", native: { signature: "reasoning" } },
+        { type: "tool", native: { call: "kept", result: "kept" } },
+      ])
+      expect(rewrittenParts.map((part) => Object.keys(part).toSorted())).toEqual([
         ["native", "text", "type"],
         ["native", "text", "type"],
         ["executed", "id", "name", "native", "state", "time", "type"],
@@ -845,7 +857,8 @@ describe("SessionProjector", () => {
         .where(eq(SessionMessageTable.id, assistantMessageID))
         .get()
         .pipe(Effect.orDie)
-      expect(row?.data).toMatchObject({
+      expect(row?.data).toMatchObject({ content: [] })
+      expect(yield* SessionHistory.loadMessageRow(db, row!)).toMatchObject({
         content: [
           { id: "succeeded", native: { call: "succeeded", result: "succeeded" }, state: { status: "completed" } },
           { id: "failed", native: { call: "failed" }, state: { status: "error" } },
@@ -953,9 +966,7 @@ describe("SessionProjector", () => {
         .orderBy(asc(SessionMessageTable.id))
         .all()
         .pipe(Effect.orDie)
-      const messages = rows.map((row) =>
-        Schema.decodeUnknownSync(SessionMessage.Info)({ ...row.data, id: row.id, type: row.type }),
-      )
+      const messages = yield* SessionHistory.decodeMessageRows(db, rows).pipe(Effect.orDie)
       expect(messages).toEqual([
         SessionMessage.Assistant.make({
           id: SessionMessage.ID.make("msg_assistant_completed"),
@@ -1024,6 +1035,38 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("leaves a settled inline assistant message untouched when a new step starts", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const settledID = SessionMessage.ID.make("msg_settled_inline")
+      const seeded = assistantRow(settledID, 0, { created, completed: created })
+      yield* db
+        .insert(SessionMessageTable)
+        .values({ ...seeded, data: { ...seeded.data, content: [{ type: "text", text: "old answer" }] } })
+        .run()
+        .pipe(Effect.orDie)
+      yield* Bus.reserveSequence(db, sessionID, 0)
+      const settledRow = () =>
+        db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, settledID)).get().pipe(Effect.orDie)
+      const before = yield* settledRow()
+
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: SessionMessage.ID.make("msg_next_step"),
+        agent: build,
+        model,
+        started: 1,
+      })
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
+
+      expect(yield* settledRow()).toEqual(before)
+      expect(
+        yield* db.select().from(SessionPartTable).where(eq(SessionPartTable.message_id, settledID)).all().pipe(Effect.orDie),
+      ).toEqual([])
+    }),
+  )
+
   it.effect("hydrates media:<hash> refs on message and inbox reads", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
@@ -1066,7 +1109,14 @@ describe("SessionProjector", () => {
             time_created: 1,
             data: {
               text: "user attachment",
-              files: [SessionStored.FileRef.make({ uri, mime: "application/pdf", source: { type: "inline" }, name: "spec.pdf" })],
+              files: [
+                SessionStored.FileRef.make({
+                  uri,
+                  mime: "application/pdf",
+                  source: { type: "inline" },
+                  name: "spec.pdf",
+                }),
+              ],
               time: { created: 1 },
             },
           },
@@ -1111,7 +1161,14 @@ describe("SessionProjector", () => {
           type: "user",
           payload: {
             text: "queued attachment",
-            files: [SessionStored.FileRef.make({ uri, mime: "application/pdf", source: { type: "inline" }, name: "queued.pdf" })],
+            files: [
+              SessionStored.FileRef.make({
+                uri,
+                mime: "application/pdf",
+                source: { type: "inline" },
+                name: "queued.pdf",
+              }),
+            ],
           },
           delivery: "queue",
           enqueued_seq: 3,
@@ -1136,7 +1193,12 @@ describe("SessionProjector", () => {
             state: {
               status: "completed",
               content: [
-                { type: "file", uri: `data:application/pdf;base64,${base64}`, mime: "application/pdf", name: "spec.pdf" },
+                {
+                  type: "file",
+                  uri: `data:application/pdf;base64,${base64}`,
+                  mime: "application/pdf",
+                  name: "spec.pdf",
+                },
                 { type: "file", uri: pathUri, mime: "application/pdf", name: "path.pdf" },
               ],
             },
@@ -1281,7 +1343,11 @@ describe("SessionProjector", () => {
       const store = yield* SessionStore.Service
       const userID = SessionMessage.ID.make("msg_kept_user")
       const compactionID = SessionMessage.ID.make("msg_kept_compaction")
-      const { id: _, type: __, ...compaction } = encodeMessage(
+      const {
+        id: _,
+        type: __,
+        ...compaction
+      } = encodeMessage(
         SessionMessage.CompactionCompleted.make({
           id: compactionID,
           type: "compaction",
@@ -1403,12 +1469,12 @@ describe("SessionProjector", () => {
       })
       const tool = yield* db
         .select()
-        .from(SessionMessageTable)
-        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .from(SessionPartTable)
+        .where(and(eq(SessionPartTable.message_id, assistantMessageID), eq(SessionPartTable.call_id, "shot")))
         .get()
         .pipe(Effect.orDie)
       expect(tool?.data).toMatchObject({
-        content: [{ state: { status: "completed", content: [{ type: "file", uri, mime: "image/png" }] } }],
+        state: { status: "completed", content: [{ type: "file", uri, mime: "image/png" }] },
       })
       expect((yield* store.message(assistantMessageID))?.message).toMatchObject({
         content: [
@@ -1531,6 +1597,52 @@ describe("SessionProjector", () => {
     }).pipe(Effect.provide(mediaBlob)),
   )
 
+  it.effect("keeps a tool part's blob while a fork references it", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const assistantMessageID = SessionMessage.ID.make("msg_media_tool_forked")
+      const childID = Session.ID.make("ses_media_tool_fork")
+      yield* bus.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID, agent: build, model, started: 1 })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, { sessionID, assistantMessageID, id: "shot", name: "shot" })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        input: {},
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        assistantMessageID,
+        finish: "stop",
+        cost: Money.USD.make(0),
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+      yield* bus.publish(SessionEvent.Forked, {
+        sessionID: childID,
+        parentID: sessionID,
+        boundary: { type: "through", messageID: assistantMessageID },
+      })
+
+      yield* bus.publish(SessionEvent.Deleted, { sessionID })
+      expect(
+        yield* db.select({ session: BlobRefTable.session_id }).from(BlobRefTable).all().pipe(Effect.orDie),
+      ).toEqual([{ session: childID }])
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toHaveLength(1)
+
+      yield* bus.publish(SessionEvent.Deleted, { sessionID: childID })
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
+    }).pipe(Effect.provide(mediaBlob)),
+  )
+
   it.effect("releases a tool's blob when a content update drops its ref", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
@@ -1559,6 +1671,267 @@ describe("SessionProjector", () => {
       expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([])
       expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
     }).pipe(Effect.provide(mediaBlob)),
+  )
+
+  it.effect(
+    "stores interleaved assistant parts in session_part by ordinal across out-of-order tool completions and forks",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* seedSession()
+        const bus = yield* Bus.Service
+        const assistantMessageID = SessionMessage.ID.make("msg_interleaved")
+
+        yield* bus.publish(SessionEvent.Step.Started, {
+          sessionID,
+          assistantMessageID,
+          agent: build,
+          model,
+          started: 1,
+        })
+        yield* bus.publish(SessionEvent.Reasoning.Started, { sessionID, assistantMessageID, ordinal: 0 })
+        yield* bus.publish(SessionEvent.Reasoning.Ended, {
+          sessionID,
+          assistantMessageID,
+          ordinal: 0,
+          text: "plan first",
+        })
+        yield* bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID, ordinal: 1 })
+        yield* bus.publish(SessionEvent.Text.Ended, {
+          sessionID,
+          assistantMessageID,
+          ordinal: 1,
+          text: "running two tools",
+        })
+        yield* bus.publish(SessionEvent.Tool.Input.Started, {
+          sessionID,
+          assistantMessageID,
+          id: "call_first",
+          name: "read",
+        })
+        yield* bus.publish(SessionEvent.Tool.Called, {
+          sessionID,
+          assistantMessageID,
+          id: "call_first",
+          input: { file: "a.ts" },
+          executed: true,
+        })
+        yield* bus.publish(SessionEvent.Tool.Input.Started, {
+          sessionID,
+          assistantMessageID,
+          id: "call_second",
+          name: "read",
+        })
+        yield* bus.publish(SessionEvent.Tool.Called, {
+          sessionID,
+          assistantMessageID,
+          id: "call_second",
+          input: { file: "b.ts" },
+          executed: true,
+        })
+        // Complete the second tool before the first tool
+        yield* bus.publish(SessionEvent.Tool.Success, {
+          sessionID,
+          assistantMessageID,
+          id: "call_second",
+          content: [{ type: "text", text: "b contents" }],
+          executed: true,
+        })
+        yield* bus.publish(SessionEvent.Tool.Success, {
+          sessionID,
+          assistantMessageID,
+          id: "call_first",
+          content: [{ type: "text", text: "a contents" }],
+          executed: true,
+        })
+        yield* bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID, ordinal: 4 })
+        yield* bus.publish(SessionEvent.Text.Ended, {
+          sessionID,
+          assistantMessageID,
+          ordinal: 4,
+          text: "all done",
+        })
+        yield* bus.publish(SessionEvent.Step.Ended, {
+          sessionID,
+          assistantMessageID,
+          finish: "stop",
+          cost: Money.USD.make(0),
+          tokens: { input: 10, output: 5, reasoning: 2, cache: { read: 0, write: 0 } },
+        })
+
+        const envelope = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.id, assistantMessageID))
+          .get()
+          .pipe(Effect.orDie)
+        expect(envelope?.data).toMatchObject({ content: [] })
+
+        const parts = yield* db
+          .select()
+          .from(SessionPartTable)
+          .where(eq(SessionPartTable.message_id, assistantMessageID))
+          .orderBy(asc(SessionPartTable.ordinal))
+          .all()
+          .pipe(Effect.orDie)
+        expect(parts.map((row) => ({ ordinal: row.ordinal, type: row.type, callID: row.call_id }))).toEqual([
+          { ordinal: 0, type: "reasoning", callID: null },
+          { ordinal: 1, type: "text", callID: null },
+          { ordinal: 2, type: "tool", callID: "call_first" },
+          { ordinal: 3, type: "tool", callID: "call_second" },
+          { ordinal: 4, type: "text", callID: null },
+        ])
+
+        const forkedSessionID = Session.ID.make("ses_projected_fork")
+        yield* bus.publish(SessionEvent.Forked, {
+          sessionID: forkedSessionID,
+          parentID: sessionID,
+          boundary: { type: "through", messageID: assistantMessageID },
+        })
+        const forkedMessage = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, forkedSessionID))
+          .get()
+          .pipe(Effect.orDie)
+        const loadedFork = yield* SessionHistory.loadMessageRow(db, forkedMessage!).pipe(Effect.orDie)
+        expect(loadedFork).toMatchObject({
+          type: "assistant",
+          content: [
+            { type: "reasoning", text: "plan first" },
+            { type: "text", text: "running two tools" },
+            { type: "tool", id: "call_first", state: { status: "completed" } },
+            { type: "tool", id: "call_second", state: { status: "completed" } },
+            { type: "text", text: "all done" },
+          ],
+        })
+      }),
+  )
+
+  it.effect("replaces conflicting session_part rows when splitting an inline assistant row", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const conflictID = SessionMessage.ID.make("msg_conflict_replace")
+
+      // Simulate a row that had stale session_part rows (ordinals 0..2) and then had inline content written
+      yield* db
+        .insert(SessionMessageTable)
+        .values({
+          id: conflictID,
+          session_id: sessionID,
+          seq: 1,
+          type: "assistant",
+          time_created: 10,
+          time_updated: 20,
+          data: {
+            agent: build,
+            model,
+            content: [
+              { type: "reasoning", text: "fresh inline reasoning", time: { created: 10, completed: 12 } },
+              { type: "text", text: "fresh inline text" },
+            ],
+            time: { created: 10 },
+          },
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionPartTable)
+        .values([
+          {
+            message_id: conflictID,
+            session_id: sessionID,
+            ordinal: 0,
+            type: "text",
+            call_id: null,
+            time_created: 1,
+            time_updated: 1,
+            data: { type: "text", text: "stale part 0" },
+          },
+          {
+            message_id: conflictID,
+            session_id: sessionID,
+            ordinal: 1,
+            type: "text",
+            call_id: null,
+            time_created: 2,
+            time_updated: 2,
+            data: { type: "text", text: "stale part 1" },
+          },
+          {
+            message_id: conflictID,
+            session_id: sessionID,
+            ordinal: 2,
+            type: "text",
+            call_id: null,
+            time_created: 3,
+            time_updated: 3,
+            data: { type: "text", text: "stale trailing part 2" },
+          },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* bus.publish(SessionEvent.Text.Started, {
+        sessionID,
+        assistantMessageID: conflictID,
+        ordinal: 2,
+      })
+      yield* bus.publish(SessionEvent.Text.Ended, {
+        sessionID,
+        assistantMessageID: conflictID,
+        ordinal: 2,
+        text: "appended after split",
+      })
+
+      const messageRow = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, conflictID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(messageRow?.data).toMatchObject({ content: [] })
+
+      const partRows = yield* db
+        .select()
+        .from(SessionPartTable)
+        .where(eq(SessionPartTable.message_id, conflictID))
+        .orderBy(asc(SessionPartTable.ordinal))
+        .all()
+        .pipe(Effect.orDie)
+      expect(partRows.map((row) => ({ ordinal: row.ordinal, data: row.data }))).toMatchObject([
+        { ordinal: 0, data: { type: "reasoning", text: "fresh inline reasoning" } },
+        { ordinal: 1, data: { type: "text", text: "fresh inline text" } },
+        { ordinal: 2, data: { type: "text", text: "appended after split" } },
+      ])
+    }),
+  )
+
+  it.effect("splits inline media out of a session_part tool row for offline blob backfills", () =>
+    Effect.sync(() => {
+      const hash = SessionBlob.hashBytes(png)
+      const split = SessionBlob.split({
+        type: "tool",
+        id: "call_shot",
+        name: "shot",
+        state: {
+          status: "completed",
+          input: {},
+          content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+          time: { created: 1, completed: 2 },
+        },
+      })
+      expect(split.moved).toBe(true)
+      expect(split.hashes).toEqual(new Set([hash]))
+      expect(split.blobs).toEqual([{ hash, mime: "image/png", bytes: png.byteLength, data: png }])
+      expect(split.data).toMatchObject({
+        type: "tool",
+        state: {
+          status: "completed",
+          content: [{ type: "file", uri: SessionStored.ref(hash), mime: "image/png" }],
+        },
+      })
+    }),
   )
 
   // A newer release wrote this in-progress message's parts as session_part rows, then the user rolled back.

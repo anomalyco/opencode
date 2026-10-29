@@ -18,9 +18,10 @@ import { AbsolutePath, RelativePath } from "../schema.js"
 import { Session } from "../session.js"
 import { Slug } from "../util/slug.js"
 import { SessionEvent } from "./event.js"
+import { SessionHistory } from "./history.js"
 import { SessionMessage } from "./message.js"
 import { SessionProjector } from "./projector.js"
-import { SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionMessageTable, SessionPartTable, SessionTable } from "./sql.js"
 
 export const Data = SessionTransfer.Data
 export type Data = SessionTransfer.Data
@@ -74,8 +75,11 @@ const layer = Layer.effect(
         const project = yield* projects.resolve(input.location.directory)
         yield* upsertProject(db, project).pipe(Effect.orDie)
         const importedAt = yield* Clock.currentTimeMillis
-        const messages = input.data.messages.filter(isSettled).map((message, index) => {
-          const encoded = encodeMessage(message)
+        const settled = input.data.messages.filter(isSettled)
+        const messages = settled.map((message, index) => {
+          const encoded = encodeMessage(
+            message.type === "assistant" && message.content.length > 0 ? { ...message, content: [] } : message,
+          )
           const { id: _, type, ...data } = encoded
           return {
             id: message.id,
@@ -85,6 +89,20 @@ const layer = Layer.effect(
             time_created: DateTime.toEpochMillis(message.time.created),
             data,
           }
+        })
+        const parts = settled.flatMap((message) => {
+          if (message.type !== "assistant" || message.content.length === 0) return []
+          const timeCreated = DateTime.toEpochMillis(message.time.created)
+          return message.content.map((part, ordinal) => ({
+            message_id: message.id,
+            session_id: sessionID,
+            ordinal,
+            type: part.type,
+            call_id: part.type === "tool" ? part.id : null,
+            time_created: timeCreated,
+            time_updated: importedAt,
+            data: SessionHistory.encodePart(part),
+          }))
         })
         yield* bus
           .publish(
@@ -111,6 +129,13 @@ const layer = Layer.effect(
                 Effect.gen(function* () {
                   if (messages.length > 0) {
                     yield* db.insert(SessionMessageTable).values(messages).run().pipe(Effect.orDie)
+                    for (let index = 0; index < parts.length; index += 500) {
+                      yield* db
+                        .insert(SessionPartTable)
+                        .values(parts.slice(index, index + 500))
+                        .run()
+                        .pipe(Effect.orDie)
+                    }
                     yield* Bus.reserveSequence(db, sessionID, seq + messages.length)
                   }
                   yield* db

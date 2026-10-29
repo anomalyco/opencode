@@ -106,6 +106,40 @@ const storeAsBlobs = (database: string) => {
         row.seq,
       ])
   }
+  const parts = db
+    .query<
+      { message_id: string; ordinal: number; session_id: string; seq: number; data: string },
+      []
+    >(
+      `SELECT part.message_id, part.ordinal, part.session_id, message.seq, part.data
+       FROM session_part AS part
+       JOIN session_message AS message ON message.id = part.message_id`,
+    )
+    .all()
+  for (const part of parts) {
+    const split = SessionBlob.split(JSON.parse(part.data))
+    if (!split.moved) continue
+    db.run(`UPDATE session_part SET data = ? WHERE message_id = ? AND ordinal = ?`, [
+      JSON.stringify(split.data),
+      part.message_id,
+      part.ordinal,
+    ])
+    for (const blob of split.blobs)
+      db.run(`INSERT OR IGNORE INTO blob (hash, mime, bytes, data, time_created) VALUES (?, ?, ?, ?, ?)`, [
+        blob.hash,
+        blob.mime,
+        blob.bytes,
+        blob.data,
+        Date.now(),
+      ])
+    for (const hash of split.hashes)
+      db.run(`INSERT OR IGNORE INTO blob_ref (session_id, message_id, hash, seq) VALUES (?, ?, ?, ?)`, [
+        part.session_id,
+        part.message_id,
+        hash,
+        part.seq,
+      ])
+  }
   db.close()
 }
 

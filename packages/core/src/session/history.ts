@@ -159,6 +159,15 @@ export const decodeMessageRows = Effect.fnUntraced(function* (
   })
 })
 
+/** {@link decodeMessageRows} for one row. */
+export const loadMessageRow = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  row: typeof SessionMessageTable.$inferSelect,
+) {
+  const [hydrated = row] = yield* SessionBlob.hydrate(db, yield* withParts(db, [row]))
+  return yield* decodeMessageRow(hydrated)
+})
+
 /** Decodes rows for clients that fetch media themselves, so files stored in `blob` stay `media:` refs. */
 export const decodeMessageRowsWithRefs = Effect.fnUntraced(function* (
   db: DatabaseService,

@@ -16,6 +16,7 @@ import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionHistory } from "@opencode/core/session/history"
 import { SessionTable, SessionMessageTable } from "@opencode/core/session/sql"
 import { testEffect } from "./lib/effect"
 
@@ -68,7 +69,8 @@ describe("Session tool progress", () => {
           .get()
           .pipe(Effect.orDie)
         if (!row) return yield* Effect.die("Missing projected assistant")
-        return Schema.decodeUnknownSync(SessionMessage.Assistant)({ ...row.data, id: row.id, type: row.type })
+        const message = yield* SessionHistory.loadMessageRow(db, row).pipe(Effect.orDie)
+        return Schema.decodeUnknownSync(SessionMessage.Assistant)(Schema.encodeSync(SessionMessage.Info)(message))
       })
       const start = (id: string) =>
         Effect.gen(function* () {
