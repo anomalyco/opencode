@@ -36,6 +36,7 @@ import {
   BlobTable,
   SessionInboxTable,
   SessionMessageTable,
+  SessionPartTable,
   SessionTable,
 } from "@opencode/core/session/sql"
 import { testEffect } from "./lib/effect"
@@ -1558,5 +1559,133 @@ describe("SessionProjector", () => {
       expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([])
       expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
     }).pipe(Effect.provide(mediaBlob)),
+  )
+
+  // A newer release wrote this in-progress message's parts as session_part rows, then the user rolled back.
+  it.effect("keeps projecting into session_part rows a newer release wrote for an in-progress message", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const assistantMessageID = SessionMessage.ID.make("msg_rolled_back")
+      yield* db.insert(SessionMessageTable).values(assistantRow(assistantMessageID, 0)).run().pipe(Effect.orDie)
+      yield* db
+        .insert(SessionPartTable)
+        .values([
+          {
+            message_id: assistantMessageID,
+            session_id: sessionID,
+            ordinal: 0,
+            type: "text",
+            call_id: null,
+            time_created: 1,
+            time_updated: 1,
+            data: { type: "text", text: "before rollback" },
+          },
+          {
+            message_id: assistantMessageID,
+            session_id: sessionID,
+            ordinal: 1,
+            type: "tool",
+            call_id: "call_a",
+            time_created: 1,
+            time_updated: 1,
+            data: {
+              type: "tool",
+              id: "call_a",
+              name: "read",
+              executed: true,
+              state: { status: "running", input: { path: "a.ts" }, metadata: {} },
+              time: { created: 1, ran: 1 },
+            },
+          },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* TestClock.setTime(5)
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID,
+        id: "call_a",
+        content: [{ type: "text", text: "export {}" }],
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID, ordinal: 1 })
+      yield* bus.publish(SessionEvent.Text.Ended, { sessionID, assistantMessageID, ordinal: 1, text: "after rollback" })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, { sessionID, assistantMessageID, id: "call_b", name: "grep" })
+
+      expect((yield* store.message(assistantMessageID))?.message).toMatchObject({
+        content: [
+          { type: "text", text: "before rollback" },
+          { type: "tool", id: "call_a", state: { status: "completed", content: [{ type: "text", text: "export {}" }] } },
+          { type: "text", text: "after rollback" },
+          { type: "tool", id: "call_b", state: { status: "streaming" } },
+        ],
+      })
+      const row = yield* db
+        .select({ data: SessionMessageTable.data })
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(row?.data).toMatchObject({ content: [] })
+      expect(
+        yield* db
+          .select({
+            ordinal: SessionPartTable.ordinal,
+            type: SessionPartTable.type,
+            call: SessionPartTable.call_id,
+            updated: SessionPartTable.time_updated,
+          })
+          .from(SessionPartTable)
+          .where(eq(SessionPartTable.message_id, assistantMessageID))
+          .orderBy(asc(SessionPartTable.ordinal))
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([
+        { ordinal: 0, type: "text", call: null, updated: 1 },
+        { ordinal: 1, type: "tool", call: "call_a", updated: 5 },
+        { ordinal: 2, type: "text", call: null, updated: 5 },
+        { ordinal: 3, type: "tool", call: "call_b", updated: 5 },
+      ])
+    }),
+  )
+
+  it.effect("forks a settled message whose parts are in session_part with its content", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const messageID = SessionMessage.ID.make("msg_split_settled")
+      const childID = Session.ID.make("ses_split_fork")
+      yield* db
+        .insert(SessionMessageTable)
+        .values(assistantRow(messageID, 0, { created, completed: created }))
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionPartTable)
+        .values({
+          message_id: messageID,
+          session_id: sessionID,
+          ordinal: 0,
+          type: "text",
+          call_id: null,
+          time_created: 0,
+          time_updated: 0,
+          data: { type: "text", text: "split answer" },
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* bus.publish(SessionEvent.Forked, {
+        sessionID: childID,
+        parentID: sessionID,
+        boundary: { type: "through", messageID },
+      })
+      expect(yield* store.messages({ sessionID: childID, order: "asc" })).toMatchObject([
+        { type: "assistant", content: [{ type: "text", text: "split answer" }] },
+      ])
+    }),
   )
 })
