@@ -67,12 +67,21 @@ export default defineConfig(async ({ command }) => {
             // DesktopPaths resolves resources from the main output directory,
             // including when the lazy desktop entry shares it with other chunks.
             chunkFileNames: "[name]-[hash].js",
+            // A module-scoped require would collide with a bundled dependency that declares its own
+            // require (for example @effect/platform-node's node:http shim). Keep the exact electron-vite
+            // shim signature in a comment so its esm-shim plugin does not inject a second copy.
             banner: `
+/*
 // -- CommonJS Shims --
 import __cjs_mod__ from 'node:module';
 const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;
 const require = __cjs_mod__.createRequire(import.meta.url);
+*/
+import __cjs_mod__ from 'node:module';
+const __filename = import.meta.filename;
+const __dirname = import.meta.dirname;
+globalThis.require ??= __cjs_mod__.createRequire(import.meta.url);
 `,
           },
         },
