@@ -1,7 +1,16 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 71cf630..4c33e3b 100644
+index 71cf630..dcedf2d 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
+@@ -725,7 +725,7 @@
+ 	}
+ 	if (freshDiscoveryState) await provider.saveDiscoveryState?.(freshDiscoveryState);
+ 	const selectedResource = await selectResourceURL(serverUrl, provider, resourceMetadata);
+-	const resource = selectedResource && resourceMetadata && !provider.validateResourceURL ? resourceMetadata.resource : selectedResource;
++	const resource = selectedResource && resourceMetadata && selectedResource.href === new URL(resourceMetadata.resource).href ? resourceMetadata.resource : selectedResource;
+ 	if (resource) await provider.saveResourceUrl?.(resourceIndicatorToString(resource));
+ 	const resolvedScope = determineScope({
+ 		requestedScope: scope,
 @@ -1038,7 +1038,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
  	else {
  		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
@@ -19,9 +28,18 @@ index 71cf630..4c33e3b 100644
  	return {
  		authorizationUrl,
 diff --git a/dist/index.mjs b/dist/index.mjs
-index c1a09a8..f5b0e1d 100644
+index c1a09a8..c13b5b5 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
+@@ -722,7 +722,7 @@
+ 	}
+ 	if (freshDiscoveryState) await provider.saveDiscoveryState?.(freshDiscoveryState);
+ 	const selectedResource = await selectResourceURL(serverUrl, provider, resourceMetadata);
+-	const resource = selectedResource && resourceMetadata && !provider.validateResourceURL ? resourceMetadata.resource : selectedResource;
++	const resource = selectedResource && resourceMetadata && selectedResource.href === new URL(resourceMetadata.resource).href ? resourceMetadata.resource : selectedResource;
+ 	if (resource) await provider.saveResourceUrl?.(resourceIndicatorToString(resource));
+ 	const resolvedScope = determineScope({
+ 		requestedScope: scope,
 @@ -1035,7 +1035,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
  	else {
  		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
