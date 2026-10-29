@@ -113,6 +113,18 @@ describe("class diagram parser", () => {
     ])
   })
 
+  test("keeps classes a relation refers to out of the namespace it is written in", () => {
+    const diagram = parseMermaidClassDiagram(`classDiagram
+  class Outer
+  namespace Shapes {
+    class Circle
+    Circle --> Outer
+    Circle --> Fresh
+  }`)
+
+    expect(diagram.namespaces).toEqual([{ id: "Shapes", classIds: ["Circle"] }])
+  })
+
   test("parses direction and namespaces, ignoring presentation statements", () => {
     const diagram = parseMermaidClassDiagram(`classDiagram
   direction LR

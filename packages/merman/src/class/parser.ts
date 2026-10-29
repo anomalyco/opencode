@@ -36,13 +36,15 @@ export function parseMermaidClassDiagram(content: string): ClassDiagram {
   let openNamespace: { namespace: ClassNamespace; lineNumber: number; line: string } | undefined
 
   // Generic parameters are display only: `Box~T~` and `Box` are the same class.
-  const ensure = (name: string) => {
+  // Only `class` statements place a class in the open namespace; relations just refer to classes.
+  const ensure = (name: string, declared = false) => {
     const generic = name.match(/^(.*?)~([^~]+)~$/)
     const id = generic ? generic[1]! : name
     const node = classes.get(id) ?? { id, label: id, annotations: [], attributes: [], methods: [] }
     classes.set(id, node)
     if (generic && node.label === id) node.label = `${id}<${generic[2]}>`
-    if (openNamespace && !openNamespace.namespace.classIds.includes(id)) openNamespace.namespace.classIds.push(id)
+    if (declared && openNamespace && !openNamespace.namespace.classIds.includes(id))
+      openNamespace.namespace.classIds.push(id)
     return node
   }
 
@@ -86,7 +88,7 @@ export function parseMermaidClassDiagram(content: string): ClassDiagram {
 
     const classMatch = line.match(CLASS_RE)
     if (classMatch) {
-      const node = ensure(classMatch[1]!)
+      const node = ensure(classMatch[1]!, true)
       if (classMatch[2] !== undefined) node.label = stripMermaidQuotes(classMatch[2])
       if (classMatch[3] && !classMatch[4]) openClass = { node, lineNumber: source.lineNumber, line }
       continue
