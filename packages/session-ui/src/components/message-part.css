@@ -510,10 +510,14 @@
       width: fit-content;
     }
 
-    /* A lighter glyph inside the full 20px target. */
     [data-component="icon-button-v2"] [data-slot="icon-svg"] {
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Pulls the glyph toward the reply's text edge. */
+    [data-component="tooltip-v2-trigger"]:first-child {
+      margin-inline-start: -2px;
     }
   }
 

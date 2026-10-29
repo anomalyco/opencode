@@ -91,7 +91,7 @@ story("desktop message actions still appear on hover and keyboard focus", async 
       const copy = actions.getByRole("button", { name: action.name, exact: true })
       await expect(copy).toHaveCSS("width", "20px")
       await expect(copy).toHaveCSS("height", "20px")
-      await expect(copy.locator('[data-slot="icon-svg"]')).toHaveCSS("width", "12px")
+      await expect(copy.locator('[data-slot="icon-svg"]')).toHaveCSS("width", "14px")
     }
 
     await page.mouse.move(0, 0)
