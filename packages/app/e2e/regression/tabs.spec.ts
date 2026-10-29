@@ -1147,6 +1147,34 @@ test("each session tab shows its own file tab after a switch to a session in ano
   }
 })
 
+test("a text file tab offers copy and download for its content", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/FileActions"
+  const alpha = { id: "ses_file_actions", title: "File actions" }
+  await openSession(page, {
+    name: "FileActions",
+    sessions: [alpha],
+    fileList: (path) => (path ? [] : ["greet.ts"].map((file) => fileNode(directory, file))),
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: { panes: { [alpha.id]: { review: true } } },
+  })
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
+
+  const panel = page.locator("#review-panel")
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "greet.ts", exact: true }).click()
+  await expect(panel.getByText("contents:greet.ts", { exact: true })).toBeVisible()
+
+  const toolbar = panel.locator('[data-slot="artifact-toolbar"]')
+  await toolbar.getByRole("button", { name: "Copy content", exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("contents:greet.ts")
+
+  await toolbar.getByRole("button", { name: "File actions", exact: true }).click()
+  const download = page.waitForEvent("download")
+  await page.getByRole("menuitem", { name: "Download", exact: true }).click()
+  expect((await download).suggestedFilename()).toBe("greet.ts")
+})
+
 test("tab shortcuts cycle side-panel tabs when the side panel is focused with multiple tabs", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   const directory = "C:/OpenCode/SidePanelTabs"
