@@ -258,6 +258,16 @@ export const settings: Setting[] = [
     keywords: ["mouse capture"],
   },
   {
+    title: "Kitty keyboard",
+    category: "Input",
+    path: ["keyboard", "kitty"],
+    description: "Whether the Kitty keyboard protocol is used for enhanced key reporting",
+    default: true,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["keyboard protocol", "kitty keyboard"],
+  },
+  {
     title: "Editor context",
     category: "Input",
     path: ["prompt", "editor"],
