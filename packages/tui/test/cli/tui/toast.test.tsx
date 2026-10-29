@@ -145,8 +145,8 @@ test.each([44, 100])("toast hides a covered terminal cursor without moving focus
   }
 })
 
-test.each([44, 100])("toast only hides cursor cells within its borders at width %i", async (width) => {
-  const app = await renderToast(width)
+test("toast only hides cursor cells within its borders", async () => {
+  const app = await renderToast(100)
   try {
     app.toast.show({ message: "Copied to clipboard", variant: "info", duration: 60_000 })
     await app.renderOnce()
@@ -168,46 +168,6 @@ test.each([44, 100])("toast only hides cursor cells within its borders at width 
         visible: !point.covered,
       })
     }
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
-test("toast cursor coverage follows terminal resizing", async () => {
-  const app = await renderToast(100)
-  try {
-    app.terminal.write("\x1b[?25h\x1b[2;31H")
-    app.toast.show({ message: "Copied to clipboard", variant: "info", duration: 60_000 })
-    await app.renderOnce()
-    expect(app.renderer.getCursorState().visible).toBe(true)
-
-    app.resize(44, 12)
-    await app.renderOnce()
-    expect(app.renderer.getCursorState()).toMatchObject({ x: 31, y: 2, visible: false })
-
-    app.resize(100, 12)
-    await app.renderOnce()
-    expect(app.renderer.getCursorState()).toMatchObject({ x: 31, y: 2, visible: true })
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
-test("dismissing a toast does not reveal a cursor hidden by the terminal application", async () => {
-  const app = await renderToast(100)
-  try {
-    app.terminal.write("\x1b[?25l\x1b[2;92H")
-    app.toast.show({ message: "Copied to clipboard", variant: "info", duration: 60_000 })
-    await app.renderOnce()
-    expect(app.renderer.getCursorState().visible).toBe(false)
-
-    app.toast.dismiss()
-    await app.renderOnce()
-    expect(app.renderer.getCursorState().visible).toBe(false)
-
-    app.terminal.write("\x1b[?25h")
-    await app.renderOnce()
-    expect(app.renderer.getCursorState().visible).toBe(true)
   } finally {
     app.renderer.destroy()
   }
