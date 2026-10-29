@@ -106,10 +106,17 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "experimental",
-    label: "settings.experimental.row.newModelPicker.title",
-    target: "settings-new-model-picker",
-    description: "settings.experimental.row.newModelPicker.description",
-    keywords: "model picker selector switcher redesign",
+    label: "settings.experimental.row.foldUserMessages.title",
+    target: "settings-fold-user-messages",
+    description: "settings.experimental.row.foldUserMessages.description",
+    keywords: "fold collapse long messages prompts read more",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.newQuestionUI.title",
+    target: "settings-new-question-ui",
+    description: "settings.experimental.row.newQuestionUI.description",
+    keywords: "question answers keyboard dock redesign",
   },
   {
     tab: "appearance",

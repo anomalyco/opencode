@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "ސެޝަން ބަދަލުވެއެވެ",
   "ui.sessionReview.title.git": "Git ބަދަލުވެއެވެ",
   "ui.sessionReview.title.branch": "ގޮފި ބަދަލުކުރުން",
@@ -72,10 +72,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "އެންމެ ރަނގަޅު އޮޕަން ސޯސް މޮޑެލްތަކަށް އިތުބާރުހުރި ގޮތެއްގައި އެކްސެސް ހޯދުމަށް މަހަކު 10 ޑޮލަރަށް OpenCode Go އަށް ސަބްސްކްރައިބް ކޮށްލައްވާ.",
   "dialog.usageExceeded.freeTier.actionLabel": "ސަބްސްކްރައިބް ކޮށްލައްވާ",
-  "dialog.usageExceeded.accountRateLimit.title": "ގޯ ލިމިޓް އާދެވުނެވެ",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "ބޭނުންކުރުމުގެ ލިމިޓަށް ވާސިލްވެއްޖެއެވެ. މިހާރު މި މޮޑެލް ބޭނުން ކުރަމުން ގެންދިއުމަށްޓަކައި، ލިބިފައިވާ ބެލެންސް އިން ބޭނުންކުރުން އެނެބަލް ކުރާށެވެ",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "ސެޓިންގސް ހުޅުވާލާށެވެ",
   "ui.sessionTurn.status.delegating": "މަސައްކަތް ހަވާލުކުރުން",
   "ui.sessionTurn.status.planning": "ދެން އަޅަންޖެހޭ ފިޔަވަޅުތައް ރޭވުން",
   "ui.sessionTurn.status.gatheringContext": "އެކްސްޕްލޯރ ކުރަމުންނެވެ",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "name": "@opencode/core",
   "type": "module",
   "license": "MIT",
@@ -98,14 +98,14 @@
     "fast-check": "catalog:"
   },
   "dependencies": {
-    "@ai-sdk/provider": "3.0.8",
-    "@ai-sdk/provider-utils": "4.0.23",
+    "@ai-sdk/provider": "3.0.19",
+    "@ai-sdk/provider-utils": "4.0.62",
     "@ff-labs/fff-bun": "0.10.5",
     "@ff-labs/fff-node": "0.10.5",
     "@lydell/node-pty": "catalog:",
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/core": "2.3.1",
-    "@opencode-ai/pty": "0.3.1",
+    "@opencode/pty": "0.3.3",
     "@opencode/ai": "workspace:*",
     "@opencode/codemode": "workspace:*",
     "@opencode/plugin": "workspace:*",

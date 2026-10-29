@@ -741,6 +741,7 @@ export const dict = {
   "dialog.server.menu.remove": "བཏོན་བཏང་",
   "home.workspaceTip": "བསྒྱུར་བཅོས་ཚུ་སོ་སོ་སྦེ་བཞག་ནི་ལུ་ ལཱ་གི་ས་སྒོ་གསརཔ་ཅིག་ནང་ ཤུལ་མམ་གྱི་ལཱ་ཡུན་འགོ་བཙུགས།",
   "session.tab.add": "མཆོང་ལྡེ་ཁ་སྐོང་",
+  "session.tab.closeOthers": "མཆོང་ལྡེ་གཞན་ཚུ་ཁ་བསྡམས།",
   "session.queue.attachments.one": "པ་ལཱསི་ {{count}} མཐུད་སྣེ།",
   "session.queue.attachments.other": "དེ་ལས་ {{count}} མཐུད་སྣེ་ཚུ་",
   "settings.backToSettings": "གཞི་སྒྲིག་ལུ་ལོག་འགྱོ།",

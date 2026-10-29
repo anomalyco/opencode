@@ -5,8 +5,22 @@ import type { AwaitOptions, Event, Generation, Snapshot } from "./generation.js"
 import { Image, type ImageModel, type ImageRequest, type ImageRequestInput } from "./image.js"
 import { LLM } from "./effect.js"
 import { Media } from "./media.js"
+import {
+  LLMClient,
+  type CheckpointRequest,
+  type CompactionRequest,
+  type EndpointCompactOptions,
+  type TriggerCompactOptions,
+} from "./route/client.js"
 import { RequestExecutor } from "./route/executor.js"
-import { AIError, InvalidRequestError, LanguageModel, type LLMRequest } from "./schema/index.js"
+import {
+  AIError,
+  InvalidRequestError,
+  LanguageModel,
+  type CompactionCheckpointResponse,
+  type CompactionResponse,
+  type LLMRequest,
+} from "./schema/index.js"
 import type {
   GenerateObjectDynamicOptions,
   GenerateObjectOptions,
@@ -21,7 +35,7 @@ import {
   type TranscriptionRequest,
   type TranscriptionRequestInput,
 } from "./transcription.js"
-import { Tool, ToolFailure, type ToolExecuteContext, type ToolSchema } from "./tool.js"
+import { Tool, ToolFailure, type FreeformOption, type ToolExecuteContext, type ToolSchema } from "./tool.js"
 import { fileMediaType } from "./utils/media-type.js"
 import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } from "./video.js"
 
@@ -30,9 +44,11 @@ import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } fro
  * transcription and decision clients over a request executor; every method runs the corresponding Effect API and rethrows
  * `AIError` unchanged. `file` and `write` load `node:fs/promises` on first use, so importing this module does not.
  */
-export interface Options {
+export interface Options<R = never> {
   /** Executor layer; defaults to `RequestExecutor.fetchLayer`. Inject a recorder or `RequestExecutor.middleware(fn)` here. */
   readonly layer?: Layer.Layer<RequestExecutor.Service>
+  /** Replaces default clients, for example with `TestImage.testLayer()`; its other services are available to `run`. */
+  readonly clients?: Layer.Layer<R>
 }
 
 export interface RunOptions {
@@ -71,14 +87,20 @@ const abortEffect = (signal: AbortSignal | undefined) =>
         return Effect.sync(() => signal.removeEventListener("abort", onAbort))
       })
 
-export const make = (options: Options = {}) => {
-  const runtime = ManagedRuntime.make(AIClient.layerWith(options.layer ?? RequestExecutor.fetchLayer))
+export const make = <R = never>(options: Options<R> = {}) => {
+  const runtime = ManagedRuntime.make(
+    Layer.merge(
+      AIClient.layerWith(options.layer ?? RequestExecutor.fetchLayer),
+      // `R` is only inferred from `clients`, so it is `never` whenever `clients` is omitted.
+      (options.clients ?? Layer.empty) as Layer.Layer<R>,
+    ),
+  )
 
   /** Run any package Effect (for example `LLMClient.compact(...)`) inside this runtime. */
-  const run = <A, E>(effect: Effect.Effect<A, E, Services>, options?: RunOptions) =>
+  const run = <A, E>(effect: Effect.Effect<A, E, Services | R>, options?: RunOptions) =>
     runtime.runPromise(Effect.raceFirst(effect, abortEffect(options?.signal)))
 
-  const iterate = <A, E>(stream: Stream.Stream<A, E, Services>, options?: RunOptions): AsyncIterable<A> =>
+  const iterate = <A, E>(stream: Stream.Stream<A, E, Services | R>, options?: RunOptions): AsyncIterable<A> =>
     Stream.toAsyncIterable(
       Stream.unwrap(
         runtime.contextEffect.pipe(
@@ -103,6 +125,21 @@ export const make = (options: Options = {}) => {
     options?: RunOptions,
   ) {
     return run("schema" in input ? LLM.generateObject(input) : LLM.generateObject(input), options)
+  }
+
+  function compact(
+    request: CheckpointRequest,
+    options: TriggerCompactOptions & RunOptions,
+  ): Promise<CompactionCheckpointResponse>
+  function compact(request: CompactionRequest, options?: EndpointCompactOptions & RunOptions): Promise<CompactionResponse>
+  // The overloads pair each request type with its mechanism; `LLMClient.compact` checks the route's capability at runtime.
+  function compact(
+    request: CheckpointRequest | CompactionRequest,
+    options?: (TriggerCompactOptions | EndpointCompactOptions) & RunOptions,
+  ) {
+    return options?.mechanism === "trigger"
+      ? run(LLMClient.compact(request as CheckpointRequest, options), options)
+      : run(LLMClient.compact(request as CompactionRequest, options), options)
   }
 
   const handle = <Response>(generation: Generation<Response>): GenerationHandle<Response> => ({
@@ -164,6 +201,8 @@ export const make = (options: Options = {}) => {
         iterate(LLM.loop(input), options),
       /** Decode the model's output against `schema` (or `jsonSchema`, unvalidated) like `LLM.generateObject`. */
       generateObject,
+      /** Compact a Responses request like `LLMClient.compact`: a replacement window, or a checkpoint with `mechanism: "trigger"`. */
+      compact,
     },
     image: {
       request: Image.request,
@@ -234,7 +273,7 @@ export const make = (options: Options = {}) => {
   }
 }
 
-export type Client = ReturnType<typeof make>
+export type Client<R = never> = ReturnType<typeof make<R>>
 
 const fileError = (message: string, cause: unknown) =>
   new AIError({ reason: new InvalidRequestError({ message, cause }) })
@@ -246,6 +285,7 @@ const fileError = (message: string, cause: unknown) =>
 export const tool = <Parameters extends ToolSchema<any>>(config: {
   readonly description: string
   readonly parameters: Parameters
+  readonly freeform?: FreeformOption<Parameters>
   readonly execute: (
     params: Schema.Schema.Type<Parameters>,
     context: Partial<ToolExecuteContext> & { readonly signal: AbortSignal },
@@ -255,6 +295,7 @@ export const tool = <Parameters extends ToolSchema<any>>(config: {
     description: config.description,
     parameters: config.parameters,
     success: Schema.Unknown,
+    freeform: config.freeform,
     execute: (params, context) =>
       Effect.tryPromise({
         try: async (signal) => (await config.execute(params, { ...context, signal })) ?? null,

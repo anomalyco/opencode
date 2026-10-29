@@ -1059,12 +1059,76 @@ body {
     }
   }
 
+  [data-slot="plans-group"] {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  [data-slot="audience"] {
+    display: flex;
+    align-self: center;
+    max-width: 100%;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--color-border-weak);
+    background: var(--color-background);
+
+    @media (max-width: 30rem) {
+      width: 100%;
+    }
+
+    button {
+      min-width: 136px;
+      height: 32px;
+      padding: 0 16px;
+      border: 0;
+      background: transparent;
+      color: var(--color-text);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      text-transform: uppercase;
+      white-space: nowrap;
+      cursor: pointer;
+
+      @media (max-width: 30rem) {
+        min-width: 0;
+        flex: 1;
+      }
+    }
+
+    button:is(:hover, :focus-visible) {
+      color: var(--color-text-strong);
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--color-text-strong);
+      outline-offset: 2px;
+    }
+
+    button[aria-pressed="true"] {
+      background: color-mix(in srgb, var(--color-text-strong) 8%, var(--color-background-weak));
+      color: var(--color-text-strong);
+    }
+  }
+
   [data-slot="plans"] {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 24px;
     font-size: 16px;
     line-height: 1.5;
+
+    &[data-audience="teams"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    [data-slot="plan"][data-plan="go-teams"] ul {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 24px;
+    }
 
     [data-slot="plan"] {
       display: flex;
@@ -1152,6 +1216,10 @@ body {
 
     @media (max-width: 42rem) {
       grid-template-columns: 1fr;
+
+      [data-slot="plan"][data-plan="go-teams"] ul {
+        grid-template-columns: 1fr;
+      }
 
       [data-slot="price"] {
         font-size: 48px;

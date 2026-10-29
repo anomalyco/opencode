@@ -23,6 +23,7 @@ const backgroundResult = (sessionID: SessionSchema.ID) => ({
     `The subagent is working in the background (sessionID: ${sessionID}). You will be notified automatically when it finishes.`,
     "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
     "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
+    "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
   ].join("\n"),
 })
 
@@ -35,11 +36,10 @@ export const Input = Schema.Struct({
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:
-      'NEVER set this unless the user explicitly asks for a particular model or variant. The value is written as "providerID/modelID", or "providerID/modelID#variant" to include a variant. Do not guess the ID: look the model up with the models tool, filtering to your own provider first.',
+      'NEVER set this unless the user explicitly asks for a particular model or variant. It must be a chat model; image and decision models can\'t run subagents. The value is written as "providerID/modelID", or "providerID/modelID#variant" to include a variant. Do not guess the ID: look the model up with the models tool, filtering to your own provider first.',
   }),
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
-    description:
-      "Continue a specific previous subagent conversation by passing its sessionID. Calls without a sessionID start a new conversation.",
+    description: "Send a follow-up to an existing subagent, running or finished. Omit to start a new one.",
   }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
@@ -83,10 +83,16 @@ export const Plugin = {
       const model = (yield* models.available()).find(
         (model) => model.providerID === ref.providerID && model.id === ref.id,
       )
-      if (model === undefined)
+      if (model === undefined) {
+        const other = (yield* models.available(["image", "decision"])).find(
+          (model) => model.providerID === ref.providerID && model.id === ref.id,
+        )
         return yield* new ToolFailure({
-          message: `Model "${ref.providerID}/${ref.id}" is not available. Use the models tool to see what is available.`,
+          message: other
+            ? `Model "${ref.providerID}/${ref.id}" is ${other.type === "image" ? "an image" : "a decision"} model; subagents need a chat model. Use the models tool to find one.`
+            : `Model "${ref.providerID}/${ref.id}" is not available. Use the models tool to see what is available.`,
         })
+      }
       if (ref.variant !== undefined && !model.variants.some((variant) => variant.id === ref.variant))
         return yield* new ToolFailure({
           message:

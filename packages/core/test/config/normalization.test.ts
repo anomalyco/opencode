@@ -545,6 +545,7 @@ describe("ConfigNormalize", () => {
           todo: true,
           background_compaction: true,
           media_blob: true,
+          image_generate: { model: "openai/gpt-image-2" },
           subagent_depth: 0,
           location_idle_timeout: "2 hours",
           policies: [{ action: "provider.use", resource: "custom", effect: "allow" }],
@@ -556,6 +557,7 @@ describe("ConfigNormalize", () => {
         todo: true,
         background_compaction: true,
         media_blob: true,
+        image_generate: { model: { providerID: "openai", model: "gpt-image-2" } },
         subagent_depth: 0,
         location_idle_timeout: "7200000 millis",
       },
@@ -567,6 +569,25 @@ describe("ConfigNormalize", () => {
         { action: "provider.use", resource: "native", effect: "deny" },
       ],
     })
+  })
+
+  test("normalizes the image_generate setting", () => {
+    for (const [value, expected] of [
+      [true, true],
+      [false, false],
+      [{}, {}],
+      [{ model: "openai/gpt-image-2#hd" }, { model: { providerID: "openai", model: "gpt-image-2", variant: "hd" } }],
+    ] as const)
+      expect(normalized({ experimental: { image_generate: value } }).encoded.experimental).toEqual({
+        image_generate: expected,
+      })
+    for (const value of ["openai/gpt-image-2", 1, { model: "no-slash" }, { model: 1 }]) {
+      const result = normalized({ experimental: { image_generate: value } })
+      expect(result.encoded.experimental).toBeUndefined()
+      expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+        ["invalid", ["experimental", "image_generate"]],
+      ])
+    }
   })
 
   test("never emits experimental policies", () => {

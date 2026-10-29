@@ -633,18 +633,21 @@ export function Session(props: {
     "go-upsell",
     { initial: {} },
   )
-  const handledFreeLimits = new Set<string>()
+  const handledLimits = new Set<string>()
   useUsageAlerts(() => route.sessionID)
   let sessionDisposed = false
   onCleanup(() => {
     sessionDisposed = true
   })
-  // Restore the prompt when the free allowance stops it, and offer OpenCode Go on the first hit in a day.
+  // Restore the prompt when the free allowance or an OpenCode Go limit stops it, and offer OpenCode Go on the first free
+  // allowance hit in a day.
   onCleanup(
     data.on("session.step.failed", (event) => {
-      if (event.data.sessionID !== route.sessionID || event.data.error.type !== "provider.free-limit") return
-      if (handledFreeLimits.has(event.data.assistantMessageID)) return
-      handledFreeLimits.add(event.data.assistantMessageID)
+      const type = event.data.error.type
+      if (event.data.sessionID !== route.sessionID) return
+      if (type !== "provider.free-limit" && type !== "provider.go-limit") return
+      if (handledLimits.has(event.data.assistantMessageID)) return
+      handledLimits.add(event.data.assistantMessageID)
       const current = prompt()
       const wasEmpty = Boolean(
         current &&
@@ -665,7 +668,7 @@ export function Session(props: {
           break
         }
       }
-      if (dialog.stack.length > 0) return
+      if (type === "provider.go-limit" || dialog.stack.length > 0) return
       if (goUpsell.dontShow || goUpsellMemory.dontShow) return
       const now = Date.now()
       const seen = Math.max(goUpsell.lastSeenAt ?? 0, goUpsellMemory.lastSeenAt ?? 0)
@@ -1121,7 +1124,7 @@ export function Session(props: {
             if (!(await mutatePending("cancel", message.id))) return
           } else {
             await client.api.session.interrupt({ sessionID })
-            await client.api.session.wait({ sessionID })
+            await client.api.experimental.session.wait({ sessionID })
             await client.api.session.revert.stage({ sessionID, messageID: message.id })
           }
           target?.set({
@@ -1321,7 +1324,7 @@ export function Session(props: {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const transcript = await client.api.session.export({ sessionID: sessionData.id })
+          const transcript = await client.api.experimental.session.export({ sessionID: sessionData.id })
           const content = formatSessionTranscript(transcript.info, transcript.messages, true)
           await clipboard.write(content)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
@@ -1347,7 +1350,7 @@ export function Session(props: {
 
           if (options === null) return
 
-          const transcript = await client.api.session.export({
+          const transcript = await client.api.experimental.session.export({
             sessionID: sessionData.id,
             sanitize: options.format === "json" ? options.sanitize : undefined,
           })
@@ -2130,7 +2133,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
     <Show
       when={completion()}
       fallback={
-        <InlineToolRow icon="◈" color={theme.text.muted} pending="Notice" complete={true}>
+        <InlineToolRow icon={source() === "goal" ? "◎" : "◈"} color={theme.text.muted} pending="Notice" complete={true}>
           {text()}
         </InlineToolRow>
       }
@@ -3286,7 +3289,13 @@ function WebSearch(props: ToolProps) {
 function Subagent(props: ToolProps) {
   const { navigate } = useRoute()
   const data = useData()
-  const sessionID = createMemo(() => stringValue(props.metadata.sessionID) ?? stringValue(props.metadata.sessionId))
+  const sessionID = createMemo(
+    () =>
+      stringValue(props.metadata.sessionID) ??
+      stringValue(props.metadata.sessionId) ??
+      // A failed continuation may name an unrelated session, such as the parent itself.
+      (props.part.state.status === "error" ? undefined : stringValue(props.input.sessionID)),
+  )
   const description = createMemo(() => stringValue(props.input.description))
   const continuation = createMemo(() => Boolean(stringValue(props.input.sessionID)))
   const model = createMemo(() => subagentModelLabel(stringValue(props.input.model), data.location.model.list()))
@@ -3297,8 +3306,8 @@ function Subagent(props: ToolProps) {
 
   return (
     <InlineTool
-      icon={continuation() ? "↳" : isRunning() ? "│" : props.part.state.status === "completed" ? "✓" : "│"}
-      spinner={!continuation() && isRunning()}
+      icon={isRunning() ? "│" : continuation() ? "↳" : props.part.state.status === "completed" ? "✓" : "│"}
+      spinner={isRunning()}
       running={isRunning()}
       complete={description()}
       pending="Delegating…"

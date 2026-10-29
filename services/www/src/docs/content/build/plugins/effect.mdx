@@ -129,7 +129,7 @@ interface Context {
   readonly mcp: MCPDomain
   readonly model: ModelDomain
   /** @deprecated Use `experimental.generate.text`. */
-  readonly generate: Pick<GenerateApi<unknown>, "text">
+  readonly generate: Pick<ExperimentalGenerateApi<unknown>, "text">
   readonly permission: PermissionDomain
   readonly plugin: Pick<PluginApi<unknown>, "list">
   readonly provider: ProviderDomain

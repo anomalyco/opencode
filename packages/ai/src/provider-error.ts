@@ -331,8 +331,6 @@ function providerCodes(value: unknown) {
     decoded.code,
     ...awsErrorType(decoded.__type),
     ...awsErrorType(decoded.code),
-    // Stability's `{ id, name, errors }` bodies carry the code in `name`.
-    Array.isArray(decoded.errors) ? decoded.name : undefined,
     decoded.error_type,
     error?.code,
     error?.type,
