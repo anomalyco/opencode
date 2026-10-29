@@ -2040,7 +2040,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("omits reasoning defaults from versioned non-reasoning chat models", () =>
     Effect.gen(function* () {
-      for (const id of ["gpt-5-chat", "gpt-5.2-chat", "gpt-5.1-chat-latest", "openai.gpt-5-chat"]) {
+      for (const id of ["gpt-5-chat", "gpt-5.2-chat", "gpt-5-pro", "gpt-5.2-pro", "openai.gpt-5-chat"]) {
         const prepared = yield* compileRequest(
           LLM.request({ model: OpenAI.configure({ apiKey: "test" }).model(id), prompt: "Hello" }),
         )
@@ -2050,6 +2050,15 @@ describe("OpenAI Responses route", () => {
       const reasoning = yield* compileRequest(
         LLM.request({ model: OpenAI.configure({ apiKey: "test" }).model("gpt-5.2"), prompt: "Hello" }),
       )
+      for (const id of ["gpt-5.2", "gpt-5.2-chat-latest"]) {
+        const reasoning = yield* compileRequest(
+          LLM.request({ model: OpenAI.configure({ apiKey: "test" }).model(id), prompt: "Hello" }),
+        )
+        // -chat-latest is declared reasoning-capable in models-dev/snapshot.txt and must be left alone.
+        expect(reasoning.body.reasoning).toEqual({ effort: "medium", summary: "auto" })
+      }
+
+
       expect(reasoning.body.reasoning).toEqual({ effort: "medium", summary: "auto" })
     }),
   )

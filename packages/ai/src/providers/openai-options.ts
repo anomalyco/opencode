@@ -39,7 +39,11 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
 
 export const gpt5DefaultOptions = (modelID: string): ProviderOptions | undefined => {
   const id = modelID.toLowerCase()
-  if (!id.includes("gpt-5") || /(?:^|[^a-z0-9])gpt-5(?:\.\d+)*-chat(?:-|$)/.test(id) || id.includes("gpt-5-pro")) return undefined
+  // Exclusion applies to the versioned non-reasoning chat AND pro families alike, with the same
+  // left boundary for both: an id with an alphanumeric prefix glued on (e.g. `xgpt-5-chat`) no
+  // longer matches, while namespaced ids like `openai.gpt-5-chat` still do. `pro` previously used
+  // a plain substring check, which is how versioned pro ids fell through.
+  if (!id.includes("gpt-5") || /(?:^|[^a-z0-9])gpt-5(?:\.\d+)*-(?:chat|pro)$/.test(id)) return undefined
   return openAIProviderOptions({
     reasoningEffort: "medium",
     reasoningSummary: "auto",
