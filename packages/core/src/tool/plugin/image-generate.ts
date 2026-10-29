@@ -84,8 +84,7 @@ export const Plugin = {
       const available = yield* models.available(["image"])
       if (!input) {
         // A configured default is a preference: when it can't serve this call, pick automatically and say so.
-        const settings = settingsFrom(yield* config.entries())
-        const configured = settings ? settings.model : undefined
+        const configured = configuredModel(yield* config.entries())
         const preferred = configured
           ? available.find((model) => model.providerID === configured.providerID && model.id === configured.model)
           : undefined
@@ -224,11 +223,9 @@ export const Plugin = {
         Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
       )
 
-    // Registered only while an image model is available and config doesn't turn the tool off, re-evaluated
-    // whenever either changes. Subscribing before the first read keeps a change in between from being missed.
-    const wanted = Effect.all([config.entries(), models.available(["image"])]).pipe(
-      Effect.map(([entries, available]) => settingsFrom(entries) !== false && available.length > 0),
-    )
+    // Registered only while an image model is available, re-evaluated whenever the catalog changes.
+    // Subscribing before the first read keeps a change in between from being missed.
+    const wanted = models.available(["image"]).pipe(Effect.map((available) => available.length > 0))
     let enabled = false
     const refresh = wanted.pipe(
       Effect.flatMap((next) => {
@@ -237,7 +234,7 @@ export const Plugin = {
         return ctx.tool.reload()
       }),
     )
-    yield* ctx.event.subscribe({ types: ["model.updated", "config.updated"] }).pipe(
+    yield* ctx.event.subscribe({ types: ["model.updated"] }).pipe(
       Stream.runForEach(() => refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
@@ -379,10 +376,10 @@ export function defaultModel(
 }
 
 // Read per field so a later config that sets other experimental options doesn't hide this one.
-function settingsFrom(entries: readonly Entry[]) {
+function configuredModel(entries: readonly Entry[]) {
   return entries.findLast(
-    (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_generation !== undefined,
-  )?.info.experimental?.image_generation
+    (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_model !== undefined,
+  )?.info.experimental?.image_model
 }
 
 function acceptsImages(model: Model.Info) {

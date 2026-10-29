@@ -545,7 +545,7 @@ describe("ConfigNormalize", () => {
           todo: true,
           background_compaction: true,
           media_blob: true,
-          image_generation: { model: "openai/gpt-image-2" },
+          image_model: "openai/gpt-image-2",
           subagent_depth: 0,
           location_idle_timeout: "2 hours",
           policies: [{ action: "provider.use", resource: "custom", effect: "allow" }],
@@ -557,7 +557,7 @@ describe("ConfigNormalize", () => {
         todo: true,
         background_compaction: true,
         media_blob: true,
-        image_generation: { model: { providerID: "openai", model: "gpt-image-2" } },
+        image_model: { providerID: "openai", model: "gpt-image-2" },
         subagent_depth: 0,
         location_idle_timeout: "7200000 millis",
       },
@@ -571,18 +571,15 @@ describe("ConfigNormalize", () => {
     })
   })
 
-  test("normalizes the image generation setting", () => {
-    expect(normalized({ experimental: { image_generation: false } }).encoded.experimental).toEqual({
-      image_generation: false,
+  test("normalizes the image model setting", () => {
+    expect(normalized({ experimental: { image_model: "openai/gpt-image-2#hd" } }).encoded.experimental).toEqual({
+      image_model: { providerID: "openai", model: "gpt-image-2", variant: "hd" },
     })
-    expect(normalized({ experimental: { image_generation: {} } }).encoded.experimental).toEqual({
-      image_generation: {},
-    })
-    for (const value of [true, { model: "no-slash" }, { model: 1 }, "openai/gpt-image-2"]) {
-      const result = normalized({ experimental: { image_generation: value } })
+    for (const value of [false, true, "no-slash", 1, { model: "openai/gpt-image-2" }]) {
+      const result = normalized({ experimental: { image_model: value } })
       expect(result.encoded.experimental).toBeUndefined()
       expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
-        ["invalid", ["experimental", "image_generation"]],
+        ["invalid", ["experimental", "image_model"]],
       ])
     }
   })

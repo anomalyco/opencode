@@ -128,13 +128,13 @@ const setup = (providerID = "test") =>
     return { session, run, notice, directory: location.directory }
   })
 
-const configure = (image_generation: ConfigExperimental.Info["image_generation"]) =>
+const configure = (image_model: ConfigExperimental.Info["image_model"]) =>
   Effect.gen(function* () {
     const config = yield* Config.Test
     yield* config.setEntries([
       new Document({
         type: "document",
-        info: new Info({ experimental: new ConfigExperimental.Info({ image_generation }) }),
+        info: new Info({ experimental: new ConfigExperimental.Info({ image_model }) }),
       }),
     ])
     const bus = yield* Bus.Service
@@ -142,7 +142,8 @@ const configure = (image_generation: ConfigExperimental.Info["image_generation"]
   })
 
 const configuredModel = (providerID: string, model: string) => ({
-  model: { providerID: Provider.ID.make(providerID), model: Model.ID.make(model) },
+  providerID: Provider.ID.make(providerID),
+  model: Model.ID.make(model),
 })
 
 const registered = Tool.Service.use((registry) => toolDefinitions(registry)).pipe(
@@ -168,19 +169,6 @@ describe("image_generate", () => {
       expect(yield* until(true)).toBe(true)
       const catalog = yield* Provider.Service
       yield* catalog.transform((editor) => editor.models.remove(Provider.ID.make("test"), Model.ID.make("painter")))
-      expect(yield* until(false)).toBe(false)
-    }),
-  )
-
-  it.live("is not registered while config turns it off", () =>
-    Effect.gen(function* () {
-      yield* imageModel("test", "painter")
-      yield* configure(false)
-      yield* setup()
-      expect(yield* registered).toBe(false)
-      yield* configure({})
-      expect(yield* until(true)).toBe(true)
-      yield* configure(false)
       expect(yield* until(false)).toBe(false)
     }),
   )
@@ -386,11 +374,9 @@ describe("image_generate", () => {
       )
 
       yield* configure({
-        model: {
-          providerID: Provider.ID.make("test"),
-          model: Model.ID.make("painter"),
-          variant: Model.VariantID.make("hd"),
-        },
+        providerID: Provider.ID.make("test"),
+        model: Model.ID.make("painter"),
+        variant: Model.VariantID.make("hd"),
       })
       const configured = yield* run({ prompt: "x" })
       expect(configured.output).toMatchObject({ model: "test/painter#hd" })
@@ -398,11 +384,9 @@ describe("image_generate", () => {
       expect(fixture.requests.at(-1)?.model.variant).toBe(Model.VariantID.make("hd"))
 
       yield* configure({
-        model: {
-          providerID: Provider.ID.make("test"),
-          model: Model.ID.make("painter"),
-          variant: Model.VariantID.make("bogus"),
-        },
+        providerID: Provider.ID.make("test"),
+        model: Model.ID.make("painter"),
+        variant: Model.VariantID.make("bogus"),
       })
       const fallback = yield* run({ prompt: "x" })
       expect(text(fallback)).toContain('test/painter#bogus has no variant "bogus"; used ')

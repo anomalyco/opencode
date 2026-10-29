@@ -15790,43 +15790,29 @@
               "media_blob": {
                 "type": "boolean"
               },
-              "image_generation": {
+              "image_model": {
                 "anyOf": [
                   {
-                    "type": "boolean",
-                    "enum": [false]
+                    "type": "string",
+                    "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
                   },
                   {
                     "type": "object",
                     "properties": {
+                      "providerID": {
+                        "type": "string",
+                        "pattern": "^[^/#]+$"
+                      },
                       "model": {
-                        "anyOf": [
-                          {
-                            "type": "string",
-                            "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "providerID": {
-                                "type": "string",
-                                "pattern": "^[^/#]+$"
-                              },
-                              "model": {
-                                "type": "string",
-                                "pattern": "^[^#]+$"
-                              },
-                              "variant": {
-                                "type": "string",
-                                "pattern": "^[^#]+$"
-                              }
-                            },
-                            "required": ["providerID", "model"],
-                            "additionalProperties": false
-                          }
-                        ]
+                        "type": "string",
+                        "pattern": "^[^#]+$"
+                      },
+                      "variant": {
+                        "type": "string",
+                        "pattern": "^[^#]+$"
                       }
                     },
+                    "required": ["providerID", "model"],
                     "additionalProperties": false
                   }
                 ]
