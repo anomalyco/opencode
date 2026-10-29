@@ -123,7 +123,7 @@ describe("toSessionError", () => {
     expect(toSessionError(go)).toEqual({
       type: "provider.go-limit",
       message:
-        "OpenCode Go usage limit reached. Switch models, or enable usage from your balance in the Console to keep going.",
+        "OpenCode Go usage limit reached. To keep using this model, enable spending from your available balance in the Console.",
       status: 429,
       response: { body: JSON.stringify(goBody) },
       retryAfterMs: 120_000,

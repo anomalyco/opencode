@@ -30,7 +30,7 @@ const FREE_USAGE_LIMIT_MESSAGE =
 const BUDGET_LIMIT_MESSAGE = "Workspace usage limit reached. Model use is paused until the limit resets."
 const MODEL_BUDGET_LIMIT_MESSAGE = "You've reached the spend limit for this model. Switch models to keep going."
 const GO_USAGE_LIMIT_MESSAGE =
-  "OpenCode Go usage limit reached. Switch models, or enable usage from your balance in the Console to keep going."
+  "OpenCode Go usage limit reached. To keep using this model, enable spending from your available balance in the Console."
 
 export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof AIError) {
