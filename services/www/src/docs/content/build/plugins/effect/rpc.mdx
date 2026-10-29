@@ -45,8 +45,8 @@ JSON Schema and Standard Schema are also supported.
 
 ### Input and output
 
-Use `input` for the method argument and `output` for its return value. Leave
-either one out when there is no value.
+Use `input` for the method argument and `output` for its return value. Every
+method declares both.
 
 ```ts
 search: {
@@ -54,6 +54,19 @@ search: {
   output: Schema.Struct({ text: Schema.String }),
 }
 ```
+
+For a method that takes or returns nothing, use `Schema.Void`. Callers leave out
+the argument, and the handler returns `Effect.void`.
+
+```ts
+refresh: {
+  input: Schema.Void,
+  output: Schema.Void,
+}
+```
+
+JSON Schema cannot describe a missing value. See
+[Methods without a value](/build/plugins/rpc#methods-without-a-value).
 
 ### Errors
 
@@ -67,7 +80,8 @@ errors: {
 
 ### Events
 
-Add events to the top-level `events` map. Event data must be an object.
+Add events to the top-level `events` map. The map is required, so pass
+`events: {}` when the RPC has no events. Event data must be an object.
 
 ```ts
 events: {
