@@ -193,6 +193,7 @@ test("the combined location picker shows checkout branches and chooses the base 
 
 test("the checkout branch opens the current project's worktree step", async ({ page }) => {
   const existing = "C:/OpenCode/BranchWorktrees/.worktrees/quiet-river"
+
   const view = await openDraft(page, {
     name: "BranchWorktrees",
     vcs: (directory) => ({ current: directory === existing ? "quiet-river-branch" : "dev", default: "main" }),
