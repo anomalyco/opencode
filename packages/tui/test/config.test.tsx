@@ -48,6 +48,12 @@ test("validates config constraints", () => {
   expect(decodeInfo({ attention: { sounds: { unknown: "sound.wav" } } })).toEqual({ attention: { sounds: {} } })
 })
 
+test("prompt.undo_depth takes a positive number of steps", () => {
+  expect(decodeInfo({ prompt: { undo_depth: 50 } }).prompt?.undo_depth).toBe(50)
+  expect(() => decodeInfo({ prompt: { undo_depth: 0 } })).toThrow()
+  expect(() => decodeInfo({ prompt: { undo_depth: 2.5 } })).toThrow()
+})
+
 test("resolves host-neutral defaults", () => {
   const config = resolve({}, { terminalSuspend: true })
 
