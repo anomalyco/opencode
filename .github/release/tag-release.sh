@@ -5,7 +5,8 @@
 . "$(dirname "$0")/lib.sh"
 
 tag="v$OPENCODE_VERSION"
-git ls-files -z -- '*package.json' bun.lock | xargs -0 sed -i -E "s/\"version\": \"[^\"]+\"/\"version\": \"$OPENCODE_VERSION\"/g"
+# @opencode/pty (packages/process-daemon) has its own process-daemon-v* releases and keeps its own version.
+git ls-files -z -- '*package.json' ':!packages/process-daemon/**' bun.lock | xargs -0 sed -i -E "s/\"version\": \"[^\"]+\"/\"version\": \"$OPENCODE_VERSION\"/g"
 
 if [ -n "${OPENCODE_RELEASE_NOTES:-}" ] && ! grep -qF -x "## $tag" CHANGELOG.md && ! grep -qF "## $tag " CHANGELOG.md; then
   notes=$(mktemp)
