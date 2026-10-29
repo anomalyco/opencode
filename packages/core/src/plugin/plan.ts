@@ -54,6 +54,9 @@ export const Plugin = define({
 
     // Compaction and committed reverts can strip reminders while the session's agent stays
     // put. Reconcile per request, appending near the tail so the cached prefix stays warm.
+    // In-memory only: persisting here would leave the reminder pending when the turn ends
+    // and start an extra step carrying nothing else, so the model simply sees the reconciled
+    // reminder on every request instead.
     yield* ctx.session.hook("context", (event) => {
       const reminder = lastReminder(event.messages, enterReminder)
       const missing = event.agent === plan && reminder !== enterReminder
@@ -63,13 +66,7 @@ export const Plugin = define({
       // Before the user's prompt, matching where agent-switch reminders land.
       const at = event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length
       event.messages.splice(at, 0, Message.user(text))
-      return ctx.session
-        .synthetic({ sessionID: event.sessionID, text, resume: false })
-        .pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning("failed to persist Plan mode reminder", { sessionID: event.sessionID, cause }),
-          ),
-        )
+      return Effect.void
     })
 
     yield* ctx.event.subscribe({ types: ["session.created", "session.agent.selected"] }).pipe(

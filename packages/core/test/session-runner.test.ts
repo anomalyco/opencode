@@ -4578,7 +4578,7 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(2)
     expect(userTexts(s.requests[1])).toEqual(["Start working", "Follow up as reviewer"])
-    expect((yield* s.session.get(sessionID)).agent).toBe("reviewer")
+    expect((yield* s.session.get(sessionID)).agent).toBe(Agent.ID.make("reviewer"))
     expect((yield* s.messages).find((message) => message.type === "agent-switched")).toMatchObject({
       agent: "reviewer",
     })
