@@ -58,6 +58,7 @@ import { Permission } from "../permission.js"
 import { Reference } from "../reference.js"
 import { WebSearch } from "../websearch.js"
 import { Ripgrep } from "../ripgrep.js"
+import { Schedule } from "../schedule.js"
 import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
 import { SessionInstructions } from "../session/instructions.js"
@@ -78,6 +79,7 @@ import { OpenCodeTools } from "../tool/plugin/opencode.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { ReadToolFileSystem } from "../tool/read-filesystem.js"
 import { ReadTool } from "../tool/plugin/read.js"
+import { ScheduleTools } from "../tool/plugin/schedule.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
@@ -143,6 +145,7 @@ const services = [
   Reference.Service,
   WebSearch.Service,
   Ripgrep.Service,
+  Schedule.Service,
   Session.Service,
   SessionCompaction.Service,
   SessionInstructions.Service,
@@ -197,6 +200,7 @@ export const requirements = LayerNode.group([
   Reference.node,
   WebSearch.node,
   Ripgrep.node,
+  Schedule.node,
   Session.node,
   SessionCompaction.node,
   SessionInstructions.node,
@@ -245,6 +249,7 @@ const pre = [
   McpResourceTools.Plugin,
   QuestionTool.Plugin,
   ReadTool.Plugin,
+  ScheduleTools.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,
   SubagentTool.Plugin,

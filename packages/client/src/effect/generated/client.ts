@@ -243,6 +243,18 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
+  ExperimentalScheduleCreateInput,
+  ExperimentalScheduleCreateOutput,
+  ExperimentalScheduleListInput,
+  ExperimentalScheduleListOutput,
+  ExperimentalScheduleGetInput,
+  ExperimentalScheduleGetOutput,
+  ExperimentalSchedulePauseInput,
+  ExperimentalSchedulePauseOutput,
+  ExperimentalScheduleResumeInput,
+  ExperimentalScheduleResumeOutput,
+  ExperimentalScheduleDeleteInput,
+  ExperimentalScheduleDeleteOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1556,6 +1568,67 @@ const EndpointExperimentalPersistentPtyConnectToken =
       ),
     )
 
+const EndpointExperimentalScheduleCreate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleCreateInput) =>
+    preserveEffect<ExperimentalScheduleCreateOutput>()(
+      raw["schedule.create"]({
+        payload: {
+          sessionID: input["sessionID"],
+          name: input["name"],
+          when: input["when"],
+          if: input["if"],
+          until: input["until"],
+          ends: input["ends"],
+          prompt: input["prompt"],
+        },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalScheduleList =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleListInput) =>
+    preserveEffect<ExperimentalScheduleListOutput>()(
+      raw["schedule.list"]({ query: { sessionID: input["sessionID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalScheduleGet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleGetInput) =>
+    preserveEffect<ExperimentalScheduleGetOutput>()(
+      raw["schedule.get"]({ params: { scheduleID: input["scheduleID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalSchedulePause =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSchedulePauseInput) =>
+    preserveEffect<ExperimentalSchedulePauseOutput>()(
+      raw["schedule.pause"]({ params: { scheduleID: input["scheduleID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalScheduleResume =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleResumeInput) =>
+    preserveEffect<ExperimentalScheduleResumeOutput>()(
+      raw["schedule.resume"]({ params: { scheduleID: input["scheduleID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalScheduleDelete =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleDeleteInput) =>
+    preserveEffect<ExperimentalScheduleDeleteOutput>()(
+      raw["schedule.delete"]({ params: { scheduleID: input["scheduleID"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1568,6 +1641,14 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     snapshot: EndpointExperimentalPersistentPtySnapshot(raw),
     remove: EndpointExperimentalPersistentPtyRemove(raw),
     connectToken: EndpointExperimentalPersistentPtyConnectToken(raw),
+  },
+  schedule: {
+    create: EndpointExperimentalScheduleCreate(raw),
+    list: EndpointExperimentalScheduleList(raw),
+    get: EndpointExperimentalScheduleGet(raw),
+    pause: EndpointExperimentalSchedulePause(raw),
+    resume: EndpointExperimentalScheduleResume(raw),
+    delete: EndpointExperimentalScheduleDelete(raw),
   },
 })
 

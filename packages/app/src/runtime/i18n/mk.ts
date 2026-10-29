@@ -747,6 +747,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Мигрирање на податоци {{current}}/{{total}}",
   "home.workspaceTip": "Започнете ја следната сесија во нов работен простор за да ги одделите промените",
   "session.tab.add": "Додај јазиче",
+  "session.tab.closeOthers": "Затвори ги другите картички",
   "session.queue.attachments.one": "Плус {{count}} прилог",
   "session.queue.attachments.other": "Плус {{count}} прилози",
   "settings.backToSettings": "Назад на поставки",

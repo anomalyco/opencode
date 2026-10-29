@@ -1,14 +1,22 @@
 import { describe, expect } from "bun:test"
-import type { FileSystem } from "@opencode/core/filesystem"
-import { DateTime, Effect, Fiber, Layer, LayerMap, Stream } from "effect"
+import { FileSystem } from "@opencode/core/filesystem"
+import { DateTime, Effect, Fiber, Latch, Layer, LayerMap, Queue, Sink, Stream } from "effect"
+import { ChildProcessSpawner } from "effect/process"
+import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { TestClock } from "effect/testing"
 import { eq } from "drizzle-orm"
+import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Environment } from "@opencode/core/environment/index"
+import { FileAccess } from "@opencode/core/file-access"
+import { Instance } from "@opencode/core/instance/service"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "@opencode/core/bus"
-import { Location } from "@opencode/schema/location"
+import { Location } from "@opencode/core/location"
+import { Permission } from "@opencode/core/permission"
+import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -21,6 +29,7 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
+import { ShellSelect } from "@opencode/core/shell/select"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
@@ -30,11 +39,13 @@ import { Skill } from "@opencode/core/skill"
 import { Config } from "@opencode/core/config"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
+import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
 const enabledDirectory = "/enabled"
 const disabledDirectory = "/disabled"
 const toggleDirectory = "/toggle"
+const missingDirectory = "/missing"
 
 const wakes: Session.ID[] = []
 /** Runs inside the next wake, which happens while a schedule is firing. */
@@ -79,31 +90,141 @@ const toggled = Layer.succeed(
     changes: () => Stream.empty,
   }),
 )
+/** Fake shell state and permission rules reset by `setup`. */
+const shellState = {
+  exitCode: 0,
+  stdout: "",
+  stderr: "",
+  hangMs: 0,
+  runs: [] as string[],
+  missingNow: false,
+}
+let agentRules: Permission.Ruleset = [{ action: "*", resource: "*", effect: "allow" }]
+let activationGate: Effect.Effect<void> = Effect.void
+
+const testEnvironment = Layer.effect(
+  Environment.Service,
+  Effect.gen(function* () {
+    const memory = Environment.makeMemoryDriver()
+    const files = Environment.makeFiles(memory)
+    yield* files.mkdir(enabledDirectory).pipe(Effect.orDie)
+    yield* files.mkdir(toggleDirectory).pipe(Effect.orDie)
+    const spawner = ChildProcessSpawner.make((command) =>
+      Effect.gen(function* () {
+        const script = command._tag === "StandardCommand" ? (command.args.at(-1) ?? command.command) : "pipeline"
+        shellState.runs.push(script)
+        if (shellState.hangMs > 0) yield* Effect.sleep(shellState.hangMs)
+        const outBytes = new TextEncoder().encode(shellState.stdout)
+        const errBytes = new TextEncoder().encode(shellState.stderr)
+        return makeHandle({
+          pid: ProcessId(1),
+          exitCode: Effect.succeed(ExitCode(shellState.exitCode)),
+          isRunning: Effect.succeed(false),
+          kill: () => Effect.void,
+          stdin: Sink.drain,
+          stdout: outBytes.byteLength > 0 ? Stream.make(outBytes) : Stream.empty,
+          stderr: errBytes.byteLength > 0 ? Stream.make(errBytes) : Stream.empty,
+          all: outBytes.byteLength > 0 ? Stream.make(outBytes) : Stream.empty,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void),
+        })
+      }),
+    )
+    return Environment.Service.of({ files, spawner })
+  }),
+)
+
+const configureAgent = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const agents = yield* Agent.Service
+    yield* agents.transform((editor) =>
+      editor.update(Agent.defaultID, (agent) => {
+        agent.permissions = [...agentRules]
+      }),
+    )
+  }),
+)
+
 const locations = makeGlobalNode({
   service: LocationServiceMap.Service,
   layer: Layer.effect(
     LocationServiceMap.Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const saved = yield* PermissionSaved.Service
       return yield* LayerMap.make(
-        (ref: Location.Ref) =>
+        (ref: Location.Ref): Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError> => {
+          if (ref.directory === missingDirectory && shellState.missingNow) {
+            return Layer.effectDiscard(
+              Effect.fail(
+                new FileSystem.DirectoryNotFoundError({ directory: ref.directory, cause: new Error("missing") }),
+              ),
+            ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>
+          }
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-          Layer.mergeAll(
-            ref.directory === enabledDirectory ? enabled : ref.directory === toggleDirectory ? toggled : Layer.empty,
-            LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), {
-              replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
-            }),
+          return Layer.mergeAll(
+            ref.directory === enabledDirectory || ref.directory === missingDirectory
+              ? enabled
+              : ref.directory === toggleDirectory
+                ? toggled
+                : Layer.empty,
+            configureAgent.pipe(
+              Layer.provideMerge(
+                LayerNode.compile(
+                  LayerNode.group([
+                    Location.node,
+                    Environment.node,
+                    PluginHooks.node,
+                    Skill.node,
+                    Agent.node,
+                    Permission.node,
+                    FileAccess.node,
+                  ]),
+                  {
+                    replacements: [
+                      Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+                      SessionStore.node.replace(Layer.succeed(SessionStore.Service, store)),
+                      PermissionSaved.node.replace(Layer.succeed(PermissionSaved.Service, saved)),
+                      Location.node.replace(Layer.succeed(Location.Service, location(ref))),
+                      Environment.node.replace(testEnvironment),
+                    ],
+                  },
+                ),
+              ),
+            ),
+            Layer.succeed(
+              ShellSelect.Service,
+              ShellSelect.Service.of({
+                transform: () => Effect.die("unused"),
+                reload: () => Effect.void,
+                resolve: () => Effect.succeed("/bin/bash"),
+              }),
+            ),
             Layer.mock(Snapshot.Service, { capture: () => Effect.undefined, restore: () => Effect.void }),
-            Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
-          ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
+            Layer.succeed(Plugin.Service, {
+              awaitActivation: Effect.suspend(() => activationGate),
+            } as unknown as Plugin.Interface),
+          ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>
+        },
       )
     }),
   ),
-  deps: [Bus.node],
+  deps: [Bus.node, SessionStore.node, PermissionSaved.node],
 })
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node, Schedule.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      Session.node,
+      Schedule.node,
+      Instance.node,
+      LocationServiceMap.node,
+    ]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       SessionExecution.node.replace(execution),
@@ -132,6 +253,14 @@ const setup = (directory = enabledDirectory) =>
     duringWake = Effect.void
     toggle.on = false
     toggle.reads = 0
+    shellState.exitCode = 0
+    shellState.stdout = ""
+    shellState.stderr = ""
+    shellState.hangMs = 0
+    shellState.runs = []
+    shellState.missingNow = false
+    agentRules = [{ action: "*", resource: "*", effect: "allow" }]
+    activationGate = Effect.void
     return yield* Schedule.Service
   })
 
@@ -690,4 +819,344 @@ describe("Schedule", () => {
       expect(yield* schedules.list({ sessionID })).toEqual([])
     }),
   )
+
+  describe("shell checks", () => {
+    it.effect("returns done immediately without queuing a prompt when an until check already passes at creation", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.exitCode = 0
+        shellState.stdout = "all green\n"
+        const schedule = yield* schedules.create({
+          sessionID,
+          until: { type: "shell", run: "gh pr checks 123" },
+          action: { type: "prompt", prompt: "CI passed." },
+        })
+        expect(schedule).toMatchObject({
+          status: "done",
+          runCount: 1,
+          lastOutcome: "fired",
+          lastOutput: "all green",
+          nextDueAt: undefined,
+          when: { type: "every", every: "30 seconds" },
+        })
+        expect(yield* pending).toEqual([])
+        expect(wakes).toEqual([])
+      }),
+    )
+
+    it.effect("polls until exit 0 with default 30s interval and 24h deadline, then wakes once and stops", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.exitCode = 1
+        const schedule = yield* schedules.create({
+          sessionID,
+          until: { type: "shell", run: "gh pr checks 123" },
+          action: { type: "prompt", prompt: "CI passed." },
+        })
+        expect(schedule).toMatchObject({
+          status: "active",
+          when: { type: "every", every: "30 seconds" },
+          remainingRuns: 1,
+        })
+        expect(iso(schedule.endsAt)).toBe(iso(DateTime.makeUnsafe(24 * 60 * 60_000)))
+
+        yield* TestClock.adjust("30 seconds")
+        yield* schedules.tick
+        expect(yield* pending).toEqual([])
+        expect(yield* schedules.get(schedule.id)).toMatchObject({
+          status: "active",
+          runCount: 0,
+          remainingRuns: 1,
+          lastOutcome: "checked",
+        })
+
+        shellState.exitCode = 0
+        shellState.stdout = "20 pass\n"
+        yield* TestClock.adjust("30 seconds")
+        yield* schedules.tick
+        expect(yield* pending).toEqual([messageID(schedule, 1)])
+        const { db } = yield* Database.Service
+        expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
+          payload: {
+            text: "CI passed.\n\n20 pass",
+            metadata: { schedule: { id: schedule.id, run: 1, check: { message: "20 pass" } } },
+          },
+        })
+        expect(yield* schedules.get(schedule.id)).toMatchObject({
+          status: "done",
+          runCount: 1,
+          remainingRuns: 0,
+          lastOutcome: "fired",
+          nextDueAt: undefined,
+        })
+      }),
+    )
+
+    it.effect("wakes once with expired when an until check hits its deadline without matching", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.exitCode = 1
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "every", every: "30 seconds" },
+          until: { type: "shell", run: "curl -sf http://localhost:3000" },
+          ends: { after: "1 minute" },
+          action: { type: "prompt", prompt: "Server check finished." },
+        })
+
+        yield* TestClock.adjust("30 seconds")
+        yield* schedules.tick
+        expect(yield* pending).toEqual([])
+
+        yield* TestClock.adjust("30 seconds")
+        yield* schedules.tick
+        expect(yield* pending).toEqual([messageID(schedule, 1)])
+        const { db } = yield* Database.Service
+        expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
+          payload: {
+            text: expect.stringContaining("[Schedule timed out without matching: curl -sf http://localhost:3000]"),
+            metadata: { schedule: { id: schedule.id, run: 1, check: { expired: true } } },
+          },
+        })
+        expect(yield* schedules.get(schedule.id)).toMatchObject({
+          status: "done",
+          runCount: 1,
+          lastOutcome: "expired",
+          nextDueAt: undefined,
+        })
+      }),
+    )
+
+    it.effect("seeds changes baseline at t=0 and counts ends.times by wakes rather than quiet checks", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        shellState.stdout = "sha-1\n"
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "every", every: "15 seconds" },
+          if: { type: "shell", run: "git rev-parse HEAD", changes: true },
+          ends: { times: 2 },
+          action: { type: "prompt", prompt: "HEAD moved." },
+        })
+
+        // Quiet check: same output as t=0 baseline -> remainingRuns stays 2.
+        yield* TestClock.adjust("15 seconds")
+        yield* schedules.tick
+        expect(yield* pending).toEqual([])
+        expect(yield* schedules.get(schedule.id)).toMatchObject({
+          status: "active",
+          runCount: 0,
+          remainingRuns: 2,
+          lastOutcome: "checked",
+        })
+
+        // Change before second tick: wakes once -> remainingRuns becomes 1.
+        shellState.stdout = "sha-2\n"
+        yield* TestClock.adjust("15 seconds")
+        yield* schedules.tick
+        expect(yield* pending).toEqual([messageID(schedule, 1)])
+        expect(yield* schedules.get(schedule.id)).toMatchObject({
+          status: "active",
+          runCount: 1,
+          remainingRuns: 1,
+          lastOutcome: "fired",
+        })
+        yield* deliver
+
+        // Another quiet check at sha-2 -> remainingRuns stays 1.
+        yield* TestClock.adjust("15 seconds")
+        yield* schedules.tick
+        expect(yield* pending).toEqual([])
+        expect(yield* schedules.get(schedule.id)).toMatchObject({ status: "active", remainingRuns: 1 })
+
+        // Second change -> wakes a second time and finishes.
+        shellState.stdout = "sha-3\n"
+        yield* TestClock.adjust("15 seconds")
+        yield* schedules.tick
+        expect(yield* pending).toEqual([messageID(schedule, 2)])
+        expect(yield* schedules.get(schedule.id)).toMatchObject({
+          status: "done",
+          runCount: 2,
+          remainingRuns: 0,
+          lastOutcome: "fired",
+        })
+      }),
+    )
+
+    it.effect("supports is and matches predicates, even when the command exits non-zero at creation", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        // Service is still booting at creation (curl exits 7); creating an `until` with `is` still succeeds.
+        shellState.exitCode = 7
+        shellState.stdout = ""
+        const exact = yield* schedules.create({
+          sessionID,
+          when: { type: "every", every: "20 seconds" },
+          until: { type: "shell", run: "curl -sf http://localhost:3000/status", is: "MERGED" },
+          action: { type: "prompt", prompt: "Merged." },
+        })
+        shellState.exitCode = 0
+        shellState.stdout = "OPEN\n"
+        const regex = yield* schedules.create({
+          sessionID,
+          when: { type: "every", every: "20 seconds" },
+          until: { type: "shell", run: "gh pr view 2", matches: "^MERGED" },
+          action: { type: "prompt", prompt: "Regex merged." },
+        })
+
+        yield* TestClock.adjust("20 seconds")
+        yield* schedules.tick
+        expect(yield* pending).toEqual([])
+
+        shellState.stdout = "MERGED\n"
+        yield* TestClock.adjust("20 seconds")
+        yield* schedules.tick
+        expect(yield* pending).toEqual([messageID(exact, 1), messageID(regex, 1)])
+      }),
+    )
+
+    it.effect("asks once without save at creation, runs unattended on ticks, and pauses after 3 failures", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        agentRules = [{ action: "shell", resource: "*", effect: "ask" }]
+        shellState.exitCode = 1
+
+        const bus = yield* Bus.Service
+        const instances = yield* Instance.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.get(sessionID)
+        const asks = yield* Queue.unbounded<Permission.Request>()
+        const unsubscribe = yield* bus.listen((event) =>
+          event.type === Permission.Event.Asked.type
+            ? Queue.offer(asks, event.data as Permission.Request).pipe(Effect.asVoid)
+            : Effect.void,
+        )
+        yield* Effect.addFinalizer(() => unsubscribe)
+        const asked: Permission.Request[] = []
+        const answerLoop = yield* Queue.take(asks).pipe(
+          Effect.tap((request) => Effect.sync(() => asked.push(request))),
+          Effect.flatMap((request) =>
+            Permission.Service.use((permission) => permission.reply({ requestID: request.id, reply: "once" })).pipe(
+              instances.provide(session),
+            ),
+          ),
+          Effect.forever,
+          Effect.forkChild,
+        )
+
+        const schedule = yield* schedules.create({
+          sessionID,
+          name: "ci",
+          when: { type: "every", every: "1 minute" },
+          if: { type: "shell", run: "gh pr checks 99" },
+          action: { type: "prompt", prompt: "CI green." },
+        })
+        yield* Fiber.interrupt(answerLoop)
+        expect(asked).toHaveLength(1)
+        expect(asked[0]?.save).toBeUndefined()
+        expect(asked[0]?.resources).toEqual(["gh pr checks 99"])
+
+        // Unattended tick runs without asking again.
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+        expect(asked).toHaveLength(1)
+        expect(yield* schedules.get(schedule.id)).toMatchObject({ lastOutcome: "checked" })
+
+        // Revoking shell permission causes 3 consecutive check failures -> auto-pause + error wake.
+        agentRules = [{ action: "shell", resource: "*", effect: "deny" }]
+        const locationsMap = yield* LocationServiceMap.Service
+        yield* locationsMap.invalidate(Location.Ref.make({ directory: AbsolutePath.make(enabledDirectory) }))
+
+        for (const strike of [1, 2]) {
+          yield* TestClock.adjust("1 minute")
+          yield* schedules.tick
+          expect(yield* schedules.get(schedule.id)).toMatchObject({
+            status: "active",
+            lastOutcome: "failed",
+            runCount: 0,
+          })
+          expect(strike).toBeLessThan(3)
+        }
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+        expect(yield* schedules.get(schedule.id)).toMatchObject({
+          status: "paused",
+          lastOutcome: "failed",
+          runCount: 1,
+        })
+        expect(yield* pending).toEqual([messageID(schedule, 1)])
+        const { db } = yield* Database.Service
+        expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
+          payload: { text: expect.stringContaining("[Schedule paused after 3 failed checks:") },
+        })
+      }),
+    )
+
+    it.effect("waits for Plugin.awaitActivation and auto-pauses when the Session directory disappears", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup(missingDirectory)
+        const gate = yield* Latch.make()
+        activationGate = gate.await
+        shellState.exitCode = 1
+        const creating = yield* Effect.forkChild(
+          schedules.create({
+            sessionID,
+            when: { type: "every", every: "1 minute" },
+            until: { type: "shell", run: "gh pr checks 1" },
+            action: { type: "prompt", prompt: "done" },
+          }),
+        )
+        yield* Effect.repeat(Effect.yieldNow, { times: 5 })
+        expect(shellState.runs).toEqual([])
+        yield* gate.open
+        const schedule = yield* Fiber.join(creating)
+        expect(shellState.runs).toEqual(["gh pr checks 1"])
+
+        // Simulate the worktree directory being deleted before the next tick.
+        const session = yield* Session.Service.use((sessions) => sessions.get(sessionID))
+        const locationsMap = yield* LocationServiceMap.Service
+        shellState.missingNow = true
+        yield* locationsMap.invalidate(session.location)
+
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+        expect(yield* schedules.get(schedule.id)).toMatchObject({
+          status: "paused",
+          lastOutcome: "failed",
+        })
+      }),
+    )
+
+    it.effect("validates check combinations, intervals, and regexes at creation", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        const bad = (input: Omit<Schedule.CreateInput, "sessionID" | "action">) =>
+          Effect.flip(schedules.create({ sessionID, action: { type: "prompt", prompt: "x" }, ...input }))
+
+        expect(yield* bad({})).toMatchObject({ reason: "when is required unless until is set" })
+        expect(
+          yield* bad({
+            if: { type: "shell", run: "true" },
+            until: { type: "shell", run: "true" },
+          }),
+        ).toMatchObject({ reason: "Choose either if or until, not both" })
+        expect(
+          yield* bad({
+            when: { type: "every", every: "10 seconds" },
+            until: { type: "shell", run: "true" },
+          }),
+        ).toMatchObject({ reason: "every must be at least 15 seconds" })
+        expect(
+          yield* bad({
+            until: { type: "shell", run: "echo hi", is: "hi", matches: "hi" },
+          }),
+        ).toMatchObject({ reason: "Choose at most one of is, matches or changes" })
+        expect(
+          yield* bad({
+            until: { type: "shell", run: "echo hi", matches: "[unclosed" },
+          }),
+        ).toMatchObject({ _tag: "Schedule.InvalidError" })
+      }),
+    )
+  })
 })

@@ -12,16 +12,17 @@ import { AttachmentCard } from "./attachment-card"
  */
 export type CommentCardTarget =
   | { type: "file"; path: string; selection?: { startLine: number; endLine: number } }
-  | { type: "note"; label: string; icon: string }
+  | { type: "note"; label: string; icon: string; title?: string; subtitle?: string }
   | { type: "quote"; text: string; source?: { label: string; icon: string } }
 
 export function commentCardTarget(
   comment:
     | { type?: "file"; path: string; selection?: { startLine: number; endLine: number } }
-    | { type: "note"; label: string; icon: string }
+    | { type: "note"; label: string; icon: string; title?: string; subtitle?: string }
     | { type: "quote"; text: string; source?: { label: string; icon: string } },
 ): CommentCardTarget {
-  if (comment.type === "note") return { type: "note", label: comment.label, icon: comment.icon }
+  if (comment.type === "note")
+    return { type: "note", label: comment.label, icon: comment.icon, title: comment.title, subtitle: comment.subtitle }
 
   if (comment.type === "quote") return { type: "quote", text: comment.text, source: comment.source }
 
@@ -52,8 +53,21 @@ export function CommentCard(props: {
   const [truncated, setTruncated] = createSignal(false)
   const quote = () => (props.target.type === "quote" ? props.target.text.slice(0, QUOTE_PREVIEW_LENGTH) : undefined)
   const source = () => (props.target.type === "quote" ? props.target.source : undefined)
-  const heading = () => props.comment || (quote() ?? "")
-  const tooltipDisabled = () => !props.tooltip || (!truncated() && !(props.target.type === "quote" && props.comment))
+  const note = () => (props.target.type === "note" ? props.target : undefined)
+
+  const subtitle = () => note()?.subtitle?.trim() || note()?.label
+
+  const heading = () => {
+    const target = note()
+
+    if (target) return props.comment.trim() ? props.comment : target.title?.trim() || target.label
+
+    return props.comment || (quote() ?? "")
+  }
+
+  const tooltipDisabled = () =>
+    !props.tooltip ||
+    (!truncated() && !(note() && !props.comment.trim()) && !(props.target.type === "quote" && props.comment))
 
   onMount(() => {
     const element = title
@@ -72,7 +86,7 @@ export function CommentCard(props: {
     <Tooltip
       placement="top"
       openDelay={1000}
-      value={props.title ?? heading()}
+      value={props.title ?? (note() && !props.comment.trim() ? `${heading()}\n${subtitle()}` : heading())}
       disabled={tooltipDisabled()}
       class={props.wide ? "w-full" : undefined}
       contentStyle={{ "max-width": "320px", "white-space": "pre-wrap" }}
@@ -109,7 +123,7 @@ export function CommentCard(props: {
               <>
                 <Icon name={note().icon} data-slot="attachment-card-icon" />
                 <span data-slot="attachment-card-label" dir="ltr">
-                  {note().label}
+                  {subtitle()}
                 </span>
               </>
             )}

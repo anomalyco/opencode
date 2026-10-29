@@ -749,6 +749,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Məlumatlar köçürülür {{current}}/{{total}}",
   "home.workspaceTip": "Dəyişiklikləri izolə etmək üçün növbəti sessiyanı yeni iş sahəsində başlayın",
   "session.tab.add": "Tab əlavə et",
+  "session.tab.closeOthers": "Digər tabları bağla",
   "session.queue.attachments.one": "{{count}} əlavə əlavə et",
   "session.queue.attachments.other": "{{count}} əlavə əlavələr əlavə et",
   "settings.backToSettings": "Parametrlərə qayıt",

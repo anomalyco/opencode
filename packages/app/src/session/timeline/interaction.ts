@@ -176,10 +176,20 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     consumePendingMessage: (key) => layout.pendingMessage.consume(key),
   })
 
+  let resumeFrame: (() => void) | undefined
+
   const resume = (behavior?: ScrollBehavior) => {
     setState("messageID", undefined)
     pin()
-    scrollToEnd(behavior)
+    // Scrolls on the next frame, before it paints. A submit resumes from its key handler right after changing the
+    // DOM, where reading the scroll range would force a layout that the frame then repeats.
+    resumeFrame?.()
+    resumeFrame = frameLoop.add(() => {
+      resumeFrame = undefined
+      scrollToEnd(behavior)
+
+      return false
+    })
     clearMessageHash()
 
     if (scroller) scheduleScrollState(scroller)
@@ -381,6 +391,8 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   )
   onCleanup(() => {
     if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
+
+    resumeFrame?.()
 
     scrollStateFrame?.()
 

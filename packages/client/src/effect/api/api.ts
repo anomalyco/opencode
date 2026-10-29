@@ -37,6 +37,7 @@ import type { FileSystem } from "@opencode/schema/filesystem"
 import type { Command } from "@opencode/schema/command"
 import type { OpenCodeEvent } from "@opencode/protocol/groups/event"
 import type { Pty } from "@opencode/schema/pty"
+import type { Schedule } from "@opencode/schema/schedule"
 import type { Reference } from "@opencode/schema/reference"
 import type { Worktree } from "@opencode/schema/worktree"
 import type { Vcs } from "@opencode/schema/vcs"
@@ -2370,6 +2371,50 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
   input: ExperimentalPersistentPtyConnectTokenInput,
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
+export type ExperimentalScheduleCreateInput = {
+  readonly sessionID: Session.ID
+  readonly name?: string | undefined
+  readonly when?: Schedule.WhenInput | undefined
+  readonly if?: Schedule.ConditionInput | undefined
+  readonly until?: Schedule.ConditionInput | undefined
+  readonly ends?: Schedule.Ends | undefined
+  readonly prompt: string
+}
+export type ExperimentalScheduleCreateOutput = Schedule.Info
+export type ExperimentalScheduleCreateOperation<E = never> = (
+  input: ExperimentalScheduleCreateInput,
+) => Effect.Effect<ExperimentalScheduleCreateOutput, E>
+
+export type ExperimentalScheduleListInput = { readonly sessionID: Session.ID }
+export type ExperimentalScheduleListOutput = ReadonlyArray<Schedule.Info>
+export type ExperimentalScheduleListOperation<E = never> = (
+  input: ExperimentalScheduleListInput,
+) => Effect.Effect<ExperimentalScheduleListOutput, E>
+
+export type ExperimentalScheduleGetInput = { readonly scheduleID: Schedule.ID }
+export type ExperimentalScheduleGetOutput = Schedule.Info
+export type ExperimentalScheduleGetOperation<E = never> = (
+  input: ExperimentalScheduleGetInput,
+) => Effect.Effect<ExperimentalScheduleGetOutput, E>
+
+export type ExperimentalSchedulePauseInput = { readonly scheduleID: Schedule.ID }
+export type ExperimentalSchedulePauseOutput = Schedule.Info
+export type ExperimentalSchedulePauseOperation<E = never> = (
+  input: ExperimentalSchedulePauseInput,
+) => Effect.Effect<ExperimentalSchedulePauseOutput, E>
+
+export type ExperimentalScheduleResumeInput = { readonly scheduleID: Schedule.ID }
+export type ExperimentalScheduleResumeOutput = Schedule.Info
+export type ExperimentalScheduleResumeOperation<E = never> = (
+  input: ExperimentalScheduleResumeInput,
+) => Effect.Effect<ExperimentalScheduleResumeOutput, E>
+
+export type ExperimentalScheduleDeleteInput = { readonly scheduleID: Schedule.ID }
+export type ExperimentalScheduleDeleteOutput = void
+export type ExperimentalScheduleDeleteOperation<E = never> = (
+  input: ExperimentalScheduleDeleteInput,
+) => Effect.Effect<ExperimentalScheduleDeleteOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2382,6 +2427,14 @@ export interface ExperimentalApi<E = never> {
     readonly snapshot: ExperimentalPersistentPtySnapshotOperation<E>
     readonly remove: ExperimentalPersistentPtyRemoveOperation<E>
     readonly connectToken: ExperimentalPersistentPtyConnectTokenOperation<E>
+  }
+  readonly schedule: {
+    readonly create: ExperimentalScheduleCreateOperation<E>
+    readonly list: ExperimentalScheduleListOperation<E>
+    readonly get: ExperimentalScheduleGetOperation<E>
+    readonly pause: ExperimentalSchedulePauseOperation<E>
+    readonly resume: ExperimentalScheduleResumeOperation<E>
+    readonly delete: ExperimentalScheduleDeleteOperation<E>
   }
 }
 
