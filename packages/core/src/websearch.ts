@@ -201,10 +201,14 @@ const layer = Layer.effect(
             if (result._tag === "Success") return new Response({ providerID: provider.id, results: result.success })
             const cause = result.failure
             const error = new RequestError({ providerID: provider.id, cause })
-            if (choice !== "random" || !HttpClientError.isHttpClientError(cause) || cause.response?.status !== 429)
+            if (
+              choice !== "random" ||
+              !HttpClientError.isHttpClientError(cause) ||
+              !depleted.has(cause.response?.status ?? 0)
+            )
               return yield* error
             const now = yield* Clock.currentTimeMillis
-            cooldown = { until: now + cooldownMillis(cause.response.headers["retry-after"], now), error }
+            cooldown = { until: now + cooldownMillis(cause.response?.headers["retry-after"], now), error }
             cooldowns.set(provider.id, cooldown)
           }
           provider = randomProvider(yield* Clock.currentTimeMillis, affinity, attempted)
@@ -214,6 +218,10 @@ const layer = Layer.effect(
     })
   }),
 )
+
+// A rate limit says nothing about the query, and neither does an exhausted plan or quota,
+// so random selection tries another provider instead of failing the search.
+const depleted = new Set([402, 429, 432])
 
 function cooldownMillis(value: string | undefined, now: number) {
   if (!value?.trim()) return 60_000

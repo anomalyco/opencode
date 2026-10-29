@@ -15,6 +15,8 @@ const providerSelectionLock = Semaphore.makeUnsafe(1)
 const httpErrors = new Map([
   [429, "Web search rate limited (HTTP 429)"],
   [401, "Web search authentication failed (HTTP 401)"],
+  [402, "Web search quota exhausted (HTTP 402)"],
+  [432, "Web search plan limit reached (HTTP 432)"],
 ])
 
 export const description = `Search the web using the user's selected search integration. Use this for current information beyond knowledge cutoff.
