@@ -22,6 +22,10 @@ export function HomeSessions(props: {
           showProjectName={props.sessions.session.showProjectName()}
           server={server()}
           canCreateSession={props.sessions.session.canCreate()}
+          viewMode={props.sessions.data.viewMode()}
+          setViewMode={props.sessions.data.setViewMode}
+          isGroupCollapsed={props.sessions.data.isGroupCollapsed}
+          toggleGroupCollapse={props.sessions.data.toggleGroupCollapse}
           searchValue={props.search.query.value()}
           searchPlaceholder={props.search.query.placeholder()}
           searchOpen={props.search.query.open()}

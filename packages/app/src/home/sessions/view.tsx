@@ -21,7 +21,9 @@ import {
   HomeSessionStatusController,
   homeSessionSearchKey,
   type HomeSessionGroup,
+  type HomeSessionProjectGroup,
   type HomeSessionRecord,
+  type HomeSessionViewMode,
   type OpenSessionOptions,
 } from "./controller"
 
@@ -32,6 +34,49 @@ const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
 const HOME_SESSION_SEARCH_RESULTS_ID = "home-session-search-results"
 
 const HOME_SESSION_LONG_PRESS_MS = 500
+
+function HomeSessionViewModeToggle(props: {
+  viewMode: HomeSessionViewMode
+  setViewMode: (mode: HomeSessionViewMode) => void
+  language: ReturnType<typeof useLanguage>
+}) {
+  return (
+    <div class="flex items-center gap-1 pt-2">
+      <button
+        type="button"
+        class={`
+          flex h-7 items-center gap-1.5 rounded-[6px] px-2 text-[13px] [font-weight:530]
+          transition-[background-color,color] duration-[120ms] ease-in-out
+          ${
+            props.viewMode === "date"
+              ? "bg-v2-overlay-simple-overlay-hover text-v2-text-text-base"
+              : "bg-transparent text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base"
+          }
+        `}
+        onClick={() => props.setViewMode("date")}
+      >
+        <Icon name="status" size="small" />
+        {props.language.t("home.sessions.viewMode.date")}
+      </button>
+      <button
+        type="button"
+        class={`
+          flex h-7 items-center gap-1.5 rounded-[6px] px-2 text-[13px] [font-weight:530]
+          transition-[background-color,color] duration-[120ms] ease-in-out
+          ${
+            props.viewMode === "project"
+              ? "bg-v2-overlay-simple-overlay-hover text-v2-text-text-base"
+              : "bg-transparent text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base"
+          }
+        `}
+        onClick={() => props.setViewMode("project")}
+      >
+        <Icon name="folder" size="small" />
+        {props.language.t("home.sessions.viewMode.project")}
+      </button>
+    </div>
+  )
+}
 
 // Middle-click or Cmd+click on macOS (Ctrl+click elsewhere) opens a session
 // tab in the background without navigating, matching browser conventions.
@@ -48,7 +93,7 @@ function isBackgroundOpen(event: MouseEvent) {
 
 export type HomeSessionsViewProps = {
   language: ReturnType<typeof useLanguage>
-  groups: HomeSessionGroup[]
+  groups: HomeSessionGroup[] | HomeSessionProjectGroup[]
   loading: boolean
   desktop: boolean
   location: (record: HomeSessionRecord) => { worktree: string; branch: string | undefined }
@@ -56,6 +101,10 @@ export type HomeSessionsViewProps = {
   showProjectName: boolean
   server: ServerConnection.Key
   canCreateSession: boolean
+  viewMode: HomeSessionViewMode
+  setViewMode: (mode: HomeSessionViewMode) => void
+  isGroupCollapsed: (id: string) => boolean
+  toggleGroupCollapse: (id: string) => void
   searchValue: string
   searchPlaceholder: string
   searchOpen: boolean
@@ -63,7 +112,7 @@ export type HomeSessionsViewProps = {
   searchResults: HomeSessionRecord[]
   searchActive: string
   searchNoResultsLabel: string
-  titleOpacity: (id: HomeSessionGroup["id"]) => number
+  titleOpacity: (id: HomeSessionGroup["id"] | string) => number
   isOpenTab: (record: HomeSessionRecord) => boolean
   onCreateSession: () => void
   onOpenSession: (session: SessionInfo, options?: OpenSessionOptions) => void
@@ -74,7 +123,7 @@ export type HomeSessionsViewProps = {
   onSetHoverTarget: (element: HTMLElement) => void
   onSetThumbTrack: (element: HTMLDivElement) => void
   onSetContent: (element: HTMLDivElement) => void
-  onSetHeader: (id: HomeSessionGroup["id"], element: HTMLDivElement) => void
+  onSetHeader: (id: HomeSessionGroup["id"] | string, element: HTMLDivElement) => void
   onWheel: (event: WheelEvent) => void
   onSetSearchRoot: (element: HTMLDivElement) => void
   onSetSearchInput: (element: HTMLInputElement) => void
@@ -117,6 +166,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           hoveredSession={hover.sessionID}
           onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
         />
+        <HomeSessionViewModeToggle viewMode={props.viewMode} setViewMode={props.setViewMode} language={props.language} />
         <Show when={props.groups.length > 0 && props.canCreateSession}>
           <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[84px] lg:top-[108px]">
             <Button
@@ -161,37 +211,54 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
               {/* Index keeps group subtrees mounted when the group arrays are
                   rebuilt, so store updates cannot recreate rows mid-gesture. */}
               <Index each={props.groups}>
-                {(group, index) => (
-                  <>
-                    <HomeSessionGroupHeader
-                      title={group().title}
-                      titleOpacity={props.titleOpacity(group().id)}
-                      onSetRef={(element) => props.onSetHeader(group().id, element)}
-                      elevated={index === 0}
-                    />
-                    <div
-                      class={`flex min-w-0 flex-col gap-px pt-2 md:pt-4 ${index === props.groups.length - 1 ? "" : "mb-6"}`}
-                    >
-                      {/* Rows key by session ID: session.sync replaces the
-                          stored session object wholesale, so reference-keyed
-                          rows would be disposed mid-interaction whenever a
-                          sync response lands. */}
-                      <Key each={group().sessions} by={(record) => record.session.id}>
-                        {(record) => (
-                          <HomeSessionRow
-                            {...props}
-                            record={record()}
-                            rowUI={rowUI}
-                            setRowUI={setRowUI}
-                            showLocations={showLocations()}
-                            hoveredSession={hover.sessionID}
-                            onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
-                          />
-                        )}
-                      </Key>
-                    </div>
-                  </>
-                )}
+                {(group, index) => {
+                  const isProjectGroup = props.viewMode === "project"
+                  const groupTitle = isProjectGroup
+                    ? (group() as HomeSessionProjectGroup).projectName
+                    : (group() as HomeSessionGroup).title
+                  const groupSessions = isProjectGroup
+                    ? (group() as HomeSessionProjectGroup).sessions
+                    : (group() as HomeSessionGroup).sessions
+                  const isCollapsed = props.isGroupCollapsed(group().id)
+
+                  return (
+                    <>
+                      <HomeSessionGroupHeader
+                        title={groupTitle}
+                        titleOpacity={props.titleOpacity(group().id)}
+                        onSetRef={(element) => props.onSetHeader(group().id, element)}
+                        elevated={index === 0}
+                        collapsible={isProjectGroup}
+                        collapsed={isCollapsed}
+                        onToggleCollapse={() => props.toggleGroupCollapse(group().id)}
+                        sessionCount={groupSessions.length}
+                      />
+                      <Show when={!isCollapsed}>
+                        <div
+                          class={`flex min-w-0 flex-col gap-px pt-2 md:pt-4 ${index === props.groups.length - 1 ? "" : "mb-6"}`}
+                        >
+                          {/* Rows key by session ID: session.sync replaces the
+                              stored session object wholesale, so reference-keyed
+                              rows would be disposed mid-interaction whenever a
+                              sync response lands. */}
+                          <Key each={groupSessions} by={(record) => record.session.id}>
+                            {(record) => (
+                              <HomeSessionRow
+                                {...props}
+                                record={record()}
+                                rowUI={rowUI}
+                                setRowUI={setRowUI}
+                                showLocations={showLocations()}
+                                hoveredSession={hover.sessionID}
+                                onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
+                              />
+                            )}
+                          </Key>
+                        </div>
+                      </Show>
+                    </>
+                  )
+                }}
               </Index>
             </div>
           </Show>
@@ -217,13 +284,25 @@ function HomeSessionLeadingController(props: {
           open={state.open()}
           unread={state.unread()}
           loading={state.loading()}
+          running={state.running()}
         />
       )}
     />
   )
 }
 
-function HomeSessionLeading(props: { record: HomeSessionRecord; open: boolean; unread: boolean; loading: boolean }) {
+function HomeSessionRunningIndicator() {
+  return (
+    <span
+      class="home-session-running-indicator absolute -top-0.5 -right-0.5 flex h-1.5 w-1.5 items-center justify-center"
+      aria-hidden="true"
+    >
+      <span class="block h-1 w-1 rounded-full bg-v2-background-bg-accent" />
+    </span>
+  )
+}
+
+function HomeSessionLeading(props: { record: HomeSessionRecord; open: boolean; unread: boolean; loading: boolean; running: boolean }) {
   return (
     <div class="relative shrink-0">
       <Show when={props.open}>
@@ -242,6 +321,9 @@ function HomeSessionLeading(props: { record: HomeSessionRecord; open: boolean; u
         unread={props.unread}
         loading={props.loading}
       />
+      <Show when={props.running}>
+        <HomeSessionRunningIndicator />
+      </Show>
     </div>
   )
 }
@@ -474,6 +556,10 @@ function HomeSessionGroupHeader(props: {
   titleOpacity: number
   onSetRef: (element: HTMLDivElement) => void
   elevated?: boolean
+  collapsible?: boolean
+  collapsed?: boolean
+  onToggleCollapse?: () => void
+  sessionCount?: number
 }) {
   return (
     <div
@@ -487,6 +573,27 @@ function HomeSessionGroupHeader(props: {
       <div class={HOME_SECTION_LABEL} style={{ opacity: props.titleOpacity }}>
         {props.title}
       </div>
+      <Show when={props.collapsible}>
+        <button
+          type="button"
+          class={`
+            flex items-center gap-1 rounded px-1.5 text-[11px] [font-weight:440]
+            text-v2-text-text-muted transition-colors duration-[120ms]
+            hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base
+          `}
+          onClick={(e) => {
+            e.stopPropagation()
+            props.onToggleCollapse?.()
+          }}
+        >
+          <Icon
+            name="chevron-down"
+            size="small"
+            class={`transition-transform duration-[120ms] ${props.collapsed ? "-rotate-90" : ""}`}
+          />
+          {props.sessionCount ?? 0}
+        </button>
+      </Show>
     </div>
   )
 }
@@ -840,29 +947,28 @@ function HomeSessionLocation(props: {
   instantHide: boolean
   desktop: boolean
 }) {
-  if (!props.desktop) return null
+  const worktree = () => props.location.worktree
+  const branch = () => props.location.branch
 
   return (
     <span
       dir="ltr"
-      aria-hidden={!props.show || undefined}
-      class="flex min-w-0 shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap ease-out motion-reduce:transition-none"
+      class="flex min-w-0 shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap"
       classList={{
-        "-ms-1.5 max-w-0 opacity-0": !props.show,
-        "max-w-[60%] opacity-100": props.show,
-        "transition-[max-width,opacity] duration-[120ms]": !props.instantHide,
-        "transition-none": props.instantHide,
+        "text-v2-text-text-muted [font-weight:440]": true,
       }}
     >
-      <Icon name="outline-worktree" class="shrink-0 text-v2-icon-icon-muted" />
-      <span class="min-w-0 overflow-hidden text-ellipsis [font-weight:440]">{props.location.worktree}</span>
-      <Show when={props.location.branch}>
-        {(branch) => (
+      <Show when={branch()}>
+        {(b) => (
           <>
-            <Icon name="branch" class="shrink-0 text-v2-icon-icon-muted" />
-            <span class="min-w-0 overflow-hidden text-ellipsis [font-weight:440]">{branch()}</span>
+            <span class="min-w-0 overflow-hidden text-ellipsis">{worktree()}</span>
+            <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+            <span class="min-w-0 overflow-hidden text-ellipsis [font-weight:440]">{b()}</span>
           </>
         )}
+      </Show>
+      <Show when={!branch()}>
+        <span class="min-w-0 overflow-hidden text-ellipsis">{worktree()}</span>
       </Show>
     </span>
   )

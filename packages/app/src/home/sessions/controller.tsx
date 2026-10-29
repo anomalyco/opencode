@@ -39,6 +39,15 @@ export type HomeSessionGroup = {
   sessions: HomeSessionRecord[]
 }
 
+export type HomeSessionProjectGroup = {
+  id: string
+  projectWorktree: string
+  projectName: string
+  sessions: HomeSessionRecord[]
+}
+
+export type HomeSessionViewMode = "date" | "project"
+
 export type OpenSessionOptions = { background?: boolean }
 
 export function createHomeSessionsController(home: HomeController) {
@@ -48,6 +57,9 @@ export function createHomeSessionsController(home: HomeController) {
   const language = useLanguage()
   const platform = usePlatform()
   const queryClient = useQueryClient()
+
+  const [viewMode, setViewMode] = createStore<{ mode: HomeSessionViewMode }>({ mode: "date" })
+  const [collapsedGroups, setCollapsedGroups] = createStore<Record<string, boolean>>({})
 
   const projectDirectories = createMemo(() => {
     const selected = home.selection.value().directory
@@ -101,7 +113,9 @@ export function createHomeSessionsController(home: HomeController) {
   )
 
   const records = createMemo(() => allRecords().slice(0, HOME_SESSION_LIMIT))
-  const groups = createMemo(() => groupSessions(records(), language))
+  const groups = createMemo(() =>
+    viewMode.mode === "project" ? groupSessionsByProject(records()) : groupSessions(records(), language),
+  )
   const prefetched = new Set<string>()
 
   const location = (record: HomeSessionRecord) => {
@@ -306,6 +320,11 @@ export function createHomeSessionsController(home: HomeController) {
       groups,
       loading: () => sessionLoad.isPending,
       searchRecords: allRecords,
+      viewMode: () => viewMode.mode,
+      setViewMode: (mode: HomeSessionViewMode) => setViewMode({ mode }),
+      isGroupCollapsed: (id: string) => collapsedGroups[id] ?? false,
+      toggleGroupCollapse: (id: string) =>
+        setCollapsedGroups((prev) => ({ ...prev, [id]: !prev[id] })),
     },
     platform: {
       desktop: platform.platform === "desktop",
@@ -425,13 +444,42 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
   ].filter((group) => group.sessions.length > 0)
 }
 
+function groupSessionsByProject(records: HomeSessionRecord[]): HomeSessionProjectGroup[] {
+  const groups = new Map<string, HomeSessionRecord[]>()
+
+  for (const record of records) {
+    const key = record.project.worktree
+    const existing = groups.get(key) ?? []
+    existing.push(record)
+    groups.set(key, existing)
+  }
+
+  return Array.from(groups.entries())
+    .map(([worktree, sessions]) => ({
+      id: worktree,
+      projectWorktree: worktree,
+      projectName: displayName({ worktree }),
+      sessions,
+    }))
+    .sort((a, b) => {
+      const aTime = Math.max(...a.sessions.map((s) => s.session.time.updated ?? s.session.time.created))
+      const bTime = Math.max(...b.sessions.map((s) => s.session.time.updated ?? s.session.time.created))
+      return bTime - aTime
+    })
+}
+
 export type HomeSessionsController = ReturnType<typeof createHomeSessionsController>
 
 export function HomeSessionStatusController(props: {
   server: ServerConnection.Key
   record: HomeSessionRecord
   isOpenTab: (record: HomeSessionRecord) => boolean
-  render: (state: { unread: Accessor<boolean>; loading: Accessor<boolean>; open: Accessor<boolean> }) => JSX.Element
+  render: (state: {
+    unread: Accessor<boolean>
+    loading: Accessor<boolean>
+    open: Accessor<boolean>
+    running: Accessor<boolean>
+  }) => JSX.Element
 }) {
   const avatar = useSessionTabAvatarState(
     () => props.server,
@@ -445,5 +493,6 @@ export function HomeSessionStatusController(props: {
     unread: avatar.unread,
     loading: avatar.loading,
     open: () => props.isOpenTab(props.record),
+    running: () => avatar.loading() && !avatar.unread(),
   })
 }

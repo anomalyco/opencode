@@ -24,3 +24,25 @@
     line-height: var(--line-height-compact);
   }
 }
+
+.home-session-running-indicator {
+  animation: home-session-pulse 2s ease-in-out infinite;
+}
+
+@keyframes home-session-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-session-running-indicator {
+    animation: none;
+  }
+}
