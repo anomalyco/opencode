@@ -100,7 +100,10 @@ export const Plugin = define({
 
           const exists = editor.get(agentID) !== undefined
           editor.update(agentID, (agent) => {
-            if (!exists) agent.permissions.push(...permissions)
+            if (!exists) {
+              agent.native = false
+              agent.permissions.push(...permissions)
+            }
             if (item.model !== undefined)
               agent.model = {
                 id: item.model.model,
