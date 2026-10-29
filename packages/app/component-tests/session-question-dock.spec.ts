@@ -80,6 +80,90 @@ story("keeps classic long answer lists inside the panel and scrolls them", async
   await expect(question.getByRole("radio", { name: "One pull request", exact: true })).toBeFocused()
 })
 
+story.describe("on a 393x852 mobile viewport", () => {
+  story.use({ hasTouch: true, isMobile: true, viewport: { width: 393, height: 852 } })
+
+  for (const experimental of [false, true]) {
+    story(
+      `keeps navigation visible and scrolls long prompts and 12 options (${experimental ? "experimental" : "classic"})`,
+      async ({ mount, page }) => {
+        if (experimental) {
+          await page.addInitScript(() =>
+            localStorage.setItem("settings.v3", JSON.stringify({ general: { newQuestionUI: true } })),
+          )
+        }
+
+        const component = await mount("session-question-switch--long-prompt")
+        expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true)
+        await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+        const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+        const dismiss = question.getByRole("button", { name: "Dismiss", exact: true })
+        const next = question.getByRole("button", { name: "Next", exact: true })
+        await expect(dismiss).toBeInViewport({ ratio: 1 })
+        await expect(next).toBeInViewport({ ratio: 1 })
+
+        const twelfth = question.getByRole("radio", { name: /12\. Clean slate rebuild/ })
+        await twelfth.scrollIntoViewIfNeeded()
+        await expect(twelfth).toBeInViewport({ ratio: 1 })
+        await twelfth.tap()
+        await expect(twelfth).toBeChecked()
+        await expect(next).toBeInViewport({ ratio: 1 })
+
+        await next.tap()
+
+        const back = question.getByRole("button", { name: "Back", exact: true })
+        const submit = question.getByRole("button", { name: "Submit", exact: true })
+        await expect(back).toBeInViewport({ ratio: 1 })
+        await expect(submit).toBeInViewport({ ratio: 1 })
+
+        const detailsSlot = experimental ? '[data-slot="question-details-frame"]' : '[data-slot="question-details"]'
+
+        const layout = await question.evaluate((root, selector) => {
+          const details = root.querySelector<HTMLElement>(selector)!
+          const options = root.querySelector<HTMLElement>('[data-slot="question-options"]')!
+          const footer = root.querySelector<HTMLElement>('[data-slot="question-footer"]')!
+          const detailsRect = details.getBoundingClientRect()
+          const optionsRect = options.getBoundingClientRect()
+          const footerRect = footer.getBoundingClientRect()
+
+          details.scrollTop = details.scrollHeight
+          const scrolledPrompt = details.scrollTop > 0
+
+          return {
+            promptScrollHeight: details.scrollHeight,
+            promptClientHeight: details.clientHeight,
+            scrolledPrompt,
+            optionsHeight: optionsRect.height,
+            optionsBelowPrompt: optionsRect.top >= detailsRect.bottom - 0.5,
+            footerBelowOptions: footerRect.top >= optionsRect.bottom - 9.5,
+            dockFitsViewport: root.getBoundingClientRect().bottom <= innerHeight + 0.5,
+          }
+        }, detailsSlot)
+
+        expect(layout.promptScrollHeight).toBeGreaterThan(852)
+        expect(layout.promptClientHeight).toBeGreaterThan(48)
+        expect(layout.promptScrollHeight).toBeGreaterThan(layout.promptClientHeight)
+        expect(layout.scrolledPrompt).toBe(true)
+        expect(layout.optionsHeight).toBeGreaterThan(80)
+        expect(layout.optionsBelowPrompt).toBe(true)
+        expect(layout.footerBelowOptions).toBe(true)
+        expect(layout.dockFitsViewport).toBe(true)
+
+        const lastOption = question.getByRole("radio", { name: /Export a diagnostic bundle/ })
+        await lastOption.scrollIntoViewIfNeeded()
+        await expect(lastOption).toBeInViewport({ ratio: 1 })
+        await lastOption.tap()
+        await expect(lastOption).toBeChecked()
+        await expect(submit).toBeInViewport({ ratio: 1 })
+
+        await submit.tap()
+        await expect(question).toBeHidden()
+      },
+    )
+  }
+})
+
 story(
   "minimizes and restores classic questions immediately for reduced motion and keyboard actions",
   async ({ mount, page }) => {
