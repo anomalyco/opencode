@@ -743,3 +743,27 @@ describe("ConfigNormalize", () => {
     expect(result.encoded.share).toBeUndefined()
   })
 })
+
+describe("legacy provider decoding", () => {
+  // Regression: a V2-style partial limit ({ output: 16000 }) failed the V1 schema, and because
+  // migrateProviders decodes a whole provider atomically, ONE such model dropped the entire
+  // provider — every other model in it silently disappeared.
+  test("keeps a provider whose model overrides only limit.output", () => {
+    const result = normalized({
+      provider: {
+        custom: {
+          npm: "@ai-sdk/openai-compatible",
+          models: {
+            "some/model": { limit: { output: 16000 } },
+            "other/model": { limit: { context: 200000, output: 8000 } },
+          },
+        },
+      },
+    })
+    const providers = (result.encoded as Record<string, any>).providers ?? {}
+    expect(Object.keys(providers)).toContain("custom")
+    const models = providers.custom?.models ?? {}
+    expect(Object.keys(models)).toEqual(expect.arrayContaining(["some/model", "other/model"]))
+    expect(models["some/model"].limit).toEqual({ output: 16000 })
+  })
+})

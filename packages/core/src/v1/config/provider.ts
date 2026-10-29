@@ -40,10 +40,13 @@ export const Model = Schema.Struct({
     }),
   ),
   limit: Schema.optional(
+    // Every field optional: V2 lets an operator override just one dimension (commonly
+    // `{ output: 16000 }`), and requiring `context` here made that config fail V1 decoding,
+    // which drops the ENTIRE provider rather than the one model. See normalize.migrateProviders.
     Schema.Struct({
-      context: Schema.Finite,
+      context: Schema.optional(Schema.Finite),
       input: Schema.optional(Schema.Finite),
-      output: Schema.Finite,
+      output: Schema.optional(Schema.Finite),
     }),
   ),
   modalities: Schema.optional(
