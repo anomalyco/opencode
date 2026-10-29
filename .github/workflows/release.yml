@@ -733,6 +733,22 @@ jobs:
           GH_REPO: ${{ github.repository }}
           OPENCODE_RELEASE_NOTES: ${{ inputs.release_notes }}
 
+  publish-discord:
+    needs: [plan, publish-github-release]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
+    env: *env
+    steps:
+      - *checkout-release
+      - name: Publish
+        run: bash .github/release/publish-discord.sh
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          OPENCODE_RELEASE_NOTES: ${{ inputs.release_notes }}
+
   # Brings the release commit back to dev. Pushing to dev is blocked by rulesets, so it opens a PR.
   publish-version-pr:
     needs: [plan, tag, publish-npm, publish-cli, publish-desktop, publish-github-release]

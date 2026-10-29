@@ -878,6 +878,7 @@ export const dict = {
   "settings.server.preferences.websearch.description": "Select the search provider agents use to search the web",
   "settings.projects.title": "Projects",
   "settings.projects.description": "Manage projects and their settings",
+  "settings.projects.other": "Other projects",
   "settings.projects.empty": "No projects found",
   "settings.projects.empty.title": "No projects yet",
   "settings.projects.empty.description": "Add a project to get started",
