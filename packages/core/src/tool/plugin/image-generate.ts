@@ -9,6 +9,7 @@ import { Global } from "@opencode/util/global"
 import { Duration, Effect, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
 import { FileAccess } from "../../file-access.js"
 import { Generate } from "../../generate.js"
@@ -217,6 +218,10 @@ export const Plugin = {
       Effect.forkIn(scope, { startImmediately: true }),
     )
 
+    // Opt-in through experimental.image_generate. Internal plugins are not re-run on config changes, so reload the
+    // tool transform instead.
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+
     // Registered only while an image model is available, re-evaluated whenever the catalog changes.
     // Subscribing before the first read keeps a change in between from being missed.
     const wanted = models.available(["image"]).pipe(Effect.map((available) => available.length > 0))
@@ -236,7 +241,7 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((editor) => {
-        if (!enabled) return
+        if (!enabled || !optedIn(loaded.entries)) return
         editor.add({
           name,
           options: { codemode: false },
@@ -382,10 +387,20 @@ export function defaultModel(
 }
 
 // Read per field so a later config that sets other experimental options doesn't hide this one.
-function configuredModel(entries: readonly Entry[]) {
+function imageGenerate(entries: readonly Entry[]) {
   return entries.findLast(
-    (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_model !== undefined,
-  )?.info.experimental?.image_model
+    (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_generate !== undefined,
+  )?.info.experimental?.image_generate
+}
+
+function optedIn(entries: readonly Entry[]) {
+  const value = imageGenerate(entries)
+  return value !== undefined && value !== false
+}
+
+function configuredModel(entries: readonly Entry[]) {
+  const value = imageGenerate(entries)
+  return typeof value === "object" ? value.model : undefined
 }
 
 function acceptsImages(model: Model.Info) {

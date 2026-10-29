@@ -96,6 +96,10 @@ const setup = (providerID = "test") =>
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
     const location = yield* Location.Service
+    const config = yield* Config.Test
+    const entries = yield* config.entries()
+    if (!entries.some((entry) => entry.type === "document" && entry.info.experimental?.image_generate !== undefined))
+      yield* configure(true)
     const host = yield* PluginHost.make(plugins)
     yield* ImageGenerateTool.Plugin.effect(host)
     yield* OpenCodeTools.Plugin.effect(host)
@@ -131,13 +135,13 @@ const setup = (providerID = "test") =>
     return { session, run, notice, directory: location.directory }
   })
 
-const configure = (image_model: ConfigExperimental.Info["image_model"]) =>
+const configure = (image_generate: ConfigExperimental.Info["image_generate"]) =>
   Effect.gen(function* () {
     const config = yield* Config.Test
     yield* config.setEntries([
       new Document({
         type: "document",
-        info: new Info({ experimental: new ConfigExperimental.Info({ image_model }) }),
+        info: new Info({ experimental: new ConfigExperimental.Info({ image_generate }) }),
       }),
     ])
     const bus = yield* Bus.Service
@@ -176,6 +180,23 @@ describe("image_generate", () => {
     }),
   )
 
+  it.live("is offered only when experimental.image_generate is enabled", () =>
+    Effect.gen(function* () {
+      yield* imageModel("test", "painter")
+      yield* configure(false)
+      yield* setup()
+      expect(yield* registered).toBe(false)
+      yield* configure(true)
+      expect(yield* until(true)).toBe(true)
+      yield* configure(false)
+      expect(yield* until(false)).toBe(false)
+      yield* configure({})
+      expect(yield* until(true)).toBe(true)
+      yield* configure(undefined)
+      expect(yield* until(false)).toBe(false)
+    }),
+  )
+
   it.live("uses the configured model unless the agent picks one, and falls back with a note", () =>
     Effect.gen(function* () {
       yield* imageModel("test", "painter", (model) => {
@@ -184,7 +205,7 @@ describe("image_generate", () => {
       yield* imageModel("other", "text-only", (model) => {
         model.capabilities.input = ["text"]
       })
-      yield* configure(configuredModel("other", "text-only"))
+      yield* configure({ model: configuredModel("other", "text-only") })
       const { run, directory } = yield* setup()
       yield* Effect.promise(() => fs.writeFile(path.join(directory, "in.png"), Buffer.from(PNG, "base64")))
 
@@ -199,7 +220,7 @@ describe("image_generate", () => {
       expect(edit.output).toMatchObject({ model: "test/painter" })
       expect(text(edit)).toContain("other/text-only doesn't accept input images; used test/painter.")
 
-      yield* configure(configuredModel("gone", "model"))
+      yield* configure({ model: configuredModel("gone", "model") })
       const missing = yield* run({ prompt: "x" })
       expect(missing.output).toMatchObject({ model: "test/painter" })
       expect(text(missing)).toContain("gone/model isn't available; used test/painter.")
@@ -393,9 +414,11 @@ describe("image_generate", () => {
       )
 
       yield* configure({
-        providerID: Provider.ID.make("test"),
-        model: Model.ID.make("painter"),
-        variant: Model.VariantID.make("hd"),
+        model: {
+          providerID: Provider.ID.make("test"),
+          model: Model.ID.make("painter"),
+          variant: Model.VariantID.make("hd"),
+        },
       })
       const configured = yield* run({ prompt: "x" })
       expect(configured.output).toMatchObject({ model: "test/painter#hd" })
@@ -403,9 +426,11 @@ describe("image_generate", () => {
       expect(fixture.requests.at(-1)?.model.variant).toBe(Model.VariantID.make("hd"))
 
       yield* configure({
-        providerID: Provider.ID.make("test"),
-        model: Model.ID.make("painter"),
-        variant: Model.VariantID.make("bogus"),
+        model: {
+          providerID: Provider.ID.make("test"),
+          model: Model.ID.make("painter"),
+          variant: Model.VariantID.make("bogus"),
+        },
       })
       const fallback = yield* run({ prompt: "x" })
       expect(text(fallback)).toContain('test/painter#bogus has no variant "bogus"; used ')

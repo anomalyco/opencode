@@ -495,14 +495,14 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.media_blob = value
       }
-      if (own(experimental, "image_model")) {
+      if (own(experimental, "image_generate")) {
         const value = decodeEncoded(
-          ConfigExperimental.Info.fields.image_model,
-          experimental.image_model,
-          ["experimental", "image_model"],
+          ConfigExperimental.Info.fields.image_generate,
+          experimental.image_generate,
+          ["experimental", "image_generate"],
           diagnostics,
         )
-        if (value !== undefined) result.image_model = value
+        if (value !== undefined) result.image_generate = value
       }
       if (own(experimental, "schedules")) {
         const value = decodeEncoded(
