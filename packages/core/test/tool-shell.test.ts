@@ -865,12 +865,16 @@ describe("ShellTool", () => {
                 {
                   sessionID,
                   action: "shell",
-                  resources: [isWindows ? "Start-Sleep -Milliseconds 100" : helloCommand],
+                  resources: isWindows
+                    ? ["[Console]::Out.Write('hello')", "Start-Sleep -Milliseconds 100"]
+                    : [helloCommand],
                   agent: toolIdentity.agent,
                   source: { type: "tool", messageID: toolIdentity.messageID, id: "call-shell" },
                 },
               ])
-              expect(assertions[0]?.save).toEqual([isWindows ? "Start-Sleep *" : "printf *"])
+              expect(assertions[0]?.save).toEqual(
+                isWindows ? ["[Console]::Out.Write(*", "Start-Sleep *"] : ["printf *"],
+              )
             }),
           )
         },
