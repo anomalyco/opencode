@@ -1,5 +1,4 @@
 import { Show, createEffect, createMemo, createSignal } from "solid-js"
-import { Dynamic } from "solid-js/web"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -9,12 +8,11 @@ import { Slash } from "@opencode/ui/slash"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { ComposerEditor } from "./editor/editor"
 import { DialogSelectModel, ModelSelectorDrawer } from "@/providers/models/select-dialog"
-import { DialogSelectModelNext, ModelSelectorDrawerNext } from "@/providers/models/select-dialog-next"
-import { useSettings } from "@/settings/model"
 import { DialogSelectModelUnpaid } from "@/providers/models/unpaid"
 import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerModel } from "./model"
+import type { ComposerModelLabel } from "./model-label"
 
 export function Composer(props: {
   class?: string
@@ -42,6 +40,15 @@ export function Composer(props: {
     return language.t("dialog.model.select.title")
   }
 
+  const modelLabel = () => {
+    const preview = props.model.model.preview
+    const label = preview ? preview.label : props.model.model.label
+
+    if (label) return label
+
+    return { provider: preview ? preview.provider : props.model.model.providerName, model: modelName() }
+  }
+
   return (
     <div class="flex flex-col gap-3">
       <ComposerEditor
@@ -63,8 +70,7 @@ export function Composer(props: {
             title={language.t("command.model.choose")}
             keybind={command.keybindParts("model.choose")}
             model={props.model.model.selection}
-            providerName={props.model.model.preview?.provider ?? props.model.model.providerName}
-            modelName={modelName()}
+            label={modelLabel()}
             onClose={props.model.restoreFocus}
             onUnpaidClick={() => dialog.show(() => <DialogSelectModelUnpaid model={props.model.model.selection} />)}
           />
@@ -81,8 +87,7 @@ function ComposerModelControl(props: {
   title: string
   keybind: string[]
   model: ComposerModel["model"]["selection"]
-  providerName?: string
-  modelName: string
+  label: ComposerModelLabel
   onClose: () => void
   onUnpaidClick: () => void
 }) {
@@ -90,14 +95,12 @@ function ComposerModelControl(props: {
   const shouldAnimate = createMemo<boolean>((previous) => previous ?? (props.loading && !props.preview))
   const mobile = createMediaQuery("(max-width: 767px)")
   const dialog = useDialog()
-  const settings = useSettings()
 
   const open = (detail: number) => {
     if (!props.paid) return props.onUnpaidClick()
-    const Picker = settings.general.newModelPicker() ? DialogSelectModelNext : DialogSelectModel
     // A pointer open keeps focus in the composer, so the dialog returns it to the caret. A keyboard open
     // (a click with no pointer presses) returns focus to this trigger instead of moving it to the editor.
-    void dialog.show(() => <Picker model={props.model} />, detail === 0 ? undefined : props.onClose)
+    void dialog.show(() => <DialogSelectModel model={props.model} />, detail === 0 ? undefined : props.onClose)
   }
 
   // A previewed chip is visible before the catalog loads, so a click on it opens the dialog once loading finishes.
@@ -114,16 +117,16 @@ function ComposerModelControl(props: {
   const content = () => (
     <>
       <span class="flex min-w-0 whitespace-nowrap leading-4">
-        <Show when={props.providerName}>
+        <Show when={props.label.provider}>
           {(name) => (
             <>
-              <span class="shrink-0 text-v2-text-text-faint">{name()}</span>
+              <bdi class="min-w-0 shrink-[2] truncate text-v2-text-text-faint">{name()}</bdi>
               <Slash />
               <span class="sr-only">{" / "}</span>
             </>
           )}
         </Show>
-        <span class="truncate">{props.modelName}</span>
+        <bdi class="min-w-0 truncate">{props.label.model}</bdi>
       </span>
       <span class="-ml-0.5 -mr-1 flex shrink-0">
         <Icon name="chevron-down" />
@@ -167,8 +170,7 @@ function ComposerModelControl(props: {
             </Button>
           }
         >
-          <Dynamic
-            component={settings.general.newModelPicker() ? ModelSelectorDrawerNext : ModelSelectorDrawer}
+          <ModelSelectorDrawer
             model={props.model}
             trigger={(triggerProps) => (
               <Button

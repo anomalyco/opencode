@@ -250,7 +250,11 @@ function runtime(inventory: Inventory) {
     })
   }
   const tools = renderTools(root)
-  const created = CodeMode.make<typeof tools>({ tools, extensions: [CodeModeWeb.extension], hooks: runHooks })
+  const created = CodeMode.make<typeof tools, [typeof CodeModeWeb.extension]>({
+    tools,
+    extensions: [CodeModeWeb.extension],
+    hooks: runHooks,
+  })
   runtimes.set(inventory, created)
   return created
 }

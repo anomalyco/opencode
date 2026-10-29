@@ -1,4 +1,4 @@
-import type { SessionApi } from "@opencode/client/promise/api"
+import type { ExperimentalSessionApi, SessionApi } from "@opencode/client/promise/api"
 import type { GenerationOptionsFields, Message, SystemPart } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
@@ -136,6 +136,48 @@ export interface SessionRetry {
   decision: SessionRetryDecision
 }
 
+/**
+ * Background work still running for the idle Session or one of its descendants. `sessionID` is
+ * the Session that owns the job: the idle Session itself, or a descendant such as a subagent child.
+ */
+export type SessionIdleBackground =
+  | {
+      readonly kind: "shell"
+      readonly sessionID: Session.ID
+      readonly shellID: string
+      readonly command: string
+    }
+  | {
+      readonly kind: "subagent"
+      readonly sessionID: Session.ID
+      readonly childSessionID: Session.ID
+      readonly agent: string
+      readonly description: string
+    }
+  | {
+      readonly kind: "image"
+      readonly sessionID: Session.ID
+      readonly path: string
+      readonly model: string
+    }
+
+/**
+ * Runs when a Session finishes model work and has no pending input, just before it goes idle.
+ * It does not run after interruption, failure, or control-only work such as a manual compaction.
+ * Input admitted by the hook, such as a synthetic message, runs in the same execution instead
+ * of the Session going idle.
+ *
+ * `background` lists work that is still running. When the Session's own shell or subagent finishes,
+ * its notice wakes the Session and the hook runs again, so a plugin that waits for that work can
+ * simply return. Work a descendant owns, such as a shell a subagent left running, wakes that
+ * descendant instead, so it is listed for information only. Notices admitted with `resume: false`,
+ * such as those recovered after a restart, wait for the next wake. Experimental.
+ */
+export interface SessionIdle {
+  readonly sessionID: Session.ID
+  readonly background: ReadonlyArray<SessionIdleBackground>
+}
+
 export interface SessionHooks {
   readonly prompt: SessionPrompt
   readonly context: SessionContext
@@ -149,6 +191,7 @@ export interface SessionHooks {
   readonly "experimental.ws.send": SessionWebSocketSend
   readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
+  readonly "experimental.idle": SessionIdle
 }
 
 export type SessionDomain = Pick<
@@ -167,9 +210,8 @@ export type SessionDomain = Pick<
   | "interrupt"
   | "update"
   | "move"
-  | "wait"
   | "context"
-  | "instructions"
-> & {
-  readonly hook: ModelHooks<SessionHooks>
-}
+> &
+  Pick<ExperimentalSessionApi, "wait" | "instructions"> & {
+    readonly hook: ModelHooks<SessionHooks>
+  }

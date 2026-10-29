@@ -3993,7 +3993,7 @@
     "/api/experimental/session/{sessionID}/log": {
       "get": {
         "tags": ["session"],
-        "operationId": "session.log",
+        "operationId": "experimental.session.log",
         "parameters": [
           {
             "name": "sessionID",
@@ -11732,7 +11732,7 @@
     "/api/experimental/session/{sessionID}/terminal/read": {
       "get": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.read",
+        "operationId": "experimental.persistentPty.read",
         "parameters": [
           {
             "name": "sessionID",
@@ -11822,7 +11822,7 @@
     "/api/experimental/session/{sessionID}/terminal": {
       "get": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.list",
+        "operationId": "experimental.persistentPty.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -11889,7 +11889,7 @@
       },
       "post": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.create",
+        "operationId": "experimental.persistentPty.create",
         "parameters": [
           {
             "name": "sessionID",
@@ -11965,7 +11965,7 @@
     "/api/experimental/persistent-pty/shutdown": {
       "post": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.shutdown",
+        "operationId": "experimental.persistentPty.shutdown",
         "parameters": [],
         "security": [],
         "responses": {
@@ -12008,7 +12008,7 @@
     "/api/experimental/persistent-pty/handoff": {
       "post": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.handoff",
+        "operationId": "experimental.persistentPty.handoff",
         "parameters": [],
         "security": [],
         "responses": {
@@ -12072,7 +12072,7 @@
     "/api/experimental/persistent-pty/{ptyID}": {
       "get": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.get",
+        "operationId": "experimental.persistentPty.get",
         "parameters": [
           {
             "name": "ptyID",
@@ -12146,7 +12146,7 @@
       },
       "put": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.update",
+        "operationId": "experimental.persistentPty.update",
         "parameters": [
           {
             "name": "ptyID",
@@ -12230,7 +12230,7 @@
       },
       "delete": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.remove",
+        "operationId": "experimental.persistentPty.remove",
         "parameters": [
           {
             "name": "ptyID",
@@ -12292,7 +12292,7 @@
     "/api/experimental/persistent-pty/{ptyID}/snapshot": {
       "get": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.snapshot",
+        "operationId": "experimental.persistentPty.snapshot",
         "parameters": [
           {
             "name": "ptyID",
@@ -12368,7 +12368,7 @@
     "/api/experimental/persistent-pty/{ptyID}/connect-token": {
       "post": {
         "tags": ["persistentPty"],
-        "operationId": "server.experimental.persistentPty.connectToken",
+        "operationId": "experimental.persistentPty.connectToken",
         "parameters": [
           {
             "name": "ptyID",
@@ -12469,7 +12469,7 @@
     "/api/experimental/persistent-pty/{ptyID}/connect": {
       "get": {
         "tags": ["persistentPty"],
-        "operationId": "persistentPty.connect",
+        "operationId": "experimental.persistentPty.connect",
         "parameters": [
           {
             "name": "ptyID",
@@ -12650,6 +12650,460 @@
         },
         "description": "Read a content-addressed media blob by SHA-256 hash with immutable Cache-Control, ETag, and 304 Not Modified support. Only blobs a stored message or inbox item still references are served. Experimental: may change without compatibility guarantees.",
         "summary": "Read media blob"
+      }
+    },
+    "/api/experimental/schedule": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.create",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Schedule.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "Create schedule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Schedule.CreatePayload"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Schedule.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List a Session's schedules, oldest first. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "List schedules"
+      }
+    },
+    "/api/experimental/schedule/{scheduleID}": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.get",
+        "parameters": [
+          {
+            "name": "scheduleID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Schedule.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Schedule.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ScheduleNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read one schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "Get schedule"
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.delete",
+        "parameters": [
+          {
+            "name": "scheduleID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Schedule.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ScheduleNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Delete a schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "Delete schedule"
+      }
+    },
+    "/api/experimental/schedule/{scheduleID}/pause": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.pause",
+        "parameters": [
+          {
+            "name": "scheduleID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Schedule.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Schedule.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ScheduleNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stop a schedule from firing until it is resumed. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "Pause schedule"
+      }
+    },
+    "/api/experimental/schedule/{scheduleID}/resume": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.resume",
+        "parameters": [
+          {
+            "name": "scheduleID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Schedule.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Schedule.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ScheduleNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Resume a paused schedule. A one-shot that fell due while paused fires once; a repeating schedule resumes at its next slot. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "Resume schedule"
       }
     },
     "/api/shell": {
@@ -15508,6 +15962,9 @@
           "username": {
             "type": "string"
           },
+          "timezone": {
+            "type": "string"
+          },
           "permissions": {
             "$ref": "#/components/schemas/Permission.Ruleset"
           },
@@ -15785,6 +16242,49 @@
                 "type": "boolean"
               },
               "media_blob": {
+                "type": "boolean"
+              },
+              "image_generate": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "providerID": {
+                                "type": "string",
+                                "pattern": "^[^/#]+$"
+                              },
+                              "model": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              }
+                            },
+                            "required": ["providerID", "model"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "schedules": {
                 "type": "boolean"
               },
               "subagent_depth": {
@@ -20629,6 +21129,338 @@
           }
         },
         "required": ["_tag", "type", "message"],
+        "additionalProperties": false
+      },
+      "Schedule.Action": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Prompt"
+          }
+        ]
+      },
+      "Schedule.Action.Prompt": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["prompt"]
+          },
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "prompt"],
+        "additionalProperties": false
+      },
+      "Schedule.CreatePayload": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/components/schemas/Schedule.WhenInput"
+          },
+          "ends": {
+            "$ref": "#/components/schemas/Schedule.Ends"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The message the Session receives each time the schedule fires."
+          }
+        },
+        "required": ["sessionID", "when", "prompt"],
+        "additionalProperties": false
+      },
+      "Schedule.Duration": {
+        "type": "string",
+        "description": "A duration such as \"90 seconds\", \"5 minutes\" or \"2 hours\"."
+      },
+      "Schedule.Ends": {
+        "type": "object",
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/Schedule.Duration"
+          },
+          "at": {
+            "type": "string"
+          },
+          "times": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "Schedule.ID": {
+        "type": "string",
+        "pattern": "^sch_"
+      },
+      "Schedule.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Schedule.ID"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/components/schemas/Schedule.When"
+          },
+          "tz": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/components/schemas/Schedule.Action"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Schedule.Status"
+          },
+          "nextDueAt": {
+            "type": "number"
+          },
+          "endsAt": {
+            "type": "number"
+          },
+          "remainingRuns": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "runCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastFiredAt": {
+            "type": "number"
+          },
+          "lastOutcome": {
+            "$ref": "#/components/schemas/Schedule.Outcome"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "updated": {
+                "type": "number"
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "when", "tz", "action", "status", "runCount", "time"],
+        "additionalProperties": false
+      },
+      "Schedule.Outcome": {
+        "type": "string",
+        "enum": ["fired", "late", "skipped", "disabled", "failed"]
+      },
+      "Schedule.Status": {
+        "type": "string",
+        "enum": ["active", "paused", "done"]
+      },
+      "Schedule.When": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Schedule.When.In"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.When.At"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.When.Every"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.When.Cron"
+          }
+        ]
+      },
+      "Schedule.When.At": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["at"]
+          },
+          "at": {
+            "type": "string"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "at"],
+        "additionalProperties": false
+      },
+      "Schedule.When.Cron": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["cron"]
+          },
+          "cron": {
+            "type": "string"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "cron"],
+        "additionalProperties": false
+      },
+      "Schedule.When.Every": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["every"]
+          },
+          "every": {
+            "$ref": "#/components/schemas/Schedule.Duration"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "every"],
+        "additionalProperties": false
+      },
+      "Schedule.When.In": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["in"]
+          },
+          "in": {
+            "$ref": "#/components/schemas/Schedule.Duration"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "in"],
+        "additionalProperties": false
+      },
+      "Schedule.WhenInput": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "in": {
+                "$ref": "#/components/schemas/Schedule.Duration"
+              },
+              "at": {
+                "not": {}
+              },
+              "every": {
+                "not": {}
+              },
+              "cron": {
+                "not": {}
+              },
+              "tz": {
+                "type": "string"
+              }
+            },
+            "required": ["in"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "in": {
+                "not": {}
+              },
+              "every": {
+                "not": {}
+              },
+              "cron": {
+                "not": {}
+              },
+              "tz": {
+                "type": "string"
+              }
+            },
+            "required": ["at"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "every": {
+                "$ref": "#/components/schemas/Schedule.Duration"
+              },
+              "in": {
+                "not": {}
+              },
+              "at": {
+                "not": {}
+              },
+              "cron": {
+                "not": {}
+              },
+              "tz": {
+                "type": "string"
+              }
+            },
+            "required": ["every"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cron": {
+                "type": "string"
+              },
+              "in": {
+                "not": {}
+              },
+              "at": {
+                "not": {}
+              },
+              "every": {
+                "not": {}
+              },
+              "tz": {
+                "type": "string"
+              }
+            },
+            "required": ["cron"],
+            "additionalProperties": false
+          }
+        ],
+        "description": "When it fires: { in: \"20 minutes\" }, { at: \"2026-10-27T09:00\" }, { every: \"1 hour\" } or { cron: \"0 9 * * 1-5\" }. Wall-clock times use tz."
+      },
+      "ScheduleNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ScheduleNotFoundError"]
+          },
+          "scheduleID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "scheduleID", "message"],
         "additionalProperties": false
       },
       "ServerInfo": {

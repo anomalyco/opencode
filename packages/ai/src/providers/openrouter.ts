@@ -6,11 +6,13 @@ import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { ProviderID, type ModelID, type OpenString, type ProviderOptions } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../protocols/system-one.js"
-import { OpenAIImages } from "../protocols/openai-images.js"
+import { OpenAIImages, type OpenAIImageSizing } from "../protocols/openai-images.js"
 import { MediaRoute } from "../route/media.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
+import { OpenResponses } from "../protocols/open-responses.js"
 import { cacheControl } from "../protocols/utils/cache.js"
 import { isRecord, JsonObject, lenient, ProviderShared } from "../protocols/shared.js"
+import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("openrouter")
 const baseURL = "https://openrouter.ai/api/v1"
@@ -83,11 +85,11 @@ export interface OpenRouterDecisionOptions {
 export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
-    readonly providerOptions?: OpenRouterProviderOptionsInput
+    readonly providerOptions?: OpenRouterProviderOptionsInput | OpenResponsesProviderOptionsInput
   }
 
-export type Settings = ProviderPackage.Settings &
-  OpenRouterProviderOptionsInput & {
+export type Settings<Options = OpenRouterProviderOptionsInput> = ProviderPackage.Settings &
+  Options & {
     readonly apiKey?: string
     readonly baseURL?: string
   }
@@ -174,6 +176,21 @@ const bodyOptions = (body: OpenAIChat.OpenAIChatBody, input: unknown, maxTokens:
   }
 }
 
+const IMAGE_RESOLUTIONS = new Set(["512", "768", "1K", "1.5K", "2K", "4K"])
+
+// A pixel `size` renders at the upstream's own tier (Gemini 2K comes back as 4K) and FLUX 3 rejects it, so sizing goes
+// out as an aspect ratio and a resolution tier. Values OpenRouter doesn't list are left out.
+const imageSizing: OpenAIImageSizing = (request) => {
+  const resolution = request.resolution
+    ?.toUpperCase()
+    .replace(/^0\.5K$/, "512")
+    .replace(/^0\.75K$/, "768")
+  return {
+    aspect_ratio: request.aspect,
+    resolution: resolution !== undefined && IMAGE_RESOLUTIONS.has(resolution) ? resolution : undefined,
+  }
+}
+
 export const route = Route.make({
   id: ADAPTER,
   provider: id,
@@ -183,20 +200,24 @@ export const route = Route.make({
   framing: OpenAIChat.framing,
 })
 
-export const routes = [route]
+const responsesRoute = Route.make({
+  id: "openrouter-responses",
+  provider: id,
+  providerMetadataKey: "openrouter",
+  protocol: OpenResponses.protocol,
+  endpoint: Endpoint.path("/responses", { baseURL }),
+  transport: OpenResponses.httpTransport,
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+})
 
-const configuredRoute = (input: Config) => {
-  const { apiKey: _, auth: _auth, baseURL: endpoint, ...rest } = input
-  return route.with({
-    ...rest,
-    endpoint: { baseURL: endpoint ?? baseURL },
-    auth: AuthOptions.bearer(input, "OPENROUTER_API_KEY"),
-  })
-}
+export const routes = [route, responsesRoute]
 
 export const configure = (input: Config = {}) => {
-  const route = configuredRoute(input)
+  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const auth = AuthOptions.bearer(input, "OPENROUTER_API_KEY")
+  const options = { ...defaults, endpoint: { baseURL: endpoint ?? baseURL }, auth }
+  const chatRoute = route.with(options)
+  const configuredResponses = responsesRoute.with(options)
   const decisionRoute = SystemOne.route.with({
     provider: id,
     providerMetadataKey: "openrouter",
@@ -207,7 +228,14 @@ export const configure = (input: Config = {}) => {
   })
   const media = MediaRoute.deployment({ ...input, baseURL: input.baseURL ?? baseURL }, auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
+    OpenAIImages.model({
+      ...media,
+      id: modelID,
+      provider: id,
+      providerOptions,
+      sizing: imageSizing,
+      imageInput: "references",
+    })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model<OpenRouterDecisionOptions>({
       id: modelID,
@@ -217,7 +245,9 @@ export const configure = (input: Config = {}) => {
   return {
     id,
     model: (modelID: string | ModelID) =>
-      route.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
+      chatRoute.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
+    responses: (modelID: string | ModelID) =>
+      configuredResponses.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     image,
     decision,
     configure,
@@ -227,8 +257,13 @@ export const configure = (input: Config = {}) => {
 export const provider = configure()
 export const decision = provider.decision
 export const image = provider.image
+export const responses = provider.responses
 export const model: ProviderPackage.Model<Settings, OpenRouterProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
+export const responsesModel: ProviderPackage.Model<
+  Settings<OpenResponsesProviderOptionsInput>,
+  OpenResponsesProviderOptionsInput
+> = (modelID, settings) => configure(config(settings)).responses(modelID)
 export const imageModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)
@@ -238,7 +273,7 @@ export const decisionModel = (modelID: string, settings?: Settings) => {
   return configure(input).decision(modelID, input.providerOptions)
 }
 
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
+function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings<Config["providerOptions"]> = {}) {
   return {
     apiKey,
     baseURL,
@@ -247,3 +282,5 @@ function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings
     providerOptions,
   }
 }
+
+export * as OpenRouter from "./openrouter.js"

@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
+import { MiniMaxImages, type MiniMaxImageOptions } from "../protocols/minimax-images.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { ProviderShared } from "../protocols/shared.js"
@@ -8,8 +9,9 @@ import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
+import { MediaRoute } from "../route/media.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
+import { ProviderID, type LLMRequest, type ModelID, type ProviderOptions } from "../schema/index.js"
 
 export const id = ProviderID.make("minimax")
 
@@ -45,6 +47,8 @@ export type Settings<Options = MessagesOptionsInput> = ProviderPackage.Settings 
     readonly apiKey?: string
     readonly baseURL?: string
   }
+
+export type { MiniMaxImageOptions }
 
 const ChatOptions = Schema.Struct({
   thinking: Schema.optional(Schema.Struct({ type: Schema.String })),
@@ -106,10 +110,11 @@ export const routes = [messagesRoute, chatRoute, responsesRoute]
 
 export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL, ...rest } = input
+  const auth = AuthOptions.bearer(input, "MINIMAX_API_KEY")
   const defaults = {
     ...rest,
     endpoint: baseURL === undefined ? undefined : { baseURL },
-    auth: AuthOptions.bearer(input, "MINIMAX_API_KEY"),
+    auth,
   }
   const messages = (modelID: string | ModelID) =>
     messagesRoute.with(defaults).model<MessagesOptionsInput>({ id: modelID })
@@ -120,25 +125,34 @@ export const configure = (input: Config = {}) => {
     })
   const responses = (modelID: string | ModelID) =>
     responsesRoute.with(defaults).model<ResponsesOptionsInput>({ id: modelID })
-  return { id, model: messages, messages, chat, responses, configure }
+  const media = MediaRoute.deployment(input, auth)
+  const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    MiniMaxImages.model({ ...media, id: modelID, providerOptions })
+  return { id, model: messages, messages, chat, responses, image, configure }
 }
 
 export const provider = configure()
 
-export const model: ProviderPackage.Model<Settings<MessagesOptionsInput>, MessagesOptionsInput> = (
-  modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions }: Settings<MessagesOptionsInput> = {},
-) =>
-  configure({
+export const model: ProviderPackage.Model<Settings<MessagesOptionsInput>, MessagesOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).model(modelID)
+export const imageModel = (modelID: string, settings?: Settings<MiniMaxImageOptions>) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
+
+export const messages = provider.messages
+export const chat = provider.chat
+export const responses = provider.responses
+export const image = provider.image
+
+function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings<{}> = {}) {
+  return {
     apiKey,
     baseURL,
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
-
-export const messages = provider.messages
-export const chat = provider.chat
-export const responses = provider.responses
+  }
+}
 
 export * as MiniMax from "./minimax.js"

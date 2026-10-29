@@ -43,6 +43,7 @@ export {
   EffortPart,
   ContentPart,
   Message,
+  Freeform,
   ToolDefinition,
   ToolNamespace,
   ToolEntry,

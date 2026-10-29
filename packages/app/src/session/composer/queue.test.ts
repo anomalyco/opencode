@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
-import { queuedPromptAttachments, queuedPromptRows, type SentEdit } from "./queue"
+import { extractPromptFromMessage } from "@/composer/prompt"
+import { blobDataUrl, setMediaBlobLoader } from "@/runtime/persistence/drafts"
+import { queuedPromptAttachments, queuedPromptRows, undoQueuedPrompt, type SentEdit } from "./queue"
 
 const queued = [
   {
@@ -130,5 +132,79 @@ describe("queuedPromptAttachments", () => {
         blob: { id: "data:application/pdf;base64,aGk=", url: "data:application/pdf;base64,aGk=" },
       },
     ])
+  })
+
+  test("undoQueuedPrompt pins media:<hash> attachments locally before inbox.cancel sweeps the server blob", async () => {
+    const hash = "e".repeat(64)
+    const mediaUri = `media:${hash}`
+    const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    const pngBytes = Uint8Array.from(Buffer.from(pngBase64, "base64"))
+    const blobs = new Map<string, Uint8Array>([[hash, pngBytes]])
+    const events: string[] = []
+
+    const extracted = extractPromptFromMessage({
+      id: "msg_queued_media",
+      text: "queued with image",
+      files: [
+        {
+          uri: mediaUri,
+          mime: "image/png",
+          source: { type: "inline" },
+          width: 1,
+          height: 1,
+          bytes: pngBytes.byteLength,
+          name: "shot.png",
+        },
+      ],
+    })
+
+    expect(extracted.find((part) => part.type === "image")).toMatchObject({
+      blob: { id: `media:${hash}`, url: "" },
+    })
+    expect(JSON.stringify(extracted)).not.toContain("/api/")
+
+    // The server's media cache, as `client.tsx` registers it: a URL for the bytes while the server still has them.
+    setMediaBlobLoader("queue-test", async (uri) => {
+      events.push(`load:${uri}`)
+      const found = blobs.get(uri.slice("media:".length))
+
+      return found ? `data:image/png;base64,${Buffer.from(found).toString("base64")}` : undefined
+    })
+
+    try {
+      const pinned = await undoQueuedPrompt({
+        prompt: extracted,
+        cancelInboxItem: async () => {
+          events.push("cancelInboxItem")
+          // The cancel releases the item's blob refs and sweeps the blob nothing else references.
+          blobs.delete(hash)
+        },
+      })
+
+      expect(events).toEqual([`load:${mediaUri}`, "cancelInboxItem"])
+      expect(blobs.has(hash)).toBe(false)
+
+      const imagePart = pinned.find((part) => part.type === "image")
+      expect(imagePart?.type).toBe("image")
+
+      if (imagePart?.type !== "image") return
+      expect(imagePart.blob.id).not.toStartWith("media:")
+      expect(await blobDataUrl(imagePart.blob, imagePart.mime)).toBe(`data:image/png;base64,${pngBase64}`)
+
+      // Media nothing serves anymore fails the pin, so the item is never cancelled.
+      const cancels = events.length
+
+      await expect(
+        undoQueuedPrompt({
+          prompt: extracted,
+          cancelInboxItem: async () => {
+            events.push("cancelInboxItem")
+          },
+        }),
+      ).rejects.toBeInstanceOf(Error)
+      expect(events.slice(cancels)).toEqual([`load:${mediaUri}`])
+    } finally {
+      setMediaBlobLoader("queue-test", undefined)
+    }
   })
 })

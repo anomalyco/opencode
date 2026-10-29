@@ -160,6 +160,8 @@ export const chatModel: ProviderPackage.Model<Settings, OpenResponsesProviderOpt
 export const messagesModel: ProviderPackage.Model<Settings, MessagesOptionsInput> = (modelID, settings) =>
   fromSettings(settings).messages(modelID)
 
+export const imageModel = (modelID: string, settings?: Settings) => fromSettings(settings).image(modelID)
+
 function fromSettings({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
   return configure({
     apiKey,

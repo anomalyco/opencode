@@ -125,7 +125,7 @@ it.live("serves stored media as refs only to clients that opt in while experimen
 
       yield* Effect.promise(async () => {
         const template = await plain.session.create({ title: "Media wire" })
-        await plain.session.import({ info: { ...template, id: sessionID }, messages: [user, assistant] })
+        await plain.experimental.session.import({ info: { ...template, id: sessionID }, messages: [user, assistant] })
         storeAsBlobs(database)
 
         // Without the capability, reads stay byte-for-byte what was imported.
@@ -187,7 +187,7 @@ it.live("serves stored media as refs only to clients that opt in while experimen
         const single: unknown = await opted.session.message.get({ sessionID, messageID: "msg_media_user" })
         expect(single).toMatchObject({ files: [{ uri: media(png) }, { uri: media(text) }, {}, {}] })
         expect(await plain.session.message.get({ sessionID, messageID: "msg_media_user" })).toEqual(user)
-        expect((await opted.session.export({ sessionID })).messages).toEqual([user, assistant])
+        expect((await opted.experimental.session.export({ sessionID })).messages).toEqual([user, assistant])
 
         // The route serves raw bytes, immutable caching and a 304, and never renders active content inline.
         const image = await handler(new Request(route(png)))

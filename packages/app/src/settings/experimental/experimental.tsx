@@ -40,13 +40,13 @@ export const SettingsExperimental: Component = () => {
               </div>
             </SettingsRow>
             <SettingsRow
-              title={language.t("settings.experimental.row.newModelPicker.title")}
-              description={language.t("settings.experimental.row.newModelPicker.description")}
+              title={language.t("settings.experimental.row.foldUserMessages.title")}
+              description={language.t("settings.experimental.row.foldUserMessages.description")}
             >
-              <div data-action="settings-new-model-picker">
+              <div data-action="settings-fold-user-messages">
                 <Switch
-                  checked={settings.general.newModelPicker()}
-                  onChange={(checked) => settings.general.setNewModelPicker(checked)}
+                  checked={settings.general.foldUserMessages()}
+                  onChange={(checked) => settings.general.setFoldUserMessages(checked)}
                 />
               </div>
             </SettingsRow>
