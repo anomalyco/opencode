@@ -1930,7 +1930,7 @@ test.each([8, 12])("production footer grows for wrapped instructions in %i rows"
 test("an oversized queue shortcut prevents backfilling shorter work and identity hints", async () => {
   const app = await renderFooter({
     width: 32,
-    tuiConfig: createTuiResolvedConfig({ keybinds: { "session.queued_prompts": "ctrl+shift+alt+q" } }),
+    tuiConfig: createTuiResolvedConfig({ animations: false, keybinds: { "session.queued_prompts": "ctrl+shift+alt+q" } }),
     queuedPrompts: [{ messageID: "queued", prompt: { text: "later", parts: [] }, delivery: "queue" }],
     subagents: {
       tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect" })],
