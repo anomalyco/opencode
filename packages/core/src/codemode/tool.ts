@@ -1,5 +1,6 @@
 export * as CodeModeTool from "./tool.js"
 
+import { ToolFailure } from "@opencode/ai/effect"
 import { CodeMode, Namespace, Tool } from "@opencode/codemode"
 import type {
   Content,
@@ -11,6 +12,7 @@ import type {
   Result,
 } from "@opencode/schema/tool"
 import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeWeb } from "./web.js"
@@ -120,7 +122,16 @@ export const create = (
               executeTool: (name, tool, input) =>
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-                  const executed = yield* executeTool(name, tool, input, context)
+                  const executed = yield* executeTool(name, tool, input, context).pipe(
+                    Effect.mapError((error) => {
+                      // Tools often wrap a rejection under their own message; show the user's feedback or the
+                      // rule's reason instead, as a direct call would.
+                      const failure = toSessionError(error)
+                      return failure.type === "permission.rejected"
+                        ? new ToolFailure({ message: failure.message })
+                        : error
+                    }),
+                  )
                   const content = resultContent(executed)
                   const outputFileParts = outputFiles(content)
                   if (outputFileParts.length > 0)
