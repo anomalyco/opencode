@@ -358,7 +358,7 @@ describe("ShellTool scanner permissions", () => {
       }),
     ))
 
-  test("pipeline redirect preserves exact approval and denial despite broad saved approval", () =>
+  test("pipeline redirect keeps the redirect target visible to exact approval and denial", () =>
     withScanner((registry, fixture) =>
       Effect.gen(function* () {
         const saved = yield* PermissionSaved.Service
@@ -366,6 +366,13 @@ describe("ShellTool scanner permissions", () => {
         yield* saved.add({ projectID: location.project.id, action: "shell", resources: ["printf hello", "cat"] })
         const marker = path.join(fixture.active, "marker")
         const command = "printf hello | cat > marker"
+        const unapprovedRedirect = yield* runPermissionCommand(registry, command, marker, ["reject"])
+        expect(unapprovedRedirect.requests).toMatchObject([
+          { action: "shell", resources: ["printf hello", "cat > marker"], save: ["printf *", "cat *"] },
+        ])
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+
+        yield* saved.add({ projectID: location.project.id, action: "shell", resources: ["cat > marker"] })
         const exact = yield* runPermissionCommand(registry, command, marker, [])
         expect(exact.requests).toEqual([])
         expect(exact.exit).toMatchObject({ _tag: "Success", value: { status: "completed", metadata: { exit: 0 } } })
@@ -381,7 +388,7 @@ describe("ShellTool scanner permissions", () => {
         const agents = yield* Agent.Service
         yield* agents.transform((editor) =>
           editor.update(toolIdentity.agent, (agent) => {
-            agent.permissions = [{ action: "shell", resource: "cat", effect: "deny" }]
+            agent.permissions = [{ action: "shell", resource: "* > marker", effect: "deny" }]
           }),
         )
         yield* Effect.promise(() => fs.rm(marker))
