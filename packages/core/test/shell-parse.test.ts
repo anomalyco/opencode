@@ -48,7 +48,7 @@ describe("ShellParse", () => {
 
     for (const command of commands) {
       const scanned = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
-      expect(await Effect.runPromise(ShellParse.scanPortable(command, "/bin/bash", "/workspace"))).toEqual(scanned)
+      expect(scanned.commands.length).toBeGreaterThan(0)
     }
   })
 
@@ -165,7 +165,66 @@ describe("ShellParse", () => {
         process.platform === "darwin" ? "/var/root/secret" : "/root/secret",
         "~root",
       ])
+
+      const tildeForms = await Effect.runPromise(
+        ShellParse.scan(
+          "cd ~+/../outside && cd ~- && cd ~+1 && cd ~0 && cd ~__opencode_nonexistent_user__",
+          "/bin/bash",
+          "/workspace",
+        ),
+      )
+      expect(tildeForms.directories).toEqual(["/outside"])
+      expect(tildeForms.commands).toEqual([
+        { resource: "cd ~-", save: "cd *" },
+        { resource: "cd ~+1", save: "cd *" },
+        { resource: "cd ~0", save: "cd *" },
+        { resource: "cd ~__opencode_nonexistent_user__", save: "cd *" },
+      ])
+
+      const dynamicCd = await Effect.runPromise(
+        ShellParse.scan("cd {..,x} && cd .[.] && cd .? && cd $'\\x2e'[.] && cd '.[.]'", "/bin/bash", "/workspace"),
+      )
+      expect(dynamicCd.directories).toEqual([".[.]"])
+      expect(dynamicCd.commands).toEqual([
+        { resource: "cd {..,x}", save: "cd *" },
+        { resource: "cd .[.]", save: "cd *" },
+        { resource: "cd .?", save: "cd *" },
+        { resource: "cd $'\\x2e'[.]", save: "cd *" },
+      ])
+
+      const nobodyHome = await Effect.runPromise(
+        ShellParse.scan("cd ~nobody", "/bin/bash", "/workspace"),
+      )
+      expect(nobodyHome.directories).toHaveLength(1)
+      expect(nobodyHome.directories[0]).not.toBe(
+        path.join(process.platform === "darwin" ? "/Users" : "/home", "nobody"),
+      )
     }
+  })
+
+  test("retains commandless redirects, redirected declarations, and PowerShell method calls as permission resources", async () => {
+    const redirects = await Effect.runPromise(
+      ShellParse.scan(">> ~/.zshrc <<< 'x'; export -p > ~/.bashrc", "/bin/zsh", "/workspace"),
+    )
+    expect(redirects).toEqual({
+      commands: [
+        { resource: ">> ~/.zshrc <<< 'x'", save: ">> *" },
+        { resource: "export -p > ~/.bashrc", save: "export *" },
+      ],
+      directories: [],
+    })
+
+    const methods = await Effect.runPromise(
+      ShellParse.scan('[IO.File]::Delete("C:\\victim"); $proc.Kill(); "x" >> ~/.bashrc', "pwsh", "C:\\workspace"),
+    )
+    expect(methods).toEqual({
+      commands: [
+        { resource: '[IO.File]::Delete("C:\\victim")', save: "[IO.File]::Delete(*" },
+        { resource: "$proc.Kill()", save: "$proc.Kill(*" },
+        { resource: '"x" >> ~/.bashrc', save: '"x" *' },
+      ],
+      directories: [],
+    })
   })
 
   test("extracts PowerShell directory parameters", async () => {

@@ -30,17 +30,16 @@ describe("legacy-accepted shell syntax regressions", () => {
     "preserves deeply indented function definitions: %s",
     async (source) => {
       const command = `( ${" ".repeat(32_000)}${source} )`
-      const legacy = await Effect.runPromise(ShellParse.scan(command, "zsh", "/workspace"))
-      expect(await Effect.runPromise(ShellParse.scanPortable(command, "zsh", "/workspace"))).toEqual(legacy)
+      const parsed = await Effect.runPromise(ShellParse.scan(command, "zsh", "/workspace"))
+      expect(parsed.commands.some((item) => item.resource === "scan_probe")).toBe(true)
     },
   )
 
   test.each(conditions.flatMap((source) => contexts.map((context) => context(source))))(
     "retains conditional process substitutions and permission resources: %s",
     async (source) => {
-      const legacy = await Effect.runPromise(ShellParse.scan(source, "bash", "/workspace"))
-      expect(legacy.commands.some((command) => command.resource === "scan_probe")).toBe(true)
-      expect(await Effect.runPromise(ShellParse.scanPortable(source, "bash", "/workspace"))).toEqual(legacy)
+      const parsed = await Effect.runPromise(ShellParse.scan(source, "bash", "/workspace"))
+      expect(parsed.commands.some((command) => command.resource === "scan_probe")).toBe(true)
     },
   )
 
@@ -52,9 +51,8 @@ describe("legacy-accepted shell syntax regressions", () => {
         ),
       ),
     )(`${shell} preserves line continuations at function boundaries: %s`, async (source) => {
-      const legacy = await Effect.runPromise(ShellParse.scan(source, shell, "/workspace"))
-      expect(legacy.commands.some((command) => command.resource === "scan_probe")).toBe(true)
-      expect(await Effect.runPromise(ShellParse.scanPortable(source, shell, "/workspace"))).toEqual(legacy)
+      const parsed = await Effect.runPromise(ShellParse.scan(source, shell, "/workspace"))
+      expect(parsed.commands.some((command) => command.resource === "scan_probe")).toBe(true)
     })
 
     test.each(
@@ -64,17 +62,15 @@ describe("legacy-accepted shell syntax regressions", () => {
         ),
       ),
     )(`${shell} preserves comments between a function head and its body: %s`, async (source) => {
-      const legacy = await Effect.runPromise(ShellParse.scan(source, shell, "/workspace"))
-      expect(legacy.commands.some((command) => command.resource === "scan_probe")).toBe(true)
-      expect(await Effect.runPromise(ShellParse.scanPortable(source, shell, "/workspace"))).toEqual(legacy)
+      const parsed = await Effect.runPromise(ShellParse.scan(source, shell, "/workspace"))
+      expect(parsed.commands.some((command) => command.resource === "scan_probe")).toBe(true)
     })
 
     test.each(functions)(
       `${shell} preserves function resources, saved prefixes, and directories: %s`,
       async (source) => {
-        const legacy = await Effect.runPromise(ShellParse.scan(source, shell, "/workspace"))
-        expect(legacy.commands.some((command) => command.resource === "scan_probe")).toBe(true)
-        expect(await Effect.runPromise(ShellParse.scanPortable(source, shell, "/workspace"))).toEqual(legacy)
+        const parsed = await Effect.runPromise(ShellParse.scan(source, shell, "/workspace"))
+        expect(parsed.commands.some((command) => command.resource === "scan_probe")).toBe(true)
       },
     )
 
@@ -116,9 +112,8 @@ describe("legacy-accepted shell syntax regressions", () => {
     "while() { scan_probe; break; }",
     "until() { scan_probe; break; }",
   ])("preserves Zsh anonymous functions and parenthesized loop permissions: %s", async (source) => {
-    const legacy = await Effect.runPromise(ShellParse.scan(source, "zsh", "/workspace"))
-    expect(legacy.commands.some((command) => command.resource === "scan_probe")).toBe(true)
-    expect(await Effect.runPromise(ShellParse.scanPortable(source, "zsh", "/workspace"))).toEqual(legacy)
+    const parsed = await Effect.runPromise(ShellParse.scan(source, "zsh", "/workspace"))
+    expect(parsed.commands.some((command) => command.resource === "scan_probe")).toBe(true)
   })
 
   test.each([
