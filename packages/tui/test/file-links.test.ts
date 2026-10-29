@@ -62,6 +62,30 @@ test("lists explicitly rooted paths even when they are missing", async () => {
   expect(detection.links.every((link) => !link.exists)).toBe(true)
 })
 
+test("does not number slash commands or the filesystem root", async () => {
+  await using tmp = await tmpdir()
+  const text = "Type /paths, then /goal or /api/users. The root / is not a file."
+  const detection = detectPathLinks([{ id: "text:0", text }], { base: tmp.path })
+
+  expect(detection.links).toEqual([])
+})
+
+test("offers missing rooted directories only when their first segment exists", async () => {
+  await using tmp = await tmpdir()
+  const root = path.parse(tmp.path).root
+  const [first] = path.relative(root, tmp.path).split(path.sep)
+  const present = detectPathLinks([{ id: "text:0", text: `Missing /${first}/not-created-yet soon.` }], {
+    base: tmp.path,
+  })
+  const absent = detectPathLinks(
+    [{ id: "text:0", text: "Missing /definitely-missing-opencode/not-created-yet." }],
+    { base: tmp.path },
+  )
+
+  expect(present.links).toMatchObject([{ exists: false }])
+  expect(absent.links).toEqual([])
+})
+
 test("normalizes dot segments against the session directory", async () => {
   await using tmp = await tmpdir()
   const detection = detectPathLinks([{ id: "text:0", text: "See ../shared/a.ts and /var/log/../tmp/b.ts." }], {
@@ -133,6 +157,10 @@ test("keeps multi-digit selection unambiguous", () => {
 
 test("leaves source untouched when a marker is out of range", () => {
   expect(applyPathLinkMarkers("a.ts", [{ at: 99, index: 1 }])).toBe("a.ts")
+})
+
+test("formats markers through the provided formatter", () => {
+  expect(applyPathLinkMarkers("a.ts", [{ at: 4, index: 1 }], (index) => `[[${index}]]`)).toBe("a.ts [[1]]")
 })
 
 test("keeps a marker next to parentheses from becoming a Markdown link", async () => {

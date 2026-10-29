@@ -225,6 +225,7 @@ function toCandidate(text: string, start: number, markerAt: number) {
 function looksLikePath(value: string) {
   if (!value || value.length > 4096) return false
   if (/[<>|]/.test(value)) return false
+  if (/^[\\/]+$/.test(value) || /^[A-Za-z]:[\\/]?$/.test(value)) return false
   if (explicitPattern.test(value)) return true
   if (/\s/.test(value)) return false
   if (/^[A-Za-z][A-Za-z0-9+.-]*:[^\\/]/.test(value)) return false
@@ -334,7 +335,7 @@ function resolveCandidate(raw: string, base: string, cache: StatCache) {
   if (!looksLikePath(value)) return
   const absolute = path.isAbsolute(value) ? path.normalize(value) : path.resolve(base, value)
   const stat = statFile(absolute, cache)
-  if (!stat.exists && !isExplicit(value)) return
+  if (!stat.exists && !offerMissing(value, absolute, cache)) return
   return {
     path: absolute,
     line: suffix?.line,
@@ -342,6 +343,21 @@ function resolveCandidate(raw: string, base: string, cache: StatCache) {
     kind: stat.kind,
     exists: stat.exists,
   }
+}
+
+/**
+ * A missing explicit path stays reportable when it has a file extension, when
+ * it is a deliberate relative token, or when its first absolute segment exists.
+ * Without that, prose such as `/goal` or `/api/users` would be numbered and
+ * rejected as a broken path.
+ */
+function offerMissing(value: string, absolute: string, cache: StatCache) {
+  if (!isExplicit(value)) return false
+  if (/\.[A-Za-z0-9]{1,8}$/.test(value)) return true
+  if (!path.isAbsolute(value)) return true
+  const root = path.parse(absolute).root
+  const [first] = path.relative(root, absolute).split(path.sep)
+  return Boolean(first) && statFile(path.join(root, first), cache).exists
 }
 
 function isExplicit(value: string) {
