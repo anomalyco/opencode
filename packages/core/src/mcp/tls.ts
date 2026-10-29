@@ -1,10 +1,11 @@
 export * as McpTls from "./tls.js"
 
+import { createHash } from "node:crypto"
 import { closeSync, fstatSync, openSync, readFileSync } from "node:fs"
 import { isIP } from "node:net"
 import { homedir } from "node:os"
 import path from "node:path"
-import tls from "node:tls"
+import tls, { type PeerCertificate } from "node:tls"
 import type { ConfigMCP } from "@opencode/schema/config/mcp"
 
 const PEM_CERT_HEADER = "-----BEGIN CERTIFICATE-----"
@@ -75,51 +76,97 @@ export function readCaFile(filePath: string, workspaceDir: string): string {
 }
 
 /**
- * Build the PEM CA bundle for a server's TLS config. An empty result means "use the system
- * trust store". A pinned fingerprint opens one pre-flight TLS connection; its certificate is
- * verified and returned as the trust anchor for the real connection.
+ * The trust rules a server's connections are subject to. `ca` is a PEM trust anchor bundle;
+ * `fingerprint` pins one exact certificate, making its SHA256 fingerprint the identity check.
  */
-export async function buildTlsCa(config: ConfigMCP.Tls, workspaceDir: string, url: URL): Promise<string> {
+export type ResolvedTls =
+  | { readonly ca: string }
+  | { readonly fingerprint: string }
+
+/**
+ * Resolve a server's TLS config into the trust rules for its connections. An undefined result
+ * means "use the system trust store". A pinned fingerprint opens one pre-flight TLS connection;
+ * the presented certificate must match it exactly. Name matching is deliberately not enforced:
+ * LAN appliance certificates often omit the IP SANs a hostname check would require, and the
+ * fingerprint already identifies the certificate the user pinned.
+ */
+export async function resolveTls(
+  config: ConfigMCP.Tls,
+  workspaceDir: string,
+  url: URL,
+): Promise<ResolvedTls | undefined> {
+  if (config.fingerprint !== undefined) {
+    const expected = validateFingerprint(config.fingerprint)
+    const cert = await probeCertificate(url.hostname, port(url))
+    if (cert.fingerprint !== expected)
+      throw new Error(`Certificate fingerprint mismatch.\nExpected: ${expected}\nGot:      ${cert.fingerprint}`)
+    return { fingerprint: expected }
+  }
   if (config.ca_pem !== undefined) validatePemCert(config.ca_pem, "ca_pem config entry")
-  const pinned = config.fingerprint !== undefined ? await pinFingerprint(config.fingerprint, url) : undefined
-  return [
+  const ca = [
     config.ca_pem,
     config.ca_file !== undefined ? readCaFile(config.ca_file, workspaceDir) : undefined,
-    pinned,
   ]
     .filter((part): part is string => part !== undefined)
     .join("")
+  return ca === "" ? undefined : { ca }
 }
 
 /**
- * Wrap a fetch so its requests trust the given CA. The trust is scoped to the returned fetch
- * and does not affect other connections, including redirects it follows.
+ * Wrap a fetch so its requests apply the resolved TLS trust rules. The trust is scoped to the
+ * returned fetch and does not affect other connections, including redirects it follows. A pinned
+ * fingerprint disables certificate and name validation on the real connection: the pre-flight
+ * comparison is the effective check on current runtimes, and the identity hook is the check on
+ * runtimes that honor it.
  */
-export function withTlsCa(
-  ca: string,
+export function withTls(
+  resolved: ResolvedTls,
   base: (url: string | URL, init?: RequestInit) => Promise<Response>,
 ): (url: string | URL, init?: RequestInit) => Promise<Response> {
-  return (url, init) => base(url, { ...init, tls: { ca } } as BunFetchRequestInit)
-}
-
-function pinFingerprint(raw: string, url: URL): Promise<string> {
-  const expected = validateFingerprint(raw)
-  return verifyServerFingerprint(url.hostname, port(url), expected)
+  if ("fingerprint" in resolved) {
+    const fingerprint = resolved.fingerprint
+    return (url, init) =>
+      base(url, {
+        ...init,
+        tls: {
+          rejectUnauthorized: false,
+          // Current runtimes ignore this callback's result when rejectUnauthorized is false, so
+          // the pre-flight comparison is the effective check; the callback is the check on
+          // runtimes that enforce it.
+          checkServerIdentity: (_hostname: string, cert: PeerCertificate) => {
+            const presented = createHash("sha256").update(cert.raw).digest("hex")
+            if (presented !== fingerprint)
+              return new Error(`Certificate fingerprint mismatch.\nExpected: ${fingerprint}\nGot:      ${presented}`)
+          },
+        },
+      } as BunFetchRequestInit)
+  }
+  return (url, init) => base(url, { ...init, tls: { ca: resolved.ca } } as BunFetchRequestInit)
 }
 
 /**
- * Open a raw TLS socket, compare the presented certificate's SHA256 fingerprint, and return the
- * certificate as PEM. This is the only place verification is relaxed (rejectUnauthorized: false),
- * and only to read the certificate; the socket is destroyed before any application data is sent.
+ * True when a connection failure is a TLS certificate verification error rather than a network,
+ * protocol, or HTTP failure. Current runtimes report these as message-only errors ("self signed
+ * certificate", "ERR_TLS_CERT_ALTNAME_INVALID", "certificate has expired"); Node-style codes are
+ * matched as well for the runtimes that expose them.
  */
-function verifyServerFingerprint(hostname: string, portNumber: number, expectedFingerprint: string): Promise<string> {
-  return probeCertificate(hostname, portNumber).then((cert) => {
-    if (cert.fingerprint !== expectedFingerprint)
-      throw new Error(
-        `Certificate fingerprint mismatch.\nExpected: ${expectedFingerprint}\nGot:      ${cert.fingerprint}`,
-      )
-    return cert.pem
-  })
+export function isTlsCertificateError(error: unknown): boolean {
+  const patterns = [
+    /self[- ]signed/i,
+    /ERR_TLS_CERT_ALTNAME_INVALID|CERT_ALTNAME/i,
+    /UNABLE_TO_VERIFY_LEAF_SIGNATURE|UNABLE_TO_GET_ISSUER_CERT_LOCALLY|unable to verify/i,
+    /CERT_HAS_EXPIRED|certificate has expired/i,
+    /DEPTH_ZERO/i,
+  ]
+  let current: unknown = error
+  for (let depth = 0; depth < 5; depth++) {
+    if (!(current instanceof Error)) break
+    const code = (current as { code?: unknown }).code
+    const text = `${code === undefined ? "" : `${code} `}${current.message}`
+    if (patterns.some((pattern) => pattern.test(text))) return true
+    current = (current as { cause?: unknown }).cause
+  }
+  return false
 }
 
 export interface Certificate {

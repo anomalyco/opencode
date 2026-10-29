@@ -322,14 +322,14 @@ export const connect = Effect.fnUntraced(function* (
     if (addedCodemode) url.searchParams.set("codemode", "false")
     // A missing CA file or a fingerprint mismatch fails the connect instead of the first request.
     const tls = config.tls
-    const ca = tls
-      ? yield* Effect.tryPromise({ try: () => McpTls.buildTlsCa(tls, directory, url), catch: toError })
-      : ""
+    const resolved = tls
+      ? yield* Effect.tryPromise({ try: () => McpTls.resolveTls(tls, directory, url), catch: toError })
+      : undefined
     const open = Effect.fnUntraced(function* (url: URL) {
       session.transport = new StreamableHTTPClientTransport(url, {
         requestInit: config.headers ? { headers: config.headers } : undefined,
         authProvider,
-        fetch: ca ? McpTls.withTlsCa(ca, fetch) : fetch,
+        fetch: resolved ? McpTls.withTls(resolved, fetch) : fetch,
       })
       return yield* initialize(session.transport)
     })

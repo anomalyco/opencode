@@ -10,6 +10,10 @@ export const CERT = readFileSync(path.join(TLS_FIXTURE_DIR, "localhost.crt"), "u
 export const KEY = readFileSync(path.join(TLS_FIXTURE_DIR, "localhost.key"), "utf-8")
 export const CERT_ROTATED = readFileSync(path.join(TLS_FIXTURE_DIR, "localhost2.crt"), "utf-8")
 export const KEY_ROTATED = readFileSync(path.join(TLS_FIXTURE_DIR, "localhost2.key"), "utf-8")
+// Appliance-style certificate: a CN and no subjectAltName. A hostname or IP name check fails
+// against it, which is exactly why the fingerprint is the identity check when it is pinned.
+export const CERT_APPLIANCE = readFileSync(path.join(TLS_FIXTURE_DIR, "appliance.crt"), "utf-8")
+export const KEY_APPLIANCE = readFileSync(path.join(TLS_FIXTURE_DIR, "appliance.key"), "utf-8")
 
 export function startTlsMcpServer(options: { cert?: string; key?: string; port?: number } = {}) {
   const cert = options.cert ?? CERT
