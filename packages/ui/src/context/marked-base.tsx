@@ -9,6 +9,11 @@ export function createMarkdownBase() {
         return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${this.parser.parseInline(tokens)}</a>`
       },
     },
+    tokenizer: {
+      // A lone `~` usually means "approximately" or a numeric range, so only `~~` strikes through: returning
+      // false keeps the default tokenizer for `~~text~~`, while undefined skips the del rule entirely.
+      del: (src) => (src.startsWith("~~") ? false : undefined),
+    },
   })
 }
 
