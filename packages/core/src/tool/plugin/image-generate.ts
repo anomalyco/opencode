@@ -52,12 +52,12 @@ export const Input = Schema.Struct({
   }),
   path: Schema.optionalKey(Schema.String).annotate({
     description:
-      "Where to save the image, relative to the session directory or absolute. Overwrites an existing file. Defaults to a new file in the session's temp folder.",
+      "Where to save the image, relative to the session directory or absolute. The extension is replaced with the image's real format, and an existing file is overwritten. Defaults to a new file in the session's temp folder.",
   }),
 })
 
 export const Output = Schema.Struct({
-  path: Schema.String,
+  path: Schema.String.annotate({ description: "Where the image is saved, without its extension" }),
   model: Schema.String.annotate({ description: "providerID/modelID" }),
 })
 
@@ -251,9 +251,10 @@ export const Plugin = {
               const variant = resolved.variant
               const ref = `${model.providerID}/${model.id}${variant ? `#${variant}` : ""}`
               const target = input.path ? yield* access.resolve({ path: input.path, kind: "file" }) : undefined
-              const requested =
-                target?.absolute ??
-                path.join(global.tmp, "images", context.sessionID, `image_${Identifier.create(false)}.png`)
+              // The extension the image is saved with follows its real format, whatever the requested path ends in.
+              const stem = target
+                ? target.absolute.slice(0, target.absolute.length - path.extname(target.absolute).length)
+                : path.join(global.tmp, "images", context.sessionID, `image_${Identifier.create(false)}`)
 
               yield* permission.assert({
                 action: name,
@@ -313,38 +314,44 @@ export const Plugin = {
                 const image = result.images[0]
                 if (!image) return yield* Effect.fail(new Error(`${ref} returned no image.`))
                 const bytes = Buffer.from(image.data, "base64")
-                const mime = Mime.detect(bytes)
-                // Providers may return JPEG or WebP and core has no encoder. A default path takes the real extension;
-                // an explicit path is written exactly as given, since that's the path the edit permission covered.
-                const extension = EXTENSIONS[mime] ?? ".png"
-                const file = target || extension === ".png" ? requested : requested.slice(0, -".png".length) + extension
+                const file = stem + (EXTENSIONS[Mime.detect(bytes)] ?? ".png")
+                // The edit prompt covered the requested path; a different extension must still not be denied.
+                if (target && file !== target.absolute) {
+                  const actual = yield* access.resolve({ path: file, kind: "file" })
+                  yield* permission.assertNotDenied({
+                    action: "edit",
+                    resources: [actual.resource],
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source,
+                  })
+                }
                 yield* environment.files.write(file, bytes)
-                const note = mime === "image/png" ? "" : ` The model returned ${mime}, so the file is in that format.`
-                return `Image request finished. Saved image: ${file} (${ref}).${note}\nUse the read tool on this path to view the image.`
+                return `Image request finished. Saved image: ${file} (${ref}).\nUse the read tool on this path to view the image.`
               }).pipe(
                 // The job keeps this text, so a restart can still deliver the outcome.
-                Effect.mapError((error) => new Error(`Image request failed for ${requested}: ${error.message}`)),
+                Effect.mapError((error) => new Error(`Image request failed for ${stem}: ${error.message}`)),
               )
               const id = `image_${Identifier.create(false)}`
               const job = yield* jobs.start({
                 id,
                 type: name,
                 title: input.prompt,
-                metadata: { sessionID: context.sessionID, path: requested, model: ref },
-                recovery: { kind: "image", sessionID: context.sessionID, path: requested, model: ref },
+                metadata: { sessionID: context.sessionID, path: stem, model: ref },
+                recovery: { kind: "image", sessionID: context.sessionID, path: stem, model: ref },
                 run,
               })
               yield* jobs.background(job.id)
-              yield* notifyWhenDone(context.sessionID, job.id, requested)
+              yield* notifyWhenDone(context.sessionID, job.id, stem)
               return {
-                output: { path: requested, model: ref },
+                output: { path: stem, model: ref },
                 content: [
-                  `Image request started in the background with ${ref}. It will be saved to: ${requested}${resolved.note ?? ""}`,
+                  `Image request started in the background with ${ref}. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.${resolved.note ?? ""}`,
                   "You will be notified automatically when it finishes or fails.",
                   "DO NOT sleep, poll, check whether the file exists, or request the same image again while it runs.",
                   "Work on other tasks, or briefly tell the user what you started and end your response.",
                 ].join("\n"),
-                metadata: { path: requested, model: ref, jobID: job.id },
+                metadata: { path: stem, model: ref, jobID: job.id },
               }
             }).pipe(
               Effect.mapError((error) =>

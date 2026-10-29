@@ -33,6 +33,7 @@ const JPEG =
 const fixture = {
   requests: [] as ImageRequest[],
   assertions: [] as Permission.AssertInput[],
+  checked: [] as Permission.AssertInput[],
   result: { images: [{ type: "image", data: PNG, mime: "image/png" }] } as ImageResult,
   // Holds generation until the test releases it, to observe a running job.
   gate: Effect.void as Effect.Effect<void>,
@@ -43,6 +44,7 @@ const fixture = {
 const it = testEffect(
   makePluginTestLayer(
     permissionLayer({
+      assertNotDenied: (input) => Effect.sync(() => void fixture.checked.push(input)),
       assert: (input) =>
         Effect.sync(() => void fixture.assertions.push(input)).pipe(
           Effect.andThen(
@@ -86,6 +88,7 @@ const setup = (providerID = "test") =>
   Effect.gen(function* () {
     fixture.requests.length = 0
     fixture.assertions.length = 0
+    fixture.checked.length = 0
     fixture.result = { images: [{ type: "image", data: PNG, mime: "image/png" }] }
     fixture.gate = Effect.void
     fixture.failure = undefined
@@ -213,12 +216,13 @@ describe("image_generate", () => {
 
       const result = yield* run({ prompt: "make it blue", images: ["in.png"], path: "out.png" })
       const file = path.join(directory, "out.png")
-      expect(result.output).toEqual({ path: file, model: "test/painter" })
+      const stem = path.join(directory, "out")
+      expect(result.output).toEqual({ path: stem, model: "test/painter" })
       expect(result.content).toEqual([
         {
           type: "text",
           text: [
-            `Image request started in the background with test/painter. It will be saved to: ${file}`,
+            `Image request started in the background with test/painter. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.`,
             "You will be notified automatically when it finishes or fails.",
             "DO NOT sleep, poll, check whether the file exists, or request the same image again while it runs.",
             "Work on other tasks, or briefly tell the user what you started and end your response.",
@@ -252,26 +256,31 @@ describe("image_generate", () => {
     }),
   )
 
-  it.live("saves to the session temp folder by default and handles a non-PNG result", () =>
+  it.live("saves with the extension of the image's real format", () =>
     Effect.gen(function* () {
       yield* imageModel("test", "painter")
       const { run, notice, session, directory } = yield* setup()
       const global = yield* Global.Service
       fixture.result = { images: [{ type: "image", data: JPEG, mime: "image/jpeg" }] }
 
-      // A default path takes the real extension, and the notice gives the final path.
+      // The default path lives in the session temp folder and takes the real extension.
       const result = yield* run({ prompt: "a cat" })
       expect(path.dirname(result.output.path)).toBe(path.join(global.tmp, "images", session.id))
-      const saved = result.output.path.replace(/\.png$/, ".jpg")
+      const saved = `${result.output.path}.jpg`
       expect(yield* notice(result)).toBe(
-        `Image request finished. Saved image: ${saved} (test/painter). The model returned image/jpeg, so the file is in that format.\nUse the read tool on this path to view the image.`,
+        `Image request finished. Saved image: ${saved} (test/painter).\nUse the read tool on this path to view the image.`,
       )
       expect(yield* Effect.promise(() => Bun.file(saved).exists())).toBe(true)
 
-      // An explicit path is kept exactly, since only that path was approved and checked before paying.
+      // An explicit path's extension is replaced too, and the notice gives the real path.
       const explicit = yield* run({ prompt: "a cat", path: "cat.png" })
-      expect(explicit.output.path).toBe(path.join(directory, "cat.png"))
-      expect(yield* notice(explicit)).toContain(`Saved image: ${path.join(directory, "cat.png")} (test/painter).`)
+      expect(yield* notice(explicit)).toContain(`Saved image: ${path.join(directory, "cat.jpg")} (test/painter).`)
+      expect(yield* Effect.promise(() => Bun.file(path.join(directory, "cat.jpg")).exists())).toBe(true)
+      // The edit prompt covered cat.png; the file actually written is still checked against deny rules.
+      expect(fixture.assertions.filter((item) => item.action === "edit").map((item) => item.resources)).toEqual([
+        ["cat.png"],
+      ])
+      expect(fixture.checked.map((item) => [item.action, item.resources])).toEqual([["edit", ["cat.jpg"]]])
     }),
   )
 
@@ -286,7 +295,7 @@ describe("image_generate", () => {
       })
       const result = yield* run({ prompt: "x", path: "out.png" })
       expect(yield* notice(result)).toBe(
-        `Image request failed for ${path.join(directory, "out.png")}: The prompt was rejected`,
+        `Image request failed for ${path.join(directory, "out")}: The prompt was rejected`,
       )
       expect(yield* Effect.promise(() => Bun.file(path.join(directory, "out.png")).exists())).toBe(false)
     }),
@@ -302,7 +311,7 @@ describe("image_generate", () => {
       const id = String(result.metadata?.jobID)
       expect((yield* jobs.get(id))?.status).toBe("running")
       yield* jobs.cancel(id)
-      expect(yield* notice(result)).toBe(`Image request for ${path.join(directory, "out.png")} was cancelled.`)
+      expect(yield* notice(result)).toBe(`Image request for ${path.join(directory, "out")} was cancelled.`)
       expect(yield* Effect.promise(() => Bun.file(path.join(directory, "out.png")).exists())).toBe(false)
     }),
   )
