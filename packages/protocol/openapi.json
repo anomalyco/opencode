@@ -16244,6 +16244,9 @@
               "media_blob": {
                 "type": "boolean"
               },
+              "image_generate": {
+                "type": "boolean"
+              },
               "image_model": {
                 "anyOf": [
                   {

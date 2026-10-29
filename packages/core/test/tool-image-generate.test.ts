@@ -96,6 +96,10 @@ const setup = (providerID = "test") =>
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
     const location = yield* Location.Service
+    const config = yield* Config.Test
+    const entries = yield* config.entries()
+    if (!entries.some((entry) => entry.type === "document" && entry.info.experimental?.image_generate !== undefined))
+      yield* configure(undefined)
     const host = yield* PluginHost.make(plugins)
     yield* ImageGenerateTool.Plugin.effect(host)
     yield* OpenCodeTools.Plugin.effect(host)
@@ -131,13 +135,14 @@ const setup = (providerID = "test") =>
     return { session, run, notice, directory: location.directory }
   })
 
-const configure = (image_model: ConfigExperimental.Info["image_model"]) =>
+// The tool is opt-in, so every configuration here enables it unless a test says otherwise.
+const configure = (image_model: ConfigExperimental.Info["image_model"], image_generate = true) =>
   Effect.gen(function* () {
     const config = yield* Config.Test
     yield* config.setEntries([
       new Document({
         type: "document",
-        info: new Info({ experimental: new ConfigExperimental.Info({ image_model }) }),
+        info: new Info({ experimental: new ConfigExperimental.Info({ image_generate, image_model }) }),
       }),
     ])
     const bus = yield* Bus.Service
@@ -172,6 +177,19 @@ describe("image_generate", () => {
       expect(yield* until(true)).toBe(true)
       const catalog = yield* Provider.Service
       yield* catalog.transform((editor) => editor.models.remove(Provider.ID.make("test"), Model.ID.make("painter")))
+      expect(yield* until(false)).toBe(false)
+    }),
+  )
+
+  it.live("is offered only when experimental.image_generate is enabled", () =>
+    Effect.gen(function* () {
+      yield* imageModel("test", "painter")
+      yield* configure(undefined, false)
+      yield* setup()
+      expect(yield* registered).toBe(false)
+      yield* configure(undefined, true)
+      expect(yield* until(true)).toBe(true)
+      yield* configure(undefined, false)
       expect(yield* until(false)).toBe(false)
     }),
   )
