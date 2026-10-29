@@ -1902,7 +1902,8 @@ export function createData(config: CreateDataInput) {
               )
               for (const session of family.sessions) {
                 clearDeleted(session.id)
-                setStore("session", "active", session.id, session.status)
+                // Older servers omit status; /session/active and events then remain the only source.
+                if (session.status) setStore("session", "active", session.id, session.status)
                 setStore(
                   "session",
                   "permission",

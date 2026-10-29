@@ -67,8 +67,10 @@ All three facts have the same shape of problem: the answer exists in one place o
 Schema's `Session.Info` gains one field:
 
 ```ts
-status: "idle" | "running"
+status?: "idle" | "running"
 ```
+
+The field is optional on the wire. A server with this change always sends it. An older server does not, and a missing `status` means unknown, not `idle`; a client then learns status from `/session/active` and execution events, as it does today.
 
 `running` means `SessionExecution` owns a busy period for the Session in this process. That is what `session.execution.started` and the terminal execution events describe, and it is the set `/session/active` returns. It does not mean the Session is waiting on the user, which its pending requests say; or that it has queued input, which its inbox says; or that something else in its family is running, which the family read says.
 
@@ -86,7 +88,7 @@ Session.Info // Session.Persisted plus status; identifier "Session.Info"
 
 The facade takes its snapshot of the running set before it reads Session rows. A read can then never pair `idle` with a row from before the terminal commit. Clients also rely on one guarantee from the Server: a read never reports a state older than an execution event the Server has already published. Today that holds because nothing asynchronous runs between the coordinator publishing a terminal event and removing the Session from its set. A change that adds asynchronous work between the two must compute `status` from state cleared before publication.
 
-`/session/active` stays, as the inventory form of the same state, and each entry gains `rootID`. Execution events carry only a `sessionID`, so today a client that sees `session.execution.started` for a child it has never loaded cannot tell which root to mark as busy. The iOS app walks `GET /api/session/:id` up the parents to find out; the TUI open dialog loads the child and resolves its root. Putting `rootID` on the durable execution events would repeat state derivable from Session history, which [`AGENTS.md`](../../AGENTS.md) rules out for durable events. `/session/active` is a read model and may carry it.
+`/session/active` stays, as the inventory form of the same state, and each entry gains `rootID`. Like `status`, `rootID` is optional on the wire: a server with this change always sends it, and its absence means the server predates it. Execution events carry only a `sessionID`, so today a client that sees `session.execution.started` for a child it has never loaded cannot tell which root to mark as busy. The iOS app walks `GET /api/session/:id` up the parents to find out; the TUI open dialog loads the child and resolves its root. Putting `rootID` on the durable execution events would repeat state derivable from Session history, which [`AGENTS.md`](../../AGENTS.md) rules out for durable events. `/session/active` is a read model and may carry it.
 
 ### 2. One read returns the whole family
 
@@ -175,7 +177,7 @@ A client must not discard a `session.created` event because the parent has not l
 
 ## Compatibility
 
-`Session.Info.status` and the family endpoint are additive for existing clients. The TypeScript clients are regenerated from the assembled `HttpApi`. The reverse does not hold: the Effect client decodes responses, so a newer Effect client rejects Sessions from an older server, which send no `status`, as it would any new required field. The desktop browser pane is the one in-repo Effect client that can reach a server of another version. The Promise client used by the TUI and CLI does not decode responses. App and desktop exports, which assemble the transcript from `session.get`, drop `status` too. The iOS app decodes Sessions with hand-written Swift payloads, which ignore keys they do not know. Plugins receive `status` from Core's facade. Session export and import keep their status-less shape, and `rootID` on `/session/active` entries is a new field the iOS app already ignores alongside `type`.
+`Session.Info.status` and the family endpoint are additive for existing clients. The TypeScript clients are regenerated from the assembled `HttpApi`. The reverse holds too: `status` and `rootID` are optional in the contract, so a newer Effect client, which decodes responses, accepts Sessions and `/session/active` entries from an older server that sends neither. The desktop browser pane is the one in-repo Effect client that can reach a server of another version. The Promise client used by the TUI and CLI does not decode responses. App and desktop exports, which assemble the transcript from `session.get`, drop `status` too. The iOS app decodes Sessions with hand-written Swift payloads, which ignore keys they do not know. Plugins receive `status` from Core's facade. Session export and import keep their status-less shape, and `rootID` on `/session/active` entries is a new field the iOS app already ignores alongside `type`.
 
 Two behaviors change. `session.permission.list` returns `[]` instead of `LocationNotFoundError` for a Session whose directory is gone and no longer starts an idle Location, as `session.form.list` already does. Both stop waiting on a Location that is still starting. No current client relies on the old behavior. The TUI discards those failures, and the iOS app never calls these endpoints. `mini` retries each failed child on its own timer, backing off from 50 ms to a 2-second cap and never giving up, and every hydration, including each reconnect, reads pending requests for up to 100 children. By that code, a `mini` view of `BURROW` sends 31 failing permission reads every 2 seconds for as long as it stays open; before #59083 fixed forms it was 62. I have not run `mini` against `BURROW` to observe it.
 
