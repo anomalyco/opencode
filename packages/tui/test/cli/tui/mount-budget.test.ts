@@ -50,14 +50,34 @@ test("an expanded group costs its header plus rendered children", () => {
 })
 
 test("a collapsed inner group costs one even when its parent is expanded", () => {
-  const row = group(50, ["exploration", "exploration"])
+  // The trailing sibling keeps the inner group nested rather than shown in its parent's place.
+  const [row] = groupEntries(
+    Array.from({ length: 51 }, (_, index) => read(index)),
+    (entry) =>
+      entry.type === "part" && entry.ref.partID === "read-50" ? ["exploration"] : ["exploration", "exploration"],
+  )
   if (row.type !== "group" || row.children[0].type !== "group") throw new Error("Expected nested group")
   const outer = groupID(row, 0)
   const inner = groupID(row.children[0], 1)
-  expect(rowWeight(row, { expanded: (key) => key === outer, grouped: () => true })).toBe(2)
-  expect(rowWeight(row, { expanded: (key) => key === outer || key === inner, grouped: () => true })).toBe(52)
+  const weight = (expanded: (key: string) => boolean) =>
+    rowWeight({ ...row, kind: "exploration", pending: [], completed: true }, { expanded, grouped: () => true })
+  expect(weight((key) => key === outer)).toBe(3)
+  expect(weight((key) => key === outer || key === inner)).toBe(53)
   // A saved expanded inner group under a collapsed parent mounts nothing.
-  expect(rowWeight(row, { expanded: (key) => key === inner, grouped: () => true })).toBe(1)
+  expect(weight((key) => key === inner)).toBe(1)
+})
+
+test("a lone inner group costs what it renders in its parent's place", () => {
+  const row = group(50, ["activity", "exploration"])
+  if (row.type !== "group" || row.children[0].type !== "group") throw new Error("Expected nested group")
+  const outer = groupID(row, 0)
+  const inner = groupID(row.children[0], 1)
+  expect(rowWeight(row, collapsed)).toBe(1)
+  expect(rowWeight(row, { expanded: (key) => key === inner, grouped: () => true })).toBe(51)
+  // The parent isn't rendered, so its saved expansion mounts nothing extra.
+  expect(rowWeight(row, { expanded: (key) => key === outer, grouped: () => true })).toBe(1)
+  // An ungrouped inner kind stays wrapped, behind the parent's summary.
+  expect(rowWeight(row, { expanded: () => false, grouped: (kind) => kind !== "exploration" })).toBe(1)
 })
 
 test("an ungrouped kind renders every leaf", () => {
