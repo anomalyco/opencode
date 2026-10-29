@@ -235,7 +235,7 @@ Pin the exact certificate a server presents with `fingerprint`, formatted as `SH
 }
 ```
 
-OpenCode reads the server's certificate once, compares the fingerprint, and then trusts exactly that certificate for the connection. Get a fingerprint from the server with:
+OpenCode compares the certificate the server presents against the fingerprint and then uses the fingerprint as the identity check for the connection. Name matching is not enforced, so this also works for appliance certificates without an IP SAN. Get a fingerprint from the server with:
 
 ```sh
 openssl s_client -connect 192.168.1.1:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
@@ -258,10 +258,16 @@ Check that the fingerprint matches what the server presents (with the `openssl s
 opencode mcp trust https://192.168.1.1/mcp
 ```
 
-The command shows the certificate's subject, validity, and fingerprint and asks for confirmation. The pin is stored on this machine, per project, and later connections verify that the server presents exactly that certificate. If the appliance rotates its certificate, the connection fails until you re-pin it:
+The command shows the certificate's subject, validity, and fingerprint and asks for confirmation. Pass `--yes` to trust without being asked; without an interactive terminal it is required. The pin is stored on this machine, per project, and later connections verify that the server presents exactly that certificate. If the appliance rotates its certificate, the connection fails until you re-pin it:
 
 ```sh
 opencode mcp trust https://192.168.1.1/mcp --force
+```
+
+Scripts that re-pin non-interactively combine the flags:
+
+```sh
+opencode mcp trust https://192.168.1.1/mcp --force --yes
 ```
 
 Only private IP literals qualify — hostnames never do, so a name cannot be pointed at another server through DNS. An explicit `tls` config always takes precedence.

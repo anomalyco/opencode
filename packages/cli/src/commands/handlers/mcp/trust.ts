@@ -12,10 +12,10 @@ const location = { directory: process.cwd() }
 
 export default Runtime.handler(
   Commands.commands.mcp.commands.trust,
-  Effect.fn("cli.mcp.trust")((input) => run(input.url, input.force).pipe(handlePromptErrors)),
+  Effect.fn("cli.mcp.trust")((input) => run(input.url, input.force, input.yes).pipe(handlePromptErrors)),
 )
 
-const run = Effect.fn("cli.mcp.trust.run")(function* (url: string, force: boolean) {
+const run = Effect.fn("cli.mcp.trust.run")(function* (url: string, force: boolean, yes: boolean) {
   intro("Trust an MCP server certificate")
   const { endpoint } = yield* ServerConnection.resolve()
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
@@ -34,8 +34,8 @@ const run = Effect.fn("cli.mcp.trust.run")(function* (url: string, force: boolea
     }
     log.warn(`The certificate changed: the previously trusted fingerprint was ${stored.fingerprint}`)
   }
-  if (!force) yield* requireInteractive("Pass --force when trusting a certificate without an interactive terminal")
-  if (!force) {
+  if (!yes) {
+    yield* requireInteractive("Pass --yes when trusting a certificate without an interactive terminal")
     const ok = yield* prompt(() => confirm({ message: "Trust this certificate for this project?" }))
     if (!ok) {
       outro("Cancelled")

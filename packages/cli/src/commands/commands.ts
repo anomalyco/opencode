@@ -287,6 +287,13 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
               Flag.withDescription("Re-pin the certificate even if it changed since it was last trusted"),
               Flag.withDefault(false),
             ),
+            yes: Flag.Boolean("yes").pipe(
+              Flag.withAlias("y"),
+              Flag.withDescription(
+                "Trust the certificate without asking for confirmation (required without an interactive terminal)",
+              ),
+              Flag.withDefault(false),
+            ),
           },
         }),
       ],
