@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
-import { Effect } from "effect"
+import { Effect, Fiber } from "effect"
 import { makeDaemonTransport } from "../src/persistent-pty/daemon"
 import { it } from "./lib/effect"
 
@@ -50,11 +50,13 @@ it.live("rediscovers a rotated registration when acquiring a subscription", () =
     let token = "old-token"
     let instance = "old-instance"
     let subscriptions = 0
-    yield* listen(socketPath, (_socket, request, receivedToken) => {
+    let subscriptionSocket: net.Socket | undefined
+    yield* listen(socketPath, (socket, request, receivedToken) => {
       if (receivedToken !== token) return { type: "error", message: "authentication failed" }
       if (request.op === "ping") return { ...pong, instance_id: instance }
       if (request.op !== "subscribe") return { type: "terminals", terminals: [] }
       subscriptions++
+      subscriptionSocket = socket
       return {
         type: "attached",
         terminal: terminal(1),
@@ -85,6 +87,50 @@ it.live("rediscovers a rotated registration when acquiring a subscription", () =
     expect(attachment.terminal.id).toBe(1)
     expect(subscriptions).toBe(1)
     attachment.detach()
+    expect(yield* Effect.promise(() => closedWithin(subscriptionSocket!, 500))).toBeTrue()
+  }),
+)
+
+it.live("closes a pending subscription socket when acquisition is interrupted", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const socketPath = path.join(directory, "daemon.sock")
+    let socket: net.Socket | undefined
+    let received!: () => void
+    const subscribed = new Promise<void>((resolve) => (received = resolve))
+    yield* listen(socketPath, (current, request) => {
+      if (request.op === "ping") return pong
+      if (request.op === "subscribe") {
+        socket = current
+        received()
+        return undefined
+      }
+      return { type: "terminals", terminals: [] }
+    })
+    yield* Effect.promise(() => writeRegistration(directory, socketPath))
+    const daemon = yield* makeDaemonTransport(root, "daemon", () =>
+      Promise.reject(new Error("unexpected daemon spawn")),
+    )
+    let delivered = false
+    let callbacks = 0
+    const fiber = yield* Effect.forkChild(
+      daemon
+        .subscribe(1, {
+          cursor: 0,
+          attachmentID: "attachment",
+          role: "observer",
+          onEvent: () => callbacks++,
+          onEnd: () => callbacks++,
+        })
+        .pipe(Effect.tap(() => Effect.sync(() => (delivered = true)))),
+      { startImmediately: true },
+    )
+    yield* Effect.promise(() => subscribed)
+    yield* Fiber.interrupt(fiber)
+    expect((yield* Fiber.await(fiber))._tag).toBe("Failure")
+    expect(yield* Effect.promise(() => closedWithin(socket!, 500))).toBeTrue()
+    expect(delivered).toBeFalse()
+    expect(callbacks).toBe(0)
   }),
 )
 
@@ -359,6 +405,17 @@ function terminal(id: number) {
 function close(server: net.Server) {
   if (!server.listening) return Promise.resolve()
   return new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+}
+
+function closedWithin(socket: net.Socket, ms: number) {
+  if (socket.destroyed) return Promise.resolve(true)
+  return new Promise<boolean>((resolve) => {
+    const timeout = setTimeout(() => resolve(false), ms)
+    socket.once("close", () => {
+      clearTimeout(timeout)
+      resolve(true)
+    })
+  })
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
