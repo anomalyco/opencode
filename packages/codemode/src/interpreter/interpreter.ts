@@ -118,7 +118,7 @@ import {
 } from "./runner.js"
 import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from "./references.js"
 import { fn } from "./native.js"
-import { capability } from "./promises.js"
+import { capability, promiseLike } from "./promises.js"
 import { ScopeStack } from "./scope.js"
 import { constructRegExp } from "../stdlib/regexp.js"
 import { enumerableSource } from "../stdlib/object.js"
@@ -432,6 +432,11 @@ export class Interpreter<R> {
     const json: Array<Json | undefined> = []
     for (const arg of args) json.push(yield* toBoundary(this, arg))
     return fromJson(this, (yield this.runner.blocking(run(json))) as Json | undefined)
+  }
+
+  /** The built-in search: its result is usable directly, and can also be awaited or chained like a Promise. */
+  *search(args: Array<Value>) {
+    return promiseLike(this, yield* this.tool(this.tools.search, args))
   }
 }
 

@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "44bd8ca5-689a-410e-a46a-958eb5accd97",
-  "prevIds": ["f1f14616-b6a1-483d-87b0-d5b7a9132580"],
+  "id": "23940db2-8b4e-4a5e-a404-70d785bd788c",
+  "prevIds": ["44bd8ca5-689a-410e-a46a-958eb5accd97"],
   "ddl": [
     {
       "name": "account_state",
@@ -42,6 +42,10 @@
     },
     {
       "name": "project",
+      "entityType": "tables"
+    },
+    {
+      "name": "schedule",
       "entityType": "tables"
     },
     {
@@ -743,6 +747,176 @@
       "name": "commands",
       "entityType": "columns",
       "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "action",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "when",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "tz",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'active'",
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "next_due_at",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "ends_at",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "remaining_runs",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "0",
+      "generated": null,
+      "name": "run_count",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_fired_at",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_message_id",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_outcome",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "retry_at",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "schedule"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "schedule"
     },
     {
       "type": "text",
@@ -1625,6 +1799,17 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "nameExplicit": false,
+      "name": "fk_schedule_session_id_session_v2_id_fk",
+      "entityType": "fks",
+      "table": "schedule"
+    },
+    {
+      "columns": ["session_id"],
+      "tableTo": "session_v2",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
       "name": "fk_blob_ref_session_id_session_v2_id_fk",
       "entityType": "fks",
       "table": "blob_ref"
@@ -1798,6 +1983,13 @@
       "entityType": "pks"
     },
     {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "schedule_pk",
+      "table": "schedule",
+      "entityType": "pks"
+    },
+    {
       "columns": ["hash"],
       "nameExplicit": false,
       "name": "blob_pk",
@@ -1907,6 +2099,34 @@
       "name": "permission_project_action_resource_idx",
       "entityType": "indexes",
       "table": "permission"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "schedule_session_idx",
+      "entityType": "indexes",
+      "table": "schedule"
+    },
+    {
+      "columns": [
+        {
+          "value": "next_due_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"schedule\".\"status\" = 'active' and \"schedule\".\"next_due_at\" is not null",
+      "origin": "manual",
+      "name": "schedule_due_idx",
+      "entityType": "indexes",
+      "table": "schedule"
     },
     {
       "columns": [

@@ -1,11 +1,12 @@
 import { Effect, JsonSchema, Schema } from "effect"
 import { Tool } from "@opencode/schema/tool"
 import type {
+  Freeform,
   ToolCallPart,
   ToolDefinition as ToolDefinitionClass,
   ToolOutput as ToolOutputType,
 } from "./schema/index.js"
-import { ToolDefinition, ToolFailure, ToolOutput } from "./schema/index.js"
+import { ToolDefinition, ToolFailure, ToolOutput, type ToolDefinitionInput } from "./schema/index.js"
 import { isRecord } from "./utils/record.js"
 
 /**
@@ -34,6 +35,23 @@ export interface ToolModelOutputInput<Parameters, Output> {
 export type ToolToModelOutput<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>> = (
   input: ToolModelOutputInput<Schema.Schema.Type<Parameters>, Success["Encoded"]>,
 ) => ReadonlyArray<Tool.Content>
+
+type FreeformField<T> = {
+  [K in keyof T]-?: [Exclude<keyof T, K>] extends [never]
+    ? {} extends Pick<T, K>
+      ? never
+      : T[K] extends string
+        ? K
+        : never
+    : never
+}[keyof T]
+
+/** `Freeform` when the parameters are exactly one required string field, otherwise `undefined`. */
+export type FreeformOption<Parameters extends ToolSchema<any>> = [
+  FreeformField<Schema.Schema.Type<Parameters>>,
+] extends [never]
+  ? undefined
+  : Freeform
 
 /**
  * A type-safe LLM tool. Each tool bundles its own description, parameter
@@ -87,6 +105,7 @@ type TypedToolConfig = {
   readonly description: string
   readonly parameters: ToolSchema<any>
   readonly success: ToolSchema<any>
+  readonly freeform?: Freeform
   readonly execute?: ToolExecute<ToolSchema<any>, ToolSchema<any>>
   readonly toModelOutput?: ToolToModelOutput<ToolSchema<any>, ToolSchema<any>>
   readonly toStructuredOutput?: (output: unknown) => unknown
@@ -96,6 +115,7 @@ type DynamicToolConfig = {
   readonly description: string
   readonly jsonSchema: JsonSchema.JsonSchema
   readonly outputSchema?: JsonSchema.JsonSchema
+  readonly freeform?: Freeform
   readonly execute?: (params: unknown, context?: ToolExecuteContext) => Effect.Effect<unknown, ToolFailure>
   readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<Tool.Content>
   readonly toStructuredOutput?: (output: unknown) => unknown
@@ -136,6 +156,7 @@ export function make<Parameters extends ToolSchema<any>, Success extends ToolSch
   readonly description: string
   readonly parameters: Parameters
   readonly success: Success
+  readonly freeform?: FreeformOption<Parameters>
   readonly execute: ToolExecute<Parameters, Success>
   readonly toModelOutput?: ToolToModelOutput<Parameters, Success>
   readonly toStructuredOutput?: (output: Success["Encoded"]) => unknown
@@ -144,6 +165,7 @@ export function make<Parameters extends ToolSchema<any>, Success extends ToolSch
   readonly description: string
   readonly parameters: Parameters
   readonly success: Success
+  readonly freeform?: FreeformOption<Parameters>
   readonly execute?: undefined
   readonly toModelOutput?: ToolToModelOutput<Parameters, Success>
   readonly toStructuredOutput?: (output: Success["Encoded"]) => unknown
@@ -152,6 +174,7 @@ export function make(config: {
   readonly description: string
   readonly jsonSchema: JsonSchema.JsonSchema
   readonly outputSchema?: JsonSchema.JsonSchema
+  readonly freeform?: Freeform
   readonly execute: (params: unknown, context?: ToolExecuteContext) => Effect.Effect<unknown, ToolFailure>
   readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<Tool.Content>
   readonly toStructuredOutput?: (output: unknown) => unknown
@@ -160,6 +183,7 @@ export function make(config: {
   readonly description: string
   readonly jsonSchema: JsonSchema.JsonSchema
   readonly outputSchema?: JsonSchema.JsonSchema
+  readonly freeform?: Freeform
   readonly execute?: undefined
   readonly toModelOutput?: (input: ToolModelOutputInput<unknown, unknown>) => ReadonlyArray<Tool.Content>
   readonly toStructuredOutput?: (output: unknown) => unknown
@@ -178,11 +202,12 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
       _project: (parameters, id, output) =>
         project(config.toModelOutput, config.toStructuredOutput, parameters, id, output),
       _legacyResult: config.toModelOutput === undefined && config.toStructuredOutput === undefined,
-      _definition: new ToolDefinition({
+      _definition: definition({
         name: "",
         description: config.description,
         inputSchema: config.jsonSchema,
         outputSchema: config.outputSchema,
+        freeform: config.freeform,
       }),
     }
   }
@@ -198,11 +223,12 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
     _project: (parameters, id, output) =>
       project(config.toModelOutput, config.toStructuredOutput, parameters, id, output),
     _legacyResult: false,
-    _definition: new ToolDefinition({
+    _definition: definition({
       name: "",
       description: config.description,
       inputSchema: emptyInputJsonSchema(config.parameters) ?? toJsonSchema(config.parameters),
       outputSchema: toJsonSchema(config.success),
+      freeform: config.freeform,
     }),
   }
 }
@@ -228,6 +254,7 @@ export const toDefinitions = (tools: Tools): ReadonlyArray<ToolDefinitionClass> 
         description: item._definition.description,
         inputSchema: item._definition.inputSchema,
         outputSchema: item._definition.outputSchema,
+        freeform: item._definition.freeform,
       }),
   )
 
@@ -245,6 +272,12 @@ export const emptyInputJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema 
   if (!isRecord(not) || not.type !== "null" || Object.keys(not).length !== 1) return undefined
   if (!Object.keys(rest).every((key) => annotationKeywords.has(key))) return undefined
   return { ...rest, type: "object", properties: {}, additionalProperties: false }
+}
+
+const definition = (input: ToolDefinitionInput) => {
+  if (input.freeform !== undefined && ToolDefinition.freeformField(input.inputSchema) === undefined)
+    throw new Error("A freeform tool needs exactly one parameter, a required string")
+  return new ToolDefinition(input)
 }
 
 const annotationKeywords = new Set(["title", "description", "default", "examples", "readOnly", "writeOnly"])

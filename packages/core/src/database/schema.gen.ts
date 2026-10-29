@@ -117,6 +117,28 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`schedule\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text,
+          \`name\` text,
+          \`action\` text NOT NULL,
+          \`when\` text NOT NULL,
+          \`tz\` text NOT NULL,
+          \`status\` text DEFAULT 'active' NOT NULL,
+          \`next_due_at\` integer,
+          \`ends_at\` integer,
+          \`remaining_runs\` integer,
+          \`run_count\` integer DEFAULT 0 NOT NULL,
+          \`last_fired_at\` integer,
+          \`last_message_id\` text,
+          \`last_outcome\` text,
+          \`retry_at\` integer,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_schedule_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`blob_ref\` (
           \`session_id\` text NOT NULL,
           \`message_id\` text NOT NULL,
@@ -254,6 +276,10 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
       yield* tx.run(
         `CREATE UNIQUE INDEX \`permission_project_action_resource_idx\` ON \`permission\` (\`project_id\`,\`action\`,\`resource\`);`,
+      )
+      yield* tx.run(`CREATE INDEX \`schedule_session_idx\` ON \`schedule\` (\`session_id\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`schedule_due_idx\` ON \`schedule\` (\`next_due_at\`) WHERE "schedule"."status" = 'active' and "schedule"."next_due_at" is not null;`,
       )
       yield* tx.run(`CREATE INDEX \`blob_ref_hash_idx\` ON \`blob_ref\` (\`hash\`);`)
       yield* tx.run(`CREATE INDEX \`blob_ref_session_seq_idx\` ON \`blob_ref\` (\`session_id\`,\`seq\`);`)

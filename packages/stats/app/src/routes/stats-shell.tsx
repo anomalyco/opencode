@@ -309,7 +309,6 @@ function FooterLanguageSwitcher() {
     <label data-slot="footer-language">
       <span>{i18n.t("footer.language")}</span>
       <select
-        value={language.locale()}
         aria-label={i18n.t("footer.language")}
         onChange={(event) => {
           const locale = event.currentTarget.value as Locale
@@ -320,7 +319,14 @@ function FooterLanguageSwitcher() {
           if (href !== current) window.location.assign(href)
         }}
       >
-        <For each={language.locales}>{(locale) => <option value={locale}>{language.label(locale)}</option>}</For>
+        {/* Mark the option, not the select: SSR ignores a select value and hydration does not apply it. */}
+        <For each={language.locales}>
+          {(locale) => (
+            <option value={locale} selected={locale === language.locale()}>
+              {language.label(locale)}
+            </option>
+          )}
+        </For>
       </select>
     </label>
   )

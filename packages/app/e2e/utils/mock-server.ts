@@ -1274,6 +1274,15 @@ function mockHandlers(
             cursor: { next: offset + limit < ordered.length ? String(offset + limit) : undefined },
           })
         },
+        // The goal plugin's pill reads each routed session's goal; no scenario sets one.
+        rpcCall: (ctx) =>
+          ctx.params.rpcID === "opencode.goal" && ctx.params.method === "get"
+            ? Effect.succeed({ output: null })
+            : Effect.fail(
+                new MockUnsupported({
+                  message: `The mock server has no ${ctx.params.rpcID}.${ctx.params.method} RPC`,
+                }),
+              ),
         sessionActive: () => {
           const status = resolve(config.sessionStatus ?? {})
 
@@ -1554,7 +1563,7 @@ function currentModels(catalog: MockProviderCatalog) {
           variants: Object.entries(model.variants ?? {}).map(([id, settings]) =>
             Predicate.isObject(settings) ? { id, settings } : { id },
           ),
-          time: { released: Date.now() },
+          time: model.time ?? { released: Date.now() },
           cost: [{ input: model.cost?.input ?? 0, output: model.cost?.output ?? 0, cache: { read: 0, write: 0 } }],
           status: "active",
           enabled: true,
@@ -1687,6 +1696,7 @@ const decodeModel = Schema.decodeUnknownOption(
     cost: lenient(Schema.Struct({ input: lenient(Schema.Number), output: lenient(Schema.Number) })),
     capabilities: lenient(Model.Capabilities),
     variants: lenient(Schema.Record(Schema.String, Schema.Unknown)),
+    time: lenient(Schema.Struct({ released: Schema.Number })),
   }),
 )
 

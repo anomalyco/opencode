@@ -282,7 +282,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
   })
 
   const control = page.locator('[data-action="composer-model"]')
-  await expect(control).toHaveText("OpenCode / Alpha")
+  await expect(control).toHaveText("Alpha")
   await view.editor.fill("Keep my selected model")
 
   catalog.current = provider(beta)
@@ -295,7 +295,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("OpenCode / alpha (unavailable)")
+  await expect(control).toHaveText("alpha (unavailable)")
   await view.editor.press("Enter")
   await expect(page.getByText("Select an agent and model", { exact: true })).toBeVisible()
   await expect(view.editor).toHaveText("Keep my selected model")
@@ -312,7 +312,7 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("OpenCode / Alpha")
+  await expect(control).toHaveText("Alpha")
   await expect(page.getByRole("button", { name: "Choose model variant", exact: true })).toHaveText("high")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
@@ -329,13 +329,13 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
       data: {},
     },
   ])
-  await expect(control).toHaveText("OpenCode / alpha (unavailable)")
+  await expect(control).toHaveText("alpha (unavailable)")
   await control.click()
   await page
     .getByRole("dialog", { name: "Select model" })
     .getByRole("button", { name: "Beta Free", exact: true })
     .click()
-  await expect(control).toHaveText("OpenCode / Beta")
+  await expect(control).toHaveText("Beta")
   await view.editor.fill("Use the replacement I chose")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(2)
@@ -387,8 +387,8 @@ test("an existing session's model never shows a fallback while its agent loads",
   const agentLoaded = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/agent")
   agents.resolve()
   await agentLoaded
-  await expect(control).toHaveText("OpenCode / Alpha")
-  expect(await page.evaluate(() => [...(window.__chipTexts ?? [])])).toEqual(["OpenCode / Alpha"])
+  await expect(control).toHaveText("Alpha")
+  expect(await page.evaluate(() => [...(window.__chipTexts ?? [])])).toEqual(["Alpha"])
 })
 
 test("a send pressed while the Location's plugins activate waits, Esc cancels it, and it sends once catalogs load", async ({
@@ -459,7 +459,7 @@ test("an opened session in another Location names its model from a loaded catalo
 
   const control = page.locator('[data-action="composer-model"]')
   await page.goto(sessionHref("ses_warm_here"))
-  await expect(control).toHaveText("OpenCode / Alpha")
+  await expect(control).toHaveText("Alpha")
 
   const held = await holdRoute(
     page,
@@ -470,7 +470,7 @@ test("an opened session in another Location names its model from a loaded catalo
   try {
     await page.locator(`[data-slot="vertical-tabs"] a[href="${sessionHref("ses_warm_there", SERVER)}"]`).click()
     await held.arrived
-    await expect(control).toHaveText("OpenCode / Beta")
+    await expect(control).toHaveText("Beta")
     await expect(page.getByRole("button", { name: "Choose model variant" })).toHaveText("high")
     const painted = await control.elementHandle()
 
@@ -488,7 +488,7 @@ test("an opened session in another Location names its model from a loaded catalo
     await Promise.all(loaded)
     await expect(page.getByRole("dialog")).toBeVisible()
     // The loaded selection keeps the same chip instead of replacing it.
-    await expect(control).toHaveText("OpenCode / Beta")
+    await expect(control).toHaveText("Beta")
     expect(await painted?.evaluate((element) => element.isConnected)).toBe(true)
   } finally {
     held.release()
@@ -501,33 +501,120 @@ declare global {
   }
 }
 
-test("names a Console-managed provider without its workspace unless a direct connection shares it", async ({
+test("a managed composer label follows direct connections, not picker filtering or model identity", async ({
   page,
 }) => {
-  const sessions = [
-    { id: "ses_managed_root", model: { id: "alpha", providerID: "opencode" } },
-    { id: "ses_managed_openai", model: { id: "gpt", providerID: "console-openai" } },
-  ]
+  const sessionID = "ses_managed_provider"
+  const connected = { direct: false }
+  const switches: unknown[] = []
+  const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/model`)
+      switches.push(request.postDataJSON())
+  })
 
-  const managed = { integrationID: "opencode" }
-  await openSession(page, {
+  const view = await openSession(page, {
     name: "ManagedProvider",
-    sessions: sessions.map((session) => ({ ...session, agent: "build" })),
-    provider: {
+    sessions: [{ id: sessionID, agent: "build", model: { id: "gpt", providerID: "console-openai" } }],
+    provider: () => ({
       all: [
-        { ...managed, id: "opencode", name: "Anomaly / OpenCode", models: { alpha: { id: "alpha", name: "Alpha" } } },
-        { ...managed, id: "console-openai", name: "Anomaly / OpenAI", models: { gpt: { id: "gpt", name: "GPT" } } },
-        { id: "openai", name: "OpenAI", models: { gpt: { id: "gpt", name: "GPT" } } },
+        {
+          id: "opencode",
+          integrationID: "opencode",
+          name: "Anomaly / OpenCode",
+          models: {},
+        },
+        {
+          id: "console-openai",
+          canonical: "openai",
+          integrationID: "opencode",
+          name: "Anomaly / OpenAI",
+          models: { gpt: { id: "gpt", name: "GPT" } },
+        },
+        ...(connected.direct
+          ? [
+              {
+                id: "openai",
+                name: "OpenAI",
+                models: { "direct-model": { id: "direct-model", name: "Direct Model" } },
+              },
+            ]
+          : []),
       ],
-      connected: ["opencode", "console-openai", "openai"],
+      connected: ["opencode", "console-openai", ...(connected.direct ? ["openai"] : [])],
       default: {},
+    }),
+    onPrompt: (input) => void prompts.push(input.body),
+    seed: {
+      storage: {
+        "opencode.global.dat:model": {
+          user: [
+            { providerID: "console-openai", modelID: "gpt", visibility: "show" },
+            { providerID: "openai", modelID: "direct-model", visibility: "show" },
+          ],
+        },
+      },
     },
   })
 
   const control = page.locator('[data-action="composer-model"]')
-  await expect(control).toHaveText("OpenCode / Alpha")
-  await page.goto(sessionHref(sessions[1]!.id))
-  await expect(control).toHaveText("Anomaly / OpenAI / GPT")
+  const picker = page.getByRole("dialog", { name: "Select model", exact: true })
+  const selected = picker.locator('[data-option-key="console-openai:gpt"]')
+  await expect(control).toHaveText("OpenAI / GPT")
+
+  connected.direct = true
+  await view.push([
+    {
+      id: "evt_direct_connected",
+      created: T0 + 1,
+      type: "provider.updated",
+      location: { directory: view.directory },
+      data: {},
+    },
+    {
+      id: "evt_direct_models_connected",
+      created: T0 + 2,
+      type: "model.updated",
+      location: { directory: view.directory },
+      data: {},
+    },
+  ])
+  await expect(control).toHaveText("OpenCode / OpenAI / GPT")
+  await expect(control).toHaveAccessibleName("OpenCode / OpenAI / GPT")
+  await control.click()
+  const search = picker.getByRole("combobox", { name: "Search models", exact: true })
+  await expect(picker.locator('[data-option-key="openai:direct-model"]')).toBeVisible()
+  await search.fill("GPT")
+  await expect(picker.locator('[data-option-key="openai:direct-model"]')).toHaveCount(0)
+  await expect(selected).toHaveAttribute("aria-current", "true")
+  await expect(control).toHaveText("OpenCode / OpenAI / GPT")
+  await search.press("Escape")
+  await expect(picker).toBeHidden()
+
+  connected.direct = false
+  await view.push([
+    {
+      id: "evt_direct_disconnected",
+      created: T0 + 3,
+      type: "provider.updated",
+      location: { directory: view.directory },
+      data: {},
+    },
+    {
+      id: "evt_direct_models_disconnected",
+      created: T0 + 4,
+      type: "model.updated",
+      location: { directory: view.directory },
+      data: {},
+    },
+  ])
+  await expect(control).toHaveText("OpenAI / GPT")
+
+  await view.editor.fill("Keep the managed provider selected")
+  await view.editor.press("Enter")
+  await expect.poll(() => prompts.length).toBe(1)
+  expect(prompts[0]).toMatchObject({ text: "Keep the managed provider selected" })
+  expect(switches).toEqual([])
 })
 
 async function draft(page: Page) {
@@ -802,6 +889,25 @@ test("keeps focus in a dialog that replaces the model dialog and returns it to t
   await expect(editor).toHaveText("keep, me")
 })
 
+test("lists OpenCode's free models in the model picker however old they are", async ({ page }) => {
+  await page.clock.setFixedTime(T0)
+  const year = { released: T0 - 365 * 24 * 60 * 60 * 1000 }
+  await openSession(page, {
+    name: "ComposerFreeModels",
+    provider: provider(
+      { id: "new-paid", name: "New Paid", cost: { input: 1, output: 1 }, time: { released: T0 } },
+      { id: "old-paid", name: "Old Paid", cost: { input: 1, output: 1 }, time: year },
+      { id: "big-pickle", name: "Big Pickle", cost: { input: 0, output: 0 }, time: year },
+    ),
+  })
+
+  await page.locator('[data-component="composer"] [data-action="composer-model"]').click()
+  const models = page.getByRole("dialog", { name: "Select model", exact: true })
+  await expect(models.locator('[data-option-key="opencode:new-paid"]')).toBeVisible()
+  await expect(models.locator('[data-option-key="opencode:big-pickle"]')).toBeVisible()
+  await expect(models.locator('[data-option-key="opencode:old-paid"]')).toHaveCount(0)
+})
+
 test("lists slash commands in their built-in order", async ({ page }) => {
   const { editor } = await openSession(page, {
     name: "ComposerSlash",
@@ -828,8 +934,30 @@ test("lists slash commands in their built-in order", async ({ page }) => {
     "/mcp",
     "/model",
     "/connect",
+    "/reload",
     "/btw",
   ])
+})
+
+test("/reload reloads the server's configuration once and reports it", async ({ page }) => {
+  const { editor } = await openSession(page, { name: "ComposerReload", provider: NO_PROVIDER })
+  const reloaded = Promise.withResolvers<void>()
+  let reloads = 0
+  await page.route(/\/api\/location\/reload$/, async (route) => {
+    reloads++
+    await reloaded.promise
+    await route.fulfill({ status: 204 })
+  })
+
+  await editor.fill("/reload")
+  await expect(page.locator('[data-suggestion-id="config.reload"]')).toHaveAttribute("data-active", "")
+  await editor.press("Enter")
+  await expect(page.getByText("Reloading configuration…", { exact: true })).toBeVisible()
+  reloaded.resolve()
+  await expect(page.getByText("Configuration reloaded", { exact: true })).toBeVisible()
+  await expect(page.getByText("Reloading configuration…", { exact: true })).toBeHidden()
+  await expect(editor).toBeEmpty()
+  expect(reloads).toBe(1)
 })
 
 const followUp = "Add follow-up, / for commands, @ for context…"

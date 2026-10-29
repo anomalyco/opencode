@@ -20,6 +20,7 @@ export const EDIT_PATH = "/images/edits"
 
 /** Provider-native options. Common fields (`n`, `aspect`, `resolution`, `images`) live on the request. */
 export type XAIImageOptions = {
+  /** Defaults to `b64_json`; `url` returns a short-lived hosted URL instead. */
   readonly responseFormat?: OpenString<"url" | "b64_json">
   readonly response_format?: OpenString<"url" | "b64_json">
 } & Record<string, unknown>
@@ -47,9 +48,8 @@ const XAIImageResponse = Schema.Struct({
 // ---------------------------------------------------------------------------
 
 const nativeOptions = (options: XAIImageOptions | undefined) => {
-  if (!options) return undefined
-  const { responseFormat, ...native } = options
-  return { response_format: responseFormat, ...native }
+  const { responseFormat, ...native } = options ?? {}
+  return { response_format: responseFormat ?? "b64_json", ...native }
 }
 
 /** xAI renders `1k` or `2k`; other tiers use the nearest one. */

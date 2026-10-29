@@ -1,4 +1,5 @@
 import type { SessionUserActions } from "@opencode/session-ui/message"
+import type { ShellOutputInput } from "@opencode/client/promise"
 import { getFilename, sameDirectory } from "@opencode/util/path"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
@@ -41,7 +42,7 @@ import { SessionTodoPill } from "./todo-pill"
 import { sessionTodos, todoFinished } from "./todos"
 import { useOpenSessionRoute } from "../session-identity-header"
 import { resolveSessionComposerSelection } from "./selection"
-import { composerProviderName } from "@/composer/selection"
+import { composerModelLabelKey, composerModelLabels, composerProviderName } from "@/composer/model-label"
 import { useProviders } from "@/providers/catalog/providers"
 import { SubagentBar } from "./subagent-bar"
 import { createSessionRequestModel } from "../requests/model"
@@ -105,13 +106,27 @@ export function createActiveSessionRegion(input: {
   )
 
   const openAttachment: NonNullable<SessionUserActions["openAttachment"]> = (file) => {
-    const url = file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
+    const source = file.source
+    const fileData = "data" in file ? file.data : undefined
+    const fileUri = "uri" in file ? file.uri : undefined
+
+    const inlineUrl =
+      source?.type === "uri" ? source.uri : fileData !== undefined ? `data:${file.mime};base64,${fileData}` : undefined
 
     const download = () => {
-      const anchor = document.createElement("a")
-      anchor.href = url
-      anchor.download = getFilename(file.name) || "attachment"
-      anchor.click()
+      void (
+        inlineUrl
+          ? Promise.resolve(inlineUrl)
+          : fileUri
+            ? server.media.load(fileUri, file.mime)
+            : Promise.resolve(undefined)
+      ).then((url) => {
+        if (!url) return
+        const anchor = document.createElement("a")
+        anchor.href = url
+        anchor.download = getFilename(file.name) || "attachment"
+        anchor.click()
+      })
     }
 
     const path = file.name ?? ""
@@ -299,6 +314,7 @@ export function createActiveSessionRegion(input: {
     centered: input.screen.centered,
     onResponseSubmit: input.timeline.actions.resume,
     openParent,
+    focusPrompt: () => focusPrompt(),
     setPromptRef: (element: HTMLDivElement) => {
       promptRef = element
     },
@@ -447,7 +463,7 @@ export function ActiveSessionComposerRegion(props: {
 
     if (item.sessionID) return openRoute(current, item.sessionID)
 
-    // Shells and starting subagent calls live in this timeline.
+    // A starting subagent call has no session yet, so it lives in this timeline.
     props.onReveal(item.target)
   }
 
@@ -456,18 +472,46 @@ export function ActiveSessionComposerRegion(props: {
       ? server.api.session.interrupt({ sessionID: item.sessionID })
       : server.api.shell.remove({
           id: item.target,
-          location: { directory: data.shell.get(item.target)?.location.directory },
+          location: { directory: data.shell.get(item.target)?.location.directory ?? location().directory },
         })
 
-    void request.catch((error) =>
-      showToast({
-        title: language.t("common.requestFailed"),
-        description: errorMessage(error, language.t("common.requestFailed")),
-      }),
+    return request.then(
+      () => true,
+      (error) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: errorMessage(error, language.t("common.requestFailed")),
+        })
+
+        return false
+      },
     )
   }
 
+  const shell = {
+    get directory() {
+      return location().directory
+    },
+    output: (input: ShellOutputInput) => server.api.shell.output(input),
+    ended: (id: string) =>
+      server.api.shell.get({ id, location: { directory: location().directory } }).then(
+        (response) => ({
+          status: response.data.status === "running" ? ("killed" as const) : response.data.status,
+          exit: response.data.exit,
+          completed: response.data.time.completed,
+        }),
+        () => undefined,
+      ),
+  }
+
   const providers = useProviders(() => props.session.data.info()?.location.directory)
+
+  const modelLabels = createMemo(() =>
+    composerModelLabels(
+      providers.all(),
+      providers.connected().map((provider) => provider.id),
+    ),
+  )
 
   const subagentModel = () => {
     const ref =
@@ -475,11 +519,17 @@ export function ActiveSessionComposerRegion(props: {
       props.session.history.messages().findLast((message) => message.type === "assistant")?.model
 
     if (!ref) return
-    const catalog = providers.all()
+    const label = modelLabels().get(composerModelLabelKey(ref.providerID, ref.id))
 
     return {
-      provider: composerProviderName(ref.providerID, catalog),
-      name: catalog.get(ref.providerID)?.models[ref.id]?.name.replace("(latest)", "").trim() ?? ref.id,
+      provider: label
+        ? label.provider
+        : composerProviderName(
+            ref.providerID,
+            providers.all(),
+            providers.connected().map((provider) => provider.id),
+          ),
+      name: label?.model ?? ref.id,
       variant: ref.variant,
     }
   }
@@ -510,7 +560,14 @@ export function ActiveSessionComposerRegion(props: {
       above={
         <Show when={!missing() && !props.session.data.isChild()}>
           <SessionComposerLane>
-            <SessionActivityChips subagents={subagents()} shells={shells()} onOpen={open} onStop={stop} />
+            <SessionActivityChips
+              subagents={subagents()}
+              shells={shells()}
+              shell={shell}
+              onOpen={open}
+              onStop={stop}
+              onEmpty={props.model.region.focusPrompt}
+            />
             <Show when={todosVisible()}>
               <SessionTodoPill todos={todos()} />
             </Show>

@@ -25,10 +25,11 @@ import { formatValue } from "../stdlib/console.js"
 
 export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof PendingThrow) {
+    const location = error.node?.loc ? sourceLocation(error.node) : undefined
     return {
       kind: error.kind,
-      message: `${error.type}: ${error.message}${formatLocation(error.node)}`,
-      ...(error.node?.loc ? { location: sourceLocation(error.node) } : {}),
+      message: `${error.type}: ${error.message}${formatLocation(location)}`,
+      ...(location ? { location } : {}),
       ...(error.suggestions ? { suggestions: error.suggestions } : {}),
     }
   }

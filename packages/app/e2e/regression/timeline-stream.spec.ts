@@ -1352,14 +1352,11 @@ test.describe("background shortcut", () => {
       /^Explore\s*Background task\d+h \d{2}m$/,
       /^sleep 120\d+h \d{2}m$/,
     ])
+    // A shell opens its output in the menu rather than revealing its call in the timeline.
     await list.getByRole("menuitem", { name: /sleep 120/ }).click()
-    await expect(list).toHaveCount(0)
-    await expect(used).toHaveAttribute("aria-expanded", "true")
-    const shellCall = page.locator('[data-timeline-part-id="call_shell_backgrounded"]')
-    await expect(shellCall.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
-    await expect(shellCall).toBeInViewport()
-
-    await activity.click()
+    await expect(list).toHaveAttribute("data-view", "shell")
+    await expect(used).toHaveAttribute("aria-expanded", "false")
+    await list.getByRole("menuitem", { name: "Back to background work", exact: true }).click()
 
     const interrupt = page.waitForRequest(
       (request) =>
@@ -1384,6 +1381,7 @@ test.describe("background shortcut", () => {
     await expect(list).toHaveCount(0)
     await expect(backgroundCard).toContainText("Background task (background)")
     await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
+    await used.click()
     await expect(
       page.locator('[data-timeline-part-id="call_shell_backgrounded"] [data-component="text-shimmer"]'),
     ).toHaveAttribute("data-active", "true")
@@ -1407,9 +1405,10 @@ test.describe("background shortcut", () => {
     // Reaching the shell lands on the end of the timeline, which would otherwise follow new content again.
     { name: "at the end of the timeline", before: 40, searches: 0, after: 0 },
   ]) {
-    test(`holds a revealed shell ${fixture.name} just under its stuck group header`, async ({ page }) => {
+    // A starting subagent call is the pill's row that reveals its call; grouping subagents puts it inside the group.
+    test(`holds a revealed call ${fixture.name} just under its stuck group header`, async ({ page }) => {
       const timeline = await setupTimeline(page, {
-        settings: { timelineDetail: detailed },
+        settings: { timelineDetail: { ...detailed, subagents: { placement: "grouped" } } },
         sessionStatus: { [sessionID]: { type: "busy" } },
         messages: [
           userMessage(),
@@ -1417,14 +1416,8 @@ test.describe("background shortcut", () => {
             [
               ...(fixture.before ? [textPart("prt_earlier", notes("Earlier", fixture.before))] : []),
               ...searches(0, 42 - fixture.searches),
-              toolPart(
-                "prt_far_shell",
-                "shell",
-                "completed",
-                { command: "sleep 120" },
-                { output: "working", metadata: { shellID: "shell_far", status: "running" } },
-              ),
-              // The open group outgrows the viewport, so aligning the group instead of the shell misses it.
+              toolPart("prt_far_call", "subagent", "running", { description: "Map the far code", agent: "explore" }),
+              // The open group outgrows the viewport, so aligning the group instead of the call misses it.
               ...searches(42 - fixture.searches, fixture.searches),
               ...(fixture.after ? [textPart("prt_follow_up", notes("Follow-up", fixture.after))] : []),
             ],
@@ -1433,60 +1426,40 @@ test.describe("background shortcut", () => {
         ],
       })
 
-      await timeline.transport.send({
-        id: "evt_far_shell_created",
-        created: 3,
-        type: "shell.created",
-        location: { directory },
-        data: {
-          info: {
-            id: "shell_far",
-            status: "running",
-            command: "sleep 120",
-            cwd: directory,
-            shell: "bash",
-            file: "/tmp/far.out",
-            metadata: { sessionID },
-            time: { started: 2 },
-          },
-        },
-      })
-
       const group = page
         .locator('[data-component="collapsed-tool-group"]')
         .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
 
-      const shellTrigger = page.locator('[data-timeline-part-id="prt_far_shell"] [data-slot="collapsible-trigger"]')
+      const call = page.locator('[data-timeline-part-id="prt_far_call"]')
 
       const aligned = () =>
         expect
           .poll(async () => {
-            const [header, shell] = await Promise.all([group.boundingBox(), shellTrigger.boundingBox()])
+            const [header, row] = await Promise.all([group.boundingBox(), call.boundingBox()])
 
-            return header && shell ? Math.round(shell.y - (header.y + header.height)) : undefined
+            return header && row ? Math.round(row.y - (header.y + header.height)) : undefined
           })
           .toBe(0)
 
       await expect(
         fixture.after ? page.getByText(`Follow-up note ${fixture.after}.`, { exact: true }) : group,
       ).toBeInViewport()
-      await expect(shellTrigger).toHaveCount(0)
-      await page.getByRole("button", { name: "1 shell", exact: true }).click()
+      await expect(call).toHaveCount(0)
+      await page.getByRole("button", { name: "1 subagent", exact: true }).click()
       await page
-        .getByRole("menu", { name: "1 shell", exact: true })
-        .getByRole("menuitem", { name: /sleep 120/ })
+        .getByRole("menu", { name: "1 subagent", exact: true })
+        .getByRole("menuitem", { name: /Map the far code/ })
         .click()
 
       await expect(group).toHaveAttribute("aria-expanded", "true")
-      await expect(shellTrigger).toHaveAttribute("aria-expanded", "true")
-      await expect(shellTrigger).toBeInViewport()
+      await expect(call).toBeInViewport()
 
-      // A shell at the very end cannot rise under the header until more content arrives below it.
+      // A call at the very end cannot rise under the header until more content arrives below it.
       if (fixture.searches) await aligned()
       // Nothing covers the row, so it takes the next click.
-      await shellTrigger.click({ trial: true })
+      await call.click({ trial: true })
 
-      // The agent keeps writing below the shell; the shell stays where it was revealed.
+      // The agent keeps writing below the call; the call stays where it was revealed.
       await timeline.send(partUpdated(textPart("prt_late", notes("Late", 30))))
       await expect(page.getByText("Late note 30.", { exact: true })).toBeAttached()
       await aligned()
@@ -2142,10 +2115,7 @@ test("highlights a quote's source only while its first comment is written", asyn
     await expect
       .poll(() =>
         first.evaluate((element) =>
-          [
-            "::selection",
-            "::highlight(timeline-quote-source)",
-          ].map((pseudo) => {
+          ["::selection", "::highlight(timeline-quote-source)"].map((pseudo) => {
             const style = getComputedStyle(element, pseudo)
 
             return {
@@ -2245,11 +2215,13 @@ test("keeps the native selection height after quoting wrapped and formatted text
   const height = await source.locator("p").evaluate((element) => parseFloat(getComputedStyle(element).lineHeight))
   await expect
     .poll(() =>
-      source.locator('[data-component="timeline-quote-background"] > span').evaluateAll(
-        (lines, height) =>
-          lines.length > 0 && lines.every((line) => Math.abs(line.getBoundingClientRect().height - height) < 0.1),
-        height,
-      ),
+      source
+        .locator('[data-component="timeline-quote-background"] > span')
+        .evaluateAll(
+          (lines, height) =>
+            lines.length > 0 && lines.every((line) => Math.abs(line.getBoundingClientRect().height - height) < 0.1),
+          height,
+        ),
     )
     .toBe(true)
 })

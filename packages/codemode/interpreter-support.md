@@ -31,7 +31,8 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
 - [x] Live Date, RegExp, Map, Set, URL, URLSearchParams, Headers, and Uint8Array values inside CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
-      shadowable by program declarations like other globals.
+      shadowable by program declarations like other globals. Its result can also be awaited or chained with
+      `then`, `catch`, and `finally`.
 - [x] Cooperative timeout, an optional total tool-call limit, output bounding, and unrestricted tool-call concurrency.
 - [x] The timeout fires between interpreter steps, so one built-in is bounded in what it may build: strings up to
       2^24 characters (`repeat`, `pad*`, `concat`, `join`, `+`, template literals, `JSON.stringify`), arrays up to

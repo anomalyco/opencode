@@ -997,8 +997,8 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`try { JSON.rawJSON("1") } catch (e) { return e.message }`)).toBe(
       "JSON.rawJSON is not a function.",
     )
-    expect(await value(`try { search({ query: "star" }).catch(() => 1) } catch (e) { return e.message }`)).toBe(
-      "search(...).catch is not a function.",
+    expect(await value(`try { search({ query: "star" }).filter(() => 1) } catch (e) { return e.message }`)).toBe(
+      "search(...).filter is not a function.",
     )
     expect(
       await value(`const foo = () => ({ bar: () => ({}) }); try { foo().bar().baz() } catch (e) { return e.message }`),

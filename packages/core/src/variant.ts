@@ -621,6 +621,9 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/openai-compatible-responses": openResponses,
   "@opencode/ai/providers/google-vertex/responses": openResponses,
   "@opencode/ai/providers/xai": openResponses,
+  "@opencode/ai/providers/digitalocean/responses": openResponses,
+  "@opencode/ai/providers/openrouter/responses": openResponses,
+  "@opencode/ai/providers/venice/responses": openResponses,
 
   "@opencode/ai/providers/openai-compatible": openaiCompatible,
   "@opencode/ai/providers/openai/chat": openaiChat,
