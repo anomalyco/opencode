@@ -20,7 +20,7 @@ import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import type { ImageRequest, ImageResult } from "@opencode/schema/generate"
 import { Global } from "@opencode/util/global"
-import { Deferred, Effect, Layer, Schedule, Stream } from "effect"
+import { Effect, Layer, Schedule, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { executeTool, toolDefinitions, toolIdentity } from "./lib/tool"
@@ -252,9 +252,9 @@ describe("image_generate", () => {
           ].join("\n"),
         },
       ])
-      // The notice names the job and its request, like shell and subagent notices.
+      // The notice carries the job ID from the start result, like shell notices.
       expect(yield* notice(result)).toBe(
-        `<image id="${id}" state="completed" prompt="make it blue">\nImage request finished. Saved image: ${file} (test/painter).\nUse the read tool on this path to view the image.\n</image>`,
+        `<image id="${id}" state="completed">\nImage request finished. Saved image: ${file} (test/painter).\nUse the read tool on this path to view the image.\n</image>`,
       )
       expect((yield* Effect.promise(() => fs.readFile(file))).toString("base64")).toBe(PNG)
       expect(fixture.requests).toEqual([
@@ -319,28 +319,6 @@ describe("image_generate", () => {
     }),
   )
 
-  it.live("warns when another job is still writing the same file", () =>
-    Effect.gen(function* () {
-      yield* imageModel("test", "painter")
-      const { run, notice } = yield* setup()
-      const gate = yield* Deferred.make<void>()
-      fixture.gate = Deferred.await(gate)
-      const first = yield* run({ prompt: "red cap", path: "cap.png" })
-      const second = yield* run({ prompt: "blue cap", path: "cap.png" })
-      expect(text(first)).not.toContain("still writing")
-      expect(text(second)).toContain(`Image job ${first.output.id} is still writing`)
-      expect(text(second)).toContain("whichever finishes last overwrites the file.")
-      yield* Deferred.succeed(gate, undefined)
-      expect(yield* notice(first)).toContain('prompt="red cap"')
-      expect(yield* notice(second)).toContain('prompt="blue cap"')
-      // Once both finished, a new request for the file has nothing to warn about.
-      fixture.gate = Effect.void
-      const third = yield* run({ prompt: "beach", path: "cap.png" })
-      expect(text(third)).not.toContain("still writing")
-      yield* notice(third)
-    }),
-  )
-
   it.live("reports a failed generation in the completion notice", () =>
     Effect.gen(function* () {
       yield* imageModel("test", "painter")
@@ -352,7 +330,7 @@ describe("image_generate", () => {
       })
       const result = yield* run({ prompt: "x", path: "out.png" })
       expect(yield* notice(result)).toBe(
-        `<image id="${result.output.id}" state="error" prompt="x">\nImage request failed for ${path.join(directory, "out")}: The prompt was rejected\n</image>`,
+        `<image id="${result.output.id}" state="error">\nImage request failed for ${path.join(directory, "out")}: The prompt was rejected\n</image>`,
       )
       expect(yield* Effect.promise(() => Bun.file(path.join(directory, "out.png")).exists())).toBe(false)
     }),
@@ -369,7 +347,7 @@ describe("image_generate", () => {
       expect((yield* jobs.get(id))?.status).toBe("running")
       yield* jobs.cancel(id)
       expect(yield* notice(result)).toBe(
-        `<image id="${id}" state="cancelled" prompt="x">\nImage request for ${path.join(directory, "out")} was cancelled.\n</image>`,
+        `<image id="${id}" state="cancelled">\nImage request for ${path.join(directory, "out")} was cancelled.\n</image>`,
       )
       expect(yield* Effect.promise(() => Bun.file(path.join(directory, "out.png")).exists())).toBe(false)
     }),

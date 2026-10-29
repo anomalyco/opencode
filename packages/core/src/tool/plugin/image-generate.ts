@@ -199,21 +199,9 @@ export const Plugin = {
       return (yield* environment.files.read(target.absolute)).bytes
     })
 
-    // Running jobs per target, so a second request for the same file can say the first is still writing it.
-    const writing = new Map<string, Set<string>>()
-
     const notifyWhenDone = Effect.fn("ImageGenerateTool.notifyWhenDone")(
-      function* (input: {
-        sessionID: SessionSchema.ID
-        id: string
-        notificationID: SessionMessage.ID
-        file: string
-        prompt: string
-      }) {
+      function* (input: { sessionID: SessionSchema.ID; id: string; notificationID: SessionMessage.ID; file: string }) {
         const info = (yield* jobs.wait({ id: input.id })).info
-        const running = writing.get(input.file)
-        running?.delete(input.id)
-        if (running?.size === 0) writing.delete(input.file)
         if (!info || info.status === "running") return
         yield* sessions.synthetic({
           id: input.notificationID,
@@ -222,7 +210,6 @@ export const Plugin = {
           text: ImageNotice.text({
             id: input.id,
             state: info.status,
-            prompt: input.prompt,
             body:
               info.status === "completed"
                 ? (info.output ?? "")
@@ -364,7 +351,7 @@ export const Plugin = {
               )
               const id = `image_${Identifier.create(false)}`
               const notificationID = SessionMessage.ID.create()
-              const job = yield* jobs.start({
+              yield* jobs.start({
                 id,
                 notificationID,
                 type: name,
@@ -373,30 +360,17 @@ export const Plugin = {
                 recovery: { kind: "image", sessionID: context.sessionID, path: stem, model: ref },
                 run,
               })
-              yield* jobs.background(job.id)
-              const others = [...(writing.get(stem) ?? [])]
-              writing.set(stem, new Set([...others, job.id]))
-              yield* notifyWhenDone({
-                sessionID: context.sessionID,
-                id: job.id,
-                notificationID,
-                file: stem,
-                prompt: input.prompt,
-              })
+              yield* jobs.background(id)
+              yield* notifyWhenDone({ sessionID: context.sessionID, id, notificationID, file: stem })
               return {
-                output: { id: job.id, path: stem, model: ref },
+                output: { id, path: stem, model: ref },
                 content: [
-                  `Image job ${job.id} started in the background with ${ref}. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.${resolved.note ?? ""}`,
-                  ...(others.length > 0
-                    ? [
-                        `Image job ${others.join(", ")} is still writing ${stem}; whichever finishes last overwrites the file.`,
-                      ]
-                    : []),
+                  `Image job ${id} started in the background with ${ref}. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.${resolved.note ?? ""}`,
                   "You will be notified automatically when it finishes or fails.",
                   "DO NOT sleep, poll, check whether the file exists, or request the same image again while it runs.",
                   "Work on other tasks, or briefly tell the user what you started and end your response.",
                 ].join("\n"),
-                metadata: { path: stem, model: ref, jobID: job.id },
+                metadata: { path: stem, model: ref, jobID: id },
               }
             }).pipe(
               Effect.mapError((error) =>
