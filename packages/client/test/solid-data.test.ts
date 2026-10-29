@@ -355,6 +355,23 @@ test("reads a whole family once and serves its members' reads from it", async ()
   }
 })
 
+test("a family member without status keeps the status already known", async () => {
+  const { status: _, ...child } = member("ses_child", "ses_root")
+  const setup = sessionFixture(() =>
+    Response.json({ data: { rootID: "ses_root", sessions: [member("ses_root"), child], permissions: [], forms: [] } }),
+  )
+
+  try {
+    setup.emit(sessionEvent("session.execution.started", { sessionID: "ses_child" }))
+    await setup.data.session.sync("ses_root", { children: true })
+
+    expect(setup.data.session.family("ses_root")).toEqual(["ses_root", "ses_child"])
+    expect(setup.data.session.status("ses_child")).toBe("running")
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("events recorded during a family read survive its response", async () => {
   const release = Promise.withResolvers<void>()
   const setup = sessionFixture(async (path) => {

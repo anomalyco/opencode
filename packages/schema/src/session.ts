@@ -66,8 +66,14 @@ export const Persisted = Schema.Struct({
 export const Status = Schema.Literals(["idle", "running"])
 export type Status = typeof Status.Type
 
+/**
+ * Servers that report status always send it. A missing `status` comes from an older server and means unknown, not
+ * idle.
+ */
 export interface Info extends Schema.Schema.Type<typeof Info> {}
-export const Info = Schema.Struct({ ...Persisted.fields, status: Status }).annotate({ identifier: "Session.Info" })
+export const Info = Schema.Struct({ ...Persisted.fields, status: Status.pipe(optional) }).annotate({
+  identifier: "Session.Info",
+})
 
 export const ListAnchor = Schema.Struct({
   id: ID,

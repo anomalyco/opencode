@@ -74,6 +74,30 @@ test("session.get returns the decoded Effect projection", async () => {
   expect(DateTime.toEpochMillis(result.time.created)).toBe(1_717_171_717_000)
 })
 
+test("session reads decode responses from servers without status or rootID", async () => {
+  const { status: _, ...info } = session.data
+  const httpClient = HttpClient.make((request) =>
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        new URL(request.url).pathname === "/api/session/active"
+          ? Response.json({ data: { ses_test: { type: "running" } } })
+          : Response.json({ data: info }),
+      ),
+    ),
+  )
+  const result = await Effect.gen(function* () {
+    const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+    return {
+      info: yield* client.session.get({ sessionID: Session.ID.make("ses_test") }),
+      active: yield* client.session.active(),
+    }
+  }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+
+  expect(result.info.status).toBeUndefined()
+  expect(result.active).toEqual({ ses_test: { type: "running" } })
+})
+
 test("session instructions methods use the public HTTP contract", async () => {
   const requests: Array<{ method: string; url: string; body?: unknown }> = []
   const instructions = [{ key: "review-notes", value: { text: "Check the diff", priority: 1 } }]

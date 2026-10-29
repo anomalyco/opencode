@@ -405,7 +405,7 @@ export type PermissionRule = { action: string; resource: string; effect: Permiss
 
 export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
 
-export type SessionActive = { type: "running"; rootID: SessionID }
+export type SessionActive = { type: "running"; rootID?: SessionID }
 
 export type SessionForkBoundary =
   | { type: "before"; messageID: SessionMessageID }
@@ -2285,7 +2285,7 @@ export type SessionInfo = {
   metadata?: SessionMetadata
   permissions?: PermissionRuleset
   revert?: SessionRevert
-  status: "idle" | "running"
+  status?: "idle" | "running"
   location: LocationPublicRef
 }
 

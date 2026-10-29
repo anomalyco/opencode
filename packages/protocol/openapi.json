@@ -23188,7 +23188,7 @@
             "$ref": "#/components/schemas/Location.PublicRef"
           }
         },
-        "required": ["id", "projectID", "cost", "tokens", "time", "status", "location"],
+        "required": ["id", "projectID", "cost", "tokens", "time", "location"],
         "additionalProperties": false
       },
       "Session.Message.AgentSelected": {
@@ -24240,7 +24240,7 @@
             "$ref": "#/components/schemas/Session.ID"
           }
         },
-        "required": ["type", "rootID"],
+        "required": ["type"],
         "additionalProperties": false
       },
       "SessionBusyErrorEncoded": {
