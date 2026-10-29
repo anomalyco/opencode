@@ -1046,6 +1046,23 @@ describe("FlowchartDiagram", () => {
     `)
   })
 
+  test("can push nodes outside a group off its frame", () => {
+    const source = `flowchart TD
+  subgraph Accounts
+    Account
+    Checking[Checking with long label]
+    Savings[Savings with long label]
+  end
+  Account --> Checking
+  Account --> Savings
+  AR --> Repository
+  AR --> Account`
+    const separated = layoutFlowchartDiagram(source, { compact: true, separateLooseNodes: true })
+
+    expect(boundsIntersect(separated.bounds.get("Repository")!, separated.subgraphBounds.get("Accounts")!)).toBe(false)
+    expect(boundsIntersect(separated.bounds.get("AR")!, separated.subgraphBounds.get("Accounts")!)).toBe(false)
+  })
+
   test("wraps the real deployment chart responsively without losing content or geometry", () => {
     const expected = new Map([
       [60, { width: 82, height: 108 }],

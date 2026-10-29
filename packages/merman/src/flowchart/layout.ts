@@ -1008,6 +1008,7 @@ function separateTopLevelItems(
   subgraphBounds: ReadonlyMap<string, FlowchartSubgraphBounds>,
   gap: number,
   targetWidth?: number,
+  separateLooseNodes = false,
 ): boolean {
   const hasLocalDirection = (diagram.subgraphs ?? []).some(
     (subgraph) => subgraph.direction && subgraph.direction !== diagram.direction,
@@ -1160,7 +1161,11 @@ function separateTopLevelItems(
     }
     return adjusted
   }
-  if (rankedItems.length < 2) return ensureSubgraphEdgeItemClearance()
+  if (rankedItems.length < 2) {
+    const cleared = ensureSubgraphEdgeItemClearance()
+    if (!separateLooseNodes) return cleared
+    return separateLooseNodesFromFrames(items, topLevelIds, horizontal, gap, moveItem) || cleared
+  }
 
   const itemById = new Map(rankedItems.map((item) => [item.id, item]))
   const outgoing = new Map(rankedItems.map((item) => [item.id, new Set<string>()]))
@@ -1257,6 +1262,47 @@ function separateTopLevelItems(
     }
   }
   moved = ensureSubgraphEdgeItemClearance() || moved
+  if (separateLooseNodes) moved = separateLooseNodesFromFrames(items, topLevelIds, horizontal, gap, moveItem) || moved
+  return moved
+}
+
+/** Push nodes outside a top-level group off its frame when ranking placed them inside its bounds. */
+function separateLooseNodesFromFrames<Item extends { id: string; bounds: FlowchartBounds }>(
+  items: Item[],
+  topLevelIds: ReadonlySet<string>,
+  horizontal: boolean,
+  gap: number,
+  moveItem: (item: Item, dx: number, dy: number) => void,
+): boolean {
+  const primary = (bounds: FlowchartBounds) =>
+    horizontal ? [bounds.left, bounds.left + bounds.width] : [bounds.top, bounds.top + bounds.height]
+  const cross = (bounds: FlowchartBounds) =>
+    horizontal ? [bounds.top, bounds.top + bounds.height] : [bounds.left, bounds.left + bounds.width]
+  const overlaps = ([leftStart, leftEnd]: number[], [rightStart, rightEnd]: number[]) =>
+    leftStart! < rightEnd! && rightStart! < leftEnd!
+  let moved = false
+  for (const frame of items.filter((item) => topLevelIds.has(item.id))) {
+    const intruded = items.some(
+      (item) =>
+        !topLevelIds.has(item.id) &&
+        overlaps(primary(item.bounds), primary(frame.bounds)) &&
+        overlaps(cross(item.bounds), cross(frame.bounds)),
+    )
+    if (!intruded) continue
+    const band = items
+      .filter((item) => item === frame || overlaps(primary(item.bounds), primary(frame.bounds)))
+      .toSorted((left, right) => cross(left.bounds)[0]! - cross(right.bounds)[0]! || (left === frame ? -1 : 1))
+    let cursor: number | undefined
+    for (const item of band) {
+      const [start, end] = cross(item.bounds)
+      const shift = cursor === undefined ? 0 : Math.max(0, cursor - start!)
+      if (shift > 0) {
+        moved = true
+        moveItem(item, horizontal ? 0 : shift, horizontal ? shift : 0)
+      }
+      cursor = end! + shift + gap
+    }
+  }
   return moved
 }
 
@@ -1355,6 +1401,7 @@ function layoutFlowchartWithDirection(
       subgraphBounds,
       Math.max(1, Math.floor(requestedMinRankGap / 2)),
       targetWidth,
+      options.separateLooseNodes,
     )
     if (moved) {
       routes = route()
@@ -1370,6 +1417,7 @@ function layoutFlowchartWithDirection(
       subgraphBounds,
       Math.max(1, Math.floor(requestedMinRankGap / 2)),
       targetWidth,
+      options.separateLooseNodes,
     )
     if (expanded) routes = route(subgraphBounds)
     if (hasSubgraphEndpoints) {
