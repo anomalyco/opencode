@@ -127,6 +127,9 @@ describe("OpenAIPlugin", () => {
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"), () => {})
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-4.99"), () => {})
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-image-1.5"), (model) => {
+          model.type = "image"
+        })
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-image-2"), (model) => {
           model.type = "image"
           model.cost = [
@@ -194,13 +197,10 @@ describe("OpenAIPlugin", () => {
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-4.99"))).enabled).toBe(false)
-      // The ChatGPT backend serves image models too, covered by the subscription.
-      const image = required(
-        (yield* models.available(["image"])).find(
-          (model) => model.providerID === Provider.ID.openai && model.id === Model.ID.make("gpt-image-2"),
-        ),
-      )
-      expect(image.cost).toEqual([])
+      // Only the image model the Codex client uses is offered, covered by the subscription.
+      const images = (yield* models.available(["image"])).filter((model) => model.providerID === Provider.ID.openai)
+      expect(images.map((model) => model.id)).toEqual([Model.ID.make("gpt-image-2")])
+      expect(images[0]?.cost).toEqual([])
     }),
   )
 
