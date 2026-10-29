@@ -104,6 +104,35 @@ describe("LLMResponse reducer", () => {
     ])
   })
 
+  test("retains tool input deltas without their partial input parse", () => {
+    // Mirrors ToolStream's lazy getter; parsing it per retained delta grows with deltas × input length.
+    let parses = 0
+    const delta = (text: string): LLMEvent => ({
+      ...LLMEvent.toolInputDelta({ id: "call_1", name: "lookup", text }),
+      get input() {
+        parses++
+        return {}
+      },
+    })
+    const response = LLMResponse.fromEvents([
+      LLMEvent.toolInputStart({ id: "call_1", name: "lookup" }),
+      delta('{"query"'),
+      delta(':"weather"}'),
+      LLMEvent.toolInputEnd({ id: "call_1", name: "lookup" }),
+      LLMEvent.toolCall({ id: "call_1", name: "lookup", input: { query: "weather" } }),
+      LLMEvent.finish({ reason: { normalized: "tool-calls" } }),
+    ])
+
+    expect(parses).toBe(0)
+    expect(response?.events.filter(LLMEvent.is.toolInputDelta)).toEqual([
+      { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
+      { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
+    ])
+    expect(response?.message.content).toEqual([
+      { type: "tool-call", id: "call_1", name: "lookup", input: { query: "weather" } },
+    ])
+  })
+
   test("authoritative text-end value replaces accumulated deltas", () => {
     const response = LLMResponse.fromEvents([
       LLMEvent.textStart({ id: "t1" }),
