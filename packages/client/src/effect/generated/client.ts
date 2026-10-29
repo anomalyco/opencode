@@ -31,8 +31,6 @@ import type {
   SessionActiveOutput,
   SessionGetInput,
   SessionGetOutput,
-  SessionFamilyInput,
-  SessionFamilyOutput,
   SessionRemoveInput,
   SessionRemoveOutput,
   SessionForkInput,
@@ -245,6 +243,8 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
+  ExperimentalSessionFamilyGetInput,
+  ExperimentalSessionFamilyGetOutput,
   ExperimentalScheduleCreateInput,
   ExperimentalScheduleCreateOutput,
   ExperimentalScheduleListInput,
@@ -476,14 +476,6 @@ const EndpointSessionActive = (raw: RawClient["server.session"]) => () =>
 const EndpointSessionGet = (raw: RawClient["server.session"]) => (input: SessionGetInput) =>
   preserveEffect<SessionGetOutput>()(
     raw["session.get"]({ params: { sessionID: input["sessionID"] } }).pipe(
-      Effect.mapError(mapClientError),
-      Effect.map((value) => value.data),
-    ),
-  )
-
-const EndpointSessionFamily = (raw: RawClient["server.session"]) => (input: SessionFamilyInput) =>
-  preserveEffect<SessionFamilyOutput>()(
-    raw["session.family"]({ params: { sessionID: input["sessionID"] } }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),
     ),
@@ -763,7 +755,6 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   create: EndpointSessionCreate(raw),
   active: EndpointSessionActive(raw),
   get: EndpointSessionGet(raw),
-  family: EndpointSessionFamily(raw),
   remove: EndpointSessionRemove(raw),
   fork: EndpointSessionFork(raw),
   switchAgent: EndpointSessionSwitchAgent(raw),
@@ -1593,6 +1584,15 @@ const EndpointExperimentalPersistentPtyConnectToken =
       ),
     )
 
+const EndpointExperimentalSessionFamilyGet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSessionFamilyGetInput) =>
+    preserveEffect<ExperimentalSessionFamilyGetOutput>()(
+      raw["sessionFamily.get"]({ params: { sessionID: input["sessionID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const EndpointExperimentalScheduleCreate =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleCreateInput) =>
     preserveEffect<ExperimentalScheduleCreateOutput>()(
@@ -1739,6 +1739,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     remove: EndpointExperimentalPersistentPtyRemove(raw),
     connectToken: EndpointExperimentalPersistentPtyConnectToken(raw),
   },
+  sessionFamily: { get: EndpointExperimentalSessionFamilyGet(raw) },
   schedule: {
     create: EndpointExperimentalScheduleCreate(raw),
     list: EndpointExperimentalScheduleList(raw),

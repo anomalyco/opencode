@@ -5,7 +5,6 @@ import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { Form } from "@opencode/core/form"
-import { Permission } from "@opencode/core/permission"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
@@ -173,40 +172,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             data: yield* session
               .get(ctx.params.sessionID)
               .pipe(Effect.catchTag("Session.NotFoundError", missingSession)),
-          }
-        }),
-      )
-      .handle(
-        "session.family",
-        Effect.fn(function* (ctx) {
-          const family = yield* session
-            .family(ctx.params.sessionID)
-            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
-          // Pending requests live in memory, so only a running Location can hold one. A member whose Location
-          // is not running contributes nothing and is neither started nor waited on. If one is invalidated after
-          // `live`, `provide` restarts it; a missing directory then contributes nothing, other failures are defects.
-          const none = [[], []] as const
-          const pending = yield* Effect.forEach(
-            family.sessions,
-            Effect.fnUntraced(function* (member) {
-              if (instances.live && !(yield* instances.live(member))) return none
-              return yield* Effect.all([
-                Permission.Service.use((permission) => permission.forSession(member.id)),
-                Form.Service.use((form) => form.list({ sessionID: member.id })),
-              ]).pipe(
-                instances.provide(member),
-                Effect.orElseSucceed(() => none),
-              )
-            }),
-            { concurrency: 8 },
-          )
-          return {
-            data: {
-              rootID: family.rootID,
-              sessions: family.sessions,
-              permissions: pending.flatMap((requests) => requests[0]),
-              forms: pending.flatMap((requests) => requests[1]),
-            },
           }
         }),
       )

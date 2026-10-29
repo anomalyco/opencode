@@ -78,7 +78,7 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     // Derive a family from the Session, children, and pending-request reads a test serves, so overrides need not know
     // the endpoint. Like the server it walks up to the root and returns the whole tree, root first; an ancestor the test
     // does not serve stays the family's root ID without being listed.
-    const family = /^\/api\/session\/([^/]+)\/family$/.exec(url.pathname)
+    const family = /^\/api\/experimental\/session\/([^/]+)\/family$/.exec(url.pathname)
     if (family) {
       type Info = { id: string; parentID?: string }
       const read = (path: string) =>

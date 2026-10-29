@@ -201,9 +201,11 @@ test.each([40, 120])("subagent completion notices navigate to the child session 
     // One family read loads both members, their pending requests, and serves the child's route.
     expect(
       requests
-        .filter((pathname) => /^\/api\/session\/(active|[^/]+\/(family|permission|form))$/.test(pathname))
+        .filter((pathname) =>
+          /^\/api\/(session\/(active|[^/]+\/(permission|form))|experimental\/session\/[^/]+\/family)$/.test(pathname),
+        )
         .toSorted(),
-    ).toEqual(["/api/session/active", `/api/session/${parent.id}/family`])
+    ).toEqual([`/api/experimental/session/${parent.id}/family`, "/api/session/active"])
   } finally {
     setup.renderer.destroy()
     await task

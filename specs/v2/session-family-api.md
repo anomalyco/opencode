@@ -91,10 +91,12 @@ The facade takes its snapshot of the running set before it reads Session rows. A
 ### 2. One read returns the whole family
 
 ```
-GET /api/session/:sessionID/family
+GET /api/experimental/session/:sessionID/family
 ```
 
 returns every Session in the tree that contains `sessionID`: the root first, then its descendants ordered by `time.created` and then `id`. Any member's ID returns the same family, so a client that opens a subagent first does not have to find the root. The Server builds the tree with one recursive query over `parent_id`, and every member's `status` comes from the same snapshot of the running set.
+
+The endpoint starts experimental, as [`AGENTS.md`](../../AGENTS.md) requires of new endpoints: its OpenAPI identifier is `experimental.sessionFamily.get`, and the SDK exposes it as `client.experimental.sessionFamily.get`.
 
 ```jsonc
 {
@@ -215,6 +217,10 @@ The fix is to record each run with `{ assistantMessageID, toolCallID, background
 
 - `session.wait` returns no outcome and blocks without a signal while a permission or form is pending. The iOS app long-polls it in 25-second windows after every send, for Live Activities, and for voice.
 - A permission prompt for a child shows without the tool's input, because the TUI reads the tool call from the child's transcript, which the root view has not loaded (`routes/session/permission.tsx`). The request could carry its tool input instead.
+
+## Open questions
+
+- Whether `status` on `Session.Info` and `rootID` on `/session/active` entries start experimental is left for review. [`AGENTS.md`](../../AGENTS.md) puts experimental fields on stable endpoints under an `experimental` key, so clients would read `session.experimental.status` and `entry.experimental.rootID`. This proposal keeps both as plain fields until that is decided.
 
 ## Out of scope
 
