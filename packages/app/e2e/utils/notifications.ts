@@ -1,6 +1,5 @@
 import type { Page } from "@playwright/test"
 
-// Only browser APIs are replaced: settings, event delivery, request stores and the coordinator stay real.
 export async function recordNotifications(page: Page) {
   const notifications: { title: string; body?: string }[] = []
 
@@ -19,7 +18,6 @@ export async function recordNotifications(page: Page) {
       recordNotificationSound?: (src: string) => Promise<void>
     } = window
 
-    // Simulate an unfocused app without changing the user's live desktop window.
     document.hasFocus = () => false
     Object.defineProperty(window, "Notification", {
       value: class extends EventTarget {

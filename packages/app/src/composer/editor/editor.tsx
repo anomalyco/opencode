@@ -1323,9 +1323,11 @@ function ComposerEditorPopover(props: {
                 type="button"
                 data-suggestion-id={item.id}
                 data-active={props.activeID === item.id ? "" : undefined}
-                class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover"
+                class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start"
                 classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
-                onPointerMove={() => props.onActiveChange(item)}
+                onPointerMove={(event) => {
+                  if (event.movementX || event.movementY) props.onActiveChange(item)
+                }}
                 onClick={() => props.onSelect(item)}
               >
                 <div class="flex min-w-0 flex-1 items-center gap-2">
