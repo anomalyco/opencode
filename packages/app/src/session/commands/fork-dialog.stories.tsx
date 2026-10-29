@@ -7,6 +7,7 @@ import { ForkDialog } from "./fork-dialog"
 function ForkDialogStory() {
   const dialog = useDialog()
   const [store, setStore] = createStore({ selected: "No message selected" })
+
   const messages = [
     "Investigate how the command palette handles keyboard navigation.",
     "Show me where session titles are stored.",
@@ -23,6 +24,7 @@ function ForkDialogStory() {
       time: new Date(Date.UTC(2026, 9, 28, 10, index * 5)).toLocaleTimeString(undefined, { timeStyle: "short" }),
     }))
     .reverse()
+
   const open = () =>
     dialog.show(() => (
       <ForkDialog

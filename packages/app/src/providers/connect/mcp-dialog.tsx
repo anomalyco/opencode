@@ -1,6 +1,7 @@
 import { Component, createEffect, createMemo, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import fuzzysort from "fuzzysort"
+import { Predicate } from "effect"
 import type { McpServer } from "@opencode/client/promise"
 import { useData } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -37,10 +38,11 @@ export const DialogMcp: Component<{ directory: string; server?: string }> = (pro
   const data = useData()
   const directory = () => props.directory
   const toggle = useMcpToggle(directory)
+
   const target = () => {
     const current = toggle.isPending ? toggle.variables : undefined
 
-    return typeof current === "string" ? current : current?.name
+    return Predicate.isString(current) ? current : current?.name
   }
 
   createEffect(() => void data.location.mcp.server.sync({ directory: directory() }).catch(() => undefined))
@@ -224,11 +226,13 @@ export function McpDialog(props: {
             {(item, row) => {
               const server = () => servers().find((entry) => entry.name === item().name)
               const status = () => server()?.status
+
               const error = () => {
                 const current = status()
 
                 return current?.status === "failed" ? current.error : undefined
               }
+
               // The switch would start sign-in anyway, so an auth-gated server shows that action instead.
               const signIn = () => status()?.status === "needs_auth" && !!server()?.integrationID
 

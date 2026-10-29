@@ -64,6 +64,7 @@ export const DialogFork: Component = () => {
 
 export function ForkDialog(props: { messages: ForkableMessage[]; onSelect: (messageID: string) => void }) {
   const language = useLanguage()
+
   const select = (item: ForkableMessage | undefined) => {
     if (item) props.onSelect(item.id)
   }

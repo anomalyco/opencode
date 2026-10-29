@@ -7,6 +7,7 @@ import { PluginSelectDialog } from "./dialogs"
 function PluginSelectStory() {
   const dialog = useDialog()
   const [store, setStore] = createStore({ selected: "Nothing selected" })
+
   const open = () =>
     dialog.show(() => (
       <PluginSelectDialog

@@ -1,12 +1,14 @@
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import type { McpServer } from "@opencode/client/promise"
+import { Predicate } from "effect"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { McpDialog } from "./mcp-dialog"
 
 function McpDialogStory(props: { server?: string }) {
   const dialog = useDialog()
+
   const [servers, setServers] = createStore<McpServer[]>([
     { name: "figma-remote", integrationID: "figma-oauth", status: { status: "needs_auth", error: "Sign in required" } },
     { name: "local-files", status: { status: "disabled" } },
@@ -20,6 +22,7 @@ function McpDialogStory(props: { server?: string }) {
       },
     },
   ])
+
   const open = () =>
     dialog.show(() => (
       <McpDialog
@@ -27,12 +30,13 @@ function McpDialogStory(props: { server?: string }) {
         server={props.server}
         pending={false}
         onToggle={(input) => {
-          const name = typeof input === "string" ? input : input.name
-          const enabled =
-            typeof input === "string"
-              ? servers.find((server) => server.name === name)?.status.status !== "connected"
-              : input.enabled
-          setServers((server) => server.name === name, "status", { status: enabled ? "connected" : "disabled" })
+          const action = Predicate.isString(input)
+            ? { name: input, enabled: servers.find((server) => server.name === input)?.status.status !== "connected" }
+            : input
+
+          setServers((server) => server.name === action.name, "status", {
+            status: action.enabled ? "connected" : "disabled",
+          })
         }}
       />
     ))

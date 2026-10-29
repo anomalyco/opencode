@@ -7,6 +7,7 @@ story("fork search anchors filtering and keyboard scrolling", async ({ mount, pa
   const dialog = page.getByRole("dialog", { name: "Fork from message", exact: true })
   const input = dialog.getByRole("searchbox", { name: "Search", exact: true })
   const container = page.locator('[data-component="dialog-v2"] [data-slot="dialog-container"]')
+
   const geometry = () =>
     container.evaluate((element) => {
       const field = element.querySelector('input[type="search"]')!.getBoundingClientRect()
@@ -39,6 +40,7 @@ story("fork search anchors filtering and keyboard scrolling", async ({ mount, pa
 
   await expect.poll(() => scroll.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
   await input.press("ArrowUp")
+
   const oldest = dialog.getByRole("option", {
     name: /^Investigate how the command palette handles keyboard navigation\./,
   })
