@@ -83,7 +83,9 @@ const GoogleImageResponse = Schema.Struct({
 
 const generationConfig = (request: Request) => {
   const { thinkingLevel, includeThoughts, ...native } = request.providerOptions ?? {}
-  const imageConfig = { aspectRatio: request.aspect, imageSize: request.resolution }
+  // Google names the half tier `512` and rejects `0.5K`.
+  const imageSize = request.resolution?.toUpperCase() === "0.5K" ? "512" : request.resolution?.toUpperCase()
+  const imageConfig = { aspectRatio: request.aspect, imageSize }
   const thinkingConfig = { thinkingLevel, includeThoughts }
   return (
     mergeJsonRecords(

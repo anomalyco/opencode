@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration.js"
 
 const migration: DatabaseMigration.Migration = {
-  id: "20261028201919_mcp_trusted_host",
+  id: "20261029184115_mcp_trusted_host",
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`

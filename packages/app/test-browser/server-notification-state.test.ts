@@ -82,7 +82,7 @@ test.each([
           },
         },
       },
-      data: { session: { get: () => session } },
+      data: { session: { get: () => session, family: () => [session.id], status: () => "idle" } },
       coordinator: { system: async (_id: string, fn: () => Promise<void>) => fn() },
     })
 

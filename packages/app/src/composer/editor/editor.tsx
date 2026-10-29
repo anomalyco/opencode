@@ -266,8 +266,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
               onCommentRemove={(comment) => props.controller.removeContext(comment.key)}
               onFileRemove={(file) => props.controller.removeContext(file.key)}
               editingQuote={props.controller.editingQuote()}
+              quoteAnchor={props.controller.quoteAnchor()}
+              onQuoteFocus={props.controller.focusQuotePrompt}
               onEditQuote={props.controller.editQuote}
-              quoteSource={props.controller.quoteSource}
               onQuoteComment={(quote, comment) => props.controller.commentQuote(quote.key, comment)}
               searchPaths={props.controller.searchPaths}
             />
@@ -527,7 +528,9 @@ function renderComposerEditor(editor: HTMLDivElement, prompt: ComposerPrompt) {
     }),
   )
 
-  if (!active) return
+  // Emptying the editor already collapses its caret to the start, which is also its end. Any selection call, even a
+  // read, forces a layout, and a submit empties the editor from its key handler.
+  if (!active || prompt.every((part) => isAttachment(part) || (part.type === "text" && !part.content))) return
   const selection = window.getSelection()
   const range = document.createRange()
   range.selectNodeContents(editor)
@@ -678,8 +681,9 @@ function ComposerAttachments(props: {
   onCommentRemove?: (comment: ComposerComment) => void
   onFileRemove?: (file: Extract<ComposerComment, { type: "file" }>) => void
   editingQuote?: string
+  quoteAnchor?: ReturnType<ComposerEditorModel["quoteAnchor"]>
+  onQuoteFocus?: () => void
   onEditQuote?: (key?: string) => void
-  quoteSource?: ComposerEditorModel["quoteSource"]
   onQuoteComment?: (quote: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
   searchPaths?: (query: string) => Promise<string[]>
 }) {
@@ -729,18 +733,17 @@ function ComposerAttachments(props: {
                   value={comment.comment}
                   placement="top"
                   openDelay={800}
-                  disabled={comment.type === "quote"}
+                  disabled={comment.type === "quote" || (comment.type === "note" && !comment.comment.trim())}
                   contentClass="max-w-[300px] break-words"
                 >
                   <CommentCard
                     comment={comment.comment ?? ""}
                     target={commentCardTarget(comment)}
                     title={quoteTitle(comment)}
-                    tooltip={quoteHint(comment)}
+                    tooltip={quoteHint(comment) || (comment.type === "note" && !comment.comment.trim())}
                     active={commentActive(comment)}
                     onClick={() => {
                       if (comment.type !== "quote") return props.onCommentClick?.(comment)
-                      props.quoteSource?.reveal(comment.key)
                       props.onEditQuote?.(props.editingQuote === comment.key ? undefined : comment.key)
                     }}
                   />
@@ -874,15 +877,20 @@ function ComposerAttachments(props: {
               {(anchor) => (
                 <QuoteCommentEditor
                   anchor={anchor()}
+                  source={props.quoteAnchor}
                   text={current.text}
-                  icon={current.source?.icon}
                   comment={current.comment ?? ""}
                   mention={(query) => props.searchPaths?.(query) ?? Promise.resolve([])}
                   onSubmit={(comment) => {
                     props.onQuoteComment?.(current, comment)
                     props.onEditQuote?.()
+                    props.onQuoteFocus?.()
                   }}
-                  onClose={() => props.onEditQuote?.()}
+                  onClose={(focus) => {
+                    props.onEditQuote?.()
+
+                    if (focus) props.onQuoteFocus?.()
+                  }}
                 />
               )}
             </Show>
