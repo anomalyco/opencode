@@ -34,6 +34,40 @@ downloads the published dev CLI, `beta` downloads the beta CLI, and `prod`/`late
 `bun dev` is separate from packaging: it uses local renderer/server mode, the dev app identity, and the CLI source by
 default. `bun dev --download-server <version>` instead downloads that CLI version for local development.
 
+### First-launch onboarding
+
+`OPENCODE_TEST_ONBOARDING=1` starts the app as a new user would see it on a new machine, under `bun dev` and in
+packaged builds alike. Each launch uses a new temporary profile with its own XDG directories, home directory, Documents
+folder, in-memory database and service port. Provider keys and the AWS, Azure and Google Cloud SDK variables are removed
+from the environment, as are `OPENCODE_CONFIG`, `OPENCODE_CONFIG_CONTENT` and `OPENCODE_CONFIG_DIR`, including the
+ones your login shell sets, so no provider is connected and the composer starts on a free OpenCode model. The app does
+not check for updates or take over `opencode://` links. Under `bun dev`, the splash also waits for the window to have
+focus and plays in full.
+
+## Onboarding video
+
+`bun run onboarding:video` records a new user's first launch of a packaged build and checks the onboarding invariants
+in `script/onboarding/invariants.ts` as it goes: the first-launch splash, the hand-off to the new session page with the
+composer focused, a model selected without signing in, and a typed prompt that gets a reply.
+
+```bash
+OPENCODE_CHANNEL=dev bun run build && bun run pack
+bun run onboarding:video                                   # the build from pack
+bun run onboarding:video -- --app "path/to/OpenCode.exe"   # any packaged build: .exe, .app or binary
+bun run onboarding:video -- --installer <file | url> --disposable   # Windows, on a throwaway machine only
+```
+
+The app runs in a throwaway profile, service, Documents folder and home directory without credentials, so a recording
+never reads or changes your own OpenCode. It works with older builds too: the recorder isolates them from outside and
+puts back the `opencode://` handler if they take it. `--installer` installs into this machine's user profile, over any
+copy of that channel, so it refuses to run without `--disposable`.
+
+Each run writes to `dist/onboarding/<time>/` at the repository root (or `--out`): `index.html` plays the video against
+the invariants, and `onboarding-annotated.mp4` adds a strip that lights up each invariant as it passes. The last line
+printed is the path of `report.json`. The exit code is 0 when every invariant held, 1 when one failed (the video ends
+on the failure and `failure.png` shows it), and 2 when the recorder could not run. It needs `ffmpeg` on `PATH` for the
+videos.
+
 ## Beta channel
 
 Every push to the `beta` branch publishes OpenCode Beta (`ai.opencode.desktop.beta`) as version `0.0.0-beta-<run>` to

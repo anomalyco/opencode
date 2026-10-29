@@ -72,15 +72,38 @@ function createTestRoot() {
 
   if (testOnboarding) rmSync(root, { recursive: true, force: true })
 
-  for (const dir of ["data", "config", "cache", "state", "desktop", "session", "documents"])
+  for (const dir of ["data", "config", "cache", "state", "desktop", "session", "documents", "home"])
     mkdirSync(path.join(root, dir), { recursive: true })
 
-  if (testOnboarding) process.env.OPENCODE_DB = ":memory:"
-
-  process.env.XDG_DATA_HOME = path.join(root, "data")
-  process.env.XDG_CONFIG_HOME = path.join(root, "config")
-  process.env.XDG_CACHE_HOME = path.join(root, "cache")
-  process.env.XDG_STATE_HOME = path.join(root, "state")
+  process.env.OPENCODE_DESKTOP_TEST_ROOT = root
+  isolateTestEnvironment()
 
   return root
+}
+
+// Variables that connect a provider or point opencode at the developer's own configuration: anything named like a
+// secret, plus the AWS, Azure and Google Cloud SDK variables whose presence alone signs a user in.
+const developerSetup =
+  /^OPENCODE_CONFIG(?:_CONTENT|_DIR)?$|^(?:AWS|AZURE|GOOGLE|GCP|GCLOUD|CLOUDSDK)_|(?:^|_)(?:API_?KEY|KEY|TOKEN|SECRET|PAT|PASSWORD|CREDENTIALS?|AUTHORIZATION)$/i
+
+// The login shell's environment is merged in after startup, so this runs again then. Otherwise the shell restores the
+// developer's XDG paths and provider keys, and onboarding no longer starts from a new user's machine.
+export function isolateTestEnvironment() {
+  const root = process.env.OPENCODE_DESKTOP_TEST_ROOT
+
+  if (!root) return
+
+  Object.assign(process.env, {
+    XDG_DATA_HOME: path.join(root, "data"),
+    XDG_CONFIG_HOME: path.join(root, "config"),
+    XDG_CACHE_HOME: path.join(root, "cache"),
+    XDG_STATE_HOME: path.join(root, "state"),
+  })
+
+  if (!testOnboarding) return
+
+  Object.keys(process.env)
+    .filter((name) => developerSetup.test(name))
+    .forEach((name) => delete process.env[name])
+  Object.assign(process.env, { OPENCODE_DB: ":memory:", OPENCODE_TEST_HOME: path.join(root, "home") })
 }

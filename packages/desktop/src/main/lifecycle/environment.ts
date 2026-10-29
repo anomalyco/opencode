@@ -4,6 +4,7 @@ import { app } from "electron"
 import { Effect, Path } from "effect"
 import { DesktopPaths } from "../paths"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
+import { isolateTestEnvironment } from "./configure"
 import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../windows"
 import { scoped } from "../native/logging"
 
@@ -30,6 +31,7 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
       OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
       OPENCODE_CLIENT: "desktop",
     })
+    isolateTestEnvironment()
   })
 })
 
@@ -37,7 +39,11 @@ export const prepareDesktop = Effect.gen(function* () {
   const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve
 
-  if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
+  // An onboarding test profile is thrown away, so it must not take opencode:// links from the installed app.
+  if (
+    process.env.OPENCODE_TEST_ONBOARDING !== "1" &&
+    (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
+  )
     app.setAsDefaultProtocolClient("opencode")
   const runFork = Effect.runForkWith(yield* Effect.context())
   setProtocolReporter((level, message, data) =>
@@ -50,7 +56,8 @@ export const prepareDesktop = Effect.gen(function* () {
 export const loadProxyEnvironment = Effect.gen(function* () {
   yield* Effect.try(() => {
     ensureLoopbackNoProxy()
-    // Electron 41.2 has a newer Node API than the current @types/node package.
+    // SAFETY: Electron 41.2 and later ship Node's http.setGlobalProxyFromEnv, which the current @types/node package
+    // does not declare yet.
     const proxyAwareHttp = http as typeof http & { setGlobalProxyFromEnv(): void }
     proxyAwareHttp.setGlobalProxyFromEnv()
   }).pipe(Effect.catch((error) => Effect.logWarning("failed to load proxy environment", { error })))

@@ -18,7 +18,8 @@
     "build": "bun run script/build.ts",
     "pack": "bun run script/pack.ts",
     "preview": "electron-vite preview",
-    "bench:startup": "bun run script/bench-startup.ts"
+    "bench:startup": "bun run script/bench-startup.ts",
+    "onboarding:video": "bun run script/onboarding/record.ts"
   },
   "main": "./out/main/index.js",
   "dependencies": {
