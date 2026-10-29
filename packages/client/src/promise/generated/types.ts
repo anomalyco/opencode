@@ -2448,8 +2448,7 @@ export type ConfigEntry =
           todo?: boolean
           background_compaction?: boolean
           media_blob?: boolean
-          image_generate?: boolean
-          image_model?: string | { providerID: string; model: string; variant?: string }
+          image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           schedules?: boolean
           subagent_depth?: number
           location_idle_timeout?: string | false

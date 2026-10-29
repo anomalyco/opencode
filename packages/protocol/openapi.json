@@ -16245,31 +16245,41 @@
                 "type": "boolean"
               },
               "image_generate": {
-                "type": "boolean"
-              },
-              "image_model": {
                 "anyOf": [
                   {
-                    "type": "string",
-                    "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                    "type": "boolean"
                   },
                   {
                     "type": "object",
                     "properties": {
-                      "providerID": {
-                        "type": "string",
-                        "pattern": "^[^/#]+$"
-                      },
                       "model": {
-                        "type": "string",
-                        "pattern": "^[^#]+$"
-                      },
-                      "variant": {
-                        "type": "string",
-                        "pattern": "^[^#]+$"
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "providerID": {
+                                "type": "string",
+                                "pattern": "^[^/#]+$"
+                              },
+                              "model": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "pattern": "^[^#]+$"
+                              }
+                            },
+                            "required": ["providerID", "model"],
+                            "additionalProperties": false
+                          }
+                        ]
                       }
                     },
-                    "required": ["providerID", "model"],
                     "additionalProperties": false
                   }
                 ]

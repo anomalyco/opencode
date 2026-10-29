@@ -381,18 +381,20 @@ export function defaultModel(
 }
 
 // Read per field so a later config that sets other experimental options doesn't hide this one.
+function imageGenerate(entries: readonly Entry[]) {
+  return entries.findLast(
+    (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_generate !== undefined,
+  )?.info.experimental?.image_generate
+}
+
 function optedIn(entries: readonly Entry[]) {
-  return (
-    entries.findLast(
-      (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_generate !== undefined,
-    )?.info.experimental?.image_generate === true
-  )
+  const value = imageGenerate(entries)
+  return value !== undefined && value !== false
 }
 
 function configuredModel(entries: readonly Entry[]) {
-  return entries.findLast(
-    (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_model !== undefined,
-  )?.info.experimental?.image_model
+  const value = imageGenerate(entries)
+  return typeof value === "object" ? value.model : undefined
 }
 
 function acceptsImages(model: Model.Info) {

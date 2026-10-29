@@ -20,14 +20,20 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
     description:
       "Store new session media once in a deduplicated blob table instead of inline in every message row. Defaults to false.",
   }),
-  image_generate: Schema.Boolean.pipe(optional).annotate({
-    description:
-      "Enable the experimental image_generate tool, offered while a connected provider has an image model. Defaults to false.",
-  }),
-  image_model: ConfigModel.Selection.pipe(optional).annotate({
-    description:
-      "Default model for the image_generate tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
-  }),
+  image_generate: Schema.Union([
+    Schema.Boolean,
+    Schema.Struct({
+      model: ConfigModel.Selection.pipe(optional).annotate({
+        description:
+          "Default model for the image_generate tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
+      }),
+    }),
+  ])
+    .pipe(optional)
+    .annotate({
+      description:
+        "Enable the experimental image_generate tool, offered while a connected provider has an image model. Set to true, or to an object with an optional default model. Defaults to false.",
+    }),
   schedules: Schema.Boolean.pipe(optional).annotate({
     description: "Enable experimental scheduled tasks that wake a session with a prompt. Defaults to false.",
   }),
