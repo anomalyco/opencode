@@ -1358,7 +1358,13 @@ describe("Schedule", () => {
         expect(asked).toHaveLength(1)
         expect(asked[0]).toMatchObject({
           action: "slack_read_thread",
-          metadata: { schedule: "thread", mode: "if", tools: ["slack.read_thread"] },
+          metadata: {
+            schedule: "thread",
+            mode: "if",
+            when: { type: "every", every: "1 minute" },
+            unattended: true,
+            tools: ["slack.read_thread"],
+          },
         })
         expect(asked[0]?.save).toBeUndefined()
 
@@ -1417,6 +1423,47 @@ describe("Schedule", () => {
 
         agentRules = [{ action: "execute", resource: "*", effect: "deny" }]
         expect(yield* bad("return true")).toMatchObject({ _tag: "Permission.BlockedError" })
+      }),
+    )
+
+    it.effect("fails schedule_create when a t=0 code run throws, and pauses on strike 1 when a later tick returns an invalid shape", () =>
+      Effect.gen(function* () {
+        const schedules = yield* setup()
+        const thrown = yield* Effect.flip(
+          schedules.create({
+            sessionID,
+            when: { type: "cron", cron: "0 9 * * *" },
+            if: {
+              type: "code",
+              code: `const t = await tools.slack.read_thread({}); return t.nonexistent.length > 0`,
+            },
+            action: { type: "prompt", prompt: "Morning check." },
+          }),
+        )
+        expect(thrown).toMatchObject({ _tag: "Schedule.InvalidError" })
+
+        // First run (state === null) returns valid { wake: false, state: { ok: true } };
+        // first scheduled tick (state !== null) returns an invalid string, pausing immediately on strike 1.
+        const schedule = yield* schedules.create({
+          sessionID,
+          when: { type: "every", every: "1 minute" },
+          if: {
+            type: "code",
+            code: `if (state === null) return { wake: false, state: { ok: true } }; return "not-a-check-result"`,
+          },
+          action: { type: "prompt", prompt: "Watch." },
+        })
+        yield* TestClock.adjust("1 minute")
+        yield* schedules.tick
+        expect(yield* schedules.get(schedule.id)).toMatchObject({
+          status: "paused",
+          lastOutcome: "failed",
+          runCount: 1,
+        })
+        const { db } = yield* Database.Service
+        expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
+          payload: { text: expect.stringContaining("[Schedule paused after invalid check:") },
+        })
       }),
     )
   })

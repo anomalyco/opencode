@@ -294,7 +294,7 @@ const layer = Layer.effect(
 
         if (!outcome.ok) {
           const strikes = row.failures + 1
-          if (strikes < MAX_CHECK_FAILURES) {
+          if (!outcome.invalid && strikes < MAX_CHECK_FAILURES) {
             yield* update(row, {
               failures: strikes,
               last_outcome: "failed",
@@ -304,13 +304,16 @@ const layer = Layer.effect(
             return
           }
           const run = row.run_count + 1
+          const note = outcome.invalid
+            ? `[Schedule paused after invalid check: ${outcome.error}]`
+            : `[Schedule paused after ${strikes} failed checks: ${outcome.error}]`
           const id = yield* admitWake(
             row,
             session.id,
             run,
             due,
             late,
-            `${row.action.prompt}\n\n[Schedule paused after ${strikes} failed checks: ${outcome.error}]`,
+            `${row.action.prompt}\n\n${note}`,
             { error: outcome.error, failures: strikes },
           )
           yield* db
@@ -636,7 +639,7 @@ const layer = Layer.effect(
           check === undefined
             ? { matched: false as const, state: null as Schema.Json, checks: 0 }
             : yield* Effect.gen(function* () {
-                yield* ScheduleCheck.authorize(session, input.name, check).pipe(
+                yield* ScheduleCheck.authorize(session, input.name, when, check).pipe(
                   instances.provide(session),
                   Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
                   Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
@@ -647,7 +650,7 @@ const layer = Layer.effect(
                 )
                 const shouldSeed =
                   check.mode === "until" ||
-                  (check.condition.type === "code" && when.type === "every") ||
+                  check.condition.type === "code" ||
                   (check.condition.type === "shell" && check.condition.changes === true)
                 if (!shouldSeed) return { matched: false as const, state: null as Schema.Json, checks: 0 }
                 const init = yield* ScheduleCheck.evaluate(session, check, null, {
@@ -663,7 +666,8 @@ const layer = Layer.effect(
                   ),
                 )
                 if (!init.ok) {
-                  if (init.invalid) return yield* new InvalidError({ reason: init.error })
+                  // A code check that throws or fails at creation is broken (e.g. wrong MCP response field); fail right away.
+                  if (init.invalid || check.condition.type === "code") return yield* new InvalidError({ reason: init.error })
                   return { matched: false as const, state: null as Schema.Json, checks: 0 }
                 }
                 if (check.mode === "until" && init.wake)
