@@ -17,6 +17,7 @@ import { Mime } from "../../mime.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
+import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { collectBoundedResponseBody } from "../http-body.js"
 
@@ -44,7 +45,7 @@ export const Input = Schema.Struct({
     Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
   ).annotate({
     description:
-      "Images to edit or use as references, in order. Local file paths (relative to the session directory or absolute) or https URLs. Omit to create a new image.",
+      "Images to edit or use as references, in order. Local file paths (relative to the session directory or absolute) or http(s) URLs. Omit to create a new image.",
   }),
   model: Schema.optionalKey(Schema.String).annotate({
     description:
@@ -160,19 +161,12 @@ export const Plugin = {
       fetchAllowed: (url: string) => ReturnType<typeof permission.assert>,
     ) {
       if (/^https?:\/\//i.test(source)) {
-        if (!source.toLowerCase().startsWith("https://"))
-          return yield* new ToolFailure({ message: `Image URLs must use https: ${source}` })
         // Downloads follow the same rule as the webfetch tool, so denying web access also covers image URLs.
         yield* fetchAllowed(source)
         return yield* Effect.gen(function* () {
           const response = yield* http
             .execute(HttpClientRequest.get(source))
             .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
-          const type = (response.headers["content-type"] ?? "").split(";", 1)[0]?.trim().toLowerCase() ?? ""
-          if (!INPUT_TYPES.includes(type))
-            return yield* new ToolFailure({
-              message: `${source} is not a PNG, JPEG, WebP or GIF image (${type || "no content type"}).`,
-            })
           return yield* collectBoundedResponseBody(
             response,
             MAX_INPUT_BYTES,
@@ -197,11 +191,11 @@ export const Plugin = {
     })
 
     const notifyWhenDone = Effect.fn("ImageGenerateTool.notifyWhenDone")(
-      function* (sessionID: SessionSchema.ID, id: string, file: string) {
+      function* (sessionID: SessionSchema.ID, id: string, notificationID: SessionMessage.ID, file: string) {
         const info = (yield* jobs.wait({ id })).info
         if (!info || info.status === "running") return
         yield* sessions.synthetic({
-          ...(info.notificationID ? { id: info.notificationID } : {}),
+          id: notificationID,
           sessionID,
           description: "Image generation",
           text:
@@ -212,7 +206,7 @@ export const Plugin = {
                 : `Image request for ${file} was cancelled.`,
           metadata: { source: name, jobID: id, state: info.status, path: file },
         })
-        if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
+        yield* jobs.completeBackground(notificationID)
       },
       Effect.forkIn(scope, { startImmediately: true }),
     )
@@ -333,8 +327,10 @@ export const Plugin = {
                 Effect.mapError((error) => new Error(`Image request failed for ${stem}: ${error.message}`)),
               )
               const id = `image_${Identifier.create(false)}`
+              const notificationID = SessionMessage.ID.create()
               const job = yield* jobs.start({
                 id,
+                notificationID,
                 type: name,
                 title: input.prompt,
                 metadata: { sessionID: context.sessionID, path: stem, model: ref },
@@ -342,7 +338,7 @@ export const Plugin = {
                 run,
               })
               yield* jobs.background(job.id)
-              yield* notifyWhenDone(context.sessionID, job.id, stem)
+              yield* notifyWhenDone(context.sessionID, job.id, notificationID, stem)
               return {
                 output: { path: stem, model: ref },
                 content: [
