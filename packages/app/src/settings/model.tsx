@@ -131,6 +131,8 @@ const generalSchema = Persistence.struct({
   newIcons: Schema.Boolean,
   // The "New model picker" design experiment, off until it ships.
   newModelPicker: Schema.Boolean,
+  // The "Fold long messages" experiment, off until it ships.
+  foldUserMessages: Schema.Boolean,
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
@@ -300,6 +302,7 @@ export const defaultSettings: Settings = {
     timelineWidth: "comfortable",
     newIcons: false,
     newModelPicker: false,
+    foldUserMessages: false,
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
   },
@@ -411,6 +414,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         newModelPicker: withFallback(() => store.general?.newModelPicker, defaultSettings.general.newModelPicker),
         setNewModelPicker(value: boolean) {
           setStore("general", "newModelPicker", value)
+        },
+        foldUserMessages: withFallback(() => store.general?.foldUserMessages, defaultSettings.general.foldUserMessages),
+        setFoldUserMessages(value: boolean) {
+          setStore("general", "foldUserMessages", value)
         },
         mobileTitlebarPosition: withFallback(
           () => store.general?.mobileTitlebarPosition,

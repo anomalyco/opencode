@@ -97,6 +97,7 @@ describe("settings schema", () => {
         timelineWidth: "comfortable",
         newIcons: false,
         newModelPicker: false,
+        foldUserMessages: false,
         mobileTitlebarPosition: "top",
         followUpBehavior: "steer",
       },

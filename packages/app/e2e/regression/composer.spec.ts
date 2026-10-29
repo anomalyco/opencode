@@ -889,6 +889,25 @@ test("keeps focus in a dialog that replaces the model dialog and returns it to t
   await expect(editor).toHaveText("keep, me")
 })
 
+test("lists OpenCode's free models in the model picker however old they are", async ({ page }) => {
+  await page.clock.setFixedTime(T0)
+  const year = { released: T0 - 365 * 24 * 60 * 60 * 1000 }
+  await openSession(page, {
+    name: "ComposerFreeModels",
+    provider: provider(
+      { id: "new-paid", name: "New Paid", cost: { input: 1, output: 1 }, time: { released: T0 } },
+      { id: "old-paid", name: "Old Paid", cost: { input: 1, output: 1 }, time: year },
+      { id: "big-pickle", name: "Big Pickle", cost: { input: 0, output: 0 }, time: year },
+    ),
+  })
+
+  await page.locator('[data-component="composer"] [data-action="composer-model"]').click()
+  const models = page.getByRole("dialog", { name: "Select model", exact: true })
+  await expect(models.locator('[data-option-key="opencode:new-paid"]')).toBeVisible()
+  await expect(models.locator('[data-option-key="opencode:big-pickle"]')).toBeVisible()
+  await expect(models.locator('[data-option-key="opencode:old-paid"]')).toHaveCount(0)
+})
+
 test("lists slash commands in their built-in order", async ({ page }) => {
   const { editor } = await openSession(page, {
     name: "ComposerSlash",
