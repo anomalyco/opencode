@@ -65,11 +65,6 @@ export interface Interface {
   readonly update: (id: ID, updates: Partial<Pick<Info, "label" | "value">>) => Effect.Effect<void>
   /** Removes a stored credential. */
   readonly remove: (id: ID) => Effect.Effect<void>
-  /**
-   * Moves every credential of `from` to `to` when `to` has none, keeping IDs and the active selection. Used when an
-   * integration's ID changes. Returns whether anything moved.
-   */
-  readonly rekey: (from: Integration.ID, to: Integration.ID) => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Credential") {}
@@ -287,32 +282,6 @@ const layer = Layer.effect(
         })
         if (updates.label !== undefined && updates.label !== credential.label)
           yield* bus.publish(Event.Updated, {}, { global: true })
-      }),
-      rekey: Effect.fn("Credential.rekey")(function* (from, to) {
-        // One transaction so concurrent processes sharing the database move the rows at most once.
-        const moved = yield* db
-          .transaction((tx) =>
-            Effect.gen(function* () {
-              const existing = yield* tx
-                .select({ id: CredentialTable.id })
-                .from(CredentialTable)
-                .where(eq(CredentialTable.integration_id, to))
-                .get()
-              if (existing) return false
-              const rows = yield* tx
-                .update(CredentialTable)
-                .set({ integration_id: to })
-                .where(eq(CredentialTable.integration_id, from))
-                .returning({ id: CredentialTable.id })
-                .all()
-              return rows.length > 0
-            }),
-          )
-          .pipe(Effect.orDie)
-        if (!moved) return false
-        yield* Effect.logInfo("credentials rekeyed", { from, to })
-        yield* bus.publish(Event.Updated, {}, { global: true })
-        return true
       }),
       remove: Effect.fn("Credential.remove")(function* (id) {
         const removed = yield* db

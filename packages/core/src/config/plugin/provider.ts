@@ -142,7 +142,7 @@ export const Plugin = define({
 // Integration documents are left out: their providers authenticate with the integration's connection, so they add no
 // integration or method, and the integration's own plugin applies them earlier in the provider chain (`integrate`).
 // A provider the Console supplies is shaped only by the Console and managed configuration: user, project, and remote
-// documents cannot override any part of it.
+// documents cannot override any part of it, since it carries the org's token and a repository must not redirect it.
 function configuredProviders(entries: readonly Entry[]) {
   const supplied = new Set(
     entries

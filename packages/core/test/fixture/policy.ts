@@ -80,7 +80,6 @@ export const registerIntegrationPolicy = Effect.fn(function* (input: {
         activate: () => Effect.die("unused Credential.activate"),
         update: () => Effect.die("unused Credential.update"),
         remove: () => Effect.die("unused Credential.remove"),
-        rekey: () => Effect.die("unused Credential.rekey"),
       }),
     ),
     Effect.provideService(

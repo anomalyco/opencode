@@ -26,6 +26,7 @@ it.live("integration policy filters /connect and blocks denied integrations and 
                 models: { chat: {} },
               },
             },
+            mcp: { servers: { wiki: { type: "remote", url: "http://127.0.0.1:9/mcp" } } },
             policies: [
               { action: "integration.connect", resource: "*", effect: "deny" },
               { action: "integration.connect", resource: "opencode", effect: "allow" },
@@ -59,7 +60,17 @@ it.live("integration policy filters /connect and blocks denied integrations and 
 
     const integrations = yield* request("GET", "/api/integration")
     expect(integrations.status).toBe(200)
-    expect(integrations.body.data.map((integration: { id: string }) => integration.id)).toEqual(["opencode"])
+    // MCP sign-ins are outside integration policy; `mcp.use` governs MCP servers.
+    const listed: { id: string; metadata?: { source?: string } }[] = integrations.body.data
+    expect(listed.filter((integration) => integration.metadata?.source !== "mcp").map((item) => item.id)).toEqual([
+      "opencode",
+    ])
+    const mcp = listed.find((integration) => integration.metadata?.source === "mcp")
+    expect(mcp?.id).toStartWith("mcp_")
+    const signIn = yield* request("POST", `/api/integration/${encodeURIComponent(mcp?.id ?? "")}/connect/oauth`, {
+      methodID: mcp?.id,
+    })
+    expect(signIn.body?.kind).not.toBe("integration_policy")
 
     const denied = yield* request("POST", "/api/integration/anthropic/connect/key", { key: "sk-test" })
     expect(denied.status).toBe(400)

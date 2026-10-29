@@ -202,23 +202,17 @@ export const layer = (options?: Options) =>
         if (entry.config.type !== "remote" || entry.config.oauth === false) return
         const remote = entry.config
         // Key identity on name + url, not url alone: two configs for the same url under different names are
-        // distinct logical servers that may hold different accounts, so they must not share a credential row. The
-        // url also keeps a token from being sent to a different server configured under the same name.
-        const integrationID = integrationIDFor(name, remote.url)
+        // distinct logical servers that may hold different accounts, so they must not share a credential row.
+        const suffix =
+          "mcp_" +
+          createHash("sha1")
+            .update(name + "\u0000" + remote.url)
+            .digest("hex")
+            .slice(0, 16)
+        const integrationID = Integration.ID.make(suffix)
         entry.integrationID = integrationID
         owned.add(integrationID)
-        const methodID = Integration.MethodID.make(integrationID)
-        // Before readable IDs, this server's credentials were stored under a hash of the same name and url.
-        yield* credentials.rekey(
-          Integration.ID.make(
-            "mcp_" +
-              createHash("sha1")
-                .update(name + "\u0000" + remote.url)
-                .digest("hex")
-                .slice(0, 16),
-          ),
-          integrationID,
-        )
+        const methodID = Integration.MethodID.make(suffix)
         // Each registration gets its own child scope so disposal detaches it from the root scope
         // entirely; registering directly on root would accumulate a dead finalizer per replaced or
         // removed server for the lifetime of the layer.
@@ -1014,12 +1008,3 @@ function toElicitationField(key: string, property: ElicitationProperty, required
 }
 
 type ElicitationProperty = McpClient.ElicitationFormParams["requestedSchema"]["properties"][string]
-
-/**
- * The integration ID of a remote MCP server's OAuth login: `mcp/<name>@<url>`, where `<name>` is the configured
- * server name with `%` written as `%25` and `@` as `%40`. The encoded name never contains `@`, so the first `@` always
- * ends it and distinct name and url pairs never share an ID, or a stored token.
- */
-export function integrationIDFor(name: string, url: string) {
-  return Integration.ID.make(`mcp/${name.replaceAll("%", "%25").replaceAll("@", "%40")}@${url}`)
-}

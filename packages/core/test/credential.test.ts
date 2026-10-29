@@ -48,33 +48,6 @@ describe("Credential", () => {
     }),
   )
 
-  it.effect("rekeys an integration's credentials once, keeping IDs and the active selection", () =>
-    Effect.gen(function* () {
-      const credentials = yield* Credential.Service
-      const legacy = Integration.ID.make("mcp_0123456789abcdef")
-      const readable = Integration.ID.make("mcp/github@https://api.example.com/mcp")
-      const first = yield* credentials.create({
-        integrationID: legacy,
-        value: Credential.Key.make({ type: "key", key: "first" }),
-      })
-      const second = yield* credentials.create({
-        integrationID: legacy,
-        value: Credential.Key.make({ type: "key", key: "second" }),
-      })
-      yield* credentials.activate(first.id)
-
-      expect(yield* credentials.rekey(legacy, readable)).toBe(true)
-      expect(yield* credentials.list(legacy)).toEqual([])
-      // The active credential lists last.
-      expect((yield* credentials.list(readable)).map((credential) => credential.id)).toEqual([second.id, first.id])
-
-      // A target that already has credentials is never merged into.
-      yield* credentials.create({ integrationID: legacy, value: Credential.Key.make({ type: "key", key: "late" }) })
-      expect(yield* credentials.rekey(legacy, readable)).toBe(false)
-      expect(yield* credentials.list(readable)).toHaveLength(2)
-    }),
-  )
-
   it.effect("reads key form answers stored in configuration before v2.1 as metadata", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service

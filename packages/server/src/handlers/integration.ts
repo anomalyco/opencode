@@ -19,8 +19,15 @@ const statements = Effect.fnUntraced(function* () {
   return ManagedPolicy.statements(yield* config.entries())
 })
 
-// `integration.connect` decides which integrations are listed and can be connected.
-export const requireConnectable = Effect.fnUntraced(function* (integrationID: string) {
+// MCP OAuth logins skip integration policy: whether an MCP server is available at all is decided by `mcp.use` and by
+// managed policy withholding the documents of denied integrations.
+const isMcp = (integration: { readonly metadata?: { readonly source?: unknown } } | undefined) =>
+  integration?.metadata?.source === "mcp"
+
+// `integration.connect` decides which integrations are listed and can be connected. Credential creation shares it.
+export const requireConnectable = Effect.fnUntraced(function* (integrationID: Integration.ID) {
+  const integrations = yield* Integration.Service
+  if (isMcp(yield* integrations.get(integrationID))) return
   const denied = ManagedPolicy.match(yield* statements(), "integration.connect", integrationID)
   if (denied?.effect !== "deny") return
   return yield* new InvalidRequestError({
@@ -56,7 +63,9 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
               .pipe(
                 Effect.map((integrations) =>
                   integrations.filter(
-                    (integration) => ManagedPolicy.decision(current, "integration.connect", integration.id) !== "deny",
+                    (integration) =>
+                      isMcp(integration) ||
+                      ManagedPolicy.decision(current, "integration.connect", integration.id) !== "deny",
                   ),
                 ),
               ),
@@ -82,7 +91,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
           const wellknown = yield* WellKnown.Service
           const integration = yield* Integration.Service
           // Well-known sources are integrations keyed by their origin as entered.
-          yield* requireConnectable(ctx.payload.url.replace(/\/+$/, ""))
+          yield* requireConnectable(Integration.ID.make(ctx.payload.url.replace(/\/+$/, "")))
           yield* wellknown
             .add(ctx.payload.url)
             .pipe(

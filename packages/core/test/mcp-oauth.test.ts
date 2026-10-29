@@ -49,7 +49,6 @@ const memoryCredentials = (initial: Credential.Info[]) => {
         if (row) rows.set(id, new Credential.Info({ ...row, ...updates }))
       }),
     remove: (id) => Effect.sync(() => void rows.delete(id)),
-    rekey: unused,
   })
   return { rows, service }
 }

@@ -227,8 +227,8 @@ export const layer = (options?: Options) =>
       })
 
       // `integration.use` decides whether an integration may supply anything. Only managed policies can withhold the
-      // documents an integration delivers, since those load before every other source. A withheld document keeps its
-      // policies, so denying an integration never lifts the restrictions it carries.
+      // documents an integration delivers, so a project file can never strip the Console document carrying org policy.
+      // A withheld document keeps its policies, so denying an integration never lifts the restrictions it carries.
       const supplies = Effect.fnUntraced(function* (
         lockdown: ReturnType<typeof ManagedPolicy.statements>,
         integrationID: string,

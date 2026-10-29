@@ -32,7 +32,8 @@ const Statement = Schema.Struct({
 })
 
 // Before `mcp.use`, `skill.use` and `plugin.use` existed, `integration.use` covered them with a resource prefix.
-// Every policy source decodes through this schema, so this is the only place that knows the legacy form.
+// Every policy source decodes through this schema, so this is the only place that knows the legacy form. Only prefixed
+// resources convert: a bare `integration.use` `*` keeps its action and now covers providers and accounts.
 const legacy = new Map<string, Action>([
   ["mcp", "mcp.use"],
   ["skill", "skill.use"],
