@@ -32,9 +32,10 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
           await mkdir(join(root, "public", "nested"), { recursive: true })
           await Promise.all(
             Object.entries({
-              "index.html": `<html><head></head><body><h1>Loading</h1><label>Draft<textarea></textarea></label><button>Load lazy</button><button id="connection">Check connection</button><output></output><script type="module" src="/main.js"></script></body></html>`,
-              "main.js": `import { createWebFetch } from "web-fetch";
+              "index.html": `<html><head></head><body><h1>Loading</h1><label>Draft<textarea></textarea></label><button>Load lazy</button><button id="styled">Load styled</button><button id="connection">Check connection</button><output></output><script type="module" src="/main.js"></script></body></html>`,
+              "main.js": `import { createWebFetch, watchWebAssets } from "web-fetch";
             const request = createWebFetch();
+            watchWebAssets(request, new URL("/api/info", location.href));
             document.querySelector("#connection").onclick = async () => {
               const response = await request("/api/info");
               document.querySelector("output").textContent = response.ok ? "Connected" : "Unauthorized";
@@ -42,8 +43,13 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
             document.querySelector("h1").textContent = "${version}";
             document.querySelector("button").onclick = async () => {
               document.querySelector("output").textContent = await (await import("./lazy.js")).load()
+            };
+            document.querySelector("#styled").onclick = async () => {
+              document.querySelector("output").textContent = await (await import("./styled.js")).load()
             };`,
               "lazy.js": `export async function load() { return (await import("./nested.js")).value }`,
+              "styled.js": `import "./styled.css"; export { load } from "./lazy.js"`,
+              "styled.css": `output { color: ${version === "old" ? "green" : "blue"} }`,
               "nested.js": `export const value = "${version} nested lazy loaded"`,
               "public/nested/data.json": JSON.stringify({ version }),
               "public/nested/font.woff2": `font-${version}`,
@@ -165,6 +171,7 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
 
       const types = new Map([
         [".js", "text/javascript"],
+        [".css", "text/css"],
         [".html", "text/html"],
         [".json", "application/json"],
         [".wasm", "application/wasm"],
@@ -419,6 +426,59 @@ fixture("recovers an expired proxy session without removing the worker or losing
   await page.getByRole("button", { name: "Check connection" }).click()
   await expect(page.getByRole("status")).toHaveText("Connected")
   expect(await page.evaluate(() => sessionStorage.getItem("opencode.auth-refresh"))).toBeNull()
+})
+
+for (const extension of ["css", "js"]) {
+  fixture(`recovers expired proxy auth after a lazy ${extension} load fails`, async ({ page, site, builds }) => {
+    await page.goto(`${site.url}/workspace/session?view=diff`)
+    await expect(page.getByRole("heading")).toHaveText("old")
+    // Keep the other asset available so each case fails at the intended loader.
+    const available = extension === "css" ? "js" : "css"
+    await page.route(new RegExp(`/styled-[^/]+\\.${available}$`), (route) =>
+      route.fulfill({
+        body: builds.old[new URL(route.request().url()).pathname],
+        contentType: available === "css" ? "text/css" : "text/javascript",
+      }),
+    )
+    site.expire()
+    await page.getByRole("button", { name: "Load styled" }).click()
+    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible()
+    await page.getByRole("link", { name: "Sign in" }).click()
+    await expect(page).toHaveURL(`${site.url}/workspace/session?view=diff&reauth=1`)
+    await expect(page.getByRole("heading")).toHaveText("old")
+    await page.getByRole("button", { name: "Load styled" }).click()
+    await expect(page.getByRole("status")).toHaveText("old nested lazy loaded")
+  })
+}
+
+fixture("keeps a missing lazy asset error when proxy auth is valid", async ({ page, site }) => {
+  await page.goto(site.url)
+  await expect(page.getByRole("heading")).toHaveText("old")
+  await page.route(/\/styled-[^/]+\.css$/, (route) => route.fulfill({ status: 404 }))
+  const failure = page.waitForEvent("pageerror")
+  const check = page.waitForResponse(`${site.url}/api/info`)
+  await page.getByRole("button", { name: "Load styled" }).click()
+  expect((await failure).message).toContain("Unable to preload CSS")
+  expect((await check).status()).toBe(200)
+  await page.getByRole("button", { name: "Check connection" }).click()
+  await expect(page.getByRole("status")).toHaveText("Connected")
+  await expect(page).toHaveURL(site.url + "/")
+  expect(site.requests).not.toContain("/auth/login")
+})
+
+fixture("keeps the current page when a lazy asset fails offline", async ({ page, context, site }) => {
+  await page.goto(site.url)
+  await expect(page.getByRole("heading")).toHaveText("old")
+  await context.setOffline(true)
+  const check = page.waitForEvent("requestfailed", (request) => request.url() === `${site.url}/api/info`)
+  const failure = page.waitForEvent("pageerror")
+  await page.getByRole("button", { name: "Load styled" }).click()
+  expect((await failure).message).toContain("Unable to preload CSS")
+  await check
+  await page.getByLabel("Draft").fill("Keep this draft")
+  await expect(page.getByLabel("Draft")).toHaveValue("Keep this draft")
+  await expect(page).toHaveURL(site.url + "/")
+  expect(site.requests).not.toContain("/auth/login")
 })
 
 fixture("does not substitute cached HTML for API, missing asset, or reauth navigations", async ({ page, site }) => {

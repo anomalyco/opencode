@@ -1,11 +1,14 @@
 import { createBrowserDraftStore } from "@/runtime/persistence/drafts"
 import type { Platform } from "./platform"
-import { createWebFetch } from "./web-fetch"
+import { createWebFetch, watchWebAssets } from "./web-fetch"
 
 export function createWebPlatform(version: string) {
+  const request = createWebFetch()
+  watchWebAssets(request, new URL(`${import.meta.env.BASE_URL}api/info`, location.href))
+
   const platform: Platform = {
     platform: "web",
-    fetch: createWebFetch(),
+    fetch: request,
     draftStore: createBrowserDraftStore(),
     version,
     openExternal(value) {
