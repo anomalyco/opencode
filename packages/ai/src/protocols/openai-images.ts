@@ -13,7 +13,7 @@ import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { AIError, mergeJsonRecords, ProviderID, tokenUsage, type MediaUsage, type OpenString } from "../schema/index.js"
-import { optionalNull, ProviderShared } from "./shared.js"
+import { optionalNullish, optionalNull, ProviderShared } from "./shared.js"
 import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
 
@@ -56,11 +56,13 @@ const Usage = Schema.Struct({
 })
 
 /** What the provider actually rendered; it can differ from the request when `auto` or a default applied. */
+// `optionalNullish` (rather than `Schema.optional`) tolerates compatible hosts that report an absent optional field
+// (e.g. `quality` or `background`) as an explicit `null` instead of omitting it, and normalizes it to `undefined`.
 const Settings = {
-  output_format: Schema.optional(Schema.String),
-  size: Schema.optional(Schema.String),
-  quality: Schema.optional(Schema.String),
-  background: Schema.optional(Schema.String),
+  output_format: optionalNullish(Schema.String),
+  size: optionalNullish(Schema.String),
+  quality: optionalNullish(Schema.String),
+  background: optionalNullish(Schema.String),
 }
 
 const OpenAIImageResponse = Schema.Struct({
