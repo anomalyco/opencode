@@ -218,7 +218,9 @@ export const Plugin = {
         prompt: string
       }) {
         const info = (yield* jobs.wait({ id: input.id })).info
-        writing.get(input.file)?.delete(input.id)
+        const running = writing.get(input.file)
+        running?.delete(input.id)
+        if (running?.size === 0) writing.delete(input.file)
         if (!info || info.status === "running") return
         yield* sessions.synthetic({
           id: input.notificationID,
