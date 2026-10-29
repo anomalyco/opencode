@@ -279,6 +279,42 @@ test("collapses identical V1 backgrounds when both variants infer one mode", () 
   expect(selectThemeMode(migratedLight, "dark").mode).toBe("light")
 })
 
+test("gives dialogs an opaque background when V1 panels are see-through", () => {
+  const lucent = DEFAULT_THEMES["lucent-orng"]!
+  for (const mode of ["dark", "light"] as const) {
+    const legacy = resolveV1(lucent, mode)
+    const dialog = resolveThemeDocument(migrateV1(lucent), mode).surface("dialog")
+    expect(legacy.backgroundPanel.a).toBe(0)
+    const [red, green, blue] = legacy.backgroundMenu.toInts()
+    expect(legacy.backgroundMenu.a).toBeLessThan(1)
+    expect(dialog.background.base.toInts()).toEqual([red, green, blue, 255])
+  }
+
+  const source = structuredClone(opencodeV1)
+  source.theme.background = "transparent"
+  source.theme.backgroundPanel = "transparent"
+  source.theme.backgroundElement = "transparent"
+  source.theme.backgroundMenu = "transparent"
+  expect(hex(resolveThemeDocument(migrateV1(source), "dark").surface("dialog").background.base)).toBe("#000000")
+  expect(hex(resolveThemeDocument(migrateV1(source), "light").surface("dialog").background.base)).toBe("#ffffff")
+
+  const opaque = resolveThemeDocument(migrateV1(opencodeV1), "dark")
+  expect(hex(opaque.surface("dialog").background.base)).toBe(hex(opaque.background.raised.base))
+})
+
+test("gives new designs dialogs an opaque background when V1 panels are see-through", () => {
+  const lucent = DEFAULT_THEMES["lucent-orng"]!
+  for (const mode of ["dark", "light"] as const) {
+    const [red, green, blue] = resolveV1(lucent, mode).backgroundMenu.toInts()
+    const dialog = resolveThemeDocument(migrateV1NewDesigns(lucent), mode).surface("dialog")
+    expect(dialog.background.base.toInts()).toEqual([red, green, blue, 255])
+  }
+
+  const opaque = migrateV1NewDesigns(DEFAULT_THEMES.tokyonight!)
+  expect(opaque.base["@dialog"]?.background?.base).toBe("$background.raised.base")
+  expect(opaque.light?.["@dialog"]?.background?.base).toBe("$hue.neutral.800")
+})
+
 test("keeps both modes when a shared background has different contrast", () => {
   const source = structuredClone(opencodeV1)
   source.theme.background = "#808080"

@@ -217,11 +217,23 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
     },
     "@dialog": {
       background: {
-        base: "$background.raised.base",
+        base: dialogBackground(theme),
         action: { primary: { $hovered: "$background.raised.high" } },
       },
     },
   })
+}
+
+// Dialogs float over the session, so a see-through panel would let the content underneath show through them.
+// Fall back to the first visible surface color, made opaque.
+export function dialogBackground(theme: Theme) {
+  if (theme.backgroundPanel.a === 1) return "$background.raised.base"
+  const visible = [theme.backgroundPanel, theme.backgroundMenu, theme.backgroundElement, theme.background].find(
+    (color) => color.a > 0,
+  )
+  if (!visible) return luminance(theme.text) > 0.5 ? "#000000" : "#ffffff"
+  const [red, green, blue] = visible.toInts()
+  return hexInts(red, green, blue, 255)
 }
 
 export function referenceHues(theme: ThemeDefinition): ThemeDefinition {

@@ -780,6 +780,11 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "permissions", event.data.permissions)
         return
+      case "session.metadata.updated":
+        // The event carries the whole record, so keys it drops must go too.
+        if (store.session.info[event.data.sessionID])
+          setStore("session", "info", event.data.sessionID, "metadata", reconcile(event.data.metadata))
+        return
       case "session.archived":
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "time", "archived", event.created)

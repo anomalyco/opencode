@@ -15790,6 +15790,33 @@
               "media_blob": {
                 "type": "boolean"
               },
+              "image_model": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string",
+                        "pattern": "^[^/#]+$"
+                      },
+                      "model": {
+                        "type": "string",
+                        "pattern": "^[^#]+$"
+                      },
+                      "variant": {
+                        "type": "string",
+                        "pattern": "^[^#]+$"
+                      }
+                    },
+                    "required": ["providerID", "model"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
               "schedules": {
                 "type": "boolean"
               },
