@@ -194,23 +194,47 @@ function Option(props: {
   shortcut?: string
   disabled: boolean
   tabbable: boolean
-  ref?: (el: HTMLButtonElement) => void
+  ref?: (el: HTMLDivElement) => void
   onFocus?: VoidFunction
   onClick: VoidFunction
 }) {
+  let pointer: { x: number; y: number } | undefined
+
   return (
-    <button
-      type="button"
+    <div
       ref={props.ref}
       data-slot="question-option"
       data-picked={props.picked}
+      data-disabled={props.disabled}
       role={props.multi ? "checkbox" : "radio"}
       aria-checked={props.picked}
       aria-keyshortcuts={props.shortcut}
-      tabindex={props.tabbable ? 0 : -1}
-      disabled={props.disabled}
+      tabindex={!props.disabled && props.tabbable ? 0 : -1}
+      aria-disabled={props.disabled}
       onFocus={props.onFocus}
-      onClick={props.onClick}
+      onPointerDown={(event) => (pointer = { x: event.clientX, y: event.clientY })}
+      onClick={(event) => {
+        const moved = pointer && (event.clientX !== pointer.x || event.clientY !== pointer.y)
+
+        pointer = undefined
+
+        if (props.disabled) return
+
+        const selection = window.getSelection()
+
+        // Padding and nonselectable marks can retain an old highlight without selecting text.
+        if (
+          event.detail > 0 &&
+          (moved || event.shiftKey) &&
+          !(event.target instanceof Element && event.target.closest('[data-slot="question-option-check"]')) &&
+          selection &&
+          !selection.isCollapsed &&
+          selection.getRangeAt(0).intersectsNode(event.currentTarget)
+        )
+          return
+
+        props.onClick()
+      }}
     >
       <Mark multi={props.multi} picked={props.picked} shortcut={props.shortcut} />
       <span data-slot="question-option-main">
@@ -223,7 +247,7 @@ function Option(props: {
           </span>
         </Show>
       </span>
-    </button>
+    </div>
   )
 }
 
@@ -270,7 +294,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   let customRow: HTMLDivElement | undefined
   let highlightRef: HTMLSpanElement | undefined
   let customInput: HTMLInputElement | undefined
-  let optsRef: HTMLButtonElement[] = []
+  let optsRef: HTMLDivElement[] = []
   let replied = false
 
   const question = createMemo(() => questions()[store.tab])
