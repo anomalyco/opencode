@@ -141,12 +141,20 @@ export interface Connection {
     readonly name: string
     readonly args?: Record<string, unknown>
     readonly sessionID?: Session.ID
+    readonly onProgress?: (progress: Progress) => void
   }) => Effect.Effect<CallToolResult, Error>
   readonly onClose: (callback: (reason: string) => void) => void
   readonly onSessionExpired: (callback: () => void) => void
   readonly onToolsChanged: (callback: () => void) => void
   readonly onPromptsChanged: (callback: () => void) => void
   readonly onResourcesChanged: (callback: () => void) => void
+}
+
+/** A progress notification a server sent for a running tool call. */
+export interface Progress {
+  readonly progress: number
+  readonly total?: number
+  readonly message?: string
 }
 
 /** An MCP server reached over a transport someone else already opened, such as a client socket. */
@@ -432,7 +440,16 @@ export const connect = Effect.fnUntraced(function* (
               ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
             },
             // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
-            { signal, timeout: execution, onprogress: () => {} },
+            {
+              signal,
+              timeout: execution,
+              onprogress: (progress) =>
+                input.onProgress?.({
+                  progress: progress.progress,
+                  ...(progress.total === undefined ? {} : { total: progress.total }),
+                  ...(progress.message === undefined ? {} : { message: progress.message }),
+                }),
+            },
           ),
         ).pipe(Effect.map(toCallToolResult)),
       onClose: (callback) => {

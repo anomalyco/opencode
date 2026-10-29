@@ -68,12 +68,17 @@ export const layer = Layer.effect(
                         id: context.id,
                       },
                     })
+                    // The server's progress notifications arrive in SDK callbacks outside any fiber; each one is
+                    // published as the call's progress so clients can show what a long call is doing.
+                    const runFork = Effect.runForkWith(yield* Effect.context())
                     const result = yield* mcp
                       .callTool({
                         server: tool.server,
                         name: tool.name,
                         args: (input ?? {}) as Record<string, unknown>,
                         sessionID: context.sessionID,
+                        onProgress: (progress) =>
+                          runFork(context.progress({ ...progress }).pipe(Effect.catchCause(() => Effect.void))),
                       })
                       .pipe(
                         Effect.catchTags({

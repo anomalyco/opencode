@@ -141,6 +141,7 @@ export interface Interface extends State.Transformable<Editor> {
     readonly name: string
     readonly args?: Record<string, unknown>
     readonly sessionID?: Session.ID
+    readonly onProgress?: (progress: McpClient.Progress) => void
   }) => Effect.Effect<ToolResult, NotFoundError | ToolCallError>
   readonly instructions: () => Effect.Effect<ServerInstructions[]>
   readonly prompts: () => Effect.Effect<Prompt[]>
@@ -818,7 +819,7 @@ export const layer = (options?: Options) =>
           const client = attached.get(server)?.at(-1)
           if (client && (client.tools.some((tool) => tool.name === input.name) || !entries.has(server))) {
             const result = yield* client.client
-              .callTool({ name: input.name, args: input.args, sessionID: input.sessionID })
+              .callTool({ name: input.name, args: input.args, sessionID: input.sessionID, onProgress: input.onProgress })
               .pipe(
                 Effect.mapError(
                   (error) =>
@@ -840,7 +841,12 @@ export const layer = (options?: Options) =>
               message: unavailable(target.name, target.entry.status),
             })
           const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
-            connection.callTool({ name: input.name, args: input.args, sessionID: input.sessionID }),
+            connection.callTool({
+              name: input.name,
+              args: input.args,
+              sessionID: input.sessionID,
+              onProgress: input.onProgress,
+            }),
           ).pipe(
             Effect.mapError(
               (error) =>
