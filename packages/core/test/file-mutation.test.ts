@@ -80,8 +80,16 @@ describe("FileMutation", () => {
         const created = yield* access.resolve({ path: "created.txt" })
         const files = yield* FileMutation.Service
 
-        yield* files.writeTextPreservingBom({ target: preserved, content: "\uFEFFafter" })
-        yield* files.writeTextPreservingBom({ target: created, content: "\uFEFF\uFEFF\uFEFFcreated" })
+        yield* files.writeText({
+          target: preserved,
+          content: "\uFEFFafter",
+          source: { encoding: "utf-8", bom: true },
+        })
+        yield* files.writeText({
+          target: created,
+          content: "\uFEFF\uFEFF\uFEFFcreated",
+          source: { encoding: "utf-8", bom: false },
+        })
 
         expect(yield* Effect.promise(() => fs.readFile(preservedPath, "utf8"))).toBe("\uFEFFafter")
         expect(yield* Effect.promise(() => fs.readFile(created.absolute, "utf8"))).toBe("\uFEFFcreated")

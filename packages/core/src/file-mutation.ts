@@ -4,7 +4,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer } from "effect"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Bom } from "@opencode/util/bom"
+import { Encoding } from "./encoding.js"
 import { Environment } from "./environment/index.js"
 import type { Files } from "./environment/index.js"
 import type { FileAccess } from "./file-access.js"
@@ -14,6 +14,8 @@ export type Target = Pick<FileAccess.Target, "absolute" | "resource">
 export interface WriteInput {
   readonly target: Target
   readonly content: string | Uint8Array
+  /** Encoding for string content; defaults to UTF-8 without BOM. */
+  readonly source?: Encoding.Source
 }
 
 export interface TextWriteInput {
@@ -33,29 +35,41 @@ export interface Interface {
   readonly withLock: (
     targets: ReadonlyArray<string>,
   ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
-  readonly write: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
-  /** Write text while retaining an existing UTF-8 BOM and emitting at most one BOM. */
-  readonly writeTextPreservingBom: (
-    input: TextWriteInput,
-  ) => Effect.Effect<WriteResult, Environment.WrongKind | Environment.Failed>
+  readonly write: (
+    input: WriteInput,
+  ) => Effect.Effect<WriteResult, Environment.Failed | Encoding.UnrepresentableError>
+  /** Write text in the given source encoding, stripping any leading BOM from the content and emitting at most one. */
+  readonly writeText: (
+    input: TextWriteInput & { readonly source: Encoding.Source },
+  ) => Effect.Effect<WriteResult, Environment.Failed | Encoding.UnrepresentableError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileMutation") {}
 
 export const readText = Effect.fn("FileMutation.readText")(function* (files: Files, target: string) {
-  return Bom.decodeBytes((yield* files.read(target)).bytes)
+  const bytes = (yield* files.read(target)).bytes
+  const detected = yield* Encoding.detect(bytes)
+  const decoded = Encoding.split(yield* Encoding.decodeText(bytes, detected))
+  const bom = detected.encoding === "utf-8" ? decoded.bom : detected.bom
+  return { ...detected, bom, text: decoded.text }
 })
 
-export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (
+/**
+ * Re-reads a file after an external formatter may have rewritten it and
+ * re-encodes it in the source encoding unless the bytes are already canonical.
+ */
+export const syncTextEncoding = Effect.fn("FileMutation.syncTextEncoding")(function* (
   files: Files,
   target: string,
-  bom: boolean,
+  source: Encoding.Source,
 ) {
-  const synced = Bom.syncBytes((yield* files.read(target)).bytes, bom)
-  if (synced.bytes) yield* files.write(target, synced.bytes)
-  return synced.text
+  const current = yield* files.read(target)
+  const detected = yield* Encoding.detect(current.bytes)
+  const text = Encoding.split(yield* Encoding.decodeText(current.bytes, detected)).text
+  const canonical = yield* Encoding.encodeText(text, source)
+  if (!Buffer.from(canonical).equals(current.bytes)) yield* files.write(target, canonical)
+  return text
 })
-
 /** Share transaction locks across Location graphs that address the same file. */
 const transactionLocks = KeyedMutex.makeUnsafe<string>()
 
@@ -91,33 +105,35 @@ const layer = Layer.effect(
             Effect.as(true),
             Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
           )
-          yield* environment.files.write(
-            input.target.absolute,
-            typeof input.content === "string" ? new TextEncoder().encode(input.content) : input.content,
-          )
+          const bytes =
+            typeof input.content === "string"
+              ? yield* Encoding.encodeText(input.content, input.source ?? { encoding: "utf-8", bom: false })
+              : input.content
+          yield* environment.files.write(input.target.absolute, bytes)
           return writeResult(input.target, existed)
         }),
       ),
     )
 
-    const writeTextPreservingBom = Effect.fn("FileMutation.writeTextPreservingBom")((input: TextWriteInput) =>
-      withTargetLock(input.target)(
-        Effect.gen(function* () {
-          const next = Bom.split(input.content)
-          const current = yield* environment.files.read(input.target.absolute, { offset: 0, length: 3 }).pipe(
-            Effect.map((result) => result.bytes),
-            Effect.catchTag("Environment.NotFound", () => Effect.undefined),
-          )
-          yield* environment.files.write(
-            input.target.absolute,
-            new TextEncoder().encode(Bom.join(next.text, Boolean(current && Bom.has(current)) || next.bom)),
-          )
-          return writeResult(input.target, current !== undefined)
-        }),
-      ),
+    const writeText = Effect.fn("FileMutation.writeText")(
+      (input: TextWriteInput & { readonly source: Encoding.Source }) =>
+        withTargetLock(input.target)(
+          Effect.gen(function* () {
+            const existed = yield* environment.files.stat(input.target.absolute).pipe(
+              Effect.as(true),
+              Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
+            )
+            const bom = input.source.bom || input.content.charCodeAt(0) === 0xfeff
+            yield* environment.files.write(
+              input.target.absolute,
+              yield* Encoding.encodeText(input.content, { ...input.source, bom }),
+            )
+            return writeResult(input.target, existed)
+          }),
+        ),
     )
 
-    return Service.of({ withLock, write, writeTextPreservingBom })
+    return Service.of({ withLock, write, writeText })
   }),
 )
 
