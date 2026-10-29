@@ -196,16 +196,32 @@ test.each(
   })
 
   try {
-    listeners.forEach((listener) =>
-      // SAFETY: only the request identity, session and form kind are read by the handler.
-      listener({
-        type: options.kind === "permission" ? "permission.asked" : "form.created",
-        data:
-          options.kind === "permission"
-            ? { sessionID: session.id, id: "request-1" }
-            : { form: { sessionID: session.id, id: "request-1", metadata: { kind: options.kind } } },
-      } as never),
-    )
+    const event: OpenCodeEvent =
+      options.kind === "permission"
+        ? {
+            id: "event-1",
+            created: 0,
+            location: session.location,
+            type: "permission.asked",
+            data: { sessionID: session.id, id: "request-1", action: "shell", resources: [], metadata: {} },
+          }
+        : {
+            id: "event-1",
+            created: 0,
+            location: session.location,
+            type: "form.created",
+            data: {
+              form: {
+                sessionID: session.id,
+                id: "request-1",
+                title: "Input",
+                fields: [{ key: "answer", type: "string", title: "Continue?" }],
+                metadata: { kind: options.kind },
+              },
+            },
+          }
+
+    listeners.forEach((listener) => listener(event))
     await Promise.resolve()
 
     if (options.scenario === "resolved") pending.value = false

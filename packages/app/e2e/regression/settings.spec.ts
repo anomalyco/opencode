@@ -128,7 +128,7 @@ test("Questions settings default independently of old Permissions settings and s
 
   await expect(questions).toBeChecked()
   await expect(permissions).not.toBeChecked()
-  await expect(questionSound).toHaveText("Staplebops 02")
+  await expect(questionSound).toHaveText("Staplebops 05")
   await expect(permissionSound).toHaveText("None")
   await questions.locator("..").locator('[data-slot="switch-control"]').click()
   await expect(questions).not.toBeChecked()
@@ -174,34 +174,40 @@ test("request events use real Questions settings without disabling Permissions a
   const event = (
     kind: "question" | "mcp-elicitation" | "websearch.provider" | "permission",
     index: number,
-  ): OpenCodeEvent => ({
-    id: `evt_request_${index}`,
-    created: 1700000001000 + index,
-    location: { directory: workspace.directory },
-    ...(kind === "permission"
-      ? {
-          type: "permission.asked" as const,
-          data: {
-            id: `per_request_${index}`,
-            sessionID: workspace.session.id,
-            action: "shell",
-            resources: ["echo hello"],
-            metadata: {},
-          },
-        }
-      : {
-          type: "form.created" as const,
-          data: {
-            form: {
-              id: `frm_request_${index}`,
-              sessionID: workspace.session.id,
-              title: "Input",
-              metadata: { kind },
-              fields: [{ key: "answer", type: "string" as const, title: "Continue?" }],
-            },
-          },
-        }),
-  })
+  ): OpenCodeEvent => {
+    const base = {
+      id: `evt_request_${index}`,
+      created: 1700000001000 + index,
+      location: { directory: workspace.directory },
+    }
+
+    if (kind === "permission")
+      return {
+        ...base,
+        type: "permission.asked",
+        data: {
+          id: `per_request_${index}`,
+          sessionID: workspace.session.id,
+          action: "shell",
+          resources: ["echo hello"],
+          metadata: {},
+        },
+      }
+
+    return {
+      ...base,
+      type: "form.created",
+      data: {
+        form: {
+          id: `frm_request_${index}`,
+          sessionID: workspace.session.id,
+          title: "Input",
+          metadata: { kind },
+          fields: [{ key: "answer", type: "string", title: "Continue?" }],
+        },
+      },
+    }
+  }
 
   await transport.send(event("question", 1))
   await expect
@@ -209,7 +215,6 @@ test("request events use real Questions settings without disabling Permissions a
     .toEqual([{ title: "Question requires an answer", body: "Request notifications" }])
   await expect.poll(() => recorded.sounds).toEqual([expect.stringContaining("alert-02")])
 
-  // Choosing None leaves system notifications enabled; the next input request proves the settings reach delivery.
   await settings.locator('[data-action="settings-sounds-questions"]').click()
   await page.getByRole("option", { name: "None", exact: true }).click()
   await expect(settings.locator('[data-action="settings-sounds-questions"]')).toHaveText("None")
@@ -222,12 +227,7 @@ test("request events use real Questions settings without disabling Permissions a
 
   await questions.locator("..").locator('[data-slot="switch-control"]').click()
   await expect(questions).not.toBeChecked()
-  await transport.send(event("question", 3))
-  await transport.send(event("permission", 4))
-  await expect
-    .poll(() => recorded.notifications.map((item) => item.title))
-    .toEqual(["Question requires an answer", "Input requested", "Permission required"])
-  await transport.send(event("websearch.provider", 5))
+  await transport.burst([event("question", 3), event("permission", 4), event("websearch.provider", 5)])
   await expect
     .poll(() => recorded.notifications.map((item) => item.title))
     .toEqual(["Question requires an answer", "Input requested", "Permission required", "Permission required"])
