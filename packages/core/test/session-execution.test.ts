@@ -571,8 +571,8 @@ describe("SessionRestart background recovery", () => {
 
       const inbox = yield* SessionInbox.list(database.db, sessionID)
       expect(inbox.map((item) => (item.type === "synthetic" ? item.payload.text : undefined)).toSorted()).toEqual([
-        "Image request finished. Saved image: /tmp/done.png (test/painter).",
-        "Image request for /tmp/running.png was cancelled because the server restarted.",
+        '<image id="image_done" state="completed">\nImage request finished. Saved image: /tmp/done.png (test/painter).\n</image>',
+        '<image id="image_running" state="cancelled">\nImage request for /tmp/running.png was cancelled because the server restarted.\n</image>',
       ])
       expect(yield* restarted.pendingBackground).toEqual([])
     }),

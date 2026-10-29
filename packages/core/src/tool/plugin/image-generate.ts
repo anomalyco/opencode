@@ -13,6 +13,7 @@ import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
 import { FileAccess } from "../../file-access.js"
 import { Generate } from "../../generate.js"
+import { ImageNotice } from "../../image/notice.js"
 import { Job } from "../../job.js"
 import { Mime } from "../../mime.js"
 import { Model } from "../../model.js"
@@ -32,6 +33,13 @@ const EXTENSIONS: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/webp": ".webp",
   "image/gif": ".gif",
+}
+const EXTENSION_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
 }
 
 export const description = [
@@ -65,6 +73,7 @@ export const Input = Schema.Struct({
 })
 
 export const Output = Schema.Struct({
+  id: Schema.String.annotate({ description: "The image job's ID, repeated in its completion notice" }),
   path: Schema.String.annotate({ description: "Where the image is saved, without its extension" }),
   model: Schema.String.annotate({ description: "providerID/modelID" }),
 })
@@ -197,23 +206,38 @@ export const Plugin = {
       return (yield* environment.files.read(target.absolute)).bytes
     })
 
+    // Running jobs per target, so a second request for the same file can say the first is still writing it.
+    const writing = new Map<string, Set<string>>()
+
     const notifyWhenDone = Effect.fn("ImageGenerateTool.notifyWhenDone")(
-      function* (sessionID: SessionSchema.ID, id: string, notificationID: SessionMessage.ID, file: string) {
-        const info = (yield* jobs.wait({ id })).info
+      function* (input: {
+        sessionID: SessionSchema.ID
+        id: string
+        notificationID: SessionMessage.ID
+        file: string
+        prompt: string
+      }) {
+        const info = (yield* jobs.wait({ id: input.id })).info
+        writing.get(input.file)?.delete(input.id)
         if (!info || info.status === "running") return
         yield* sessions.synthetic({
-          id: notificationID,
-          sessionID,
+          id: input.notificationID,
+          sessionID: input.sessionID,
           description: "Image generation",
-          text:
-            info.status === "completed"
-              ? (info.output ?? "")
-              : info.status === "error"
-                ? (info.error ?? `Image request failed for ${file}.`)
-                : `Image request for ${file} was cancelled.`,
-          metadata: { source: name, jobID: id, state: info.status, path: file },
+          text: ImageNotice.text({
+            id: input.id,
+            state: info.status,
+            prompt: input.prompt,
+            body:
+              info.status === "completed"
+                ? (info.output ?? "")
+                : info.status === "error"
+                  ? (info.error ?? `Image request failed for ${input.file}.`)
+                  : `Image request for ${input.file} was cancelled.`,
+          }),
+          metadata: { source: name, jobID: input.id, state: info.status, path: input.file },
         })
-        yield* jobs.completeBackground(notificationID)
+        yield* jobs.completeBackground(input.notificationID)
       },
       Effect.forkIn(scope, { startImmediately: true }),
     )
@@ -319,7 +343,8 @@ export const Plugin = {
                 const image = result.images[0]
                 if (!image) return yield* Effect.fail(new Error(`${ref} returned no image.`))
                 const bytes = Buffer.from(image.data, "base64")
-                const file = stem + (EXTENSIONS[Mime.detect(bytes)] ?? ".png")
+                const mime = Mime.detect(bytes)
+                const file = stem + (EXTENSIONS[mime] ?? ".png")
                 // The edit prompt covered the requested path. Replacing a different existing file needs its own
                 // approval; a new file only has to pass the deny rules.
                 if (target && file !== target.absolute) {
@@ -338,7 +363,13 @@ export const Plugin = {
                   yield* replaces ? permission.assert({ ...request, save: ["*"] }) : permission.assertNotDenied(request)
                 }
                 yield* environment.files.write(file, bytes)
-                return `Image request finished. Saved image: ${file} (${ref}).\nUse the read tool on this path to view the image.`
+                // Say so when the real format changed the requested extension, so the agent doesn't convert it back.
+                const requested = target ? path.extname(target.absolute).toLowerCase() : ""
+                const format =
+                  requested in EXTENSION_TYPES && requested !== path.extname(file)
+                    ? ` It was saved as ${path.basename(file)} instead of ${path.basename(target!.absolute)} because the model returned ${mime}.`
+                    : ""
+                return `Image request finished. Saved image: ${file} (${ref}).${format}\nUse the read tool on this path to view the image.`
               }).pipe(
                 // The job keeps this text, so a restart can still deliver the outcome.
                 Effect.mapError((error) => new Error(`Image request failed for ${stem}: ${error.message}`)),
@@ -355,11 +386,24 @@ export const Plugin = {
                 run,
               })
               yield* jobs.background(job.id)
-              yield* notifyWhenDone(context.sessionID, job.id, notificationID, stem)
+              const others = [...(writing.get(stem) ?? [])]
+              writing.set(stem, new Set([...others, job.id]))
+              yield* notifyWhenDone({
+                sessionID: context.sessionID,
+                id: job.id,
+                notificationID,
+                file: stem,
+                prompt: input.prompt,
+              })
               return {
-                output: { path: stem, model: ref },
+                output: { id: job.id, path: stem, model: ref },
                 content: [
-                  `Image request started in the background with ${ref}. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.${resolved.note ?? ""}`,
+                  `Image job ${job.id} started in the background with ${ref}. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.${resolved.note ?? ""}`,
+                  ...(others.length > 0
+                    ? [
+                        `Image job ${others.join(", ")} is still writing ${stem}; whichever finishes last overwrites the file.`,
+                      ]
+                    : []),
                   "You will be notified automatically when it finishes or fails.",
                   "DO NOT sleep, poll, check whether the file exists, or request the same image again while it runs.",
                   "Work on other tasks, or briefly tell the user what you started and end your response.",

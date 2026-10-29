@@ -20,7 +20,7 @@ import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import type { ImageRequest, ImageResult } from "@opencode/schema/generate"
 import { Global } from "@opencode/util/global"
-import { Effect, Layer, Schedule, Stream } from "effect"
+import { Deferred, Effect, Layer, Schedule, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { executeTool, toolDefinitions, toolIdentity } from "./lib/tool"
@@ -238,20 +238,23 @@ describe("image_generate", () => {
       const result = yield* run({ prompt: "make it blue", images: ["in.png"], path: "out.png" })
       const file = path.join(directory, "out.png")
       const stem = path.join(directory, "out")
-      expect(result.output).toEqual({ path: stem, model: "test/painter" })
+      const id = result.output.id
+      expect(id).toStartWith("image_")
+      expect(result.output).toEqual({ id, path: stem, model: "test/painter" })
       expect(result.content).toEqual([
         {
           type: "text",
           text: [
-            `Image request started in the background with test/painter. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.`,
+            `Image job ${id} started in the background with test/painter. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.`,
             "You will be notified automatically when it finishes or fails.",
             "DO NOT sleep, poll, check whether the file exists, or request the same image again while it runs.",
             "Work on other tasks, or briefly tell the user what you started and end your response.",
           ].join("\n"),
         },
       ])
+      // The notice names the job and its request, like shell and subagent notices.
       expect(yield* notice(result)).toBe(
-        `Image request finished. Saved image: ${file} (test/painter).\nUse the read tool on this path to view the image.`,
+        `<image id="${id}" state="completed" prompt="make it blue">\nImage request finished. Saved image: ${file} (test/painter).\nUse the read tool on this path to view the image.\n</image>`,
       )
       expect((yield* Effect.promise(() => fs.readFile(file))).toString("base64")).toBe(PNG)
       expect(fixture.requests).toEqual([
@@ -288,14 +291,16 @@ describe("image_generate", () => {
       const result = yield* run({ prompt: "a cat" })
       expect(path.dirname(result.output.path)).toBe(path.join(global.tmp, "images", session.id))
       const saved = `${result.output.path}.jpg`
-      expect(yield* notice(result)).toBe(
+      expect(yield* notice(result)).toContain(
         `Image request finished. Saved image: ${saved} (test/painter).\nUse the read tool on this path to view the image.`,
       )
       expect(yield* Effect.promise(() => Bun.file(saved).exists())).toBe(true)
 
       // An explicit path's extension is replaced too, and the notice gives the real path.
       const explicit = yield* run({ prompt: "a cat", path: "cat.png" })
-      expect(yield* notice(explicit)).toContain(`Saved image: ${path.join(directory, "cat.jpg")} (test/painter).`)
+      expect(yield* notice(explicit)).toContain(
+        `Saved image: ${path.join(directory, "cat.jpg")} (test/painter). It was saved as cat.jpg instead of cat.png because the model returned image/jpeg.`,
+      )
       expect(yield* Effect.promise(() => Bun.file(path.join(directory, "cat.jpg")).exists())).toBe(true)
       // The edit prompt covered cat.png; the file actually written is still checked against deny rules.
       expect(fixture.assertions.filter((item) => item.action === "edit").map((item) => item.resources)).toEqual([
@@ -316,6 +321,28 @@ describe("image_generate", () => {
     }),
   )
 
+  it.live("warns when another job is still writing the same file", () =>
+    Effect.gen(function* () {
+      yield* imageModel("test", "painter")
+      const { run, notice } = yield* setup()
+      const gate = yield* Deferred.make<void>()
+      fixture.gate = Deferred.await(gate)
+      const first = yield* run({ prompt: "red cap", path: "cap.png" })
+      const second = yield* run({ prompt: "blue cap", path: "cap.png" })
+      expect(text(first)).not.toContain("still writing")
+      expect(text(second)).toContain(`Image job ${first.output.id} is still writing`)
+      expect(text(second)).toContain("whichever finishes last overwrites the file.")
+      yield* Deferred.succeed(gate, undefined)
+      expect(yield* notice(first)).toContain('prompt="red cap"')
+      expect(yield* notice(second)).toContain('prompt="blue cap"')
+      // Once both finished, a new request for the file has nothing to warn about.
+      fixture.gate = Effect.void
+      const third = yield* run({ prompt: "beach", path: "cap.png" })
+      expect(text(third)).not.toContain("still writing")
+      yield* notice(third)
+    }),
+  )
+
   it.live("reports a failed generation in the completion notice", () =>
     Effect.gen(function* () {
       yield* imageModel("test", "painter")
@@ -327,7 +354,7 @@ describe("image_generate", () => {
       })
       const result = yield* run({ prompt: "x", path: "out.png" })
       expect(yield* notice(result)).toBe(
-        `Image request failed for ${path.join(directory, "out")}: The prompt was rejected`,
+        `<image id="${result.output.id}" state="error" prompt="x">\nImage request failed for ${path.join(directory, "out")}: The prompt was rejected\n</image>`,
       )
       expect(yield* Effect.promise(() => Bun.file(path.join(directory, "out.png")).exists())).toBe(false)
     }),
@@ -343,7 +370,9 @@ describe("image_generate", () => {
       const id = String(result.metadata?.jobID)
       expect((yield* jobs.get(id))?.status).toBe("running")
       yield* jobs.cancel(id)
-      expect(yield* notice(result)).toBe(`Image request for ${path.join(directory, "out")} was cancelled.`)
+      expect(yield* notice(result)).toBe(
+        `<image id="${id}" state="cancelled" prompt="x">\nImage request for ${path.join(directory, "out")} was cancelled.\n</image>`,
+      )
       expect(yield* Effect.promise(() => Bun.file(path.join(directory, "out.png")).exists())).toBe(false)
     }),
   )

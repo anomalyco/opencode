@@ -9,6 +9,7 @@ import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { ImageNotice } from "../../image/notice.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
 
@@ -139,7 +140,7 @@ export const layer = (options?: Options) =>
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "image" }>,
       ) {
-        const text =
+        const body =
           background.status === "running"
             ? `Image request for ${recovery.path} was cancelled because the server restarted.`
             : background.status === "completed"
@@ -152,7 +153,11 @@ export const layer = (options?: Options) =>
             id: background.notificationID,
             sessionID: recovery.sessionID,
             description: "Image generation",
-            text,
+            text: ImageNotice.text({
+              id: background.id,
+              state: background.status === "running" ? "cancelled" : background.status,
+              body,
+            }),
             metadata: {
               source: "image_generate",
               jobID: background.id,
