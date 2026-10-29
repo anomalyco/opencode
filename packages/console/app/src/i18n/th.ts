@@ -215,7 +215,7 @@ export const dict = {
   "go.plans.individuals": "บุคคลทั่วไป",
   "go.plans.teams": "ทีม",
   "go.plans.month": "ต่อเดือน",
-  "go.plans.memberMonth": "ต่อสมาชิกต่อเดือน",
+  "go.plans.memberMonth": "ต่อสมาชิก\nต่อเดือน",
   "go.plans.plus.cta": "สมัคร Go Plus",
   "go.plans.plus.description": "Go Plus ราคา $40/เดือน พร้อมขีดจำกัดการใช้งานที่สูงขึ้น",
   "go.plans.teams.cta": "สมัคร Go Teams",
