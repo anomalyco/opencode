@@ -389,7 +389,7 @@ describe("applyCachePolicy", () => {
         LLM.request({
           model: anthropicModel,
           system: [
-            { type: "text", text: "first system", cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }) },
+            { type: "text", text: "first system", cache: new CacheHint({ type: "ephemeral", ttl: "1h" }) },
             { type: "text", text: "last system" },
           ],
           prompt: "hi",
@@ -416,7 +416,7 @@ describe("applyCachePolicy", () => {
           {
             type: "text",
             text: "Manual context",
-            cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }),
+            cache: new CacheHint({ type: "ephemeral", ttl: "1h" }),
           },
           { type: "text", text: "Project instructions" },
         ],
@@ -473,14 +473,27 @@ describe("applyCachePolicy", () => {
     expect(namespace.tools[1]).toHaveProperty("cache", { type: "ephemeral" })
   })
 
-  it.effect("ttlSeconds in the policy flows through to wire markers", () =>
+  it.effect("a ttl-only policy keeps automatic placement", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({ model: anthropicModel, system: "Sys", prompt: "hi", cache: { ttl: "1h" } }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        system: [{ type: "text", text: "Sys", cache_control: { type: "ephemeral", ttl: "1h" } }],
+        messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral", ttl: "1h" } }] }],
+      })
+    }),
+  )
+
+  it.effect("ttl in the policy flows through to wire markers", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
           model: anthropicModel,
           system: "Sys",
           prompt: "hi",
-          cache: { system: true, ttlSeconds: 3600 },
+          cache: { system: true, ttl: "1h" },
         }),
       )
 

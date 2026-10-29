@@ -7,6 +7,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { LLMRequest, type ToolDefinition, type ToolEntry } from "../schema/index.js"
+import { requestTTL } from "../cache-policy.js"
 import { resolveEffortUpdates } from "../effort-updates.js"
 import { OpenResponses } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
@@ -15,6 +16,8 @@ import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { OpenResponsesChannel } from "./open-responses-channel.js"
 import { ResponsesCompaction } from "./utils/responses-compaction.js"
 import { ResponsesCheckpoint } from "./utils/responses-checkpoint.js"
+import * as Cache from "./utils/cache.js"
+import { OpenAIFreeform } from "./openai-freeform.js"
 
 const ADAPTER = "openai-responses"
 const NAME = "OpenAI Responses"
@@ -105,6 +108,7 @@ const OpenAIResponsesNamespace = Schema.Struct({
 
 const OpenAIResponsesTools = Schema.Union([
   OpenResponses.Tool,
+  OpenResponses.CustomTool,
   OpenAIResponsesNamespace,
   OpenAIResponsesImageGenerationTool,
 ])
@@ -116,6 +120,8 @@ const OpenAIResponsesToolChoice = Schema.Union([
 
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
+  prompt_cache_retention: Schema.optional(Schema.String),
+  prompt_cache_options: Schema.optional(Schema.Struct({ ttl: Schema.optional(Schema.String) })),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   reasoning: Schema.optional(
@@ -177,19 +183,21 @@ const nativeImageTool = (tool: ToolDefinition) => {
   return Schema.is(OpenAIResponsesImageGenerationTool)(native) ? native : undefined
 }
 
-const lowerTool = Effect.fnUntraced(function* (tool: ToolDefinition) {
+const lowerTool = Effect.fnUntraced(function* (tool: ToolDefinition, custom: ReadonlyMap<string, OpenAIFreeform.Custom>) {
   const native = nativeImageToolInput(tool)
   if (native !== undefined) {
     if (Schema.is(OpenAIResponsesImageGenerationTool)(native)) return native
     return yield* ProviderShared.invalidRequest("OpenAI Responses image generation tool options are invalid")
   }
+  const definition = custom.get(tool.name)
+  if (definition) return OpenResponses.lowerCustomTool(tool, definition)
   return yield* OpenResponses.lowerTool(NAME, tool)
 })
 
 // Native namespaces hold only function tools, so deeper levels flatten into
 // the leaf names the same way non-native protocols flatten the whole tree.
-const lowerToolEntry = Effect.fnUntraced(function* (tool: ToolEntry) {
-  if (tool.type === "tool") return yield* lowerTool(tool)
+const lowerToolEntry = Effect.fnUntraced(function* (tool: ToolEntry, custom: ReadonlyMap<string, OpenAIFreeform.Custom>) {
+  if (tool.type === "tool") return yield* lowerTool(tool, custom)
   // OpenAI requires a namespace description; fall back to a generic one so a
   // missing description never blocks the request.
   return {
@@ -202,9 +210,16 @@ const lowerToolEntry = Effect.fnUntraced(function* (tool: ToolEntry) {
   }
 })
 
-const lowerTools = (request: LLMRequest) => Effect.forEach(request.tools, lowerToolEntry)
+const lowerTools = (request: LLMRequest) => {
+  const custom = OpenAIFreeform.tools(request)
+  return Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, custom))
+}
 
-const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tools: ReadonlyArray<ToolEntry>) =>
+const lowerToolChoice = (
+  toolChoice: NonNullable<LLMRequest["toolChoice"]>,
+  tools: ReadonlyArray<ToolEntry>,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) =>
   ProviderShared.matchToolChoice(NAME, toolChoice, {
     auto: () => "auto" as const,
     none: () => "none" as const,
@@ -212,7 +227,7 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tool
     tool: (name) =>
       tools.some((tool) => tool.type === "tool" && tool.name === name && nativeImageTool(tool) !== undefined)
         ? ({ type: "image_generation" } as const)
-        : { type: "function" as const, name },
+        : OpenResponses.namedTool(name, custom),
   })
 
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
@@ -223,9 +238,11 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   const reasoning = Schema.decodeUnknownSync(ReasoningOptions)(request.providerOptions ?? {})
   const updates = resolveEffortUpdates(request, options.reasoningEffort)
   const generation = OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort })
+  const custom = OpenAIFreeform.tools(request)
   return {
     ...(yield* OpenResponses.lowerConversation(updates.request, adapter)),
     ...generation,
+    ...Cache.openAIRequestTTL(requestTTL(request)),
     ...(generation.reasoning || reasoning.reasoningMode || reasoning.reasoningContext
       ? {
           reasoning: {
@@ -240,8 +257,8 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     tool_choice:
       request.tools.length === 0
         ? undefined
-        : (OpenResponses.allowedToolChoice(request, options) ??
-          (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined)),
+        : (OpenResponses.allowedToolChoice(options, custom) ??
+          (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools, custom) : undefined)),
   }
 })
 

@@ -18,7 +18,8 @@ import {
   type LanguageModelProviderOptions,
   type ToolEntryInput,
 } from "./schema/index.js"
-import { make as makeTool, toDefinitions, type ToolSchema } from "./tool.js"
+import { make as makeTool, toDefinitions, type ExecutableTools, type ToolSchema } from "./tool.js"
+import { ToolRuntime } from "./tool-runtime.js"
 
 /** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
 export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
@@ -50,6 +51,72 @@ export function stream<const Model extends LanguageModel>(
 ): Stream.Stream<LLMEvent, AIError, Service>
 export function stream(input: RequestInput | LLMRequest, options?: StreamOptions) {
   return Stream.unwrap(requestEffect(input).pipe(Effect.map((request) => LLMClient.stream(request, options))))
+}
+
+export type LoopInput<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
+  RequestInput<SelectedLanguageModel>,
+  "tools"
+> & {
+  readonly tools: ExecutableTools
+  /** Called after each step that has tool calls; returning `true` ends the loop without running them. */
+  readonly until?: (state: { readonly steps: ReadonlyArray<LLMResponse> }) => boolean
+}
+
+/**
+ * Stream model calls, running the model's tool calls between them, until a step has no client-executed tool calls,
+ * reports a provider error, or `until` returns `true`. Each step's `step-start` and `step-finish` carry its step index.
+ */
+export function loop<const Model extends LanguageModel>(
+  input: LoopInput<Model>,
+  options?: StreamOptions,
+): Stream.Stream<LLMEvent, AIError, Service>
+export function loop(input: LoopInput, options?: StreamOptions) {
+  const { tools, until, ...rest } = input
+  const step = (request: LLMRequest, steps: ReadonlyArray<LLMResponse>): Stream.Stream<LLMEvent, AIError, Service> =>
+    Stream.suspend(() => {
+      const events: LLMEvent[] = []
+      return LLMClient.stream(request, options).pipe(
+        Stream.map((event) =>
+          event.type === "step-start" || event.type === "step-finish" ? { ...event, index: steps.length } : event,
+        ),
+        Stream.tap((event) => Effect.sync(() => events.push(event))),
+        Stream.concat(
+          Stream.unwrap(
+            Effect.gen(function* () {
+              const response = LLMResponse.fromEvents(events)
+              const calls = response?.toolCalls.filter((call) => call.providerExecuted !== true) ?? []
+              if (!response || calls.length === 0 || events.some(LLMEvent.is.providerError)) return Stream.empty
+              const done = [...steps, response]
+              if (until?.({ steps: done })) return Stream.empty
+              const results = yield* Effect.forEach(calls, (call) => ToolRuntime.dispatch(tools, call), {
+                concurrency: "unbounded",
+              })
+              const next = LLMRequest.update(request, {
+                messages: [
+                  ...request.messages,
+                  response.message,
+                  ...calls.map((call, i) =>
+                    Message.tool({
+                      id: call.id,
+                      name: call.name,
+                      namespace: call.namespace,
+                      result: results[i].result,
+                      providerMetadata: call.providerMetadata,
+                    }),
+                  ),
+                ],
+              })
+              return Stream.fromIterable(results.flatMap((result) => result.events)).pipe(
+                Stream.concat(step(next, done)),
+              )
+            }),
+          ),
+        ),
+      )
+    })
+  return Stream.unwrap(
+    requestEffect({ ...rest, tools: toDefinitions(tools) }).pipe(Effect.map((request) => step(request, []))),
+  )
 }
 
 const requestEffect = (input: RequestInput | LLMRequest) =>

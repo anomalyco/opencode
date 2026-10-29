@@ -16,6 +16,7 @@ import {
   OpenAICompatibleResponses,
   XAI,
 } from "../../src/providers.js"
+import { ai } from "../../src/index.js"
 import type { WebSocketChannelExecutor } from "../../src/route.js"
 import type { RoutePatch } from "../../src/route/client.js"
 import type { OpenAIResponsesBody } from "../../src/protocols/openai-responses.js"
@@ -127,3 +128,19 @@ if (LLMClient.canCompact(dynamic)) {
 }
 // @ts-expect-error A dynamic model override cannot preserve trigger support.
 LLMClient.compact(LLMRequest.update(request, patch), { mechanism: "trigger" })
+
+void ai.llm.compact(request).then((result) => result satisfies CompactionResponse)
+void ai.llm.compact(request, { mechanism: "trigger", webSocket, signal: AbortSignal.timeout(1) }).then((result) => {
+  result satisfies CompactionCheckpointResponse
+  // @ts-expect-error A trigger does not return replacement history.
+  result.replacement
+})
+// @ts-expect-error Endpoint compaction does not accept a WebSocket executor.
+void ai.llm.compact(request, { webSocket })
+// @ts-expect-error Azure must not inherit OpenAI's trigger operation.
+void ai.llm.compact(LLM.request({ model: azure }), { mechanism: "trigger" })
+// @ts-expect-error OpenAI Chat does not expose explicit compaction.
+void ai.llm.compact(unsupported.openai)
+// @ts-expect-error Dynamic models must be narrowed.
+void ai.llm.compact(dynamic)
+if (LLMClient.canCompact(dynamic, { mechanism: "trigger" })) void ai.llm.compact(dynamic, { mechanism: "trigger" })

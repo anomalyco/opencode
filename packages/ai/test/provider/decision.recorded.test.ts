@@ -130,7 +130,7 @@ describe("Decision recorded", () => {
       plan: "pro",
     }).pipe(
       Effect.map((response) => {
-        expect(response.providerMetadata).toEqual({ openai: { model: "gpt-6-luna" } })
+        expect(response.providerMetadata?.openai).toMatchObject({ model: "gpt-6-luna", usage: { input_tokens: 430 } })
         expect(response.usage?.outputTokens).toBe(0)
       }),
     ),

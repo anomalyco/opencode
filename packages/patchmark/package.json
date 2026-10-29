@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/patchmark",
+  "version": "2.2.1",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test --only-failures",
+    "fuzz": "bun scripts/fuzz-differential.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native": "catalog:",
+    "commonmark": "0.31.2",
+    "commonmark-spec": "0.31.2",
+    "micromark": "^4.0.0",
+    "micromark-extension-gfm": "^3.0.0"
+  }
+}

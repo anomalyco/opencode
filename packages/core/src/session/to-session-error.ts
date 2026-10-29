@@ -32,6 +32,9 @@ const MODEL_BUDGET_LIMIT_MESSAGE = "You've reached the spend limit for this mode
 
 export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof AIError) {
+    // ChatGPT's usage limit arrives in HTTP and stream errors alike, whatever their reason, so its code decides the type.
+    if (cause.reason.body?.includes("subscription_sharing_usage_limit_exceeded"))
+      return providerError("provider.chatgpt-limit", cause.reason)
     switch (cause.reason._tag) {
       case "RateLimit":
         return providerError("provider.rate-limit", cause.reason)
@@ -41,6 +44,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
         if (cause.reason.body?.includes("FreeUsageLimitError"))
           return { ...providerError("provider.free-limit", cause.reason), message: FREE_USAGE_LIMIT_MESSAGE }
         if (cause.reason.body?.includes("BudgetLimitError")) return budgetLimit(cause.reason)
+        if (cause.reason.body?.includes("GoUsageLimitError")) return goLimit(cause.reason)
         return providerError("provider.quota", cause.reason)
       case "ContentPolicy":
         return providerError("provider.content-filter", cause.reason)
@@ -107,6 +111,15 @@ function budgetLimit(reason: AIError["reason"]): SessionError.Error {
   if (/"coverage"\s*:\s*"models"/.test(reason.body ?? ""))
     return { ...providerError("provider.model-budget-limit", reason), message: MODEL_BUDGET_LIMIT_MESSAGE }
   return { ...providerError("provider.budget-limit", reason), message: BUDGET_LIMIT_MESSAGE }
+}
+
+// OpenCode Console names the Go limit that refused the request (5 hour, weekly or monthly) in its envelope's metadata.
+function goLimit(reason: AIError["reason"]): SessionError.Error {
+  const name = /"limitName"\s*:\s*"([^"]+)"/.exec(reason.body ?? "")?.[1]
+  return {
+    ...providerError("provider.go-limit", reason),
+    message: `OpenCode Go ${name ? `${name} ` : ""}usage limit reached. Switch to a free model, or turn on Extra Usage on the Go page in OpenCode Console to keep going.`,
+  }
 }
 
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {

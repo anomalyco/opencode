@@ -179,6 +179,7 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(HttpApiEndpoint.get("websearchProviders", "/api/websearch/provider", { success: Json }))
+  .add(HttpApiEndpoint.get("usageLimits", "/api/experimental/usage/limits", { success: Json }))
   .add(
     HttpApiEndpoint.get("worktreeList", "/api/worktree", {
       query: Schema.Struct({ projectID: Schema.String }),
@@ -232,6 +233,8 @@ const Group = HttpApiGroup.make("mock")
       error: Unsupported,
     }),
   )
+  .add(HttpApiEndpoint.post("fsWatch", "/api/experimental/fs/watch", { success: NoContent }))
+  .add(HttpApiEndpoint.delete("fsUnwatch", "/api/experimental/fs/watch", { success: NoContent }))
   .add(HttpApiEndpoint.get("shell", "/api/shell", { success: Json }))
   .add(
     HttpApiEndpoint.get("shellOutput", "/api/shell/:id/output", {
@@ -297,6 +300,14 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(HttpApiEndpoint.post("sessionCreate", "/api/session", { payload: JsonPayload, success: Json }))
   .add(HttpApiEndpoint.get("sessionActive", "/api/session/active", { success: Json }))
+  .add(
+    HttpApiEndpoint.post("rpcCall", "/api/rpc/:rpcID/:method", {
+      params: { rpcID: Schema.String, method: Schema.String },
+      payload: JsonPayload,
+      success: Json,
+      error: Unsupported,
+    }),
+  )
   .add(
     HttpApiEndpoint.get("sessionGet", "/api/session/:sessionID", {
       params: SessionParams,

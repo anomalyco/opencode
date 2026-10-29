@@ -428,7 +428,7 @@ test("concurrent service processes elect one server", async () => {
       await fetch(new URL("/api/info", info.url), {
         headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
       }).then((response) => response.json()),
-    ).toEqual({
+    ).toMatchObject({
       version: info.version,
       pid: info.pid,
       hostname: os.hostname(),

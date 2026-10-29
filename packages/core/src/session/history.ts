@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, lt, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm"
 import { Message } from "@opencode/ai/effect"
 import { Effect, Option, Schema } from "effect"
 import type { Model } from "@opencode/schema/model"
@@ -11,7 +11,7 @@ import { Instructions } from "../instructions/index.js"
 import { InstructionState } from "./instruction-state.js"
 import { SessionBlob } from "./blob.js"
 import { SessionRecentText } from "./recent-text.js"
-import { SessionMessageTable } from "./sql.js"
+import { SessionMessageTable, SessionPartTable } from "./sql.js"
 import { SessionStored } from "./stored.js"
 
 type DatabaseService = Database.Interface["db"]
@@ -19,6 +19,10 @@ type DatabaseService = Database.Interface["db"]
 const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
 const decodeSync = Schema.decodeUnknownSync(SessionMessage.Info)
 const decodeStoredUser = Schema.decodeUnknownEffect(SessionStored.User)
+const decodeMedia = Schema.decodeUnknownEffect(SessionMessage.MediaInfo)
+const decodePartSync = Schema.decodeUnknownSync(SessionMessage.AssistantContent)
+export const encodePart = Schema.encodeSync(SessionMessage.AssistantContent)
+const PartQueryBatchSize = 500
 
 /**
  * Which completed compactions bound a history read. Local summaries always do. Native
@@ -83,12 +87,50 @@ const latestCompaction = Effect.fnUntraced(function* (
     .pipe(Effect.orDie)
 })
 
+export const hasInlineContent = (data: typeof SessionMessageTable.$inferSelect.data): boolean =>
+  "content" in data && Array.isArray(data.content) && data.content.length > 0
+
+/**
+ * Puts each assistant row's `session_part` rows into its `data.content`, in ordinal order. Rows without parts keep
+ * their inline content, so legacy rows read unchanged. Runs before blob hydration so media in parts restores too.
+ */
+export const withParts = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
+) {
+  const assistantIDs = rows.flatMap((row) => (row.type === "assistant" ? [row.id] : []))
+  if (assistantIDs.length === 0) return rows
+  const partsByMessage = new Map<SessionMessage.ID, Array<(typeof SessionPartTable.$inferSelect)["data"]>>()
+  for (let index = 0; index < assistantIDs.length; index += PartQueryBatchSize) {
+    const partRows = yield* db
+      .select()
+      .from(SessionPartTable)
+      .where(inArray(SessionPartTable.message_id, assistantIDs.slice(index, index + PartQueryBatchSize)))
+      .orderBy(asc(SessionPartTable.message_id), asc(SessionPartTable.ordinal))
+      .all()
+      .pipe(Effect.orDie)
+    for (const part of partRows) {
+      const list = partsByMessage.get(part.message_id)
+      if (list) list.push(part.data)
+      else partsByMessage.set(part.message_id, [part.data])
+    }
+  }
+  if (partsByMessage.size === 0) return rows
+  return rows.map((row) => {
+    const parts = partsByMessage.get(row.id)
+    return parts && "content" in row.data ? { ...row, data: { ...row.data, content: parts } } : row
+  })
+})
+
 // Every stored message row decodes through here, so rows written in older shapes are upgraded in one place.
 const rowInput = (row: typeof SessionMessageTable.$inferSelect) => ({
   ...SessionLegacy.message(row.type, row.data),
   id: row.id,
   type: row.type,
 })
+
+export const decodePartRowSync = (row: typeof SessionPartTable.$inferSelect) =>
+  decodePartSync(SessionLegacy.part({ ...row.data, type: row.type }))
 
 export const decodeMessageRowSync = (row: typeof SessionMessageTable.$inferSelect) => decodeSync(rowInput(row))
 
@@ -112,7 +154,30 @@ export const decodeMessageRows = Effect.fnUntraced(function* (
   db: DatabaseService,
   rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
 ) {
-  return yield* Effect.forEach(yield* SessionBlob.hydrate(db, rows), decodeMessageRow, { concurrency: 1 })
+  return yield* Effect.forEach(yield* SessionBlob.hydrate(db, yield* withParts(db, rows)), decodeMessageRow, {
+    concurrency: 1,
+  })
+})
+
+/** Decodes rows for clients that fetch media themselves, so files stored in `blob` stay `media:` refs. */
+export const decodeMessageRowsWithRefs = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
+) {
+  const kept = yield* SessionBlob.keepRefs(db, yield* withParts(db, rows))
+  return yield* Effect.forEach(
+    kept.rows,
+    (row) =>
+      decodeMedia(rowInput(row)).pipe(
+        Effect.mapError(decodeError(row)),
+        Effect.map((message) =>
+          message.type === "user" && message.files
+            ? { ...message, files: SessionBlob.describe(message.files, kept.meta) }
+            : message,
+        ),
+      ),
+    { concurrency: 1 },
+  )
 })
 
 const messageEntries = Effect.fnUntraced(function* (
@@ -138,7 +203,7 @@ const messageEntries = Effect.fnUntraced(function* (
     .all()
     .pipe(Effect.orDie)
   const decoded = yield* Effect.forEach(
-    yield* SessionBlob.hydrate(db, rows),
+    yield* SessionBlob.hydrate(db, yield* withParts(db, rows)),
     (row) => decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
     { concurrency: 1 },
   )
@@ -194,7 +259,7 @@ const withRecentText = Effect.fnUntraced(function* (
     .all()
     .pipe(Effect.orDie)
   // The recent text names attachments by mime and name only, so their bytes are never read.
-  const kept = yield* Effect.forEach(rows, decodeStoredRow, { concurrency: 1 })
+  const kept = yield* Effect.forEach(yield* withParts(db, rows), decodeStoredRow, { concurrency: 1 })
   const recent = kept.map(SessionRecentText.messageToText).filter(Boolean).join("\n\n")
   return [{ ...first, message: { ...compaction, metadata: { ...compaction.metadata, recent } } }, ...entries.slice(1)]
 })
@@ -251,6 +316,31 @@ export const preview = Effect.fn("SessionHistory.preview")(function* (
       }),
     )
     .pipe(Effect.catch((error) => (error instanceof Instructions.InitializationBlocked ? error : Effect.die(error))))
+})
+
+/**
+ * The synthetic messages `load(db, sessionID, "latest")` would return, read without the rest of the transcript. Under
+ * that boundary every row from the latest completed compaction on is kept, and synthetic rows carry no media.
+ */
+export const synthetics = Effect.fn("SessionHistory.synthetics")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const compaction = yield* latestCompaction(db, sessionID, "latest")
+  const rows = yield* db
+    .select()
+    .from(SessionMessageTable)
+    .where(
+      and(
+        eq(SessionMessageTable.session_id, sessionID),
+        eq(SessionMessageTable.type, "synthetic"),
+        compaction ? gte(SessionMessageTable.seq, compaction.seq) : undefined,
+      ),
+    )
+    .orderBy(asc(SessionMessageTable.seq))
+    .all()
+    .pipe(Effect.orDie)
+  return yield* Effect.forEach(rows, decodeMessageRow, { concurrency: 1 })
 })
 
 /** The id and text of the session's first user message. */

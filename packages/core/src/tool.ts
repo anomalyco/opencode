@@ -255,10 +255,13 @@ const layer = Layer.effect(
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
           }
-          const direct = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
+          const codeModeEnabled = !whollyDisabled("execute", rules)
+          // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
+          const direct = codeModeEnabled
+            ? new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode === false))
+            : active
           const codeModeTools = new Map(Array.from(active).filter(([, tool]) => tool.options?.codemode !== false))
           const names = Array.from(codeModeTools.keys()).join("\0")
-          const codeModeEnabled = !whollyDisabled("execute", rules)
           // Discovery is immutable for a registry revision and visible tool set. Keep executors
           // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
           // are cached by identity, and the execute tool's definition across steps.

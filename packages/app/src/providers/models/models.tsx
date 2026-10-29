@@ -3,7 +3,7 @@ import { createSimpleContext } from "@opencode/ui/context"
 import { useProviders } from "@/providers/catalog/providers"
 import { useGlobal } from "@/runtime/server/runtime"
 
-export type ModelKey = { providerID: string; modelID: string }
+type ModelKey = { providerID: string; modelID: string }
 
 type Visibility = "show" | "hide"
 
@@ -66,7 +66,8 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
     () =>
       new Map(
         available().map(
-          (model) => [modelKey({ providerID: model.provider.id, modelID: model.id }), Date.parse(model.release_date)] as const,
+          (model) =>
+            [modelKey({ providerID: model.provider.id, modelID: model.id }), Date.parse(model.release_date)] as const,
         ),
       ),
   )
@@ -82,6 +83,17 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
   )
 
   const latestSet = createMemo(() => new Set(latest().map((x) => modelKey(x))))
+
+  // OpenCode's free models (Big Pickle) stay on offer long after release, so they are listed regardless of age or a
+  // newer free model in the same family.
+  const freeSet = createMemo(
+    () =>
+      new Set(
+        available()
+          .filter(isFreeModel)
+          .map((x) => modelKey({ providerID: x.provider.id, modelID: x.id })),
+      ),
+  )
 
   const visibility = createMemo(() => {
     const map = new Map<string, Visibility>()
@@ -121,7 +133,7 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
 
     if (state === "show") return true
 
-    if (latestSet().has(key)) return true
+    if (latestSet().has(key) || freeSet().has(key)) return true
 
     // Models without a parseable release date stay visible.
     return !Number.isFinite(release().get(key) ?? NaN)
@@ -136,6 +148,19 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
 
     if (uniq.length > RECENT_LIMIT) uniq.pop()
     setStore("recent", uniq)
+  }
+
+  // Newest favorite first, as in the TUI.
+  const toggleFavorite = (model: ModelKey) => {
+    const key = modelKey(model)
+    const rest = store.favorite.filter((item) => modelKey(item) !== key)
+
+    setStore(
+      "favorite",
+      rest.length === store.favorite.length
+        ? [{ providerID: model.providerID, modelID: model.modelID }, ...rest]
+        : rest,
+    )
   }
 
   const variantKey = (model: ModelKey) => `${model.providerID}/${model.modelID}`
@@ -162,6 +187,10 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
     recent: {
       list: models.recent,
       push,
+    },
+    favorite: {
+      list: models.favorite,
+      toggle: toggleFavorite,
     },
     variant: {
       get: getVariant,

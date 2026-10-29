@@ -84,13 +84,64 @@ describe("Cloudflare Workers AI Images", () => {
     ),
   )
 
+  it.effect("sends FLUX.2 input images as numbered multipart files", () =>
+    Image.generate({
+      model: workers.image("@cf/black-forest-labs/flux-2-klein-4b"),
+      prompt: "Put the cat from image 1 in image 0",
+      images: [Media.bytes(new Uint8Array([1, 2]), "image/png"), Media.base64("AwQ=", "image/jpeg")],
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) =>
+              Effect.gen(function* () {
+                const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                const form = yield* Effect.promise(() => request.formData())
+                const bytes = yield* Effect.forEach(["input_image_0", "input_image_1"], (name) =>
+                  Effect.promise(async () => [...new Uint8Array(await (form.get(name) as Blob).arrayBuffer())]),
+                )
+                expect(form.get("prompt")).toBe("Put the cat from image 1 in image 0")
+                expect(bytes).toEqual([
+                  [1, 2],
+                  [3, 4],
+                ])
+                return input.respond(JSON.stringify({ result: { image: "iVBORw0KGgo=" } }), {
+                  headers: { "content-type": "application/json" },
+                })
+              }),
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("sends the first input image of a JSON model as image_b64", () =>
+    Image.generate({
+      model: workers.image("@cf/lykon/dreamshaper-8-lcm"),
+      prompt: "Make it green",
+      images: [Media.bytes(new Uint8Array([1, 2, 3]), "image/png")],
+    }).pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) => {
+              expect(JSON.parse(input.text)).toEqual({ prompt: "Make it green", image_b64: "AQID" })
+              return Effect.succeed(input.respond(new Uint8Array([0x89, 0x50, 0x4e, 0x47])))
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
+
   it.effect("fails typed for fields the Run API image models cannot take", () =>
     Effect.gen(function* () {
-      const model = workers.image("@cf/black-forest-labs/flux-2-dev")
+      const image = Media.bytes(new Uint8Array([1]), "image/png")
       const errors = yield* Effect.forEach(
         [
-          { model, prompt: "test", n: 2 },
-          { model, prompt: "test", images: [Media.bytes(new Uint8Array([1]), "image/png")] },
+          { model: workers.image("@cf/black-forest-labs/flux-2-dev"), prompt: "test", n: 2 },
+          { model: workers.image("@cf/lykon/dreamshaper-8-lcm"), prompt: "test", images: [image, image] },
         ],
         (request) => Image.generate(request).pipe(Effect.flip),
       )

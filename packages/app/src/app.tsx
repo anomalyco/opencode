@@ -1,4 +1,6 @@
 import "@/index.css"
+import { VoiceProvider } from "@/voice/context"
+import { VoiceOverlay } from "@/voice/composer"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { FileComponentProvider } from "@opencode/ui/context/file"
 import { Font } from "@opencode/ui/font"
@@ -10,6 +12,7 @@ import { type Component, createRenderEffect, ErrorBoundary, type JSX, type Paren
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/shell/commands/command"
 import { DesktopCommands } from "@/shell/commands/desktop"
+import { ProjectIconsProvider } from "@/shell/layout/project-icons"
 import { GlobalProvider } from "@/runtime/server/runtime"
 import { LanguageProvider, UiI18nBridge, type Locale } from "@/runtime/i18n/language"
 import { ServerConnection, ServersProvider } from "@/runtime/server/registry"
@@ -17,7 +20,7 @@ import { SettingsProvider } from "@/settings/model"
 import { TabsProvider } from "@/shell/tabs/tabs"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
-import { ExtensionRoot } from "@/runtime/extension/root"
+import { PluginRoot } from "@/runtime/plugin/root"
 
 export { preloadRoute }
 
@@ -72,9 +75,9 @@ export function AppBaseProviders(
             >
               <QueryProvider>
                 <DialogProvider>
-                  <ExtensionRoot>
+                  <PluginRoot>
                     <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </ExtensionRoot>
+                  </PluginRoot>
                 </DialogProvider>
               </QueryProvider>
             </ErrorBoundary>
@@ -97,12 +100,17 @@ export function AppInterface(props: {
   const Root = (rootProps: ParentProps) => (
     <TabsProvider>
       <GlobalProvider>
-        <BodyTypography />
-        <CommandProvider>
-          <DesktopCommands />
-          {props.children}
-          {rootProps.children}
-        </CommandProvider>
+        <ProjectIconsProvider>
+          <BodyTypography />
+          <CommandProvider>
+            <DesktopCommands />
+            <VoiceProvider>
+              {props.children}
+              {rootProps.children}
+              <VoiceOverlay />
+            </VoiceProvider>
+          </CommandProvider>
+        </ProjectIconsProvider>
       </GlobalProvider>
     </TabsProvider>
   )

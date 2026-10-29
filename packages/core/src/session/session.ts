@@ -176,7 +176,11 @@ export const make = Effect.fn("Session.make")(function* () {
               sessionID: session.id,
               item,
             })
-          }).pipe(instances.provide(session), Effect.provideService(FSUtil.Service, fs))
+          }).pipe(
+            instances.provide(session),
+            Effect.provideService(Database.Service, database),
+            Effect.provideService(FSUtil.Service, fs),
+          )
         }).pipe(
           Effect.catchTag("SessionInbox.LifecycleConflict", () => new PromptConflictError({ sessionID, messageID })),
         )

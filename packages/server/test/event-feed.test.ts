@@ -54,8 +54,8 @@ describe("EventFeed", () => {
           return event.type
         },
       })
-      const first = yield* feed.subscribe
-      const second = yield* feed.subscribe
+      const first = yield* feed.subscribe()
+      const second = yield* feed.subscribe()
       const left = yield* first.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       const right = yield* second.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
 
@@ -69,6 +69,31 @@ describe("EventFeed", () => {
     }),
   )
 
+  it.effect("delivers only the requested event types to filtered subscribers", () =>
+    Effect.gen(function* () {
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, { encode: (event) => event.type })
+      const filtered = yield* feed.subscribe([Credential.Event.Switched.type])
+      const all = yield* feed.subscribe()
+      const left = yield* filtered.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      const right = yield* all.pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+
+      yield* source.publish(event("ignored"))
+      yield* source.publish({
+        id: Event.ID.create(),
+        created: Date.now(),
+        type: Credential.Event.Switched.type,
+        data: {
+          credentialID: Credential.ID.make("cred_test"),
+          integrationID: IntegrationID.make("openai"),
+        },
+      })
+
+      expect(Array.from(yield* Fiber.join(left))).toEqual([Credential.Event.Switched.type])
+      expect(Array.from(yield* Fiber.join(right))).toEqual([Agent.Event.Updated.type, Credential.Event.Switched.type])
+    }),
+  )
+
   it.effect("fails only the subscriber that exceeds its lag capacity", () =>
     Effect.gen(function* () {
       const source = makeSource()
@@ -76,8 +101,8 @@ describe("EventFeed", () => {
         capacity: 1,
         encode: (event) => event.id,
       })
-      const slow = yield* feed.subscribe
-      const fast = yield* feed.subscribe
+      const slow = yield* feed.subscribe()
+      const fast = yield* feed.subscribe()
       const first = yield* Deferred.make<void>()
       const second = yield* Deferred.make<void>()
       const received = new Array<string>()
@@ -117,7 +142,7 @@ describe("EventFeed", () => {
     Effect.gen(function* () {
       const source = makeSource()
       const feed = yield* EventFeed.make(source.observe, { encode: (event) => event.type })
-      const stream = yield* feed.subscribe
+      const stream = yield* feed.subscribe()
       const received = yield* stream.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
 
       yield* source.publish({
@@ -138,7 +163,7 @@ describe("EventFeed", () => {
     Effect.gen(function* () {
       const source = makeSource()
       const feed = yield* EventFeed.make(source.observe, { capacity: 1, encode: (event) => event.type })
-      const stream = yield* feed.subscribe
+      const stream = yield* feed.subscribe()
 
       yield* source.publish(internal("one"))
       yield* source.publish(internal("two"))
@@ -157,13 +182,13 @@ describe("EventFeed", () => {
           return event.id
         },
       })
-      const current = yield* feed.subscribe
+      const current = yield* feed.subscribe()
       const failed = yield* current.pipe(Stream.runCollect, Effect.exit, Effect.forkScoped)
 
       yield* source.publish(event("bad"))
       const exit = yield* Fiber.join(failed)
 
-      const next = yield* feed.subscribe
+      const next = yield* feed.subscribe()
       const received = yield* next.pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* source.publish(event("good"))
 

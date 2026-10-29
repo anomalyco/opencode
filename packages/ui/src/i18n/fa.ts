@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "تغییرات جلسه",
   "ui.sessionReview.title.git": "تغییرات Git",
   "ui.sessionReview.title.branch": "تغییر شعبه",
@@ -71,10 +71,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "برای دسترسی مطمئن به بهترین مدل‌های منبع باز، با قیمت 10 دلار در ماه در OpenCode Go مشترک شوید.",
   "dialog.usageExceeded.freeTier.actionLabel": "مشترک شوید",
-  "dialog.usageExceeded.accountRateLimit.title": "به حد مجاز رفتن رسید",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "به حد مجاز استفاده رسیده است. برای ادامه استفاده از این مدل اکنون، استفاده را از موجودی موجود خود فعال کنید",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "تنظیمات را باز کنید",
   "ui.sessionTurn.status.delegating": "تفویض کار",
   "ui.sessionTurn.status.planning": "برنامه ریزی مراحل بعدی",
   "ui.sessionTurn.status.gatheringContext": "کاوش",
@@ -190,7 +186,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(بدون جواب)",
   "ui.question.review.notAnswered": "(پاسخ داده نشد)",
   "ui.question.multiHint": "همه پاسخ هایی که اعمال می شوند را انتخاب کنید",
-  "ui.question.singleHint": "یک پاسخ را انتخاب کنید",
   "ui.question.custom.placeholder": "پاسخ خود را تایپ کنید…",
   "ui.messagePart.context.match.one": "({{count}} تطابق)",
   "ui.messagePart.context.match.other": "({{count}} تطابق)",
