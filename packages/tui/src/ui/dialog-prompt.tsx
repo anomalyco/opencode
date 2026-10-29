@@ -172,7 +172,7 @@ export function DialogPrompt(props: DialogPromptProps) {
           textColor={props.busy ? theme.text.formfield.disabled : theme.text.formfield.base}
           focusedTextColor={props.busy ? theme.text.formfield.disabled : theme.text.formfield.base}
           cursorColor={props.busy ? theme.background.formfield.disabled : theme.text.base}
-          cursorStyle={config.cursor}
+          cursorStyle={{ ...config.cursor }}
         />
         <Show when={props.busy}>
           <Spinner color={theme.text.muted}>{props.busyText ?? "Working…"}</Spinner>

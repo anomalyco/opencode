@@ -180,33 +180,46 @@ export default function Home() {
                   )}
                 </For>
               </div>
-              <div data-slot="plans" data-audience={audience()}>
-                <For each={plans.filter((plan) => plan.audience === audience())}>
-                  {(plan) => (
-                    <div data-slot="plan" data-plan={plan.id}>
-                      <div data-slot="plan-body">
-                        <p data-slot="name">{plan.name}</p>
-                        <p data-slot="price">
-                          {plan.price} <span>{i18n.t(plan.period)}</span>
-                        </p>
-                        <ul>
-                          <For each={plan.features}>
-                            {(feature) => (
-                              <li>
-                                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                  {plan.marker === "square" ? (
-                                    <path d="M11 5H5V11H11V5Z" fill="currentColor" />
-                                  ) : (
-                                    <path d="M8 3.5V12.5M3.5 8H12.5" stroke="currentColor" />
+              {/* Both audiences stay rendered in one grid cell so switching crossfades between them; the hidden one is
+                  inert and out of the accessibility tree. */}
+              <div data-slot="plans-stack">
+                <For each={audiences}>
+                  {(group) => (
+                    <div
+                      data-slot="plans"
+                      data-audience={group.id}
+                      aria-hidden={audience() !== group.id}
+                      inert={audience() !== group.id}
+                    >
+                      <For each={plans.filter((plan) => plan.audience === group.id)}>
+                        {(plan) => (
+                          <div data-slot="plan" data-plan={plan.id}>
+                            <div data-slot="plan-body">
+                              <p data-slot="name">{plan.name}</p>
+                              <p data-slot="price">
+                                {plan.price} <span>{i18n.t(plan.period)}</span>
+                              </p>
+                              <ul>
+                                <For each={plan.features}>
+                                  {(feature) => (
+                                    <li>
+                                      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                        {plan.marker === "square" ? (
+                                          <path d="M11 5H5V11H11V5Z" fill="currentColor" />
+                                        ) : (
+                                          <path d="M8 3.5V12.5M3.5 8H12.5" stroke="currentColor" />
+                                        )}
+                                      </svg>
+                                      {i18n.t(feature)}
+                                    </li>
                                   )}
-                                </svg>
-                                {i18n.t(feature)}
-                              </li>
-                            )}
-                          </For>
-                        </ul>
-                      </div>
-                      <a href={subscribeUrl}>{i18n.t(plan.cta)}</a>
+                                </For>
+                              </ul>
+                            </div>
+                            <a href={subscribeUrl}>{i18n.t(plan.cta)}</a>
+                          </div>
+                        )}
+                      </For>
                     </div>
                   )}
                 </For>

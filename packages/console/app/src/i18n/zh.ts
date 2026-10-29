@@ -205,7 +205,7 @@ export const dict = {
   "go.plans.individuals": "个人",
   "go.plans.teams": "团队",
   "go.plans.month": "每月",
-  "go.plans.memberMonth": "每位成员每月",
+  "go.plans.memberMonth": "每位成员\n每月",
   "go.plans.plus.cta": "订阅 Go Plus",
   "go.plans.plus.description": "Go Plus 每月 $40，提供更高的使用额度。",
   "go.plans.teams.cta": "订阅 Go Teams",

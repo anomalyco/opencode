@@ -120,6 +120,25 @@ it.live("manages schedules through the experimental API where the session's conf
           prompt: "never",
         }),
       ).rejects.toMatchObject({ _tag: "ForbiddenError" })
+
+      // Code Mode until check works end-to-end with no allow field, and { run, code } together is 400.
+      const codeMatched = await api.experimental.schedule.create({
+        sessionID: session.id,
+        until: { code: 'return { wake: true, message: "models=" + (await tools.opencode.models({})).total }' },
+        prompt: "models checked",
+      })
+      expect(codeMatched).toMatchObject({
+        status: "done",
+        lastOutcome: "fired",
+        lastOutput: expect.stringContaining("models="),
+        until: { type: "code" },
+      })
+      const mixed = await handlerRequest("/api/experimental/schedule", {
+        sessionID: session.id,
+        until: { run: "true", code: "return true" },
+        prompt: "ping",
+      })
+      expect(mixed.status).toBe(400)
     })
   }).pipe(Effect.scoped),
 )

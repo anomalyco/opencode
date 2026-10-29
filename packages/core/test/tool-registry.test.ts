@@ -1225,11 +1225,11 @@ describe("Tool", () => {
       })
 
       expect(execution).toMatchObject({ content: [{ type: "text" }] })
+      expect(execution.metadata?.toolCalls).toEqual([{ tool: "echo", status: "completed", input: { text: "request" } }])
       expect(executed).toEqual(["old:request"])
       expect(progress).toEqual([
         { toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] },
         { stage: "old" },
-        { toolCalls: [{ tool: "echo", status: "completed", input: { text: "request" } }] },
       ])
     }),
   )
