@@ -735,7 +735,7 @@ jobs:
 
   publish-discord:
     needs: [plan, publish-github-release]
-    if: ${{ !cancelled() && !failure() && needs.plan.outputs.channel == 'latest' }}
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
     permissions:
