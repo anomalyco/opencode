@@ -502,9 +502,10 @@ export const layer = (options?: Options) =>
         })
       })
 
-      // A remote server at a private IP with no explicit TLS config connects with the certificate
-      // this project already trusts (if any), pinned by fingerprint. A rotated certificate fails the
-      // connection instead of being silently accepted.
+      // A remote server at a private IP with no explicit TLS config connects pinned by the
+      // certificate's fingerprint (if this project already trusts one), which also covers
+      // appliance certificates without IP SANs. A rotated certificate fails the connection
+      // instead of being silently accepted.
       const pinTrusted = Effect.fnUntraced(function* (config: Mcp.ServerConfig) {
         if (config.type !== "remote" || config.tls || !URL.canParse(config.url)) return config
         const url = new URL(config.url)
@@ -521,7 +522,7 @@ export const layer = (options?: Options) =>
               `TLS certificate for ${host}:${McpTls.port(url)} changed since it was last trusted: expected ${stored.fingerprint}, got ${cert.fingerprint}. If the appliance rotated its certificate, re-pin it with: opencode mcp trust ${config.url} --force`,
             ),
           )
-        return { ...config, tls: { ca_pem: cert.pem } }
+        return { ...config, tls: { fingerprint: cert.fingerprint } }
       })
 
       const explainFailure = Effect.fnUntraced(function* (config: Mcp.ServerConfig, error: unknown) {
@@ -532,6 +533,9 @@ export const layer = (options?: Options) =>
         const { McpTls } = yield* Effect.promise(() => import("./tls.js"))
         const host = McpTls.privateHost(url.hostname)
         if (!host) return message
+        // Only certificate verification failures get the trust hint; network, protocol, and HTTP
+        // failures keep their original message (and do not pay for a TLS probe).
+        if (!McpTls.isTlsCertificateError(error)) return message
         const portNumber = McpTls.port(url)
         const cert = yield* presentedCertificate(url).pipe(Effect.orElseSucceed(() => undefined))
         if (!cert) return message

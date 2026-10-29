@@ -24,10 +24,11 @@ import { Cause, Effect, Exit, Layer, Schedule, Stream } from "effect"
 import { registerIntegrationPolicy } from "./fixture/policy"
 import { location } from "./fixture/location"
 import { hostEnvironmentLayer } from "./fixture/environment"
-import { CERT, CERT_ROTATED, KEY_ROTATED, startTlsMcpServer } from "./fixture/tls-server"
+import { CERT, CERT_APPLIANCE, CERT_ROTATED, KEY_APPLIANCE, KEY_ROTATED, startTlsMcpServer } from "./fixture/tls-server"
 
 const FINGERPRINT = fingerprintOf(CERT)
 const FINGERPRINT_ROTATED = fingerprintOf(CERT_ROTATED)
+const FINGERPRINT_APPLIANCE = fingerprintOf(CERT_APPLIANCE)
 
 function fingerprintOf(cert: string) {
   return createHash("sha256").update(Buffer.from(cert.split("\n").slice(1, -1).join(""), "base64")).digest("hex")
@@ -271,6 +272,31 @@ describe("trust on first use", () => {
 
           const after = yield* mcp.trustInspect({ url: server.url })
           expect(after.stored?.fingerprint).toBe(FINGERPRINT)
+
+          yield* mcp.connect("appliance")
+          connected(yield* settled(mcp), "after trust")
+        }).pipe(Effect.scoped, Effect.provide(trustMcpLayer(server.url))),
+      )
+    } finally {
+      await server.close()
+    }
+  })
+
+  test("an appliance certificate without IP SANs connects after being trusted", async () => {
+    const server = await startTlsMcpServer({ cert: CERT_APPLIANCE, key: KEY_APPLIANCE })
+    try {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          yield* seedProject()
+          const mcp = yield* Mcp.Service
+          const error = failedError(yield* settled(mcp), "first use")
+          expect(error).toContain(`TLS certificate for 127.0.0.1:${server.port} is not trusted`)
+          expect(error).toContain(`SHA256:${FINGERPRINT_APPLIANCE}`)
+          expect(error).toContain("Subject: CN=appliance.local")
+
+          const result = yield* mcp.trust({ url: server.url })
+          expect(result.fingerprint).toBe(FINGERPRINT_APPLIANCE)
+          expect(result.replaced).toBe(false)
 
           yield* mcp.connect("appliance")
           connected(yield* settled(mcp), "after trust")
