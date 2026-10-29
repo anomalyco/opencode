@@ -1,6 +1,10 @@
 import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
 
 export const dict = {
+  "migration.v1.title": "One-way upgrade to OpenCode V2",
+  "migration.v1.description":
+    "Back up your OpenCode data and configuration, then stop all V1 processes. This upgrade applies to every project sharing this environment, not just the current project. Use V2 from now on: later V1 changes will not be imported, and V2 changes cannot be sent back to V1. Uninstalling or reinstalling V2 does not restore the V1 environment.",
+  "migration.v1.confirm": "Use V2 from now on",
   "experiment.voiceCalls": "Voice calls",
   "voice.call": "Call",
   "voice.mute": "Mute",
@@ -782,7 +786,8 @@ export const dict = {
   "settings.experimental.row.newModelPicker.title": "New model picker",
   "settings.experimental.row.newModelPicker.description": "Preview the redesigned model picker",
   "settings.experimental.row.foldUserMessages.title": "Fold long messages",
-  "settings.experimental.row.foldUserMessages.description": "Fold your messages past 12 lines behind a Read more button",
+  "settings.experimental.row.foldUserMessages.description":
+    "Fold your messages past 12 lines behind a Read more button",
   "settings.plugins.reload": "Reload",
   "settings.plugins.status.loading": "Loading",
   "settings.plugins.status.failed": "Failed",

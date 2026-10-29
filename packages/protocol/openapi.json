@@ -14510,7 +14510,7 @@
                       "properties": {
                         "status": {
                           "type": "string",
-                          "enum": ["required", "completed"]
+                          "enum": ["confirmation_required", "required", "completed"]
                         }
                       },
                       "required": ["status"],
@@ -14601,6 +14601,59 @@
         },
         "description": "Return the progress of the V1 to V2 session history migration.",
         "summary": "Get V1 migration status"
+      }
+    },
+    "/api/experimental/migration/v1/accept": {
+      "post": {
+        "tags": ["migration"],
+        "operationId": "experimental.migration.v1.accept",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Acknowledge that all projects sharing this server's data and configuration must use V2. Stop V1 first; later V1 changes are not synchronized.",
+        "summary": "Accept the one-way V1 to V2 upgrade",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "acknowledged": {
+                    "type": "boolean",
+                    "enum": [true]
+                  }
+                },
+                "required": ["acknowledged"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/websearch/provider": {

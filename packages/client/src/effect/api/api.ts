@@ -2559,7 +2559,7 @@ export interface DebugApi<E = never> {
 }
 
 export type ExperimentalMigrationV1StatusOutput =
-  | { readonly status: "required" | "completed" }
+  | { readonly status: "confirmation_required" | "required" | "completed" }
   | {
       readonly status: "running"
       readonly progress: {
@@ -2574,8 +2574,17 @@ export type ExperimentalMigrationV1StatusOperation<E = never> = () => Effect.Eff
   E
 >
 
+export type ExperimentalMigrationV1AcceptInput = { readonly acknowledged: true }
+export type ExperimentalMigrationV1AcceptOutput = void
+export type ExperimentalMigrationV1AcceptOperation<E = never> = (
+  input: ExperimentalMigrationV1AcceptInput,
+) => Effect.Effect<ExperimentalMigrationV1AcceptOutput, E>
+
 export interface ExperimentalMigrationApi<E = never> {
-  readonly v1: { readonly status: ExperimentalMigrationV1StatusOperation<E> }
+  readonly v1: {
+    readonly status: ExperimentalMigrationV1StatusOperation<E>
+    readonly accept: ExperimentalMigrationV1AcceptOperation<E>
+  }
 }
 
 export type WebsearchProvidersInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
@@ -2845,6 +2854,15 @@ export type MigrationV1StatusOutput = ExperimentalMigrationV1StatusOutput
 /** @deprecated Use `ExperimentalMigrationV1StatusOperation`. Removed in the next minor. */
 export type MigrationV1StatusOperation<E = never> = ExperimentalMigrationV1StatusOperation<E>
 
+/** @deprecated Use `ExperimentalMigrationV1AcceptInput`. Removed in the next minor. */
+export type MigrationV1AcceptInput = ExperimentalMigrationV1AcceptInput
+
+/** @deprecated Use `ExperimentalMigrationV1AcceptOutput`. Removed in the next minor. */
+export type MigrationV1AcceptOutput = ExperimentalMigrationV1AcceptOutput
+
+/** @deprecated Use `ExperimentalMigrationV1AcceptOperation`. Removed in the next minor. */
+export type MigrationV1AcceptOperation<E = never> = ExperimentalMigrationV1AcceptOperation<E>
+
 /** @deprecated Use `ExperimentalUsageLimitsInput`. Removed in the next minor. */
 export type UsageLimitsInput = ExperimentalUsageLimitsInput
 
@@ -2942,6 +2960,9 @@ export interface AppApi<E = never> {
     readonly v1: {
       /** @deprecated Use `client.experimental.migration.v1.status`. Removed in the next minor. */
       readonly status: ExperimentalMigrationV1StatusOperation<E>
+
+      /** @deprecated Use `client.experimental.migration.v1.accept`. Removed in the next minor. */
+      readonly accept: ExperimentalMigrationV1AcceptOperation<E>
     }
   }
 

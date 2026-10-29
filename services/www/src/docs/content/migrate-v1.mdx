@@ -29,6 +29,24 @@ compatibility bug rather than an expected migration requirement.
 
 ## Install V2
 
+<Callout type="warning">
+  Upgrading is a one-way switch for every project sharing your OpenCode data and configuration, not just the project you
+  open first. Back up that environment and stop all V1 processes before accepting the V2 migration prompt. Use V2 from
+  then on: sessions created or updated later in V1 are not synchronized, and V2 history cannot be sent back to V1.
+</Callout>
+
+V2 asks for this acknowledgment once per shared database, including databases imported by an earlier V2 release.
+Cancelling leaves the history import paused. Headless clients can inspect and accept the same boundary explicitly:
+
+```sh
+opencode api get /api/experimental/migration/v1
+opencode api post /api/experimental/migration/v1/accept --data '{"acknowledged":true}'
+```
+
+Uninstalling or reinstalling V2 does not reset this boundary or restore V1. Returning to V1 requires separately saving
+V2-only work and restoring the complete pre-upgrade data and configuration backup. Keep any V1 validation environment
+fully isolated, including project-local configuration and plugins.
+
 Install the V2 terminal client with the [terminal startup guide](/cli).
 
 You do not need to rewrite everything before starting V2. A practical migration is:

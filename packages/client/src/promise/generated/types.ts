@@ -4470,9 +4470,13 @@ export type DebugLocationEvictInput = { readonly location?: { readonly directory
 export type DebugLocationEvictOutput = void
 
 export type ExperimentalMigrationV1StatusOutput =
-  | { status: "required" | "completed" }
+  | { status: "confirmation_required" | "required" | "completed" }
   | { status: "running"; progress: { label: string; numerator?: number | undefined; denominator?: number | undefined } }
   | { status: "error"; error: string }
+
+export type ExperimentalMigrationV1AcceptInput = { readonly acknowledged: true }
+
+export type ExperimentalMigrationV1AcceptOutput = void
 
 export type WebsearchProvidersInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
@@ -4642,6 +4646,12 @@ export type FileUnwatchOutput = ExperimentalFileUnwatchOutput
 
 /** @deprecated Use `ExperimentalMigrationV1StatusOutput`. Removed in the next minor. */
 export type MigrationV1StatusOutput = ExperimentalMigrationV1StatusOutput
+
+/** @deprecated Use `ExperimentalMigrationV1AcceptInput`. Removed in the next minor. */
+export type MigrationV1AcceptInput = ExperimentalMigrationV1AcceptInput
+
+/** @deprecated Use `ExperimentalMigrationV1AcceptOutput`. Removed in the next minor. */
+export type MigrationV1AcceptOutput = ExperimentalMigrationV1AcceptOutput
 
 /** @deprecated Use `ExperimentalUsageLimitsInput`. Removed in the next minor. */
 export type UsageLimitsInput = ExperimentalUsageLimitsInput

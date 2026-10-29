@@ -281,6 +281,8 @@ import type {
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
   ExperimentalMigrationV1StatusOutput,
+  ExperimentalMigrationV1AcceptInput,
+  ExperimentalMigrationV1AcceptOutput,
   WebsearchProvidersInput,
   WebsearchProvidersOutput,
   WebsearchQueryInput,
@@ -1490,6 +1492,18 @@ export function make(options: ClientOptions) {
               },
               requestOptions,
             ),
+          accept: (input: ExperimentalMigrationV1AcceptInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalMigrationV1AcceptOutput>(
+              {
+                method: "POST",
+                path: `/api/experimental/migration/v1/accept`,
+                body: { acknowledged: input["acknowledged"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: true,
+              },
+              requestOptions,
+            ),
         },
       },
       usage: {
@@ -2548,6 +2562,8 @@ export function make(options: ClientOptions) {
       v1: {
         /** @deprecated Use `client.experimental.migration.v1.status`. Removed in the next minor. */
         status: client.experimental.migration.v1.status,
+        /** @deprecated Use `client.experimental.migration.v1.accept`. Removed in the next minor. */
+        accept: client.experimental.migration.v1.accept,
       },
     },
     /** @deprecated Use `client.experimental.usage`. Removed in the next minor. */

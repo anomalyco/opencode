@@ -2,6 +2,10 @@ import { OpenCode, type ExperimentalMigrationV1StatusOutput } from "@opencode/cl
 import { useLanguage } from "@opencode/app/desktop"
 import { Loader } from "@opencode/ui/loader"
 import { showToast, toaster, Toast } from "@opencode/ui/toast"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Dialog, DialogHeader, DialogTitleGroup, DialogFooter } from "@opencode/ui/dialog"
+import { Button } from "@opencode/ui/button"
+import { createStore } from "solid-js/store"
 import { createRoot, createSignal, onCleanup, onMount } from "solid-js"
 import type { ServerReadyData } from "../shared/ipc-contract"
 
@@ -9,6 +13,7 @@ type Progress = Extract<ExperimentalMigrationV1StatusOutput, { status: "running"
 
 export function MigrationStatus(props: { server: ServerReadyData }) {
   const language = useLanguage()
+  const dialog = useDialog()
   const [progress, setProgress] = createSignal<Progress>()
   const abort = new AbortController()
   let toastID: number | undefined
@@ -88,6 +93,53 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
     void (async () => {
       while (true) {
         const status = await client.experimental.migration.v1.status({ signal: abort.signal })
+        if (status.status === "confirmation_required") {
+          const accepted = await new Promise<boolean>((resolve) => {
+            dialog.show(
+              () => {
+                const [state, setState] = createStore({ pending: false })
+                const accept = async () => {
+                  setState("pending", true)
+                  await client.experimental.migration.v1
+                    .accept({ acknowledged: true }, { signal: abort.signal })
+                    .then(() => {
+                      resolve(true)
+                      dialog.close()
+                    })
+                    .catch((error) => {
+                      if (abort.signal.aborted) return
+                      showToast({
+                        variant: "error",
+                        title: language.t("toast.migration.failed.title"),
+                        description: error instanceof Error ? error.message : String(error),
+                      })
+                    })
+                    .finally(() => setState("pending", false))
+                }
+                return (
+                  <Dialog fit preventBackdropDismiss>
+                    <DialogHeader hideClose>
+                      <DialogTitleGroup
+                        title={language.t("migration.v1.title")}
+                        description={language.t("migration.v1.description")}
+                      />
+                    </DialogHeader>
+                    <DialogFooter>
+                      <Button variant="ghost" disabled={state.pending} onClick={() => dialog.close()}>
+                        {language.t("common.cancel")}
+                      </Button>
+                      <Button disabled={state.pending} onClick={accept}>
+                        {language.t("migration.v1.confirm")}
+                      </Button>
+                    </DialogFooter>
+                  </Dialog>
+                )
+              },
+              () => resolve(false),
+            )
+          })
+          if (!accepted) return
+        }
         setProgress(status.status === "running" ? status.progress : undefined)
 
         if (status.status === "running") show()

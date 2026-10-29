@@ -4,10 +4,12 @@ import { Effect } from "effect"
 import { Api } from "../api"
 
 export const MigrationHandler = HttpApiBuilder.group(Api, "server.migration", (handlers) =>
-  handlers.handle(
-    "migration.v1.status",
-    Effect.fn(function* () {
-      return yield* V1Migration.status()
-    }),
-  ),
+  handlers
+    .handle(
+      "migration.v1.status",
+      Effect.fn(function* () {
+        return yield* V1Migration.status()
+      }),
+    )
+    .handle("migration.v1.accept", () => V1Migration.accept()),
 )

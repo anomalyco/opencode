@@ -281,6 +281,8 @@ import type {
   DebugLocationEvictInput,
   DebugLocationEvictOutput,
   ExperimentalMigrationV1StatusOutput,
+  ExperimentalMigrationV1AcceptInput,
+  ExperimentalMigrationV1AcceptOutput,
   WebsearchProvidersInput,
   WebsearchProvidersOutput,
   WebsearchQueryInput,
@@ -1732,8 +1734,16 @@ const EndpointExperimentalMigrationV1Status = (raw: RawClient["server.migration"
     raw["migration.v1.status"]({}).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointExperimentalMigrationV1Accept =
+  (raw: RawClient["server.migration"]) => (input: ExperimentalMigrationV1AcceptInput) =>
+    preserveEffect<ExperimentalMigrationV1AcceptOutput>()(
+      raw["migration.v1.accept"]({ payload: { acknowledged: input["acknowledged"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
 const adaptGroupExperimentalMigration = (raw: RawClient["server.migration"]) => ({
-  v1: { status: EndpointExperimentalMigrationV1Status(raw) },
+  v1: { status: EndpointExperimentalMigrationV1Status(raw), accept: EndpointExperimentalMigrationV1Accept(raw) },
 })
 
 const EndpointWebsearchProviders = (raw: RawClient["server.websearch"]) => (input?: WebsearchProvidersInput) =>
@@ -1909,6 +1919,8 @@ const adaptClient = (raw: RawClient) => {
       v1: {
         /** @deprecated Use `client.experimental.migration.v1.status`. Removed in the next minor. */
         status: client.experimental.migration.v1.status,
+        /** @deprecated Use `client.experimental.migration.v1.accept`. Removed in the next minor. */
+        accept: client.experimental.migration.v1.accept,
       },
     },
     /** @deprecated Use `client.experimental.usage`. Removed in the next minor. */

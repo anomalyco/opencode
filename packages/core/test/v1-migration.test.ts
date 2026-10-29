@@ -891,6 +891,7 @@ describe("V1Migration database workflow", () => {
         const db = yield* makeDb
         yield* DatabaseMigration.apply(db)
         yield* createLegacyTables(db)
+        yield* V1Migration.accept().pipe(Effect.provideService(Database.Service, { db }))
         return yield* effect.pipe(
           Effect.provide(
             AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, FSUtil.node]), [
@@ -908,6 +909,64 @@ describe("V1Migration database workflow", () => {
         expect(yield* V1Migration.run()).toEqual({ status: "completed" })
         expect(yield* V1Migration.status()).toEqual({ status: "completed" })
         expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+      }),
+    )
+  })
+
+  test("startup waits for the shared-profile acknowledgment before importing V1 history", async () => {
+    await database(
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const db = database.db
+        yield* db.run(sql`DELETE FROM kv WHERE key = 'migration.v1-v2.accepted'`)
+        yield* db.run(sql`
+          INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+          VALUES ('ses_cutover', 'global', 'cutover', '/tmp/test', 'V1 history', '1.19.5', 1, 2)
+        `)
+        yield* Layer.build(V1Migration.layer)
+        expect(yield* V1Migration.status()).toEqual({ status: "confirmation_required" })
+        expect(yield* db.get(sql`SELECT id FROM session_v2 WHERE id = 'ses_cutover'`)).toBeUndefined()
+        expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toBeUndefined()
+
+        yield* V1Migration.accept()
+        yield* V1Migration.accept()
+        yield* V1Migration.status().pipe(
+          Effect.filterOrFail((status) => status.status === "completed"),
+          Effect.retry(Schedule.spaced("10 millis")),
+        )
+        expect(yield* db.get(sql`SELECT title FROM session_v2 WHERE id = 'ses_cutover'`)).toEqual({
+          title: "V1 history",
+        })
+        expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2.accepted'`)).toEqual({
+          value: "true",
+        })
+      }),
+    )
+  })
+
+  test("completed imports require acknowledgment without replaying subsequent V1 changes", async () => {
+    await database(
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const db = database.db
+        yield* V1Migration.run()
+        yield* db.run(sql`
+          INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+          VALUES ('ses_late', 'global', 'late', '/tmp/test', 'Later V1 history', '1.19.5', 3, 4)
+        `)
+        yield* db.run(sql`
+          INSERT INTO session_v2 (id, project_id, slug, directory, title, version, time_created, time_updated)
+          VALUES ('ses_native', 'global', 'native', '/tmp/test', 'Keep V2 history', '2', 3, 4)
+        `)
+        yield* db.run(sql`DELETE FROM kv WHERE key = 'migration.v1-v2.accepted'`)
+        expect(yield* V1Migration.status()).toEqual({ status: "confirmation_required" })
+        yield* V1Migration.accept()
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* V1Migration.status()).toEqual({ status: "completed" })
+        expect(yield* db.get(sql`SELECT id FROM session_v2 WHERE id = 'ses_late'`)).toBeUndefined()
+        expect(yield* db.get(sql`SELECT title FROM session_v2 WHERE id = 'ses_native'`)).toEqual({
+          title: "Keep V2 history",
+        })
       }),
     )
   })
