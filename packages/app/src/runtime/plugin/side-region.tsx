@@ -220,6 +220,18 @@ export function PaneTabs(props: {
 
   const modifier = closedTabsModifier()
 
+  // The tab a right click opened the tab menu on, and where. One menu serves the strip: a menu around each trigger
+  // would register the tab in the menu's item collection instead of the strip's.
+  const [tabMenu, setTabMenu] = createStore({ open: false, key: "", x: 0, y: 0 })
+
+  const closable = createMemo(() =>
+    props.pane.keys().filter((key) => {
+      const tab = props.region.entry(key)?.tab
+
+      return !!tab && !tab.pinned && tab.closable !== false
+    }),
+  )
+
   // Without a new tab item, "+" opens a host-owned new tab view listing the launchers, as ⌘T does inside the region.
   const current = createMemo(() => props.region.shownNewTab(props.pane.id))
   const add = () => props.region.openNewTab(props.pane.id)
@@ -255,6 +267,17 @@ export function PaneTabs(props: {
               capture: true,
             })
             onCleanup(createTabStripScroll({ el, lead: props.pane.lead }))
+          }}
+          onContextMenu={(event: MouseEvent) => {
+            const key =
+              event.target instanceof Element
+                ? event.target.closest<HTMLElement>("[data-pane-tab]")?.dataset.paneTab
+                : undefined
+
+            // A label's own context menu, such as a terminal's, handles the click first.
+            if (!key || event.defaultPrevented) return
+            event.preventDefault()
+            setTabMenu({ open: true, key, x: event.clientX, y: event.clientY })
           }}
         >
           <For each={props.pane.keys()}>
@@ -348,6 +371,32 @@ export function PaneTabs(props: {
             </Show>
           </div>
         </Tabs.List>
+        <Menu
+          open={tabMenu.open}
+          onOpenChange={(open) => setTabMenu("open", open)}
+          modal={false}
+          placement="bottom-start"
+          gutter={0}
+          getAnchorRect={() => ({ x: tabMenu.x, y: tabMenu.y, width: 0, height: 0 })}
+        >
+          <Menu.Portal>
+            <Menu.Content>
+              <Menu.Item disabled={!closable().includes(tabMenu.key)} onSelect={() => props.region.close(tabMenu.key)}>
+                {language.t("common.closeTab")}
+              </Menu.Item>
+              <Menu.Item
+                disabled={!closable().some((key) => key !== tabMenu.key)}
+                onSelect={() => {
+                  const keep = tabMenu.key
+
+                  closable().forEach((key) => key !== keep && props.region.close(key))
+                }}
+              >
+                {language.t("session.tab.closeOthers")}
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
         <div
           data-slot="session-side-panel-actions"
           class="session-review-v2-open-in-app-slot h-[var(--tabs-bar-height)] shrink-0 flex items-center gap-2 pe-3"

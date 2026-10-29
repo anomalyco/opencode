@@ -212,6 +212,54 @@ test("closing the last New tab closes the side region, and only a New tab lists 
   await expect(review).toBeVisible()
 })
 
+test("tabs in a narrow side strip shrink to keep their close buttons, and a tab's menu closes the others", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 700 })
+  const directory = "C:/OpenCode/NarrowStrip"
+  const key = `local\u0000${base64Encode(directory)}/ses_narrowstrip`
+  const files = ["a.md", "a-file-name-long-enough-to-overflow-the-side-strip-by-itself.md", "b.md"]
+
+  await openSession(page, {
+    name: "NarrowStrip",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_narrowstrip: { review: true, sessionWidth: 640 } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: { [key]: { all: files.map((file) => `file://${file}`), active: `file://${files[1]}` } },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  const add = side.getByRole("button", { name: "Add tab", exact: true })
+  await expect(side.getByRole("tab", { name: files[1], exact: true })).toHaveAttribute("aria-selected", "true")
+
+  // Every tab's close button stays left of "+", instead of the strip scrolling it away under its edge fade.
+  const end = (await add.boundingBox())!.x
+  const closes = side.locator('[data-pane-strip="side"] [data-slot="tabs-trigger-close-button"]')
+  await expect(closes).toHaveCount(files.length)
+
+  for (const close of await closes.all()) {
+    const box = (await close.boundingBox())!
+    expect(box.x + box.width).toBeLessThanOrEqual(end)
+  }
+
+  await side.getByRole("tab", { name: "b.md", exact: true }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Close other tabs", exact: true }).click()
+  await expect(side.getByRole("tab")).toHaveCount(1)
+  await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  // With nothing else to close, the menu offers only the tab itself.
+  await side.getByRole("tab", { name: "b.md", exact: true }).click({ button: "right" })
+  await expect(page.getByRole("menuitem", { name: "Close other tabs", exact: true })).toBeDisabled()
+  await page.getByRole("menuitem", { name: "Close tab", exact: true }).click()
+  await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveCount(0)
+})
+
 // A DOM mark survives only while the same node stays mounted.
 function mark(locator: Locator) {
   return locator.evaluate((element) => element.setAttribute("data-e2e-mounted", "original"))

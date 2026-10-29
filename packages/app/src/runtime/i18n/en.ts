@@ -582,6 +582,7 @@ export const dict = {
   "session.tab.more": "More...",
   "session.view.select": "Session view",
   "session.tab.add": "Add tab",
+  "session.tab.closeOthers": "Close other tabs",
   "session.tab.recentHint": "Hold {{key}} for recently closed",
   "session.tab.showMore": "Show more",
   "session.tab.new": "New tab",
