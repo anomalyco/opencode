@@ -119,6 +119,8 @@ const appGlobalBindingCommands = ["session.list", "session.new", "open.menu"] as
 const sessionTabBindingCommands = [
   "session.tab.next",
   "session.tab.previous",
+  "session.tab.move_up",
+  "session.tab.move_down",
   "session.tab.next_unread",
   "session.tab.previous_unread",
   "session.tab.close",
@@ -749,6 +751,13 @@ function App() {
   })
 
   const connected = useConnected()
+  const moveActiveTab = (direction: 1 | -1) => {
+    const sessionID = sessionTabs.current()
+    if (!sessionID) return
+    const index = sessionTabs.tabs().findIndex((tab) => tab.sessionID === sessionID)
+    if (index === -1) return
+    sessionTabs.move(sessionID, index + direction)
+  }
   const appCommands = createMemo(() =>
     [
       {
@@ -860,6 +869,22 @@ function App() {
         palette: undefined,
         enabled: sessionTabs.enabled,
         run: () => sessionTabs.cycle(-1),
+      },
+      {
+        name: "session.tab.move_up",
+        title: "Move tab up",
+        category: "Session",
+        palette: undefined,
+        enabled: sessionTabs.enabled,
+        run: () => moveActiveTab(-1),
+      },
+      {
+        name: "session.tab.move_down",
+        title: "Move tab down",
+        category: "Session",
+        palette: undefined,
+        enabled: sessionTabs.enabled,
+        run: () => moveActiveTab(1),
       },
       {
         name: "session.tab.next_unread",

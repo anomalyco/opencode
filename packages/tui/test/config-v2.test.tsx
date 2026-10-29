@@ -159,6 +159,8 @@ test("preserves current navigation defaults", () => {
   expect(config.keybinds.get("open.menu")).toMatchObject([{ key: "ctrl+o" }])
   expect(config.keybinds.get("session.tab.next")).toMatchObject([{ key: "ctrl+tab,alt+down" }])
   expect(config.keybinds.get("session.tab.previous")).toMatchObject([{ key: "ctrl+shift+tab,alt+up" }])
+  expect(config.keybinds.get("session.tab.move_up")).toMatchObject([{ key: "ctrl+alt+up" }])
+  expect(config.keybinds.get("session.tab.move_down")).toMatchObject([{ key: "ctrl+alt+down" }])
   expect(config.keybinds.get("session.tab.next_unread")).toMatchObject([{ key: "alt+shift+down" }])
   expect(config.keybinds.get("session.tab.previous_unread")).toMatchObject([{ key: "alt+shift+up" }])
   expect(config.keybinds.get("session.tab.reopen")).toMatchObject([{ key: "ctrl+shift+t" }])
@@ -179,6 +181,8 @@ test("preserves migrated v1 keybind defaults", () => {
     ["prompt.queue", "prompt_queue"],
     ["session.delete", "session_delete"],
     ["session.list", "session_list"],
+    ["session.tab.move_up", "session_tab_move_up"],
+    ["session.tab.move_down", "session_tab_move_down"],
     ["agent.list", "agent_list"],
   ] as const
 
