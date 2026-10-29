@@ -1,5 +1,22 @@
 import { isUnauthorizedError } from "@opencode/client"
 
+export function watchWebAssets(request: typeof fetch, info: URL) {
+  const state = { checking: false }
+
+  window.addEventListener("vite:preloadError", () => {
+    if (state.checking) return
+    state.checking = true
+
+    // CSS and module loads do not use the API fetch wrapper. Check auth before
+    // recovery, and keep the original error for offline or missing assets.
+    void request(info, { cache: "no-store", signal: AbortSignal.timeout(10_000) })
+      .catch(() => undefined)
+      .finally(() => {
+        state.checking = false
+      })
+  })
+}
+
 export function createWebFetch(): typeof fetch {
   const auth = { refreshing: false }
 
