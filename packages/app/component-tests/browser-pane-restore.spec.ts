@@ -637,6 +637,15 @@ story("keeps the browser launcher available when the first attachment suspends",
   await expect(root.getByTestId("add-shortcut")).toHaveText(mac ? "⌃⌘B" : "Ctrl+Alt+B")
 })
 
+story("hides the browser launcher after another attachment replaces the pane", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+
+  await root.getByRole("button", { name: "Replace pane", exact: true }).click()
+  await expect(root.getByTestId("add-shortcut")).toHaveText("none")
+})
 story("keeps a restored browser tab selected and undrawn until the desktop's first inventory", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const tabs = root.getByRole("tab")

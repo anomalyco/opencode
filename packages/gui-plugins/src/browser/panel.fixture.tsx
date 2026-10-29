@@ -1158,6 +1158,16 @@ export function mountBrowserRegion(input: RegionHost) {
                 Blank page
               </button>
               <button onClick={() => setStore("away", true)}>Pane away</button>
+              <button onClick={() => {
+                const binding = latest()?.binding
+                if (binding) {
+                  listeners.forEach((listener) =>
+                    listener({ binding, event: { type: "state", state: null, error: "browser.pane.replaced" } }),
+                  )
+                }
+              }}>
+                Replace pane
+              </button>
               <button onClick={() => setStore("away", false)}>Pane back</button>
             </nav>
             <iframe

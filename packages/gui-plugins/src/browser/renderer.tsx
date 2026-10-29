@@ -177,7 +177,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     const value = model()
 
     // Opening the launcher can wake or reconnect a pane that is available but not attached.
-    if (!view || !value?.available(view)) return undefined
+    if (!view || !value?.available(view) || value.error(view) === ctx.t("replaced")) return undefined
 
     // A launcher of the side panel's new tab view, between Review and Terminal.
     return {
