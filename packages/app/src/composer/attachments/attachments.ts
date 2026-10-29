@@ -17,13 +17,15 @@ type PromptTarget = {
 export type ComposerAttachmentConfig = {
   picker?: (
     options: { defaultPath?: string; multiple?: boolean; accept?: string[] },
-    onFile: (file: File) => Promise<unknown>,
+    onFile: (file: File) => Promise<boolean>,
   ) => Promise<void>
   directory: () => string
   destination: () => AttachmentDestination
   isDialogActive: () => boolean
   duplicate: () => void
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a failed attachment is opaque; the host formats it
   onError: (error: unknown) => void
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a failed upload is opaque; the host formats it
   onUploadError: (error: unknown) => void
   readClipboardImage?: () => Promise<File | null>
   getPathForFile?: (file: File) => string
@@ -130,7 +132,7 @@ export function createComposerAttachments(
       .track({ id, filename: file.name, mime, size: file.size }, (report, signal) =>
         destination.upload(file, report, signal),
       )
-      .catch((error: unknown) => {
+      .catch((error) => {
         input.onUploadError(error)
 
         return undefined
@@ -202,6 +204,7 @@ export function createComposerAttachments(
       return
     }
 
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- probing for a deprecated browser API that some environments lack
     if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return
     put()
   }
