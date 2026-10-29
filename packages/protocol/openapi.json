@@ -21222,6 +21222,7 @@
           },
           "times": {
             "type": "integer",
+            "maximum": 9007199254740991,
             "exclusiveMinimum": 0
           }
         },
@@ -21263,11 +21264,13 @@
           },
           "remainingRuns": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "runCount": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "lastFiredAt": {
             "type": "number"
