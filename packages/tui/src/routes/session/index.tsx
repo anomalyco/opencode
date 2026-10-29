@@ -349,7 +349,7 @@ export function Session(props: {
       editor.reconnect(info.location.directory)
       setSynced(true)
     })().catch((error) => {
-      if (route.sessionID !== sessionID) return
+      if (superseded) return
       toast.show({
         message: errorMessage(error),
         variant: "error",

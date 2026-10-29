@@ -64,7 +64,7 @@ const layer = Layer.effect(
         if (!info) return yield* new Session.NotFoundError({ sessionID: input.sessionID })
         const data = {
           info,
-          messages: (yield* sessions.messages({ sessionID: input.sessionID, order: "asc" })).filter(isSettled),
+          messages: (yield* store.messages({ sessionID: input.sessionID, order: "asc" })).filter(isSettled),
         }
         return input.sanitize ? sanitize(data) : data
       }),

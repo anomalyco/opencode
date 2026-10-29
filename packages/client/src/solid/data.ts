@@ -755,7 +755,8 @@ export function createData(config: CreateDataInput) {
   function handleEvent(event: OpenCodeEvent) {
     switch (event.type) {
       case "server.connected": {
-        familyRouteMissing = false
+        // A client with a connection resets on disconnect instead, because reads start before this event is delivered.
+        if (!config.connection) familyRouteMissing = false
         const updates = new Map<string, DataSessionStatus | undefined>()
         activeUpdates = updates
         refresh(() =>
@@ -869,22 +870,23 @@ export function createData(config: CreateDataInput) {
         return
       case "session.metadata.updated":
         // The event carries the whole record, so keys it drops must go too.
-        if (store.session.info[event.data.sessionID])
-          setStore("session", "info", event.data.sessionID, "metadata", reconcile(event.data.metadata))
+        patchSession(event.data.sessionID, { metadata: event.data.metadata }, event.created)
         return
       case "session.archived":
       case "session.unarchived":
-        patchSession(event.data.sessionID, {}, event.created)
         observe(event.data.sessionID, () => {
-          if (store.session.info[event.data.sessionID])
-            setStore(
-              "session",
-              "info",
-              event.data.sessionID,
-              "time",
-              "archived",
-              event.type === "session.archived" ? event.created : undefined,
-            )
+          if (!store.session.info[event.data.sessionID]) return
+          setStore(
+            "session",
+            "info",
+            event.data.sessionID,
+            "time",
+            "archived",
+            event.type === "session.archived" ? event.created : undefined,
+          )
+          setStore("session", "info", event.data.sessionID, "time", "updated", (updated) =>
+            Math.max(updated, event.created),
+          )
         })
         return
       case "session.moved": {
@@ -1893,7 +1895,6 @@ export function createData(config: CreateDataInput) {
           // Servers without the family route: the Session and its direct children, merged into what is already known.
           // Status comes only from /session/active and events, and pending requests are read per member.
           const fallback = async () => {
-            const loaded: string[] = []
             await observeRead(
               () =>
                 Promise.all([
@@ -1906,19 +1907,18 @@ export function createData(config: CreateDataInput) {
                   setStore("session", "info", session.id, reconcile(session))
                   registerSession(session.id)
                   sync.complete(`session:${session.id}`)
-                  loaded.push(session.id)
                 }
-                return (id) => loaded.includes(id)
+                const ids = new Set(sessions.map((session) => session.id))
+                return (id) => ids.has(id)
               },
               stale,
             )
+            if (stale()) return
             // Read every known member's pending requests, but wait only for the requested Session's. Older servers fail
             // a member's reads when its worktree is gone; the other members still load.
             const pending = (id: string) => [result.session.permission.sync(id), result.session.form.sync(id)]
             void Promise.allSettled(
-              [...new Set([...loaded, ...(store.session.family[resolveRoot(sessionID)] ?? [])])]
-                .filter((id) => id !== sessionID)
-                .flatMap(pending),
+              (store.session.family[resolveRoot(sessionID)] ?? []).filter((id) => id !== sessionID).flatMap(pending),
             )
             await Promise.allSettled(pending(sessionID))
           }
@@ -1930,10 +1930,6 @@ export function createData(config: CreateDataInput) {
               // Members the server no longer lists were deleted while this client could not hear it. Sessions created
               // during the read rejoin when their creation replays, and unacknowledged local creations stay.
               const created = new Set(journal.flatMap((entry) => (entry.created ? [entry.sessionID] : [])))
-              const gone = [family.rootID, ...ids]
-                .flatMap((id) => store.session.family[id] ?? [])
-                .filter((id) => !ids.has(id) && !created.has(id) && !sessionOutbox.has(id))
-              gone.forEach((id) => markDeleted(id))
               setStore(
                 "session",
                 "info",
@@ -1941,15 +1937,24 @@ export function createData(config: CreateDataInput) {
                   for (const session of family.sessions) draft[session.id] = session
                 }),
               )
+              // The server roots a family whose top names a missing parent at the top; the client walks to the missing
+              // ID, so membership is keyed the client's way.
+              const root = resolveRoot(family.rootID)
+              const gone = new Set(
+                [root, ...ids]
+                  .flatMap((id) => store.session.family[id] ?? [])
+                  .filter((id) => !ids.has(id) && !created.has(id) && !sessionOutbox.has(id)),
+              )
+              gone.forEach((id) => markDeleted(id))
               const local = [...sessionOutbox].filter(
-                (id) => !ids.has(id) && store.session.info[id] && resolveRoot(id) === family.rootID,
+                (id) => !ids.has(id) && store.session.info[id] && resolveRoot(id) === root,
               )
               setStore(
                 "session",
                 "family",
                 produce((draft) => {
-                  for (const id of ids) if (id !== family.rootID) delete draft[id]
-                  draft[family.rootID] = [...ids, ...local]
+                  for (const id of ids) if (id !== root) delete draft[id]
+                  draft[root] = [...ids, ...local]
                 }),
               )
               for (const session of family.sessions) {
@@ -1973,7 +1978,7 @@ export function createData(config: CreateDataInput) {
                 sync.complete(`session.permission:${session.id}`)
                 sync.complete(`session.form:${session.id}:`)
               }
-              return (id) => resolveRoot(id) === family.rootID
+              return (id) => resolveRoot(id) === root
             },
             // A read invalidated in flight is superseded by a newer one, and its older snapshot would undo that read.
             stale,
@@ -2132,7 +2137,7 @@ export function createData(config: CreateDataInput) {
             .catch((error: unknown) => {
               if (!isPermissionNotFoundError(error)) throw error
             })
-          removePermission(input.sessionID, input.requestID)
+          observe(input.sessionID, () => removePermission(input.sessionID, input.requestID))
         },
       },
       form: {
@@ -2329,6 +2334,8 @@ export function createData(config: CreateDataInput) {
   createEffect(() => {
     if (config.connection?.status() === "connected") return
     sync.invalidate()
+    // A reconnect may reach an upgraded or a different server.
+    familyRouteMissing = false
   })
 
   onCleanup(

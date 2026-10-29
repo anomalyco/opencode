@@ -31,7 +31,7 @@ Generated clients follow the assembled public `HttpApi`. GitHub issues own activ
 | [Event stream](./event-stream-architecture.md)      | Accepted and implemented | Record why public events use one encoded feed with independent queues.                                    |
 | [Provider policy](./provider-policy.md)             | Accepted and implemented | Allow or deny provider use and permission checks, with Console-managed statements having final authority. |
 | [Claude Agent provider](./claude-agent-provider.md) | Draft                    | Record the design decisions behind the Claude Agent provider.                                             |
-| [Session family API](./session-family-api.md)       | Proposed                 | Let a client render a Session family from one read and keep it current from events.                       |
+| [Session family API](./session-family-api.md)       | Partly implemented       | Let a client render a Session family from one read and keep it current from events.                       |
 
 ## Historical Context
 

@@ -240,7 +240,6 @@ export function makeSession(
     time: input.time ?? { created: 0, updated: 0 },
     title: `Session ${id}`,
     location: { directory: input.cwd ?? "/workspace" },
-    status: "idle",
   }
 }
 

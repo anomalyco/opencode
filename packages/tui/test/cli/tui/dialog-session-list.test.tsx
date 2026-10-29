@@ -71,7 +71,6 @@ test("scopes sessions to the active session location", async () => {
         time: { created: 1, updated: 3 },
         title: "Active session",
         location: { directory: active },
-        status: "idle",
       })
       route.navigate({ type: "session", sessionID: "ses_active" })
       dialog.replace(() => <DialogSessionList />)

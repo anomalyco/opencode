@@ -51,9 +51,9 @@ export default Runtime.handler(
       return
     }
     if (!response.ok) yield* Effect.fail(new Error(`Failed to import session: ${response.statusText}`))
-    const imported = yield* Schema.decodeUnknownEffect(
-      Schema.fromJsonString(Schema.Struct({ data: Session.Persisted })),
-    )(yield* Effect.promise(() => response.text()))
+    const imported = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ data: Session.Info })))(
+      yield* Effect.promise(() => response.text()),
+    )
     process.stdout.write(`Imported session: ${imported.data.id}${EOL}`)
   }),
 )
