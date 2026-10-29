@@ -91,6 +91,35 @@ it.live("manages schedules through the experimental API where the session's conf
       await expect(api.experimental.schedule.list({ sessionID: off.id })).rejects.toMatchObject({
         _tag: "ForbiddenError",
       })
+
+      // Shell until check that already passes returns done immediately with its output.
+      const matched = await api.experimental.schedule.create({
+        sessionID: session.id,
+        until: { run: "printf ready" },
+        prompt: "ready now",
+      })
+      expect(matched).toMatchObject({
+        status: "done",
+        lastOutcome: "fired",
+        lastOutput: "ready",
+        until: { type: "shell", run: "printf ready" },
+      })
+
+      // Stateless HTTP create settles an "ask" command as 403 ForbiddenError instead of hanging.
+      const askDir = path.join(dir, "ask")
+      await fs.mkdir(askDir, { recursive: true })
+      await fs.writeFile(
+        path.join(askDir, "opencode.json"),
+        JSON.stringify({ experimental: { schedules: true }, permission: { shell: "ask" } }),
+      )
+      const askSession = await api.session.create({ location: { directory: askDir } })
+      await expect(
+        api.experimental.schedule.create({
+          sessionID: askSession.id,
+          until: { run: "printf blocked" },
+          prompt: "never",
+        }),
+      ).rejects.toMatchObject({ _tag: "ForbiddenError" })
     })
   }).pipe(Effect.scoped),
 )

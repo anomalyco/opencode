@@ -21183,6 +21183,57 @@
         "required": ["type", "prompt"],
         "additionalProperties": false
       },
+      "Schedule.Condition": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Schedule.Condition.Shell"
+          }
+        ]
+      },
+      "Schedule.Condition.Shell": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "run": {
+            "type": "string"
+          },
+          "is": {
+            "type": "string"
+          },
+          "matches": {
+            "type": "string"
+          },
+          "changes": {
+            "type": "boolean"
+          }
+        },
+        "required": ["type", "run"],
+        "additionalProperties": false
+      },
+      "Schedule.ConditionInput": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Shell command to run in the Session's directory. Alone, exit 0 wakes and stdout is appended."
+          },
+          "is": {
+            "type": "string"
+          },
+          "matches": {
+            "type": "string"
+          },
+          "changes": {
+            "type": "boolean"
+          }
+        },
+        "required": ["run"],
+        "additionalProperties": false
+      },
       "Schedule.CreatePayload": {
         "type": "object",
         "properties": {
@@ -21195,16 +21246,22 @@
           "when": {
             "$ref": "#/components/schemas/Schedule.WhenInput"
           },
+          "if": {
+            "$ref": "#/components/schemas/Schedule.ConditionInput"
+          },
+          "until": {
+            "$ref": "#/components/schemas/Schedule.ConditionInput"
+          },
           "ends": {
             "$ref": "#/components/schemas/Schedule.Ends"
           },
           "prompt": {
             "type": "string",
             "minLength": 1,
-            "description": "The message the Session receives each time the schedule fires."
+            "description": "The message the Session receives when the schedule wakes."
           }
         },
-        "required": ["sessionID", "when", "prompt"],
+        "required": ["sessionID", "prompt"],
         "additionalProperties": false
       },
       "Schedule.Duration": {
@@ -21250,6 +21307,12 @@
           "tz": {
             "type": "string"
           },
+          "if": {
+            "$ref": "#/components/schemas/Schedule.Condition"
+          },
+          "until": {
+            "$ref": "#/components/schemas/Schedule.Condition"
+          },
           "action": {
             "$ref": "#/components/schemas/Schedule.Action"
           },
@@ -21278,6 +21341,9 @@
           "lastOutcome": {
             "$ref": "#/components/schemas/Schedule.Outcome"
           },
+          "lastOutput": {
+            "type": "string"
+          },
           "time": {
             "type": "object",
             "properties": {
@@ -21297,7 +21363,7 @@
       },
       "Schedule.Outcome": {
         "type": "string",
-        "enum": ["fired", "late", "skipped", "disabled", "failed"]
+        "enum": ["fired", "late", "checked", "expired", "skipped", "disabled", "failed"]
       },
       "Schedule.Status": {
         "type": "string",
@@ -21477,8 +21543,7 @@
             "required": ["cron"],
             "additionalProperties": false
           }
-        ],
-        "description": "When it fires: { in: \"20 minutes\" }, { at: \"2026-10-27T09:00\" }, { every: \"1 hour\" } or { cron: \"0 9 * * 1-5\" }. Wall-clock times use tz."
+        ]
       },
       "ScheduleNotFoundErrorEncoded": {
         "type": "object",

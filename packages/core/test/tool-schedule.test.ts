@@ -47,8 +47,10 @@ const memory = () => {
           id: Schedule.ID.make(`sch_${rows.size + 1}`),
           sessionID: input.sessionID,
           name: input.name,
-          when: input.when,
+          when: input.when ?? { type: "every", every: "30 seconds" },
           tz: "America/New_York",
+          if: input.if,
+          until: input.until,
           action: input.action,
           status: "active",
           nextDueAt: DateTime.add(now, { minutes: 20 }),
@@ -259,6 +261,32 @@ describe("ScheduleTools", () => {
         })
       }
       expect(rows.get(Schedule.ID.make("sch_1"))).toMatchObject({ status: "active", sessionID: otherSessionID })
+    }),
+  )
+
+  it.effect("creates until schedules with optional when and formats check conditions", () =>
+    Effect.gen(function* () {
+      const { registry, rows } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
+      const created = yield* run(registry, "schedule_create", {
+        until: { run: "gh pr checks 59962" },
+        prompt: "CI passed",
+      })
+      expect(created).toMatchObject({
+        id: "sch_1",
+        when: { type: "every", every: "30 seconds" },
+        until: { type: "shell", run: "gh pr checks 59962" },
+      })
+      expect(rows.get(Schedule.ID.make("sch_1"))?.until).toEqual({
+        type: "shell",
+        run: "gh pr checks 59962",
+      })
+      expect(
+        yield* direct(registry, "schedule_create", {
+          when: { every: "2 minutes" },
+          if: { run: "git status -s", changes: true },
+          prompt: "working tree changed",
+        }),
+      ).toContain('if "git status -s", active')
     }),
   )
 })
