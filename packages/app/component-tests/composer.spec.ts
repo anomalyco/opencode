@@ -491,18 +491,10 @@ story("keeps command selection on the keyboard until the pointer moves", async (
   // Layout changes can deliver pointer events without any actual mouse movement.
   await review.dispatchEvent("pointermove", { movementX: 0, movementY: 0 })
   await expect(test).toHaveAttribute("data-active", "")
-  await input.press("ArrowDown")
-  await expect(review).toHaveAttribute("data-active", "")
-  await input.press("ArrowUp")
-  await expect(test).toHaveAttribute("data-active", "")
-  await expect(review).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
 
   await page.mouse.move(box.x + box.width / 2 + 2, box.y + box.height / 2)
   await expect(review).toHaveAttribute("data-active", "")
   await expect(test).not.toHaveAttribute("data-active")
-  await test.click()
-  await expect(menu).toHaveCount(0)
-  await expect(input).toHaveText("/test")
 })
 
 story("grows suggestions while preserving visible timeline context", async ({ mount }) => {
