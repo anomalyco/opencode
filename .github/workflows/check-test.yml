@@ -119,10 +119,10 @@ jobs:
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
 
-      - name: Verify published codemode package
+      - name: Verify packed codemode package
         if: runner.os == 'Linux'
         working-directory: packages/codemode
-        run: bun run script/publish.ts --dry-run
+        run: bun run pack
 
       - name: Verify packed workerd SDK
         if: runner.os == 'Linux'

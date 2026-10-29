@@ -20,6 +20,7 @@ import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
 import { isoDay } from "../lib/format"
 import { jsonUrl, localizedUrl, markdownUrl } from "../lib/language"
+import { dismissChartTooltipOnExit } from "../lib/chart-tooltip"
 import { methodologyItems } from "../lib/methodology"
 import { loadHomePage, type HomePageData } from "../lib/page-data"
 import { homeSummary } from "../lib/summaries"
@@ -461,6 +462,14 @@ function TopModelsChart(props: {
   const metric = createMemo(() => props.metric ?? "tokens")
 
   createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
+  dismissChartTooltipOnExit({
+    chart: () => chartRef,
+    open: () => activeIndex() !== undefined,
+    dismiss: () => {
+      setActiveIndex(undefined)
+      props.onActiveModelChange(undefined)
+    },
+  })
 
   return (
     <>
@@ -1109,6 +1118,14 @@ function MarketShare(props: {
   }
 
   createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
+  dismissChartTooltipOnExit({
+    chart: () => chartRef,
+    open: () => props.inspecting,
+    dismiss: () => {
+      props.onInspectingChange(false)
+      props.onActiveAuthorChange(undefined)
+    },
+  })
 
   return (
     <>

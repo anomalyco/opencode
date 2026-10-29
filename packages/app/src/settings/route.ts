@@ -10,13 +10,12 @@ export type SettingsRootTab =
   | "extensions"
   | "servers"
   | "experimental"
-  | "gui-extensions"
   | "about"
 
-declare const extensionTab: unique symbol
+declare const pluginTab: unique symbol
 
-/** A root page a GUI extension contributes; the value is its SettingsPage id. */
-export type SettingsExtensionTab = string & { readonly [extensionTab]: true }
+/** A root page a GUI plugin contributes; the value is its SettingsPage id. */
+export type SettingsPluginTab = string & { readonly [pluginTab]: true }
 
 /** Root pages that show one server's settings: the selected server, or the default one. */
 export type SettingsServerTab = "projects" | "workspaces" | "providers" | "models" | "extensions"
@@ -33,7 +32,7 @@ type SettingsProjectView = { type: "project"; server: string; project: string; t
 
 /** `server` on a root view is the server its per-server pages show; without it they show the default server. */
 export type SettingsView = (
-  | { type: "root"; tab: SettingsRootTab | SettingsExtensionTab; server?: string }
+  | { type: "root"; tab: SettingsRootTab | SettingsPluginTab; server?: string }
   | SettingsProjectView
 ) &
   SettingsViewState
@@ -56,7 +55,6 @@ const rootTabs: Record<SettingsRootTab, true> = {
   extensions: true,
   servers: true,
   experimental: true,
-  "gui-extensions": true,
   about: true,
 }
 
@@ -76,7 +74,7 @@ const subtabs: Record<NonNullable<SettingsView["subtab"]>, true> = {
 export function parseSettingsView(
   search: string,
   transient?: SettingsTransientView,
-  extensionTabs?: ReadonlySet<string>,
+  pluginTabs?: ReadonlySet<string>,
 ): SettingsView {
   const params = new URLSearchParams(search)
   const tab = params.get("tab") ?? "general"
@@ -91,10 +89,14 @@ export function parseSettingsView(
   // Links to a server's own page, which the Servers page replaced, name a server without a tab.
   if (!project && server && !params.has("tab")) return { type: "root", tab: "servers", server, ...transient }
 
+  // The desktop's Plugins page is now the Plugins tab of Extensions, so links to it and `layout.settings("plugins")`
+  // land there.
+  if (!project && tab === "plugins") return { type: "root", tab: "extensions", server, subtab: "plugins", ...transient }
+
   if (!project && isRootTab(tab))
     return { type: "root", tab, server, subtab: nested === "lsps" ? undefined : nested, ...transient }
 
-  if (!project && extensionTabs && isExtensionTab(tab, extensionTabs))
+  if (!project && pluginTabs && isPluginTab(tab, pluginTabs))
     return { type: "root", tab, server, subtab: undefined, ...transient }
 
   return { type: "root", tab: "general", ...transient }
@@ -142,8 +144,8 @@ export function isRootTab(value: string): value is SettingsRootTab {
   return Object.hasOwn(rootTabs, value)
 }
 
-/** Host tabs win over an extension page with the same id. */
-export function isExtensionTab(value: string, tabs: ReadonlySet<string>): value is SettingsExtensionTab {
+/** Host tabs win over a plugin page with the same id. */
+export function isPluginTab(value: string, tabs: ReadonlySet<string>): value is SettingsPluginTab {
   return !isRootTab(value) && tabs.has(value)
 }
 

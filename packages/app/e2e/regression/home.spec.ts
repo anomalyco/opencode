@@ -179,7 +179,7 @@ test("Home lists the used server projects by recent activity, hides them, and li
   await page.getByRole("menuitem", { name: "Close", exact: true }).click()
   await expect(view.rows).toHaveText(["oldest"])
 
-  // The location dialog lists every server project once: used ones first, then the rest, each by recency.
+  // Closing a project moves it out of the added list, but it remains discoverable in the server inventory.
   await page
     .locator('[data-component="home-project-row"]')
     .filter({ hasText: "oldest" })
@@ -188,13 +188,9 @@ test("Home lists the used server projects by recent activity, hides them, and li
     .click()
   await newSessionLocation(page).click()
   const options = page.getByRole("dialog").getByRole("option")
-  await expect(options.locator(".command-palette-title")).toHaveText([
-    "Add project",
-    "oldest",
-    "fresh",
-    "unused",
-    "recent",
-  ])
+  await expect(options.locator(".command-palette-title")).toHaveText(["oldest", "Other projects", "Add project"])
+  await options.filter({ hasText: "Other projects" }).click()
+  await expect(options.locator(".command-palette-title")).toHaveText(["fresh", "unused", "recent"])
   await options.filter({ hasText: "C:/OpenCode/recent" }).click()
   await expect(newSessionLocation(page)).toContainText("recent")
   await page.getByRole("button", { name: "Home", exact: true }).click()

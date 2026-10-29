@@ -243,7 +243,7 @@ test("the details follow the routed session when it moves to another worktree", 
   await page.keyboard.press("Escape")
   await expect(summary).toBeHidden()
 
-  // The server moves the session; the screen stays mounted while its extensions read the new worktree.
+  // The server moves the session; the screen stays mounted while its plugins read the new worktree.
   const moved = sessions.find((item) => item.id === fixture.targetID)
 
   if (moved) moved.directory = `${root}/other`

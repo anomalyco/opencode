@@ -77,7 +77,7 @@ Most of these rarely reproduce on an idle local machine.
 - **Use the harness's signals.** `holdRoute(...).arrived` resolves when the request reaches the route, and `transport.send` resolves after delivery. `setupTimeline(...).waitForPart` resolves once a part renders (`timeline.ts:328`).
 - **Decide which side is wrong.** Three of eight investigated e2e flakes were product bugs, each since fixed in the product:
   - a stale scroll offset restored when a scroll settles (`src/session/timeline/observe-element-offset.ts`);
-  - a video double-click that also entered native fullscreen (`packages/gui-extensions/src/file/artifact-view.tsx:617`);
+  - a video double-click that also entered native fullscreen (`packages/gui-plugins/src/file/artifact-view.tsx:612`);
   - shortcuts dropped while a dialog closed.
 
   If a user could hit the interleaving, fix the product and keep the assertion.

@@ -40,6 +40,15 @@ describe("settings route", () => {
     })
   })
 
+  test("opens links to the desktop's old Plugins page on the Plugins tab of Extensions", () => {
+    expect(parseSettingsView("?tab=plugins")).toEqual({
+      type: "root",
+      tab: "extensions",
+      server: undefined,
+      subtab: "plugins",
+    })
+  })
+
   test("keeps search reveal state transient", () => {
     expect(
       parseSettingsView("?server=local&project=%2Fwork&tab=extensions&subtab=plugins", {

@@ -6,8 +6,36 @@ import { browseFiles, openFileLauncher, openReviewLauncher, reviewTabs } from ".
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { fileDiff, fileNode, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
+import { readFile } from "node:fs/promises"
 
 test.use({ viewport: { width: 1440, height: 900 } })
+
+test("review toggle shows its tooltip with the side panel open or closed", async ({ page }) => {
+  await openSession(page, {
+    name: "ReviewTooltip",
+    seed: { panes: { ses_reviewtooltip: { review: true } } },
+  })
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const tooltip = page.getByRole("tooltip", { name: /Toggle review/ })
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(page.locator("#review-panel")).toHaveAttribute("aria-hidden", "false")
+  await toggle.hover()
+  await expect(tooltip).toBeVisible()
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await page.locator("[data-session-title]").hover()
+  await expect(tooltip).toBeHidden()
+  await toggle.hover()
+  await expect(tooltip).toBeVisible()
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await page.locator("[data-session-title]").hover()
+  await expect(tooltip).toBeHidden()
+  await toggle.hover()
+  await expect(tooltip).toBeVisible()
+})
 
 for (const view of ["desktop", "mobile"] as const) {
   test(`offers Git initialization for a project without VCS (${view})`, async ({ page }) => {
@@ -316,7 +344,7 @@ for (const listed of [false, true]) {
 }
 
 test("context closes the side region only when its button opened it", async ({ page }) => {
-  // A /btw tab saved before extensions must not linger as a hidden tab that keeps the region open.
+  // A /btw tab saved before plugins must not linger as a hidden tab that keeps the region open.
   await openSession(page, {
     name: "ReviewContextOpener",
     seed: {
@@ -473,6 +501,7 @@ test("file tree expands Windows paths and scrolls long names in both directions"
     fileList: (path) => {
       if (path === "frontend\\" || path === "frontend") {
         return [
+          fileNode(directory, "frontend/nested", "directory"),
           { ...fileNode(directory, "frontend/app.ts"), path: "frontend\\app.ts" },
           { ...fileNode(directory, longPath), path: `frontend\\${longFilename}` },
           // Short rows below the long one, so it can scroll out of view.
@@ -483,6 +512,8 @@ test("file tree expands Windows paths and scrolls long names in both directions"
           }),
         ]
       }
+
+      if (path === "frontend/nested") return [fileNode(directory, "frontend/nested/child.ts")]
 
       if (path) return []
 
@@ -508,6 +539,36 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await expect(frontend).toHaveAttribute("aria-expanded", "false")
   await frontend.click()
   await expect(frontend).toHaveAttribute("aria-expanded", "true")
+
+  const nested = panel.locator('[data-type="item"][data-item-path="frontend/nested/"]')
+  await nested.click()
+  const child = panel.locator('[data-type="item"][data-item-path="frontend/nested/child.ts"]')
+  await expect(child).toBeVisible()
+  await expect(child.locator('[data-item-section="spacing-item"]')).toHaveCount(2)
+
+  // Every ancestor guide runs through its folder's chevron, not just the first indentation level.
+  const guideOffset = () =>
+    child.evaluate((element) => {
+      const root = element.getRootNode()
+
+      if (!(root instanceof ShadowRoot)) throw new Error("Expected the file tree's shadow root")
+
+      return Math.max(
+        ...Array.from(element.querySelectorAll<HTMLElement>('[data-item-section="spacing-item"]'), (guide) => {
+          const folder = Array.from(root.querySelectorAll<HTMLElement>('[data-type="item"]')).find(
+            (row) => row.dataset.itemPath === guide.dataset.ancestorPath,
+          )!
+
+          const icon = folder.querySelector('[data-item-section="icon"]')!.getBoundingClientRect()
+          const line = guide.getBoundingClientRect()
+          const center = getComputedStyle(guide).direction === "rtl" ? line.right - 0.5 : line.left + 0.5
+
+          return Math.abs(center - (icon.left + icon.width / 2))
+        }),
+      )
+    })
+
+  await expect.poll(guideOffset).toBeLessThanOrEqual(0.5)
 
   const viewport = sidebar.locator('[data-slot="session-review-v2-sidebar-viewport"]')
   const longRow = panel.locator(`[data-type="item"][data-item-path="${longPath}"]`)
@@ -552,6 +613,7 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   await expect.poll(async () => (await scrollTree({})).left).toBeGreaterThan(0)
   await scrollTree({ left: 0, top: 0 })
   await viewport.evaluate((element) => element.setAttribute("dir", "rtl"))
+  await expect.poll(guideOffset).toBeLessThanOrEqual(0.5)
   await expect.poll(() => statusInset(status, "left")).toBeLessThanOrEqual(24)
   await frontend.focus()
   await page.keyboard.press("ArrowRight")
@@ -679,6 +741,276 @@ test("rereads a file each time an artifact link opens it", async ({ page }) => {
   await expect(missingTab).toHaveCount(0)
 })
 
+test("artifact actions copy and download content, switch source, and follow the selected file's capabilities", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+  const source = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80"/></svg>'
+  const table = 'name,role\n"Jensen, Oliver",Researcher\nIsabella,Support'
+
+  const workspace = await openSession(page, {
+    name: "ArtifactActions",
+    fileList: () => [],
+    fileContent: (path) => {
+      if (path === "vector.svg") return { content: source }
+
+      if (path === "data.csv") return { content: table }
+
+      if (path === "notes.md") return { content: "# Notes\n\nA document with a visible top edge." }
+
+      return { type: "binary", content: "AAEC", encoding: "base64" }
+    },
+    pageMessages: () => ({
+      items: [
+        {
+          id: "msg_artifact_actions",
+          type: "assistant",
+          agent: "build",
+          model: { id: "test", providerID: "opencode" },
+          content: [
+            { type: "text", text: "[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin)" },
+          ],
+          time: { created: 1, completed: 2 },
+        },
+      ],
+    }),
+  })
+
+  await page.getByRole("link", { name: "Vector", exact: true }).click()
+  const panel = page.locator("#review-panel")
+  const toolbar = panel.locator('[data-slot="artifact-toolbar"]:visible')
+  const actions = toolbar.getByRole("button", { name: "File actions", exact: true })
+  const image = panel.getByRole("img", { name: "vector.svg", exact: true })
+  await expect(image).toHaveJSProperty("naturalWidth", 120)
+  await expect(toolbar.getByText("vector.svg", { exact: true })).toBeVisible()
+  await panel.getByRole("button", { name: "Toggle file tree", exact: true }).click()
+
+  // The source action stays visible at rest; only metadata needs hover or keyboard focus.
+  await page.mouse.move(0, 0)
+  const sourceAction = toolbar.getByRole("button", { name: "View source", exact: true })
+  await expect(sourceAction).toHaveCSS("opacity", "1")
+  await expect(toolbar.locator('[data-slot="artifact-metadata"]')).toHaveCSS("opacity", "0")
+  await actions.focus()
+  await expect(toolbar.locator('[data-slot="artifact-metadata"]')).toHaveCSS("opacity", "1")
+  await expect(toolbar.getByText("120 × 80", { exact: true })).toBeVisible()
+  const copy = toolbar.getByRole("button", { name: "Copy content", exact: true })
+  await copy.click()
+  await expect(page.getByText("Copied", { exact: true })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(source)
+  await page.getByRole("button", { name: "Dismiss", exact: true }).click()
+
+  await sourceAction.click()
+  await expect(image).toHaveCount(0)
+  await expect(panel.locator("diffs-container")).toContainText(source)
+  await actions.click()
+  await expect(page.getByRole("menuitem", { name: "View preview", exact: true })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: "Open in", exact: true })).toHaveCount(0)
+  await page.getByRole("menuitem", { name: "View preview", exact: true }).click()
+  await expect(image).toHaveJSProperty("naturalWidth", 120)
+
+  await page.getByRole("link", { name: "Table", exact: true }).click()
+  await expect(panel.getByRole("columnheader", { name: /^name(?:\s|$)/ })).toHaveCSS(
+    "background-color",
+    "rgb(242, 242, 242)",
+  )
+  const nameCell = panel.getByRole("cell", { name: /^Jensen, Oliver(?:\s|$)/ })
+  await expect(nameCell).toBeVisible()
+  await expect(toolbar.getByText("data.csv", { exact: true })).toBeVisible()
+  await nameCell.hover()
+  await nameCell.getByRole("button", { name: "Copy cell", exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("Jensen, Oliver")
+  await toolbar.hover()
+  await expect(nameCell.getByRole("button", { name: "Copy cell", exact: true })).toHaveCSS("opacity", "0")
+  await page.keyboard.press("Tab")
+
+  const nextCopy = panel
+    .getByRole("cell", { name: /^Researcher(?:\s|$)/ })
+    .getByRole("button", { name: "Copy cell", exact: true })
+
+  await expect(nextCopy).toBeFocused()
+  await expect(nextCopy).toHaveCSS("opacity", "1")
+
+  const copyHeader = panel
+    .getByRole("columnheader", { name: /^role(?:\s|$)/ })
+    .getByRole("button", { name: "Copy cell", exact: true })
+
+  await copyHeader.focus()
+  await copyHeader.press("Enter")
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("role")
+  await actions.click()
+  const downloaded = page.waitForEvent("download")
+  await page.getByRole("menuitem", { name: "Download", exact: true }).click()
+  const download = await downloaded
+  expect(download.suggestedFilename()).toBe("data.csv")
+  expect(await readFile((await download.path())!, "utf8")).toBe(table)
+
+  await page.getByRole("link", { name: "Notes", exact: true }).click()
+  await expect(panel.getByRole("heading", { name: "Notes", exact: true })).toBeVisible()
+  const paper = panel.locator('[data-slot="artifact-markdown-page"]')
+  await expect(paper).toHaveCSS("border-radius", "8px")
+  await expect(paper).toHaveAttribute("data-component", "document-surface")
+  expect(await paper.evaluate((element) => getComputedStyle(element, "::after").borderTopStyle)).toBe("solid")
+  const surface = (await paper.boundingBox())!
+  const bar = (await toolbar.boundingBox())!
+  expect(surface.y - bar.y - bar.height).toBe(1)
+  await expect(panel.getByRole("group", { name: "Preview controls", exact: true })).toHaveCount(0)
+
+  await page.getByRole("link", { name: "Binary", exact: true }).click()
+  await expect(panel.getByText(/Binary file/)).toBeVisible()
+  await expect(toolbar.getByText("sample.bin", { exact: true })).toBeVisible()
+  await expect(copy).toHaveCount(0)
+  await expect(toolbar.getByRole("button", { name: "View source", exact: true })).toHaveCount(0)
+  await actions.click()
+  await expect(page.getByRole("menuitem", { name: "Download", exact: true })).toHaveCount(0)
+  await page.getByRole("menuitem", { name: "Copy path", exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${workspace.directory}/sample.bin`)
+})
+
+test("Markdown and DOCX sheets stay aligned when switching at wide and narrow preview widths", async ({ page }) => {
+  // Minimal DOCX containing one paragraph, "Document spacing", and a letter-sized page.
+  const docx =
+    "UEsDBBQAAAAIAI51W13mdcR+0gAAAIsBAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbH2QvVLDMAzHX8XnlasVGBh6SToAKzD0BXSOkvjw11luad++Sls6cIVR+n/8ZLebQ/BqT4Vdip1+NI3e9O32mImVKJE7Pdea1wBsZwrIJmWKooypBKwylgky2i+cCJ6a5hlsipViXdWlQ/ftK42481W9HWR9oRTyrNXLxbiwOo05e2exig77OPyirK4EI8mzh2eX+UEMGu4SFuVvwDX3Ic8ubiD1iaW+YxAXfKcywJDsLkjS/F9z5840js7SLb+05ZIsMbs4BW9uSkAXf+6H83f3J1BLAwQUAAAACACOdVtdXzOVUpUAAAAHAQAACwAAAF9yZWxzLy5yZWxzjc87DsIwDAbgq0Q+QJ0yMKCmXVi6Ii4QJW5T0TzkhNftycBAEQOjf//6LHfDw6/iRpyXGBS0jYSh70606lKD7JaURW2ErMCVkg6I2TjyOjcxUaibKbLXpY48Y9LmomfCnZR75E8DtqYYrQIebQvi/Ez0jx2naTF0jObqKZQfJ74aVdY8U1Fwj2zRvuOmsoB9h5sX+xdQSwMEFAAAAAgAjnVbXUye0X++AAAAMQEAABEAAAB3b3JkL2RvY3VtZW50LnhtbEVQ0Q6CMAz8FbIPsEjUGILw4quJiV8wxwQSti5dFfXr7TCEl9v1ru01q5q3G7OXpTigP6ntJldNXU1li+bprOdMbB/L6aR65lACRNNbp+MGg/XiPZCcZimpgwmpDYTGxjj4zo1Q5PkBnB68Sivv2H7SGxJQAq7PS0wM2shQBUlNSDPOvdEavs4Dobt9syldsy2KXa6E98L3R+Hwb7hoEpUxiL77t9DQ9byWd2RGt9ajfSwuzKFLHiw3w/of9Q9QSwECFAMUAAAACACOdVtd5nXEftIAAACLAQAAEwAAAAAAAAAAAAAAgAEAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQIUAxQAAAAIAI51W11fM5VSlQAAAAcBAAALAAAAAAAAAAAAAACAAQMBAABfcmVscy8ucmVsc1BLAQIUAxQAAAAIAI51W11MntF/vgAAADEBAAARAAAAAAAAAAAAAACAAcEBAAB3b3JkL2RvY3VtZW50LnhtbFBLBQYAAAAAAwADALkAAACuAgAAAAA="
+
+  await page.setViewportSize({ width: 1728, height: 900 })
+  await openSession(page, {
+    name: "DocumentAlignment",
+    fileList: () => [],
+    fileContent: (path) =>
+      path === "notes.md"
+        ? { type: "text", content: "# Document spacing\n\nA Markdown sheet beside an Office document." }
+        : {
+            type: "binary",
+            content: docx,
+            encoding: "base64",
+            mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          },
+    pageMessages: () => ({
+      items: [
+        {
+          id: "msg_document_alignment",
+          type: "assistant",
+          agent: "build",
+          model: { id: "test", providerID: "opencode" },
+          content: [{ type: "text", text: "[Markdown](notes.md) [Word](sample.docx) [Second Word](other.docx)" }],
+          time: { created: 1, completed: 2 },
+        },
+      ],
+    }),
+    seed: { storage: { "opencode.global.dat:review-panel-v2": { sidebarOpened: false } } },
+  })
+
+  const panel = page.locator("#review-panel")
+  const toolbar = panel.locator('[data-slot="artifact-toolbar"]:visible')
+  const markdown = panel.locator('[data-slot="artifact-markdown-page"]')
+  const word = panel.getByRole("group", { name: "Page 1", exact: true })
+
+  const edges = (sheet: Locator) =>
+    sheet.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const scrollport = element.closest("[data-document-surface-scrollport]")!
+
+      return { left: rect.left, right: rect.right, inset: rect.left - scrollport.getBoundingClientRect().left }
+    })
+
+  await page.getByRole("link", { name: "Markdown", exact: true }).click()
+  await page.getByRole("link", { name: "Word", exact: true }).click()
+  await expect(toolbar.getByText("sample.docx", { exact: true })).toBeVisible()
+  // The real Office engine may need a cold WASM initialization before its text layer is ready.
+  await expect(word.getByText("Document spacing", { exact: true })).toBeVisible({ timeout: 30_000 })
+  await word.evaluate((element) => {
+    element.dataset.e2eProbe = "warm"
+  })
+  const canvas = await word.locator("canvas").elementHandle()
+  expect(canvas).not.toBeNull()
+  await expect.poll(() => canvas!.evaluate((element) => Number(element.getAttribute("width")))).toBeGreaterThan(0)
+  await page.getByRole("link", { name: "Second Word", exact: true }).click()
+  await expect(toolbar.getByText("other.docx", { exact: true })).toBeVisible()
+  await expect(word.getByText("Document spacing", { exact: true })).toBeVisible({ timeout: 30_000 })
+  await word.evaluate((element) => {
+    element.dataset.e2eProbe = "other-warm"
+  })
+
+  for (const size of [
+    { width: 1728, gutter: 20 },
+    { width: 1000, gutter: 12 },
+  ]) {
+    await page.setViewportSize({ width: size.width, height: 900 })
+    await panel.getByRole("tab", { name: "notes.md", exact: true }).click()
+    await expect(markdown.getByRole("heading", { name: "Document spacing", exact: true })).toBeVisible()
+    await toolbar.hover()
+    await expect.poll(async () => (await edges(markdown)).inset).toBeCloseTo(size.gutter, 1)
+    const reference = await edges(markdown)
+    const header = await toolbar.boundingBox()
+
+    await panel.getByRole("tab", { name: "sample.docx", exact: true }).click()
+    await expect(word).toHaveAttribute("data-e2e-probe", "warm")
+    await expect(word.getByText("Document spacing", { exact: true })).toBeVisible()
+    await expect
+      .poll(() => edges(word))
+      .toEqual({
+        left: expect.closeTo(reference.left, 1),
+        right: expect.closeTo(reference.right, 1),
+        inset: expect.closeTo(size.gutter, 1),
+      })
+    await expect.poll(() => toolbar.boundingBox()).toEqual(header)
+
+    await panel.getByRole("tab", { name: "notes.md", exact: true }).click()
+    await expect(markdown.getByRole("heading", { name: "Document spacing", exact: true })).toBeVisible()
+    await expect.poll(() => edges(markdown)).toEqual(reference)
+    await expect.poll(() => toolbar.boundingBox()).toEqual(header)
+    expect(await canvas!.evaluate((element) => element.isConnected && Number(element.getAttribute("width")) > 0)).toBe(true)
+    await panel.getByRole("tab", { name: "other.docx", exact: true }).click()
+    await expect(word).toHaveAttribute("data-e2e-probe", "other-warm")
+    await panel.getByRole("tab", { name: "notes.md", exact: true }).click()
+  }
+
+  await panel
+    .getByRole("tab", { name: "sample.docx", exact: true })
+    .locator("..")
+    .getByRole("button", { name: "Close tab", exact: true })
+    .click()
+  await expect.poll(() => canvas!.evaluate((element) => element.isConnected)).toBe(false)
+})
+
+test("diagram preview controls zoom the rendered diagram and fit it back into its pane", async ({ page }) => {
+  await openSession(page, {
+    name: "DiagramZoom",
+    fileList: () => [],
+    fileContent: () => ({ content: "flowchart LR\n Start[Start] --> Review[Review] --> Finish[Finish]" }),
+    pageMessages: () => ({
+      items: [
+        {
+          id: "msg_diagram_zoom",
+          type: "assistant",
+          agent: "build",
+          model: { id: "test", providerID: "opencode" },
+          content: [{ type: "text", text: "[Diagram](flow.mmd)" }],
+          time: { created: 1, completed: 2 },
+        },
+      ],
+    }),
+  })
+  await page.getByRole("link", { name: "Diagram", exact: true }).click()
+  const panel = page.locator("#review-panel")
+  const diagram = panel.locator('[data-component="markdown-mermaid"] > svg')
+  const controls = panel.getByRole("group", { name: "Preview controls", exact: true })
+  const fit = controls.getByRole("button", { name: "Fit", exact: true })
+  await expect(panel.getByText("Finish", { exact: true })).toBeVisible()
+  await diagram.hover()
+  const initial = (await diagram.boundingBox())!
+
+  await expect(fit).toBeEnabled()
+  await controls.getByRole("button", { name: "Zoom in", exact: true }).click()
+  await expect.poll(async () => (await diagram.boundingBox())!.width).toBeCloseTo(initial.width * 1.25, 1)
+  await controls.getByRole("button", { name: "Zoom out", exact: true }).click()
+  await expect.poll(async () => (await diagram.boundingBox())!.width).toBeCloseTo(initial.width, 1)
+  await controls.getByRole("button", { name: "Zoom out", exact: true }).click()
+  await expect.poll(async () => (await diagram.boundingBox())!.width).toBeCloseTo(initial.width / 1.25, 1)
+  await fit.click()
+  await expect.poll(() => diagram.boundingBox()).toEqual(initial)
+})
+
 /** What the image case's frame probe records on the window. */
 type ImageProbe = { problems: string[]; frames: number; running: boolean }
 
@@ -698,12 +1030,20 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
   await openSession(page, {
     name: "ImageGestures",
     fileList: () => [],
-    fileContent: (path) => ({
-      content:
-        path === "second.svg"
-          ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1600"><rect width="1600" height="1600" fill="#6699aa"/></svg>'
-          : '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1600"><rect width="1600" height="1600" fill="#6699aa"/></svg>',
-    }),
+    fileContent: (path) => {
+      if (path === "small.svg")
+        return {
+          content:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#6699aa"/></svg>',
+        }
+
+      return {
+        content:
+          path === "second.svg"
+            ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1600"><rect width="1600" height="1600" fill="#6699aa"/></svg>'
+            : '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1600"><rect width="1600" height="1600" fill="#6699aa"/></svg>',
+      }
+    },
     pageMessages: () => ({
       items: [
         {
@@ -711,7 +1051,7 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
           type: "assistant",
           agent: "build",
           model: { id: "test", providerID: "opencode" },
-          content: [{ type: "text", text: "[First](first.svg) [Second](second.svg)" }],
+          content: [{ type: "text", text: "[First](first.svg) [Second](second.svg) [Small](small.svg)" }],
           time: { created: 1, completed: 2 },
         },
       ],
@@ -723,11 +1063,15 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
   const stage = panel.locator('[data-slot="artifact-stage"]')
   const fit = panel.getByRole("button", { name: "Fit", exact: true })
   await expect(image).toBeVisible()
-  await expect(fit).toBeDisabled()
+  await expect(fit).toBeEnabled()
   // Wait for the side pane's opening motion before choosing a gesture anchor.
   await image.hover()
   const initial = (await image.boundingBox())!
   const pane = (await panel.boundingBox())!
+  await panel.getByRole("button", { name: "Zoom in", exact: true }).click()
+  await expect.poll(async () => (await image.boundingBox())!.width).toBeCloseTo(initial.width * 1.25, 1)
+  await panel.getByRole("button", { name: "Zoom out", exact: true }).click()
+  await expect.poll(() => image.boundingBox()).toEqual(initial)
   const anchor = { x: Math.round(initial.x + initial.width * 0.55), y: Math.round(initial.y + initial.height * 0.55) }
   await page.mouse.move(anchor.x, anchor.y)
   // A continuous pinch catches anchor drift while the image still fits one axis.
@@ -739,7 +1083,7 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
     gestureSourceType: "mouse",
   })
   await cdp.detach()
-  await expect(fit).toBeEnabled()
+  await expect(stage).toHaveAttribute("data-zoom", "actual")
   const zoomed = (await image.boundingBox())!
   expect(zoomed.width).toBeCloseTo(initial.width * 2, 1)
   expect((anchor.x - zoomed.x) / zoomed.width).toBeCloseTo((anchor.x - initial.x) / initial.width, 4)
@@ -753,7 +1097,7 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
   await page.mouse.down()
   await page.mouse.move(anchor.x + 60, anchor.y + 40, { steps: 5 })
   await page.mouse.up()
-  await expect(fit).toBeEnabled()
+  await expect(stage).toHaveAttribute("data-zoom", "actual")
   expect((await image.boundingBox())!.x).toBeCloseTo(scrolled.x + 60, 1)
   expect((await image.boundingBox())!.y).toBeCloseTo(scrolled.y + 40, 1)
   // Touch uses the same captured-pointer path and must not generate a click-to-fit.
@@ -765,13 +1109,13 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
   })
   await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
   await touch.detach()
-  await expect(fit).toBeEnabled()
+  await expect(stage).toHaveAttribute("data-zoom", "actual")
   expect((await image.boundingBox())!.x).toBeCloseTo(scrolled.x + 30, 1)
   expect((await image.boundingBox())!.y).toBeCloseTo(scrolled.y + 20, 1)
   // Keyboard-accessible fit restores the exact original geometry.
   await fit.focus()
   await page.keyboard.press("Enter")
-  await expect(fit).toBeDisabled()
+  await expect(stage).toHaveAttribute("data-zoom", "fit")
   expect(await image.boundingBox()).toEqual(initial)
   expect(
     await stage.evaluate((element) =>
@@ -779,17 +1123,17 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
     ),
   ).toBe(true)
   await image.click()
-  await expect(fit).toBeEnabled()
+  await expect(stage).toHaveAttribute("data-zoom", "actual")
   await page.getByRole("link", { name: "Second", exact: true }).click()
   await expect(panel.getByRole("img", { name: "second.svg", exact: true })).toBeVisible()
-  await expect(fit).toBeDisabled()
+  await expect(stage).toHaveAttribute("data-zoom", "fit")
   await panel.getByRole("img", { name: "second.svg", exact: true }).hover()
   const second = (await panel.getByRole("img", { name: "second.svg", exact: true }).boundingBox())!
   expect(second.width).toBeGreaterThan(0)
   expect(second.height).toBeGreaterThan(0)
   await page.keyboard.down("Control")
   await page.mouse.wheel(0, -50)
-  await expect(fit).toBeEnabled()
+  await expect(stage).toHaveAttribute("data-zoom", "actual")
   await page.keyboard.up("Control")
   await fit.click()
   await page.setViewportSize({ width: 1200, height: 700 })
@@ -801,6 +1145,14 @@ test("image gestures anchor zoom, pan, and reset independently of the pane", asy
       return media.width <= frame.width - 47 && media.height <= frame.height - 47
     })
     .toBe(true)
+  await page.getByRole("link", { name: "Small", exact: true }).click()
+  const small = panel.getByRole("img", { name: "small.svg", exact: true })
+  await expect(small).toHaveJSProperty("naturalWidth", 32)
+  await small.click()
+  await expect.poll(async () => (await small.boundingBox())!.width).toBeCloseTo(32, 1)
+  await expect(panel.getByRole("button", { name: "Zoom out", exact: true })).toBeDisabled()
+  await fit.click()
+  await expect.poll(async () => (await small.boundingBox())!.width).toBeGreaterThan(128)
 })
 
 test("image files load into the review panel and keep it painted while loading", async ({ page }) => {
@@ -999,6 +1351,49 @@ test("video files stream into the viewer behind a loading state, open into the p
   expect(await page.evaluate(() => document.fullscreenElement)).toBeNull()
 })
 
+test("review file navigation focuses the arrow for the keyboard direction", async ({ page }) => {
+  await openSession(page, {
+    name: "ReviewArrowFocus",
+    vcsDiff: [fileDiff("src/alpha.ts"), fileDiff("src/beta.ts"), fileDiff("src/gamma.ts")],
+    seed: {
+      panes: { ses_reviewarrowfocus: { review: true } },
+      storage: {
+        ...reviewTabs("C:/OpenCode/ReviewArrowFocus", "ses_reviewarrowfocus"),
+        "opencode.global.dat:review-panel-v2": { sidebarOpened: false },
+      },
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const file = panel.locator('[data-slot="session-review-v2-file-name"]')
+  const previous = panel.getByRole("button", { name: "Previous file", exact: true })
+  const next = panel.getByRole("button", { name: "Next file", exact: true })
+
+  await expect(file).toHaveText("alpha.ts")
+  await previous.click()
+  await expect(file).toHaveText("gamma.ts")
+  await page.keyboard.press("ArrowRight")
+  await expect(file).toHaveText("alpha.ts")
+  await expect(next).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(file).toHaveText("beta.ts")
+  await page.keyboard.press("ArrowLeft")
+  await expect(file).toHaveText("alpha.ts")
+  await expect(previous).toBeFocused()
+  await next.click()
+  await expect(file).toHaveText("beta.ts")
+  await expect(next).toBeFocused()
+
+  const home = page.getByRole("button", { name: "Home", exact: true })
+  await home.focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(file).toHaveText("gamma.ts")
+  await expect(home).toBeFocused()
+  await page.keyboard.press("ArrowLeft")
+  await expect(file).toHaveText("beta.ts")
+  await expect(home).toBeFocused()
+})
+
 test("restores review state and the side-panel tab per session", async ({ page }) => {
   const sessions = [
     { id: "ses_review_state_a", title: "Alpha review state" },
@@ -1128,7 +1523,7 @@ test("shows and restores last turn changes from the session diff", async ({ page
   await expect(panel.locator('[data-slot="session-review-v2-file-name"]')).toHaveText("delta.ts")
 })
 
-test("keeps the review state a session stored before extensions", async ({ page }) => {
+test("keeps the review state a session stored before plugins", async ({ page }) => {
   const directory = "C:/OpenCode/ReviewLegacy"
   await openSession(page, {
     name: "ReviewLegacy",
@@ -1222,7 +1617,7 @@ test("desktop review waits for the session's stored mode before it loads changes
     .poll(() =>
       page.evaluate(() =>
         Object.entries(localStorage).some(
-          ([key, value]) => key.includes("extension.review.session") && value.includes('"branch"'),
+          ([key, value]) => key.includes("plugin.review.session") && value.includes('"branch"'),
         ),
       ),
     )
@@ -1230,7 +1625,7 @@ test("desktop review waits for the session's stored mode before it loads changes
 
   // The reopened window's review mounts before its session store has loaded.
   working.length = 0
-  await page.goto(desktop("extension.review.session"))
+  await page.goto(desktop("plugin.review.session"))
   await expectSessionTitle(page, title)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(page.locator("#review-panel").getByText("Loading changes…", { exact: true })).toBeVisible()

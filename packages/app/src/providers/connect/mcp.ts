@@ -13,7 +13,7 @@ export type McpControls = {
   change: (name: string, enabled: boolean) => void
 }
 
-export function useMcpToggle(directory?: Accessor<string | undefined>, onSuccess?: () => unknown) {
+export function useMcpToggle(directory?: Accessor<string | undefined>, onSuccess?: () => void) {
   const data = useData()
   const serverSDK = useServerSDK()
   const platform = usePlatform()
@@ -27,19 +27,22 @@ export function useMcpToggle(directory?: Accessor<string | undefined>, onSuccess
 
   return useMutation(() => ({
     mutationFn: async (input: string | { name: string; enabled: boolean; directory?: string }) => {
-      const name = typeof input === "string" ? input : input.name
-      const ref = typeof input !== "string" && input.directory ? { directory: input.directory } : location()
+      // A bare name toggles the server; an object sets an explicit state.
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- discriminates this function's own input union
+      const request: { name: string; enabled?: boolean; directory?: string } = typeof input === "string" ? { name: input } : input
+      const name = request.name
+      const ref = request.directory ? { directory: request.directory } : location()
       const server = (await serverSDK.api.mcp.list({ location: ref })).data.find((item) => item.name === name)
 
-      if (!server || (server.status.status === "pending" && typeof input === "string")) return
-      const enabled = typeof input === "string" ? server.status.status !== "connected" : input.enabled
+      if (!server || (server.status.status === "pending" && request.enabled === undefined)) return
+      const enabled = request.enabled ?? server.status.status !== "connected"
 
       if (!enabled) {
-        await serverSDK.api.mcp.disconnect({ server: name, location: ref })
+        await serverSDK.api.experimental.mcp.disconnect({ server: name, location: ref })
       }
 
       if (enabled && server.status.status !== "needs_auth") {
-        await serverSDK.api.mcp.connect({ server: name, location: ref })
+        await serverSDK.api.experimental.mcp.connect({ server: name, location: ref })
       }
 
       data.location.mcp.server.invalidate(ref)

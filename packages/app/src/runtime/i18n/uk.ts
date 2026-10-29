@@ -836,6 +836,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Перенесення даних {{current}}/{{total}}",
   "home.workspaceTip": "Розпочніть наступну сесію в новому робочому просторі, щоб ізолювати зміни",
   "session.tab.add": "Додати вкладку",
+  "session.tab.closeOthers": "Закрити інші вкладки",
   "session.queue.attachments.one": "Ще {{count}} вкладення",
   "session.queue.attachments.other": "Ще {{count}} вкладення",
   "settings.backToSettings": "Назад до налаштувань",

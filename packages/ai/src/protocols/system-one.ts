@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 import {
   DecisionResponse,
+  DecisionUsage,
   type DecisionAnswer,
   type DecisionModelCompatibility,
   type DecisionPart,
@@ -11,7 +12,7 @@ import type { Media } from "../media.js"
 import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaProtocol } from "../route/media-protocol.js"
-import { AIError, UnsupportedOperationError, Usage, mergeJsonRecords } from "../schema/index.js"
+import { AIError, UnsupportedOperationError, mergeJsonRecords } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import { JsonObject, ProviderShared } from "./shared.js"
 
@@ -42,6 +43,7 @@ const NativeUsage = Schema.StructWithRest(
   Schema.Struct({
     input_tokens: Schema.optional(Schema.Number),
     output_tokens: Schema.optional(Schema.Number),
+    cost: Schema.optional(Schema.Number),
   }),
   [JsonObject],
 )
@@ -211,15 +213,16 @@ export const toResponse = (
       usage:
         data.usage === undefined
           ? undefined
-          : new Usage({
+          : new DecisionUsage({
               inputTokens: data.usage.input_tokens,
               outputTokens: data.usage.output_tokens,
               totalTokens: ProviderShared.totalTokens(data.usage.input_tokens, data.usage.output_tokens, undefined),
-              providerMetadata: { [providerMetadataKey]: data.usage },
+              cost: data.usage.cost,
             }),
       providerMetadata: {
         [providerMetadataKey]: {
           model: data.model,
+          ...(data.usage === undefined ? {} : { usage: data.usage }),
           ...(data.id === undefined ? {} : { responseId: data.id }),
           ...(data.provider === undefined ? {} : { provider: data.provider }),
           ...data.provider_metadata?.[providerMetadataKey],

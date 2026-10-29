@@ -1,9 +1,11 @@
-import { batch, createSignal, untrack, type Accessor } from "solid-js"
+import { batch, untrack, type Accessor } from "solid-js"
+import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerScope } from "@/runtime/server/scope"
 import type { Platform } from "@/runtime/platform/platform"
 import { clonePrompt } from "./prompt-parts"
+import { createComposerQuoteSource } from "./quote-source"
 import {
   ComposerStore,
   DEFAULT_PROMPT,
@@ -43,7 +45,7 @@ type InitialPrompt = {
 }
 
 export function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
-  return item.type === "quote" || !!item.comment?.trim()
+  return item.type === "note" || item.type === "quote" || !!item.comment?.trim()
 }
 
 function createComposerActions(setStore: SetStoreFunction<ComposerStore>) {
@@ -114,20 +116,26 @@ export interface ComposerStateValue {
   }
   readonly quoteComment: {
     readonly key: Accessor<string | undefined>
-    readonly set: (key?: string) => void
+    readonly anchor: Accessor<ComposerQuoteAnchor | undefined>
+    readonly set: (key?: string, anchor?: ComposerQuoteAnchor) => void
   }
+  readonly quoteSource: ReturnType<typeof createComposerQuoteSource>
   readonly set: (prompt: Prompt, cursorPosition?: number) => void
   readonly reset: () => void
   readonly capture: () => ComposerStateValue
 }
 
-function createComposerStateValue(
-  store: ComposerStore,
-  setStore: SetStoreFunction<ComposerStore>,
-): ComposerStateValue {
+function createComposerStateValue(store: ComposerStore, setStore: SetStoreFunction<ComposerStore>): ComposerStateValue {
   const actions = createComposerActions(setStore)
   // The quote whose comment editor is open, by key; a request made before the composer shows waits for it.
-  const [quoteComment, setQuoteComment] = createSignal<string>()
+  const [quoteComment, setQuoteComment] = createStore<{ key?: string; anchor?: ComposerQuoteAnchor }>({})
+
+  const quoteSource = createComposerQuoteSource({
+    get: () => store.quoteSources,
+    set: (key, source) => setStore("quoteSources", (sources) => ({ ...sources, [key]: source })),
+  })
+
+  const retainQuoteSources = () => quoteSource.retain(store.context.items.map((item) => item.key))
 
   const clearRetry = () => {
     if (untrack(() => store.retry) !== undefined) setStore("retry", undefined)
@@ -166,11 +174,13 @@ function createComposerStateValue(
       },
       remove(key: string) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
+        retainQuoteSources()
         clearRetry()
       },
       /** Removes the file comment, note, or quote with this commentID. */
       removeComment(commentID: string) {
         setStore("context", "items", (items) => items.filter((item) => item.commentID !== commentID))
+        retainQuoteSources()
         clearRetry()
       },
       /** Edits the file comment, note, or quote with this commentID; only file comments carry a preview. */
@@ -199,6 +209,7 @@ function createComposerStateValue(
             key,
           })),
         )
+        retainQuoteSources()
         clearRetry()
       },
       replaceComments(items: ContextItem[]) {
@@ -206,10 +217,26 @@ function createComposerStateValue(
           ...current.filter((item) => !isCommentItem(item)),
           ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
         ])
+        retainQuoteSources()
         clearRetry()
       },
     },
-    quoteComment: { key: quoteComment, set: (key?: string) => setQuoteComment(key) },
+    quoteComment: {
+      key: () => quoteComment.key,
+      anchor: () => quoteComment.anchor,
+      set: (key?: string, anchor?: ComposerQuoteAnchor) => {
+        setQuoteComment({ key, anchor: key ? anchor : undefined })
+
+        if (key && quoteSource.state.sources[key]) {
+          quoteSource.pend(key)
+
+          return
+        }
+
+        quoteSource.settle()
+      },
+    },
+    quoteSource,
     set: (prompt: Prompt, cursorPosition?: number) => actions.set(prompt, cursorPosition),
     reset: () => actions.reset(),
     capture: () => value,

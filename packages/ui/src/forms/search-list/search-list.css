@@ -1,4 +1,7 @@
 [data-component="search-list"] {
+  /* Sticky headers and the top fade paint this, so rows scroll under an opaque band. */
+  --search-list-surface: var(--v2-background-bg-base);
+
   display: flex;
   min-height: 0;
   flex: 1;
@@ -42,6 +45,17 @@
     }
   }
 
+  [data-slot="search-list-body"] {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+
+    &[hidden] {
+      display: none;
+    }
+  }
+
   /* Arrow keys scroll the active row clear of the sticky header. Rows fade out past the bottom edge while more follow. */
   [data-slot="search-list-scroll"] {
     min-height: 0;
@@ -69,7 +83,7 @@
       position: absolute;
       inset: var(--search-list-fade-offset, 0px) 0 auto;
       height: 24px;
-      background: linear-gradient(var(--v2-background-bg-base), transparent);
+      background: linear-gradient(var(--search-list-surface), transparent);
       content: "";
       opacity: var(--search-list-fade-top, 0);
     }
@@ -79,6 +93,11 @@
     display: flex;
     flex-direction: column;
     padding: 6px 6px 8px;
+
+    /* Its padding would sit above the empty state and push it below the centre. */
+    &[hidden] {
+      display: none;
+    }
   }
 
   [data-slot="search-list-section"] {
@@ -104,7 +123,7 @@
     height: 28px;
     margin-inline: -6px;
     padding-inline: 18px;
-    background: var(--v2-background-bg-base);
+    background: var(--search-list-surface);
     color: var(--v2-text-text-muted);
     font-size: 13px;
     font-weight: 440;
@@ -159,6 +178,40 @@
     font-weight: 440;
     line-height: var(--line-height-compact);
     letter-spacing: -0.04px;
+  }
+
+  /* On the rows' text spine, under the bottom fade rather than inside it. */
+  [data-slot="search-list-footer"] {
+    flex-shrink: 0;
+    padding: 4px 18px 12px;
+    color: var(--v2-text-text-muted);
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+  }
+
+  &[data-popover] {
+    --search-list-surface: var(--v2-background-bg-layer-01);
+
+    position: relative;
+    flex: none;
+
+    [data-slot="search-list-body"] {
+      position: absolute;
+      inset-block-start: calc(100% + 4px);
+      inset-inline: 0;
+      z-index: 12;
+      max-height: min(45vh, 480px);
+      overflow: hidden;
+      border-radius: 8px;
+      background: var(--search-list-surface);
+      box-shadow: var(--v2-elevation-floating);
+    }
+
+    [data-slot="search-list-scroll"] {
+      flex: 0 1 auto;
+    }
   }
 }
 

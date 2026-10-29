@@ -22,7 +22,7 @@ import { pathKey } from "@/workspaces/path-key"
 import { worktreeInventoryKey } from "@/workspaces/inventory"
 import { SettingsList } from "@/settings/list"
 import { useTabs } from "@/shell/tabs/tabs"
-import { useHostApis } from "@/runtime/extension/root"
+import { useHostApis } from "@/runtime/plugin/root"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { Project } from "@/runtime/server/types"
 import {
@@ -58,7 +58,7 @@ export const SettingsWorkspaces: Component<{
   const queryClient = useQueryClient()
   const data = server.ctx.data
   const tabs = useTabs()
-  const extensions = useHostApis()
+  const hostApis = useHostApis()
 
   const [store, setStore] = createStore<{
     project: string
@@ -290,7 +290,7 @@ export const SettingsWorkspaces: Component<{
           worktree: undefined,
         })
       })
-      extensions.workspaceRemoved({ server: context.server, directory: workspace.directory })
+      hostApis.workspaceRemoved({ server: context.server, directory: workspace.directory })
       await queryClient.invalidateQueries({
         queryKey: worktreeInventoryKey(context.sdk.scope, workspace.project.id),
       })

@@ -36,14 +36,20 @@ export const install = Effect.fnUntraced(function* (input: Duration.Input = DEAD
     started = true
     fork(expire(signal))
   }
+  // Closing the terminal sends SIGHUP, whose default action exits without teardown. Treat it as SIGTERM, but only
+  // with a terminal: nohup and the background service have none, and a listener would override nohup's ignore.
+  const onHangup = () => process.kill(process.pid, "SIGTERM")
+  const hangup = process.stdin.isTTY || process.stdout.isTTY
   const off = () => {
     process.off("SIGTERM", onSignal)
     process.off("SIGINT", onSignal)
+    process.off("SIGHUP", onHangup)
   }
   yield* Effect.acquireRelease(
     Effect.sync(() => {
       process.on("SIGTERM", onSignal)
       process.on("SIGINT", onSignal)
+      if (hangup) process.on("SIGHUP", onHangup)
     }),
     // Once shutdown has started, keep listening: this release can run while a later finalizer is still stuck.
     () =>

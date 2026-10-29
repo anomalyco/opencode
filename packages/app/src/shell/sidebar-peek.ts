@@ -7,12 +7,10 @@ import "./sidebar-peek.css"
 // The peek's own spring, quicker than the docked sidebar's.
 const spring: DurationOptions = { duration: 0.18, bounce: 0 }
 
-// How long the pointer rests before the sidebar peeks, in ms. Both sit well under the ~100ms where a response still
-// reads as immediate, and above how long a pointer spends crossing: through the ~24px edge zone in a frame or two,
-// over the 28px toggle in ~30–60ms on the way to the breadcrumb or the traffic lights. The toggle waits longer because
-// the header row is crossed far more often than the bare window edge, and a peek that starts just before a click docks
-// smoothly.
-const dwell = { edge: 40, toggle: 80 }
+// How long the pointer rests before the sidebar peeks, in ms. The edge stays quick: it's crossed in a frame or two and
+// rarely by accident. The toggle waits longer, because the header row is crossed far more often on the way to the
+// breadcrumb or the traffic lights, and a peek there should only open when the pointer means to rest on it.
+const dwell = { edge: 40, toggle: 500 }
 
 /** Whether any session in the vertical sidebar draws its unread dot, published by the sidebar's tab strip. */
 export const [sidebarUnread, setSidebarUnread] = createSignal(false)

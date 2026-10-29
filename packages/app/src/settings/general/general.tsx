@@ -5,7 +5,7 @@ import { Switch } from "@opencode/ui/switch"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
-import { ExtensionSettingsSections } from "@/runtime/extension/settings-page-view"
+import { PluginSettingsSections } from "@/runtime/plugin/settings-page-view"
 import {
   type BackgroundActivity,
   type FollowUpBehavior,
@@ -141,6 +141,7 @@ const FollowUpBehaviorSetting: Component = () => {
 const BackgroundActivitySetting = () => {
   const language = useLanguage()
   const settings = useSettings()
+
   const options = createMemo((): { value: BackgroundActivity; label: string }[] => [
     { value: "off", label: language.t("settings.timeline.row.backgroundActivity.off") },
     { value: "left", label: language.t("settings.timeline.row.backgroundActivity.left") },
@@ -171,6 +172,7 @@ const BackgroundActivitySetting = () => {
 const TimelineWidthSetting = () => {
   const language = useLanguage()
   const settings = useSettings()
+
   const options = createMemo((): { value: TimelineWidth; label: string }[] => [
     { value: "focused", label: language.t("settings.timeline.row.width.focused") },
     { value: "comfortable", label: language.t("settings.timeline.row.width.comfortable") },
@@ -282,7 +284,7 @@ export const SettingsGeneral: Component = () => {
           </SettingsRow>
         </Show>
 
-        <ExtensionSettingsSections page="general" section="general" />
+        <PluginSettingsSections page="general" section="general" />
 
         <Show when={mobile()}>
           <SettingsRow
@@ -341,7 +343,7 @@ export const SettingsGeneral: Component = () => {
           </SettingsList>
         </section>
 
-        <ExtensionSettingsSections page="general" />
+        <PluginSettingsSections page="general" />
       </div>
     </>
   )

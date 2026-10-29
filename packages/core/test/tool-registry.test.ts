@@ -707,6 +707,27 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("exposes Code Mode tools directly when execute is denied", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { lookup: make() }, { namespace: "mcp" })
+      yield* transform(service, { bash: make() }, { codemode: false })
+      const denyExecute: Permission.Ruleset = [{ action: "execute", resource: "*", effect: "deny" }]
+
+      const snapshot = yield* service.snapshot(denyExecute)
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["bash", "mcp_lookup"])
+      expect(snapshot.codeModeCatalog).toBeUndefined()
+      expect((yield* snapshot.execute(call("mcp_lookup"))).output).toEqual({ text: "mcp_lookup" })
+
+      const hidden = yield* service.snapshot([
+        ...denyExecute,
+        { action: "mcp_lookup", resource: "*", effect: "deny" },
+      ])
+      expect(hidden.definitions.map((tool) => tool.name)).toEqual(["bash"])
+      expect(yield* hidden.execute(call("mcp_lookup")).pipe(Effect.flip)).toBeInstanceOf(Tool.Error)
+    }),
+  )
+
   it.effect("filters disabled tools with edit aliases and ordered wildcard precedence", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
@@ -1204,11 +1225,11 @@ describe("Tool", () => {
       })
 
       expect(execution).toMatchObject({ content: [{ type: "text" }] })
+      expect(execution.metadata?.toolCalls).toEqual([{ tool: "echo", status: "completed", input: { text: "request" } }])
       expect(executed).toEqual(["old:request"])
       expect(progress).toEqual([
         { toolCalls: [{ tool: "echo", status: "running", input: { text: "request" } }] },
         { stage: "old" },
-        { toolCalls: [{ tool: "echo", status: "completed", input: { text: "request" } }] },
       ])
     }),
   )

@@ -71,10 +71,6 @@ export const dict = {
   "dialog.usageExceeded.freeTier.description":
     "הירשם ל-OpenCode Go לקבלת גישה אמינה למודלי הקוד הפתוח הטובים ביותר, החל מ-$5 לחודש.",
   "dialog.usageExceeded.freeTier.actionLabel": "הירשם",
-  "dialog.usageExceeded.accountRateLimit.title": "הגעת למגבלת Go",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "הגעת למגבלת השימוש. כדי להמשיך להשתמש במודל זה כעת, הפעל שימוש מהיתרה הזמינה שלך",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "פתח את ההגדרות",
   "ui.sessionTurn.status.delegating": "מעביר את העבודה לסוכן אחר",
   "ui.sessionTurn.status.planning": "תכנון השלבים הבאים",
   "ui.sessionTurn.status.gatheringContext": "בודק את הפרויקט",

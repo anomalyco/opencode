@@ -6,15 +6,15 @@ import { useLayout, type LayoutRoute } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useCommand } from "@/shell/commands/command"
-import { createSettingsPages } from "@/runtime/extension/settings-pages"
+import { createSettingsPages } from "@/runtime/plugin/settings-pages"
 import { useSettingsServers } from "./servers/inventory"
 import {
-  isExtensionTab,
+  isPluginTab,
   isProjectTab,
   isRootTab,
   parseSettingsView,
   settingsViewUrl,
-  type SettingsExtensionTab,
+  type SettingsPluginTab,
   type SettingsProjectTab,
   type SettingsRootTab,
   type SettingsTransientView,
@@ -22,7 +22,7 @@ import {
 } from "./route"
 
 export type {
-  SettingsExtensionTab,
+  SettingsPluginTab,
   SettingsHostView,
   SettingsProjectTab,
   SettingsRootTab,
@@ -44,7 +44,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
       settings?: { route: Exclude<LayoutRoute, { type: "settings" }>; view?: SettingsTransientView }
     }>()
 
-    const extensions = createSettingsPages()
+    const plugins = createSettingsPages()
     const open = () => layout.route().type === "settings"
 
     // While Settings is closed, the current tab is where it would open from.
@@ -56,7 +56,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
       return location.state?.settings?.route ?? { type: "home" as const }
     }
 
-    const view = () => parseSettingsView(location.search, location.state?.settings?.view, extensions.tabs())
+    const view = () => parseSettingsView(location.search, location.state?.settings?.view, plugins.tabs())
 
     // The server of the tab settings opened from, which per-server pages show until another is selected.
     const sourceServer = createMemo(() => {
@@ -137,7 +137,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
       /** The server per-server pages show; undefined only while no server is listed. */
       server,
       sourceServer,
-      extensions,
+      plugins,
       search: {
         state: search,
         input(query: string) {
@@ -172,7 +172,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
           return true
         },
       },
-      open(tab: SettingsRootTab | SettingsExtensionTab = "general") {
+      open(tab: SettingsRootTab | SettingsPluginTab = "general") {
         show({ type: "root", tab })
       },
       /** Shows another server on the per-server pages, staying on the current page. */
@@ -195,7 +195,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
         const current = view()
 
         const next: SettingsView =
-          current.type === "root" && (isRootTab(tab) || isExtensionTab(tab, extensions.tabs()))
+          current.type === "root" && (isRootTab(tab) || isPluginTab(tab, plugins.tabs()))
             ? { ...current, tab }
             : current.type === "project" && isProjectTab(tab)
               ? { ...current, tab }

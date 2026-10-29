@@ -82,7 +82,7 @@ export function CommandPaletteView(props: {
   })
 
   return (
-    <Dialog class="command-palette" size="large">
+    <Dialog class="command-palette command-palette-compact" size="large" fit>
       <DialogBody class="command-palette-body">
         <SearchList
           query={store.query}
@@ -122,12 +122,12 @@ function PaletteRow(props: {
       : undefined
 
   return (
-    <button type="button" class="command-palette-row group" {...props.row}>
+    <button type="button" class="command-palette-row group" data-size="compact" {...props.row}>
       <Switch
         fallback={
           <div class="command-palette-row-main">
             <FileIcon node={{ path: props.item.path ?? "", type: "file" }} class="command-palette-row-icon size-4" />
-            <div class="command-palette-file-path">
+            <div class="command-palette-file-path" dir="ltr">
               <span class="command-palette-file-dir">
                 <SearchHighlight text={getDirectory(props.item.path ?? "")} />
               </span>
@@ -141,12 +141,12 @@ function PaletteRow(props: {
         <Match when={props.item.type === "command" || props.item.type === "setting"}>
           <div class="command-palette-row-main">
             <div class="command-palette-row-text">
-              <span class="command-palette-title palette-menu-title">
+              <span class="command-palette-title palette-menu-title" dir="auto">
                 <SearchHighlight text={props.item.title} />
               </span>
               <Show when={props.item.description}>
                 {(description) => (
-                  <span class="command-palette-description">
+                  <span class="command-palette-description" dir="auto">
                     <SearchHighlight text={description()} />
                   </span>
                 )}
@@ -164,7 +164,7 @@ function PaletteRow(props: {
                 <span
                   aria-hidden="true"
                   class="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
-                  style={{ right: "calc(100% + 4px)" }}
+                  style={{ "inset-inline-start": "-6px" }}
                 />
               </Show>
               <Show when={session()}>
@@ -181,13 +181,18 @@ function PaletteRow(props: {
             <div class="command-palette-row-text">
               <span
                 class="command-palette-title palette-menu-title"
+                dir="auto"
                 classList={{ "opacity-70": !!props.item.archived }}
               >
                 <SearchHighlight text={props.item.title} />
               </span>
               <Show when={props.item.description}>
                 {(description) => (
-                  <span class="command-palette-description" classList={{ "opacity-70": !!props.item.archived }}>
+                  <span
+                    class="command-palette-description"
+                    dir="auto"
+                    classList={{ "opacity-70": !!props.item.archived }}
+                  >
                     <SearchHighlight text={description()} />
                   </span>
                 )}

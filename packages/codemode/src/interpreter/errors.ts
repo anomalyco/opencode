@@ -1,4 +1,3 @@
-import { Effect } from "effect"
 import type { Diagnostic } from "../codemode.js"
 import { ToolError } from "../tool-error.js"
 import { ToolRuntimeError } from "../tool-runtime.js"
@@ -20,15 +19,17 @@ import {
   type Value,
 } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
+import type { Eval } from "./runner.js"
 import { toPrimitiveString } from "./callback.js"
 import { formatValue } from "../stdlib/console.js"
 
 export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof PendingThrow) {
+    const location = error.node?.loc ? sourceLocation(error.node) : undefined
     return {
       kind: error.kind,
-      message: `${error.type}: ${error.message}${formatLocation(error.node)}`,
-      ...(error.node?.loc ? { location: sourceLocation(error.node) } : {}),
+      message: `${error.type}: ${error.message}${formatLocation(location)}`,
+      ...(location ? { location } : {}),
       ...(error.suggestions ? { suggestions: error.suggestions } : {}),
     }
   }
@@ -134,44 +135,34 @@ export const createAggregateErrorValue = <R>(
   return value
 }
 
-const constructAggregateErrorValue = <R>(
-  ctx: Interpreter<R>,
-  args: Array<Value>,
-  proto: Obj,
-): Effect.Effect<ErrorObj, unknown, R> =>
-  Effect.gen(function* () {
-    const message = args[1] === undefined ? "" : yield* toPrimitiveString(ctx, args[1])
-    const cursor = yield* ctx.iterate(args[0])
-    if (cursor === undefined) throw typeError("new AggregateError(...) expects a synchronous iterable of errors.")
-    const errors: Array<Value> = []
-    while (true) {
-      const step = yield* cursor.next
-      if (step.done) return createAggregateErrorValue(ctx, errors, message, proto)
-      errors.push(step.value)
-    }
-  })
+function* constructAggregateErrorValue<R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj): Eval<ErrorObj> {
+  const message = args[1] === undefined ? "" : yield* toPrimitiveString(ctx, args[1])
+  const cursor = yield* ctx.iterate(args[0])
+  if (cursor === undefined) throw typeError("new AggregateError(...) expects a synchronous iterable of errors.")
+  const errors: Array<Value> = []
+  while (true) {
+    const step = yield* cursor.next()
+    if (step.done) return createAggregateErrorValue(ctx, errors, message, proto)
+    errors.push(step.value)
+  }
+}
 
 /** An error constructor such as `Error` or `TypeError`; callable with or without `new`, like JS. */
 export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const prototype = builtins[type]
-  const construct = (args: Array<Value>, newTarget: Callable) => {
+  const construct = function* (args: Array<Value>, newTarget: Callable): Eval<Value> {
     const proto = prototypeFrom(newTarget, prototype)
     const created =
       type === "AggregateError"
-        ? constructAggregateErrorValue(ctx, args, proto)
-        : Effect.map(args[0] === undefined ? Effect.undefined : toPrimitiveString(ctx, args[0]), (message) =>
-            createErrorValue(proto, message),
-          )
+        ? yield* constructAggregateErrorValue(ctx, args, proto)
+        : createErrorValue(proto, args[0] === undefined ? undefined : yield* toPrimitiveString(ctx, args[0]))
     // ES2022 `new Error(message, { cause })`: installed only when the options object has the property at all.
     const options = args[type === "AggregateError" ? 2 : 1]
-    if (!(options instanceof Obj) || !has(options, "cause")) return created
-    return Effect.map(created, (value) => {
-      define(value, "cause", get(options, "cause"), hidden)
-      return value
-    })
+    if (options instanceof Obj && has(options, "cause")) define(created, "cause", get(options, "cause"), hidden)
+    return created
   }
-  const ctor: Native<R> = constructor<R>(builtins, prototype, {
+  const ctor: Native = constructor(builtins, prototype, {
     name: type,
     length: type === "AggregateError" ? 2 : 1,
     call: (_, args) => construct(args, ctor),

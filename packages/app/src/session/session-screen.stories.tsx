@@ -282,6 +282,21 @@ export const ChildSession = {
   ),
 }
 
+export const ChildSessionNoOutcome = {
+  render: () => (
+    <SessionPreview
+      title="Inspect a child Session with no recorded outcome"
+      description={description}
+      document={subagentDocument}
+      child={{
+        agent: "surveyor",
+        model: { provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" },
+        started: 0,
+      }}
+    />
+  ),
+}
+
 export const ChildSessionDone = {
   render: () => (
     <SessionPreview

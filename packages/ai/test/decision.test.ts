@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { Decision, DecisionClient, Media } from "../src/effect.js"
+import { Decision, DecisionClient, DecisionUsage, Media } from "../src/effect.js"
 import {
   Baseten,
   CloudflareWorkersAI,
@@ -94,7 +94,9 @@ describe("Decision", () => {
 
       expect(response.answers).toEqual(expectedAnswers)
       expect(response.usage?.totalTokens).toBe(36)
-      expect(response.providerMetadata).toEqual({ typesafe: { model: "jev-1.14.0" } })
+      expect(response.providerMetadata).toEqual({
+        typesafe: { model: "jev-1.14.0", usage: { input_tokens: 30, output_tokens: 6 } },
+      })
     }).pipe(
       Effect.provide(
         client((input) =>
@@ -159,7 +161,12 @@ describe("Decision", () => {
             { value: true, probability: 0.99 },
             { value: false, probability: 0.01 },
           ])
-          expect(response.usage?.providerMetadata).toEqual({ opencode: { input_tokens: 10, output_tokens: 2 } })
+          expect(response.usage).toEqual(
+            new DecisionUsage({ inputTokens: 10, outputTokens: 2, totalTokens: 12, cost: 0.0004 }),
+          )
+          expect(response.providerMetadata).toEqual({
+            opencode: { model: "jev-1.13.0", usage: { input_tokens: 10, output_tokens: 2, cost: 0.0004 } },
+          })
         }),
       ),
       Effect.provide(
@@ -180,7 +187,7 @@ describe("Decision", () => {
               answers: {
                 greeting: { type: "choice", choice: "true", probabilities: { false: 0.01, true: 0.99 }, confidence: 1 },
               },
-              usage: { input_tokens: 10, output_tokens: 2 },
+              usage: { input_tokens: 10, output_tokens: 2, cost: 0.0004 },
             }),
           )
         }),
@@ -315,7 +322,9 @@ describe("Decision", () => {
         Effect.sync(() => {
           expect(response.answers).toEqual(expectedAnswers)
           expect(response.usage?.inputTokens).toBe(40)
-          expect(response.providerMetadata).toEqual({ openai: { model: "gpt-6-luna" } })
+          expect(response.providerMetadata).toEqual({
+            openai: { model: "gpt-6-luna", usage: { input_tokens: 40, output_tokens: 0, total_tokens: 40 } },
+          })
         }),
       ),
       Effect.provide(
@@ -401,6 +410,7 @@ describe("Decision", () => {
       questions: [
         { name: "greeting", type: "predicate", instructions: "Is this a greeting?" },
         { name: "unsafe", type: "predicate", instructions: "Something the model declines" },
+        { name: "explained", type: "predicate", instructions: "Something the model declines with a reason" },
       ],
     }).pipe(
       Effect.tap((response) =>
@@ -408,6 +418,7 @@ describe("Decision", () => {
           expect(response.answers).toEqual([
             { name: "greeting", type: "predicate", probability: 0.99 },
             { name: "unsafe", type: "error", reason: "refusal" },
+            { name: "explained", type: "error", reason: "refusal", message: "I can't help with that." },
           ]),
         ),
       ),
@@ -419,6 +430,7 @@ describe("Decision", () => {
               answers: [
                 { type: "predicate", name: "greeting", probability: 0.99 },
                 { type: "refusal", name: "unsafe" },
+                { type: "refusal", name: "explained", message: "I can't help with that." },
               ],
             }),
           ),
@@ -450,8 +462,9 @@ describe("Decision", () => {
       Effect.tap((response) =>
         Effect.sync(() => {
           expect(response.answers).toEqual([{ name: "refund", type: "predicate", probability: 0.98 }])
-          expect(response.providerMetadata).toEqual({ "vercel-ai-gateway": { model: "typesafe-ai/jev" } })
-          expect(response.usage?.providerMetadata).toHaveProperty("vercel-ai-gateway")
+          expect(response.providerMetadata).toEqual({
+            "vercel-ai-gateway": { model: "typesafe-ai/jev", usage: { input_tokens: 10, output_tokens: 0 } },
+          })
         }),
       ),
       Effect.provide(
