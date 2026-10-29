@@ -190,6 +190,28 @@ test("new tab selection and closing stay in the focused pane", async ({ page }) 
   await expect(sideTabs.nth(0)).toHaveAttribute("aria-selected", "true")
 })
 
+test("closing the last New tab closes the side region, and only a New tab lists the launchers", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await openSession(page, { name: "LastNewTab", seed: { panes: { ses_lastnewtab: { review: true } } } })
+
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const newTab = panel.getByRole("tab", { name: "New tab", exact: true })
+  const review = panel.getByRole("button", { name: /^Review/ })
+
+  // An empty side region opens on a New tab listing the launchers.
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+  await expect(review).toBeVisible()
+
+  // Closing it leaves no tab, so the region closes rather than listing the launchers without one.
+  await newTab.locator("..").getByRole("button", { name: "Close tab" }).click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+
+  await toggle.click()
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+  await expect(review).toBeVisible()
+})
+
 // A DOM mark survives only while the same node stays mounted.
 function mark(locator: Locator) {
   return locator.evaluate((element) => element.setAttribute("data-e2e-mounted", "original"))
