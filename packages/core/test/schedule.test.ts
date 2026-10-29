@@ -983,16 +983,20 @@ describe("Schedule", () => {
       }),
     )
 
-    it.effect("supports is and matches predicates", () =>
+    it.effect("supports is and matches predicates, even when the command exits non-zero at creation", () =>
       Effect.gen(function* () {
         const schedules = yield* setup()
-        shellState.stdout = "OPEN\n"
+        // Service is still booting at creation (curl exits 7); creating an `until` with `is` still succeeds.
+        shellState.exitCode = 7
+        shellState.stdout = ""
         const exact = yield* schedules.create({
           sessionID,
           when: { type: "every", every: "20 seconds" },
-          until: { type: "shell", run: "gh pr view 1", is: "MERGED" },
+          until: { type: "shell", run: "curl -sf http://localhost:3000/status", is: "MERGED" },
           action: { type: "prompt", prompt: "Merged." },
         })
+        shellState.exitCode = 0
+        shellState.stdout = "OPEN\n"
         const regex = yield* schedules.create({
           sessionID,
           when: { type: "every", every: "20 seconds" },

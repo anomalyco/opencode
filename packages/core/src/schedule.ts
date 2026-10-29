@@ -642,9 +642,7 @@ const layer = Layer.effect(
                   ),
                 )
                 const shouldSeed =
-                  check.mode === "until" ||
-                  when.type === "every" ||
-                  (check.condition.type === "shell" && check.condition.changes === true)
+                  check.mode === "until" || (check.condition.type === "shell" && check.condition.changes === true)
                 if (!shouldSeed) return { matched: false as const, state: null as Schema.Json, checks: 0 }
                 const init = yield* ScheduleCheck.evaluate(session, check, null).pipe(
                   instances.provide(session),
@@ -654,7 +652,8 @@ const layer = Layer.effect(
                     ),
                   ),
                 )
-                if (!init.ok) return yield* new InvalidError({ reason: init.error })
+                // A target that is not up yet (e.g. curl exiting 7 while a server boots) is "not yet", not an invalid schedule.
+                if (!init.ok) return { matched: false as const, state: null as Schema.Json, checks: 0 }
                 if (check.mode === "until" && init.wake)
                   return { matched: true as const, state: init.state, message: init.message }
                 return { matched: false as const, state: init.state, checks: 1 }
