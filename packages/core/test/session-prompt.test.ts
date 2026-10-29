@@ -46,6 +46,7 @@ import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { SessionStored } from "@opencode/core/session/stored"
 import { SessionBlob } from "@opencode/core/session/blob"
 import { SessionTransfer } from "@opencode/core/session/transfer"
+import { PromptInput } from "@opencode/schema/prompt-input"
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
@@ -531,6 +532,46 @@ describe("Session.prompt", () => {
       ])
       const stored = yield* admitted(message.id)
       expect(stored?.type === "user" ? stored.payload.files : undefined).toEqual(message.payload.files)
+    }),
+  )
+
+  it.live("admits captured image bytes with their source path after the source disappears", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const directory = yield* tmpdirScoped("opencode-session-prompt-")
+      const source = path.join(directory.path, "screenshot.png")
+      yield* Effect.promise(() => Bun.write(source, Buffer.from(pngBase64, "base64")))
+      const bytes = yield* Effect.promise(() => Bun.file(source).arrayBuffer())
+      yield* Effect.promise(() => Bun.file(source).delete())
+      const file = {
+        uri: `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`,
+        source: { type: "uri", uri: pathToFileURL(source).href },
+        name: "screenshot.png",
+        mention: { start: 0, end: 9, text: "[Image 1]" },
+      } satisfies PromptInput.FileAttachment
+
+      const message = yield* session.prompt({
+        sessionID,
+        text: "[Image 1] Inspect this image",
+        files: [Schema.decodeUnknownSync(PromptInput.FileAttachment)(file)],
+        resume: false,
+      })
+
+      expect(message.payload.files).toEqual([
+        {
+          data: pngBase64,
+          mime: "image/png",
+          source: file.source,
+          name: file.name,
+          mention: file.mention,
+        },
+      ])
+      const stored = yield* admitted(message.id)
+      expect(stored?.type === "user" ? stored.payload.files : undefined).toEqual(message.payload.files)
+      expect(
+        Schema.encodeSync(PromptInput.FileAttachment)(Schema.decodeUnknownSync(PromptInput.FileAttachment)(file)),
+      ).toEqual(file)
     }),
   )
 
