@@ -203,7 +203,7 @@ describe("image_generate", () => {
     }),
   )
 
-  it.live("reads input images, asks permission, and saves the result without overwriting", () =>
+  it.live("reads input images, asks permission, and saves the result, overwriting an existing file", () =>
     Effect.gen(function* () {
       yield* imageModel("test", "painter", (model) => {
         model.capabilities.input = ["text", "image"]
@@ -244,12 +244,11 @@ describe("image_generate", () => {
       ])
       expect(fixture.assertions[0]?.sessionID).toBe(session.id)
 
-      // An existing file is never replaced, and nothing is generated or charged for.
-      fixture.requests.length = 0
-      expect(failure(yield* run({ prompt: "again", path: "out.png" }))).toBe(
-        `${file} already exists. Choose a new path.`,
-      )
-      expect(fixture.requests).toEqual([])
+      // Running again with the same path replaces the file, like the write tool.
+      const again = yield* run({ prompt: "again", path: "out.png" })
+      expect(again.status).toBe("completed")
+      yield* notice(again)
+      expect(fixture.requests).toHaveLength(2)
     }),
   )
 

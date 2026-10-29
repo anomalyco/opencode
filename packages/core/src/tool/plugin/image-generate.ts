@@ -52,7 +52,7 @@ export const Input = Schema.Struct({
   }),
   path: Schema.optionalKey(Schema.String).annotate({
     description:
-      "Where to save the image, relative to the session directory or absolute. Never overwrites. Defaults to a new file in the session's temp folder.",
+      "Where to save the image, relative to the session directory or absolute. Overwrites an existing file. Defaults to a new file in the session's temp folder.",
   }),
 })
 
@@ -217,12 +217,6 @@ export const Plugin = {
       Effect.forkIn(scope, { startImmediately: true }),
     )
 
-    const exists = (file: string) =>
-      environment.files.stat(file).pipe(
-        Effect.as(true),
-        Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
-      )
-
     // Registered only while an image model is available, re-evaluated whenever the catalog changes.
     // Subscribing before the first read keeps a change in between from being missed.
     const wanted = models.available(["image"]).pipe(Effect.map((available) => available.length > 0))
@@ -260,8 +254,6 @@ export const Plugin = {
               const requested =
                 target?.absolute ??
                 path.join(global.tmp, "images", context.sessionID, `image_${Identifier.create(false)}.png`)
-              if (yield* exists(requested))
-                return yield* new ToolFailure({ message: `${requested} already exists. Choose a new path.` })
 
               yield* permission.assert({
                 action: name,
@@ -323,10 +315,9 @@ export const Plugin = {
                 const bytes = Buffer.from(image.data, "base64")
                 const mime = Mime.detect(bytes)
                 // Providers may return JPEG or WebP and core has no encoder. A default path takes the real extension;
-                // an explicit path is kept as given, because only that exact path was approved and checked.
+                // an explicit path is written exactly as given, since that's the path the edit permission covered.
                 const extension = EXTENSIONS[mime] ?? ".png"
                 const file = target || extension === ".png" ? requested : requested.slice(0, -".png".length) + extension
-                if (yield* exists(file)) return yield* Effect.fail(new Error(`${file} already exists.`))
                 yield* environment.files.write(file, bytes)
                 const note = mime === "image/png" ? "" : ` The model returned ${mime}, so the file is in that format.`
                 return `Image request finished. Saved image: ${file} (${ref}).${note}\nUse the read tool on this path to view the image.`
