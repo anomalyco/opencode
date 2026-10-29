@@ -143,6 +143,26 @@ describe("class diagram rendering", () => {
     expect(output).not.toMatch(/\n\s*\n/)
   })
 
+  test("places cardinalities on free cells and shows a shared one once", () => {
+    const output = renderClassDiagram(`classDiagram
+  class User {
+    +String id
+    +String email
+  }
+  class Notification {
+    +String message
+    +Boolean read
+  }
+  class Project
+  class Task
+  User "1" --> "0..*" Notification : receives
+  User "1" --> "0..*" Task : assigned to
+  Project "1" --> "0..*" Task : contains`)
+    expect(output.match(/0\.\.\*/g)).toHaveLength(2)
+    expect(output.match(/(?<![.\w])1(?![\w.])/g)).toHaveLength(2)
+    for (const line of output.split("\n")) expect(line).not.toMatch(/[│├┤]\d|\d[│├┤]/)
+  })
+
   test("keeps classes outside a namespace off its frame", () => {
     const output = renderClassDiagram(`classDiagram
   namespace Accounts {

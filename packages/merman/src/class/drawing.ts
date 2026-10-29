@@ -42,6 +42,35 @@ export function drawClassDiagramGrid(diagram: ClassDiagram, options: ClassDiagra
   const padding = rowPadding(firstLayout.bounds)
   const layout = padding.size ? layoutFlowchartDiagram(toFlowchart(diagram, padding), layoutOptions) : firstLayout
   straightenLeafRoutes(layout, new Set(diagram.namespaces.flatMap((namespace) => namespace.classIds)))
+  const first = drawLayout(diagram, layout, padding)
+  if (!first.dropped) return first.grid
+  // A cardinality had no free cell, usually because its line ends at the canvas edge. Add a margin and redraw.
+  const margin =
+    Math.max(
+      ...diagram.relations
+        .flatMap((relation) => [relation.fromCardinality ?? "", relation.toCardinality ?? ""])
+        .map(diagramTextWidth),
+    ) + 2
+  translateLayout(layout, margin, 1)
+  layout.width += margin * 2
+  layout.height += 2
+  return drawLayout(diagram, layout, padding).grid
+}
+
+function translateLayout(layout: FlowchartLayout, dx: number, dy: number): void {
+  for (const bounds of [...layout.bounds.values(), ...layout.subgraphBounds.values()])
+    translateDiagramBounds(bounds, dx, dy)
+  for (const route of layout.routes) {
+    route.points = route.points.map((routePoint) => point(routePoint.x + dx, routePoint.y + dy))
+    if (route.labelPoint) route.labelPoint = point(route.labelPoint.x + dx, route.labelPoint.y + dy)
+  }
+}
+
+function drawLayout(
+  diagram: ClassDiagram,
+  layout: FlowchartLayout,
+  padding: ReadonlyMap<string, number>,
+): { grid: ClassGrid; dropped: boolean } {
   const relations = new Map<string, ClassRelation[]>()
   for (const relation of diagram.relations) {
     const key = relationKey(relation.from, relation.to, relation.label)
@@ -73,10 +102,27 @@ export function drawClassDiagramGrid(diagram: ClassDiagram, options: ClassDiagra
       grid.replaceCell(connector.x, connector.y, connector.char, "classBorder")
     }
   }
+  let dropped = false
+  // Lines that share an end point show a shared cardinality once.
+  const placed = new Set<string>()
+  for (const { route, relation } of drawn) {
+    const points = route.points
+    if (points.length < 2) continue
+    const ends = [
+      { point: points[0]!, neighbor: points[1]!, text: relation.fromCardinality },
+      { point: points.at(-1)!, neighbor: points.at(-2)!, text: relation.toCardinality },
+    ]
+    for (const end of ends) {
+      const key = `${end.point.x}:${end.point.y}:${end.text}`
+      if (!end.text || placed.has(key)) continue
+      placed.add(key)
+      dropped = !drawCardinality(grid, end.point, end.neighbor, end.text) || dropped
+    }
+  }
   for (const bounds of layout.subgraphBounds.values()) {
     grid.setText(bounds.left + 2, bounds.top, ` ${bounds.label} `, "namespaceLabel")
   }
-  return grid
+  return { grid, dropped }
 }
 
 function toFlowchart(diagram: ClassDiagram, padding: ReadonlyMap<string, number>): FlowchartDiagram {
@@ -126,13 +172,22 @@ function straightenLeafRoutes(layout: FlowchartLayout, namespaced: ReadonlySet<s
     if (!box || !start || !end || route.points.length <= 2 || namespaced.has(id)) continue
     if (layout.routes.some((other) => other !== route && (other.edge.from === id || other.edge.to === id))) continue
 
-    const vertical = end.y === box.top - 1 || end.y === box.top + box.height
-    const horizontal = end.x === box.left - 1 || end.x === box.left + box.width
-    if (!vertical && !horizontal) continue
+    const above = start.y < box.top - 1
+    const below = start.y > box.top + box.height
+    const leftOf = start.x < box.left - 1
+    const rightOf = start.x > box.left + box.width
+    const vertical = above || below
+    if (!vertical && !leftOf && !rightOf) continue
     const dx = vertical ? start.x - box.centerX : 0
     const dy = vertical ? 0 : start.y - box.centerY
     const moved = { left: box.left + dx, top: box.top + dy, width: box.width, height: box.height }
-    const straight = vertical ? [start, point(start.x, end.y)] : [start, point(end.x, start.y)]
+    // End the straight line on the side of the box that faces the other class.
+    const straight = [
+      start,
+      vertical
+        ? point(start.x, above ? box.top - 1 : box.top + box.height)
+        : point(leftOf ? box.left - 1 : box.left + box.width, start.y),
+    ]
     if (moved.left < 0 || moved.top < 0) continue
 
     const margin = { left: moved.left - 3, top: moved.top - 1, width: moved.width + 6, height: moved.height + 2 }
@@ -235,8 +290,6 @@ function drawRelation(grid: ClassGrid, route: FlowchartEdgeRoute, relation: Clas
   const end = points.at(-1)!
   drawEnd(grid, start, points[1]!, relation.fromMarker, relation.dashed)
   drawEnd(grid, end, points.at(-2)!, relation.toMarker, relation.dashed)
-  if (relation.fromCardinality) drawCardinality(grid, start, points[1]!, relation.fromCardinality)
-  if (relation.toCardinality) drawCardinality(grid, end, points.at(-2)!, relation.toCardinality)
   if (relation.label) {
     const label = flowchartRouteLabelLayout(route, diagramTextWidth)
     for (const [index, line] of label.lines.entries()) {
@@ -272,12 +325,28 @@ function markerGlyph(marker: ClassRelationMarker | undefined, direction: Diagram
   return diagramLineGlyph(new Set([direction]))
 }
 
-function drawCardinality(grid: ClassGrid, point: DiagramPoint, neighbor: DiagramPoint, text: string): void {
-  const vertical = point.x === neighbor.x
-  const towardBox = directionBetween(neighbor, point)
-  const x = vertical ? point.x + 2 : towardBox === "right" ? point.x - diagramTextWidth(text) : point.x + 1
-  const y = vertical ? point.y : point.y - 1
-  grid.setText(x, y, text, "label")
+function drawCardinality(grid: ClassGrid, point: DiagramPoint, neighbor: DiagramPoint, text: string): boolean {
+  const width = diagramTextWidth(text)
+  const beside = [
+    { x: point.x + 2, y: point.y },
+    { x: point.x - width - 1, y: point.y },
+  ]
+  const around = [
+    { x: point.x + 1, y: point.y - 1 },
+    { x: point.x - width, y: point.y - 1 },
+    { x: point.x + 1, y: point.y + 1 },
+    { x: point.x - width, y: point.y + 1 },
+  ]
+  const candidates = point.x === neighbor.x ? [...beside, ...around] : [...around, ...beside]
+  // Keep a blank cell on both sides so the text never touches a box, line or other label.
+  const target = candidates.find((candidate) =>
+    Array.from({ length: width + 2 }, (_, index) => grid.getCell(candidate.x - 1 + index, candidate.y)).every(
+      (cell) => cell?.char === " " && cell.style === undefined,
+    ),
+  )
+  if (!target) return false
+  grid.setText(target.x, target.y, text, "label")
+  return true
 }
 
 const DASHED: Record<string, string> = { "─": "╌", "│": "╎" }
