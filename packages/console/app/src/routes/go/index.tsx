@@ -119,7 +119,7 @@ export default function Home() {
       <Title>{i18n.t("go.title")}</Title>
       <Meta name="description" content={description()} />
       <LocaleLinks path="/go" />
-      <SocialMeta title={i18n.t("go.title")} description={description()} path="/go" image="/social-share-black.png" />
+      <SocialMeta title={i18n.t("go.title")} description={description()} path="/go" />
 
       <div data-component="container">
         <Header go hideGetStarted />
