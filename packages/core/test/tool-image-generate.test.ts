@@ -298,9 +298,7 @@ describe("image_generate", () => {
 
       // An explicit path's extension is replaced too, and the notice gives the real path.
       const explicit = yield* run({ prompt: "a cat", path: "cat.png" })
-      expect(yield* notice(explicit)).toContain(
-        `Saved image: ${path.join(directory, "cat.jpg")} (test/painter). It was saved as cat.jpg instead of cat.png because the model returned image/jpeg.`,
-      )
+      expect(yield* notice(explicit)).toContain(`Saved image: ${path.join(directory, "cat.jpg")} (test/painter).`)
       expect(yield* Effect.promise(() => Bun.file(path.join(directory, "cat.jpg")).exists())).toBe(true)
       // The edit prompt covered cat.png; the file actually written is still checked against deny rules.
       expect(fixture.assertions.filter((item) => item.action === "edit").map((item) => item.resources)).toEqual([

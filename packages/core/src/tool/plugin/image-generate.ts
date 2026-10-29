@@ -34,13 +34,6 @@ const EXTENSIONS: Record<string, string> = {
   "image/webp": ".webp",
   "image/gif": ".gif",
 }
-const EXTENSION_TYPES: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".gif": "image/gif",
-}
 
 export const description = [
   "Generates a new image, or edits existing ones.",
@@ -345,8 +338,7 @@ export const Plugin = {
                 const image = result.images[0]
                 if (!image) return yield* Effect.fail(new Error(`${ref} returned no image.`))
                 const bytes = Buffer.from(image.data, "base64")
-                const mime = Mime.detect(bytes)
-                const file = stem + (EXTENSIONS[mime] ?? ".png")
+                const file = stem + (EXTENSIONS[Mime.detect(bytes)] ?? ".png")
                 // The edit prompt covered the requested path. Replacing a different existing file needs its own
                 // approval; a new file only has to pass the deny rules.
                 if (target && file !== target.absolute) {
@@ -365,13 +357,7 @@ export const Plugin = {
                   yield* replaces ? permission.assert({ ...request, save: ["*"] }) : permission.assertNotDenied(request)
                 }
                 yield* environment.files.write(file, bytes)
-                // Say so when the real format changed the requested extension, so the agent doesn't convert it back.
-                const requested = target ? path.extname(target.absolute).toLowerCase() : ""
-                const format =
-                  requested in EXTENSION_TYPES && requested !== path.extname(file)
-                    ? ` It was saved as ${path.basename(file)} instead of ${path.basename(target!.absolute)} because the model returned ${mime}.`
-                    : ""
-                return `Image request finished. Saved image: ${file} (${ref}).${format}\nUse the read tool on this path to view the image.`
+                return `Image request finished. Saved image: ${file} (${ref}).\nUse the read tool on this path to view the image.`
               }).pipe(
                 // The job keeps this text, so a restart can still deliver the outcome.
                 Effect.mapError((error) => new Error(`Image request failed for ${stem}: ${error.message}`)),
