@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
-import { createEffect, createMemo, For, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, For, Show } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
@@ -13,49 +13,105 @@ import { useServers } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
+import { pathKey } from "@/workspaces/path-key"
 import { sessionTabTitle } from "./tab-title"
 import { sessionTitle } from "@/session/title"
-import { createSessionInbox, inboxArchived, inboxBusy, type InboxEntry, type InboxStatus } from "./inbox-model"
+import { createSessionInbox, inboxArchived, inboxBusy, type InboxEntry, type SessionInbox } from "./inbox-model"
 
-// `since` is when the inbox was first used; Recent only lists sessions that finished a run after it.
+// `since` is when the inbox was first used; it only lists sessions that finished a run after it. `project` is the
+// project filter, absent for all projects.
 const InboxState = Persistence.struct({
-  workingExpanded: Schema.Boolean,
   since: Persistence.optional(Schema.Number),
+  project: Persistence.optional(Schema.String),
 })
 
 /** The experimental Inbox interface mode: the session inbox in place of vertical tabs. */
 export function SidebarInbox() {
   const language = useLanguage()
   const dialog = useDialog()
+  const servers = useServers()
   const inbox = createSessionInbox({ archived: true })
 
-  const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {
-    workingExpanded: true,
+  const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {})
+
+  const projectOf = (entry: InboxEntry) => {
+    const project = entry.ctx.projects.forSession(entry.session)
+    const tag = servers.tag(entry.conn)
+    const name = displayName(project ?? { worktree: entry.session.location.directory })
+
+    return {
+      key: `${entry.server}\0${project?.id ?? pathKey(entry.session.location.directory)}`,
+      name,
+      // Projects on another server keep the server in the picker, where two can share a name.
+      label: tag ? `${name} · ${tag}` : name,
+    }
+  }
+
+  const finished = (entry: InboxEntry) =>
+    !inboxBusy(entry.status) && state.since !== undefined && (entry.session.time.idle ?? 0) >= state.since
+
+  // Every session the inbox lists: running, waiting on you, or finished since the inbox was first used.
+  const listed = createMemo(() => inbox.entries().filter((entry) => inboxBusy(entry.status) || finished(entry)))
+
+  const projects = createMemo(() => [
+    ...new Map(
+      listed()
+        .map((entry) => projectOf(entry))
+        .map((project) => [project.key, project]),
+    ).values(),
+  ])
+
+  // A filter whose project left the inbox shows everything rather than an empty list.
+  const filter = () => (projects().some((project) => project.key === state.project) ? state.project : undefined)
+
+  // Rows name their project only when the list mixes projects; otherwise it repeats on every row.
+  const named = () => projects().length > 1 && !filter()
+
+  const shown = createMemo(() => {
+    const key = filter()
+
+    return key ? listed().filter((entry) => projectOf(entry).key === key) : listed()
   })
 
-  const sections = createMemo(() => {
-    const list = inbox.entries()
-    // The most recently finished session comes first.
-    const finished = list
-      .filter((entry) => {
-        const since = state.since
+  // Live rows want something from you or are still running; read rows settle into one line below them. Opening a live
+  // row marks it read, so it stays live while it is open instead of jumping into Settled under the pointer.
+  const live = createMemo((previous: Set<string>) => {
+    const keys = shown().flatMap((entry) => {
+      const unread = finished(entry) && !inboxArchived(entry) && entry.status !== "ready"
+      const kept = previous.has(entry.key) && inbox.selected(entry)
 
-        return !inboxBusy(entry.status) && since !== undefined && (entry.session.time.idle ?? 0) >= since
-      })
+      return inboxBusy(entry.status) || unread || kept ? [entry.key] : []
+    })
+
+    return new Set(keys)
+  }, new Set<string>())
+
+  const sections = createMemo(() => {
+    const list = shown()
+    const rank = (entry: InboxEntry) => (entry.status === "approval" || entry.status === "input" ? 0 : 1)
+
+    // The latest activity: when a run finished, or when the running one was requested.
+    const activity = (entry: InboxEntry) =>
+      inboxBusy(entry.status) ? entry.session.time.updated : (entry.session.time.idle ?? 0)
+
+    const settled = list
+      .filter((entry) => !live().has(entry.key))
       .toSorted((a, b) => (b.session.time.idle ?? 0) - (a.session.time.idle ?? 0))
 
     return {
-      needs: list.filter((entry) => entry.status === "approval" || entry.status === "input"),
-      inbox: finished.filter((entry) => !inboxArchived(entry)),
-      archived: finished.filter(inboxArchived),
-      working: list.filter((entry) => entry.status === "working"),
+      // What needs you comes first, then everything else by its latest activity.
+      live: list
+        .filter((entry) => live().has(entry.key))
+        .toSorted((a, b) => rank(a) - rank(b) || activity(b) - activity(a)),
+      settled: settled.filter((entry) => !inboxArchived(entry)),
+      archived: settled.filter(inboxArchived),
     }
   })
 
   // The client only refreshes `time.idle` for loaded sessions when a run ends, so load every working one.
   createEffect(() => {
-    sections().working.forEach((entry) => {
-      if (entry.ctx.data.session.get(entry.session.id)) return
+    sections().live.forEach((entry) => {
+      if (entry.status !== "working" || entry.ctx.data.session.get(entry.session.id)) return
       void entry.ctx.data.session.sync(entry.session.id).catch(() => undefined)
     })
   })
@@ -65,18 +121,12 @@ export function SidebarInbox() {
     if (ready() && state.since === undefined) setState("since", Date.now())
   })
 
-  // Git info is not stored on the session, so eagerly load it for every shown row.
-  createEffect(() => {
-    const visible = sections()
-
-    inbox.loadBranches([...visible.needs, ...visible.working, ...visible.inbox, ...visible.archived])
-  })
-
   function DeleteDialog(props: { entry: InboxEntry }) {
     const confirm = async () => {
       await inbox.remove(props.entry)
       dialog.close()
     }
+
     return (
       <Dialog fit>
         <DialogHeader hideClose>
@@ -99,283 +149,310 @@ export function SidebarInbox() {
     )
   }
 
-  const rows = (list: InboxEntry[]) => (
+  const menu = (entry: () => InboxEntry) => (
+    <Menu.Context.Portal>
+      <Menu.Context.Content>
+        <Show
+          when={inboxArchived(entry())}
+          fallback={<Menu.Item onSelect={() => void inbox.archive(entry())}>{language.t("common.archive")}</Menu.Item>}
+        >
+          <Menu.Item onSelect={() => void inbox.unarchive(entry())}>{language.t("sidebar.inbox.unarchive")}</Menu.Item>
+        </Show>
+        <Menu.Separator />
+        <Menu.Item onSelect={() => dialog.show(() => <DeleteDialog entry={entry()} />)}>
+          {language.t("common.delete")}…
+        </Menu.Item>
+      </Menu.Context.Content>
+    </Menu.Context.Portal>
+  )
+
+  const rows = (list: InboxEntry[], settled: boolean) => (
     <For each={list.map((entry) => entry.key)}>
       {(key) => (
         <Show when={inbox.byKey().get(key)}>
           {(entry) => (
-            <InboxRow
-              entry={entry()}
-              selected={inbox.selected(entry())}
-              now={inbox.now()}
-              branchLoading={inbox.branchLoading(entry())}
-              branch={inbox.branch(entry())}
-              worktree={inbox.inWorktree(entry())}
-              archived={inboxArchived(entry())}
-              onOpen={() => inbox.open(entry())}
-              onArchive={() => void inbox.archive(entry())}
-              onUnarchive={() => void inbox.unarchive(entry())}
-              onDelete={() => dialog.show(() => <DeleteDialog entry={entry()} />)}
-            />
+            <Menu.Context modal={false}>
+              <Show
+                when={settled}
+                fallback={
+                  <LiveRow entry={entry()} inbox={inbox} project={named() ? projectOf(entry()).name : undefined} />
+                }
+              >
+                <SettledRow entry={entry()} inbox={inbox} project={named() ? projectOf(entry()).name : undefined} />
+              </Show>
+              {menu(entry)}
+            </Menu.Context>
           )}
         </Show>
       )}
     </For>
   )
 
+  const empty = () =>
+    sections().live.length === 0 && sections().settled.length === 0 && sections().archived.length === 0
+
   return (
-    <div data-slot="sidebar-inbox" class="flex min-h-0 flex-1 flex-col">
-      <div data-slot="sidebar-inbox-scroll" class="flex min-h-0 flex-1 flex-col gap-px overflow-y-auto pb-1">
-        <Show when={sections().needs.length > 0}>
-          <div class="flex shrink-0 flex-col gap-px pb-3">
-            <SectionHeader label={language.t("sidebar.inbox.section.needsAttention")} count={sections().needs.length} />
-            {rows(sections().needs)}
-          </div>
-        </Show>
-        <Show
-          when={sections().inbox.length > 0}
-          fallback={
-            <Show
-              when={
-                sections().needs.length === 0 && sections().working.length === 0 && sections().archived.length === 0
-              }
+    <div data-slot="sidebar-inbox" class="@container flex min-h-0 flex-1 flex-col">
+      {/* One picker scales to any number of projects, so it replaces per-project tabs. */}
+      <Show when={projects().length > 1}>
+        <div class="flex shrink-0 px-1.5 pb-1.5">
+          <Menu modal={false} placement="bottom-start" gutter={4}>
+            <Menu.Trigger
+              as="button"
+              type="button"
+              class="flex h-6 min-w-0 items-center gap-1 rounded-[6px] text-[12px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:outline-none focus-visible:text-v2-text-text-base"
             >
-              <div class="px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
-                {language.t("sidebar.inbox.empty")}
-              </div>
-            </Show>
-          }
-        >
-          <Show when={sections().needs.length > 0}>
-            <SectionHeader label={language.t("sidebar.inbox.section.recent")} />
-          </Show>
-          {rows(sections().inbox)}
-        </Show>
-        <Show when={sections().archived.length > 0}>
-          <div class="flex shrink-0 flex-col gap-px pt-3">
-            <SectionHeader label={language.t("sidebar.inbox.section.archived")} />
-            {rows(sections().archived)}
-          </div>
-        </Show>
-      </div>
-      {/* Working sessions sit in a shelf pinned below the scrolling list. */}
-      <Show when={sections().working.length > 0}>
-        <div
-          data-slot="sidebar-inbox-working"
-          class="flex max-h-[40%] shrink-0 flex-col gap-px border-t border-v2-border-border-muted pt-1.5"
-        >
-          <SectionHeader
-            label={language.t("sidebar.inbox.section.working")}
-            count={sections().working.length}
-            expanded={state.workingExpanded}
-            onToggle={() => setState("workingExpanded", !state.workingExpanded)}
-          />
-          <div class="flex min-h-0 flex-col gap-px overflow-y-auto">
-            {/* A collapsed shelf still shows the session that is open. */}
-            {rows(sections().working.filter((entry) => state.workingExpanded || inbox.selected(entry)))}
-          </div>
+              <span class="truncate">
+                {projects().find((project) => project.key === filter())?.label ??
+                  language.t("sidebar.inbox.project.all")}
+              </span>
+              <Icon name="chevron-down" size="small" class="shrink-0 text-v2-text-text-faint" />
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content>
+                <Menu.RadioGroup value={filter() ?? ""} onChange={(value) => setState("project", value || undefined)}>
+                  <Menu.RadioItem value="" closeOnSelect>
+                    {language.t("sidebar.inbox.project.all")}
+                  </Menu.RadioItem>
+                  <Menu.Separator />
+                  <For each={projects().toSorted((a, b) => a.label.localeCompare(b.label))}>
+                    {(project) => (
+                      <Menu.RadioItem value={project.key} closeOnSelect>
+                        {project.label}
+                      </Menu.RadioItem>
+                    )}
+                  </For>
+                </Menu.RadioGroup>
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
         </div>
       </Show>
+      <div data-slot="sidebar-inbox-scroll" data-scrollable class="flex min-h-0 flex-1 flex-col overflow-y-auto pb-1">
+        <Show when={!empty()}>
+          <div class="flex shrink-0 flex-col gap-px">{rows(sections().live, false)}</div>
+        </Show>
+        <Show when={empty()}>
+          <div class="px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
+            {language.t("sidebar.inbox.empty")}
+          </div>
+        </Show>
+        <Show when={sections().settled.length > 0}>
+          <SectionDivider label={language.t("sidebar.inbox.section.settled")} />
+          <div class="flex shrink-0 flex-col">{rows(sections().settled, true)}</div>
+        </Show>
+        <Show when={sections().archived.length > 0}>
+          <SectionDivider label={language.t("sidebar.inbox.section.archived")} />
+          <div class="flex shrink-0 flex-col opacity-50">{rows(sections().archived, true)}</div>
+        </Show>
+      </div>
     </div>
   )
 }
 
-function SectionHeader(props: { label: string; count?: number; expanded?: boolean; onToggle?: () => void }) {
-  const content = (): JSX.Element => (
-    <>
-      <span class="min-w-0 truncate">{props.label}</span>
-      <Show when={props.count}>
-        <span class="shrink-0 tabular-nums text-v2-text-text-faint">{props.count}</span>
+function SectionDivider(props: { label: string }) {
+  return (
+    <div class="mx-1.5 mt-3 mb-1 flex shrink-0 items-center gap-2 text-[11px] leading-4 font-medium text-v2-text-text-faint">
+      <span class="shrink-0">{props.label}</span>
+      <span aria-hidden="true" class="h-px flex-1 bg-v2-border-border-muted" />
+    </div>
+  )
+}
+
+const rowClass =
+  "w-full min-w-0 shrink-0 rounded-[6px] px-1.5 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover data-[state=active]:bg-v2-background-bg-layer-02"
+
+/**
+ * A session that wants something or is still running: avatar, "project / title" and its state, then what it is
+ * asking, aligned with the text so nothing sits under the avatar.
+ */
+function LiveRow(props: { entry: InboxEntry; inbox: SessionInbox; project?: string }) {
+  const status = () => props.entry.status
+
+  // The pending request's own words: the command or resource for a permission, the question for a form.
+  const message = () => {
+    if (status() === "approval") {
+      const request = props.inbox.permission(props.entry)
+
+      return request && { text: request.message ?? request.resources.join(" "), code: !request.message }
+    }
+
+    if (status() !== "input") return
+
+    const form = props.inbox.form(props.entry)
+
+    return form && { text: form.fields[0].description ?? form.fields[0].title ?? form.title, code: false }
+  }
+
+  return (
+    <Menu.Context.Trigger
+      as="button"
+      type="button"
+      data-slot="sidebar-inbox-item"
+      data-status={status()}
+      data-state={props.inbox.selected(props.entry) ? "active" : undefined}
+      class={`${rowClass} grid grid-cols-[16px_minmax(0,1fr)_auto] gap-x-1.5 gap-y-1 py-1.5`}
+      onClick={() => props.inbox.open(props.entry)}
+    >
+      <span class="flex h-4 items-center">
+        <Avatar entry={props.entry} />
+      </span>
+      <Heading entry={props.entry} project={props.project} />
+      {/* The state owns a column across both lines, so the message wraps before it. */}
+      <span class="row-span-2 ms-1.5 flex h-4 items-center">
+        <State entry={props.entry} now={props.inbox.now()} />
+      </span>
+      <Show when={message()}>
+        {(value) => (
+          <span
+            dir="auto"
+            class="col-start-2 line-clamp-2 min-w-0 text-[12px] leading-4 [overflow-wrap:anywhere] text-v2-text-text-muted"
+            classList={{ "font-mono text-[13px] font-[440] tracking-[-0.04px]": value().code }}
+          >
+            {value().text}
+          </span>
+        )}
       </Show>
-      <Show when={props.onToggle}>
-        <Icon
-          name="chevron-down"
-          size="small"
-          class="ms-auto shrink-0 transition-transform"
-          classList={{ "-rotate-90 rtl:rotate-90": !props.expanded }}
-        />
-      </Show>
-    </>
+    </Menu.Context.Trigger>
+  )
+}
+
+/** A read session: one quiet line. */
+function SettledRow(props: { entry: InboxEntry; inbox: SessionInbox; project?: string }) {
+  return (
+    <Menu.Context.Trigger
+      as="button"
+      type="button"
+      data-slot="sidebar-inbox-item"
+      data-status={props.entry.status}
+      data-state={props.inbox.selected(props.entry) ? "active" : undefined}
+      class={`${rowClass} group flex h-[26px] items-center gap-1.5 text-v2-text-text-faint hover:text-v2-text-text-muted data-[state=active]:text-v2-text-text-base`}
+      onClick={() => props.inbox.open(props.entry)}
+    >
+      <span class="flex opacity-60 group-hover:opacity-100 group-data-[state=active]:opacity-100">
+        <Avatar entry={props.entry} />
+      </span>
+      <Heading entry={props.entry} project={props.project} settled />
+      <span class="ms-1.5 shrink-0 text-[12px] leading-4 tabular-nums">
+        <Age entry={props.entry} now={props.inbox.now()} />
+      </span>
+    </Menu.Context.Trigger>
+  )
+}
+
+/** The project avatar; a session on another server names it in the tooltip. */
+function Avatar(props: { entry: InboxEntry }) {
+  const servers = useServers()
+  const project = createMemo(() => props.entry.ctx.projects.forSession(props.entry.session))
+
+  const avatar = () => (
+    <SessionTabAvatarView project={project()} directory={props.entry.session.location.directory} unread={false} />
   )
 
   return (
-    <Show
-      when={props.onToggle}
-      fallback={
-        <div class="flex h-6 shrink-0 items-center gap-1.5 px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted">
-          {content()}
-        </div>
-      }
-    >
-      {(toggle) => (
-        <button
-          type="button"
-          aria-expanded={props.expanded}
-          class="flex h-6 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-1.5 text-start text-[12px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
-          onClick={toggle()}
-        >
-          {content()}
-        </button>
+    <Show when={servers.tag(props.entry.conn)} fallback={avatar()}>
+      {(name) => (
+        <Tooltip placement="right" value={name()} class="flex">
+          {avatar()}
+        </Tooltip>
       )}
     </Show>
   )
 }
 
-function InboxRow(props: {
-  entry: InboxEntry
-  selected: boolean
-  now: number
-  branchLoading: boolean
-  branch: string | undefined
-  worktree: boolean
-  archived: boolean
-  onOpen: () => void
-  onArchive: () => void
-  onUnarchive: () => void
-  onDelete: () => void
-}) {
+/** "project / title", or the title alone when the project is given away by the list. Below 240px the avatar alone
+ * names the project, so the title keeps its room. */
+function Heading(props: { entry: InboxEntry; project?: string; settled?: boolean }) {
   const language = useLanguage()
-  const servers = useServers()
-  const project = createMemo(() => props.entry.ctx.projects.forSession(props.entry.session))
-  const status = () => props.entry.status
-  const unread = () => status() !== "ready" && status() !== "working"
-
-  // Sessions on the current server are not marked.
-  const tag = () => servers.tag(props.entry.conn)
-
-  const compact = (seconds: number) => {
-    if (seconds < 3600) return language.plural("sidebar.inbox.elapsed.minutes", Math.floor(seconds / 60))
-
-    if (seconds < 86_400) return language.plural("sidebar.inbox.elapsed.hours", Math.floor(seconds / 3600))
-
-    return language.plural("sidebar.inbox.elapsed.days", Math.floor(seconds / 86_400))
-  }
-
-  const elapsed = () => {
-    // `time.updated` moves when a prompt is enqueued, so it marks when the current run was requested.
-    const seconds = Math.max(0, Math.floor((props.now - props.entry.session.time.updated) / 1000))
-
-    return seconds < 60 ? language.plural("sidebar.inbox.elapsed.seconds", seconds) : compact(seconds)
-  }
-
-  const age = () => {
-    const seconds = Math.max(
-      0,
-      Math.floor((props.now - (props.entry.session.time.idle ?? props.entry.session.time.updated)) / 1000),
-    )
-
-    return seconds < 60 ? language.t("sidebar.inbox.time.now") : compact(seconds)
-  }
 
   return (
-    <Menu.Context modal={false}>
-      <Menu.Context.Trigger
-        as="button"
-        type="button"
-        data-slot="sidebar-inbox-item"
-        data-status={status()}
-        data-state={props.selected ? "active" : undefined}
-        class="group flex w-full shrink-0 flex-col gap-0.5 rounded-[6px] px-1.5 py-1.5 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover data-[state=active]:bg-v2-background-bg-layer-02"
-        classList={{
-          "transition-opacity hover:opacity-100 focus-visible:opacity-100": !props.selected,
-          "opacity-70": status() === "working" && !props.selected,
-          "opacity-50": props.archived && !props.selected,
-        }}
-        onClick={props.onOpen}
-      >
-        <span class="flex h-4 w-full min-w-0 items-center gap-1.5 text-[12px] leading-4 text-v2-text-text-faint">
-          <span class="flex size-4 shrink-0 items-center justify-center">
-            <SessionTabAvatarView
-              project={project()}
-              directory={props.entry.session.location.directory}
-              unread={false}
-            />
-          </span>
-          <span class="min-w-0 truncate">
-            {displayName(project() ?? { worktree: props.entry.session.location.directory })}
-          </span>
-          <span class="ms-auto shrink-0 tabular-nums" role={status() === "ready" ? undefined : "status"}>
-            <Show when={status() !== "ready"} fallback={age()}>
-              <span
-                classList={{
-                  "text-v2-state-fg-warning": status() === "approval" || status() === "input",
-                  "text-v2-state-fg-info": status() === "working",
-                  "text-v2-state-fg-danger": status() === "failed",
-                  "text-v2-state-fg-success": status() === "done",
-                }}
-              >
-                <Show
-                  when={status() === "working"}
-                  fallback={language.t(`sidebar.inbox.status.${status() as Exclude<InboxStatus, "ready">}`)}
-                >
-                  {/* Announce only the status: the ticking duration would be re-read every second. */}
-                  <span class="sr-only">{language.t("sidebar.inbox.status.working")}</span>
-                  {/* Keep the status colour under the sweep. */}
-                  <span
-                    aria-hidden="true"
-                    class="[&_[data-component=text-shimmer]]:[--text-shimmer-base-color:var(--v2-state-fg-info)]"
-                  >
-                    <TextShimmer text={language.t("sidebar.inbox.status.workingFor", { duration: elapsed() })} active />
-                  </span>
-                </Show>
-              </span>
-            </Show>
-          </span>
+    <span class="flex h-4 min-w-0 flex-1 items-center gap-1 text-[13px] leading-4">
+      <Show when={props.project}>
+        <span
+          class="max-w-[45%] shrink-0 truncate @max-[239px]:hidden"
+          classList={{ "text-v2-text-text-muted": !props.settled }}
+        >
+          {props.project}
         </span>
         <span
-          dir="auto"
-          class="w-full min-w-0 truncate text-[13px] leading-4"
-          // Rows recede once read so unread results stand out.
-          classList={{
-            "font-medium text-v2-text-text-base": unread(),
-            "text-v2-text-text-muted": !unread(),
-          }}
+          aria-hidden="true"
+          class="shrink-0 @max-[239px]:hidden"
+          classList={{ "text-v2-text-text-faint": !props.settled }}
         >
-          {sessionTabTitle(props.entry.session.title, language.t("session.tab.session"))}
+          /
         </span>
-        <Show when={props.branchLoading || props.branch || props.worktree || tag()}>
-          <span class="flex h-4 w-full min-w-0 items-center gap-1 text-[12px] leading-4 text-v2-text-text-faint">
-            <Show when={props.branchLoading}>
-              <span
-                aria-hidden="true"
-                class="h-2.5 w-24 max-w-full animate-pulse rounded-full bg-v2-background-bg-layer-03"
-              />
-            </Show>
-            <Show when={!props.branchLoading && (props.branch || props.worktree)}>
-              <span class="flex min-w-0 items-center gap-1">
-                {/* The worktree icon stands in for the branch icon to mark sessions outside the project checkout. */}
-                <Icon name={props.worktree ? "outline-worktree" : "branch"} size="small" class="shrink-0" />
-                <Show when={props.branch}>
-                  {(name) => (
-                    <span dir="ltr" class="min-w-0 truncate">
-                      {name()}
-                    </span>
-                  )}
-                </Show>
-              </span>
-            </Show>
-            <Show when={tag()}>
-              {(name) => (
-                <Tooltip placement="right" value={name()} class="ms-auto flex shrink-0">
-                  <Icon name="server" size="small" aria-label={name()} />
-                </Tooltip>
-              )}
-            </Show>
-          </span>
-        </Show>
-      </Menu.Context.Trigger>
-      <Menu.Context.Portal>
-        <Menu.Context.Content>
-          <Show
-            when={props.archived}
-            fallback={<Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>}
-          >
-            <Menu.Item onSelect={props.onUnarchive}>{language.t("sidebar.inbox.unarchive")}</Menu.Item>
-          </Show>
-          <Menu.Separator />
-          <Menu.Item onSelect={props.onDelete}>{language.t("common.delete")}…</Menu.Item>
-        </Menu.Context.Content>
-      </Menu.Context.Portal>
-    </Menu.Context>
+      </Show>
+      <span dir="auto" class="min-w-0 truncate" classList={{ "font-medium text-v2-text-text-base": !props.settled }}>
+        {sessionTabTitle(props.entry.session.title, language.t("session.tab.session"))}
+      </span>
+    </span>
   )
+}
+
+/** One slot, text only: what the session wants from you, that it failed, how long it has run, or its age. */
+function State(props: { entry: InboxEntry; now: number }) {
+  const language = useLanguage()
+  const status = () => props.entry.status
+
+  return (
+    <span
+      class="shrink-0 text-[12px] leading-4 tabular-nums"
+      role={inboxBusy(status()) || status() === "failed" ? "status" : undefined}
+    >
+      <Show when={status() === "approval"}>
+        <span class="text-v2-state-fg-warning">{language.t("sidebar.inbox.action.approve")}</span>
+      </Show>
+      <Show when={status() === "input"}>
+        <span class="text-v2-state-fg-warning">{language.t("sidebar.inbox.action.answer")}</span>
+      </Show>
+      <Show when={status() === "failed"}>
+        <span class="text-v2-state-fg-danger">{language.t("sidebar.inbox.status.failed")}</span>
+      </Show>
+      <Show when={status() === "working"}>
+        {/* Announce only the status: the ticking duration would be re-read every second. */}
+        <span class="sr-only">{language.t("sidebar.inbox.status.working")}</span>
+        {/* Keep the status colour under the sweep. */}
+        <span
+          aria-hidden="true"
+          class="[&_[data-component=text-shimmer]]:[--text-shimmer-base-color:var(--v2-state-fg-info)]"
+        >
+          <TextShimmer
+            text={language.t("sidebar.inbox.status.workingFor", {
+              duration: elapsed(language, props.now, props.entry.session.time.updated),
+            })}
+            active
+          />
+        </span>
+      </Show>
+      <Show when={status() === "done" || status() === "ready"}>
+        <span class="text-v2-text-text-faint">
+          <Age entry={props.entry} now={props.now} />
+        </span>
+      </Show>
+    </span>
+  )
+}
+
+function Age(props: { entry: InboxEntry; now: number }) {
+  const language = useLanguage()
+
+  const seconds = () =>
+    Math.max(0, Math.floor((props.now - (props.entry.session.time.idle ?? props.entry.session.time.updated)) / 1000))
+
+  return <>{seconds() < 60 ? language.t("sidebar.inbox.time.now") : compact(language, seconds())}</>
+}
+
+// `time.updated` moves when a prompt is enqueued, so it marks when the current run was requested.
+function elapsed(language: ReturnType<typeof useLanguage>, now: number, since: number) {
+  const seconds = Math.max(0, Math.floor((now - since) / 1000))
+
+  return seconds < 60 ? language.plural("sidebar.inbox.elapsed.seconds", seconds) : compact(language, seconds)
+}
+
+function compact(language: ReturnType<typeof useLanguage>, seconds: number) {
+  if (seconds < 3600) return language.plural("sidebar.inbox.elapsed.minutes", Math.floor(seconds / 60))
+
+  if (seconds < 86_400) return language.plural("sidebar.inbox.elapsed.hours", Math.floor(seconds / 3600))
+
+  return language.plural("sidebar.inbox.elapsed.days", Math.floor(seconds / 86_400))
 }
