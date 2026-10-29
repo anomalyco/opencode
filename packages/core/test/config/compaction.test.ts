@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LanguageModel, LLMClient, LLMEvent } from "@opencode/ai"
+import { LanguageModel, LLMClient, LLMEvent } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"

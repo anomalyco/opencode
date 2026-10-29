@@ -209,7 +209,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "།ལན་མེད་དོ།",
   "ui.question.review.notAnswered": "།ལན་མ་བཏབ་པར།",
   "ui.question.multiHint": "འཇུག་སྤྱོད་འབད་མི་ལན་ཚུ་ཆ་མཉམ་སེལ་འཐུ་འབད།",
-  "ui.question.singleHint": "ལན་གཅིག་སེལ་འཐུ་འབད།",
   "ui.question.custom.placeholder": "ཁྱོད་རའི་ལན་ཡིག་དཔར་རྐྱབས།",
   "ui.promptInput.placeholder.followUp":
     "འཕྲོ་མཐུད་འཕྲིན་དོན་ཁ་སྐོང་རྐྱབས་ བརྡ་བཀོད་ཀྱི་དོན་ལུ་ {{slash}} སྐབས་དོན་གྱི་དོན་ལུ་ {{at}}...",

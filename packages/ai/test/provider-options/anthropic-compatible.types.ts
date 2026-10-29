@@ -1,4 +1,4 @@
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { AnthropicCompatible } from "../../src/providers.js"
 
 const model = AnthropicCompatible.configure({ baseURL: "https://example.com" }).model("claude")

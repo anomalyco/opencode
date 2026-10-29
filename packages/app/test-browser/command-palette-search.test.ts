@@ -12,12 +12,22 @@ const copy: CommandPaletteEntry = {
 
 const file: CommandPaletteEntry = { id: "file:copy.txt", type: "file", title: "copy.txt", category: "Files" }
 
+const setting: CommandPaletteEntry = {
+  id: "setting:copy",
+  type: "setting",
+  title: "Copy on select",
+  category: "Settings",
+}
+
 const session: CommandPaletteEntry = {
   id: "session:copy",
   type: "session",
   title: "Copy session",
   category: "Sessions",
+  updated: 2,
 }
+
+const tab: CommandPaletteEntry = { ...session, id: "session:tab", title: "Copy tab", updated: 1 }
 
 describe("command palette search", () => {
   test("matches commands synchronously and cancels obsolete requests", () => {
@@ -52,7 +62,7 @@ describe("command palette search", () => {
     expect(signals[2].aborted).toBe(true)
   })
 
-  test("publishes each source independently and drops stale results on a new query", async () => {
+  test("lists sessions first, open tabs leading, then commands, settings and files, publishes each source independently, and drops stale results on a new query", async () => {
     const files = Promise.withResolvers<CommandPaletteEntry[]>()
     const sessions = Promise.withResolvers<CommandPaletteEntry[]>()
     const fileVisible = Promise.withResolvers<void>()
@@ -63,8 +73,9 @@ describe("command palette search", () => {
 
       const search = createCommandPaletteSearch({
         query,
-        items: () => [copy],
+        items: () => [copy, setting],
         sources: [() => sessions.promise, () => files.promise],
+        open: (entry) => entry.id === tab.id,
       })
 
       createComputed(() => {
@@ -76,17 +87,17 @@ describe("command palette search", () => {
       return { search, setQuery, dispose }
     })
 
-    expect(root.search.items()).toEqual([copy])
+    expect(root.search.items()).toEqual([copy, setting])
     files.resolve([file])
     await fileVisible.promise
-    expect(root.search.items()).toEqual([copy, file])
+    expect(root.search.items()).toEqual([copy, setting, file])
     expect(root.search.loading()).toBe(true)
-    sessions.resolve([session])
+    sessions.resolve([session, tab])
     await sessionVisible.promise
-    expect(root.search.items()).toEqual([copy, session, file])
+    expect(root.search.items()).toEqual([tab, session, copy, setting, file])
     expect(root.search.loading()).toBe(false)
     root.setQuery("new query")
-    expect(root.search.items()).toEqual([copy])
+    expect(root.search.items()).toEqual([copy, setting])
     root.dispose()
   })
 
@@ -109,6 +120,38 @@ describe("command palette search", () => {
 
     await settled.promise
     expect(root.search.items()).toEqual([copy, file])
+    root.dispose()
+  })
+
+  test("filters previous remote results synchronously while a refined query is pending", async () => {
+    const first = Promise.withResolvers<CommandPaletteEntry[]>()
+    const second = Promise.withResolvers<CommandPaletteEntry[]>()
+    const otherFile: CommandPaletteEntry = { id: "file: readme.md", type: "file", title: "readme.md", category: "Files" }
+    const ready = Promise.withResolvers<void>()
+
+    const root = createRoot((dispose) => {
+      const [query, setQuery] = createSignal("c")
+
+      const search = createCommandPaletteSearch({
+        query,
+        items: (q) => (q === "c" ? [copy] : []),
+        sources: [(q) => (q === "c" ? first.promise : second.promise)],
+      })
+
+      createComputed(() => {
+        if (search.items().some((entry) => entry.id === file.id)) ready.resolve()
+      })
+
+      return { search, setQuery, dispose }
+    })
+
+    first.resolve([file, otherFile])
+    await ready.promise
+    expect(root.search.items()).toEqual([copy, file, otherFile])
+
+    root.setQuery("copy")
+    expect(root.search.loading()).toBe(true)
+    expect(root.search.items()).toEqual([file])
     root.dispose()
   })
 })

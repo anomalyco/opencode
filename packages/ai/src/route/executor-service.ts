@@ -26,7 +26,7 @@ export const Service = RequestExecutorService
 export type Service = RequestExecutorService
 
 export const headerDetails = (headers: Headers.Headers) =>
-  Object.fromEntries(Object.entries(headers).map(([name, value]) => [name, String(value)]))
+  Object.fromEntries(Object.entries(headers).map(([name, value]) => [name, value]))
 
 export const responseHttp = (response: HttpClientResponse.HttpClientResponse) =>
   new HttpContext({

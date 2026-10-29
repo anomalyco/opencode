@@ -209,7 +209,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(ei vastausta)",
   "ui.question.review.notAnswered": "(ei vastattu)",
   "ui.question.multiHint": "Valitse kaikki sopivat vastaukset",
-  "ui.question.singleHint": "Valitse yksi vastaus",
   "ui.question.custom.placeholder": "Kirjoita vastauksesi…",
   "ui.lineComment.contextPlaceholder": "Lisää tämän muutoksen konteksti",
   "ui.promptInput.noMatchingItems": "Ei vastaavia kohteita",

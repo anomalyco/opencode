@@ -61,7 +61,7 @@ _Режим_: `primary`
 По умолчанию для всех следующих параметров установлено значение `ask`:
 
 - `file edits`: Все записи, исправления и изменения.
-- `shell`: все команды shell.
+- `bash`: все команды bash.
 
 Этот агент полезен, если вы хотите, чтобы LLM анализировал код, предлагал изменения или создавал планы без внесения каких-либо фактических изменений в вашу кодовую базу.
 
@@ -151,12 +151,12 @@ _Режим_: `primary`
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
         "edit": true,
-        "shell": true
+        "bash": true
       }
     },
     "plan": {
@@ -165,13 +165,13 @@ _Режим_: `primary`
       "tools": {
         "write": false,
         "edit": false,
-        "shell": false
+        "bash": false
       }
     },
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -195,12 +195,12 @@ _Режим_: `primary`
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
   edit: false
-  shell: false
+  bash: false
 ---
 
 You are in code review mode. Focus on:
@@ -366,7 +366,7 @@ Provide constructive feedback without making direct changes.
 }
 ```
 
-Идентификатор модели в вашей конфигурации opencode использует формат `provider/model-id`. Например, если вы используете [OpenCode Zen](https://opencode.ai/v2/docs/console/), вы должны использовать `opencode/gpt-5.1-codex` для кодекса GPT 5.1.
+Идентификатор модели в вашей конфигурации opencode использует формат `provider/model-id`. Например, если вы используете [OpenCode Zen](https://opencode.ai/v2/docs/console/), вы должны использовать `opencode/gpt-6.1-sol` для GPT-6.1 Sol.
 
 ---
 
@@ -379,13 +379,13 @@ Provide constructive feedback without making direct changes.
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "write": true,
-    "shell": true
+    "bash": true
   },
   "agent": {
     "plan": {
       "tools": {
         "write": false,
-        "shell": false
+        "bash": false
       }
     }
   }
@@ -419,7 +419,7 @@ Provide constructive feedback without making direct changes.
 
 ### Разрешения
 
-Вы можете настроить разрешения, чтобы управлять действиями, которые может выполнять агент. В настоящее время разрешения для инструментов `edit`, `shell` и `webfetch` можно настроить на:
+Вы можете настроить разрешения, чтобы управлять действиями, которые может выполнять агент. В настоящее время разрешения для инструментов `edit`, `bash` и `webfetch` можно настроить на:
 
 - `"ask"` — Запросить подтверждение перед запуском инструмента.
 - `"allow"` — Разрешить все операции без одобрения.
@@ -460,7 +460,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell:
+  bash:
     "*": ask
     "git diff": allow
     "git log*": allow
@@ -471,7 +471,7 @@ permission:
 Only analyze code and suggest changes.
 ```
 
-Вы можете установить разрешения для определенных команд shell.
+Вы можете установить разрешения для определенных команд bash.
 
 ```json title="opencode.json" {7}
 {
@@ -479,7 +479,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git push": "ask",
           "grep *": "allow"
         }
@@ -497,7 +497,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git *": "ask"
         }
       }
@@ -515,7 +515,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git status *": "allow"
         }
@@ -653,7 +653,7 @@ Only analyze code and suggest changes.
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -673,7 +673,7 @@ Only analyze code and suggest changes.
 
 Чтобы создать нового агента, добавьте файл Markdown в `.opencode/agents/` для проекта или в `~/.config/opencode/agents/` глобально. Имя файла становится именем агента, а frontmatter задает его описание, режим, модель и разрешения. Формат файла описан выше в разделе [Markdown](#markdown).
 
-Выполните `opencode debug agents`, чтобы вывести список агентов, загруженных OpenCode.
+Выполните `opencode agent list`, чтобы вывести список агентов, загруженных OpenCode.
 
 ---
 
@@ -684,7 +684,7 @@ Only analyze code and suggest changes.
 - **Агент сборки**: полная работа по разработке со всеми включенными инструментами.
 - **Агент планирования**: анализ и планирование без внесения изменений.
 - **Агент проверки**: проверка кода с доступом только для чтения и инструментами документирования.
-- **Агент отладки**: сосредоточен на исследовании с включенными инструментами shell и чтения.
+- **Агент отладки**: сосредоточен на исследовании с включенными инструментами bash и чтения.
 - **Агент документов**: запись документации с помощью файловых операций, но без системных команд.
 
 ---
@@ -706,7 +706,7 @@ Only analyze code and suggest changes.
 description: Writes and maintains project documentation
 mode: subagent
 tools:
-  shell: false
+  bash: false
 ---
 
 You are a technical writer. Create clear, comprehensive documentation.

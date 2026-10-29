@@ -93,7 +93,7 @@ test.describe("timeline visual lifecycle stability", () => {
       ),
     )
     await expect(
-      page.locator(`[data-timeline-part-id="${renderedPartID(ids[2])}"] [data-slot="bash-pre"]`),
+      page.locator(`[data-timeline-part-id="${renderedPartID(ids[2])}"] [data-slot="bash-result"]`),
     ).toContainText("line 50")
 
     const short = page.locator(`[data-timeline-part-id="${renderedPartID(ids[1])}"]`)

@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import path from "path"
-import { LanguageModel, LLMClient } from "@opencode/ai"
+import { LanguageModel, LLMClient } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
@@ -126,7 +126,7 @@ it.live(
       expect((yield* llm.requests()).length).toBe(1)
       yield* Deferred.succeed(release, undefined)
       yield* llm.wait(3).pipe(Effect.timeout("5 seconds"))
-      yield* second.sessions.wait({ sessionID: session.id })
+      yield* second.experimental.session.wait({ sessionID: session.id })
 
       expect(configured).toEqual(["thread-recovery", "thread-recovery"])
       expect(executed).toEqual([2])
@@ -215,7 +215,7 @@ it.live(
       for (const session of [first, second]) {
         const admitted = yield* opencode.sessions.prompt({ sessionID: session.id, text: "Hello" })
         expect(admitted.payload.text).toBe(`Hello:${session.location.workspaceID}`)
-        yield* opencode.sessions.wait({ sessionID: session.id })
+        yield* opencode.experimental.session.wait({ sessionID: session.id })
       }
       expect(configured).toEqual(["same-thread", "same-thread"])
       expect(placements.map((location) => location.workspaceID)).toEqual([firstWorkspace, secondWorkspace])
@@ -225,7 +225,7 @@ it.live(
         directory: AbsolutePath.make(directory.path),
         workspaceID: secondWorkspace,
       })
-      yield* opencode.sessions.wait({ sessionID: first.id })
+      yield* opencode.experimental.session.wait({ sessionID: first.id })
       const moved = yield* opencode.sessions.get({ sessionID: first.id })
       expect(moved.location.workspaceID).toBe(secondWorkspace)
       const admitted = yield* opencode.sessions.prompt({ sessionID: first.id, text: "Moved", resume: false })

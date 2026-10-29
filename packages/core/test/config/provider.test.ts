@@ -397,6 +397,68 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("lists a custom model by its configured type and an untyped one as chat", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: { chat: {}, painter: { type: "image" } },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries)
+
+      expect((yield* models.available()).map((model) => model.id)).toEqual([Model.ID.make("chat")])
+      expect((yield* models.available(["image"])).map((model) => model.id)).toEqual([Model.ID.make("painter")])
+      expect(yield* models.get(Provider.ID.make("custom"), Model.ID.make("painter"))).toBeUndefined()
+    }),
+  )
+
+  it.effect("lets config change a catalog model's type and keeps it when unset", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("custom")
+      const retypedID = Model.ID.make("retyped")
+      const keptID = Model.ID.make("kept")
+      yield* providers.transform((editor) => {
+        editor.models.update(providerID, retypedID, () => {})
+        editor.models.update(providerID, keptID, (model) => {
+          model.type = "decision"
+        })
+      })
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: { retyped: { type: "image" }, kept: { name: "Kept" } },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries)
+
+      expect(yield* models.available()).toEqual([])
+      expect((yield* models.available(["image"])).map((model) => model.id)).toEqual([retypedID])
+      expect((yield* models.available(["decision"])).map((model) => [model.id, model.name])).toEqual([
+        [keptID, "Kept"],
+      ])
+    }),
+  )
+
   it.effect("preserves catalog capabilities unless config overrides them", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service

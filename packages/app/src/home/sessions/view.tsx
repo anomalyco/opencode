@@ -1,15 +1,15 @@
 import type { SessionInfo } from "@opencode/client/promise"
 import { Key } from "@solid-primitives/keyed"
-import { createMemo, For, Index, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { InlineInput } from "@opencode/ui/inline-input"
-import { Spinner } from "@opencode/ui/spinner"
-import { ScrollView } from "@opencode/ui/scroll-view"
+import { Loader } from "@opencode/ui/loader"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
+import { prefersReducedMotion } from "@opencode/ui/motion"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
@@ -32,6 +32,14 @@ const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
 const HOME_SESSION_SEARCH_RESULTS_ID = "home-session-search-results"
 
 const HOME_SESSION_LONG_PRESS_MS = 500
+
+const HOME_SESSION_PLACEHOLDER_DELAY_MS = 250
+
+// Matches the list's reveal animation in view.css.
+const HOME_SESSION_REVEAL_MS = 200
+
+// Title widths for the placeholder rows, as a share of the row's label area.
+const HOME_SESSION_PLACEHOLDER_WIDTHS = [56, 38, 66, 46, 30, 52]
 
 // Middle-click or Cmd+click on macOS (Ctrl+click elsewhere) opens a session
 // tab in the background without navigating, matching browser conventions.
@@ -100,6 +108,17 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
   const [rowUI, setRowUI] = createStore<HomeSessionRowUI>({ menu: undefined, editor: undefined })
   const [hover, setHover] = createStore<{ sessionID: string | undefined }>({ sessionID: undefined })
   const showLocations = createAltHold(props.desktop, props.onRevealLocations)
+  // A list that arrives within the delay paints directly; slower loads show placeholder rows until it does, which stay
+  // mounted while the list fades in over them.
+  const [placeholder, setPlaceholder] = createSignal(false)
+
+  createEffect(() => {
+    const timer = props.loading
+      ? setTimeout(() => setPlaceholder(true), HOME_SESSION_PLACEHOLDER_DELAY_MS)
+      : setTimeout(() => setPlaceholder(false), prefersReducedMotion() ? 0 : HOME_SESSION_REVEAL_MS)
+
+    onCleanup(() => clearTimeout(timer))
+  })
 
   return (
     <section
@@ -139,15 +158,20 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           class="relative ml-auto h-[calc(100cqh-68px)] w-3 md:h-[calc(100cqh-84px)] lg:h-[calc(100cqh-108px)]"
         />
       </div>
-      <div class="-mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]">
-        <Show
-          when={!props.loading}
-          fallback={
-            <div class="pt-1 md:pt-3">
-              <HomeSessionSkeleton label={props.language.t("common.loading")} />
-            </div>
-          }
-        >
+      <div
+        data-slot="home-sessions-list"
+        data-reveal={placeholder() || undefined}
+        class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]"
+        aria-busy={props.loading}
+      >
+        <Show when={placeholder()}>
+          <HomeSessionSkeleton
+            visible={props.loading}
+            showProjectName={props.showProjectName}
+            desktop={props.desktop}
+          />
+        </Show>
+        <Show when={!props.loading}>
           <Show
             when={props.groups.length > 0}
             fallback={
@@ -275,7 +299,7 @@ function HomeSessionSearch(
                   when={!props.searchLoading}
                   fallback={
                     <div class="flex items-center justify-center px-4 py-3 text-v2-text-text-muted [font-weight:440]">
-                      <Spinner class="size-4" />
+                      <Loader class="size-4" />
                     </div>
                   }
                 >
@@ -301,7 +325,7 @@ function HomeSessionSearch(
                       >
                         {props.language.t("home.sessions.search.sessions")}
                       </p>
-                      <ScrollView class="max-h-[min(20rem,40dvh)]" viewportRef={props.onSetSearchList}>
+                      <div class="max-h-[min(20rem,40dvh)] overflow-y-auto" data-scrollable ref={props.onSetSearchList}>
                         <div class="flex flex-col gap-px pb-2">
                           <For each={props.searchResults}>
                             {(record) => (
@@ -313,7 +337,7 @@ function HomeSessionSearch(
                             )}
                           </For>
                         </div>
-                      </ScrollView>
+                      </div>
                     </div>
                   </Show>
                 </Show>
@@ -595,8 +619,8 @@ function HomeSessionRow(
         fallback={
           <div
             data-slot="home-session-editor"
-            class="flex h-10 min-w-0 w-full flex-1 items-center py-3 ps-1.5 pe-3 md:ps-3 md:pe-10"
-            classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop }}
+            class="flex h-10 min-w-0 w-full flex-1 items-center py-3 ps-1.5 pe-3 md:ps-3"
+            classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "md:pe-10": SHOW_HOME_SESSION_ARCHIVE }}
           >
             <HomeSessionLeadingController server={props.server} isOpenTab={props.isOpenTab} record={props.record} />
             <div data-slot="home-session-labels" class="contents">
@@ -653,11 +677,11 @@ function HomeSessionRow(
           aria-expanded={!!menu()}
           class={`
             flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center rounded-[6px] border-0
-            bg-transparent py-3 ps-1.5 pe-3 md:ps-3 md:pe-10 text-start text-v2-text-text-muted [font-weight:530]
+            bg-transparent py-3 ps-1.5 pe-3 md:ps-3 text-start text-v2-text-text-muted [font-weight:530]
             transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
             hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
           `}
-          classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop }}
+          classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "md:pe-10": SHOW_HOME_SESSION_ARCHIVE }}
           onMouseDown={(event) => {
             if (event.button === 1) event.preventDefault()
           }}
@@ -915,14 +939,30 @@ function HomeSessionsEmpty(props: { onNewSession?: () => void; language: ReturnT
   )
 }
 
-function HomeSessionSkeleton(props: { label: string }) {
+function HomeSessionSkeleton(props: { visible: boolean; showProjectName: boolean; desktop: boolean }) {
   return (
-    <div class="flex min-w-0 flex-col gap-4">
-      <div class="flex h-7 min-w-0 items-center justify-between ps-1.5 pe-4 md:ps-4">
-        <div class={HOME_SECTION_LABEL}>{props.label}</div>
-      </div>
-      <div class="flex min-w-0 flex-col gap-px" aria-hidden="true">
-        <For each={[0, 1, 2, 3]}>{() => <div class="h-10 rounded-[6px] bg-v2-background-bg-deep opacity-70" />}</For>
+    <div
+      data-component="home-session-skeleton"
+      data-visible={props.visible || undefined}
+      aria-hidden="true"
+      class="pointer-events-none absolute inset-x-0 top-0 pt-1 pr-3 md:pt-3"
+    >
+      <div class="h-7" />
+      <div class="flex min-w-0 flex-col gap-px pt-2 md:pt-4">
+        <For each={HOME_SESSION_PLACEHOLDER_WIDTHS}>
+          {(width) => (
+            <div
+              class="flex h-10 min-w-0 items-center ps-1.5 pe-3 md:ps-3 md:pe-10"
+              classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "max-md:h-12": props.showProjectName }}
+            >
+              <span class="size-4 shrink-0 rounded-[4px] bg-v2-background-bg-layer-02" />
+              <span class="h-2 rounded-full bg-v2-background-bg-layer-02" style={{ width: `${width}%` }} />
+              <Show when={props.showProjectName}>
+                <span class="h-2 w-16 shrink-0 rounded-full bg-v2-background-bg-layer-01" />
+              </Show>
+            </div>
+          )}
+        </For>
       </div>
     </div>
   )

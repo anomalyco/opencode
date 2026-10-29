@@ -2,9 +2,10 @@ import { expect, test, type Page } from "@playwright/test"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { expected, messages } from "../utils/markdown-sessions"
-import { expectPath, seed, sessionHref, type SeedInput } from "../utils/app"
+import { expectPath, holdRoute, seed, sessionHref, type SeedInput } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"
+import { mockWorkspace } from "../utils/workspace"
 
 test.use({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block" })
 
@@ -37,7 +38,11 @@ for (const width of [1440, 390]) {
               ? [row.dataset.timelineKey!]
               : [],
           ),
-          bottomError: (spacer?.getBoundingClientRect().bottom ?? Infinity) - root.getBoundingClientRect().bottom,
+          // The viewport runs on under the composer; its visible part ends at the composer region.
+          bottomError:
+            (spacer?.getBoundingClientRect().bottom ?? Infinity) -
+            root.getBoundingClientRect().bottom +
+            parseFloat(getComputedStyle(root).scrollPaddingBottom),
           tables: answer.querySelectorAll("table").length,
           codeBlocks: answer.querySelectorAll("pre").length,
         }
@@ -58,10 +63,10 @@ for (const width of [1440, 390]) {
       const reveal = await page.evaluate(() => window.__coldReveal)
       expect(reveal).toMatchObject({ pending: 0, clipped: [], tables: 1, codeBlocks: 4 })
       expect(Math.abs(reveal?.bottomError ?? Infinity)).toBeLessThanOrEqual(1)
-      // The gap above the composer is part of the tail.
+      // The gap above the composer is part of the tail: the status lane, then the activity pill and its gap.
       const spacer = page.locator('[data-timeline-row="bottom-spacer"]')
       await expect(spacer).toBeVisible()
-      expect(await spacer.evaluate((element) => element.getBoundingClientRect().height)).toBe(64)
+      expect(await spacer.evaluate((element) => element.getBoundingClientRect().height)).toBe(82)
     } finally {
       release.resolve()
     }
@@ -92,6 +97,175 @@ test("paints cold and warm session tabs at the latest message", async ({ page })
   expect(Math.abs(warmPaint.bottomError ?? Infinity)).toBeLessThanOrEqual(1)
   await expectAtTail(page, fixture.expected.targetMessageIDs.at(-1)!)
   expect(await warm.stop()).toBe(0)
+})
+
+test("reloads a transcript only after inline file links have their final styling", async ({ page }) => {
+  const sessionID = "ses_cold_inline_paths"
+  await mockWorkspace(page, {
+    name: "ColdInlinePaths",
+    sessions: [{ id: sessionID, title: "Cold inline paths" }],
+    findFiles: ({ query }) => (query === "src/file.ts" ? ["src/file.ts"] : []),
+    pageMessages: () => ({
+      items: [
+        { id: "user_cold_paths", type: "user", text: "Review these files", time: { created: 1 } },
+        {
+          id: "answer_cold_paths",
+          type: "assistant",
+          agent: "build",
+          model: { id: "test", providerID: "opencode" },
+          time: { created: 2, completed: 3 },
+          content: [
+            {
+              type: "text",
+              text: "| Area | Files |\n| --- | --- |\n| App | `src/file.ts`, `src/file.ts` |\n| Missing | `missing/file.ts` |",
+            },
+          ],
+        },
+      ],
+    }),
+  })
+  await page.goto(sessionHref(sessionID))
+  const answer = page.locator('[data-timeline-part-id="answer_cold_paths:text:0"]')
+  const content = page.locator("[data-timeline-virtual-content]")
+  await expect(answer.locator('code[data-inline-code-kind="path"]')).toHaveCount(2)
+  await expect(content).toHaveCSS("visibility", "visible")
+  const held = await holdRoute(page, /\/api\/fs\/find\?/)
+
+  try {
+    await page.reload({ waitUntil: "domcontentloaded" })
+    await held.arrived
+    await expect(answer.getByRole("table", { includeHidden: true })).toBeAttached()
+    await expect(content).toHaveCSS("visibility", "hidden")
+    const editor = page.locator('[data-component="composer-editor"]')
+    await expect(editor).toBeEditable()
+    await editor.fill("The composer still works")
+    await expect(editor).toHaveText("The composer still works")
+
+    const reveal = await content.evaluateHandle((root) => {
+      type PathReveal = { kinds?: (string | null)[] }
+
+      const state: PathReveal = {}
+
+      const observer = new MutationObserver(() => {
+        if (!root.checkVisibility({ checkVisibilityCSS: true })) return
+        state.kinds = [...root.querySelectorAll("code")].map((code) => code.getAttribute("data-inline-code-kind"))
+        observer.disconnect()
+      })
+
+      observer.observe(root, { attributes: true, attributeFilter: ["style"] })
+
+      return state
+    })
+
+    held.release()
+    await expect(content).toHaveCSS("visibility", "visible")
+    expect(await reveal.evaluate((state) => state.kinds)).toEqual(["path", "path", null])
+    await reveal.dispose()
+    await expect(answer.locator("code")).toHaveText(["src/file.ts", "src/file.ts", "missing/file.ts"])
+    await expect(answer.locator('code[data-inline-code-kind="path"]')).toHaveText(["src/file.ts", "src/file.ts"])
+    await expect(answer.getByText("missing/file.ts", { exact: true })).not.toHaveAttribute("data-inline-code-kind")
+  } finally {
+    held.release()
+  }
+})
+
+test("restores verified inline paths before painting after a workspace tab switch", async ({ page }) => {
+  const directory = "C:/OpenCode/InlinePaths"
+  const other = "C:/OpenCode/OtherInlinePaths"
+  const sourceID = "ses_inline_source"
+  const targetID = "ses_inline_target"
+  const queries: { query: string; directory: string }[] = []
+  const existing = new Set([directory])
+  await page.clock.setFixedTime(new Date("2026-10-21T00:00:00Z"))
+  await mockWorkspace(page, {
+    name: "InlinePaths",
+    directory,
+    project: { sandboxes: [other] },
+    sessions: [
+      { id: sourceID, title: "Known path" },
+      { id: targetID, title: "Missing path", directory: other },
+    ],
+    pageMessages: (id) => ({
+      items: [
+        { id: `user_${id}`, type: "user", text: "Check the file", time: { created: 1 } },
+        {
+          id: `answer_${id}`,
+          type: "assistant",
+          agent: "build",
+          model: { id: "test", providerID: "opencode" },
+          time: { created: 2, completed: 3 },
+          content: [{ type: "text", text: "Inspect `src/file.ts`." }],
+        },
+      ],
+    }),
+    findFiles: (input) => {
+      queries.push({ query: input.query, directory: input.directory })
+
+      return existing.has(input.directory) ? ["src/file.ts"] : []
+    },
+  })
+  await page.goto(sessionHref(sourceID))
+  const source = page.locator(`[data-timeline-part-id="answer_${sourceID}:text:0"] code`)
+  await expect(source).toHaveAttribute("data-inline-code-kind", "path")
+  const original = await source.elementHandle()
+  await tab(page, targetID).click()
+  const target = page.locator(`[data-timeline-part-id="answer_${targetID}:text:0"] code`)
+  await expect(target).toHaveText("src/file.ts")
+  await expect.poll(() => queries.some((query) => query.directory === other)).toBe(true)
+  await expect(target).not.toHaveAttribute("data-inline-code-kind")
+  expect(await original!.evaluate((node) => node.isConnected)).toBe(false)
+
+  const insertion = await page.evaluateHandle((id) => {
+    type Insertion = { kind?: string | null }
+
+    const state: Insertion = {}
+
+    const observer = new MutationObserver(() => {
+      const code = document.querySelector(`[data-timeline-part-id="answer_${id}:text:0"] code`)
+
+      if (!code) return
+      state.kind = code.getAttribute("data-inline-code-kind")
+      observer.disconnect()
+    })
+
+    observer.observe(document, { childList: true, subtree: true })
+
+    return state
+  }, sourceID)
+
+  const count = queries.length
+  const held = await holdRoute(page, /\/api\/fs\/find\?/)
+
+  try {
+    await tab(page, sourceID).click()
+    await expect(source).toBeVisible()
+    // The other workspace disposes the old timeline, so this must exercise a real Markdown remount.
+    expect(await source.evaluate((node, original) => node === original, original)).toBe(false)
+    expect(await insertion.evaluate((state) => state.kind)).toBe("path")
+    expect(held.requests).toHaveLength(0)
+    expect(queries).toHaveLength(count)
+  } finally {
+    held.release()
+    await insertion.dispose()
+  }
+
+  // Expired positives keep their styling while revalidation is pending; negatives must discover new files.
+  await tab(page, targetID).click()
+  await expect(target).toBeVisible()
+  await page.clock.setFixedTime(new Date("2026-10-21T00:01:01Z"))
+  const refresh = await holdRoute(page, /\/api\/fs\/find\?/)
+
+  try {
+    await tab(page, sourceID).click()
+    await refresh.arrived
+    await expect(source).toHaveAttribute("data-inline-code-kind", "path")
+  } finally {
+    refresh.release()
+  }
+
+  existing.add(other)
+  await tab(page, targetID).click()
+  await expect(target).toHaveAttribute("data-inline-code-kind", "path")
 })
 
 test("scrolls within a long answer without mounting unrelated history", async ({ page }) => {
@@ -252,7 +426,7 @@ test("disposes the old workspace's shell while destination history is loading", 
   try {
     await tab(page, fixture.targetID).click()
     await requested.promise
-    await expect(page.locator("[data-session-title]")).toHaveText(fixture.expected.targetTitle)
+    await expect(page.locator("[data-session-title] h1")).toHaveText(fixture.expected.targetTitle)
     output.text += "Output after returning\n"
     await tab(page, fixture.sourceID).click()
     await expect(shell.locator('[data-slot="bash-result"]')).toContainText("Output after returning")
@@ -449,8 +623,6 @@ function tab(page: Page, sessionID: string) {
 async function openTabs(page: Page, input: Partial<MockServerConfig>, extra: SeedInput = {}) {
   const mock = await mockStressTimeline(page, input)
   await seed(page, {
-    projects: { local: [{ worktree: fixture.directory, expanded: true }] },
-    lastProject: { local: fixture.directory },
     tabs: [fixture.sourceID, fixture.targetID],
     ...extra,
   })
@@ -530,7 +702,9 @@ async function sampleTabPaint(page: Page, sessionID: string) {
         )
 
         if (root) {
-          const view = root.getBoundingClientRect()
+          // The part of the viewport above the composer region, which the timeline scrolls on under.
+          const box = root.getBoundingClientRect()
+          const view = { top: box.top, bottom: box.bottom - parseFloat(getComputedStyle(root).scrollPaddingBottom) }
 
           // A frame counts only when the row is painted: inside the viewport and not hidden by CSS.
           const inView = (element: Element) => {
@@ -585,9 +759,7 @@ async function sampleTabPaint(page: Page, sessionID: string) {
   return {
     async firstPaint() {
       await expect.poll(read).toBeDefined()
-      await expect
-        .poll(() => page.evaluate(() => window.__tabPaint!.settled))
-        .toBe(true)
+      await expect.poll(() => page.evaluate(() => window.__tabPaint!.settled)).toBe(true)
 
       return (await read())!
     },

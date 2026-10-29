@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Speech, SpeechEvent } from "../../src/index.js"
+import { Speech, SpeechEvent } from "../../src/effect.js"
 import { ElevenLabs } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TEXT, collectSpeech } from "./speech-recording.js"

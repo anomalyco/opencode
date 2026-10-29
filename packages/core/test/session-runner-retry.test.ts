@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { AIError, ProviderInternalError, TransportError } from "@opencode/ai"
+import { AIError, ProviderInternalError, TransportError } from "@opencode/ai/effect"
 import { Agent } from "@opencode/schema/agent"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/core/provider"

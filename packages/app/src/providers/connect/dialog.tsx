@@ -2,12 +2,11 @@ import { Button } from "@opencode/ui/button"
 import { Badge } from "@opencode/ui/badge"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
-import { List } from "@opencode/ui/list"
 import { RadioGroup, RadioItem } from "@opencode/ui/radio"
+import { Checkbox } from "@opencode/ui/checkbox"
 import { Loader } from "@opencode/ui/loader"
-import { Spinner } from "@opencode/ui/spinner"
 import { TextField } from "@opencode/ui/text-field"
-import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode/ui/dialog"
+import { DialogBody, DialogHeader, DialogTitle, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { TextInput } from "@opencode/ui/text-input"
 import { showToast } from "@/shell/notifications/toast"
 import {
@@ -18,6 +17,7 @@ import {
   For,
   type JSX,
   Match,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -33,7 +33,6 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { useProviders } from "@/providers/catalog/providers"
 import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
 import { useIntegrations } from "@/providers/catalog/integrations"
-import { CustomProviderForm } from "@/providers/credentials/dialog"
 import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provider-group"
 import type { ModelSelection } from "@/providers/models/selection"
 import { decode64 } from "@/runtime/persistence/base64"
@@ -42,9 +41,10 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { Schema } from "effect"
+import type { FormAnswer, FormField, FormValue, IntegrationInfo } from "@opencode/client/promise"
 import {
-  CONSOLE_PROVIDERS,
-  consoleIntegration,
+  CONSOLE_INTEGRATION,
+  connectMethods,
   createProviderConnectionController,
   providerFormDefaults,
   type ProviderConnectMethod,
@@ -57,13 +57,8 @@ import { AccountNameInput } from "@/settings/providers/account-name"
 import { useProviderAccountActions } from "@/settings/providers/account-actions"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
+import "@/shell/search-list.css"
 import "./models.css"
-
-const CUSTOM_ID = "_custom"
-
-type IntegrationForm = NonNullable<ProviderConnectMethod["form"]>[number]
-
-type StringForm = Extract<IntegrationForm, { type: "string" }>
 
 export function useProviderConnectController() {
   const [store, setStore] = createStore<{ selected?: string }>({})
@@ -81,6 +76,8 @@ export const DialogConnectProvider: Component<{
   /** Connects at the server's default Location instead of the current route's directory. */
   defaultLocation?: boolean
   controller?: ReturnType<typeof useProviderConnectController>
+  /** Opened for one provider from another flow, with no way back to the provider list. */
+  standalone?: boolean
   selection?: ModelSelection
   onDone?: () => void
   onConnected?: (provider: string) => void
@@ -94,11 +91,17 @@ export const DialogConnectProvider: Component<{
     authorization: boolean
     chatgptWelcome: boolean
     picked: boolean
+    stepBack: boolean
+    accounts: boolean
+    title: string
   }>({
     completed: false,
     authorization: false,
     chatgptWelcome: false,
     picked: false,
+    stepBack: false,
+    accounts: false,
+    title: "",
   })
 
   const language = useLanguage()
@@ -112,7 +115,8 @@ export const DialogConnectProvider: Component<{
 
   const reset = controller.reset
   const back = { current: reset }
-  const consoleSelected = () => CONSOLE_PROVIDERS.has(controller.selected() ?? "")
+  const consoleSelected = () => controller.selected() === CONSOLE_INTEGRATION
+  const accounts = () => state.accounts && !!controller.selected() && !state.modelProvider
   let focusHost: HTMLDivElement | undefined
   const holdFocus = () => focusHost?.focus({ preventScroll: true })
 
@@ -125,13 +129,7 @@ export const DialogConnectProvider: Component<{
   function Content() {
     return (
       <Switch>
-        <Match when={controller.selected() === CUSTOM_ID}>
-          <CustomProviderForm autofocus={false} />
-        </Match>
-        <Match
-          keyed
-          when={controller.selected() && controller.selected() !== CUSTOM_ID ? controller.selected() : undefined}
-        >
+        <Match keyed when={controller.selected()}>
           {(provider) => (
             <ProviderConnection
               provider={provider}
@@ -149,6 +147,9 @@ export const DialogConnectProvider: Component<{
               }}
               onFirstConnection={(provider) => setState("modelProvider", provider)}
               onAuthorization={(authorization) => setState("authorization", authorization)}
+              onStepBack={(stepBack) => setState("stepBack", stepBack)}
+              onAccounts={(accounts) => setState("accounts", accounts)}
+              onTitle={(title) => setState("title", title)}
             />
           )}
         </Match>
@@ -162,13 +163,14 @@ export const DialogConnectProvider: Component<{
   return (
     <Dialog
       preventBackdropDismiss={state.authorization}
-      containerClass={
+      // The top edge stays where the provider list puts it, so a step that fits its content only moves the bottom edge.
+      containerClass={`!self-start !bg-v2-background-bg-base [--connect-top:max(8px,calc((100vh_-_512px)/2))] !mt-[var(--connect-top)] !w-[min(calc(100vw_-_16px),640px)] ${
         state.modelProvider
-          ? "!h-[min(calc(100vh_-_16px),560px)] !w-[min(calc(100vw_-_16px),640px)]"
-          : consoleSelected() && state.authorization
-            ? "!h-auto !max-h-[min(calc(100vh_-_16px),560px)] !w-[min(calc(100vw_-_16px),640px)]"
-            : "!h-[min(calc(100vh_-_16px),512px)] !w-[min(calc(100vw_-_16px),640px)]"
-      }
+          ? "!h-[min(calc(100vh_-_8px_-_var(--connect-top)),560px)]"
+          : controller.selected()
+            ? "!h-auto !max-h-[min(calc(100vh_-_8px_-_var(--connect-top)),560px)]"
+            : "!h-[min(calc(100vh_-_16px),512px)]"
+      }`}
       onCloseAutoFocus={(event) => {
         if (state.completed && props.onDone) {
           event.preventDefault()
@@ -182,11 +184,12 @@ export const DialogConnectProvider: Component<{
           void dialog.show(() => <DialogChatGPTPlanWelcome />)
         })
       }}
-      class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
+      class="[font-family:var(--v2-font-family-sans)]"
       classList={{
-        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3":
-          consoleSelected() && !state.modelProvider,
+        "[&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]":
+          !!controller.selected() && !accounts(),
         "[&_[data-slot=dialog-header]]:!pt-5": !!state.modelProvider,
+        "search-dialog": !controller.selected() || accounts(),
       }}
     >
       <DialogHeader closeLabel={language.t("common.close")}>
@@ -199,24 +202,61 @@ export const DialogConnectProvider: Component<{
               </div>
             )}
           </Match>
+          <Match when={accounts()}>
+            <div class="flex min-w-0 flex-1 items-center gap-0.5">
+              <Show when={!props.standalone}>
+                <button
+                  type="button"
+                  class="shrink-0 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint hover:text-v2-text-text-base focus-visible:text-v2-text-text-base focus-visible:outline-none"
+                  onClick={() => back.current()}
+                >
+                  {language.t("dialog.provider.title")}
+                </button>
+                <Icon name="chevron-right" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              </Show>
+              <DialogTitle>{state.title}</DialogTitle>
+            </div>
+          </Match>
           <Match when={controller.selected()}>
-            <button
-              type="button"
-              class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-              onClick={() => back.current()}
-              aria-label={language.t("common.goBack")}
-            >
-              <Icon name="arrow-left" size="small" />
-            </button>
+            {(provider) => (
+              <div class="flex min-w-0 flex-1 items-center gap-2">
+                <Show when={!props.standalone || state.stepBack}>
+                  <button
+                    type="button"
+                    class="-my-0.5 -ms-0.5 flex size-5 shrink-0 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+                    onClick={() => back.current()}
+                    aria-label={language.t("common.goBack")}
+                  >
+                    <Icon name="arrow-left" size="small" />
+                  </button>
+                </Show>
+                <ProviderModelIcon
+                  provider={{ id: provider(), name: state.title }}
+                  class="shrink-0 text-v2-icon-icon-base"
+                />
+                <DialogTitle>{state.title}</DialogTitle>
+              </div>
+            )}
           </Match>
           <Match when={true}>
-            <DialogTitle>{language.t("command.provider.connect")}</DialogTitle>
+            <DialogTitleGroup
+              title={language.t("dialog.provider.title")}
+              description={language.t("dialog.provider.description")}
+            />
           </Match>
         </Switch>
       </DialogHeader>
       <DialogBody
-        class={`min-h-0 flex-1 overflow-hidden px-2 ${state.modelProvider || consoleSelected() ? "pb-0" : "pb-2"}`}
+        class={`min-h-0 flex-1 overflow-hidden ${
+          controller.selected() && !accounts()
+            ? `px-2 ${state.modelProvider || consoleSelected() ? "pb-0" : "pb-2"}`
+            : "px-1.5 pb-1.5"
+        }`}
       >
+        {/* Outside the scrolling content, so it can reach across the body's padding without scrolling sideways. */}
+        <Show when={accounts()}>
+          <div data-slot="search-dialog-divider" />
+        </Show>
         <div ref={focusHost} tabIndex={-1} class="flex min-h-0 flex-1 flex-col outline-none">
           <Content />
         </div>
@@ -225,54 +265,73 @@ export const DialogConnectProvider: Component<{
   )
 }
 
+// The TUI's integration groups and order, with connected integrations pulled up into their own group first.
+const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"]
+
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
   const integrations = useIntegrations(() => props.directory)
   const language = useLanguage()
+  const data = useData()
+  const location = () => (props.directory ? { directory: props.directory } : undefined)
+  const mcpServers = () => data.location.mcp.server.list(location()) ?? []
+
+  createEffect(() => void data.location.mcp.server.sync(location()).catch(() => undefined))
 
   const [store, setStore] = createStore<{
     filter: string
     active?: string
-    connecting?: string
   }>({
     filter: "",
   })
 
-  const featured = ["opencode-go", "opencode", "anthropic", "openai", "google", "openrouter", "vercel"]
-  const custom = () => ({ id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") })
-
   const all = createMemo(() => {
-    language.locale()
     const query = store.filter.trim().toLowerCase()
 
-    const values = [custom(), ...integrations.list()]
+    if (!query) return integrations.list()
 
-    if (!query) return values
-
-    return values.filter((provider) => `${provider.id} ${provider.name}`.toLowerCase().includes(query))
+    return integrations.list().filter((row) => `${row.id} ${row.name}`.toLowerCase().includes(query))
   })
 
+  // MCP servers keep their own group whether or not they are signed in.
+  const providers = createMemo(() => all().filter((row) => row.metadata?.source !== "mcp"))
+
+  const connected = createMemo(() =>
+    providers()
+      .filter((row) => row.connections.length > 0)
+      .toSorted((a, b) => a.name.localeCompare(b.name)),
+  )
+
+  const unconnected = createMemo(() => providers().filter((row) => row.connections.length === 0))
+
+  const mcp = createMemo(() =>
+    all()
+      .filter((row) => row.metadata?.source === "mcp")
+      .toSorted((a, b) => a.name.localeCompare(b.name)),
+  )
+
   const popular = createMemo(() =>
-    all()
-      .filter((provider) => featured.includes(provider.id))
-      .sort((a, b) => featured.indexOf(a.id) - featured.indexOf(b.id)),
+    unconnected()
+      .filter((row) => POPULAR.includes(row.id))
+      .toSorted((a, b) => POPULAR.indexOf(a.id) - POPULAR.indexOf(b.id)),
   )
 
-  const other = createMemo(() =>
-    all()
-      .filter((provider) => !featured.includes(provider.id))
-      .sort((a, b) => {
-        if (a.id === CUSTOM_ID) return -1
-
-        if (b.id === CUSTOM_ID) return 1
-
-        return a.name.localeCompare(b.name)
-      }),
+  const services = createMemo(() =>
+    unconnected()
+      .filter((row) => !POPULAR.includes(row.id))
+      .toSorted((a, b) => a.name.localeCompare(b.name)),
   )
 
-  const rows = createMemo(() => [...popular(), ...other()])
+  const groups = () => [
+    { title: language.t("dialog.provider.connected"), items: connected },
+    { title: language.t("dialog.provider.group.mcp"), items: mcp },
+    { title: language.t("dialog.provider.group.popular"), items: popular },
+    { title: language.t("dialog.provider.group.services"), items: services },
+  ]
 
-  const accountCount = (provider: { id: string }) =>
-    providerAccounts(integrations.list().find((integration) => integration.id === provider.id)).length
+  // An integration that only reads environment variables has nothing to connect from here.
+  const disabled = (row: IntegrationInfo) => connectMethods(row).length === 0 && providerAccounts(row).length === 0
+
+  const rows = createMemo(() => [...connected(), ...mcp(), ...popular(), ...services()].filter((row) => !disabled(row)))
 
   let picker: HTMLDivElement | undefined
   let search: HTMLInputElement | undefined
@@ -308,14 +367,15 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   }
 
   return (
-    <div ref={picker} class="flex min-h-0 flex-1 flex-col gap-4" onKeyDown={handleKeyDown}>
-      <div class="shrink-0 px-1 pt-px">
+    <div ref={picker} class="flex min-h-0 flex-1 flex-col gap-0.5" onKeyDown={handleKeyDown}>
+      <div class="search-dialog-search shrink-0">
         <TextInput
           ref={search}
           type="search"
           class="!w-full [font-family:var(--v2-font-family-sans)]"
-          leadingIcon={<Icon name="magnifying-glass" size="small" />}
-          placeholder={language.t("dialog.provider.search.placeholder")}
+          leadingIcon={<Icon name="magnifying-glass" />}
+          placeholder={language.t("common.search.placeholder")}
+          aria-label={language.t("dialog.provider.search.placeholder")}
           value={store.filter}
           onInput={(event) => {
             setStore({ filter: event.currentTarget.value, active: undefined })
@@ -323,72 +383,87 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
         />
       </div>
       <div class="relative min-h-0 flex-1">
-        <div class="flex size-full min-h-0 flex-col gap-4 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <For
-            each={[
-              { title: language.t("dialog.provider.group.popular"), items: popular },
-              { title: language.t("dialog.provider.group.other"), items: other },
-            ]}
-          >
+        <div class="flex size-full min-h-0 flex-col gap-0.5 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <For each={groups()}>
             {(group) => (
               <Show when={group.items().length > 0}>
-                <section class="flex flex-col">
-                  <div class="px-3 pb-2 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted">
+                <section class="flex flex-col gap-0.5">
+                  <div class="px-2 pt-2.5 pb-0.5 text-[12px] font-[440] leading-[18px] tracking-[0.05px] text-v2-text-text-faint">
                     {group.title}
                   </div>
                   <For each={group.items()}>
-                    {(provider) => (
-                      <button
-                        type="button"
-                        data-provider-id={provider.id}
-                        class="flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] leading-text-compact tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
-                        classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === provider.id }}
-                        onMouseEnter={() => setStore("active", provider.id)}
-                        disabled={store.connecting !== undefined}
-                        aria-busy={store.connecting === provider.id}
-                        onClick={() => connect(provider.id)}
-                      >
-                        <ProviderModelIcon provider={provider} class="shrink-0 text-v2-icon-icon-base" />
-                        <span class="min-w-0 truncate font-[530] text-v2-text-text-base">{provider.name}</span>
-                        <Show when={accountCount(provider) > 0}>
-                          <Badge
-                            variant="subtle"
-                            class="shrink-0"
-                            aria-label={language.plural("dialog.provider.accounts.count", accountCount(provider), {
-                              count: accountCount(provider),
-                            })}
+                    {(provider) => {
+                      const mcp = provider.metadata?.source === "mcp"
+                      const connection = () => provider.connections[0]
+
+                      const needsSignIn = () =>
+                        !!connection()?.status ||
+                        (mcp &&
+                          mcpServers().some(
+                            (server) => server.integrationID === provider.id && server.status.status === "needs_auth",
+                          ))
+
+                      // The server lists the active account first.
+                      const account = () => {
+                        const current = connection()
+
+                        if (mcp || !current) return
+
+                        return current.type === "credential" ? current.label : `$${current.name}`
+                      }
+
+                      return (
+                        <button
+                          type="button"
+                          data-provider-id={provider.id}
+                          class="flex min-h-8 w-full items-center gap-2 rounded-md py-1.5 ps-2 pe-1.5 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none disabled:pointer-events-none"
+                          classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === provider.id }}
+                          onMouseEnter={() => setStore("active", provider.id)}
+                          disabled={disabled(provider)}
+                          onClick={() => connect(provider.id)}
+                        >
+                          <ProviderModelIcon
+                            provider={provider}
+                            class={`shrink-0 text-v2-icon-icon-base ${disabled(provider) ? "opacity-50" : ""}`}
+                          />
+                          <span
+                            class="min-w-0 truncate font-[440]"
+                            classList={{
+                              "text-v2-text-text-base": !disabled(provider),
+                              "text-v2-text-text-faint": disabled(provider),
+                            }}
                           >
-                            {accountCount(provider)}
-                          </Badge>
-                        </Show>
-                        <Show when={CONSOLE_PROVIDERS.has(provider.id) && accountCount(provider) === 0}>
-                          <span class="min-w-0 truncate font-[440] text-v2-text-text-muted">
-                            {language.t(
-                              provider.id === "opencode"
-                                ? "dialog.provider.opencode.tagline"
-                                : "dialog.provider.opencodeGo.tagline",
+                            {provider.name}
+                          </span>
+                          <Show when={disabled(provider)}>
+                            <span class="min-w-0 truncate font-[440] text-v2-text-text-faint">
+                              {language.t("dialog.provider.environmentOnly")}
+                            </span>
+                          </Show>
+                          <Show when={account()}>
+                            {(label) => (
+                              <Badge data-slot="provider-connected" class="min-w-0 shrink truncate">
+                                {label()}
+                              </Badge>
                             )}
-                          </span>
-                          <span class="flex h-4 shrink-0 items-center rounded-xs border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-03 px-1 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-muted">
-                            {language.t("dialog.provider.tag.recommended")}
-                          </span>
-                        </Show>
-                        <Show when={provider.id === CUSTOM_ID}>
-                          <span class="flex h-4 shrink-0 items-center rounded-xs border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-03 px-1 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-muted">
-                            {language.t("settings.providers.tag.custom")}
-                          </span>
-                        </Show>
-                        <Show when={store.connecting === provider.id}>
-                          <Spinner class="ml-auto size-4 shrink-0 text-v2-icon-icon-muted" />
-                        </Show>
-                      </button>
-                    )}
+                          </Show>
+                          <Show when={needsSignIn()}>
+                            <span
+                              data-slot="provider-status"
+                              class="ms-auto shrink-0 pe-1 font-[440] text-[var(--v2-state-fg-warning)]"
+                            >
+                              {language.t("dialog.provider.needsSignIn")}
+                            </span>
+                          </Show>
+                        </button>
+                      )
+                    }}
                   </For>
                 </section>
               </Show>
             )}
           </For>
-          <Show when={rows().length === 0}>
+          <Show when={all().length === 0}>
             <div class="flex h-24 items-center justify-center text-[13px] font-[440] text-v2-text-text-muted">
               {language.t("dialog.provider.empty")}
             </div>
@@ -396,7 +471,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
         </div>
         <div
           class="pointer-events-none absolute inset-x-0 bottom-0 h-10"
-          style={{ background: "linear-gradient(to bottom, transparent, var(--v2-background-bg-layer-01))" }}
+          style={{ background: "linear-gradient(to bottom, transparent, var(--v2-background-bg-base))" }}
         />
       </div>
     </div>
@@ -414,6 +489,9 @@ function ProviderConnection(props: {
   onConnected?: (methodID?: string) => void
   onFirstConnection: (provider: { id: string; name: string }) => void
   onAuthorization: (authorization: boolean) => void
+  onStepBack: (stepBack: boolean) => void
+  onAccounts: (accounts: boolean) => void
+  onTitle: (title: string) => void
   accounts?: boolean
 }) {
   const dialog = useDialog()
@@ -431,14 +509,13 @@ function ProviderConnection(props: {
   const providers = useProviders(directory)
   const integrations = useIntegrations(directory)
   const accountActions = useProviderAccountActions(directory)
-  const integrationID = consoleIntegration(props.provider)
-  const isConsole = CONSOLE_PROVIDERS.has(props.provider)
+  const integrationID = props.provider
+  const isConsole = props.provider === CONSOLE_INTEGRATION
   const remote = isConsole && authServerName(sdk.server) !== undefined
 
   const [state, setState] = createStore<{
     copied: boolean
     copyFailed: boolean
-    firstConnection?: boolean
     models: boolean
     noModels: boolean
     catalogPending: boolean
@@ -473,13 +550,13 @@ function ProviderConnection(props: {
 
   const showAccounts = () => !!props.accounts && !state.adding && accounts().length > 0
 
+  const mcp = () =>
+    integrations.list().find((integration) => integration.id === props.provider)?.metadata?.source === "mcp"
+
   const controller = createProviderConnectionController({
     provider: () => integrationID,
-    // A Go service-account key still belongs to the `opencode-go` integration (zen/go/v1),
-    // exactly as before; only the sign-in is shared with the Console.
-    keyProvider: () => props.provider,
     directory,
-    manual: () => isConsole || (!!props.accounts && accounts().length > 0),
+    manual: () => !!props.accounts && accounts().length > 0,
     prepare: isConsole ? prepareConsoleCatalog : undefined,
     pollInterval: isConsole ? 500 : undefined,
     onComplete: () => {
@@ -495,41 +572,33 @@ function ProviderConnection(props: {
         return
       }
 
-      if (state.firstConnection) {
-        const first = connectionGroups()[0]?.models[0]
-
-        if (first) {
-          setState({ models: true, selectedModel: modelKey(first) })
-          props.onFirstConnection({ id: props.provider, name: provider().name })
-
-          return
-        }
-
-        // Keep the "connected, but no models" state visible so the workspace can be fixed.
-        if (isConsole) {
-          setState("noModels", true)
-
-          return
-        }
-      }
-
-      dialog.close()
       showToast({
         variant: "success",
         icon: "circle-check",
         title: language.t("provider.connect.toast.connected.title", { provider: provider().name }),
         description: language.t("provider.connect.toast.connected.description", { provider: provider().name }),
       })
+
+      // Like the TUI, every connection continues to that provider's models, not just the first.
+      // MCP servers have no models, so they close instead.
+      const first = mcp() ? undefined : connectionGroups()[0]?.models[0]
+
+      if (first) {
+        setState({ models: true, selectedModel: modelKey(first) })
+        props.onFirstConnection({ id: props.provider, name: provider().name })
+
+        return
+      }
+
+      // Keep the "connected, but no models" state visible so the workspace can be fixed.
+      if (isConsole) {
+        setState("noModels", true)
+
+        return
+      }
+
+      dialog.close()
     },
-  })
-
-  // Captured before the new credential lands, so the connection itself never counts as existing.
-  createEffect(() => {
-    if (state.firstConnection !== undefined) return
-    const existing = providers.anyConnection()
-
-    if (existing === undefined) return
-    setState("firstConnection", !existing)
   })
 
   const connectionProviders = createMemo(() =>
@@ -625,29 +694,8 @@ function ProviderConnection(props: {
       props.provider,
   }))
 
-  const methodLabel = (value?: { type?: string; label?: string }) => {
-    if (!value) return ""
-
-    if (value.type === "key") return language.t("provider.connect.method.apiKey")
-
-    return value.label ?? ""
-  }
-
-  const methodDetails = (value?: { type?: string; label?: string }) => {
-    const label = methodLabel(value)
-    const suffix = value?.label?.match(/\s+\((browser|headless)\)$/i)
-    const hint = suffix?.[1]
-
-    return {
-      label: suffix ? label.slice(0, -suffix[0].length) : label,
-      hint:
-        hint?.toLowerCase() === "headless"
-          ? language.t("provider.connect.method.headless")
-          : hint?.toLowerCase() === "browser" || (!hint && value?.type === "key")
-            ? language.t("provider.connect.method.browser")
-            : undefined,
-    }
-  }
+  const methodLabel = (value: ProviderConnectMethod) =>
+    value.type === "key" ? (value.label ?? language.t("provider.connect.method.apiKey")) : value.label
 
   const code = createMemo(() => {
     const authorization = controller.authorization()
@@ -663,9 +711,6 @@ function ProviderConnection(props: {
     return instructions
   })
 
-  const keyIndex = () => controller.methods().findIndex((method) => method.type === "key")
-  const oauthIndex = () => controller.methods().findIndex((method) => method.type === "oauth")
-
   const consoleSignIn = () =>
     isConsole &&
     !state.noModels &&
@@ -673,259 +718,442 @@ function ProviderConnection(props: {
     controller.auth.state() !== "error" &&
     controller.authorization()?.mode === "auto"
 
-  const consoleStarting = () => controller.currentMethod()?.type === "oauth" && controller.auth.state() === "pending"
+  createEffect(() => {
+    if (showAccounts()) return props.onTitle(provider().name)
 
-  const consoleIntro = () =>
-    isConsole && !controller.loading() && (controller.methodIndex() === undefined || consoleStarting())
+    if (isConsole && controller.auth.state() === "error")
+      return props.onTitle(language.t("provider.connect.opencode.errorTitle"))
 
+    if (consoleSignIn())
+      return props.onTitle(
+        language.t(
+          props.provider === "opencode-go" ? "provider.connect.console.titleGo" : "provider.connect.console.title",
+        ),
+      )
+
+    if (props.provider === "anthropic" && controller.currentMethod()?.label?.toLowerCase().includes("max"))
+      return props.onTitle(language.t("provider.connect.title.anthropicProMax"))
+
+    props.onTitle(
+      language.t("provider.connect.title", {
+        provider: props.provider === "opencode" ? language.t("provider.connect.opencode.name") : provider().name,
+      }),
+    )
+  })
+
+  // Asks one visible field at a time, like the TUI, so `when` conditions see every earlier answer.
   function AuthFormView() {
-    const defaults = providerFormDefaults(controller.currentMethod()?.form)
+    const method = controller.currentMethod()
+    const fields = method && method.type !== "command" ? (method.form ?? []) : []
+    const hidden = providerFormDefaults(fields)
 
     const [formStore, setFormStore] = createStore<{
-      value: Record<string, string>
+      answer: FormAnswer
       index: number
+      text: string
+      choice?: string
       customOn: boolean
       customText: string
-    }>({
-      value: Object.fromEntries(
-        (controller.currentMethod()?.form ?? []).flatMap((field) =>
-          field.type === "string" && field.key in defaults && field.default !== undefined
-            ? [[field.key, field.default]]
-            : [],
-        ),
-      ),
-      index: 0,
-      customOn: false,
-      customText: "",
-    })
+      picked: string[]
+      opened: boolean
+      error?: string
+    }>({ answer: {}, index: -1, text: "", customOn: false, customText: "", picked: [], opened: false })
 
-    const fields = createMemo<StringForm[]>(() => {
-      const value = controller.currentMethod()
+    const active = (field: FormField, answer: FormAnswer) => {
+      if (field.type === "external" || !field.when) return true
 
-      return (value?.form ?? []).flatMap((field) => (field.type === "string" && !field.hidden ? [field] : []))
-    })
+      return field.when.every((condition) => {
+        const value = answer[condition.key]
 
-    const matches = (field: StringForm, value: Record<string, string>) => {
-      return (field.when ?? []).every((condition) => {
-        const actual = value[condition.key]
+        if (value === undefined) return false
+        const hit = Array.isArray(value) ? value.includes(String(condition.value)) : value === condition.value
 
-        if (actual === undefined) return false
-
-        return condition.op === "eq" ? actual === condition.value : actual !== condition.value
+        return condition.op === "eq" ? hit : !hit
       })
     }
 
-    const current = createMemo(() => {
-      const all = fields()
-      const index = all.findIndex((field, index) => index >= formStore.index && matches(field, formStore.value))
+    const asked = (field: FormField) => field.type === "external" || !field.hidden
 
-      if (index === -1) return undefined
+    const field = createMemo(() => (formStore.index < 0 ? undefined : fields[formStore.index]))
 
-      return {
-        index,
-        field: all[index],
-      }
-    })
+    const external = () => {
+      const current = field()
 
-    // Visible defaults prefill the field but enter the answer only once that field is answered,
-    // because the server rejects values for fields whose conditions are not met.
-    const answer = (field: StringForm) => formStore.value[field.key] ?? field.default
+      return current?.type === "external" ? current : undefined
+    }
 
-    const valid = createMemo(() => {
-      const item = current()
+    const multiselect = () => {
+      const current = field()
 
-      if (!item || (item.field.options && !item.field.custom)) return false
+      return current?.type === "multiselect" ? current : undefined
+    }
 
-      if (!item.field.required) return true
+    const text = () => {
+      const current = field()
 
-      return (answer(item.field) ?? "").trim().length > 0
-    })
+      return current?.type === "string" ? current : undefined
+    }
 
-    async function next(index: number, value: Record<string, string>) {
-      const selected = controller.methodIndex()
+    const required = () => {
+      const current = field()
 
-      if (selected === undefined) return
-      const next = fields().findIndex((field, i) => i > index && matches(field, value))
+      return current?.type !== "external" && !!current?.required
+    }
 
-      if (next !== -1) {
-        setFormStore({ index: next, customOn: false, customText: "" })
+    // Prefills the next field from its default; the value only enters the answer once confirmed.
+    function advance(answer: FormAnswer) {
+      const merged = { ...hidden, ...answer }
+      const index = fields.findIndex((item, i) => i > formStore.index && asked(item) && active(item, merged))
+
+      if (index === -1) {
+        void controller.auth.select(controller.methodIndex()!, answer)
 
         return
       }
 
-      await controller.auth.select(selected, value)
+      const next = fields[index]
+      setFormStore({
+        answer,
+        index,
+        text: "",
+        choice: undefined,
+        customOn: false,
+        customText: "",
+        picked: next.type === "multiselect" ? [...(next.default ?? [])] : [],
+        opened: false,
+        error: undefined,
+      })
+
+      if (next.type === "boolean" && next.default !== undefined) setFormStore("choice", String(next.default))
+
+      if ((next.type === "number" || next.type === "integer") && next.default !== undefined)
+        setFormStore("text", String(next.default))
+
+      if (next.type !== "string" || next.default === undefined) return
+
+      if (!next.options) return setFormStore("text", next.default)
+
+      if (next.options.some((option) => option.value === next.default)) return setFormStore("choice", next.default)
+
+      if (next.custom) setFormStore({ customOn: true, customText: next.default })
     }
 
-    async function handleSubmit(e: SubmitEvent) {
-      e.preventDefault()
-      const item = current()
+    onMount(() => advance({}))
 
-      if (!item || !valid()) return
-      const value = answer(item.field)
+    const confirm = (value: FormValue | undefined) => {
+      const current = field()
 
-      if (value !== undefined) setFormStore("value", item.field.key, value)
-      await next(item.index, formStore.value)
+      if (!current) return
+
+      if (value === undefined && required()) {
+        setFormStore("error", language.t("provider.connect.form.required"))
+
+        return
+      }
+
+      const answer = { ...formStore.answer }
+
+      if (value !== undefined) answer[current.key] = value
+      advance(answer)
     }
 
-    const item = () => current()
+    const submitText = (event: SubmitEvent) => {
+      event.preventDefault()
+      const current = field()
 
-    const text = createMemo(() => {
-      const field = item()?.field
+      if (!current || current.type === "external") return
+      const text = formStore.text.trim()
 
-      if (!field || field.options) return undefined
+      if (!text) return confirm(undefined)
 
-      return field
-    })
+      if (current.type === "number" || current.type === "integer") {
+        const value = Number(text)
 
-    const select = createMemo(() => {
-      const field = item()?.field
+        if (!Number.isFinite(value) || (current.type === "integer" && !Number.isInteger(value))) {
+          setFormStore("error", language.t("provider.connect.form.number"))
 
-      if (!field?.options) return undefined
+          return
+        }
 
-      return field
-    })
+        return confirm(value)
+      }
 
-    const custom = () => {
-      const field = select()
-
-      if (!field?.custom) return false
-      const value = answer(field)
-
-      return formStore.customOn || (value !== undefined && !field.options?.some((option) => option.value === value))
+      confirm(text)
     }
+
+    const optionRows = (current: FormField) => {
+      if (current.type === "boolean") {
+        const rows = [
+          { value: "true", label: language.t("provider.connect.form.yes"), description: undefined },
+          { value: "false", label: language.t("provider.connect.form.no"), description: undefined },
+        ]
+
+        return current.default === false ? rows.toReversed() : rows
+      }
+
+      if (current.type === "string" || current.type === "multiselect")
+        return (current.options ?? []).map((option) => ({
+          value: option.value,
+          label: option.label,
+          description: option.description,
+        }))
+
+      return []
+    }
+
+    const choose = () => {
+      const current = field()
+
+      if (!current) return
+
+      if (current.type === "boolean")
+        return confirm(formStore.choice === undefined ? undefined : formStore.choice === "true")
+
+      if (formStore.customOn) return confirm(formStore.customText.trim() || undefined)
+      confirm(formStore.choice)
+    }
+
+    const multiselectError = () => {
+      const current = field()
+
+      if (current?.type !== "multiselect") return
+      const count = formStore.picked.length
+
+      if (current.required && count === 0) return language.t("provider.connect.form.selectOne")
+
+      if (current.minItems !== undefined && count < current.minItems)
+        return language.t("provider.connect.form.minItems", { count: current.minItems })
+
+      if (current.maxItems !== undefined && count > current.maxItems)
+        return language.t("provider.connect.form.maxItems", { count: current.maxItems })
+    }
+
+    const openLink = async (url: string) => {
+      const opened = await Promise.resolve()
+        .then(() => {
+          if (platform.openBrowser) return platform.openBrowser(url)
+          platform.openExternal(url)
+
+          return true
+        })
+        .catch(() => false)
+
+      setFormStore("opened", (value) => value || opened)
+    }
+
+    const title = (current: FormField) => current.title ?? (current.type === "external" ? current.url : current.key)
 
     return (
-      <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4 px-3">
-        <Switch>
-          <Match when={item()?.field.options === undefined}>
-            <TextField
-              type="text"
-              label={text()?.title ?? ""}
-              placeholder={text()?.placeholder}
-              value={text() ? (answer(text()!) ?? "") : ""}
-              onChange={(value) => {
-                const field = text()
+      <Show when={field()}>
+        {(current) => (
+          <div data-component="provider-connect-form" class="flex flex-col items-start gap-4 px-3">
+            <div class="flex w-full flex-col gap-1">
+              <div class="text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base">
+                {title(current())}
+              </div>
+              <Show when={current().description}>
+                {(description) => (
+                  <div class="text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+                    {description()}
+                  </div>
+                )}
+              </Show>
+            </div>
+            <Switch>
+              <Match when={external()}>
+                {(external) => (
+                  <div class="flex flex-wrap items-center gap-2">
+                    <Button variant="neutral" icon="arrow-up-right" onClick={() => void openLink(external().url)}>
+                      {language.t(formStore.opened ? "provider.connect.form.openAgain" : "provider.connect.form.open")}
+                    </Button>
+                    <Button variant="contrast" disabled={!formStore.opened} onClick={() => confirm(true)}>
+                      {language.t("provider.connect.form.finished")}
+                    </Button>
+                  </div>
+                )}
+              </Match>
+              <Match when={multiselect()}>
+                {(multi) => {
+                  const options = () => optionRows(multi())
+                  const custom = () => multi().custom
 
-                if (!field) return
-                setFormStore("value", field.key, value)
-              }}
-            />
-            <Button class="w-auto" type="submit" size="large" variant="contrast" disabled={!valid()}>
-              {language.t("common.continue")}
-            </Button>
-          </Match>
-          <Match when={select()?.custom && select()}>
-            {(field) => (
-              <>
-                <div class="w-full flex flex-col gap-3">
-                  <div class="text-14-regular text-text-base">{field().title}</div>
+                  return (
+                    <div class="flex w-full flex-col gap-4">
+                      <div class="flex flex-col gap-2">
+                        <For
+                          each={[
+                            ...options(),
+                            ...formStore.picked
+                              .filter((item) => !options().some((option) => option.value === item))
+                              .map((value) => ({ value, label: value, description: undefined })),
+                          ]}
+                        >
+                          {(option) => (
+                            <Checkbox
+                              checked={formStore.picked.includes(option.value)}
+                              description={option.description}
+                              onChange={(checked: boolean) =>
+                                setFormStore("picked", (picked) =>
+                                  checked ? [...picked, option.value] : picked.filter((item) => item !== option.value),
+                                )
+                              }
+                            >
+                              {option.label}
+                            </Checkbox>
+                          )}
+                        </For>
+                      </div>
+                      <Show when={custom()}>
+                        <form
+                          class="flex w-full items-center gap-2"
+                          onSubmit={(event) => {
+                            event.preventDefault()
+                            const value = formStore.customText.trim()
+
+                            if (!value || formStore.picked.includes(value)) return
+                            setFormStore({ picked: [...formStore.picked, value], customText: "" })
+                          }}
+                        >
+                          <TextInput
+                            class="min-w-0 flex-1"
+                            placeholder={language.t("ui.question.custom.placeholder")}
+                            aria-label={language.t("ui.messagePart.option.typeOwnAnswer")}
+                            value={formStore.customText}
+                            onInput={(event) => setFormStore("customText", event.currentTarget.value)}
+                          />
+                          <Button type="submit" variant="neutral">
+                            {language.t("provider.connect.form.add")}
+                          </Button>
+                        </form>
+                      </Show>
+                      <Show when={multiselectError()}>
+                        {(error) => <div class="text-xs text-v2-text-text-muted">{error()}</div>}
+                      </Show>
+                      <Button
+                        class="w-auto self-start"
+                        variant="contrast"
+                        disabled={multiselectError() !== undefined}
+                        onClick={() => confirm(formStore.picked.length ? [...formStore.picked] : undefined)}
+                      >
+                        {language.t("common.continue")}
+                      </Button>
+                    </div>
+                  )
+                }}
+              </Match>
+              <Match
+                when={current().type === "boolean" || (current().type === "string" && optionRows(current()).length > 0)}
+              >
+                <div class="flex w-full flex-col gap-4">
                   <RadioGroup
-                    label={field().title}
+                    label={title(current())}
                     hideLabel
-                    description={field().description}
-                    value={
-                      custom()
-                        ? "custom"
-                        : String(field().options?.findIndex((option) => option.value === answer(field())))
-                    }
+                    value={formStore.customOn ? "custom" : formStore.choice}
                     onChange={(value) => {
-                      const option = field().options?.[Number(value)]
-
-                      if (option) {
-                        if (custom()) setFormStore("customText", answer(field()) ?? "")
-                        setFormStore("customOn", false)
-                        setFormStore("value", field().key, option.value)
-
-                        return
-                      }
-
-                      setFormStore("customOn", true)
-                      setFormStore("value", field().key, formStore.customText)
+                      if (value === "custom") return setFormStore({ customOn: true, error: undefined })
+                      setFormStore({ customOn: false, choice: value, error: undefined })
                     }}
                   >
-                    <For each={field().options}>
-                      {(option, index) => (
-                        <RadioItem value={String(index())} label={option.label} description={option.description} />
+                    <For each={optionRows(current())}>
+                      {(option) => (
+                        <RadioItem value={option.value} label={option.label} description={option.description} />
                       )}
                     </For>
-                    <RadioItem value="custom" label={language.t("ui.messagePart.option.typeOwnAnswer")} />
-                    <Show when={custom()}>
-                      <div class="pl-6">
-                        <TextField
-                          ref={(input: HTMLInputElement) => queueMicrotask(() => input.focus())}
-                          type="text"
-                          label={language.t("ui.messagePart.option.typeOwnAnswer")}
-                          hideLabel
-                          placeholder={field().placeholder ?? language.t("ui.question.custom.placeholder")}
-                          value={answer(field()) ?? ""}
-                          onChange={(value) => setFormStore("value", field().key, value)}
-                        />
-                      </div>
+                    <Show when={text()?.custom}>
+                      <RadioItem value="custom" label={language.t("ui.messagePart.option.typeOwnAnswer")} />
+                      <Show when={formStore.customOn}>
+                        <div class="pl-6">
+                          <TextField
+                            ref={(input: HTMLInputElement) => queueMicrotask(() => input.focus())}
+                            type="text"
+                            label={language.t("ui.messagePart.option.typeOwnAnswer")}
+                            hideLabel
+                            placeholder={text()?.placeholder ?? language.t("ui.question.custom.placeholder")}
+                            value={formStore.customText}
+                            onChange={(value) => setFormStore("customText", value)}
+                          />
+                        </div>
+                      </Show>
                     </Show>
                   </RadioGroup>
+                  <div class="flex items-center gap-2">
+                    <Button
+                      class="w-auto"
+                      variant="contrast"
+                      disabled={formStore.customOn ? !formStore.customText.trim() : formStore.choice === undefined}
+                      onClick={choose}
+                    >
+                      {language.t("common.continue")}
+                    </Button>
+                    <Show when={!required()}>
+                      <Button variant="ghost-muted" onClick={() => confirm(undefined)}>
+                        {language.t("provider.connect.form.skip")}
+                      </Button>
+                    </Show>
+                  </div>
                 </div>
-                <Button class="w-auto" type="submit" size="large" variant="contrast" disabled={!valid()}>
-                  {language.t("common.continue")}
-                </Button>
-              </>
-            )}
-          </Match>
-          <Match when={item()?.field.options !== undefined}>
-            <div class="w-full flex flex-col gap-1.5">
-              <div class="text-14-regular text-text-base">{select()?.title}</div>
-              <div>
-                <List
-                  class="px-3"
-                  items={select()?.options ?? []}
-                  key={(x) => x.value}
-                  current={select()?.options?.find((x) => x.value === answer(select()!))}
-                  onSelect={(value) => {
-                    if (!value) return
-                    const field = select()
-
-                    if (!field) return
-
-                    const nextValue = {
-                      ...formStore.value,
-                      [field.key]: value.value,
-                    }
-
-                    setFormStore("value", field.key, value.value)
-                    void next(item()!.index, nextValue)
-                  }}
-                >
-                  {(option) => (
-                    <div class="w-full flex items-center gap-x-2">
-                      <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
-                        <div class="w-2.5 h-0.5 ml-0 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
-                      </div>
-                      <span>{option.label}</span>
-                      <span class="text-14-regular text-text-weak">{option.description}</span>
-                    </div>
-                  )}
-                </List>
-              </div>
-            </div>
-          </Match>
-        </Switch>
-      </form>
+              </Match>
+              <Match when={true}>
+                <form onSubmit={submitText} class="flex w-full flex-col items-start gap-4">
+                  <TextInput
+                    ref={(input: HTMLInputElement) => queueMicrotask(() => input.focus({ preventScroll: true }))}
+                    class="!w-full"
+                    type="text"
+                    inputMode={current().type === "string" ? undefined : "decimal"}
+                    aria-label={title(current())}
+                    placeholder={text()?.placeholder}
+                    value={formStore.text}
+                    invalid={formStore.error !== undefined}
+                    autocomplete="off"
+                    spellcheck={false}
+                    onInput={(event) => setFormStore({ text: event.currentTarget.value, error: undefined })}
+                  />
+                  <Button type="submit" variant="contrast">
+                    {language.t("common.continue")}
+                  </Button>
+                </form>
+              </Match>
+            </Switch>
+            <Show when={formStore.error}>
+              {(error) => (
+                <div role="alert" class="text-xs text-v2-state-fg-danger">
+                  {error()}
+                </div>
+              )}
+            </Show>
+          </div>
+        )}
+      </Show>
     )
   }
 
+  const backToAccounts = () =>
+    !!props.accounts &&
+    state.adding &&
+    accounts().length > 0 &&
+    (state.direct || controller.methodIndex() === undefined)
+
+  const backToMethods = () => (isConsole || controller.methods().length > 1) && controller.methodIndex() !== undefined
+
+  createEffect(() => props.onStepBack(backToAccounts() || backToMethods()))
+  onCleanup(() => props.onAccounts(false))
+  createEffect(() =>
+    props.onAccounts(
+      showAccounts() &&
+        controller.methodIndex() === undefined &&
+        !(state.noModels && controller.auth.state() !== "error"),
+    ),
+  )
+
   function goBack() {
-    if (
-      props.accounts &&
-      state.adding &&
-      accounts().length > 0 &&
-      (state.direct || controller.methodIndex() === undefined)
-    ) {
+    if (backToAccounts()) {
       controller.auth.reset()
       setState({ adding: false, direct: false })
 
       return
     }
 
-    if ((isConsole || controller.methods().length > 1) && controller.methodIndex() !== undefined) {
+    if (backToMethods()) {
       controller.auth.reset()
 
       return
@@ -938,33 +1166,37 @@ function ProviderConnection(props: {
 
   function MethodSelection() {
     return (
-      <div class="flex flex-col gap-2">
-        <div class="px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-          {language.t("provider.connect.selectMethod", { provider: provider().name })}
-        </div>
-        <div class="flex flex-col">
-          <For each={controller.methods()}>
-            {(item, index) => {
-              const details = () => methodDetails(item)
+      <div class="flex flex-col">
+        <For each={controller.methods()}>
+          {(item, index) => (
+            <button
+              type="button"
+              data-action="provider-connect-method"
+              class="group flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+              onClick={() => void controller.auth.select(index())}
+            >
+              <span class="font-[530] text-v2-text-text-base">{methodLabel(item)}</span>
+            </button>
+          )}
+        </For>
+      </div>
+    )
+  }
 
-              return (
-                <button
-                  type="button"
-                  class="group flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-                  onClick={() => void controller.auth.select(index())}
-                >
-                  <span class="flex h-2 w-4 shrink-0 items-center justify-center rounded-[1px] bg-v2-background-bg-base shadow-[var(--v2-elevation-button-neutral)]">
-                    <span class="hidden h-0.5 w-2.5 bg-v2-icon-icon-base group-hover:block group-focus-visible:block" />
-                  </span>
-                  <span class="font-[530] text-v2-text-text-base">{details().label}</span>
-                  <Show when={details().hint}>
-                    {(hint) => <span class="font-[440] text-v2-text-text-muted">{hint()}</span>}
-                  </Show>
-                </button>
-              )
-            }}
-          </For>
-        </div>
+  function CommandView() {
+    return (
+      <div class="flex flex-col gap-4 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+        <Show when={controller.command()?.output.trim()}>
+          {(output) => (
+            <pre
+              data-component="provider-connect-command-output"
+              class="max-h-60 overflow-auto whitespace-pre-wrap rounded-md bg-v2-background-bg-layer-03 px-3 py-2 font-mono text-[12px] leading-[18px] text-v2-text-text-base"
+            >
+              {output()}
+            </pre>
+          )}
+        </Show>
+        <StatusRow>{language.t("provider.connect.command.waiting")}</StatusRow>
       </div>
     )
   }
@@ -972,7 +1204,7 @@ function ProviderConnection(props: {
   function StatusRow(input: { children: JSX.Element }) {
     return (
       <div class="flex items-center gap-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-        <Spinner class="size-4 shrink-0 text-v2-icon-icon-muted" />
+        <Loader class="size-4 shrink-0 text-v2-icon-icon-muted" />
         <span>{input.children}</span>
       </div>
     )
@@ -1173,13 +1405,10 @@ function ProviderConnection(props: {
   const addAccount = () => {
     setState({ adding: true, direct: false, confirming: undefined })
 
-    // Go signs in through the Console, which would add a Console account, so Go adds a key instead.
-    const index =
-      props.provider === "opencode-go" ? keyIndex() : !isConsole && controller.methods().length === 1 ? 0 : -1
-
-    if (index === -1) return
+    // Like the TUI: a lone method starts directly, several show the method list.
+    if (controller.methods().length !== 1) return
     setState("direct", true)
-    void controller.auth.select(index)
+    void controller.auth.select(0)
   }
 
   const activateAccount = async (account: ProviderAccount) => {
@@ -1190,146 +1419,142 @@ function ProviderConnection(props: {
   }
 
   const removeAccount = async (account: ProviderAccount) => {
+    const final = accounts().length === 1
     setState({ switching: account.id, confirming: undefined })
     await accountActions.remove({
       integrationID: props.provider,
       provider: provider().name,
       account,
-      final: accounts().length === 1,
+      final,
     })
     setState("switching", undefined)
+
+    // Removing the last account disconnects the integration, so the dialog is done, as in the TUI.
+    if (final && accounts().length === 0) dialog.close()
+  }
+
+  // A connection that needs a fresh sign-in either has its own link or signs in again.
+  const selectAccount = (account: ProviderAccount) => {
+    const url = account.status?.url
+
+    if (url) return void platform.openExternal(url)
+
+    if (account.status) return addAccount()
+    void activateAccount(account)
   }
 
   function AccountsView() {
     return (
-      <div data-component="provider-accounts" class="flex flex-col gap-3">
-        <section class="flex flex-col">
-          <div class="px-3 pb-2 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted">
-            {language.t("dialog.provider.accounts.connected")}
-          </div>
-          <div role="radiogroup" aria-label={language.t("dialog.provider.accounts.connected")} class="flex flex-col">
-            <For each={accounts()}>
-              {(account) => (
-                <Show
-                  when={state.confirming !== account.id}
-                  fallback={
-                    <div class="flex min-h-9 items-center gap-2 rounded-md px-3 text-[13px] leading-5 tracking-[-0.04px]">
-                      <span role="alert" class="min-w-0 flex-1 truncate font-[440] text-v2-text-text-base">
-                        {language.t("dialog.provider.accounts.removeConfirm", { account: account.label })}
-                      </span>
-                      <Button variant="ghost-muted" onClick={() => setState("confirming", undefined)}>
-                        {language.t("common.cancel")}
-                      </Button>
-                      <Button variant="neutral" onClick={() => void removeAccount(account)}>
-                        {language.t("dialog.provider.accounts.remove")}
-                      </Button>
-                    </div>
-                  }
-                >
-                  <div class="group relative flex min-h-9 items-center rounded-md hover:bg-v2-overlay-simple-overlay-hover focus-within:bg-v2-overlay-simple-overlay-hover">
-                    <Show
-                      when={state.renaming !== account.id}
-                      fallback={
-                        <div class="flex min-h-9 min-w-0 flex-1 items-center px-3">
-                          <AccountNameInput
-                            value={account.label}
-                            class="-ms-1 max-w-full text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
-                            onSave={(label) => accountActions.rename(account, label)}
-                            onClose={() => setState("renaming", undefined)}
-                          />
-                        </div>
-                      }
-                    >
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={activeAccount() === account.id}
-                        class="flex min-h-9 min-w-0 flex-1 items-center gap-2 px-3 text-left text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
-                        disabled={state.switching !== undefined}
-                        onClick={() => void activateAccount(account)}
-                      >
-                        <span class="min-w-0 truncate font-[440] text-v2-text-text-base">{account.label}</span>
-                        <Show when={activeAccount() === account.id}>
-                          <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
-                        </Show>
-                      </button>
-                    </Show>
-                    <div class="flex shrink-0 items-center pe-1.5">
-                      <Menu gutter={4} modal={false} placement="bottom-end">
-                        <Menu.Trigger
-                          as={IconButton}
-                          variant="ghost-muted"
-                          size="small"
-                          icon={<Icon name="outline-dots" />}
-                          disabled={state.switching !== undefined}
-                          aria-label={language.t("dialog.provider.accounts.options", { account: account.label })}
-                        />
-                        {/* The modal dialog aria-hides anything added outside it, this portal included, a frame
-                            after it opens. Kobalte leaves a node marked as a top layer visible. */}
-                        <Menu.Portal
-                          ref={(el) => {
-                            el.dataset.reactAriaTopLayer = "true"
-                          }}
-                        >
-                          <Menu.Content onCloseAutoFocus={(event) => state.renaming && event.preventDefault()}>
-                            <Menu.Item onSelect={() => setState({ renaming: account.id, confirming: undefined })}>
-                              {language.t("common.rename")}
-                            </Menu.Item>
-                            <Menu.Item onSelect={() => setState({ confirming: account.id, renaming: undefined })}>
-                              {language.t("dialog.provider.accounts.remove")}
-                            </Menu.Item>
-                          </Menu.Content>
-                        </Menu.Portal>
-                      </Menu>
-                    </div>
-                  </div>
-                </Show>
-              )}
-            </For>
-          </div>
-        </section>
-        <Button class="-mt-1 ms-2.5 self-start !px-3" disabled={state.switching !== undefined} onClick={addAccount}>
-          {language.t("dialog.provider.accounts.add")}
-        </Button>
-      </div>
-    )
-  }
-
-  function ConsoleIntro() {
-    return (
-      <div class="flex flex-col items-start gap-5 px-3">
-        <p class="text-[13px] leading-5 text-v2-text-text-muted">{language.t("provider.connect.console.intro")}</p>
-        <Button
-          size="large"
-          class="!px-3"
-          variant="contrast"
-          disabled={oauthIndex() === -1 || consoleStarting()}
-          aria-busy={consoleStarting()}
-          onClick={() => void controller.auth.select(oauthIndex())}
+      <div data-component="provider-accounts" class="flex flex-col gap-0.5">
+        <div
+          role="radiogroup"
+          aria-label={language.t("dialog.provider.accounts.connected")}
+          class="flex flex-col gap-0.5"
         >
-          <Show when={consoleStarting()}>
-            <span class="absolute inset-0 flex items-center justify-center gap-1.5">
-              <Loader />
-              <span>{language.t("provider.connect.console.openingBrowser")}</span>
-            </span>
-          </Show>
-          <span aria-hidden={consoleStarting() ? "true" : undefined} classList={{ "opacity-0": consoleStarting() }}>
-            {language.t("provider.connect.console.continue")}
+          <For each={accounts()}>
+            {(account) => (
+              <Show
+                when={state.confirming !== account.id}
+                fallback={
+                  <div class="flex min-h-7 items-center gap-1.5 rounded-md ps-7 pe-0.5 text-[13px] leading-5 tracking-[-0.04px]">
+                    <span role="alert" class="min-w-0 flex-1 truncate font-[440] text-v2-text-text-base">
+                      {language.t("dialog.provider.accounts.removeConfirm", { account: account.label })}
+                    </span>
+                    <Button variant="ghost-muted" onClick={() => setState("confirming", undefined)}>
+                      {language.t("common.cancel")}
+                    </Button>
+                    <Button variant="neutral" onClick={() => void removeAccount(account)}>
+                      {language.t("dialog.provider.accounts.remove")}
+                    </Button>
+                  </div>
+                }
+              >
+                <div class="group relative flex min-h-7 items-center rounded-md hover:bg-v2-overlay-simple-overlay-hover focus-within:bg-v2-overlay-simple-overlay-hover has-[[data-expanded]]:bg-v2-overlay-simple-overlay-hover">
+                  <Show
+                    when={state.renaming !== account.id}
+                    fallback={
+                      <div class="flex min-h-7 min-w-0 flex-1 items-center ps-7 pe-2">
+                        <AccountNameInput
+                          value={account.label}
+                          class="-ms-1 max-w-full text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
+                          onSave={(label) => accountActions.rename(account, label)}
+                          onClose={() => setState("renaming", undefined)}
+                        />
+                      </div>
+                    }
+                  >
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={activeAccount() === account.id}
+                      class="flex min-h-7 min-w-0 flex-1 items-center gap-1.5 ps-1.5 pe-2 text-start text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
+                      disabled={state.switching !== undefined}
+                      onClick={() => selectAccount(account)}
+                    >
+                      <span class="flex size-4 shrink-0 items-center justify-center">
+                        <Show when={activeAccount() === account.id}>
+                          <Icon name="check" size="small" class="text-v2-icon-icon-base" />
+                        </Show>
+                      </span>
+                      <span class="min-w-0 truncate font-[440] text-v2-text-text-base">{account.label}</span>
+                      <Show when={account.status}>
+                        {(status) => (
+                          <span
+                            data-slot="provider-account-status"
+                            title={status().message}
+                            class="ms-auto shrink-0 font-[440] text-[var(--v2-state-fg-warning)]"
+                          >
+                            {language.t("dialog.provider.needsSignIn")}
+                          </span>
+                        )}
+                      </Show>
+                    </button>
+                  </Show>
+                  <div class="hover-reveal flex shrink-0 items-center pe-1 group-hover:opacity-100 focus-within:opacity-100 has-[[data-expanded]]:opacity-100">
+                    <Menu gutter={4} modal={false} placement="bottom-end">
+                      <Menu.Trigger
+                        as={IconButton}
+                        variant="ghost-muted"
+                        size="small"
+                        icon={<Icon name="outline-dots" />}
+                        disabled={state.switching !== undefined}
+                        aria-label={language.t("dialog.provider.accounts.options", { account: account.label })}
+                      />
+                      {/* The modal dialog aria-hides anything added outside it, this portal included, a frame
+                            after it opens. Kobalte leaves a node marked as a top layer visible. */}
+                      <Menu.Portal
+                        ref={(el) => {
+                          el.dataset.reactAriaTopLayer = "true"
+                        }}
+                      >
+                        <Menu.Content onCloseAutoFocus={(event) => state.renaming && event.preventDefault()}>
+                          <Menu.Item onSelect={() => setState({ renaming: account.id, confirming: undefined })}>
+                            {language.t("common.rename")}
+                          </Menu.Item>
+                          <Menu.Item onSelect={() => setState({ confirming: account.id, renaming: undefined })}>
+                            {language.t("dialog.provider.accounts.remove")}
+                          </Menu.Item>
+                        </Menu.Content>
+                      </Menu.Portal>
+                    </Menu>
+                  </div>
+                </div>
+              </Show>
+            )}
+          </For>
+        </div>
+        <button
+          type="button"
+          data-action="provider-account-add"
+          class="flex h-7 w-full items-center gap-1.5 rounded-md ps-1.5 pe-2 text-start text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none disabled:pointer-events-none"
+          disabled={state.switching !== undefined || controller.methods().length === 0}
+          onClick={addAccount}
+        >
+          <span class="flex size-4 shrink-0 items-center justify-center">
+            <Icon name="plus" class="text-v2-icon-icon-muted" />
           </span>
-        </Button>
-        <Show when={keyIndex() !== -1}>
-          <div data-component="console-service-account" class="flex h-7 items-center gap-1 text-[13px]">
-            <span class="text-v2-text-text-faint">{language.t("provider.connect.console.serviceAccount")}</span>
-            <Button
-              variant="ghost-muted"
-              data-action="provider-connect-api-key"
-              disabled={consoleStarting()}
-              onClick={() => void controller.auth.select(keyIndex())}
-            >
-              {language.t("provider.connect.console.useApiKey")}
-            </Button>
-          </div>
-        </Show>
+          {language.t("dialog.provider.accounts.add")}
+        </button>
       </div>
     )
   }
@@ -1459,7 +1684,7 @@ function ProviderConnection(props: {
 
                       return (
                         <section class="settings-section" data-expanded={expanded() ? "" : undefined}>
-                          <h3 class="settings-models-group-header sticky top-0 z-[1] box-content bg-v2-background-bg-layer-01">
+                          <h3 class="settings-models-group-header sticky top-0 z-[1] box-content bg-v2-background-bg-base">
                             <button
                               type="button"
                               class="settings-models-group-trigger"
@@ -1516,101 +1741,72 @@ function ProviderConnection(props: {
 
   return (
     <Show when={!state.models} fallback={<FirstConnectionModels />}>
-      <div class="flex min-h-0 flex-1 flex-col">
-        <div
-          class={isConsole ? "flex shrink-0 items-center gap-2 px-3 pb-6" : "flex h-10 shrink-0 items-start gap-2 px-3"}
-        >
-          <ProviderModelIcon
-            provider={provider()}
-            class={isConsole ? "shrink-0 text-v2-icon-icon-base" : "mt-0.5 shrink-0 text-v2-icon-icon-base"}
-          />
-          <div class="text-[15px] font-[530] leading-5 tracking-[-0.13px] text-v2-text-text-base">
-            <DialogTitle>
-              <Switch>
-                <Match when={showAccounts()}>{provider().name}</Match>
-                <Match when={isConsole && controller.auth.state() === "error"}>
-                  {language.t("provider.connect.opencode.errorTitle")}
-                </Match>
-                <Match when={consoleSignIn()}>
-                  {language.t(
-                    props.provider === "opencode-go"
-                      ? "provider.connect.console.titleGo"
-                      : "provider.connect.console.title",
-                  )}
-                </Match>
-                <Match
-                  when={
-                    props.provider === "anthropic" && controller.currentMethod()?.label?.toLowerCase().includes("max")
-                  }
-                >
-                  {language.t("provider.connect.title.anthropicProMax")}
-                </Match>
-                <Match when={props.provider === "opencode"}>
-                  {language.t("provider.connect.title", { provider: language.t("provider.connect.opencode.name") })}
-                </Match>
-                <Match when={true}>{language.t("provider.connect.title", { provider: provider().name })}</Match>
-              </Switch>
-            </DialogTitle>
+      <div
+        data-component="provider-connect-content"
+        class={
+          isConsole
+            ? `flex min-h-0 flex-1 flex-col overflow-y-auto ${showAccounts() ? "" : "pb-4"}`
+            : "flex min-h-0 flex-1 flex-col"
+        }
+      >
+        <Show when={remote}>
+          <div class="mb-5 px-3">
+            <RemoteAuthNotice server={sdk.server} />
           </div>
-        </div>
-        <div
-          data-component="provider-connect-content"
-          class={isConsole ? "flex min-h-0 flex-1 flex-col overflow-y-auto pb-4" : "flex min-h-0 flex-1 flex-col"}
-        >
-          <Show when={remote}>
-            <div class="mb-5 px-3">
-              <RemoteAuthNotice server={sdk.server} />
+        </Show>
+        <Switch>
+          <Match when={state.noModels && controller.auth.state() !== "error"}>
+            <ConsoleNoModels />
+          </Match>
+          <Match when={consoleSignIn()}>
+            <div class="px-3">
+              <ConsoleAuthorization
+                code={code()}
+                browserFailed={controller.browserFailed()}
+                copied={state.copied}
+                copyFailed={state.copyFailed}
+                onCopy={() => void copyLink()}
+                onOpen={() => void controller.auth.open()}
+              />
             </div>
-          </Show>
-          <Switch>
-            <Match when={state.noModels && controller.auth.state() !== "error"}>
-              <ConsoleNoModels />
-            </Match>
-            <Match when={consoleSignIn()}>
-              <div class="px-3">
-                <ConsoleAuthorization
-                  code={code()}
-                  browserFailed={controller.browserFailed()}
-                  copied={state.copied}
-                  copyFailed={state.copyFailed}
-                  onCopy={() => void copyLink()}
-                  onOpen={() => void controller.auth.open()}
-                />
-              </div>
-            </Match>
-            <Match when={showAccounts() && controller.methodIndex() === undefined}>
-              <AccountsView />
-            </Match>
-            <Match when={consoleIntro()}>
-              <ConsoleIntro />
-            </Match>
-            <Match when={controller.busy()}>
-              <div class="px-3">
-                <StatusRow>{language.t("provider.connect.status.inProgress")}</StatusRow>
-              </div>
-            </Match>
-            <Match when={controller.methodIndex() === undefined}>
-              <MethodSelection />
-            </Match>
-            <Match when={controller.auth.state() === "form"}>
-              <AuthFormView />
-            </Match>
-            <Match when={controller.auth.state() === "error"}>
-              <div class="px-3">
-                <ErrorRow />
-              </div>
-            </Match>
-            <Match when={controller.currentMethod()?.type === "key"}>
-              <ApiAuthView />
-            </Match>
-            <Match when={controller.authorization()?.mode === "code"}>
-              <OAuthCodeView />
-            </Match>
-            <Match when={controller.authorization()?.mode === "auto"}>
-              <OAuthAutoView />
-            </Match>
-          </Switch>
-        </div>
+          </Match>
+          <Match when={showAccounts() && controller.methodIndex() === undefined}>
+            <AccountsView />
+          </Match>
+          <Match when={controller.busy()}>
+            <div class="px-3">
+              <StatusRow>{language.t("provider.connect.status.inProgress")}</StatusRow>
+            </div>
+          </Match>
+          <Match when={controller.methodIndex() === undefined && controller.methods().length === 0}>
+            <div class="px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+              {language.t("dialog.provider.environmentOnly")}
+            </div>
+          </Match>
+          <Match when={controller.methodIndex() === undefined}>
+            <MethodSelection />
+          </Match>
+          <Match when={controller.auth.state() === "form"}>
+            <AuthFormView />
+          </Match>
+          <Match when={controller.auth.state() === "error"}>
+            <div class="px-3">
+              <ErrorRow />
+            </div>
+          </Match>
+          <Match when={controller.currentMethod()?.type === "command"}>
+            <CommandView />
+          </Match>
+          <Match when={controller.currentMethod()?.type === "key"}>
+            <ApiAuthView />
+          </Match>
+          <Match when={controller.authorization()?.mode === "code"}>
+            <OAuthCodeView />
+          </Match>
+          <Match when={controller.authorization()?.mode === "auto"}>
+            <OAuthAutoView />
+          </Match>
+        </Switch>
       </div>
     </Show>
   )

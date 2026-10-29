@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/gui-plugins",
+  "version": "2.2.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./renderer": "./src/renderer.ts",
+    "./main": "./src/main.ts",
+    "./terminal": "./src/terminal/index.ts",
+    "./debug/options": "./src/debug/options.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check --no-script -b",
+    "typecheck:tsc": "tsc -b",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@betteroffice/docx": "0.4.3",
+    "@betteroffice/fonts": "0.4.0",
+    "@betteroffice/pptx": "0.2.0",
+    "@betteroffice/xlsx": "0.3.0",
+    "@dnd-kit/abstract": "0.5.0",
+    "@dnd-kit/dom": "0.5.0",
+    "@dnd-kit/solid": "0.5.0",
+    "@effect/platform-node": "catalog:",
+    "@kobalte/core": "catalog:",
+    "@opencode/client": "workspace:*",
+    "@opencode/plugin": "workspace:*",
+    "@opencode/plugin-browser": "workspace:*",
+    "@opencode/schema": "workspace:*",
+    "@opencode/session-ui": "workspace:*",
+    "@opencode/ui": "workspace:*",
+    "@opencode/util": "workspace:*",
+    "@pierre/trees": "1.0.0-beta.6",
+    "@solid-primitives/event-listener": "catalog:",
+    "@solid-primitives/media": "catalog:",
+    "@solid-primitives/resize-observer": "catalog:",
+    "@solid-primitives/scheduled": "1.5.3",
+    "@tanstack/solid-query": "5.91.4",
+    "@tanstack/solid-virtual": "catalog:",
+    "effect": "catalog:",
+    "fuzzysort": "catalog:",
+    "ghostty-web": "github:anomalyco/ghostty-web#e91e38a9ceb13c566ddfa15185a9393849f712a9",
+    "knobs": "npm:@kitlangton/knobs@0.4.0-next.22",
+    "solid-js": "catalog:"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "20.0.11",
+    "@lydell/node-pty": "catalog:",
+    "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native": "catalog:",
+    "devtools-protocol": "0.0.1687809",
+    "electron": "44.9.1",
+    "electron-updater": "6.8.9",
+    "lighthouse": "13.4.1",
+    "vite": "catalog:"
+  }
+}

@@ -33,8 +33,6 @@ export default Runtime.handler(
       target: Option.getOrUndefined(input.target),
       method: Option.getOrUndefined(input.method),
       answer: input.answer,
-      server: Option.getOrUndefined(input.server),
-      standalone: input.standalone,
     }).pipe(handlePromptErrors),
   ),
 )
@@ -43,13 +41,11 @@ const login = Effect.fn("cli.auth.login.run")(function* (input: {
   target?: string
   method?: string
   answer?: ReadonlyArray<string>
-  server?: string
-  standalone: boolean
 }) {
   if (!input.target)
     yield* requireInteractive("Pass an integration ID or name when running without an interactive terminal")
   intro("Connect an integration")
-  const client = yield* createClient({ server: input.server, standalone: input.standalone })
+  const client = yield* createClient()
   const integration = yield* findIntegration(client, input.target)
   const methods = connectMethods(integration)
   if (methods.length === 0) yield* Effect.fail(new Error(`${integration.name} has no interactive login methods`))
@@ -65,7 +61,7 @@ const findIntegration = Effect.fn("cli.auth.login.integration")(function* (clien
     if (protocol === "http:" || protocol === "https:") {
       const progress = spinner()
       progress.start("Discovering authentication provider...")
-      yield* request((signal) => client.integration.wellknown.add({ url: target, location }, { signal })).pipe(
+      yield* request((signal) => client.experimental.integration.wellknown.add({ url: target, location }, { signal })).pipe(
         Effect.tap(() => Effect.sync(() => progress.stop("Authentication provider discovered"))),
         Effect.tapCause(() => Effect.sync(() => progress.stop("Discovery failed", 1))),
       )

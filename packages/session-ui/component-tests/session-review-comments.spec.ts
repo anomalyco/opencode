@@ -1,4 +1,4 @@
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, story } from "../../stories/playwright/story"
 
 // Moved from packages/app/e2e/regression/review-line-comment.spec.ts
 story("opens the comment editor when code is clicked", async ({ mount }) => {

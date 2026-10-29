@@ -148,6 +148,17 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("checks for a deny without asking", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const service = yield* Permission.Service
+      yield* service.assertNotDenied(assertion())
+      expect(yield* service.list()).toEqual([])
+      yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
+      expect(yield* service.assertNotDenied(assertion()).pipe(Effect.flip)).toBeInstanceOf(Permission.BlockedError)
+    }),
+  )
+
   test("matches Windows rule resources against slash-normalized file access resources", () => {
     const rules: Permission.Ruleset = [
       { action: "external_directory", resource: "C:\\Users\\x\\proj\\*", effect: "allow" },

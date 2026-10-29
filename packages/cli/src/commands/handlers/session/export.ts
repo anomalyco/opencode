@@ -16,10 +16,7 @@ export default Runtime.handler(
       if (!requested && !process.stdin.isTTY) {
         yield* Effect.fail(new Error("Pass a session ID when running without an interactive terminal"))
       }
-      const server = yield* ServerConnection.resolve({
-        server: Option.getOrUndefined(input.server),
-        standalone: input.standalone,
-      })
+      const server = yield* ServerConnection.resolve()
       const client = OpenCode.make({
         baseUrl: server.endpoint.url,
         headers: Service.headers(server.endpoint),
@@ -71,7 +68,7 @@ export default Runtime.handler(
           })
       if (!sessionID) return
       const data = yield* Effect.tryPromise({
-        try: () => client.session.export({ sessionID, sanitize: input.sanitize }),
+        try: () => client.experimental.session.export({ sessionID, sanitize: input.sanitize }),
         catch: (cause) => cause,
       })
       process.stdout.write(JSON.stringify(data, null, 2) + EOL)

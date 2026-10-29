@@ -12,15 +12,26 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
+import { makeMediaGet } from "./media"
 import { type Outbound, runPtySocket } from "./pty-socket"
+import { makeSchedule } from "./schedule"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
   Effect.gen(function* () {
     const tickets = yield* PtyTicket.Service
     const cors = yield* CorsConfig
     const pty = yield* PersistentPty.Service
+    const mediaGet = yield* makeMediaGet
+    const schedule = yield* makeSchedule
 
     return handlers
+      .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
+      .handle("schedule.create", (ctx) => schedule.create(ctx.payload))
+      .handle("schedule.list", (ctx) => schedule.list(ctx.query.sessionID))
+      .handle("schedule.get", (ctx) => schedule.get(ctx.params.scheduleID))
+      .handle("schedule.pause", (ctx) => schedule.pause(ctx.params.scheduleID))
+      .handle("schedule.resume", (ctx) => schedule.resume(ctx.params.scheduleID))
+      .handle("schedule.delete", (ctx) => schedule.remove(ctx.params.scheduleID))
       .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {
