@@ -176,8 +176,8 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     const view = sessions.current()
     const value = model()
 
-    // Only once the desktop's pane answers.
-    if (!view || !value?.available(view) || !value.attached(view)) return undefined
+    // Opening the launcher can wake or reconnect a pane that is available but not attached.
+    if (!view || !value?.available(view)) return undefined
 
     // A launcher of the side panel's new tab view, between Review and Terminal.
     return {
