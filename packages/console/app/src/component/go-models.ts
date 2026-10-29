@@ -99,7 +99,7 @@ export const goModels: GoModel[] = [
   },
 ].sort((a, b) => a.requests - b.requests)
 
-// Go Plus limits are published per model in the Console, not a fixed multiplier of Go.
+// Go Plus and Go Teams limits are published per model in the Console (packages/shared/src/domain/go-published-limits.ts).
 const plusLimits: Record<string, [number, number]> = {
   "kimi-k3": [440, 60],
   "kimi-k3.1-pro": [588, 60],
@@ -133,14 +133,50 @@ const plusLimits: Record<string, [number, number]> = {
   "iceman-contributor-free": [Infinity, Infinity],
 }
 
+const teamsLimits: Record<string, [number, number]> = {
+  "kimi-k3": [147, 20],
+  "kimi-k3.1-pro": [196, 20],
+  "qwen3.8-max": [213, 20],
+  "grok-4.7": [225, 20],
+  "glm-5.3": [293, 20],
+  "step-5-preview": [573, 20],
+  "gemini-4-argon": [513, 35],
+  "glm-5.2": [953, 65],
+  "deepseek-v4-pro": [1400, 20],
+  "kimi-k2.7-code": [1462, 65],
+  "hy4-preview": [1575, 35],
+  "gpt-5.6-luna": [2733, 20],
+  "minimax-m3": [3467, 65],
+  "mimo-v2.6-pro": [4333, 20],
+  "mimo-v2.5-pro": [4333, 20],
+  "minimax-m3.1-flash": [4850, 25],
+  "qwen3.7-plus": [4658, 65],
+  "gpt-6-luna": [5640, 20],
+  "claude-haiku-5-5": [5133, 20],
+  hy3: [4658, 65],
+  "qwen3.8-flash": [6300, 35],
+  "glm-5.3-flash": [6847, 65],
+  "deepseek-flash": [36837, 85],
+  "longcat-2.0": [12350, 65],
+  "mimo-v2.6-flash": [32608, 65],
+  "mimo-v2.5": [32608, 65],
+  "muse-spark-1.3-contributor": [49075, 65],
+  "muse-spark-1.2-contributor": [49075, 65],
+  "beam-free": [Infinity, Infinity],
+  "iceman-contributor-free": [Infinity, Infinity],
+}
+
 // A bonus multiplies a model's usual allowance, which is shown crossed out beside the current limits.
 export const goPlanModels = goModels.map((model) => {
   const [plusRequests, plusAllowance] = plusLimits[model.id]!
+  const [teamsRequests, teamsAllowance] = teamsLimits[model.id]!
   const bonus = model.bonus
   return {
     ...model,
     plusRequests,
     plusAllowance,
+    teamsRequests,
+    teamsAllowance,
     previous:
       bonus === undefined
         ? undefined
@@ -149,6 +185,8 @@ export const goPlanModels = goModels.map((model) => {
             allowance: model.allowance / bonus,
             plusRequests: plusRequests / bonus,
             plusAllowance: plusAllowance / bonus,
+            teamsRequests: teamsRequests / bonus,
+            teamsAllowance: teamsAllowance / bonus,
           },
   }
 })
