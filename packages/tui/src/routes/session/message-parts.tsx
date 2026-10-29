@@ -182,7 +182,7 @@ export function TextPart(props: {
   const plugins = usePlugin()
   const content = createMemo(() => {
     const text = props.part.text.trim()
-    return (props.partID && ctx.pathLinks?.(props.partID, text)) || text
+    return (props.partID && ctx.pathLinks?.(props.message.id, props.partID, text)) || text
   })
   return (
     <Show when={content()}>

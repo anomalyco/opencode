@@ -35,6 +35,7 @@ type PathLinkState = {
 export function createPathLinks(input: {
   messages: () => readonly SessionMessageInfo[]
   base: () => string | undefined
+  markdownMode: () => "source" | "rendered"
 }) {
   const renderer = useRenderer()
   const toast = useToast()
@@ -171,12 +172,15 @@ export function createPathLinks(input: {
     activate,
     close,
     /** Returns the part text with markers, or undefined to leave it unchanged. */
-    mark(partID: string, text: string) {
+    mark(messageID: string, partID: string, text: string) {
       const current = state()
       if (!current) return
-      const part = current.detection.parts.get(partID)
+      const part = current.detection.parts.get(`${messageID}:${partID}`)
       if (!part || part.text !== text) return
-      return applyPathLinkMarkers(text, part.markers)
+      // Conceal mode reads double brackets as a link with a bracketed label;
+      // single brackets stay legible in Markdown source mode.
+      const format = input.markdownMode() === "rendered" ? (index: number) => `[[${index}]]` : undefined
+      return applyPathLinkMarkers(text, part.markers, format)
     },
   }
 }
@@ -190,7 +194,7 @@ function collectParts(messages: readonly SessionMessageInfo[]) {
   let ordinal = 0
   for (const part of message.content) {
     if (part.type !== "text") continue
-    const id = `text:${ordinal++}`
+    const id = `${message.id}:text:${ordinal++}`
     if (!part.text.trim()) continue
     parts.push({ id, text: part.text.trim() })
   }

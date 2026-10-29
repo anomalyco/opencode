@@ -31,7 +31,7 @@ export const context = createContext<{
   models: () => ModelInfo[]
   messageIndex: (messageID: string) => number | undefined
   /** Adds path-picker markers to assistant text while the picker is open. */
-  pathLinks?: (partID: string, text: string) => string | undefined
+  pathLinks?: (messageID: string, partID: string, text: string) => string | undefined
   /** True when the session has no idle markers, so turn footers end at the next prompt. */
   legacyTurns: () => boolean
   config: ReturnType<typeof useConfig>["data"]

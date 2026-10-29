@@ -193,9 +193,11 @@ export function Session(props: {
 
   createEffect(() => currentLocation.set(location()))
 
+  const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const pathLinks = createPathLinks({
     messages,
     base: () => location()?.directory,
+    markdownMode,
   })
 
   createEffect(() => {
@@ -245,7 +247,6 @@ export function Session(props: {
   const dimensions = useTerminalDimensions()
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
-  const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
   const verbosity = createMemo(() => config.session?.verbosity ?? defaultVerbosity)
