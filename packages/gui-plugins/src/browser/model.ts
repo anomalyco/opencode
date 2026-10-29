@@ -26,6 +26,7 @@ type Attachment = {
   browser: Browser.State | null
   embeds: Readonly<Record<string, string>>
   suspended: boolean
+  replaced?: boolean
   error?: string
 }
 
@@ -243,6 +244,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
                 browser: next.browser,
                 embeds: next.embeds,
                 suspended: next.suspended,
+                replaced: next.error === "browser.pane.replaced",
                 error: next.error ? describe(next.error) : undefined,
               }),
             )
@@ -374,6 +376,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const available = (session: SessionRef) =>
     !state.unsupported[session.server.id] && !!session.id && session.server.compatible && !layout.narrow()
 
+  const replaced = (session: SessionRef) => attachment(session)?.replaced ?? false
+
   const tab = (session: Session, tabID: string) => attachment(session)?.browser?.tabs.find((item) => item.id === tabID)
 
   const command = (session: Session, action: Browser.Action) => {
@@ -439,6 +443,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   return {
     available,
+    replaced,
     attached,
     canOpen,
     openFile,

@@ -645,6 +645,10 @@ story("hides the browser launcher after another attachment replaces the pane", a
 
   await root.getByRole("button", { name: "Replace pane", exact: true }).click()
   await expect(root.getByTestId("add-shortcut")).toHaveText("none")
+
+  const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
+  await page.keyboard.press(mac ? "Control+Meta+b" : "Control+Alt+b")
+  await expect(root.getByTestId("add-shortcut")).toHaveText("none")
 })
 story("keeps a restored browser tab selected and undrawn until the desktop's first inventory", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")

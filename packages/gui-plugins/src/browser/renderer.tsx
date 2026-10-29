@@ -27,7 +27,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
       group: ctx.t("command.category.view"),
       bind: mac ? "ctrl+meta+b" : "ctrl+alt+b",
       editable: true,
-      enabled: !!value?.available(view),
+      enabled: !!value?.available(view) && !value.replaced(view),
       run: () => value?.open(view),
     }
   })
@@ -177,7 +177,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     const value = model()
 
     // Opening the launcher can wake or reconnect a pane that is available but not attached.
-    if (!view || !value?.available(view) || value.error(view) === ctx.t("replaced")) return undefined
+    if (!view || !value?.available(view) || value.replaced(view)) return undefined
 
     // A launcher of the side panel's new tab view, between Review and Terminal.
     return {
