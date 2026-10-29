@@ -22,7 +22,7 @@ const MAX_RETRY_AFTER_MS = 7 * 86_400_000
 
 const CHATGPT_USAGE_LIMIT_WINDOW = 86_400_000 // 24 hrs
 
-function formatLimitReset(locale: string, created: number, retryAfterMs: number | undefined) {
+export function formatLimitReset(locale: string, created: number, retryAfterMs: number | undefined) {
   if (
     retryAfterMs === undefined ||
     !Number.isFinite(retryAfterMs) ||

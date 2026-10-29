@@ -29,8 +29,6 @@ const FREE_USAGE_LIMIT_MESSAGE =
   "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models."
 const BUDGET_LIMIT_MESSAGE = "Workspace usage limit reached. Model use is paused until the limit resets."
 const MODEL_BUDGET_LIMIT_MESSAGE = "You've reached the spend limit for this model. Switch models to keep going."
-const GO_USAGE_LIMIT_MESSAGE =
-  "OpenCode Go usage limit reached. To keep using this model, enable spending from your available balance in the Console."
 
 export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof AIError) {
@@ -46,8 +44,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
         if (cause.reason.body?.includes("FreeUsageLimitError"))
           return { ...providerError("provider.free-limit", cause.reason), message: FREE_USAGE_LIMIT_MESSAGE }
         if (cause.reason.body?.includes("BudgetLimitError")) return budgetLimit(cause.reason)
-        if (cause.reason.body?.includes("GoUsageLimitError"))
-          return { ...providerError("provider.go-limit", cause.reason), message: GO_USAGE_LIMIT_MESSAGE }
+        if (cause.reason.body?.includes("GoUsageLimitError")) return goLimit(cause.reason)
         return providerError("provider.quota", cause.reason)
       case "ContentPolicy":
         return providerError("provider.content-filter", cause.reason)
@@ -114,6 +111,15 @@ function budgetLimit(reason: AIError["reason"]): SessionError.Error {
   if (/"coverage"\s*:\s*"models"/.test(reason.body ?? ""))
     return { ...providerError("provider.model-budget-limit", reason), message: MODEL_BUDGET_LIMIT_MESSAGE }
   return { ...providerError("provider.budget-limit", reason), message: BUDGET_LIMIT_MESSAGE }
+}
+
+// OpenCode Console names the Go limit that refused the request (5 hour, weekly or monthly) in its envelope's metadata.
+function goLimit(reason: AIError["reason"]): SessionError.Error {
+  const name = /"limitName"\s*:\s*"([^"]+)"/.exec(reason.body ?? "")?.[1]
+  return {
+    ...providerError("provider.go-limit", reason),
+    message: `OpenCode Go ${name ? `${name} ` : ""}usage limit reached. Switch to a free model, or turn on Extra Usage on the Go page in OpenCode Console to keep going.`,
+  }
 }
 
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {

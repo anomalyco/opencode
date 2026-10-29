@@ -2562,8 +2562,15 @@ test("Go usage limit restores the prompt and explains the limit with its reset t
   }
   const error = {
     type: "provider.go-limit",
-    message: "OpenCode Go usage limit reached.",
+    message: "OpenCode Go 5 hour usage limit reached.",
     status: 429,
+    response: {
+      body: JSON.stringify({
+        type: "error",
+        error: { type: "GoUsageLimitError", message: "Go usage limit exceeded" },
+        metadata: { workspace: "wrk_go_limit", limitName: "5 hour" },
+      }),
+    },
     retryAfterMs: 3_600_000,
   }
   await using setup = await createAppFixture({
@@ -2605,12 +2612,13 @@ test("Go usage limit restores the prompt and explains the limit with its reset t
   })
   await setup.waitForFrame(
     (frame) =>
-      frame.includes("OpenCode Go usage limit reached") &&
+      frame.includes("OpenCode Go 5 hour usage limit reached") &&
       frame.includes("Resets ") &&
       frame.split("Refactor the parser").length === 3,
   )
   const frame = setup.captureCharFrame()
-  expect(frame).toContain("Switch model with")
+  expect(frame).toContain("Switch to a free model with")
+  expect(frame).toContain("https://opencode.ai/console/wrk_go_limit/go")
   expect(frame).not.toContain("Error:")
   expect(frame).not.toContain("Free limit reached")
 })

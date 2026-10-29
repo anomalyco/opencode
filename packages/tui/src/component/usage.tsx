@@ -7,6 +7,7 @@ import { useLocal } from "../context/local"
 import { useLocation } from "../context/location"
 import { useTheme } from "../context/theme"
 import { SplitBorder } from "../ui/border"
+import { Link } from "../ui/link"
 import { DIALOG_LIST_INSET, DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useToast } from "../ui/toast"
@@ -15,6 +16,8 @@ import {
   formatReset,
   limitScope,
   modelUsage,
+  goLimitLink,
+  goLimitName,
   refusalReset,
   retryReset,
   servedByConsole,
@@ -263,9 +266,10 @@ export function useLimitNotice(message: () => SessionMessageAssistant) {
       value.model.id
     if (error.type === "provider.go-limit")
       return {
-        title: "OpenCode Go usage limit reached",
-        body: `${resets}Switch model with`,
+        title: `OpenCode Go ${[goLimitName(error), "usage limit reached"].filter(Boolean).join(" ")}`,
+        body: `${resets}Switch to a free model with`,
         key: shortcut() ?? "/models",
+        link: { label: "Or turn on Extra Usage on your Go page to keep going now:", href: goLimitLink(error) },
       }
     if (error.type === "provider.model-budget-limit")
       return { title: `${name} usage limit reached`, body: `${resets}Switch model with`, key: shortcut() ?? "/models" }
@@ -284,7 +288,9 @@ export function useLimitNotice(message: () => SessionMessageAssistant) {
   })
 }
 
-export function UsageLimitNotice(props: { notice: { title: string; body: string; key?: string } }) {
+export function UsageLimitNotice(props: {
+  notice: { title: string; body: string; key?: string; link?: { label: string; href: string } }
+}) {
   const theme = useTheme()
   return (
     <box
@@ -308,6 +314,16 @@ export function UsageLimitNotice(props: { notice: { title: string; body: string;
           )}
         </Show>
       </text>
+      <Show when={props.notice.link}>
+        {(link) => (
+          <box paddingTop={1}>
+            <text fg={theme.text.muted} wrapMode="word">
+              {link().label}
+            </text>
+            <Link href={link().href} fg={theme.text.base} />
+          </box>
+        )}
+      </Show>
     </box>
   )
 }
