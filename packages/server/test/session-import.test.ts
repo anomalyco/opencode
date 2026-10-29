@@ -11,7 +11,6 @@ const setup = Effect.gen(function* () {
   const handler = yield* ServerFetch.make({
     app: { version: "test" },
     database: { path: ":memory:" },
-    models: { fetch: false },
     fs: { filewatcher: false },
   })
   return (path: string, body?: unknown, status = 200) =>

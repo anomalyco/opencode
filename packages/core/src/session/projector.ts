@@ -188,7 +188,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
 
   const forkedID = (seq: number) => SessionMessage.ID.make(`${SessionMessage.ID.fromEvent(event.id)}_${seq}`)
   // The child stores the parent's inline media as blobs; the parent's rows are never rewritten.
-  const media = yield* SessionBlob.enabled
+  const media = yield* SessionBlob.ForkMedia
   let cursor = -1
   while (copiedSeq !== undefined) {
     // A parent message whose parts live in session_part is copied with them inline, so the fork reads the same.

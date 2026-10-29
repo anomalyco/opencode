@@ -369,14 +369,16 @@ const layer = Layer.effect(
         // The fork adopts the parent's newest instruction values rather than the
         // values in effect at the boundary; copied history may contain frozen
         // instruction-update text the initial baseline already reflects.
-        const forked = bus.publish(SessionEvent.Forked, {
-          sessionID,
-          parentID: parent.id,
-          boundary: { type: input.before ? "before" : "through", messageID: boundary.id },
-          ...inherited,
-        })
-        // The projection reads experimental.media_blob from the config in scope to store the copy's media as blobs.
-        yield* (yield* mediaBlob(parent)) ? forked.pipe(instances.provide(parent), Effect.orDie) : forked
+        // The parent's location, not the caller's, decides whether the copy's media is stored as blobs.
+        const media = yield* mediaBlob(parent)
+        yield* bus
+          .publish(SessionEvent.Forked, {
+            sessionID,
+            parentID: parent.id,
+            boundary: { type: input.before ? "before" : "through", messageID: boundary.id },
+            ...inherited,
+          })
+          .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
       get: (sessionID) => sessions.forSession(sessionID).get(),

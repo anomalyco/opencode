@@ -80,12 +80,6 @@ const layer = Layer.effect(
         const subpath = RelativePath.make(
           path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
         )
-        const media = yield* SessionBlob.enabledFor(instances, {
-          ...input.data.info,
-          projectID: project.id,
-          location: input.location,
-          subpath,
-        })
         const messages = input.data.messages.filter(isSettled).map((message, index) => {
           const encoded = encodeMessage(message)
           const { id: _, type, ...data } = encoded
@@ -98,6 +92,17 @@ const layer = Layer.effect(
             data,
           }
         })
+        // Only inline media the import carries becomes blobs, and only its blobs get refs: refs it carried in
+        // could otherwise keep or expose blobs it never held. The destination's config is loaded only when needed.
+        const split = messages.map((message) => SessionBlob.split(message.data))
+        const media =
+          split.some((row) => row.moved) &&
+          (yield* SessionBlob.enabledFor(instances, {
+            ...input.data.info,
+            projectID: project.id,
+            location: input.location,
+            subpath,
+          }))
         yield* bus
           .publish(
             SessionEvent.Created,
@@ -120,22 +125,19 @@ const layer = Layer.effect(
               commit: (seq) =>
                 Effect.gen(function* () {
                   if (messages.length > 0) {
+                    if (media) yield* Effect.forEach(split, (row) => SessionBlob.save(db, row.blobs), { discard: true })
                     const stored = media
-                      ? yield* Effect.forEach(messages, (message) =>
-                          SessionBlob.externalizeRow(db, message.data).pipe(
-                            Effect.map((data) => ({ ...message, data })),
-                          ),
-                        )
+                      ? messages.map((message, i) => ({ ...message, data: split[i]!.data }))
                       : messages
                     yield* db.insert(SessionMessageTable).values(stored).run().pipe(Effect.orDie)
                     if (media)
                       yield* Effect.forEach(
                         stored,
-                        (message) =>
-                          SessionBlob.recordRefs(
+                        (message, i) =>
+                          SessionBlob.recordHashes(
                             db,
                             { sessionID, messageID: message.id, seq: message.seq },
-                            message.data,
+                            new Set(split[i]!.blobs.map((blob) => blob.hash)),
                           ),
                         { discard: true },
                       )

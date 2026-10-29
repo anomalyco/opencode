@@ -1732,10 +1732,10 @@ describe("SessionProjector", () => {
       expect(withoutIDs(yield* store.messages({ sessionID: childID, order: "asc" }))).toEqual(
         withoutIDs(parentMessages),
       )
-    }).pipe(Effect.provide(mediaBlob)),
+    }).pipe(Effect.provideService(SessionBlob.ForkMedia, true)),
   )
 
-  it.effect("copies inline parent media inline into a fork unless experimental.media_blob is on", () =>
+  it.effect("copies inline parent media inline into a fork unless the parent's location stores media as blobs", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
       const bus = yield* Bus.Service
@@ -1759,7 +1759,8 @@ describe("SessionProjector", () => {
       expect(withoutIDs(yield* store.messages({ sessionID: childID, order: "asc" }))).toEqual(
         withoutIDs(yield* store.messages({ sessionID, order: "asc" })),
       )
-    }),
+      // The caller's own config doesn't decide: Session.fork sets ForkMedia from the parent's location.
+    }).pipe(Effect.provide(mediaBlob)),
   )
 })
 
