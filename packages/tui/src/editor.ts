@@ -39,9 +39,10 @@ export async function openEditor(input: { value: string; renderer: CliRenderer; 
   }
 }
 
-const terminalEditors = new Set(["vim", "nvim", "vi", "nano", "micro", "emacs", "kak", "hx", "helix", "joe", "mcedit"])
 const gotoEditors = new Set(["code", "code-insiders", "codium", "cursor", "windsurf", "trae"])
 const colonEditors = new Set(["subl", "sublime_text", "atom", "zed", "zeditor", "hx", "helix"])
+// Unknown editors keep the terminal so their output cannot interleave with the TUI.
+const guiEditors = new Set([...gotoEditors, ...colonEditors].filter((name) => name !== "hx" && name !== "helix"))
 
 export type EditorInvocation = {
   command: string
@@ -92,7 +93,7 @@ export function buildEditorInvocation(input: {
   return {
     command,
     args: [...parts.slice(1), ...targetArgs(name, input.file)],
-    terminal: terminalEditors.has(name),
+    terminal: !guiEditors.has(name),
     shell: (input.platform ?? process.platform) === "win32" && !/\.(exe|com)$/i.test(command),
   }
 }
@@ -221,19 +222,23 @@ function isLaunchable(file: string, stat: Stats) {
   return launchableExtensions.has(path.extname(file).toLowerCase())
 }
 
-function spawnInvocation(invocation: EditorInvocation, cwd: string) {
-  if (!invocation.shell) return spawn(invocation.command, invocation.args, { cwd, stdio: "inherit" })
+function spawnInvocation(
+  invocation: EditorInvocation,
+  cwd: string,
+  options: { stdio: "inherit" | "ignore"; detached?: boolean },
+) {
+  const settings = { cwd, stdio: options.stdio, detached: options.detached, windowsHide: options.detached }
+  if (!invocation.shell) return spawn(invocation.command, invocation.args, settings)
   const command = [invocation.command, ...invocation.args].map((part) => `"${part}"`).join(" ")
   return spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", `"${command}"`], {
-    cwd,
-    stdio: "inherit",
+    ...settings,
     windowsVerbatimArguments: true,
   })
 }
 
 function runTerminalEditor(invocation: EditorInvocation, cwd: string) {
   return new Promise<void>((resolve, reject) => {
-    const child = spawnInvocation(invocation, cwd)
+    const child = spawnInvocation(invocation, cwd, { stdio: "inherit" })
     child.on("error", reject)
     child.on("exit", (code, signal) => {
       if (code === 0) return resolve()
@@ -244,7 +249,7 @@ function runTerminalEditor(invocation: EditorInvocation, cwd: string) {
 
 function launchEditor(invocation: EditorInvocation, cwd: string) {
   return new Promise<void>((resolve, reject) => {
-    const child = spawnInvocation(invocation, cwd)
+    const child = spawnInvocation(invocation, cwd, { stdio: "ignore", detached: true })
     child.on("error", reject)
     child.on("spawn", () => {
       child.unref()

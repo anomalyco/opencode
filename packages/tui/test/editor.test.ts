@@ -124,6 +124,20 @@ test("builds editor invocations with line and column support", () => {
   ).toEqual({
     command: "unknown-editor",
     args: ["/a.ts"],
+    terminal: true,
+    shell: false,
+  })
+  expect(buildEditorInvocation({ editor: "hx", file: { file: "/a.ts", line: 4 }, platform: "linux" })).toEqual({
+    command: "hx",
+    args: ["/a.ts:4"],
+    terminal: true,
+    shell: false,
+  })
+  expect(
+    buildEditorInvocation({ editor: "zed", file: { file: "/a.ts", line: 4, column: 2 }, platform: "linux" }),
+  ).toEqual({
+    command: "zed",
+    args: ["/a.ts:4:2"],
     terminal: false,
     shell: false,
   })
