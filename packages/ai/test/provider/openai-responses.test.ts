@@ -1874,7 +1874,7 @@ describe("OpenAI Responses route", () => {
 
       expect(expectToolOutput(prepared.body).output).toEqual([
         { type: "input_image", image_url: "https://example.com/image.png" },
-        { type: "input_file", filename: "report.pdf", file_url: "https://example.com/report.pdf" },
+        { type: "input_file", file_url: "https://example.com/report.pdf" },
       ])
     }),
   )
@@ -5130,7 +5130,7 @@ describe("OpenAI Responses route", () => {
           role: "user",
           content: [
             { type: "input_image", image_url: "https://example.com/image.png" },
-            { type: "input_file", filename: "report.pdf", file_url: "https://example.com/report.pdf" },
+            { type: "input_file", file_url: "https://example.com/report.pdf" },
           ],
         },
       ])
