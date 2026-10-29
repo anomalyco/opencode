@@ -235,7 +235,7 @@ Pin the exact certificate a server presents with `fingerprint`, formatted as `SH
 }
 ```
 
-OpenCode compares the certificate the server presents against the fingerprint and then uses the fingerprint as the identity check for the connection. Name matching is not enforced, so this also works for appliance certificates without an IP SAN. Get a fingerprint from the server with:
+OpenCode compares the certificate the server presents against the fingerprint and then anchors the connection to that exact certificate: every handshake verifies the chain against it and re-checks the fingerprint. Name matching is not enforced, so this also works for appliance certificates without an IP SAN. Get a fingerprint from the server with:
 
 ```sh
 openssl s_client -connect 192.168.1.1:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256

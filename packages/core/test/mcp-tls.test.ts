@@ -10,7 +10,7 @@ import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpTls } from "@opencode/core/mcp/tls"
 import { hostEnvironmentLayer } from "./fixture/environment"
-import { CERT, CERT_APPLIANCE, KEY_APPLIANCE, startTlsMcpServer, TLS_FIXTURE_DIR } from "./fixture/tls-server"
+import { CERT, CERT_APPLIANCE, KEY, KEY_APPLIANCE, startTlsMcpServer, TLS_FIXTURE_DIR } from "./fixture/tls-server"
 
 const SAMPLE_CERT = `-----BEGIN CERTIFICATE-----
 MIIDXTCCAkWgAwIBAgIJALRNRw0Gx+9FMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
@@ -234,12 +234,16 @@ describe("resolveTls", () => {
     )
   })
 
-  test("accepts a matching fingerprint against the presented certificate", async () => {
+  test("resolves a matching fingerprint to the presented certificate as the trust anchor", async () => {
     const server = await startTlsMcpServer()
     try {
-      await expect(
-        McpTls.resolveTls({ fingerprint: FINGERPRINT }, import.meta.dir, new URL(server.url)),
-      ).resolves.toEqual({ fingerprint: FINGERPRINT })
+      const resolved = await McpTls.resolveTls({ fingerprint: FINGERPRINT }, import.meta.dir, new URL(server.url))
+      expect(resolved?.fingerprint).toBe(FINGERPRINT)
+      if (!resolved) throw new Error("resolveTls returned undefined")
+      const anchor = createHash("sha256")
+        .update(Buffer.from(resolved.ca.split("\n").slice(1, -1).join(""), "base64"))
+        .digest("hex")
+      expect(anchor).toBe(FINGERPRINT)
     } finally {
       await server.close()
     }
@@ -287,17 +291,18 @@ describe("withTls", () => {
     expect((calls[0].init as BunFetchRequestInit).tls).toEqual({ ca: SAMPLE_CERT })
   })
 
-  test("disables certificate validation and installs the fingerprint check for a pin", async () => {
+  test("anchors the trust store to the pinned certificate and installs the fingerprint check", async () => {
     const calls: Array<{ init?: RequestInit }> = []
     const base = ((_: string | URL, init?: RequestInit) => {
       calls.push({ init })
       return Promise.resolve(new Response("ok"))
     }) as typeof fetch
 
-    await McpTls.withTls({ fingerprint: FINGERPRINT }, base)("https://127.0.0.1:8443/mcp")
+    await McpTls.withTls({ ca: CERT, fingerprint: FINGERPRINT }, base)("https://127.0.0.1:8443/mcp")
 
     const tls = (calls[0].init as BunFetchRequestInit).tls
-    expect(tls?.rejectUnauthorized).toBe(false)
+    expect(tls?.ca).toBe(CERT)
+    expect(tls?.rejectUnauthorized).toBeUndefined()
     const check = tls?.checkServerIdentity
     expect(typeof check).toBe("function")
     const der = Buffer.from(CERT.split("\n").slice(1, -1).join(""), "base64")
@@ -403,7 +408,7 @@ describe("MCP connect over TLS", () => {
     const server = await startTlsMcpServer({ cert: CERT_APPLIANCE, key: KEY_APPLIANCE })
     try {
       const resolved = await McpTls.resolveTls({ fingerprint: FINGERPRINT_APPLIANCE }, import.meta.dir, new URL(server.url))
-      if (!resolved || !("fingerprint" in resolved) || resolved.fingerprint !== FINGERPRINT_APPLIANCE)
+      if (!resolved || resolved.fingerprint !== FINGERPRINT_APPLIANCE)
         throw new Error(`unexpected resolved tls: ${JSON.stringify(resolved)}`)
       // A bare GET is rejected by the streamable transport, so prove the trust with an initialize.
       const response = await McpTls.withTls(resolved, globalThis.fetch)(server.url, {
@@ -470,6 +475,39 @@ describe("MCP connect over TLS", () => {
       expect(error).toBeInstanceOf(McpClient.ConnectError)
     } finally {
       await server.close()
+    }
+  })
+
+  test("rejects a certificate swapped after the first connect", async () => {
+    const probe = await startTlsMcpServer()
+    const port = probe.port
+    await probe.close()
+    let current = await startTlsMcpServer({ cert: CERT_APPLIANCE, key: KEY_APPLIANCE, port })
+    try {
+      const url = new URL(current.url)
+      const resolved = await McpTls.resolveTls({ fingerprint: FINGERPRINT_APPLIANCE }, import.meta.dir, url)
+      if (!resolved || resolved.fingerprint !== FINGERPRINT_APPLIANCE)
+        throw new Error(`unexpected resolved tls: ${JSON.stringify(resolved)}`)
+      const fetchPinned = McpTls.withTls(resolved, globalThis.fetch)
+      const request = () =>
+        fetchPinned(url, {
+          method: "POST",
+          headers: { accept: "application/json, text/event-stream", "content-type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 0,
+            method: "initialize",
+            params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "opencode", version: "1.0.0" } },
+          }),
+        })
+      expect((await request()).status).toBe(200)
+      // The pin is re-verified on every handshake: swap the certificate on the same port and
+      // the next request must fail, not just the first one.
+      await current.close()
+      current = await startTlsMcpServer({ cert: CERT, key: KEY, port })
+      await expect(request()).rejects.toThrow(/self[- ]signed|fingerprint mismatch/i)
+    } finally {
+      await current.close()
     }
   })
 })
