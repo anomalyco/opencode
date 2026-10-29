@@ -265,7 +265,7 @@ const layer = Layer.effect(
               ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
               : transcript.messages,
             // Keep tool definitions on the final Step to preserve the provider's cached prefix.
-            toolChoice: stepLimitReached ? "none" : undefined,
+            toolChoice: stepLimitReached ? "none" : "auto",
             webSocket: "session",
             inputTokens: estimate,
           })

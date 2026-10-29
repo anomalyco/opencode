@@ -17,7 +17,7 @@ import {
   UnknownProviderError,
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
-import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
+import { AnthropicMessages, MistralChat, OpenAICompatibleChat, OpenAIResponses } from "@opencode/ai/protocols"
 import { TestLLM, compileRequest } from "@opencode/ai/testing"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Database } from "@opencode/core/database/database"
@@ -1638,7 +1638,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(s.requests).toHaveLength(2)
       expect(messageRoles(s.requests[1])?.slice(0, 3)).toEqual(["user", "assistant", "tool"])
-      expect(s.requests[0]?.toolChoice).toBeUndefined()
+      expect(s.requests[0]?.toolChoice).toMatchObject({ type: "auto" })
       expect(s.requests[1]?.toolChoice).toMatchObject({ type: "none" })
       expect(
         (yield* recordedEventTypes(sessionID)).filter(
@@ -2796,12 +2796,12 @@ describe("SessionRunnerLLM", () => {
           "tools",
           "generation",
           "providerOptions",
-          "toolChoice",
           "cache",
           "promptCacheKey",
           "http",
         ] as const)
           expect(compact[field]).toEqual(normal[field])
+        expect(normal.toolChoice).toMatchObject({ type: "auto" })
         expect(compact.toolChoice).toBeUndefined()
         expect(compact.system.map((part) => part.text)).toContain("Review the project carefully.")
         expect(requestAgents[2]).toBe(agentID)
@@ -2811,15 +2811,17 @@ describe("SessionRunnerLLM", () => {
         // The summary call's provider metadata is never replayed, so it is not stored.
         expect(stored).not.toHaveProperty("native")
 
-        // Compare wire content without the cache breakpoints that move to the new final message.
+        // Compare the prefix apart from moving cache breakpoints and normal steps' explicit tool choice.
         const before = yield* compileRequest(LLMRequest.update(normal, { cache: "none" }))
         const after = yield* compileRequest(LLMRequest.update(compact, { cache: "none" }))
         const key = route === OpenAIResponses.route ? "input" : "messages"
         const input = Schema.decodeUnknownSync(Schema.Array(Schema.Unknown))
         const prefix = input(before.body[key])
         expect(input(after.body[key]).slice(0, prefix.length)).toEqual([...prefix])
+        expect(before.body.tool_choice).toEqual(route === AnthropicMessages.route ? { type: "auto" } : "auto")
+        expect(after.body.tool_choice).toBeUndefined()
         expect(after.body).toMatchObject(
-          Object.fromEntries(Object.entries(before.body).filter(([name]) => name !== key)),
+          Object.fromEntries(Object.entries(before.body).filter(([name]) => name !== key && name !== "tool_choice")),
         )
       })
     }
@@ -5542,7 +5544,27 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(1)
   })
 
+  scenario("omits automatic tool selection when a context hook removes every tool", function* (s) {
+    s.currentModel = MistralChat.route.model({ id: "mistral-small" })
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "context", (event) =>
+      Effect.sync(() => {
+        event.tools = {}
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("Hello", "text-without-tools"))
+    yield* s.runPrompt("Say hello")
+
+    expect(s.requests).toHaveLength(1)
+    expect(s.requests[0].tools).toEqual([])
+    expect(s.requests[0].toolChoice).toBeUndefined()
+    expect((yield* compileRequest(s.requests[0])).body.tool_choice).toBeUndefined()
+  })
+
   scenario("forces a text response on an agent's configured final step", function* (s) {
+    s.currentModel = OpenAICompatibleChat.route
+      .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+      .model({ id: "custom-model" })
     const agents = yield* Agent.Service
     yield* agents.transform((editor) =>
       editor.update(Agent.ID.make("build"), (agent) => {
@@ -5559,7 +5581,8 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests).toHaveLength(2)
-    expect(s.requests[0]?.toolChoice).toBeUndefined()
+    expect((yield* compileRequest(s.requests[0])).body.tool_choice).toBe("auto")
+    expect((yield* compileRequest(s.requests[1])).body.tool_choice).toBe("none")
     expect(s.requests[1]?.toolChoice).toMatchObject({ type: "none" })
     // Protocols with native "none" keep these definitions for prompt caching.
     expect(s.requests[1]?.tools.map((tool) => tool.name)).toContain("echo")
@@ -5595,7 +5618,7 @@ describe("SessionRunnerLLM", () => {
     yield* run.finish
 
     expect(s.requests).toHaveLength(3)
-    expect(s.requests[1]?.toolChoice).toBeUndefined()
+    expect(s.requests[1]?.toolChoice).toMatchObject({ type: "auto" })
     expect(s.requests[1]?.tools).not.toEqual([])
     expect(s.requests[2]?.toolChoice).toMatchObject({ type: "none" })
     expect(s.executions).toEqual(["before", "after"])
@@ -6416,9 +6439,9 @@ describe("SessionRunnerLLM", () => {
     yield* Fiber.join(run)
 
     expect(s.requests).toHaveLength(3)
-    expect(s.requests[0]?.toolChoice).toBeUndefined()
+    expect(s.requests[0]?.toolChoice).toMatchObject({ type: "auto" })
     expect(s.requests[0]?.tools.map((tool) => tool.name)).toContain("echo")
-    expect(s.requests[1]?.toolChoice).toBeUndefined()
+    expect(s.requests[1]?.toolChoice).toMatchObject({ type: "auto" })
     expect(s.requests[1]?.tools.map((tool) => tool.name)).toContain("echo")
     expect(s.requests[1]?.messages.at(-1)).not.toMatchObject({
       role: "assistant",
@@ -6792,7 +6815,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Stop malformed tools at the step limit")
 
     expect(s.requests).toHaveLength(2)
-    expect(s.requests[0]?.toolChoice).toBeUndefined()
+    expect(s.requests[0]?.toolChoice).toMatchObject({ type: "auto" })
     expect(s.requests[1]?.toolChoice).toMatchObject({ type: "none" })
     expect((yield* recordedEventTypes(sessionID)).filter((type) => type === "session.tool.failed.2")).toHaveLength(2)
   })
