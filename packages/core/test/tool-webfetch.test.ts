@@ -455,17 +455,24 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
-  it.effect("does not negotiate markdown for .md URLs", () =>
+  it.effect("does not negotiate markdown for .md and .markdown URLs", () =>
     Effect.gen(function* () {
       reset()
       const registry = yield* Tool.Service
-      const url = "https://docs.example.com/page.md?source=llms.txt"
+      const urls = [
+        "https://docs.example.com/page.md?source=llms.txt",
+        "https://docs.example.com/page.markdown?source=llms.txt",
+      ]
 
-      yield* Effect.forEach(["markdown", "text", "html"] as const, (format) =>
-        executeTool(registry, call({ url, format }, `call-webfetch-${format}`)),
+      yield* Effect.forEach(urls, (url) =>
+        Effect.forEach(["markdown", "text", "html"] as const, (format) =>
+          executeTool(registry, call({ url, format }, `call-webfetch-${format}`)),
+        ),
       )
 
-      expect(requests.map((request) => request.headers.accept)).toEqual(["*/*", "*/*", "*/*"])
+      expect(requests.map((request) => request.headers.accept)).toEqual(
+        Array.from({ length: urls.length * 3 }, () => "*/*"),
+      )
     }),
   )
 
