@@ -1063,6 +1063,24 @@ describe("FlowchartDiagram", () => {
     expect(boundsIntersect(separated.bounds.get("AR")!, separated.subgraphBounds.get("Accounts")!)).toBe(false)
   })
 
+  test("pushes loose nodes off a group frame without staircasing different ranks", () => {
+    const layout = layoutFlowchartDiagram(
+      `flowchart TD
+  subgraph G
+    A --> B1[Wide box number one] & B2[Wide box number two]
+    B1 --> C
+  end
+  P --> A
+  P --> Q
+  Q --> R
+  R --> S`,
+      { compact: true, separateLooseNodes: true },
+    )
+    const frame = layout.subgraphBounds.get("G")!
+    for (const id of ["Q", "S"]) expect(boundsIntersect(layout.bounds.get(id)!, frame)).toBe(false)
+    expect(layout.bounds.get("S")!.left).toBe(layout.bounds.get("Q")!.left)
+  })
+
   test("wraps the real deployment chart responsively without losing content or geometry", () => {
     const expected = new Map([
       [60, { width: 82, height: 108 }],

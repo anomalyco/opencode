@@ -2,12 +2,17 @@ import type { FlowchartDirection } from "../flowchart/types.js"
 
 export type ClassRelationMarker = "inheritance" | "composition" | "aggregation" | "arrow"
 
+export interface ClassMember {
+  text: string
+  classifier?: "abstract" | "static"
+}
+
 export interface ClassNode {
   id: string
   label: string
   annotations: string[]
-  attributes: string[]
-  methods: string[]
+  attributes: ClassMember[]
+  methods: ClassMember[]
 }
 
 export interface ClassRelation {

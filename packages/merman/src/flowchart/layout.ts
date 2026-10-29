@@ -1292,15 +1292,22 @@ function separateLooseNodesFromFrames<Item extends { id: string; bounds: Flowcha
     const band = items
       .filter((item) => item === frame || overlaps(primary(item.bounds), primary(frame.bounds)))
       .toSorted((left, right) => cross(left.bounds)[0]! - cross(right.bounds)[0]! || (left === frame ? -1 : 1))
-    let cursor: number | undefined
+    // Only items that share part of the primary axis can collide, so each clears just those placed before it.
+    const placed: Item[] = []
     for (const item of band) {
-      const [start, end] = cross(item.bounds)
-      const shift = cursor === undefined ? 0 : Math.max(0, cursor - start!)
+      const [start] = cross(item.bounds)
+      const required = Math.max(
+        start!,
+        ...placed
+          .filter((other) => overlaps(primary(other.bounds), primary(item.bounds)))
+          .map((other) => cross(other.bounds)[1]! + gap),
+      )
+      const shift = required - start!
       if (shift > 0) {
         moved = true
         moveItem(item, horizontal ? 0 : shift, horizontal ? shift : 0)
       }
-      cursor = end! + shift + gap
+      placed.push(item)
     }
   }
   return moved
