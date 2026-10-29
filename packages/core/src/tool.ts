@@ -257,7 +257,7 @@ const layer = Layer.effect(
       },
     })
 
-    return Service.of({
+    const service: Interface = Service.of({
       transform: state.transform,
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
@@ -283,10 +283,13 @@ const layer = Layer.effect(
           const cached = catalog?.data === data && catalog.names === names ? catalog : undefined
           const codeModeInventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
           const codeModeTool = codeModeEnabled
-            ? CodeModeTool.create(codeModeInventory, (name, tool, input, context) =>
-                beforeExecute(name, input, context).pipe(
-                  Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
-                ),
+            ? CodeModeTool.create(
+                codeModeInventory,
+                (name, tool, input, context) =>
+                  beforeExecute(name, input, context).pipe(
+                    Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
+                  ),
+                CodeModeTool.hostFor(service),
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
@@ -371,6 +374,7 @@ const layer = Layer.effect(
         )
       }),
     })
+    return service
   }),
 )
 

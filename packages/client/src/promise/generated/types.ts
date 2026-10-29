@@ -176,6 +176,8 @@ export type SessionMessageToolStateRunning1 = {
   metadata: { [x: string]: JsonValue }
 }
 
+export type JobStatus = "running" | "completed" | "error" | "cancelled"
+
 export type ModelType = "chat" | "decision" | "image" | (string & {})
 
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
@@ -672,6 +674,32 @@ export type SessionMessageAssistantReasoning1 = {
 }
 
 export type ToolContent1 = ToolTextContent | ToolFileContent1
+
+export type JobInfo = {
+  id: string
+  sessionID?: SessionID
+  type: string
+  title?: string
+  status: JobStatus
+  started_at: number
+  completed_at?: number
+  output?: string
+  error?: string
+  metadata?: { [x: string]: JsonValue }
+}
+
+export type JobInfo1 = {
+  id: string
+  sessionID?: SessionID
+  type: string
+  title?: string
+  status: JobStatus
+  started_at: number
+  completed_at?: number
+  output?: string
+  error?: string
+  metadata?: { [x: string]: any }
+}
 
 export type ModelCompatibility = {
   reasoningField?: ModelReasoningField
@@ -2083,6 +2111,15 @@ export type SessionMessageToolStateError1 = {
   metadata?: { [x: string]: JsonValue }
 }
 
+export type JobUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "job.updated"
+  location?: LocationRef
+  data: { info: JobInfo1; active: boolean }
+}
+
 export type GenerateDecisionAnswer =
   | GeneratePredicateAnswer
   | GenerateChoiceAnswer
@@ -2830,6 +2867,7 @@ export type V2Event =
   | ShellCreated
   | ShellExited
   | ShellDeleted
+  | JobUpdated
   | FormCreated
   | FormReplied
   | FormCancelled
@@ -3784,6 +3822,10 @@ export type ExperimentalSessionLogInput = {
 
 export type ExperimentalSessionLogOutput = SessionLogItem
 
+export type ExperimentalSessionJobsInput = { readonly sessionID: string }
+
+export type ExperimentalSessionJobsOutput = { data: Array<JobInfo> }["data"]
+
 export type MessageListInput = {
   readonly sessionID: string
   readonly limit?: number | undefined
@@ -4302,6 +4344,7 @@ export type EventSubscribeInput = {
         | "shell.created"
         | "shell.exited"
         | "shell.deleted"
+        | "job.updated"
         | "form.created"
         | "form.replied"
         | "form.cancelled"
@@ -4728,6 +4771,12 @@ export type SessionLogInput = ExperimentalSessionLogInput
 
 /** @deprecated Use `ExperimentalSessionLogOutput`. Removed in the next minor. */
 export type SessionLogOutput = ExperimentalSessionLogOutput
+
+/** @deprecated Use `ExperimentalSessionJobsInput`. Removed in the next minor. */
+export type SessionJobsInput = ExperimentalSessionJobsInput
+
+/** @deprecated Use `ExperimentalSessionJobsOutput`. Removed in the next minor. */
+export type SessionJobsOutput = ExperimentalSessionJobsOutput
 
 /** @deprecated Use `ExperimentalGenerateTextInput`. Removed in the next minor. */
 export type GenerateTextInput = ExperimentalGenerateTextInput

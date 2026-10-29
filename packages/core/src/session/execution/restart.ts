@@ -10,6 +10,7 @@ import { SessionExecution } from "../execution.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { ImageNotice } from "../../image/notice.js"
+import { CodeModeTool } from "../../codemode/tool.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
 
@@ -136,6 +137,43 @@ export const layer = (options?: Options) =>
         yield* jobs.completeBackground(background.notificationID)
       })
 
+      const recoverExecute = Effect.fnUntraced(function* (
+        background: Job.Background,
+        recovery: Extract<Job.Recovery, { kind: "execute" }>,
+      ) {
+        const state = background.status === "running" ? "cancelled" : background.status
+        const body =
+          background.status === "running"
+            ? "Code Mode execution was cancelled because the server restarted."
+            : state === "completed"
+              ? (background.output ?? "")
+              : state === "error"
+                ? (background.error ?? "Code Mode execution failed.")
+                : "Cancelled"
+        yield* sessions
+          .synthetic({
+            id: background.notificationID,
+            sessionID: recovery.sessionID,
+            description: "Code Mode",
+            text: CodeModeTool.noticeText({
+              id: background.id,
+              state,
+              body,
+            }),
+            metadata: {
+              source: "execute",
+              jobID: background.id,
+              state,
+            },
+            resume: false,
+          })
+          .pipe(
+            Effect.catchTag("Session.NotFoundError", () => Effect.void),
+            Effect.orDie,
+          )
+        yield* jobs.completeBackground(background.notificationID)
+      })
+
       const recoverImage = Effect.fnUntraced(function* (
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "image" }>,
@@ -205,11 +243,13 @@ export const layer = (options?: Options) =>
 
         yield* jobs.start({
           id: background.id,
+          sessionID: recovery.parentSessionID,
           type: "subagent",
           title: recovery.description,
           notificationID: background.notificationID,
           recovery,
           run: execution.resume(recovery.childSessionID).pipe(
+            Effect.andThen(jobs.awaitSessionBackground(recovery.childSessionID)),
             Effect.andThen(store.context(recovery.childSessionID)),
             Effect.map((messages) => {
               const assistant = messages.findLast(
@@ -219,12 +259,9 @@ export const layer = (options?: Options) =>
               return SubagentCompletion.text(assistant)
             }),
           ),
+          onSettle: (info) => notify(info),
         })
         yield* jobs.background(background.id)
-        yield* jobs.wait({ id: background.id }).pipe(
-          Effect.flatMap((result) => (result.info ? notify(result.info) : Effect.void)),
-          Effect.forkIn(scope),
-        )
       })
 
       return Service.of({
@@ -248,6 +285,7 @@ export const layer = (options?: Options) =>
               if ((yield* jobs.get(background.id))?.status === "running") return
               const recovery = background.recovery
               if (recovery.kind === "shell") return yield* recoverShell(background, recovery)
+              if (recovery.kind === "execute") return yield* recoverExecute(background, recovery)
               if (recovery.kind === "image") return yield* recoverImage(background, recovery)
               yield* recoverSubagent(background, recovery, suspended)
             }),

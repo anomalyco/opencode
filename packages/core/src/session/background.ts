@@ -26,6 +26,12 @@ export const outstanding = Effect.fnUntraced(function* (
         shellID: recovery.shellID,
         command: recovery.command,
       }
+    if (recovery.kind === "execute")
+      return {
+        kind: "execute" as const,
+        sessionID: recovery.sessionID,
+        code: recovery.code,
+      }
     if (recovery.kind === "image")
       return { kind: "image" as const, sessionID: recovery.sessionID, path: recovery.path, model: recovery.model }
     return {
@@ -36,6 +42,32 @@ export const outstanding = Effect.fnUntraced(function* (
       description: recovery.description,
     }
   })
+})
+
+/** Running jobs owned by a Session or any of its descendants. */
+export const jobs = Effect.fnUntraced(function* (
+  registry: Pick<Job.Interface, "list">,
+  store: Pick<SessionStore.Interface, "get">,
+  sessionID: SessionSchema.ID,
+) {
+  const running = yield* registry.list({ running: true })
+  const owned = yield* Effect.filter(running, (info) =>
+    info.sessionID === undefined ? Effect.succeed(false) : descends(store, info.sessionID, sessionID),
+  )
+  return owned.map(
+    (info): Job.PublicInfo => ({
+      id: info.id,
+      ...(info.sessionID !== undefined ? { sessionID: info.sessionID } : {}),
+      type: info.type,
+      ...(info.title !== undefined ? { title: info.title } : {}),
+      status: info.status,
+      started_at: info.started_at,
+      ...(info.completed_at !== undefined ? { completed_at: info.completed_at } : {}),
+      ...(info.output !== undefined ? { output: info.output } : {}),
+      ...(info.error !== undefined ? { error: info.error } : {}),
+      ...(info.metadata !== undefined ? { metadata: { ...info.metadata } } : {}),
+    }),
+  )
 })
 
 const descends = Effect.fnUntraced(function* (

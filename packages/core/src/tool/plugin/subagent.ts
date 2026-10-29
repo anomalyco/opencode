@@ -9,6 +9,7 @@ import { Config } from "../../config.js"
 import { Job } from "../../job.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
+import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import { SubagentCompletion } from "../../session/subagent-completion.js"
@@ -16,14 +17,16 @@ import { SubagentJob } from "../../session/subagent-job.js"
 
 export const name = "subagent"
 
-const backgroundResult = (sessionID: SessionSchema.ID) => ({
+const backgroundResult = (sessionID: SessionSchema.ID, partial?: string) => ({
   sessionID,
+  jobID: sessionID,
   status: "running" as const,
   output: [
     `The subagent is working in the background (sessionID: ${sessionID}). You will be notified automatically when it finishes.`,
     "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
     "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
     "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
+    ...(partial ? ["", `Output so far:\n${partial}`] : []),
   ].join("\n"),
 })
 
@@ -41,6 +44,9 @@ export const Input = Schema.Struct({
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description: "Send a follow-up to an existing subagent, running or finished. Omit to start a new one.",
   }),
+  yield_after: Schema.optionalKey(NonNegativeInt).annotate({
+    description: `Milliseconds to wait before moving a still-running subagent to the background and returning its output so far. Defaults to ${Job.DEFAULT_YIELD_AFTER_MS}. Set to 0 to run in the background immediately.`,
+  }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
       "Run the subagent in the background and return immediately. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress.",
@@ -49,6 +55,7 @@ export const Input = Schema.Struct({
 
 export const Output = Schema.Struct({
   sessionID: SessionSchema.ID,
+  jobID: Schema.optionalKey(Schema.String),
   status: Schema.Literals(["completed", "running"]),
   output: Schema.String,
 })
@@ -203,7 +210,7 @@ export const Plugin = {
                     ),
                   ))
 
-              const background = input.background === true
+              const immediate = input.background === true || input.yield_after === 0
               yield* context.progress({ sessionID: child.id, status: "running" })
 
               // Standard prompt admission outside the job: Job.start joining a running child skips
@@ -215,7 +222,7 @@ export const Plugin = {
                     existing === undefined
                       ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
                       : input.prompt,
-                  ...(background && existing === undefined ? { resume: false } : {}),
+                  ...(immediate && existing === undefined ? { resume: false } : {}),
                 })
                 .pipe(
                   Effect.mapError(
@@ -232,21 +239,28 @@ export const Plugin = {
               }
               yield* subagents.start(recovery)
 
-              if (background) {
+              if (immediate) {
                 yield* subagents.background(recovery)
-                return backgroundResult(child.id)
+                const partial = input.background === true ? undefined : (yield* jobs.read(child.id))?.output
+                return backgroundResult(child.id, partial)
               }
 
-              const result = yield* jobs.block({ id: child.id, sessionID: context.sessionID }).pipe(
-                Effect.onInterrupt(() =>
-                  Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], {
-                    discard: true,
-                  }),
-                ),
-              )
+              const result = yield* jobs
+                .block({
+                  id: child.id,
+                  sessionID: context.sessionID,
+                  yield_after: input.yield_after ?? Job.DEFAULT_YIELD_AFTER_MS,
+                })
+                .pipe(
+                  Effect.onInterrupt(() =>
+                    Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], {
+                      discard: true,
+                    }),
+                  ),
+                )
               if (result?.type === "backgrounded") {
-                yield* subagents.notify(recovery, result.info.started_at)
-                return backgroundResult(child.id)
+                const partial = (yield* jobs.read(child.id))?.output
+                return backgroundResult(child.id, partial)
               }
               // Failure surfaces keep the sessionID visible so the model can continue the child.
               if (result?.info.status === "error")
@@ -267,7 +281,10 @@ export const Plugin = {
                   output.status === "completed"
                     ? `<subagent sessionID="${output.sessionID}" state="completed">\n${output.output}\n</subagent>`
                     : output.output,
-                metadata: { sessionID: output.sessionID, status: output.status },
+                metadata: {
+                  sessionID: output.sessionID,
+                  status: output.status,
+                },
               })),
             ),
         }),

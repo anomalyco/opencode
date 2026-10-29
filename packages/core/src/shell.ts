@@ -77,6 +77,8 @@ export interface Interface {
   // Resolves once the command reaches a terminal status, returning its final Info. Fails with
   // NotFoundError if the command is unknown or is removed before it terminates.
   readonly wait: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
+  // Bounded tail of output captured so far, without waiting for the command to exit.
+  readonly snapshot: (id: Shell.ID) => Effect.Effect<{ output: string; truncated: boolean } | undefined>
   // A known shell's terminal state and bounded tail. Missing capture remains distinct from its exit status.
   readonly result: (started: Shell.Info) => Effect.Effect<ShellResult.Result>
   // Replaces the running command's timeout from now; zero clears it. Ignored once the command has
@@ -235,29 +237,39 @@ const layer = () =>
         }
       })
 
+      const snapshot = Effect.fn("Shell.snapshot")(function* (id: Shell.ID) {
+        return yield* Effect.gen(function* () {
+          const command = yield* require(id)
+          const limits = Config.latest(yield* config.entries(), "tool_output")
+          const maxLines = limits?.max_lines ?? ToolOutput.MAX_LINES
+          const maxBytes = limits?.max_bytes ?? ToolOutput.MAX_BYTES
+          const latest = yield* output(id, { cursor: Number.MAX_SAFE_INTEGER })
+          if (latest.size === 0) return { output: "", truncated: false }
+          const page = yield* output(id, { cursor: Math.max(0, latest.size - maxBytes), limit: maxBytes })
+          const lines = page.output.split("\n")
+          if (page.output.endsWith("\n")) lines.pop()
+          const truncated = latest.size > maxBytes || lines.length > maxLines
+          const text = lines.length > maxLines ? lines.slice(-maxLines).join("\n") : page.output
+          const total = command.newlines + (page.output.endsWith("\n") ? 0 : 1)
+          const shown = Math.min(lines.length, maxLines)
+          const notice = truncated
+            ? `\n\n[showing lines ${total - shown + 1}-${total} of ${total}; full output saved to ${command.info.file}]`
+            : ""
+          return { output: `${text}${notice}`, truncated }
+        }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(undefined)))
+      })
+
       const result = Effect.fn("Shell.result")(function* (started: Shell.Info) {
         const info = yield* wait(started.id).pipe(
           Effect.catchTag("Shell.NotFoundError", () =>
             Effect.succeed({ ...started, status: "killed" as const, time: { ...started.time, completed: Date.now() } }),
           ),
         )
-        const capture = yield* Effect.gen(function* () {
-          const limits = Config.latest(yield* config.entries(), "tool_output")
-          const maxLines = limits?.max_lines ?? ToolOutput.MAX_LINES
-          const maxBytes = limits?.max_bytes ?? ToolOutput.MAX_BYTES
-          const latest = yield* output(info.id, { cursor: Number.MAX_SAFE_INTEGER })
-          const page = yield* output(info.id, { cursor: Math.max(0, latest.size - maxBytes), limit: maxBytes })
-          const lines = page.output.split("\n")
-          if (page.output.endsWith("\n")) lines.pop()
-          const truncated = latest.size > maxBytes || lines.length > maxLines
-          const text = lines.length > maxLines ? lines.slice(-maxLines).join("\n") : page.output
-          const total = (yield* require(info.id)).newlines + (page.output.endsWith("\n") ? 0 : 1)
-          const shown = Math.min(lines.length, maxLines)
-          const notice = truncated
-            ? `\n\n[showing lines ${total - shown + 1}-${total} of ${total}; full output saved to ${info.file}]`
-            : ""
-          return { output: `${text || "(no output)"}${notice}`, truncated }
-        }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(undefined)))
+        const captured = yield* snapshot(info.id)
+        const capture = captured && {
+          output: captured.output || "(no output)",
+          truncated: captured.truncated,
+        }
         return { info, capture }
       })
 
@@ -452,7 +464,7 @@ const layer = () =>
         return command.info
       })
 
-      return Service.of({ create, list, get, wait, result, timeout, output, remove })
+      return Service.of({ create, list, get, wait, snapshot, result, timeout, output, remove })
     }),
   )
 

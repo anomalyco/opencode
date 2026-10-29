@@ -1,6 +1,8 @@
 export * as CodeModeTool from "./tool.js"
 
 import { CodeMode, Namespace, Tool } from "@opencode/codemode"
+import { Identifier } from "@opencode/schema/identifier"
+import { NonNegativeInt } from "@opencode/schema/schema"
 import type {
   Content,
   Context as ToolContext,
@@ -10,10 +12,37 @@ import type {
   Namespace as ToolNamespace,
   Result,
 } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { Clock, Context, Effect, Option, Ref, Schema, Semaphore } from "effect"
+import { Job } from "../job.js"
+import { Session } from "../session.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeWeb } from "./web.js"
+
+export type Host = {
+  readonly jobs: Job.Interface
+  readonly sessions: Pick<Session.Interface, "synthetic">
+}
+
+const hosts = new WeakMap<object, Host>()
+
+export function bind(owner: object, host: Host) {
+  hosts.set(owner, host)
+}
+
+export function hostFor(owner: object): Host | undefined {
+  return hosts.get(owner)
+}
+
+const BACKGROUND_INSTRUCTION =
+  "You will be notified automatically when execution finishes. DO NOT sleep or poll in loops; continue with independent work or end your response and wait to be resumed, or call tools.opencode.job_wait / tools.opencode.job_output / tools.opencode.job_stop with this jobID."
+
+export const ExecuteInput = Schema.Struct({
+  ...CodeMode.Input.fields,
+  yield_after: Schema.optionalKey(NonNegativeInt).annotate({
+    description: `Milliseconds to wait before moving execution to the background and returning output so far. Defaults to ${Job.DEFAULT_YIELD_AFTER_MS}. Set to 0 to run in the background immediately.`,
+  }),
+})
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -34,7 +63,11 @@ const ExecuteOutput = Schema.Struct({
   toolCalls: Schema.Array(ExecuteCall),
   error: Schema.optionalKey(Schema.Literal(true)),
   files: Schema.Array(ExecuteFile),
+  status: Schema.optionalKey(Schema.Literals(["completed", "running"])),
+  jobID: Schema.optionalKey(Schema.String),
 })
+
+type ExecuteOutput = typeof ExecuteOutput.Type
 
 type CollectedFiles = {
   readonly index: number
@@ -77,94 +110,240 @@ const description = [
   "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
 ].join("\n")
 
+export function noticeText(input: { id: string; state: string; body: string }) {
+  return `<execute id="${input.id}" state="${input.state}">\n${input.body}\n</execute>`
+}
+
 export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
+  boundHost?: Host,
 ) => {
   return {
     name: "execute",
     description,
-    input: CodeMode.Input,
+    input: ExecuteInput,
     output: ExecuteOutput,
-    execute: ({ code }, context) =>
+    execute: (input, context) =>
       Effect.gen(function* () {
+        const code: string = input.code
+        const logs: Array<string> = []
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
-        const lock = Semaphore.makeUnsafe(1)
-        // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
-        // A success drops a pending one when the scope closes, since the result carries the final rows.
-        const scope = yield* Effect.scope
-        const publishedAt = yield* Ref.make(Number.NEGATIVE_INFINITY)
-        const trailing = yield* Ref.make(false)
-        const publish = Effect.gen(function* () {
-          yield* Ref.set(trailing, false)
-          yield* Ref.set(publishedAt, yield* Clock.currentTimeMillis)
-          yield* context.progress({ toolCalls: yield* Ref.get(calls) })
+        const waitingJobs = yield* Ref.make(0)
+        const yielded = yield* Ref.make(false)
+
+        const runOnce = Effect.gen(function* () {
+          const lock = Semaphore.makeUnsafe(1)
+          // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
+          // A success drops a pending one when the scope closes, since the result carries the final rows.
+          const scope = yield* Effect.scope
+          const publishedAt = yield* Ref.make(Number.NEGATIVE_INFINITY)
+          const trailing = yield* Ref.make(false)
+          const publish = Effect.gen(function* () {
+            yield* Ref.set(trailing, false)
+            yield* Ref.set(publishedAt, yield* Clock.currentTimeMillis)
+            if (yield* Ref.get(yielded)) return
+            yield* context.progress({ toolCalls: yield* Ref.get(calls) })
+          })
+          const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
+            lock.withPermit(
+              Effect.gen(function* () {
+                yield* Ref.update(calls, update)
+                if ((yield* Ref.get(trailing)) || (yield* Ref.get(yielded))) return
+                const wait = (yield* Ref.get(publishedAt)) + 100 - (yield* Clock.currentTimeMillis)
+                if (wait <= 0) return yield* publish
+                yield* Ref.set(trailing, true)
+                yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
+              }),
+            )
+          const result = yield* runtime(inventory)
+            .execute(code, undefined, { logs })
+            .pipe(
+              Effect.provideService(Run, {
+                executeTool: (name, tool, toolInput) =>
+                  Effect.gen(function* () {
+                    const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
+                    const isJobWait = name === "opencode_job_wait"
+                    if (isJobWait) yield* Ref.update(waitingJobs, (n) => n + 1)
+                    const executed = yield* executeTool(name, tool, toolInput, context).pipe(
+                      Effect.ensuring(isJobWait ? Ref.update(waitingJobs, (n) => Math.max(0, n - 1)) : Effect.void),
+                    )
+                    const content = resultContent(executed)
+                    const outputFileParts = outputFiles(content)
+                    if (outputFileParts.length > 0)
+                      yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
+                    return resultValue(executed)
+                  }),
+                hooks: progressHooks(record),
+              }),
+              // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
+              Effect.onError(() =>
+                lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
+              ),
+            )
+          const toolCalls = yield* Ref.get(calls)
+          const collected = (yield* Ref.get(files))
+            .toSorted((left, right) => left.index - right.index)
+            .flatMap((item) => item.files)
+          const output = formatResult(result)
+          const value: ExecuteOutput = {
+            output,
+            toolCalls,
+            files: collected,
+            ...(result.ok ? {} : { error: true }),
+          }
+          return { output: value.output, value }
+        }).pipe(Effect.scoped)
+
+        const ambientJobs = Option.getOrUndefined(yield* Effect.serviceOption(Job.Service))
+        const ambientSessions = Option.getOrUndefined(yield* Effect.serviceOption(Session.Service))
+        const resolvedHost =
+          boundHost ?? (ambientJobs && ambientSessions ? { jobs: ambientJobs, sessions: ambientSessions } : undefined)
+
+        if (!resolvedHost) {
+          const completed = yield* runOnce
+          return completedResult(completed.value)
+        }
+
+        const readPartial = Ref.get(calls).pipe(
+          Effect.map((toolCalls) => formatPartial(logs, toolCalls)),
+        )
+        const id = `job_${Identifier.create(false)}`
+        const title = code
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line.length > 0)
+          ?.slice(0, 80)
+
+        yield* resolvedHost.jobs.start<ExecuteOutput>({
+          id,
+          sessionID: context.sessionID,
+          type: "execute",
+          title: title ?? "execute",
+          metadata: { sessionID: context.sessionID },
+          recovery: { kind: "execute", sessionID: context.sessionID, code },
+          run: runOnce,
+          output: readPartial,
+          onSettle: (settled) => {
+            if (settled.status === "running") return Effect.void
+            const body =
+              settled.status === "completed"
+                ? (settled.output ?? "")
+                : settled.status === "error"
+                  ? (settled.error ?? "Code Mode execution failed")
+                  : settled.output
+                    ? `${settled.output}\n\nCancelled`
+                    : "Cancelled"
+            return resolvedHost.sessions
+              .synthetic({
+                ...(settled.notificationID ? { id: settled.notificationID } : {}),
+                sessionID: context.sessionID,
+                description: "Code Mode",
+                ...(settled.status === "cancelled" ? { resume: false } : {}),
+                text: noticeText({ id, state: settled.status, body }),
+                metadata: { source: "execute", jobID: id, state: settled.status },
+              })
+              .pipe(Effect.ignore)
+          },
         })
-        const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
-          lock.withPermit(
-            Effect.gen(function* () {
-              yield* Ref.update(calls, update)
-              if (yield* Ref.get(trailing)) return
-              const wait = (yield* Ref.get(publishedAt)) + 100 - (yield* Clock.currentTimeMillis)
-              if (wait <= 0) return yield* publish
-              yield* Ref.set(trailing, true)
-              yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
-            }),
-          )
-        const result = yield* runtime(inventory)
-          .execute(code)
-          .pipe(
-            Effect.provideService(Run, {
-              executeTool: (name, tool, input) =>
-                Effect.gen(function* () {
-                  const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
-                  const executed = yield* executeTool(name, tool, input, context)
-                  const content = resultContent(executed)
-                  const outputFileParts = outputFiles(content)
-                  if (outputFileParts.length > 0)
-                    yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
-                  return resultValue(executed)
-                }),
-              hooks: progressHooks(record),
-            }),
-            // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
-            Effect.onError(() =>
-              lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
-            ),
-          )
-        const toolCalls = yield* Ref.get(calls)
-        const collected = (yield* Ref.get(files))
-          .toSorted((left, right) => left.index - right.index)
-          .flatMap((item) => item.files)
-        const output = formatResult(result)
-        const value: typeof ExecuteOutput.Type = {
-          output,
-          toolCalls,
-          files: collected,
-          ...(result.ok ? {} : { error: true }),
+
+        if (input.yield_after === 0) {
+          yield* Ref.set(yielded, true)
+          yield* resolvedHost.jobs.background(id)
+          return yield* backgroundedResult(id, calls, readPartial)
         }
-        const content: Array<Content> = [
-          { type: "text", text: value.output },
-          ...value.files.map((file) => ({
-            type: "file" as const,
-            uri: `data:${file.mime};base64,${file.data}`,
-            mime: file.mime,
-            ...(file.name === undefined ? {} : { name: file.name }),
-          })),
-        ]
-        const metadata: Metadata = {
-          toolCalls: value.toolCalls,
-          ...(value.error ? { error: true } : {}),
+
+        const outcome = yield* resolvedHost.jobs
+          .block<ExecuteOutput>({
+            id,
+            sessionID: context.sessionID,
+            yield_after: input.yield_after ?? Job.DEFAULT_YIELD_AFTER_MS,
+            deferYield:
+              input.yield_after === undefined
+                ? Ref.get(waitingJobs).pipe(Effect.map((count) => count > 0))
+                : undefined,
+          })
+          .pipe(Effect.onInterrupt(() => resolvedHost.jobs.cancel(id).pipe(Effect.ignore)))
+
+        if (outcome?.type === "backgrounded") {
+          yield* Ref.set(yielded, true)
+          return yield* backgroundedResult(id, calls, readPartial)
         }
-        return {
-          output: value,
-          content,
-          metadata,
+        if (outcome?.info.value) return completedResult(outcome.info.value)
+        const fallback: ExecuteOutput = {
+          output: outcome?.info.error ?? outcome?.info.output ?? "Code Mode execution cancelled",
+          toolCalls: yield* Ref.get(calls),
+          files: [],
+          error: true,
         }
-      }).pipe(Effect.scoped),
+        return completedResult(fallback)
+      }),
   } satisfies Info
+}
+
+function completedResult(value: ExecuteOutput) {
+  const content: Array<Content> = [
+    { type: "text", text: value.output },
+    ...value.files.map((file) => ({
+      type: "file" as const,
+      uri: `data:${file.mime};base64,${file.data}`,
+      mime: file.mime,
+      ...(file.name === undefined ? {} : { name: file.name }),
+    })),
+  ]
+  const metadata: Metadata = {
+    toolCalls: value.toolCalls,
+    ...(value.error ? { error: true } : {}),
+  }
+  return {
+    output: value,
+    content,
+    metadata,
+  }
+}
+
+function backgroundedResult(
+  id: string,
+  calls: Ref.Ref<Array<ExecuteCall>>,
+  readPartial: Effect.Effect<string | undefined>,
+) {
+  return Effect.gen(function* () {
+    const toolCalls = yield* Ref.get(calls)
+    const partial = yield* readPartial
+    const text = [
+      `Code Mode execution moved to the background (jobID: ${id}).`,
+      ...(partial ? [`Output so far:\n${partial}`] : []),
+      BACKGROUND_INSTRUCTION,
+    ].join("\n\n")
+    const value: ExecuteOutput = {
+      output: text,
+      toolCalls,
+      files: [],
+      status: "running",
+      jobID: id,
+    }
+    return {
+      output: value,
+      content: [{ type: "text" as const, text }],
+      metadata: {
+        toolCalls,
+        status: "running",
+        jobID: id,
+      },
+    }
+  })
+}
+
+function formatPartial(logs: ReadonlyArray<string>, toolCalls: ReadonlyArray<ExecuteCall>): string | undefined {
+  const parts = [
+    ...(logs.length > 0 ? [`Logs:\n${logs.join("\n")}`] : []),
+    ...(toolCalls.length > 0
+      ? [`Tool calls:\n${toolCalls.map((call) => `- [${call.status}] ${call.tool}`).join("\n")}`]
+      : []),
+  ]
+  return parts.length > 0 ? parts.join("\n\n") : undefined
 }
 
 // Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.

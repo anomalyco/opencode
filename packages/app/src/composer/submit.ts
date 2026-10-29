@@ -181,18 +181,10 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
           })
         const optimisticBusy = !input.adapter.working()
 
-        // Like iOS, a steer moves the run's blocking shells and subagents to the background. The move follows
-        // admission: the steer already waits in the inbox when the moved work ends the step, so that step reads it.
-        const background = value.delivery === "steer" && !optimisticBusy ? session.background?.() : undefined
-
         if (optimisticBusy) session.data.session.setStatus(session.id, "running")
 
         const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
-          () => {
-            void background?.move()
-
-            return { ok: true as const }
-          },
+          () => ({ ok: true as const }),
           (error) => ({ ok: false as const, error }),
         )
 

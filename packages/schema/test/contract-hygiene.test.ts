@@ -6,6 +6,7 @@ import { ConfigAgent } from "../src/config/agent.js"
 import { ConfigProvider } from "../src/config/provider.js"
 import { FileSystem } from "../src/filesystem.js"
 import { Form } from "../src/form.js"
+import { Job } from "../src/job.js"
 import { Mcp } from "../src/mcp.js"
 import { Model } from "../src/model.js"
 import { Project } from "../src/project.js"
@@ -177,6 +178,8 @@ describe("contract hygiene", () => {
       Form.Fields,
       Form.Info,
       Form.ExternalField,
+      Job.Status,
+      Job.Info,
       Mcp.Resource,
       Mcp.ResourceTemplate,
       Mcp.ResourceCatalog,

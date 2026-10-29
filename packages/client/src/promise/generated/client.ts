@@ -103,6 +103,8 @@ import type {
   ExperimentalSessionInstructionsEntryRemoveOutput,
   ExperimentalSessionLogInput,
   ExperimentalSessionLogOutput,
+  ExperimentalSessionJobsInput,
+  ExperimentalSessionJobsOutput,
   MessageListInput,
   MessageListOutput,
   ModelListInput,
@@ -1156,6 +1158,17 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+        jobs: (input: ExperimentalSessionJobsInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalSessionJobsOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/jobs`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
       },
       generate: {
         text: (input: ExperimentalGenerateTextInput, requestOptions?: RequestOptions) =>
@@ -2582,6 +2595,8 @@ export function make(options: ClientOptions) {
       },
       /** @deprecated Use `client.experimental.session.log`. Removed in the next minor. */
       log: client.experimental.session.log,
+      /** @deprecated Use `client.experimental.session.jobs`. Removed in the next minor. */
+      jobs: client.experimental.session.jobs,
     },
     /** @deprecated Use `client.experimental.generate`. Removed in the next minor. */
     generate: {

@@ -4294,6 +4294,77 @@
         "summary": "Background blocking session tools"
       }
     },
+    "/api/experimental/session/{sessionID}/jobs": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "experimental.session.jobs",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Job.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List running jobs owned by this session or its descendants. Experimental: may change without compatibility guarantees.",
+        "summary": "List session jobs"
+      }
+    },
     "/api/session/{sessionID}/message/{messageID}": {
       "get": {
         "tags": ["session"],
@@ -10671,6 +10742,7 @@
                     "shell.created",
                     "shell.exited",
                     "shell.deleted",
+                    "job.updated",
                     "form.created",
                     "form.replied",
                     "form.cancelled",
@@ -10778,6 +10850,7 @@
                           "shell.created",
                           "shell.exited",
                           "shell.deleted",
+                          "job.updated",
                           "form.created",
                           "form.replied",
                           "form.cancelled",
@@ -19050,6 +19123,51 @@
         },
         "required": ["_tag", "message"],
         "additionalProperties": false
+      },
+      "Job.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "started_at": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "completed_at": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "output": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": ["id", "type", "status", "started_at"],
+        "additionalProperties": false
+      },
+      "Job.Status": {
+        "type": "string",
+        "enum": ["running", "completed", "error", "cancelled"]
       },
       "Location.PublicInfo": {
         "type": "object",

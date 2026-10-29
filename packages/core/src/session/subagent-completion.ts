@@ -18,6 +18,30 @@ export function text(message: SessionMessage.Info | undefined) {
   )
 }
 
+/** Formats any assistant text and tool activity recorded so far in the child's active turn. */
+export function progress(messagesDesc: ReadonlyArray<SessionMessage.Info>): string | undefined {
+  const turn: SessionMessage.Info[] = []
+  for (const message of messagesDesc) {
+    if (message.type === "idle" || message.type === "user") break
+    turn.unshift(message)
+  }
+  const texts: string[] = []
+  const calls: string[] = []
+  for (const message of turn) {
+    if (message.type !== "assistant") continue
+    for (const part of message.content) {
+      if (part.type === "text" && part.text.trim().length > 0) texts.push(part.text)
+      if (part.type === "tool" && part.state.status !== "streaming")
+        calls.push(`[${part.state.status}] ${part.name}`)
+    }
+  }
+  const sections = [
+    ...(texts.length > 0 ? [texts.join("\n\n")] : []),
+    ...(texts.length === 0 && calls.length > 0 ? [calls.join("\n")] : []),
+  ]
+  return sections.length > 0 ? sections.join("\n\n") : undefined
+}
+
 export const deliver = Effect.fnUntraced(function* (
   sessions: Pick<Session.Interface, "synthetic">,
   jobs: Pick<Job.Interface, "completeBackground">,

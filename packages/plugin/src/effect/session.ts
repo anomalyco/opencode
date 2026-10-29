@@ -148,6 +148,11 @@ export type SessionIdleBackground =
       readonly command: string
     }
   | {
+      readonly kind: "execute"
+      readonly sessionID: Session.ID
+      readonly code: string
+    }
+  | {
       readonly kind: "subagent"
       readonly sessionID: Session.ID
       readonly childSessionID: Session.ID

@@ -11,6 +11,7 @@ import type {
   FormInfo,
   SessionFormReplyInput,
   IntegrationInfo,
+  JobInfo,
   LocationRef,
   LocationGetOutput,
   McpResource,
@@ -127,6 +128,8 @@ type Store = {
     // session ID in that family, including the key itself once its info arrives.
     family: Record<string, string[]>
     active: Record<string, DataSessionStatus>
+    draining: Record<string, boolean>
+    jobs: Record<string, Record<string, JobInfo>>
     message: Record<string, SessionMessageInfo[]>
     messageCursor: Record<string, string | undefined>
     messageLoading: Record<string, boolean>
@@ -290,6 +293,8 @@ export function createData(config: CreateDataInput) {
       info: {},
       family: {},
       active: {},
+      draining: {},
+      jobs: {},
       message: {},
       messageCursor: {},
       messageLoading: {},
@@ -313,6 +318,13 @@ export function createData(config: CreateDataInput) {
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
+
+  function hasRunningJobs(sessionID: string) {
+    const running = store.session.jobs[sessionID]
+    if (!running) return false
+    for (const id in running) if (running[id] !== undefined) return true
+    return false
+  }
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
     activeUpdates?.set(sessionID, status)
@@ -641,11 +653,14 @@ export function createData(config: CreateDataInput) {
     sync.invalidate(`session.message:${sessionID}`)
     sync.invalidate(`session.permission:${sessionID}`)
     sync.invalidate(`session.form:${sessionID}:`)
+    sync.invalidate(`session.jobs:${sessionID}`)
     setStore(
       "session",
       produce((draft) => {
         delete draft.info[sessionID]
         delete draft.active[sessionID]
+        delete draft.draining[sessionID]
+        delete draft.jobs[sessionID]
         delete draft.message[sessionID]
         delete draft.messageCursor[sessionID]
         delete draft.messageLoading[sessionID]
@@ -1107,12 +1122,37 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.execution.started":
+        setStore("session", "draining", event.data.sessionID, true)
         setSessionActive(event.data.sessionID, "running")
         // Revalidate so `time.busy` follows the projected execution start.
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
         refresh(() => result.session.sync(event.data.sessionID))
         return
+      case "job.updated": {
+        const sessionID = event.data.info.sessionID
+        if (!sessionID) return
+        if (event.data.active) {
+          setStore("session", "jobs", sessionID, (current) => ({
+            ...current,
+            [event.data.info.id]: event.data.info,
+          }))
+          setSessionActive(sessionID, "running")
+          return
+        }
+        if (store.session.jobs[sessionID]?.[event.data.info.id]) {
+          setStore(
+            "session",
+            "jobs",
+            sessionID,
+            produce((draft) => {
+              delete draft[event.data.info.id]
+            }),
+          )
+        }
+        if (!store.session.draining[sessionID] && !hasRunningJobs(sessionID)) setSessionActive(sessionID, "idle")
+        return
+      }
       case "session.compaction.started":
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
         message.insert(event.data.sessionID, {
@@ -1127,8 +1167,10 @@ export function createData(config: CreateDataInput) {
         return
       case "session.execution.succeeded":
       case "session.execution.failed":
-      case "session.execution.interrupted":
-        setSessionActive(event.data.sessionID, "idle")
+      case "session.execution.interrupted": {
+        const isShutdown = event.type === "session.execution.interrupted" && event.data.reason === "shutdown"
+        if (!isShutdown) setStore("session", "draining", event.data.sessionID, false)
+        setSessionActive(event.data.sessionID, !isShutdown && hasRunningJobs(event.data.sessionID) ? "running" : "idle")
         message.update(event.data.sessionID, (draft) => {
           const currentAssistant = message.activeAssistant(draft)
           if (currentAssistant) currentAssistant.retry = undefined
@@ -1165,6 +1207,7 @@ export function createData(config: CreateDataInput) {
         result.session.invalidate(event.data.sessionID)
         refresh(() => result.session.sync(event.data.sessionID))
         return
+      }
       case "session.viewed":
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
@@ -1504,6 +1547,22 @@ export function createData(config: CreateDataInput) {
         return Object.entries(store.session.active).flatMap(([sessionID, status]) =>
           status === "running" ? [sessionID] : [],
         )
+      },
+      jobs: {
+        list(sessionID: string) {
+          return Object.values(store.session.jobs[sessionID] ?? {}).filter((job): job is JobInfo => job !== undefined)
+        },
+        sync(sessionID: string) {
+          return sync.run(`session.jobs:${sessionID}`, async () => {
+            const jobs = await api().experimental.session.jobs({ sessionID })
+            const next = Object.fromEntries(jobs.map((job) => [job.id, job]))
+            batch(() => {
+              setStore("session", "jobs", sessionID, reconcile(next))
+              if (jobs.length > 0) return setSessionActive(sessionID, "running")
+              if (!store.session.draining[sessionID]) setSessionActive(sessionID, "idle")
+            })
+          })
+        },
       },
       // Inputs are the pending user and synthetic items; compactions are control items.
       input: {

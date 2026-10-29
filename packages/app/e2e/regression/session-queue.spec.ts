@@ -1358,8 +1358,8 @@ test("a steer moves a blocking shell to the background after its admission, so t
 
   await view.input.fill(steer)
   await view.input.press("Enter")
-  // Admission comes first: the steer already waits in the inbox when the moved shell ends the step.
-  await expect.poll(() => mock.log).toEqual(["prompt:steer", "background"])
+  // Admission moves blocking work on the server without a separate client background call.
+  await expect.poll(() => mock.log).toEqual(["prompt:steer"])
 
   const inboxID = mock.rows[0].id
   const pending = transcript.locator(`[data-timeline-row="UserMessage"][data-message-id="${inboxID}"]`)
@@ -1397,6 +1397,6 @@ test("a steer moves a blocking shell to the background after its admission, so t
 
   await expect(response).toHaveAttribute("data-message-id", inboxID)
   await expect(pending.locator('[data-component="user-message"]')).not.toHaveAttribute("data-pending", "true")
-  expect(mock.log).toEqual(["prompt:steer", "background"])
+  expect(mock.log).toEqual(["prompt:steer"])
   await transcript.screenshot({ path: testInfo.outputPath("steer-delivered.png") })
 })
