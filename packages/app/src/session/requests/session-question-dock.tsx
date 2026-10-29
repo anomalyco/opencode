@@ -7,7 +7,6 @@ import { RollingNumber } from "@opencode/ui/rolling-number"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
 import { Icon } from "@opencode/ui/icon"
-import { TextInput } from "@opencode/ui/text-input"
 import { frameLoop, Spring, type DurationOptions } from "@opencode/ui/motion"
 import { motionTuning } from "@opencode/ui/motion-tuning"
 import { showToast } from "@/shell/notifications/toast"
@@ -273,7 +272,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   let customRef: HTMLButtonElement | undefined
   let customRow: HTMLDivElement | undefined
   let highlightRef: HTMLSpanElement | undefined
-  let customInput: HTMLInputElement | undefined
+  let customInput: HTMLTextAreaElement | undefined
   let optsRef: HTMLButtonElement[] = []
   let replied = false
 
@@ -346,6 +345,17 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
     setStore("answers", store.tab, next ? [next] : [])
   }
+
+  const resizeInput = (el: HTMLTextAreaElement) => {
+    el.style.height = "0px"
+    el.style.height = `${el.scrollHeight}px`
+  }
+
+  createEffect(() => {
+    input()
+
+    if (customInput) resizeInput(customInput)
+  })
 
   // The dock's heights from its last measure: at most, and of everything but the question text and the answers box.
   // The answers box takes what the question text leaves, and opens only to the room it will have at rest, so it never
@@ -1349,9 +1359,13 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                 >
                   <Mark multi={multi()} picked={on()} shortcut={count() <= 9 ? String(count()) : undefined} />
                 </button>
-                <TextInput
-                  ref={(el) => (customInput = el)}
+                <textarea
+                  ref={(el) => {
+                    customInput = el
+                    resizeInput(el)
+                  }}
                   class="question-custom-field"
+                  rows={1}
                   dir="auto"
                   aria-label={customLabel()}
                   placeholder={customLabel()}
@@ -1379,7 +1393,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
                     if ((e.metaKey || e.ctrlKey) && !e.altKey) return
 
-                    if (e.key !== "Enter") return
+                    if (e.key !== "Enter" || e.shiftKey) return
                     e.preventDefault()
 
                     if (!e.repeat) next()

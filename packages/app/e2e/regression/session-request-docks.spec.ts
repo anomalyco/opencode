@@ -80,11 +80,11 @@ test("shows a pending question dock", async ({ page }) => {
       new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_request/reply`,
   )
 
-  await question.getByRole("button", { name: "Submit" }).click()
+  await question.getByRole("button", { name: "Submit" }).press("Control+Enter")
   expect((await reply).postDataJSON()).toEqual({ answer: { q0: "minimal" } })
 })
 
-test("replies with predefined choices and the edited custom multiselect answer", async ({ page }) => {
+test("replies with predefined choices and a multiline custom answer", async ({ page }) => {
   await mockServer(page, {
     forms: [
       {
@@ -116,6 +116,7 @@ test("replies with predefined choices and the edited custom multiselect answer",
   const terminal = question.getByRole("checkbox", { name: "Terminal", exact: true })
   const custom = question.getByRole("checkbox", { name: "Type your own answer…", exact: true })
   const input = question.getByRole("textbox", { name: "Type your own answer…", exact: true })
+  const customRow = question.locator('[data-slot="question-option"][data-custom="true"]')
   const cancellations: string[] = []
   page.on("request", (request) => {
     if (
@@ -127,10 +128,11 @@ test("replies with predefined choices and the edited custom multiselect answer",
 
   await expect(files).not.toBeChecked()
   await files.click()
+  await files.press("2")
+  await expect(terminal).toBeChecked()
   await input.fill("Original custom answer")
   await expect(custom).toBeChecked()
   await expect(files).toBeChecked()
-  await terminal.click()
   await expect(terminal).toBeChecked()
   await expect(custom).toBeChecked()
   await expect(files).toBeChecked()
@@ -149,12 +151,40 @@ test("replies with predefined choices and the edited custom multiselect answer",
   await expect(input).toHaveValue("Original custom answer")
   await expect(files).toBeChecked()
   await expect(terminal).toBeChecked()
+  await input.press("1")
+  await expect(input).toHaveValue("Original custom answer1")
+  await expect(files).toBeChecked()
+  await expect(terminal).toBeChecked()
 
-  await input.fill("Updated custom answer")
+  await input.fill("first\nsecond\nthird\nfourth")
+  await expect(input).toHaveValue("first\nsecond\nthird\nfourth")
+  await expect.poll(() => input.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1)
+  await input.fill(Array.from({ length: 12 }, (_, index) => `line ${index + 1}`).join("\n"))
+  await expect.poll(() => input.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(0)
+
+  await input.fill("")
+  await expect.poll(() => customRow.evaluate((el) => el.getBoundingClientRect().height)).toBe(40)
+  await input.fill("alpha")
+  await page.keyboard.insertText("\nbeta")
+  await expect(input).toHaveValue("alpha\nbeta")
+  await input.press("Shift+Enter")
+  await expect(input).toHaveValue("alpha\nbeta\n")
+  await page.keyboard.insertText("gamma")
+  await expect(input).toHaveValue("alpha\nbeta\ngamma")
+  await input.dispatchEvent("keydown", { key: "Enter", isComposing: true })
+  await expect(customRow).toHaveAttribute("data-editing", "true")
+  await expect(input).toBeFocused()
+  await input.evaluate((el) => {
+    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+    Object.defineProperty(event, "keyCode", { value: 229 })
+    el.dispatchEvent(event)
+  })
+  await expect(customRow).toHaveAttribute("data-editing", "true")
+  await expect(input).toBeFocused()
   await input.press("Escape")
   await expect(input).not.toBeFocused()
   await expect(question.getByRole("button", { name: "Submit", exact: true })).toBeEnabled()
-  await expect(input).toHaveValue("Updated custom answer")
+  await expect(input).toHaveValue("alpha\nbeta\ngamma")
   await expect(custom).toBeChecked()
   await expect(files).toBeChecked()
   await expect(terminal).toBeChecked()
@@ -166,8 +196,9 @@ test("replies with predefined choices and the edited custom multiselect answer",
       new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_multiselect/reply`,
   )
 
-  await question.getByRole("button", { name: "Submit", exact: true }).press("Control+Enter")
-  expect((await reply).postDataJSON()).toEqual({ answer: { q0: ["files", "terminal", "Updated custom answer"] } })
+  await input.focus()
+  await input.press("Enter")
+  expect((await reply).postDataJSON()).toEqual({ answer: { q0: ["files", "terminal", "alpha\nbeta\ngamma"] } })
   expect(cancellations).toEqual([])
 })
 
