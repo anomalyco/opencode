@@ -13,6 +13,7 @@ import { AISDK } from "../aisdk.js"
 import { Command } from "../command.js"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
+import { Form } from "../form.js"
 import { Integration } from "../integration.js"
 import { IntegrationConnection } from "../integration/connection.js"
 import { KV } from "../kv.js"
@@ -74,6 +75,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
   const sessions = yield* Session.Service
+  const forms = yield* Form.Service
   const instructionEntries = yield* InstructionEntry.Service
   const persistentPty = yield* PersistentPty.Service
   const locations = yield* LocationServiceMap.Service
@@ -123,6 +125,20 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       Effect.flatMap(Agent.Service, (agents) => agents.list()),
     ).pipe(Effect.orDie),
   )
+
+  const decodeSessionID = Schema.decodeUnknownEffect(Session.ID)
+  const requireSession = (sessionID: string) =>
+    sessionID === "global"
+      ? Effect.void
+      : decodeSessionID(sessionID).pipe(Effect.flatMap((id) => sessions.get(id)))
+
+  const requireOwnedForm = (sessionID: string, formID: Form.ID) =>
+    Effect.gen(function* () {
+      yield* requireSession(sessionID)
+      const info = yield* forms.get(formID)
+      if (info.sessionID !== sessionID) return yield* new Form.NotFoundError({ id: formID })
+      return info
+    })
 
   // Keep the instance graph's inferred types independent of Session handles.
   const context: Plugin.Context = {
@@ -607,6 +623,25 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => sessions.wait(input.sessionID),
       context: (input) => sessions.context(input.sessionID),
+      form: {
+        list: (input) =>
+          Effect.gen(function* () {
+            yield* requireSession(input.sessionID)
+            return yield* forms.list({ sessionID: input.sessionID })
+          }),
+        get: (input) =>
+          requireOwnedForm(input.sessionID, input.formID).pipe(
+            Effect.flatMap((info) => Effect.map(forms.state(input.formID), (state) => ({ ...info, state }))),
+          ),
+        reply: (input) =>
+          requireOwnedForm(input.sessionID, input.formID).pipe(
+            Effect.andThen(forms.reply({ id: input.formID, answer: input.answer })),
+          ),
+        cancel: (input) =>
+          requireOwnedForm(input.sessionID, input.formID).pipe(
+            Effect.andThen(forms.cancel(input.formID, { message: input.message })),
+          ),
+      },
       instructions: {
         entry: {
           list: Effect.fn(function* (input) {
@@ -639,6 +674,7 @@ export const requirements = LayerNode.group([
   Model.node,
   Command.node,
   Bus.node,
+  Form.node,
   Integration.node,
   KV.node,
   Mcp.node,
