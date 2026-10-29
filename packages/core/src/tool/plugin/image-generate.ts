@@ -224,8 +224,9 @@ export const Plugin = {
       Effect.forkIn(scope, { startImmediately: true }),
     )
 
-    // On by default; experimental.image_generate: false turns it off. Internal plugins are not re-run on config changes,
-    // so reload the tool transform instead.
+    // On by default. `experimental.image_generate: false` is still honored for configs from when the tool was opt-in;
+    // permissions are the supported way to turn it off. Internal plugins are not re-run on config changes, so reload the
+    // tool transform instead.
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
 
     // Registered only while an image model is available, re-evaluated whenever the catalog changes.
