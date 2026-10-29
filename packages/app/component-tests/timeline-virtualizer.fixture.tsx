@@ -5,7 +5,12 @@ import { render } from "solid-js/web"
 import { LanguageProvider } from "../src/runtime/i18n/language"
 import { createTimelineVirtualizer } from "../src/session/timeline/virtualizer"
 
-export function mountTimelineVirtualizer(input: { count: number; rowHeight: number; immediate?: boolean }) {
+export function mountTimelineVirtualizer(input: {
+  count: number
+  rowHeight: number
+  immediate?: boolean
+  viewportHeight?: number
+}) {
   const host = document.createElement("main")
   host.dataset.testid = "timeline-virtualizer-fixture"
   host.dataset.scrolls = "0"
@@ -112,10 +117,9 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
         >
           Reconnect ready rows
         </button>
-        <div ref={container} style={{ height: "180px", width: "400px" }}>
+        <div ref={container} style={{ height: `${input.viewportHeight ?? 180}px`, width: "400px" }}>
           <timeline.View
             header={null}
-            workspaceSession={() => false}
             deferred={() => false}
             renderRow={(row) => (
               <div

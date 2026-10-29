@@ -1,4 +1,10 @@
 export * as TestLLM from "./testing.js"
+export { compileRequest } from "./route/client.js"
+export { TestDecision } from "./testing/decision.js"
+export { TestImage } from "./testing/image.js"
+export { TestSpeech } from "./testing/speech.js"
+export { TestTranscription } from "./testing/transcription.js"
+export { TestVideo } from "./testing/video.js"
 
 import {
   LLMClient,
@@ -18,7 +24,8 @@ import {
   type ProviderMetadata,
   type UsageInput,
 } from "./schema/index.js"
-import { Context, Deferred, Effect, Latch, Layer, Queue, Scope, Stream } from "effect"
+import { Context, Effect, Layer, Stream } from "effect"
+import { TestScript } from "./testing/script.js"
 
 export type Response =
   | readonly LLMEvent[]
@@ -26,45 +33,17 @@ export type Response =
   | CompactionResponse
   | CompactionCheckpointResponse
 
-export type Gate = Readonly<{ started: Effect.Effect<void>; release: Effect.Effect<void> }>
+export type Gate = TestScript.Gate
 
 type ClientInterface = Context.Service.Shape<typeof LLMClient.Service>
 
 export type Responder = (request: LLMRequest) => Response
 
-export interface TestInterface extends ClientInterface {
-  /** Returns a snapshot of requests observed at execution time. */
-  readonly requests: () => Effect.Effect<readonly LLMRequest[]>
-  readonly push: (...responses: readonly Response[]) => Effect.Effect<void>
-  /** Replaces the fallback without changing queued responses. */
-  readonly always: (response: Response) => Effect.Effect<void>
-  /** Answers requests after the one-shot queue is exhausted; receives the original request. */
-  readonly serve: (responder: Responder) => Effect.Effect<void>
-  /** Waits for request arrivals, not output or completion. */
-  readonly wait: (count: number) => Effect.Effect<void>
-  readonly gate: () => Effect.Effect<Gate, never, Scope.Scope>
-}
+export interface TestInterface extends ClientInterface, TestScript.Controls<LLMRequest, Response> {}
 
 export class Test extends Context.Service<Test, TestInterface>()("@opencode/ai/TestLLM/Test") {}
 
-/** @deprecated Use TestInterface through Test and testLayer. */
-export interface Interface {
-  readonly requests: LLMRequest[]
-  readonly push: (...responses: readonly Response[]) => Effect.Effect<void>
-  readonly always: (response: Response) => Effect.Effect<void>
-  readonly wait: (count: number) => Effect.Effect<void>
-  readonly gate: Effect.Effect<Gate, never, Scope.Scope>
-  readonly client: ClientInterface
-}
-
-export interface LayerOptions {
-  readonly transformRequest?: (request: LLMRequest) => LLMRequest
-  /** Used after the one-shot response queue is exhausted. Omit to defect on unexpected requests. */
-  readonly fallback?: Response
-}
-
-/** @deprecated Use Test and testLayer for normal client methods and test controls. */
-export class Service extends Context.Service<Service, Interface>()("@opencode/ai/TestLLM") {}
+export type LayerOptions = TestScript.Options<LLMRequest, Response>
 
 export const complete = (
   options: {
@@ -113,35 +92,10 @@ export const hangAfter = (...events: readonly LLMEvent[]) => Stream.concat(Strea
 
 const make = (options: LayerOptions) =>
   Effect.sync(() => {
-    const requests: LLMRequest[] = []
-    const responses: Response[] = []
-    let started = Deferred.makeUnsafe<void>()
-    let fallback: Response | Responder | undefined = options.fallback
-    let activeGate: { readonly started: Queue.Queue<void>; readonly release: Latch.Latch } | undefined
-    const wait = (count: number): Effect.Effect<void> =>
-      Effect.suspend(() =>
-        requests.length >= count ? Effect.void : Deferred.await(started).pipe(Effect.andThen(wait(count))),
-      )
-
-    const take = (request: LLMRequest) =>
-      Effect.suspend(() => {
-        const count = requests.push(options.transformRequest?.(request) ?? request)
-        const waiting = started
-        started = Deferred.makeUnsafe()
-        const gate = activeGate
-        try {
-          const response = responses.shift() ?? (typeof fallback === "function" ? fallback(request) : fallback)
-          if (!response) return Effect.die(new Error(`TestLLM has no response for request ${count}`))
-          if (!gate) return Effect.succeed(response)
-          return Queue.offer(gate.started, undefined).pipe(Effect.andThen(gate.release.await), Effect.as(response))
-        } finally {
-          // Waiters can resume synchronously; assign the reply and gate before notifying them.
-          Deferred.doneUnsafe(waiting, Effect.void)
-        }
-      })
+    const script = TestScript.make<LLMRequest, Response>("TestLLM", options)
     const stream: ClientInterface["stream"] = (request) =>
       Stream.unwrap(
-        take(request).pipe(
+        script.take(request).pipe(
           Effect.map((response) => {
             if (response instanceof CompactionResponse || response instanceof CompactionCheckpointResponse)
               return Stream.die("TestLLM generation requires an event response")
@@ -161,7 +115,7 @@ const make = (options: LayerOptions) =>
       request: LLMRequest,
       options?: EndpointCompactOptions | TriggerCompactOptions,
     ): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> {
-      return take(request).pipe(
+      return script.take(request).pipe(
         Effect.flatMap((response): Effect.Effect<CompactionResponse | CompactionCheckpointResponse> => {
           if (options?.mechanism === "trigger")
             return response instanceof CompactionCheckpointResponse
@@ -173,7 +127,8 @@ const make = (options: LayerOptions) =>
         }),
       )
     }
-    const test = Test.of({
+    return Test.of({
+      ...script.controls,
       compact,
       stream,
       generate: (request) =>
@@ -185,75 +140,11 @@ const make = (options: LayerOptions) =>
             return Effect.die("TestLLM response ended without a terminal finish event")
           }),
         ),
-      requests: () => Effect.sync(() => [...requests]),
-      push: (...input) =>
-        Effect.sync(() => {
-          responses.push(...input)
-        }),
-      always: (response) =>
-        Effect.sync(() => {
-          fallback = response
-        }),
-      serve: (responder) =>
-        Effect.sync(() => {
-          fallback = responder
-        }),
-      wait,
-      gate: () =>
-        Effect.gen(function* () {
-          const gate = {
-            started: yield* Effect.acquireRelease(Queue.unbounded<void>(), Queue.shutdown),
-            release: yield* Latch.make(),
-          }
-          activeGate = gate
-          const release = Effect.sync(() => {
-            if (activeGate === gate) activeGate = undefined
-          }).pipe(Effect.andThen(gate.release.open), Effect.asVoid)
-          yield* Effect.addFinalizer(() => release)
-          return {
-            started: Queue.take(gate.started),
-            release,
-          }
-        }),
     })
-
-    return { test, requests }
   })
 
 /** Provides one shared implementation under the normal client and test-control tags. */
 export const testLayer = (options: LayerOptions = {}) =>
   Layer.effectContext(
-    Effect.map(make(options), (implementation) =>
-      Context.make(LLMClient.Service, implementation.test).pipe(Context.add(Test, implementation.test)),
-    ),
+    Effect.map(make(options), (test) => Context.make(LLMClient.Service, test).pipe(Context.add(Test, test))),
   )
-
-/** @deprecated Use testLayer; retained for published callers of the legacy control interface. */
-export const layer = (options: LayerOptions = {}) =>
-  Layer.effect(
-    Service,
-    Effect.map(make(options), (implementation) =>
-      Service.of({
-        requests: implementation.requests,
-        push: implementation.test.push,
-        always: implementation.test.always,
-        wait: implementation.test.wait,
-        gate: implementation.test.gate(),
-        client: implementation.test,
-      }),
-    ),
-  )
-
-/** @deprecated testLayer provides LLMClient.Service directly. */
-export const clientLayer = Layer.effect(
-  LLMClient.Service,
-  Effect.map(Service, (service) => service.client),
-)
-
-export const push = (...responses: readonly Response[]) => Service.use((service) => service.push(...responses))
-
-export const always = (response: Response) => Service.use((service) => service.always(response))
-
-export const wait = (count: number) => Service.use((service) => service.wait(count))
-
-export const gate = Service.use((service) => service.gate)

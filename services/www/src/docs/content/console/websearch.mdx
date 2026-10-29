@@ -3,7 +3,7 @@ title: "Web Search"
 description: "Hosted web search for OpenCode through Console."
 ---
 
-Console provides hosted web search to connected OpenCode v2 users. A workspace owner or admin enables it once for the workspace, without giving members a separate search provider key.
+Console provides hosted web search to connected OpenCode users. A workspace owner or admin enables it once for the workspace, without giving members a separate search provider key.
 
 Each successful search costs **$0.01** and counts toward the workspace balance and member spending limits.
 
@@ -19,7 +19,7 @@ Each member then connects OpenCode to the workspace with `/connect`.
 /connect
 ```
 
-OpenCode loads **OpenCode Web Search** from the workspace's managed configuration. Members do not need to set `websearch.provider` or add a provider API key.
+The workspace configuration selects **OpenCode Web Search** as the default provider. Members do not need to set `websearch.provider` or add a provider API key. A member who sets their own `websearch.provider` keeps that choice instead.
 
 ## Search
 

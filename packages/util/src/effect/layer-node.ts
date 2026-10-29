@@ -1,4 +1,5 @@
-import { Brand, Context, Effect, Layer, type Scope } from "effect"
+import { Brand, Context, Effect, Layer, Scope } from "effect"
+import { Teardown } from "../teardown.js"
 
 export * as LayerNode from "./layer-node.js"
 
@@ -233,6 +234,7 @@ export interface CompileOptions {
 }
 
 type Resolved = {
+  readonly name: string
   readonly implementation: RuntimeLayer
   readonly dependencies: readonly Resolved[]
   readonly shared: boolean
@@ -274,6 +276,7 @@ export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): 
         return definition.dependencies.flatMap((dependency) => resolve(dependency, isShared))
       if (definition.kind === "unbound") throw new Error(`Unbound layer node: ${definition.name}`)
       const node: Resolved = {
+        name: definition.name,
         implementation: definition.implementation,
         dependencies: definition.dependencies.flatMap((dependency) => resolve(dependency, isShared)),
         shared: isShared,
@@ -310,7 +313,9 @@ export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): 
       const dependencies = node.dependencies.map(build)
       // Acquisition uses the selected cache, while lazy LayerMaps inherit the enclosing shared cache.
       const implementation = Layer.suspend(() => node.implementation.pipe(Layer.provide([ambient, ...dependencies])))
-      const layer = Layer.fromBuild((_, scope) => buildContext(implementation, node.shared ? memoMap : local, scope))
+      const layer = Layer.fromBuild((_, scope) =>
+        trackRelease(node.name, scope, () => buildContext(implementation, node.shared ? memoMap : local, scope)),
+      )
       layers.set(node, layer)
       return layer
     }
@@ -320,6 +325,27 @@ export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): 
       scope,
     )
   }) as Layer.Layer<A, E>
+}
+
+// The node's scope releases sequentially in reverse order, so a finalizer added before the build runs last and one
+// added after it runs first: together they bracket the release of everything this node acquired. The build must
+// not start before the first finalizer is added; Layer builds fork their scopes as soon as they are called.
+function trackRelease<A, E, R>(name: string, scope: Scope.Scope, build: () => Effect.Effect<A, E, R>) {
+  return Effect.gen(function* () {
+    let settle = () => {}
+    yield* Scope.addFinalizer(
+      scope,
+      Effect.sync(() => settle()),
+    )
+    const result = yield* build()
+    yield* Scope.addFinalizer(
+      scope,
+      Effect.sync(() => {
+        settle = Teardown.track(`layer ${name} releasing`)
+      }),
+    )
+    return result
+  })
 }
 
 class BuildResult extends Context.Service<BuildResult, Context.Context<never>>()("@opencode/LayerNode/BuildResult") {}

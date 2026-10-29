@@ -1,6 +1,6 @@
 export * as SessionUsage from "./usage.js"
 
-import type { Usage } from "@opencode/ai"
+import type { Usage } from "@opencode/ai/effect"
 import { Money } from "@opencode/schema/money"
 import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { Model } from "@opencode/schema/model"
@@ -39,8 +39,6 @@ export function calculateCost(costs: Model.Info["cost"], usage: TokenUsage.Info)
 export type Recorded = {
   readonly tokens: TokenUsage.Info
   readonly cost: Money.USD
-  /** Subscription allowance the endpoint reports the request used, such as OpenCode Go's. */
-  readonly allowance?: Money.USD
 }
 
 export const record = (usage: Usage | undefined, costs: Model.Info["cost"]): Recorded => {
@@ -50,15 +48,11 @@ export const record = (usage: Usage | undefined, costs: Model.Info["cost"]): Rec
     // What an endpoint says it charged beats the catalog, which can't see its peak pricing, subscriptions or routing.
     // A reported zero is authoritative.
     cost: usage?.cost === undefined ? calculateCost(costs, normalized) : Money.USD.make(usage.cost),
-    ...(usage?.allowance === undefined ? {} : { allowance: Money.USD.make(usage.allowance) }),
   }
 }
 
 export const add = (a: Recorded, b: Recorded): Recorded => ({
   cost: Money.USD.make(a.cost + b.cost),
-  ...(a.allowance === undefined && b.allowance === undefined
-    ? {}
-    : { allowance: Money.USD.make((a.allowance ?? 0) + (b.allowance ?? 0)) }),
   tokens: {
     input: a.tokens.input + b.tokens.input,
     output: a.tokens.output + b.tokens.output,

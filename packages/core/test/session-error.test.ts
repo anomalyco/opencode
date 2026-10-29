@@ -16,7 +16,7 @@ import {
   UnknownProviderError,
   ToolFailure,
   HttpContext,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { RequestExecutor } from "@opencode/ai/route"
 import { Permission } from "@opencode/core/permission"
 import { ID } from "@opencode/core/model"
@@ -128,6 +128,51 @@ describe("toSessionError", () => {
     )
     expect(SessionRunnerRetry.isRetryable(other)).toBe(true)
     expect(toSessionError(other)).toMatchObject({ type: "provider.rate-limit", retryAfterMs: 10_000 })
+  })
+
+  test("tells a budget on the requested model from one pausing all model use", () => {
+    const refuse = (body: unknown) =>
+      RequestExecutor.httpFailure({
+        message: "A budget policy for this model has been reached.",
+        url: "https://opencode.ai/inference/openai/v1/chat/completions",
+        status: 429,
+        responseBody: JSON.stringify(body),
+      })
+    const modelBody = {
+      type: "error",
+      error: { type: "BudgetLimitError", message: "A budget policy for this model has been reached." },
+      metadata: { coverage: "models", resetsAt: "2026-11-01T00:00:00.000Z" },
+    }
+    const model = refuse(modelBody)
+    expect(SessionRunnerRetry.isRetryable(model)).toBe(false)
+    expect(toSessionError(model)).toEqual({
+      type: "provider.model-budget-limit",
+      message: "You've reached the spend limit for this model. Switch models to keep going.",
+      status: 429,
+      response: { body: JSON.stringify(modelBody) },
+    })
+
+    // Google clients get Google's envelope, with the same metadata in its ErrorInfo.
+    const all = refuse({
+      error: {
+        code: 429,
+        status: "RESOURCE_EXHAUSTED",
+        message: "Policy budget exceeded",
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+            reason: "BudgetLimitError",
+            domain: "opencode.ai",
+            metadata: { coverage: "all", resetsAt: "2026-11-01T00:00:00.000Z" },
+          },
+        ],
+      },
+    })
+    expect(SessionRunnerRetry.isRetryable(all)).toBe(false)
+    expect(toSessionError(all)).toMatchObject({
+      type: "provider.budget-limit",
+      message: "Workspace usage limit reached. Model use is paused until the limit resets.",
+    })
   })
 
   test("preserves the permission rejection type without exposing internal fields", () => {

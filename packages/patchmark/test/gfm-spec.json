@@ -1,0 +1,194 @@
+[
+  {
+    "example": 198,
+    "section": "Tables (extension)",
+    "start_line": 3326,
+    "end_line": 3345,
+    "markdown": "| foo | bar |\n| --- | --- |\n| baz | bim |\n",
+    "html": "<table>\n<thead>\n<tr>\n<th>foo</th>\n<th>bar</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>baz</td>\n<td>bim</td>\n</tr>\n</tbody>\n</table>\n"
+  },
+  {
+    "example": 199,
+    "section": "Tables (extension)",
+    "start_line": 3350,
+    "end_line": 3369,
+    "markdown": "| abc | defghi |\n:-: | -----------:\nbar | baz\n",
+    "html": "<table>\n<thead>\n<tr>\n<th align=\"center\">abc</th>\n<th align=\"right\">defghi</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td align=\"center\">bar</td>\n<td align=\"right\">baz</td>\n</tr>\n</tbody>\n</table>\n"
+  },
+  {
+    "example": 200,
+    "section": "Tables (extension)",
+    "start_line": 3374,
+    "end_line": 3395,
+    "markdown": "| f\\|oo  |\n| ------ |\n| b `\\|` az |\n| b **\\|** im |\n",
+    "html": "<table>\n<thead>\n<tr>\n<th>f|oo</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>b <code>|</code> az</td>\n</tr>\n<tr>\n<td>b <strong>|</strong> im</td>\n</tr>\n</tbody>\n</table>\n"
+  },
+  {
+    "example": 201,
+    "section": "Tables (extension)",
+    "start_line": 3400,
+    "end_line": 3423,
+    "markdown": "| abc | def |\n| --- | --- |\n| bar | baz |\n> bar\n",
+    "html": "<table>\n<thead>\n<tr>\n<th>abc</th>\n<th>def</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>bar</td>\n<td>baz</td>\n</tr>\n</tbody>\n</table>\n<blockquote>\n<p>bar</p>\n</blockquote>\n"
+  },
+  {
+    "example": 202,
+    "section": "Tables (extension)",
+    "start_line": 3425,
+    "end_line": 3452,
+    "markdown": "| abc | def |\n| --- | --- |\n| bar | baz |\nbar\n\nbar\n",
+    "html": "<table>\n<thead>\n<tr>\n<th>abc</th>\n<th>def</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>bar</td>\n<td>baz</td>\n</tr>\n<tr>\n<td>bar</td>\n<td></td>\n</tr>\n</tbody>\n</table>\n<p>bar</p>\n"
+  },
+  {
+    "example": 203,
+    "section": "Tables (extension)",
+    "start_line": 3457,
+    "end_line": 3465,
+    "markdown": "| abc | def |\n| --- |\n| bar |\n",
+    "html": "<p>| abc | def |\n| --- |\n| bar |</p>\n"
+  },
+  {
+    "example": 204,
+    "section": "Tables (extension)",
+    "start_line": 3471,
+    "end_line": 3495,
+    "markdown": "| abc | def |\n| --- | --- |\n| bar |\n| bar | baz | boo |\n",
+    "html": "<table>\n<thead>\n<tr>\n<th>abc</th>\n<th>def</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>bar</td>\n<td></td>\n</tr>\n<tr>\n<td>bar</td>\n<td>baz</td>\n</tr>\n</tbody>\n</table>\n"
+  },
+  {
+    "example": 205,
+    "section": "Tables (extension)",
+    "start_line": 3499,
+    "end_line": 3511,
+    "markdown": "| abc | def |\n| --- | --- |\n",
+    "html": "<table>\n<thead>\n<tr>\n<th>abc</th>\n<th>def</th>\n</tr>\n</thead>\n</table>\n"
+  },
+  {
+    "example": 279,
+    "section": "Task list items (extension)",
+    "start_line": 5108,
+    "end_line": 5116,
+    "markdown": "- [ ] foo\n- [x] bar\n",
+    "html": "<ul>\n<li><input disabled=\"\" type=\"checkbox\"> foo</li>\n<li><input checked=\"\" disabled=\"\" type=\"checkbox\"> bar</li>\n</ul>\n"
+  },
+  {
+    "example": 280,
+    "section": "Task list items (extension)",
+    "start_line": 5120,
+    "end_line": 5135,
+    "markdown": "- [x] foo\n  - [ ] bar\n  - [x] baz\n- [ ] bim\n",
+    "html": "<ul>\n<li><input checked=\"\" disabled=\"\" type=\"checkbox\"> foo\n<ul>\n<li><input disabled=\"\" type=\"checkbox\"> bar</li>\n<li><input checked=\"\" disabled=\"\" type=\"checkbox\"> baz</li>\n</ul>\n</li>\n<li><input disabled=\"\" type=\"checkbox\"> bim</li>\n</ul>\n"
+  },
+  {
+    "example": 491,
+    "section": "Strikethrough (extension)",
+    "start_line": 7714,
+    "end_line": 7718,
+    "markdown": "~~Hi~~ Hello, world!\n",
+    "html": "<p><del>Hi</del> Hello, world!</p>\n"
+  },
+  {
+    "example": 492,
+    "section": "Strikethrough (extension)",
+    "start_line": 7723,
+    "end_line": 7730,
+    "markdown": "This ~~has a\n\nnew paragraph~~.\n",
+    "html": "<p>This ~~has a</p>\n<p>new paragraph~~.</p>\n"
+  },
+  {
+    "example": 621,
+    "section": "Autolinks (extension)",
+    "start_line": 9213,
+    "end_line": 9217,
+    "markdown": "www.commonmark.org\n",
+    "html": "<p><a href=\"http://www.commonmark.org\">www.commonmark.org</a></p>\n"
+  },
+  {
+    "example": 622,
+    "section": "Autolinks (extension)",
+    "start_line": 9221,
+    "end_line": 9225,
+    "markdown": "Visit www.commonmark.org/help for more information.\n",
+    "html": "<p>Visit <a href=\"http://www.commonmark.org/help\">www.commonmark.org/help</a> for more information.</p>\n"
+  },
+  {
+    "example": 623,
+    "section": "Autolinks (extension)",
+    "start_line": 9233,
+    "end_line": 9240,
+    "markdown": "Visit www.commonmark.org.\n\nVisit www.commonmark.org/a.b.\n",
+    "html": "<p>Visit <a href=\"http://www.commonmark.org\">www.commonmark.org</a>.</p>\n<p>Visit <a href=\"http://www.commonmark.org/a.b\">www.commonmark.org/a.b</a>.</p>\n"
+  },
+  {
+    "example": 624,
+    "section": "Autolinks (extension)",
+    "start_line": 9247,
+    "end_line": 9260,
+    "markdown": "www.google.com/search?q=Markup+(business)\n\nwww.google.com/search?q=Markup+(business)))\n\n(www.google.com/search?q=Markup+(business))\n\n(www.google.com/search?q=Markup+(business)\n",
+    "html": "<p><a href=\"http://www.google.com/search?q=Markup+(business)\">www.google.com/search?q=Markup+(business)</a></p>\n<p><a href=\"http://www.google.com/search?q=Markup+(business)\">www.google.com/search?q=Markup+(business)</a>))</p>\n<p>(<a href=\"http://www.google.com/search?q=Markup+(business)\">www.google.com/search?q=Markup+(business)</a>)</p>\n<p>(<a href=\"http://www.google.com/search?q=Markup+(business)\">www.google.com/search?q=Markup+(business)</a></p>\n"
+  },
+  {
+    "example": 625,
+    "section": "Autolinks (extension)",
+    "start_line": 9266,
+    "end_line": 9270,
+    "markdown": "www.google.com/search?q=(business))+ok\n",
+    "html": "<p><a href=\"http://www.google.com/search?q=(business))+ok\">www.google.com/search?q=(business))+ok</a></p>\n"
+  },
+  {
+    "example": 626,
+    "section": "Autolinks (extension)",
+    "start_line": 9277,
+    "end_line": 9284,
+    "markdown": "www.google.com/search?q=commonmark&hl=en\n\nwww.google.com/search?q=commonmark&hl;\n",
+    "html": "<p><a href=\"http://www.google.com/search?q=commonmark&amp;hl=en\">www.google.com/search?q=commonmark&amp;hl=en</a></p>\n<p><a href=\"http://www.google.com/search?q=commonmark\">www.google.com/search?q=commonmark</a>&amp;hl;</p>\n"
+  },
+  {
+    "example": 627,
+    "section": "Autolinks (extension)",
+    "start_line": 9288,
+    "end_line": 9292,
+    "markdown": "www.commonmark.org/he<lp\n",
+    "html": "<p><a href=\"http://www.commonmark.org/he\">www.commonmark.org/he</a>&lt;lp</p>\n"
+  },
+  {
+    "example": 628,
+    "section": "Autolinks (extension)",
+    "start_line": 9299,
+    "end_line": 9309,
+    "markdown": "http://commonmark.org\n\n(Visit https://encrypted.google.com/search?q=Markup+(business))\n\nAnonymous FTP is available at ftp://foo.bar.baz.\n",
+    "html": "<p><a href=\"http://commonmark.org\">http://commonmark.org</a></p>\n<p>(Visit <a href=\"https://encrypted.google.com/search?q=Markup+(business)\">https://encrypted.google.com/search?q=Markup+(business)</a>)</p>\n<p>Anonymous FTP is available at <a href=\"ftp://foo.bar.baz\">ftp://foo.bar.baz</a>.</p>\n"
+  },
+  {
+    "example": 629,
+    "section": "Autolinks (extension)",
+    "start_line": 9325,
+    "end_line": 9329,
+    "markdown": "foo@bar.baz\n",
+    "html": "<p><a href=\"mailto:foo@bar.baz\">foo@bar.baz</a></p>\n"
+  },
+  {
+    "example": 630,
+    "section": "Autolinks (extension)",
+    "start_line": 9333,
+    "end_line": 9337,
+    "markdown": "hello@mail+xyz.example isn't valid, but hello+xyz@mail.example is.\n",
+    "html": "<p>hello@mail+xyz.example isn't valid, but <a href=\"mailto:hello+xyz@mail.example\">hello+xyz@mail.example</a> is.</p>\n"
+  },
+  {
+    "example": 631,
+    "section": "Autolinks (extension)",
+    "start_line": 9343,
+    "end_line": 9356,
+    "markdown": "a.b-c_d@a.b\n\na.b-c_d@a.b.\n\na.b-c_d@a.b-\n\na.b-c_d@a.b_\n",
+    "html": "<p><a href=\"mailto:a.b-c_d@a.b\">a.b-c_d@a.b</a></p>\n<p><a href=\"mailto:a.b-c_d@a.b\">a.b-c_d@a.b</a>.</p>\n<p>a.b-c_d@a.b-</p>\n<p>a.b-c_d@a.b_</p>\n"
+  },
+  {
+    "example": 652,
+    "section": "Disallowed Raw HTML (extension)",
+    "start_line": 9647,
+    "end_line": 9658,
+    "markdown": "<strong> <title> <style> <em>\n\n<blockquote>\n  <xmp> is disallowed.  <XMP> is also disallowed.\n</blockquote>\n",
+    "html": "<p><strong> &lt;title> &lt;style> <em></p>\n<blockquote>\n  &lt;xmp> is disallowed.  &lt;XMP> is also disallowed.\n</blockquote>\n"
+  }
+]

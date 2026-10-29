@@ -203,7 +203,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(nėra atsakymo)",
   "ui.question.review.notAnswered": "(neatsakyta)",
   "ui.question.multiHint": "Pasirinkite visus tinkamus atsakymus",
-  "ui.question.singleHint": "Pasirinkite vieną atsakymą",
   "ui.question.custom.placeholder": "Įveskite savo atsakymą…",
   "ui.tool.loadedFile": "Įkelta {{path}}",
   "ui.tool.loadedSkill": "Įkeltas įgūdis {{name}}",

@@ -1,6 +1,7 @@
 export * as SessionRecentText from "./recent-text.js"
 
 import type { SessionMessage } from "./message.js"
+import type { SessionStored } from "./stored.js"
 
 const TOOL_OUTPUT_MAX_CHARS = 1_250
 
@@ -12,7 +13,7 @@ export const kept = (message: SessionMessage.CompactionCompleted) =>
   typeof message.metadata?.recent === "string" ? message.metadata.recent : ""
 
 /** One message as the recent, verbatim part of a summary shows it. Empty for messages that part leaves out. */
-export const messageToText = (message: SessionMessage.Info): string => {
+export const messageToText = (message: SessionMessage.Info | SessionStored.User): string => {
   switch (message.type) {
     // Earlier summaries and instruction updates are handled outside the recent part.
     case "compaction":

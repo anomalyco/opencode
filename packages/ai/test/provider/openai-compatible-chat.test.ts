@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMEvent, LLMRequest, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
@@ -41,6 +41,46 @@ const usageChunk = (usage: object) => ({
 })
 
 describe("OpenAI-compatible Chat route", () => {
+  it.effect("serializes user and tool video for unknown compatible providers", () =>
+    Effect.gen(function* () {
+      const inline = "data:video/mp4;base64,AAEC"
+      const url = "https://example.com/clip.mp4"
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAICompatibleChat.route
+            .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+            .model({ id: "video-model" }),
+          messages: [
+            Message.user([
+              Message.media(Media.fromDataUrl(inline)),
+              Message.media(Media.url(url, { mediaType: "video/mp4" })),
+            ]),
+            Message.assistant(ToolCallPart.make({ id: "call_video", name: "read", input: {} })),
+            Message.tool({
+              id: "call_video",
+              name: "read",
+              result: { type: "content", value: [{ type: "file", uri: url, mime: "video/mp4" }] },
+            }),
+          ],
+        }),
+      )
+      expect(prepared.body.messages[0]).toEqual({
+        role: "user",
+        content: [
+          { type: "video_url", video_url: { url: inline } },
+          { type: "video_url", video_url: { url } },
+        ],
+      })
+      expect(prepared.body.messages.slice(-2)).toEqual([
+        { role: "tool", tool_call_id: "call_video", content: "" },
+        {
+          role: "user",
+          content: [{ type: "video_url", video_url: { url } }],
+        },
+      ])
+    }),
+  )
+
   it.effect("prepares generic Chat target", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -611,7 +651,49 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
-  it.effect("rejects content after a terminal chunk", () =>
+  it.effect("preserves late text and reasoning for replay without changing the finished tool call", () =>
+    Effect.gen(function* () {
+      const details = [{ type: "reasoning.encrypted", data: "opaque", id: "late-reasoning" }]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ reasoning_content: "First" }),
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: "{}" } }] }),
+              deltaChunk({}, "tool_calls"),
+              deltaChunk({ content: " world" }),
+              deltaChunk({ refusal: " (refusal)" }),
+              deltaChunk({ reasoning_content: " then" }),
+              deltaChunk({ reasoning: " more" }),
+              deltaChunk({ reasoning_text: " thoughts", reasoning_details: details }, "stop"),
+              usageChunk({ prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello world (refusal)")
+      expect(response.reasoning).toBe("First then more thoughts")
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_calls" })
+      expect(response.usage).toMatchObject({ inputTokens: 11, outputTokens: 7 })
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: {} }])
+      expect(response.toolCalls).toHaveLength(1)
+      expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
+      expect(response.events.findIndex(LLMEvent.is.reasoningEnd)).toBeLessThan(
+        response.events.findIndex(LLMEvent.is.toolCall),
+      )
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(replay.body.messages[0]).toMatchObject({
+        role: "assistant",
+        content: "Hello world (refusal)",
+        reasoning_content: "First then more thoughts",
+        reasoning_details: details,
+      })
+    }),
+  )
+
+  it.effect("rejects tool changes after a terminal chunk", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(
         Effect.provide(

@@ -4,23 +4,6 @@
   [data-popper-positioner] {
     pointer-events: none;
   }
-
-  /* ::selection { */
-  /*   background-color: color-mix(in srgb, var(--color-primary) 33%, transparent); */
-  /*   background-color: var(--color-primary); */
-  /*   color: var(--color-background); */
-  /* } */
-}
-
-.no-scrollbar {
-  &::-webkit-scrollbar {
-    display: none;
-  }
-  /* Hide scrollbar for IE, Edge and Firefox */
-  & {
-    -ms-overflow-style: none; /* IE and Edge */
-    scrollbar-width: none; /* Firefox */
-  }
 }
 
 .sr-only {
@@ -33,14 +16,6 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border-width: 0;
-}
-
-.truncate-start {
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-  direction: rtl;
-  text-align: left;
 }
 
 .text-12-regular {
@@ -63,7 +38,7 @@
 
 .text-12-mono {
   font-family: var(--font-family-mono);
-  font-feature-settings: var(--font-feature-settings-mono);
+  font-feature-settings: var(--font-family-mono--font-feature-settings);
   font-size: var(--font-size-small);
   font-style: normal;
   font-weight: var(--font-weight-regular);
@@ -91,7 +66,7 @@
 
 .text-14-mono {
   font-family: var(--font-family-mono);
-  font-feature-settings: var(--font-feature-settings-mono);
+  font-feature-settings: var(--font-family-mono--font-feature-settings);
   font-size: var(--font-size-base);
   font-style: normal;
   font-weight: var(--font-weight-regular);

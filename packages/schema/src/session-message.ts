@@ -6,7 +6,7 @@ import { Content } from "./tool.js"
 import { Location } from "./location.js"
 import { Model } from "./model.js"
 import { Project } from "./project.js"
-import { Prompt } from "./prompt.js"
+import { Attachment, Prompt } from "./prompt.js"
 import { DateTimeUtcFromMillis, PositiveInt, RelativePath, statics } from "./schema.js"
 import { ascending } from "./identifier.js"
 import { Shell as ShellSchema } from "./shell.js"
@@ -82,6 +82,13 @@ export const User = Schema.Struct({
   skills: Prompt.fields.skills,
   type: Schema.tag("user"),
 }).annotate({ identifier: "Session.Message.User" })
+
+/** A {@link User} whose files may stay on the server, for clients that opt into `experimental-media-uri`. */
+export interface MediaUser extends Schema.Schema.Type<typeof MediaUser> {}
+export const MediaUser = Schema.Struct({
+  ...User.fields,
+  files: Schema.Array(Attachment).pipe(optional),
+}).annotate({ identifier: "Session.Message.MediaUser" })
 
 export interface Synthetic extends Schema.Schema.Type<typeof Synthetic> {}
 export const Synthetic = Schema.Struct({
@@ -227,8 +234,6 @@ export const Assistant = Schema.Struct({
   /** Step-level native data, such as a provider's reason for blocking a response. */
   native: Native.pipe(optional),
   cost: Money.USD.pipe(optional),
-  /** Subscription allowance the step used instead of money, such as OpenCode Go's. */
-  allowance: Money.USD.pipe(optional),
   tokens: TokenUsage.Info.pipe(optional),
   error: SessionError.Error.pipe(optional),
   retry: AssistantRetry.pipe(optional),
@@ -322,3 +327,19 @@ export type Info =
   | Compaction
   | Idle
 export type Type = Info["type"]
+
+/** {@link Info} with {@link MediaUser} for clients that opt into `experimental-media-uri`. */
+export const MediaInfo = Schema.Union([
+  AgentSelected,
+  ModelSelected,
+  LocationSwitched,
+  MediaUser,
+  Synthetic,
+  System,
+  Skill,
+  Shell,
+  Assistant,
+  Compaction,
+  Idle,
+]).annotate({ identifier: "Session.Message.MediaInfo" })
+export type MediaInfo = Exclude<Info, User> | MediaUser

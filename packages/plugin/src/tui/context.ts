@@ -72,8 +72,6 @@ export interface Data {
     root(sessionID: string): string
     family(sessionID: string): string[]
     cost(sessionID: string): number
-    /** Subscription allowance used instead of money, such as OpenCode Go's, in USD. */
-    allowance(sessionID: string): number
     status(sessionID: string): "idle" | "running"
     readonly pending: {
       list(sessionID: string): SessionInboxInfo[]

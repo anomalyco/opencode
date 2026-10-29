@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "name": "@opencode/core",
   "type": "module",
   "license": "MIT",
@@ -22,6 +22,7 @@
     "benchmark:location": "bun run script/benchmark-location.ts",
     "benchmark:location-memory": "bun run script/benchmark-location-memory.ts",
     "build": "bun run script/build.ts",
+    "pack": "bun run script/pack.ts",
     "update-models-snapshot": "bun run script/update-models-snapshot.ts",
     "test": "bun run script/test.ts",
     "typecheck": "bun check --no-script -b -p tsconfig.tests.json",
@@ -97,11 +98,8 @@
     "fast-check": "catalog:"
   },
   "dependencies": {
-    "@ai-sdk/cohere": "3.0.27",
-    "@ai-sdk/perplexity": "3.0.26",
-    "@ai-sdk/provider": "3.0.8",
-    "@ai-sdk/provider-utils": "4.0.23",
-    "@ai-sdk/vercel": "2.0.39",
+    "@ai-sdk/provider": "3.0.19",
+    "@ai-sdk/provider-utils": "4.0.62",
     "@ff-labs/fff-bun": "0.10.5",
     "@ff-labs/fff-node": "0.10.5",
     "@lydell/node-pty": "catalog:",
@@ -122,7 +120,7 @@
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "3.1.0",
-    "gitlab-ai-provider": "6.19.0",
+    "gitlab-ai-provider": "6.23.1",
     "gray-matter": "4.0.3",
     "htmlparser2": "8.0.2",
     "http-proxy-agent": "7.0.2",

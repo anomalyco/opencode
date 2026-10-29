@@ -12,7 +12,7 @@ import { classifyProviderFailure, providerErrorMessage } from "../provider-error
 import { headerDetails, responseHttp, Service, type HttpMiddleware, type Interface } from "./executor-service.js"
 
 export { responseHttp, Service } from "./executor-service.js"
-export type { HttpHandler, HttpMiddleware, Interface } from "./executor-service.js"
+export type { HttpHandler, HttpMiddleware, Interface, RequestExecutorService } from "./executor-service.js"
 
 const normalizedHeaders = (headers: Headers.Headers) =>
   Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]))

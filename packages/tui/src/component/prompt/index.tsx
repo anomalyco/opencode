@@ -50,7 +50,7 @@ import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { useConfig } from "../../config"
 import { usePromptMove } from "./move"
-import { resolvePastedAttachments } from "./local-attachment"
+import { promptFilesForServer, resolvePastedAttachments } from "./local-attachment"
 import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { useArgs } from "../../context/args"
@@ -70,6 +70,7 @@ import { directoryRecentValue } from "../../prompt/directory-completion"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
 import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
+import { limitLabel, useUsageLimits } from "../usage"
 
 export type PromptProps = {
   sessionID?: string
@@ -1324,7 +1325,7 @@ export function Prompt(props: PromptProps) {
           sessionID: target,
           name: slashHead.name,
           text: slashHead.arguments,
-          files: entry.files,
+          files: promptFilesForServer(entry.files, terminalEnvironment.localServer === true),
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
@@ -1365,7 +1366,7 @@ export function Prompt(props: PromptProps) {
         .prompt({
           sessionID: target,
           text: inputText,
-          files: entry.files,
+          files: promptFilesForServer(entry.files, terminalEnvironment.localServer === true),
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
@@ -1482,7 +1483,7 @@ export function Prompt(props: PromptProps) {
     }, 0)
   }
 
-  function pasteAttachment(file: { filename?: string; uri: string }) {
+  function pasteAttachment(file: { filename?: string; uri: string; path?: string }) {
     const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
     const virtualText = promptAttachmentLabel(store.prompt.files, { uri: file.uri, name: file.filename })
@@ -1502,6 +1503,7 @@ export function Prompt(props: PromptProps) {
     const part: NonNullable<PromptInfo["files"]>[number] = {
       uri: file.uri,
       name: file.filename,
+      path: file.path,
       mention: {
         start: extmarkStart,
         end: extmarkEnd,
@@ -1570,6 +1572,20 @@ export function Prompt(props: PromptProps) {
       variant: undefined,
     },
   )
+  // What the workspace's limits leave for the selected model, once it is running low. Only OpenCode Console limits
+  // models, so only a model it serves loads them.
+  const limits = useUsageLimits()
+  createEffect(() => {
+    const selected = local.model.current()
+    if (selected && limits.served(selected.providerID) && limits.info() === undefined) limits.load()
+  })
+  const limit = createMemo(() => {
+    const selected = local.model.current()
+    const model = limits
+      .models()
+      .find((item) => item.providerID === selected?.providerID && item.id === selected?.modelID)
+    return model ? limitLabel(limits.usage(model), model) : undefined
+  })
   const highlight = createMemo(() => {
     if (muted()) return theme.border.base
     if (store.mode === "shell") return theme.text.action.primary.selected
@@ -1845,6 +1861,7 @@ export function Prompt(props: PromptProps) {
                 model={promptDisplay().modelLabel}
                 provider={promptDisplay().providerLabel}
                 variant={promptDisplay().variant}
+                limit={limit()}
                 muted={!!muted()}
                 highlight={highlight()}
                 agentAlpha={agentMetaAlpha()}

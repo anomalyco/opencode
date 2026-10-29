@@ -370,6 +370,8 @@ export function reduceSessionRows(
     })
     usage.previousTurnCache = { read: last.tokens.cache.read, model: last.model }
   }
+  // An execution failure that repeats the error of the turn's last step or compaction is already on screen.
+  let shownError: SessionMessageAssistant["error"]
   const entries = [
     ...messages.filter((message) => !pending.has(message.id)),
     ...pendingCompactions,
@@ -377,10 +379,15 @@ export function reduceSessionRows(
   ].reduce<ProjectionEntry[]>((rows, message) => {
     if (message.type !== "assistant") {
       if (message.type === "idle") {
+        if (message.error && (message.error.type !== shownError?.type || message.error.message !== shownError.message))
+          rows.push({ entry: { type: "message", messageID: message.id }, path: [], closesPrevious: true })
+        shownError = undefined
         flushTurn(rows)
         return rows
       }
       if (message.type === "synthetic" && !message.description?.trim()) return rows
+      if (message.type === "compaction" && message.status !== "running")
+        shownError = message.status === "failed" ? message.error : undefined
       if (message.type === "compaction" && message.status === "completed" && usage) usage.previousTurnCache = undefined
       rows.push({
         entry: { type: "message", messageID: message.id },
@@ -390,6 +397,7 @@ export function reduceSessionRows(
       return rows
     }
     usage?.steps.push(message)
+    shownError = message.error
     const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
@@ -422,63 +430,6 @@ export function cacheReuseDrop(previous: CacheUsage | undefined, current: CacheU
   // OpenAI cache reads can move between one and two 1,024-token buckets without a material loss of reuse.
   if (current.model.providerID === "openai" && drop >= 1_024 && drop <= 2_048) return
   return drop > 0 ? drop : undefined
-}
-
-// `legacy` marks a session without idle markers, where a turn ends at the next prompt. Reactive
-// callers should pass it from a shared memo: the default scans every message, which subscribes
-// the footer to the whole history.
-export function turnDuration(
-  message: SessionMessageAssistant,
-  messages: SessionMessageInfo[],
-  position?: number,
-  legacy = legacyTurns(messages),
-) {
-  if (message.time.completed === undefined) return 0
-  const index = position ?? messages.findIndex((item) => item.id === message.id)
-  const input = messages[inputIndex(messages, index === -1 ? messages.length : index, legacy)]
-  return Math.max(0, message.time.completed - (input?.time.created ?? message.time.created))
-}
-
-export function turnTokensPerSecond(
-  message: SessionMessageAssistant,
-  messages: SessionMessageInfo[],
-  position?: number,
-  legacy = legacyTurns(messages),
-) {
-  const index = position ?? messages.findIndex((item) => item.id === message.id)
-  const end = index === -1 ? messages.length : index + 1
-  const start = inputIndex(messages, end, legacy)
-  const steps = messages
-    .slice(start + 1, end)
-    .filter((item): item is SessionMessageAssistant => item.type === "assistant")
-  const durations = steps.flatMap((step) =>
-    step.time.streamed === undefined ? [] : [Math.max(0, step.time.streamed - step.time.created)],
-  )
-  if (steps.length === 0 || durations.length !== steps.length) return
-  const output = steps.reduce((total, step) => total + (step.tokens?.output ?? 0) + (step.tokens?.reasoning ?? 0), 0)
-  const duration = durations.reduce((total, value) => total + value, 0)
-  if (output <= 0 || duration <= 0) return
-  // Aggregate before dividing so each step is weighted by its provider-active duration.
-  return output / (duration / 1_000)
-}
-
-export function legacyTurns(messages: SessionMessageInfo[]) {
-  return !messages.some((message) => message.type === "idle")
-}
-
-function inputIndex(messages: SessionMessageInfo[], end: number, legacy: boolean) {
-  // Reading a sliced prefix subscribes every footer to unrelated historical messages, so walk
-  // back only as far as the turn boundary: the nearest input in legacy sessions, otherwise the
-  // first input after the previous idle marker.
-  let input = -1
-  for (let index = end - 1; index >= 0; index--) {
-    const message = messages[index]
-    if (message.type === "idle") return input
-    if (message.type !== "user" && message.type !== "synthetic") continue
-    if (legacy) return index
-    input = index
-  }
-  return input
 }
 
 function hasTokenUsage(

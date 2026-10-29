@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, Media } from "../../src/index.js"
+import { Image, Media } from "../../src/effect.js"
 import { XAI } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
@@ -24,7 +24,6 @@ describe("xAI Images recorded", () => {
         prompt: "A simple flat black diamond centered on a plain white background.",
         aspect: "1:1",
         resolution: "1K",
-        providerOptions: { responseFormat: "b64_json" },
       })
 
       expect(response.images).toHaveLength(1)
@@ -46,7 +45,6 @@ describe("xAI Images recorded", () => {
         ],
         aspect: "1:1",
         resolution: "1K",
-        providerOptions: { responseFormat: "b64_json" },
       })
 
       expect(response.image.mediaType).toMatch(/^image\/(jpeg|png)$/)

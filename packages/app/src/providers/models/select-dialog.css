@@ -36,3 +36,206 @@
     padding-inline: 0;
   }
 }
+
+[data-component="dialog-v2"]:has(.model-dialog) [data-slot="dialog-container"] {
+  width: min(calc(100vw - 24px), 480px);
+  min-height: 0;
+  border-radius: 10px;
+  background: var(--v2-background-bg-base);
+}
+
+.model-dialog {
+  /* The inset lives on the field and the rows, so the scroll area and its scrollbar reach the dialog's edges. */
+  [data-component="search-list"] {
+    padding-top: 6px;
+  }
+
+  [data-component="search-list"] [data-slot="search-list-search"] {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 6px;
+
+    /* Full width across the list's padding, and a hairline on any display. */
+    &::after {
+      height: 1px;
+      margin-inline: -6px;
+      background: var(--v2-border-border-muted);
+      content: "";
+      transform: scaleY(0.5);
+    }
+  }
+
+  [data-component="search-list"] [data-slot="search-list-search"] [data-component="text-input-v2"],
+  [data-component="search-list"]
+    [data-slot="search-list-search"]
+    [data-component="text-input-v2"]:where(:hover, :focus-within):not([data-disabled], [data-invalid]) {
+    height: 28px;
+    padding-inline-end: 2px;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  /* The 24px buttons sit 2px from every edge of the 28px row. */
+  [data-component="search-list"] [data-slot="text-input-v2-trailing"] {
+    margin-inline-end: 0;
+
+    [data-component="icon-button-v2"] [data-slot="icon-svg"] {
+      color: var(--v2-icon-icon-muted);
+    }
+  }
+
+  /* Like a model row: 6px inset, a 16px icon slot and a 6px gap, so the query starts where the model names do. */
+  [data-component="search-list"] [data-slot="search-list-search"] [data-slot="text-input-v2-value"] {
+    gap: 6px;
+  }
+
+  [data-component="search-list"] [data-slot="search-list-search"] [data-slot="text-input-v2-leading-icon"] {
+    width: 22px;
+    padding-inline-start: 6px;
+  }
+
+  /* The stuck header's gradient replaces it; the list measures sections for it, and here they have no box. */
+  [data-component="search-list"] [data-slot="search-list-fade"] {
+    display: none;
+  }
+
+  /* Arrow keys keep the active row clear of the stuck header. */
+  [data-component="search-list"] [data-slot="search-list-scroll"] {
+    scroll-padding-top: 36px;
+  }
+
+  [data-component="search-list"] [data-slot="search-list-results"] {
+    gap: 4px;
+    padding: 0 6px 6px;
+  }
+
+  /*
+   * Without a box, a section no longer bounds its header, so every header sticks for the whole list and the next one
+   * slides over it, as on the home page, instead of pushing it away.
+   */
+  [data-component="search-list"] [data-slot="search-list-section"] {
+    display: contents;
+  }
+
+  /*
+   * The header bleeds across the list's 6px inset so rows scroll under an opaque band; its text lines up with the
+   * model names. It starts right under the divider, so it rests where it sticks.
+   */
+  [data-component="search-list"] [data-slot="search-list-header"] {
+    height: auto;
+    padding-block: 16px 2px;
+    padding-inline: 34px 6px;
+    background: var(--v2-background-bg-base);
+    color: var(--v2-text-text-faint);
+    font-size: 12px;
+    line-height: 18px;
+
+    /* The home page's sticky header fade, faded in by how far rows have scrolled beneath the stuck header. */
+    &::after {
+      position: absolute;
+      top: 100%;
+      inset-inline: 0;
+      height: 16px;
+      background: linear-gradient(
+        180deg,
+        var(--v2-background-bg-base) 0%,
+        color-mix(in srgb, var(--v2-background-bg-base) 92.0456%, transparent) 7.93%,
+        color-mix(in srgb, var(--v2-background-bg-base) 84.9947%, transparent) 14.14%,
+        color-mix(in srgb, var(--v2-background-bg-base) 78.6813%, transparent) 19%,
+        color-mix(in srgb, var(--v2-background-bg-base) 72.9394%, transparent) 22.85%,
+        color-mix(in srgb, var(--v2-background-bg-base) 67.6028%, transparent) 26.05%,
+        color-mix(in srgb, var(--v2-background-bg-base) 62.5055%, transparent) 28.95%,
+        color-mix(in srgb, var(--v2-background-bg-base) 57.4815%, transparent) 31.91%,
+        color-mix(in srgb, var(--v2-background-bg-base) 52.3647%, transparent) 35.27%,
+        color-mix(in srgb, var(--v2-background-bg-base) 46.989%, transparent) 39.4%,
+        color-mix(in srgb, var(--v2-background-bg-base) 41.1884%, transparent) 44.65%,
+        color-mix(in srgb, var(--v2-background-bg-base) 34.7969%, transparent) 51.36%,
+        color-mix(in srgb, var(--v2-background-bg-base) 27.6484%, transparent) 59.9%,
+        color-mix(in srgb, var(--v2-background-bg-base) 19.5767%, transparent) 70.62%,
+        color-mix(in srgb, var(--v2-background-bg-base) 10.416%, transparent) 83.87%,
+        transparent 100%
+      );
+      content: "";
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    &[data-stuck]::after {
+      opacity: var(--model-dialog-header-fade, 0);
+    }
+
+    /*
+     * A header sliding up over the stuck one paints only behind its own text, so its padding never covers the stuck
+     * label as it fades. Once stuck, it fills its whole band again to hide the rows scrolling beneath.
+     */
+    &:not([data-stuck]) {
+      background-clip: content-box;
+    }
+  }
+
+  [data-component="search-list"] [data-slot="search-list-row"] {
+    justify-content: flex-start;
+    gap: 6px;
+    height: 28px;
+    padding-inline: 6px 3px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 440;
+    line-height: var(--line-height-base);
+    letter-spacing: -0.04px;
+  }
+
+  [data-slot="model-dialog-check"] {
+    display: flex;
+    width: 16px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    color: var(--v2-icon-icon-base);
+  }
+
+  [data-slot="model-dialog-name"] {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    align-items: center;
+    gap: 6px;
+  }
+
+  [data-slot="model-dialog-variant"] {
+    display: flex;
+    min-width: 0;
+    max-width: 120px;
+    flex-shrink: 0;
+    align-items: center;
+    color: var(--v2-text-text-muted);
+
+    [data-slot="icon-svg"] {
+      color: var(--v2-icon-icon-muted);
+      translate: 0 0.5px;
+    }
+  }
+}
+
+/* Outranks the list's dark-scheme highlight, which uses a lighter alpha. */
+[data-component="dialog-v2"] .model-dialog [data-component="search-list"] [data-slot="search-list-row"][data-active] {
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="menu-v2-content"][data-slot="model-dialog-flyout"] {
+  position: fixed;
+  /* One width for every model, matching the 160px its placement assumes. */
+  width: 160px;
+  max-height: 400px;
+  overflow-y: auto;
+  animation: none;
+
+  /* The model stats that close the flyout. */
+  > :last-child {
+    font-size: 11px;
+    line-height: 16px;
+    cursor: default;
+    user-select: none;
+  }
+}

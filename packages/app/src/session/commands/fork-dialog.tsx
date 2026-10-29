@@ -1,18 +1,16 @@
-import { Component, createMemo } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
+import { Component, createMemo, For, Show } from "solid-js"
+import { useParams } from "@solidjs/router"
 import { useData } from "@/runtime/server/current"
-import { useComposerState } from "@/composer/persistence"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
-import { List } from "@opencode/ui/list"
-import { showToast } from "@/shell/notifications/toast"
+import { Dialog, DialogBody, DialogTitle, DialogTitleGroup } from "@opencode/ui/dialog"
+import { useFilteredList } from "@opencode/ui/hooks"
+import { Icon } from "@opencode/ui/icon"
+import { TextInput } from "@opencode/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useServerSDK } from "@/runtime/server/client"
-import { base64Encode } from "@opencode/util/encode"
-import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
-import { useWorkspaceLocation } from "@/workspaces/location"
-import { useServer } from "@/runtime/server/current"
-import { sessionHref } from "@/shell/routes/session"
+import { useSessionFork } from "@/session/fork"
+import "@/shell/commands/dialog.css"
+import "@/shell/palette-menu.css"
+import "@/shell/search-list.css"
 
 interface ForkableMessage {
   id: string
@@ -26,14 +24,9 @@ function formatTime(date: Date): string {
 
 export const DialogFork: Component = () => {
   const params = useParams()
-  const navigate = useNavigate()
   const data = useData()
-  const serverSDK = useServerSDK()
-  const location = useWorkspaceLocation()
-  const prompt = useComposerState()
   const dialog = useDialog()
-  const language = useLanguage()
-  const server = useServer()
+  const fork = useSessionFork()
 
   const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
@@ -56,62 +49,121 @@ export const DialogFork: Component = () => {
     return result.reverse()
   })
 
-  const handleSelect = (item: ForkableMessage | undefined) => {
-    if (!item) return
-
+  const handleSelect = (messageID: string) => {
     const sessionID = params.id
 
     if (!sessionID) return
-    const message = data.session.message.get(sessionID, item.id)
 
-    if (message?.type !== "user") return
-
-    const restored = extractPromptFromMessage(message, {
-      directory: location().directory,
-      attachmentName: language.t("common.attachment"),
+    void fork({ sessionID, messageID }).then((opened) => {
+      if (opened) dialog.close()
     })
+  }
 
-    const context = extractPromptContext(message, { directory: location().directory })
-    const dir = base64Encode(location().directory)
+  return <ForkDialog messages={messages()} onSelect={handleSelect} />
+}
 
-    serverSDK.api.session
-      .fork({ sessionID, before: item.id })
-      .then((forked) => {
-        data.session.remember(forked)
-        dialog.close()
-        const target = prompt.capture({ dir, id: forked.id })
-        target.set(restored)
-        target.context.replace([...context.comments, ...context.files])
-        navigate(sessionHref(server.key, forked.id))
-      })
-      .catch((cause: unknown) => {
-        const message = cause instanceof Error ? cause.message : String(cause)
-        showToast({ title: language.t("common.requestFailed"), description: message })
-      })
+export function ForkDialog(props: { messages: ForkableMessage[]; onSelect: (messageID: string) => void }) {
+  const language = useLanguage()
+
+  const select = (item: ForkableMessage | undefined) => {
+    if (item) props.onSelect(item.id)
+  }
+
+  const list = useFilteredList({
+    items: () => props.messages,
+    key: (x) => x.id,
+    filterKeys: ["text"],
+    onSelect: select,
+  })
+
+  let resultsRef: HTMLDivElement | undefined
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    // The pointer leaving the rows clears the highlight, so Enter then forks from the newest match.
+    if (event.key === "Enter" && !event.isComposing && !list.active()) {
+      event.preventDefault()
+      select(list.flat()[0])
+
+      return
+    }
+
+    list.onKeyDown(event)
+    const active = list.active()
+
+    if (!active) return
+    resultsRef?.querySelector(`[data-option-key="${CSS.escape(active)}"]`)?.scrollIntoView({ block: "nearest" })
   }
 
   return (
-    <Dialog>
-      <DialogHeader>
+    <Dialog class="command-palette command-palette-compact fork-dialog" fit>
+      <div class="sr-only">
         <DialogTitle>{language.t("command.session.fork")}</DialogTitle>
-      </DialogHeader>
-      <DialogBody>
-        <List
-          class="flex-1 px-3 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
-          search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
-          emptyMessage={language.t("dialog.fork.empty")}
-          key={(x) => x.id}
-          items={messages}
-          filterKeys={["text"]}
-          onSelect={handleSelect}
-        >
-          {(item) => (
-            <div class="w-full flex items-center gap-2">
-              <span class="truncate flex-1 min-w-0 text-left font-normal">{item.text}</span>
-              <span class="text-text-weak shrink-0 font-normal">{item.time}</span>
+      </div>
+      <DialogBody class="command-palette-body">
+        <div class="palette-menu-search" data-slot="search-list-search">
+          <TextInput
+            type="search"
+            appearance="base"
+            class="!w-full"
+            leadingIcon={<Icon name="magnifying-glass" />}
+            value={list.filter()}
+            onInput={(event) => list.onInput(event.currentTarget.value)}
+            onKeyDown={onKeyDown}
+            placeholder={language.t("common.search.placeholder")}
+            spellcheck={false}
+            autocorrect="off"
+            autocomplete="off"
+            autocapitalize="off"
+            autofocus
+            aria-label={language.t("common.search.placeholder")}
+            showClearButton={!!list.filter()}
+            clearIcon="circle-xmark"
+            clearLabel={language.t("common.clear")}
+            onClearClick={() => list.clear()}
+          />
+        </div>
+        <div class="fork-dialog-section">
+          <DialogTitleGroup description={language.t("dialog.fork.description")} />
+        </div>
+        <div class="search-list-scroll" data-scrollable ref={(el) => (resultsRef = el)}>
+          <Show
+            when={list.flat().length > 0}
+            fallback={
+              <div class="search-list-empty">
+                {language.t(props.messages.length > 0 ? "dialog.fork.search.empty" : "dialog.fork.empty")}
+              </div>
+            }
+          >
+            <div role="listbox" class="search-list-results" data-slot="search-list-results">
+              <For each={list.flat()}>
+                {(item) => (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={list.active() === item.id}
+                    data-option-key={item.id}
+                    data-active={list.active() === item.id ? "" : undefined}
+                    data-slot="search-list-row"
+                    class="search-list-row"
+                    onMouseMove={() => list.setActive(item.id)}
+                    onMouseLeave={() => list.setActive("")}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => select(item)}
+                  >
+                    <span class="search-list-row-text">
+                      <span class="search-list-title" data-weight="regular" dir="auto">
+                        {item.text}
+                      </span>
+                    </span>
+                    <span class="search-list-trailing" dir="auto">
+                      {item.time}
+                    </span>
+                  </button>
+                )}
+              </For>
             </div>
-          )}
-        </List>
+          </Show>
+        </div>
       </DialogBody>
     </Dialog>
   )

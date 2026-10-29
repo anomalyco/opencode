@@ -1,5 +1,4 @@
 import type { JSX } from "solid-js"
-import { DockShell, DockTray } from "@opencode/ui/dock-surface"
 
 export function DockPrompt(props: {
   kind: "question" | "permission"
@@ -13,11 +12,11 @@ export function DockPrompt(props: {
 
   return (
     <div data-component="dock-prompt" data-kind={props.kind} ref={props.ref} onKeyDown={props.onKeyDown}>
-      <DockShell data-slot={slot("body")}>
+      <div data-slot={slot("body")}>
         <div data-slot={slot("header")}>{props.header}</div>
         <div data-slot={slot("content")}>{props.children}</div>
-      </DockShell>
-      <DockTray data-slot={slot("footer")}>{props.footer}</DockTray>
+      </div>
+      <div data-slot={slot("footer")}>{props.footer}</div>
     </div>
   )
 }

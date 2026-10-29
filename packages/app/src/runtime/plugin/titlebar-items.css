@@ -1,0 +1,20 @@
+[data-slot="titlebar-update"] > button {
+  color: light-dark(var(--v2-blue-700), var(--v2-icon-icon-accent));
+  background-color: light-dark(
+    color-mix(in srgb, var(--v2-background-bg-accent) 10%, transparent),
+    color-mix(in srgb, var(--v2-icon-icon-accent) 20%, transparent)
+  );
+}
+
+[data-slot="titlebar-update-label"] {
+  color: light-dark(var(--v2-blue-700), var(--v2-text-text-accent));
+}
+
+@media (hover: hover) {
+  [data-slot="titlebar-update"]:hover > button {
+    background-color: light-dark(
+      color-mix(in srgb, var(--v2-background-bg-accent) 14%, var(--v2-background-bg-deep)),
+      color-mix(in srgb, var(--v2-icon-icon-accent) 25%, var(--v2-background-bg-deep))
+    );
+  }
+}

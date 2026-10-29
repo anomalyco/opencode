@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { Credential } from "@opencode/core/credential"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { CloudflareWorkersAIPlugin } from "@opencode/core/plugin/provider/cloudflare-workers-ai"
@@ -99,6 +100,23 @@ describe("CloudflareWorkersAIPlugin", () => {
         })
         yield* addPlugin()
         expect(required(yield* catalog.get(providerID)).settings).toEqual({ accountId: "acct" })
+      }),
+    ),
+  )
+
+  it.effect("gives the native Workers AI package the account ID of a stored form login", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined }, () =>
+      Effect.gen(function* () {
+        const catalog = yield* seed((provider) => {
+          provider.package = "@opencode/ai/providers/cloudflare-workers-ai"
+        })
+        const credentials = yield* Credential.Service
+        yield* credentials.create({
+          integrationID: Integration.ID.make("cloudflare-workers-ai"),
+          value: Credential.Key.make({ type: "key", key: "secret", metadata: { accountId: "form-acct" } }),
+        })
+        yield* addPlugin()
+        expect(required(yield* catalog.get(providerID)).settings).toEqual({ accountId: "form-acct" })
       }),
     ),
   )

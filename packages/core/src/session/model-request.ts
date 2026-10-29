@@ -10,7 +10,7 @@ import {
   type Media,
   Message,
   SystemPart,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import type { StreamOptions } from "@opencode/ai/route"
 import type {
   SessionCompaction,
@@ -50,6 +50,10 @@ const OUTPUT_TOKEN_FALLBACK = 32_000
 const OUTPUT_TOKEN_MAX = 256_000
 // Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
 const ESTIMATE_ERROR = 0.15
+// Share of the window a turn leaves unused when its output limit is fitted to the room left. Providers count a few
+// tokens more than we do (chat template, tool schemas), and strict ones reject input plus output past the window.
+// Compaction sizes its summary against its own reserve instead.
+const WINDOW_HEADROOM = 0.01
 // Never ask for less; only reachable with automatic compaction off, since it keeps the window from filling this far.
 const OUTPUT_TOKEN_MIN = 1_024
 
@@ -82,10 +86,13 @@ export interface Input {
 }
 
 /** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
-export const outputLimit = (limit: Model.Info["limit"], inputTokens?: Input["inputTokens"]) => {
+export const outputLimit = (limit: Model.Info["limit"], inputTokens?: Input["inputTokens"], headroom = 0) => {
   const requested = Math.min(limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK, OUTPUT_TOKEN_MAX)
   if (inputTokens === undefined || limit.context <= 0) return requested
-  const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
+  const room =
+    Math.floor(limit.context * (1 - headroom)) -
+    inputTokens.measured -
+    Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
   return Math.min(requested, Math.max(OUTPUT_TOKEN_MIN, room))
 }
 
@@ -138,9 +145,10 @@ const unsupportedMedia = (
   return `ERROR: Cannot read ${name ? `"${name}"` : modality} (this model does not support ${unsupported} input). Inform the user.`
 }
 
+// The inline budget counts base64 characters, which are ASCII, so a string's length is its size without scanning it.
 // Remote and provider-referenced media carry no local payload and never count toward the inline budget.
 const mediaBytes = (media: Media.Asset) => {
-  if (media.source.type === "base64") return Buffer.byteLength(media.source.data)
+  if (media.source.type === "base64") return media.source.data.length
   if (media.source.type === "bytes") return Math.ceil(media.source.data.byteLength / 3) * 4
   return 0
 }
@@ -160,7 +168,7 @@ const replaceMedia = (
       const result = part.result
       const value = result.value.map((item): Content => {
         if (item.type !== "file") return item
-        const text = replace({ mime: item.mime, name: item.name, bytes: () => Buffer.byteLength(item.uri) })
+        const text = replace({ mime: item.mime, name: item.name, bytes: () => item.uri.length })
         return text === undefined ? item : { type: "text", text }
       })
       return value.every((item, index) => item === result.value[index])
@@ -185,7 +193,7 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
       if (part.type === "media") return isImage(part.media.mediaType) ? [mediaBytes(part.media)] : []
       if (part.type !== "tool-result" || part.result.type !== "content") return []
       return part.result.value.flatMap((item: Content) =>
-        item.type === "file" && isImage(item.mime) ? [Buffer.byteLength(item.uri)] : [],
+        item.type === "file" && isImage(item.mime) ? [item.uri.length] : [],
       )
     }),
   )
@@ -238,8 +246,12 @@ export const layer = Layer.effect(
       }
       // Remember which tool each definition object came from. Hooks rename a tool by moving
       // its definition to a new key, so after the hook we find the tool by object identity.
+      // Definitions are shared across steps and sessions, and hooks may edit schemas in place,
+      // so each hook gets a deep copy.
       const given = new Map(
-        tools.definitions.map((t) => [{ description: t.description, input: { ...t.inputSchema } }, t] as const),
+        tools.definitions.map(
+          (t) => [{ description: t.description, input: JSON.parse(JSON.stringify(t.inputSchema)) }, t] as const,
+        ),
       )
       // Hooks see the default output limit and may change or remove it. Titles and generate keep the provider default,
       // because their reasoning is hard to budget.
@@ -250,9 +262,11 @@ export const layer = Layer.effect(
           system: input.system,
           messages: input.messages,
           options:
-            kind === "primary" || kind === "compaction"
-              ? { maxTokens: outputLimit(model.limit, input.inputTokens) }
-              : {},
+            kind === "primary"
+              ? { maxTokens: outputLimit(model.limit, input.inputTokens, WINDOW_HEADROOM) }
+              : kind === "compaction"
+                ? { maxTokens: outputLimit(model.limit, input.inputTokens) }
+                : {},
         },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),
       )
@@ -286,6 +300,7 @@ export const layer = Layer.effect(
         },
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
+        cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
         messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
@@ -317,17 +332,20 @@ export const layer = Layer.effect(
       const http: StreamOptions["http"] = hasHttpHooks
         ? (req, handler) =>
             Effect.gen(function* () {
-              const before = yield* hooks.trigger("session", "http.request", {
-                ...scope,
-                request: yield* HttpClientRequest.toWeb(req),
-              })
-              let sent = HttpClientRequest.fromWeb(before.request)
-              if (before.request.body)
-                sent = HttpClientRequest.bodyUint8Array(
-                  sent,
-                  new Uint8Array(yield* Effect.promise(() => before.request.clone().arrayBuffer())),
-                  before.request.headers.get("content-type") ?? undefined,
-                )
+              const request = yield* HttpClientRequest.toWeb(req)
+              const before = yield* hooks.trigger("session", "http.request", { ...scope, request })
+              // A hook that kept the request object cannot have replaced its body, so the original body is sent as is.
+              // Reading it back would hold a second full copy of the request, screenshots included, for the whole call.
+              const sent =
+                before.request === request
+                  ? HttpClientRequest.setBody(HttpClientRequest.fromWeb(request), req.body)
+                  : before.request.body
+                    ? HttpClientRequest.bodyUint8Array(
+                        HttpClientRequest.fromWeb(before.request),
+                        new Uint8Array(yield* Effect.promise(() => before.request.clone().arrayBuffer())),
+                        before.request.headers.get("content-type") ?? undefined,
+                      )
+                    : HttpClientRequest.fromWeb(before.request)
               const res = yield* handler(sent)
               const after = yield* hooks.trigger("session", "http.response", {
                 ...scope,

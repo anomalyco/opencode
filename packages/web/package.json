@@ -2,7 +2,7 @@
   "name": "@opencode/web",
   "type": "module",
   "license": "MIT",
-  "version": "2.1.4",
+  "version": "2.2.0",
   "scripts": {
     "dev": "astro dev",
     "dev:remote": "VITE_API_URL=https://api.opencode.ai astro dev",
@@ -12,15 +12,14 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "12.6.3",
-    "@astrojs/markdown-remark": "6.3.1",
-    "@astrojs/solid-js": "5.1.0",
-    "@astrojs/starlight": "0.34.3",
+    "@astrojs/cloudflare": "14.1.4",
+    "@astrojs/markdown-remark": "7.3.2",
+    "@astrojs/solid-js": "7.1.0",
+    "@astrojs/starlight": "catalog:",
     "@fontsource/ibm-plex-mono": "5.2.5",
-    "@shikijs/transformers": "3.20.0",
     "@solid-primitives/resize-observer": "catalog:",
     "@types/luxon": "catalog:",
-    "astro": "5.7.13",
+    "astro": "catalog:",
     "diff": "catalog:",
     "js-base64": "3.7.7",
     "lang-map": "0.4.0",
@@ -28,7 +27,6 @@
     "marked": "catalog:",
     "marked-shiki": "catalog:",
     "rehype-autolink-headings": "7.1.0",
-    "remeda": "catalog:",
     "shiki": "catalog:",
     "solid-js": "catalog:",
     "toolbeam-docs-theme": "0.4.8",
@@ -36,7 +34,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "@astrojs/check": "0.9.6",
+    "@astrojs/check": "0.9.11",
     "typescript": "catalog:"
   }
 }

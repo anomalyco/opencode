@@ -37,7 +37,7 @@ describe("settings timeline detail migration", () => {
 })
 
 describe("settings schema", () => {
-  test("keeps the values extensions copy out once and discards retired preferences", () => {
+  test("keeps the values plugins copy out once and discards retired preferences", () => {
     const settings = decode({
       general: {
         showStatus: true,
@@ -90,12 +90,14 @@ describe("settings schema", () => {
   test("supplies the existing defaults for an empty document", () => {
     expect(decode({})).toEqual({
       general: {
-        showFileTree: false,
         timelineDetail: timelinePresets[2].value,
         showCustomAgents: false,
         showTurnDiffs: false,
+        backgroundActivity: "left",
+        timelineWidth: "comfortable",
+        newIcons: false,
+        foldUserMessages: false,
         mobileTitlebarPosition: "top",
-        terminalPlacement: "side",
         followUpBehavior: "steer",
       },
       appearance: {
@@ -104,11 +106,12 @@ describe("settings schema", () => {
         sans: "",
         terminal: "",
         tabLayout: "horizontal",
+        reduceMotion: "system",
       },
       keybinds: {},
       permissions: { autoApprove: false, autoApproveProjects: {} },
       workspaces: { defaultDestination: "last-used", lastUsed: {} },
-      notifications: { agent: true, permissions: true, errors: false },
+      notifications: { agent: false, permissions: true, errors: false },
       sounds: {
         agentEnabled: true,
         agent: "staplebops-01",
@@ -116,6 +119,7 @@ describe("settings schema", () => {
         permissions: "staplebops-02",
         errorsEnabled: true,
         errors: "nope-03",
+        interfaceEnabled: true,
       },
     })
   })
@@ -128,6 +132,8 @@ describe("settings schema", () => {
         releaseNotes: undefined,
         reasoningMode: 3,
         followUpBehavior: "invalid",
+        backgroundActivity: "invalid",
+        timelineWidth: "invalid",
       },
       appearance: { fontSize: "large", mono: "Custom Mono", tabLayout: "vertical", showProjectName: true },
       permissions: { autoApprove: true, autoApproveProjects: { on: true, off: false, bad: "yes" } },
@@ -142,6 +148,8 @@ describe("settings schema", () => {
       autoSave: false,
       timelineDetail: timelinePresets[2].value,
       followUpBehavior: "steer",
+      backgroundActivity: "left",
+      timelineWidth: "comfortable",
     })
     expect(settings.appearance).toEqual({
       fontSize: 14,
@@ -149,6 +157,7 @@ describe("settings schema", () => {
       sans: "",
       terminal: "",
       tabLayout: "vertical",
+      reduceMotion: "system",
     })
     expect(settings.permissions).toEqual({ autoApprove: true, autoApproveProjects: { on: true, off: false } })
     expect(settings.workspaces).toEqual({ defaultDestination: "new", lastUsed: { good: "workspace" } })

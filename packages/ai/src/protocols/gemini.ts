@@ -541,7 +541,6 @@ const mapUsage = (
     reasoningTokens: thoughts,
     totalTokens: ProviderShared.totalTokens(promptTokens, outputTokens, usage.totalTokenCount ?? undefined),
     cost: usage.cost,
-    allowance: usage.opencode?.allowance,
     providerMetadata: providerMetadata(metadataKey, metadata),
   })
 }
@@ -550,7 +549,7 @@ const mapUsage = (
 // input plus output equal to the response's final context size, under-reporting billed input; the summed billed counts
 // remain in provider metadata.
 const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: string) => {
-  const sum = (field: Exclude<keyof GeminiUsage, "opencode">) =>
+  const sum = (field: keyof GeminiUsage) =>
     ProviderShared.sumTokens(...requests.map((usage) => usage[field] ?? undefined))
   return mapUsage(
     {
@@ -560,7 +559,6 @@ const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: st
       thoughtsTokenCount: sum("thoughtsTokenCount"),
       // Every continued request is billed on its own.
       cost: sum("cost"),
-      opencode: { allowance: ProviderShared.sumTokens(...requests.map((usage) => usage.opencode?.allowance)) },
     },
     metadataKey,
     {

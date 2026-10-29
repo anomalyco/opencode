@@ -2,11 +2,10 @@ import { Duration, Effect, Schedule, Schema, Stream } from "effect"
 import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/http"
 import { Auth, type AuthInput } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
-import { RequestExecutorService, type Interface } from "./executor-service.js"
+import type { Interface } from "./executor-service.js"
 import { RequestExecutor } from "./executor.js"
 import { MediaProtocol } from "./media-protocol.js"
 import { Generation, isTerminal } from "../generation.js"
-import type { Media } from "../media.js"
 import { isRetryable } from "../provider-error.js"
 import {
   AIError,
@@ -16,6 +15,8 @@ import {
   ProviderID,
   UnsupportedOperationError,
   mergeHttpOptions,
+  mergeProviderOptions,
+  type ProviderOptions,
 } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
@@ -24,7 +25,13 @@ export type Execute = Interface["execute"]
 
 /** The minimum a media request must carry for the route to build a transport request. */
 export interface MediaRequest {
-  readonly model: { readonly id: string; readonly provider: ProviderID; readonly http?: HttpOptions }
+  readonly model: {
+    readonly id: string
+    readonly provider: ProviderID
+    readonly http?: HttpOptions
+    readonly providerOptions?: ProviderOptions
+  }
+  readonly providerOptions?: ProviderOptions
   readonly http?: HttpOptions
 }
 
@@ -35,6 +42,8 @@ export interface ModelInput {
   readonly baseURL?: string
   readonly headers?: Record<string, string>
   readonly http?: HttpOptions
+  /** Defaults under each request's `providerOptions`. */
+  readonly providerOptions?: ProviderOptions
 }
 
 /** A provider facade's `configure(...)` input as the `ModelInput` every media selector shares, minus the model id. */
@@ -179,8 +188,6 @@ export const queued = <Request extends MediaRequest, Response, Token>(
   const encodeToken = Schema.encodeSync(protocol.token)
 
   const generationRoute = (token: Token, http: HttpOptions | undefined, execute: Execute) => {
-    const materialize = (asset: Media.Asset) =>
-      asset.materialize().pipe(Effect.provideService(RequestExecutorService, { execute }))
     // Only the GET exchange retries: a decoded terminal failure (`output.ended`) can be a `ProviderInternal` too, and
     // re-reading it would spin until the caller's deadline.
     const poll = <A>(operation: {
@@ -192,7 +199,7 @@ export const queued = <Request extends MediaRequest, Response, Token>(
     }) =>
       transport.call("GET", operation.path(token), http, execute).pipe(
         Effect.retry({ schedule: READ_RETRY, while: isRetryable }),
-        Effect.flatMap((sent) => operation.decode(sent.response, { token, auth: sent.auth, materialize })),
+        Effect.flatMap((sent) => operation.decode(sent.response, { token, auth: sent.auth })),
       )
     const status = poll(protocol.status)
     const cancel = protocol.cancel
@@ -355,6 +362,7 @@ const makeTransport = <Request extends MediaRequest>(
     ) {
       yield* rejectUnsupported(input.protocol.id, input.protocol.provider, request, protocol.unsupported)
       const http = mergeHttpOptions(routeHttp, request.model.http, request.http)
+      const providerOptions = mergeProviderOptions(request.model.providerOptions, request.providerOptions)
       const headers = Headers.fromInput(http?.headers)
       const prepared =
         protocol.prepare === undefined
@@ -365,7 +373,10 @@ const makeTransport = <Request extends MediaRequest>(
               ),
             )
       // Sanitize after merging so model-level overlays are covered; the model value is restored, not sanitized.
-      const resolved: Request = { ...sanitizeSurrogates({ ...prepared, http }), model: request.model }
+      const resolved: Request = {
+        ...sanitizeSurrogates({ ...prepared, http, providerOptions }),
+        model: request.model,
+      }
       const body = yield* protocol.from(resolved)
       const url = withQuery(
         withQuery(
@@ -379,7 +390,7 @@ const makeTransport = <Request extends MediaRequest>(
     }),
     /** Bodiless follow-up call (status, result, cancel) with the same auth and headers as `submit`. */
     call: (method: AuthInput["method"], path: string, http: HttpOptions | undefined, execute: Execute) => {
-      // Provider-issued absolute URLs (fal `status_url`) are used as-is; everything else resolves against the base.
+      // Provider-issued absolute URLs are used as-is; everything else resolves against the base.
       const url = withQuery(/^https?:\/\//.test(path) ? new URL(path) : baseURL(path), http?.query)
       for (const [key, value] of Object.entries(input.endpoint.query ?? {})) url.searchParams.set(key, value)
       return send({ method, url, headers: Headers.fromInput(http?.headers), request: { http } }, execute)

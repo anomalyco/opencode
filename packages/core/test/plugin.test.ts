@@ -1,12 +1,17 @@
 import { expect } from "bun:test"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import path from "path"
-import { Clock, Deferred, Effect } from "effect"
+import { Clock, Deferred, Effect, Fiber, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Command } from "@opencode/core/command"
 import { Bus } from "@opencode/core/bus"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { Rpc } from "@opencode/core/rpc"
+import { Event } from "@opencode/schema/config"
 import { PluginModule } from "@opencode/core/plugin/module"
 import { Session } from "@opencode/core/session"
 import { SessionSchema } from "@opencode/core/session/schema"
@@ -105,6 +110,63 @@ it.live("loads a local plugin with its configured options", () =>
   }),
 )
 
+it.live("serves a local plugin's GUI bundle, and reloads it alone when only the bundle changes", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const bus = yield* Bus.Service
+    yield* plugins.awaitActivation
+    const directory = yield* Effect.acquireRelease(
+      Effect.promise(() => mkdtemp(path.join(tmpdir(), "opencode-plugin-gui-"))),
+      (directory) => Effect.promise(() => rm(directory, { recursive: true, force: true })),
+    )
+    const starts = path.join(directory, "starts")
+    const bundle = "module.exports = { default: function setup() {}, main: function main() {} }"
+    yield* Effect.promise(async () => {
+      await writeFile(
+        path.join(directory, "index.ts"),
+        `import { appendFileSync } from "node:fs"\nexport default { id: "fixture.gui", setup() { appendFileSync(${JSON.stringify(starts)}, "x") } }`,
+      )
+      await writeFile(path.join(directory, "gui-experimental.js"), bundle)
+    })
+    const updates: string[] = []
+    yield* Effect.acquireRelease(
+      bus.listen((event) =>
+        Effect.sync(() => void (event.type === Plugin.Event.Updated.type && updates.push(event.type))),
+      ),
+      (unsubscribe) => unsubscribe,
+    )
+    const modules = yield* PluginModule.make().pipe(Effect.provide(Watcher.testLayer))
+    const load = Effect.gen(function* () {
+      const definition = yield* modules.load({ type: "add", target: directory, options: { token: "secret" } })
+      if ("pending" in definition || "blocked" in definition) return yield* Effect.die("Local plugin was not loaded")
+      return definition
+    })
+    const first = yield* load
+    yield* plugins.activate([first])
+    const id = Plugin.ID.make("fixture.gui")
+
+    expect((yield* plugins.list()).find((plugin) => plugin.id === id)?.features).toEqual({ server: true, gui: true })
+    const served = yield* plugins.gui(id)
+    expect(served?.code).toBe(bundle)
+    // The GUI gets the options its server entry gets.
+    expect(served?.options).toEqual({ token: "secret" })
+    // Windows receive the revision, so it is opaque: the plugin's options never reach them.
+    expect(served?.revision).toMatch(/^[0-9a-f]{64}$/)
+    expect(yield* plugins.gui(Plugin.ID.make("missing"))).toBeUndefined()
+
+    // Editing only the bundle reloads the GUI, as editing a TUI entry reloads only the TUI: the server entry keeps
+    // running, and the app hears of the new bundle.
+    yield* Effect.promise(() => writeFile(path.join(directory, "gui-experimental.js"), `${bundle}\n// edited`))
+    const edited = yield* load
+    const published = updates.length
+    yield* plugins.activate([edited])
+
+    expect(edited.revision).toBe(first.revision)
+    expect((yield* plugins.gui(id))?.revision).not.toBe(served?.revision)
+    expect(updates.length).toBe(published + 1)
+    expect(yield* Effect.promise(() => Bun.file(starts).text())).toBe("x")
+  }).pipe(Effect.scoped),
+)
 it.effect("unloading a plugin removes its commands and runs cleanup", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
@@ -642,5 +704,23 @@ it.effect("activates a saved credential through the context", () =>
 
     expect(yield* plugins.list()).toMatchObject([{ id: "activate-credential", state: { status: "active" } }])
     expect(yield* integrations.connection.active(integrationID)).toMatchObject({ id: first.id, label: "First" })
+  }),
+)
+
+it.effect("host event subscriptions deliver requested rpc types and ignore unknown types", () =>
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    const host = yield* PluginHost.make(yield* Plugin.Service)
+    const fiber = yield* host.event
+      // @ts-expect-error untyped JavaScript plugins can still pass unknown type names
+      .subscribe({ types: ["rpc.test.ping", "test.unknown"] })
+      .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+
+    yield* bus.publish(Event.Updated, {})
+    yield* bus.publish(Rpc.eventDefinition("rpc.test.ping"), { value: 1 })
+
+    expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.type, event.data])).toEqual([
+      ["rpc.test.ping", { value: 1 }],
+    ])
   }),
 )

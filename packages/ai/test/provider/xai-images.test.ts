@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Headers, HttpClientRequest } from "effect/http"
-import { Image, ImageClient } from "../../src/index.js"
+import { Image, ImageClient } from "../../src/effect.js"
 import { XAI } from "../../src/providers.js"
 import { Auth } from "../../src/route.js"
 import { it } from "../lib/effect.js"
@@ -39,7 +39,6 @@ describe("xAI Images", () => {
       expect(response.images[1].mediaType).toBe("application/octet-stream")
       expect(response.images[1].source).toEqual({ type: "url", url: "https://api.xai.test/image.jpg" })
       expect(response.usage).toBeUndefined()
-      expect(response.notices).toEqual([{ type: "other", message: "xAI Images doesn't offer 4K; used 2k" }])
       expect(response.providerMetadata).toEqual({ xai: { usage: { num_images: 2 } } })
     }).pipe(
       Effect.provide(
