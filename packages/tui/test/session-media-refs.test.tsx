@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { createAppFixture } from "./fixture/app"
 import { directory, json } from "./fixture/tui-client"
 import { takeDraft } from "../src/component/prompt/draft-stash"
+import type { PromptInfo } from "../src/prompt/history"
 import { copyPlugin } from "./fixture/fixture"
 
 const hash = "e".repeat(64)
@@ -146,7 +147,8 @@ async function messageAction(app: App, action: string) {
   app.mockInput.pressEnter()
 }
 
-// Waits for the requests to settle, then lets a late composer update land before reading the frame.
+// Waits for `done`, then gives anything that shouldn't follow, such as a rewind after a failed read or a composer
+// change, time to show before reading the frame.
 async function settled(app: App, done: (frame: string) => boolean) {
   await app.waitForFrame(done)
   await Bun.sleep(50)
@@ -177,8 +179,10 @@ async function undoAfterLeaving(input: { inbox: unknown[]; undo: (app: App) => P
   app.mockInput.pressEnter()
   await app.waitForFrame((frame) => !frame.includes("Looked at it"))
   media.resolve()
-  await app.waitForFrame(() => app.calls.length > 1)
-  return { calls: app.calls, draft: takeDraft(session.id)?.prompt }
+  // The rewind's request is logged on arrival, but the draft is written only once its response is back.
+  let draft: PromptInfo | undefined
+  await app.waitForFrame(() => (draft ??= takeDraft(session.id)?.prompt) !== undefined)
+  return { calls: app.calls, draft }
 }
 
 test("an /undo that finishes after its session closed keeps the prompt in that session's draft", async () => {
@@ -203,12 +207,13 @@ test("undoing a queued prompt after its session closed cancels it in that sessio
   expect(draft?.files?.map((file) => file.uri)).toEqual([pngURI])
 }, 20000)
 
-// Undoes a prompt whose image read fails. The composer is read from the draft it leaves when the app closes.
-async function undoWithFailedRead(media: Respond, queued: boolean) {
+// Undoes a prompt whose image read fails, until `done` shows the outcome. The composer is read from the draft it leaves
+// when the app closes.
+async function undoWithFailedRead(media: Respond, queued: boolean, done: (frame: string, app: App) => boolean) {
   const result = await (async () => {
     await using app = await openSession({ inbox: queued ? [queuedShot] : [], respond: { [MEDIA]: media } })
     await (queued ? undoQueued(app) : undoLast(app))
-    const frame = await settled(app, (frame) => app.calls.length > 0 && /no longer|unavailable|503/i.test(frame))
+    const frame = await settled(app, (frame) => app.calls.length > 0 && done(frame, app))
     return { calls: app.calls, frame }
   })()
   return { ...result, draft: takeDraft(session.id)?.prompt }
@@ -218,7 +223,13 @@ for (const queued of [false, true]) {
   const name = queued ? "undoing a queued prompt" : "/undo"
 
   test(`${name} goes ahead without an image the server no longer has`, async () => {
-    const { calls, frame, draft } = await undoWithFailedRead(gone, queued)
+    // The warning shows before the rewind; the prompt reaches the composer once it's done.
+    const { calls, frame, draft } = await undoWithFailedRead(
+      gone,
+      queued,
+      (frame, app) =>
+        frame.includes("no longer stored") && !!app.renderer.currentFocusedEditor?.plainText.includes("What is in"),
+    )
 
     expect(calls).toEqual([`${MEDIA} 404`, queued ? `${CANCEL} 204` : `${REVERT} 200`])
     expect(draft?.text).toBe("What is in [Image 1]")
@@ -227,7 +238,7 @@ for (const queued of [false, true]) {
   }, 20000)
 
   test(`${name} keeps the message when an image read fails for another reason`, async () => {
-    const { calls, draft } = await undoWithFailedRead(unavailable, queued)
+    const { calls, draft } = await undoWithFailedRead(unavailable, queued, (frame) => /unavailable|503/i.test(frame))
 
     expect(calls).toEqual([`${MEDIA} 503`])
     expect(draft).toBeUndefined()
@@ -239,7 +250,7 @@ test("a revert the server refuses leaves the composer as it was", async () => {
     respond: { [REVERT]: () => json({ name: "BusyError", data: {} }, { status: 409 }) },
   })
   await messageAction(app, "Revert")
-  const frame = await settled(app, () => app.calls.length === 2)
+  const frame = await settled(app, () => app.calls.includes(`${REVERT} 409`))
 
   expect(app.calls).toEqual([`${MEDIA} 200`, `${REVERT} 409`])
   expect(shown(frame)).toBe(1)
@@ -248,7 +259,7 @@ test("a revert the server refuses leaves the composer as it was", async () => {
 test("a revert goes ahead without an image the server no longer has", async () => {
   await using app = await openSession({ respond: { [MEDIA]: gone } })
   await messageAction(app, "Revert")
-  const frame = await settled(app, () => app.calls.length === 2)
+  const frame = await settled(app, (frame) => shown(frame) === 2)
 
   expect(app.calls).toEqual([`${MEDIA} 404`, `${REVERT} 200`])
   expect(shown(frame)).toBe(2)
@@ -258,7 +269,7 @@ test("a revert goes ahead without an image the server no longer has", async () =
 test("a revert whose image read fails for another reason does not revert", async () => {
   await using app = await openSession({ respond: { [MEDIA]: unavailable } })
   await messageAction(app, "Revert")
-  const frame = await settled(app, (frame) => app.calls.length > 0 && !frame.includes("Message Actions"))
+  const frame = await settled(app, () => app.calls.includes(`${MEDIA} 503`))
 
   expect(app.calls).toEqual([`${MEDIA} 503`])
   expect(shown(frame)).toBe(1)
@@ -267,7 +278,7 @@ test("a revert whose image read fails for another reason does not revert", async
 test("forking from a prompt whose image is gone does not fork", async () => {
   await using app = await openSession({ respond: { [MEDIA]: gone } })
   await messageAction(app, "Fork")
-  await settled(app, (frame) => app.calls.length > 0 && !frame.includes("Message Actions"))
+  await settled(app, () => app.calls.includes(`${MEDIA} 404`))
 
   expect(app.calls).toEqual([`${MEDIA} 404`])
 }, 20000)
@@ -313,7 +324,8 @@ for (const queued of [false, true]) {
       await leaveAndReturn(app)
       await app.mockInput.typeText("typed note")
       media.resolve()
-      await settled(app, () => app.calls.length > 1)
+      // The rewind finishes by appending the prompt to the live composer, after what was typed.
+      await app.waitForFrame(() => !!app.renderer.currentFocusedEditor?.plainText.includes("What is in"))
       await leaveAndReturn(app)
       return { calls: app.calls, frame: await app.waitForFrame((frame) => frame.includes("typed note")) }
     })()
