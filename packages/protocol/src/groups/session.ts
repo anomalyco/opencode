@@ -123,6 +123,33 @@ export const SessionsQuery = Schema.Struct({
   cursor: Session.ListCursor.pipe(Schema.optional),
 }).annotate({ identifier: "SessionsQuery" })
 
+/** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
+export const SessionFamilyEndpoint = HttpApiEndpoint.get(
+  "sessionFamily.get",
+  "/api/experimental/session/:sessionID/family",
+  {
+    params: { sessionID: Session.ID },
+    success: Schema.Struct({
+      data: Schema.Struct({
+        rootID: Session.ID,
+        sessions: Schema.Array(PublicSessionInfo),
+        permissions: Schema.Array(Permission.Request),
+        forms: Schema.Array(Form.Info),
+      }).annotate({ identifier: "Session.Family" }),
+    }),
+    error: SessionNotFoundError,
+  },
+).annotateMerge(
+  OpenApi.annotations({
+    identifier: "experimental.sessionFamily.get",
+    summary: "Get session family",
+    description:
+      "Retrieve every session in the tree that contains the session, with the family's pending permission requests and forms. The result is complete, not paginated: the root comes first, then its descendants ordered by creation time. Pending requests come only from locations that are running; a location that is not running holds none. Experimental: may change without compatibility guarantees.",
+    // The route shares the `server.experimental` group with the persistent PTY prototype; tag it with sessions.
+    transform: (operation) => ({ ...operation, tags: ["session"] }),
+  }),
+)
+
 export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI extends HttpApiMiddleware.AnyId, FormS>(
   sessionLocationMiddleware: Context.Key<I, S>,
   formLocationMiddleware: Context.Key<FormI, FormS>,
@@ -244,27 +271,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           identifier: "session.get",
           summary: "Get session",
           description: "Retrieve a session by ID.",
-        }),
-      ),
-    )
-    .add(
-      HttpApiEndpoint.get("session.family", "/api/session/:sessionID/family", {
-        params: { sessionID: Session.ID },
-        success: Schema.Struct({
-          data: Schema.Struct({
-            rootID: Session.ID,
-            sessions: Schema.Array(PublicSessionInfo),
-            permissions: Schema.Array(Permission.Request),
-            forms: Schema.Array(Form.Info),
-          }).annotate({ identifier: "Session.Family" }),
-        }),
-        error: SessionNotFoundError,
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "session.family",
-          summary: "Get session family",
-          description:
-            "Retrieve every session in the tree that contains the session, with the family's pending permission requests and forms. The result is complete, not paginated: the root comes first, then its descendants ordered by creation time. Pending requests come only from locations that are running; a location that is not running holds none.",
         }),
       ),
     )

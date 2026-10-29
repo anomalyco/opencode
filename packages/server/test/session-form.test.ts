@@ -64,7 +64,7 @@ it.live("lists pending forms and permissions only from live Locations, per Sessi
       location: { directory: idle.path },
     })
     expect(imported.status).toBe(200)
-    expect(yield* request("/api/session/ses_child/family")).toMatchObject({
+    expect(yield* request("/api/experimental/session/ses_child/family")).toMatchObject({
       status: 200,
       body: {
         data: {
@@ -82,6 +82,6 @@ it.live("lists pending forms and permissions only from live Locations, per Sessi
         fields: [{ key: "answer", type: "string" }],
       })).status,
     ).toBe(404)
-    expect((yield* request("/api/session/ses_unknown/family")).status).toBe(404)
+    expect((yield* request("/api/experimental/session/ses_unknown/family")).status).toBe(404)
   }).pipe(Effect.scoped),
 )

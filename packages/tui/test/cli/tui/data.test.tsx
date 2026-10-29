@@ -3190,7 +3190,7 @@ function sessionInfo(id: string, parentID: string | undefined, cost = 0) {
 async function mountData(parents: Record<string, string>, costs: Record<string, number> = {}) {
   // A live event stream keeps the connection up, so a reconnect cannot invalidate the family reads under test.
   const calls = createFetch((url) => {
-    const family = url.pathname.match(/^\/api\/session\/([^/]+)\/family$/)
+    const family = url.pathname.match(/^\/api\/experimental\/session\/([^/]+)\/family$/)
     if (family) {
       const rootID = (function up(id: string): string {
         return parents[id] ? up(parents[id]) : id

@@ -317,7 +317,7 @@ test("omits inline tool-result file payloads from read and live tool results whe
 
 test("reads a whole family once and serves its members' reads from it", async () => {
   const setup = sessionFixture((path) => {
-    if (path !== "/api/session/ses_child/family") throw new Error(`Unexpected request: ${path}`)
+    if (path !== "/api/experimental/session/ses_child/family") throw new Error(`Unexpected request: ${path}`)
     return Response.json({
       data: {
         rootID: "ses_root",
@@ -349,7 +349,7 @@ test("reads a whole family once and serves its members' reads from it", async ()
       setup.data.session.permission.sync("ses_grandchild"),
       setup.data.session.form.sync("ses_grandchild"),
     ])
-    expect(setup.requests).toEqual(["/api/session/ses_child/family"])
+    expect(setup.requests).toEqual(["/api/experimental/session/ses_child/family"])
   } finally {
     setup.dispose()
   }
@@ -359,7 +359,7 @@ test("events recorded during a family read survive its response", async () => {
   const release = Promise.withResolvers<void>()
   const setup = sessionFixture(async (path) => {
     if (path === "/api/session/ses_new") return Response.json({ data: member("ses_new", "ses_child") })
-    if (path !== "/api/session/ses_root/family") throw new Error(`Unexpected request: ${path}`)
+    if (path !== "/api/experimental/session/ses_root/family") throw new Error(`Unexpected request: ${path}`)
     await release.promise
     return Response.json({
       data: {
@@ -414,7 +414,7 @@ test("events recorded during a family read survive its response", async () => {
 test("a family read invalidated in flight commits nothing", async () => {
   const release = Promise.withResolvers<void>()
   const setup = sessionFixture(async (path) => {
-    if (path === "/api/session/ses_root/family")
+    if (path === "/api/experimental/session/ses_root/family")
       return Response.json({
         data: {
           rootID: "ses_root",
@@ -459,8 +459,8 @@ test("a family read invalidated in flight commits nothing", async () => {
     expect(setup.data.session.permission.sessions()).toEqual(["ses_new"])
     await setup.data.session.permission.sync("ses_child")
     expect(setup.requests).toEqual([
-      "/api/session/ses_child/family",
-      "/api/session/ses_root/family",
+      "/api/experimental/session/ses_child/family",
+      "/api/experimental/session/ses_root/family",
       "/api/session/ses_child/permission",
     ])
   } finally {
@@ -1545,8 +1545,8 @@ test("reads each running family created while disconnected once, by its root", a
     setup.emit({ type: "server.connected", data: {} })
     await wait(() => setup.data.session.family("ses_root").length === 3)
     expect(setup.data.session.active().toSorted()).toEqual(["ses_child", "ses_grandchild"])
-    expect(setup.requests.filter((path) => path.startsWith("/api/session/ses_"))).toEqual([
-      "/api/session/ses_root/family",
+    expect(setup.requests.filter((path) => /^\/api\/(experimental\/)?session\/ses_/.test(path))).toEqual([
+      "/api/experimental/session/ses_root/family",
     ])
   } finally {
     setup.dispose()
@@ -1627,9 +1627,9 @@ function modelInfo(name: string): ModelInfo {
 function activityFixture(read: () => Response | Promise<Response>, family?: SessionFamily) {
   return sessionFixture((path) => {
     if (path === "/api/session/active") return read()
-    if (family && path === `/api/session/${family.rootID}/family`) return Response.json({ data: family })
+    if (family && path === `/api/experimental/session/${family.rootID}/family`) return Response.json({ data: family })
     // Hydration reads the family of each running Session it has not loaded.
-    const running = path.match(/^\/api\/session\/([^/]+)\/family$/)?.[1]
+    const running = path.match(/^\/api\/experimental\/session\/([^/]+)\/family$/)?.[1]
     if (running)
       return Response.json({
         data: {

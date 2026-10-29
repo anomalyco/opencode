@@ -1866,7 +1866,7 @@ export function createData(config: CreateDataInput) {
         // The family's membership is unknown until the read lands, so events for every Session are recorded.
         return sync.run(`session.family:${sessionID}`, (stale) =>
           observeRead(
-            () => api().session.family({ sessionID }).catch(evictMissing),
+            () => api().experimental.sessionFamily.get({ sessionID }).catch(evictMissing),
             (family, journal) => {
               const ids = new Set(family.sessions.map((session) => session.id))
               // Members the server no longer lists were deleted while this client could not hear it. Sessions created

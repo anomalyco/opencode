@@ -25,8 +25,6 @@ import type {
   SessionActiveOutput,
   SessionGetInput,
   SessionGetOutput,
-  SessionFamilyInput,
-  SessionFamilyOutput,
   SessionRemoveInput,
   SessionRemoveOutput,
   SessionForkInput,
@@ -245,6 +243,8 @@ import type {
   ExperimentalPersistentPtyConnectTokenOutput,
   ExperimentalMediaGetInput,
   ExperimentalMediaGetOutput,
+  ExperimentalSessionFamilyGetInput,
+  ExperimentalSessionFamilyGetOutput,
   ExperimentalScheduleCreateInput,
   ExperimentalScheduleCreateOutput,
   ExperimentalScheduleListInput,
@@ -659,17 +659,6 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}`,
-            successStatus: 200,
-            declaredStatuses: [400, 401, 404],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      family: (input: SessionFamilyInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionFamilyOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/family`,
             successStatus: 200,
             declaredStatuses: [400, 401, 404],
             empty: false,
@@ -1515,6 +1504,19 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+      },
+      sessionFamily: {
+        get: (input: ExperimentalSessionFamilyGetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalSessionFamilyGetOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/family`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
       },
       schedule: {
         create: (input: ExperimentalScheduleCreateInput, requestOptions?: RequestOptions) =>

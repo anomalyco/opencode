@@ -347,7 +347,7 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
-    HttpApiEndpoint.get("sessionFamily", "/api/session/:sessionID/family", {
+    HttpApiEndpoint.get("sessionFamily", "/api/experimental/session/:sessionID/family", {
       params: SessionParams,
       success: Json,
       error: MockNotFound.pipe(HttpApiSchema.status(404)),
