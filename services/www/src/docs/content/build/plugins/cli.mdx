@@ -469,7 +469,8 @@ return unregister
 ```
 
 Tabs can be listed, opened, focused, moved, and closed when session tabs are enabled. `open` leaves focus unchanged;
-`focus` opens the tab when needed.
+`focus` opens the tab when needed. `list` returns the order the tab strip shows, and `move` reorders tabs when
+`tabs.order` is `opened`; a `recent` order is activity-driven, so moving a tab there has no lasting effect.
 
 ```ts
 if (context.ui.tabs.enabled()) {

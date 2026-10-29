@@ -23,6 +23,7 @@ import {
   moveSessionTabHistory,
   NEW_SESSION_TAB_TITLE,
   openSessionTab,
+  orderSessionTabsByRecency,
   recordClosedSessionTab,
   recordSessionTabHistory,
   reopenSessionTab,
@@ -106,6 +107,20 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       if (config.tabs.scope === "cwd") return store.cwd[paths.cwd] ?? fallback
       return store.global
     }
+
+    // Tabs can follow session activity or the order they were opened in. Navigation follows the
+    // same list the strip shows, so number shortcuts never disagree with what is on screen.
+    // `time.updated` moves with every message of a run, so the last finished run is the activity
+    // that matters; sessions that never finished one fall back to their last update.
+    const activity = (sessionID: string) => {
+      const session = data.session.get(sessionID)
+      if (!session) return undefined
+      return session.time.idle ?? session.time.updated
+    }
+    const ordered = createMemo(() => {
+      if (config.tabs.order !== "recent") return state().tabs
+      return orderSessionTabsByRecency(state().tabs, activity)
+    })
 
     function update(mutation: (draft: TabsState) => void) {
       const scope = config.tabs.scope
@@ -378,6 +393,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       tabs() {
         return state().tabs
       },
+      ordered() {
+        return ordered()
+      },
       recentlyClosed() {
         return closedTabs()
           .filter((entry) => !state().tabs.some((tab) => tab.sessionID === entry.tab.sessionID))
@@ -447,7 +465,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         if (!target) {
           const previous = moveSessionTabHistory(history, state().tabs, undefined, -1)
           history = previous.history
-          const session = previous.sessionID ?? state().tabs.at(-1)?.sessionID
+          const session = previous.sessionID ?? ordered().at(-1)?.sessionID
           if (route.data.type === "home" && session) route.navigate({ type: "session", sessionID: session })
           return
         }
@@ -478,19 +496,19 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       },
       cycle(direction: 1 | -1) {
         if (!enabled()) return
-        const tab = cycleSessionTab(state().tabs, current(), direction)
+        const tab = cycleSessionTab(ordered(), current(), direction)
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },
       cycleUnread(direction: 1 | -1) {
         if (!enabled()) return
-        const tab = cycleSessionTab(state().tabs, current(), direction, (tab) =>
+        const tab = cycleSessionTab(ordered(), current(), direction, (tab) =>
           Boolean(status(tab.sessionID).unread || status(tab.sessionID).attention),
         )
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },
       selectIndex(index: number) {
         if (!enabled()) return
-        const tab = state().tabs[index]
+        const tab = ordered()[index]
         if (tab) route.navigate({ type: "session", sessionID: tab.sessionID })
       },
     }

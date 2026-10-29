@@ -109,6 +109,8 @@ export const EMPTY_SESSION_TAB_STATUS: SessionTabsStatus = {
   renaming: false,
 }
 export type SessionTabsController = Pick<ContextController, "tabs" | "current" | "select" | "close" | "move"> & {
+  /** Display order for the rail. A recent-activity order falls back to `tabs` when absent. */
+  ordered?: ContextController["ordered"]
   newTab?: () => boolean
   add?: () => void
   recentlyClosed?: ContextController["recentlyClosed"]
@@ -596,15 +598,16 @@ function VerticalSessionTabs(props: {
   const [contextMenu, setContextMenu] = createSignal<TabContextMenuState>()
   const newTab = () => tabs.newTab?.() ?? false
   const activeID = createMemo(() => (newTab() ? undefined : tabs.current()))
+  // A recency order leaves nothing for a drag to change; the press still selects.
+  const manualOrder = () => config.tabs.order !== "recent"
   const ordered = createMemo(() => {
+    const base = tabs.ordered?.() ?? tabs.tabs()
     const pending = preview()
-    if (!pending) return tabs.tabs()
-    return moveSessionTab(tabs.tabs(), pending.sessionID, pending.index)
+    if (!pending) return base
+    return moveSessionTab(base, pending.sessionID, pending.index)
   })
   const items = ordered
-  const highlightColor = createMemo(() =>
-    tint(background(), actionHovered(), actionHovered().a),
-  )
+  const highlightColor = createMemo(() => tint(background(), actionHovered(), actionHovered().a))
   const highlighted = (sessionID: string | undefined) =>
     sessionID !== undefined && (activeID() === sessionID || hovered() === sessionID || dragging() === sessionID)
   const addHighlighted = () => newTab() || addHovered()
@@ -678,14 +681,14 @@ function VerticalSessionTabs(props: {
     if (didDrag) suppressClick = true
     setDragging(undefined)
     const pending = preview()
-    if (pending?.sessionID === source) tabs.move(pending.sessionID, pending.index)
+    if (manualOrder() && pending?.sessionID === source) tabs.move(pending.sessionID, pending.index)
     tabs.select(source)
   }
 
   const drag = (event: MouseEvent) => {
     if (!rail) return
     const source = dragging()
-    if (!source) return
+    if (!source || !manualOrder()) return
     didDrag = true
     const target = Math.max(
       0,
@@ -856,9 +859,7 @@ function VerticalSessionTabs(props: {
               const separatorUpperColor = createMemo(() =>
                 tint(background(), previousGlowHue(), 0.1 * previousGlowLevel()),
               )
-              const separatorLowerColor = createMemo(() =>
-                tint(background(), glowHue(), 0.12 * glowLevel()),
-              )
+              const separatorLowerColor = createMemo(() => tint(background(), glowHue(), 0.12 * glowLevel()))
               const titleColor = (index: number, separator: boolean) => {
                 const level = titleGlow.value().level
                 const color =
@@ -923,9 +924,7 @@ function VerticalSessionTabs(props: {
                         edge="top"
                         width={width()}
                         color={pulseBackground()}
-                        background={
-                          highlighted(items()[index() - 1]?.sessionID) ? highlightColor() : background()
-                        }
+                        background={highlighted(items()[index() - 1]?.sessionID) ? highlightColor() : background()}
                       />
                       <SessionTabHalfRow
                         top={1}
@@ -1330,10 +1329,12 @@ function HorizontalSessionTabs(props: {
   const idleNumber = () => tint(theme.text.formfield.base, theme.background.base, 0.55)
   const newTab = () => tabs.newTab?.() ?? false
   const activeID = createMemo(() => (newTab() ? NEW_SESSION_TAB.sessionID : tabs.current()))
+  const manualOrder = () => config.tabs.order !== "recent"
   const ordered = createMemo(() => {
+    const base = tabs.ordered?.() ?? tabs.tabs()
     const pending = preview()
-    if (!pending) return tabs.tabs()
-    return moveSessionTab(tabs.tabs(), pending.sessionID, pending.index)
+    if (!pending) return base
+    return moveSessionTab(base, pending.sessionID, pending.index)
   })
   // The promoted new-session slot joins the strip as the active tab; the idle plus affordance
   // and the promoted slot are mutually exclusive states of one control.
@@ -1506,14 +1507,14 @@ function HorizontalSessionTabs(props: {
     if (didDrag) suppressClick = true
     setDragging(undefined)
     const pending = preview()
-    if (pending?.sessionID === source) tabs.move(pending.sessionID, pending.index)
+    if (manualOrder() && pending?.sessionID === source) tabs.move(pending.sessionID, pending.index)
     if (source === NEW_SESSION_TAB.sessionID) return
     tabs.select(source)
   }
 
   const drag = (event: MouseEvent) => {
     const source = dragging()
-    if (!source || source === NEW_SESSION_TAB.sessionID) return
+    if (!source || source === NEW_SESSION_TAB.sessionID || !manualOrder()) return
     didDrag = true
     const slot = slotAt(event.x)
     const target = slot === undefined ? undefined : Math.min(slot, tabs.tabs().length - 1)

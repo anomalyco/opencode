@@ -70,19 +70,7 @@ test("compact rail renders and controls session tabs", async () => {
         .split("\n")
         .slice(0, 11)
         .map((line) => line.slice(0, 5)),
-    ).toEqual([
-      "▄▄▄▄▄",
-      "  ⌕  ",
-      "▄▄▄▄▄",
-      "  F  ",
-      "▀▀▀▀▀",
-      "  S  ",
-      "     ",
-      "  T  ",
-      "     ",
-      "  +  ",
-      "     ",
-    ])
+    ).toEqual(["▄▄▄▄▄", "  ⌕  ", "▄▄▄▄▄", "  F  ", "▀▀▀▀▀", "  S  ", "     ", "  T  ", "     ", "  +  ", "     "])
     expect(app.captureCharFrame().split("\n")[0].indexOf("transcript")).toBe(5)
     expect(app.captureCharFrame()).not.toContain("First session")
     expect(
@@ -96,11 +84,7 @@ test("compact rail renders and controls session tabs", async () => {
 
     setIndicators("numbers")
     await app.waitForFrame((frame) => frame.split("\n")[5].slice(0, 5).trim() === "2")
-    expect([3, 5, 7].map((row) => app.captureCharFrame().split("\n")[row].slice(0, 5).trim())).toEqual([
-      "1",
-      "2",
-      "3",
-    ])
+    expect([3, 5, 7].map((row) => app.captureCharFrame().split("\n")[row].slice(0, 5).trim())).toEqual(["1", "2", "3"])
     setIndicators("status")
     setStatus(EMPTY_SESSION_TAB_STATUS)
 
@@ -114,6 +98,60 @@ test("compact rail renders and controls session tabs", async () => {
     expect(searches()).toBe(1)
     await app.mockMouse.drag(2, 3, 2, 7)
     expect(items().map((tab) => tab.sessionID)).toEqual(["second", "third", "first"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("compact rail renders a recent order and ignores drag", async () => {
+  const [active, setActive] = createSignal("first")
+  const [tabs, setTabs] = createSignal<SessionTab[]>([
+    { sessionID: "first", title: "First session" },
+    { sessionID: "second", title: "Second session" },
+    { sessionID: "third", title: "Third session" },
+  ])
+  const controller = {
+    tabs,
+    ordered: () => [tabs()[2]!, tabs()[0]!, tabs()[1]!],
+    current: active,
+    select: setActive,
+    close() {},
+    move(sessionID: string, index: number) {
+      setTabs((items) => moveSessionTab(items, sessionID, index))
+    },
+    status: () => EMPTY_SESSION_TAB_STATUS,
+  } satisfies SessionTabsController
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig({ tabs: { indicators: "status", order: "recent" } })}>
+          <Keymap.Provider>
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
+              <box width="100%" height="100%" flexDirection="row">
+                <SessionTabs
+                  controller={controller}
+                  orientation="vertical"
+                  animations={false}
+                  indicators="status"
+                  width={SESSION_TABS_COMPACT_WIDTH}
+                />
+                <text>transcript</text>
+              </box>
+            </ThemeProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 80, height: 24 },
+  )
+
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("  F  ") && frame.includes("  T  "))
+    expect([3, 5, 7].map((row) => app.captureCharFrame().split("\n")[row]!.slice(0, 5).trim())).toEqual(["T", "F", "S"])
+    // A recent order is activity-derived, so a drag never rewrites the stored order.
+    await app.mockMouse.drag(2, 3, 2, 7)
+    expect(tabs().map((tab) => tab.sessionID)).toEqual(["first", "second", "third"])
   } finally {
     app.renderer.destroy()
   }

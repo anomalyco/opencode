@@ -156,6 +156,7 @@ Configure the persistent session tab strip:
     "mode": "auto",
     "scope": "cwd",
     "layout": "horizontal",
+    "order": "opened",
     "indicators": "status"
   }
 }
@@ -170,12 +171,19 @@ The legacy boolean `tabs.enabled` setting remains supported: `true` is `on` and 
 | `tabs.mode`       | `auto`, `on`, or `off`      | Uses tabs automatically, always, or never. Auto hides them inside Herdr.       |
 | `tabs.scope`      | `cwd` or `global`           | Keeps separate tabs per working directory or shares them globally.            |
 | `tabs.layout`     | `horizontal` or `vertical`  | Places tabs in a horizontal strip or a vertical sidebar.                      |
+| `tabs.order`      | `recent` or `opened`        | Sorts tabs by last session activity or by when they were opened.              |
 | `tabs.indicators` | `status` or `numbers`       | Shows status icons or always shows tab numbers.                               |
 
 </div>
 
 Number indicators retain status colors and background animations. Ctrl+number shortcuts switch tabs in either indicator
 mode.
+
+`tabs.order` defaults to `recent` for the vertical layout and `opened` for the horizontal strip. With `recent`, tabs
+sort top to bottom (or left to right) by the last activity in each session — the end of its last finished run — so the
+session you worked on most recently comes first without a running chat jumping around. That order is activity-driven,
+so there is nothing to drag. With `opened`, tabs stay where they were opened and dragging a tab changes that order.
+Ctrl+number shortcuts follow whichever order is shown.
 
 ## Diffs
 

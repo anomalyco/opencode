@@ -69,8 +69,17 @@ test("resolves nested config and keybind defaults", () => {
     enabled: true,
     scope: "cwd",
     layout: "horizontal",
+    order: "opened",
     indicators: "status",
   })
+  // A vertical rail defaults to recent activity; an explicit value wins over the layout default.
+  expect(resolve({ tabs: { layout: "vertical" } }, { terminalSuspend: true, environment: {} }).tabs.order).toBe(
+    "recent",
+  )
+  expect(resolve({ tabs: { order: "recent" } }, { terminalSuspend: true, environment: {} }).tabs.order).toBe("recent")
+  expect(
+    resolve({ tabs: { layout: "vertical", order: "opened" } }, { terminalSuspend: true, environment: {} }).tabs.order,
+  ).toBe("opened")
   expect(config.session.new_location).toBe("launch")
   expect(config.session.tps).toBe(true)
 })

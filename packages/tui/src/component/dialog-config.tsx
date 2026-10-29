@@ -178,6 +178,16 @@ export const settings: Setting[] = [
     keywords: ["sidebar", "orientation", "left"],
   },
   {
+    title: "Order",
+    category: "Tabs",
+    path: ["tabs", "order"],
+    description: "Whether tabs follow their last activity or the order they were opened",
+    default: "recent",
+    values: ["recent", "opened"],
+    labels: ["recent activity", "opened order"],
+    keywords: ["sort", "recency", "last updated", "last used"],
+  },
+  {
     title: "Indicators",
     category: "Tabs",
     path: ["tabs", "indicators"],
