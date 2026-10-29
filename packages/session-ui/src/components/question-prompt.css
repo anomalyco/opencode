@@ -1,5 +1,4 @@
 [data-component="dock-prompt"][data-kind="question"] {
-  --v2-question-answer-bg-selected: light-dark(#f5f8ff, #7698fd26);
   /* A bounce-0 spring sampled for CSS: with the dock's motion on, every pick and progress change eases on it, so two
      answers trading places always cross in the same frames. */
   --question-spring: linear(
@@ -256,9 +255,7 @@
     position: absolute;
     inset: 0;
     z-index: -1;
-    background:
-      linear-gradient(var(--v2-question-answer-bg-selected), var(--v2-question-answer-bg-selected)),
-      var(--v2-background-bg-layer-01);
+    background: var(--v2-overlay-simple-overlay-hover);
     clip-path: inset(0 0 100% round 6px);
     pointer-events: none;
 
@@ -301,8 +298,8 @@
     flex: 0 0 18px;
   }
 
-  /* An answer's key is its mark. One answer: a round key with a soft fill. Many: a hollow square key, like a checkbox.
-     Picking fills either solid, with the number in the inverse colour. */
+  /* An answer's key is its mark: its number in a quiet outline, round for one answer and a rounded square for many.
+     Picking fills it with the accent and swaps the number for a check, on the same frame. */
   [data-slot="question-option-key"] {
     display: inline-flex;
     align-items: center;
@@ -310,41 +307,28 @@
     box-sizing: border-box;
     inline-size: 18px;
     block-size: 18px;
-    position: relative;
-    isolation: isolate;
     border-radius: 50%;
-    background-color: var(--v2-background-bg-layer-03);
-    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
-    color: var(--v2-text-text-muted);
+    box-shadow: inset 0 0 0 1px var(--v2-border-border-strong);
+    color: var(--v2-text-text-faint);
     font-size: 11px;
     font-weight: 530;
     line-height: 1;
     font-variant-numeric: tabular-nums;
 
-    &::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      border-radius: inherit;
-      background-color: var(--v2-background-bg-accent);
-      opacity: 0;
-    }
-
     &[data-type="checkbox"] {
-      border-radius: 4px;
-      background-color: transparent;
-      box-shadow: inset 0 0 0 1px var(--v2-border-border-strong);
+      border-radius: 5px;
     }
 
     &[data-picked="true"] {
+      background-color: var(--v2-background-bg-accent);
+      box-shadow: none;
       color: var(--v2-text-text-contrast);
-      box-shadow: inset 0 0 0 1px transparent;
-
-      &::before {
-        opacity: 1;
-      }
     }
+  }
+
+  [data-slot="question-option-tick"] {
+    inline-size: 12px;
+    block-size: 12px;
   }
 
   [data-slot="question-option-main"] {
@@ -558,11 +542,8 @@
     [data-slot="question-option-key"] {
       transition:
         color var(--question-pick) var(--question-spring),
+        background-color var(--question-pick) var(--question-spring),
         box-shadow var(--question-pick) var(--question-spring);
-
-      &::before {
-        transition: opacity var(--question-pick) var(--question-spring);
-      }
     }
   }
 }

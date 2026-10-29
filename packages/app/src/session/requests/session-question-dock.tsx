@@ -177,11 +177,22 @@ function questionField(field: FormInfo["fields"][number]): field is QuestionFiel
 }
 
 // The key that picks an answer is also its mark: round like a radio for one answer, a square like a checkbox for many.
+// Picking swaps the number for a check.
 function Mark(props: { multi: boolean; picked: boolean; shortcut?: string }) {
   return (
     <span data-slot="question-option-check" aria-hidden="true">
       <span data-slot="question-option-key" data-type={props.multi ? "checkbox" : "radio"} data-picked={props.picked}>
-        {props.shortcut}
+        <Show when={props.picked} fallback={props.shortcut}>
+          <svg data-slot="question-option-tick" viewBox="0 0 12 12" fill="none">
+            <path
+              d="M2.75 6.25 5 8.5l4.25-5"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </Show>
       </span>
     </span>
   )

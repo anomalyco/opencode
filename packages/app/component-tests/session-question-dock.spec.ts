@@ -1032,7 +1032,7 @@ story("keeps the custom answer input and dock geometry stable while editing", as
   await node.dispose()
 })
 
-story("marks one-answer questions with round keys and many-answer questions with square keys", async ({ mount }) => {
+story("marks answers with round or square number keys and checks a picked key", async ({ mount }) => {
   const component = await mount("app-current-session-surface--question-request")
   const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
   const keys = question.locator('[data-slot="question-option-key"]')
@@ -1044,6 +1044,8 @@ story("marks one-answer questions with round keys and many-answer questions with
   await expect(question.getByText("Pick any", { exact: true })).toHaveCount(0)
   await focused.press("1")
   await expect(focused.locator('[data-slot="question-option-key"]')).toHaveAttribute("data-picked", "true")
+  await expect(focused.locator('[data-slot="question-option-tick"]')).toBeVisible()
+  await expect(keys).toHaveText(["", "2", "3"])
 
   await question.getByRole("button", { name: "Next", exact: true }).click()
   const files = question.getByRole("checkbox", { name: "Changed files", exact: true })

@@ -1,0 +1,15 @@
+/* Story-only: `glyph: dot` swaps the check on a picked pick-one answer for a radio dot, to compare with what ships. */
+[data-component="question-marks-story"][data-glyph="dot"]
+  [data-slot="question-option-key"][data-type="radio"][data-picked="true"] {
+  [data-slot="question-option-tick"] {
+    display: none;
+  }
+
+  &::after {
+    content: "";
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: 50%;
+    background-color: currentColor;
+  }
+}
