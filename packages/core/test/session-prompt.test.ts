@@ -44,6 +44,8 @@ import { Config } from "@opencode/core/config"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { SessionStored } from "@opencode/core/session/stored"
+import { SessionBlob } from "@opencode/core/session/blob"
+import { SessionTransfer } from "@opencode/core/session/transfer"
 
 const executionCalls: Session.ID[] = []
 const interruptCalls: Session.ID[] = []
@@ -112,7 +114,14 @@ const locations = makeGlobalNode({
 })
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      Session.node,
+      SessionTransfer.node,
+    ]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       SessionExecution.node.replace(execution),
@@ -121,6 +130,7 @@ const it = testEffect(
   ),
 )
 const sessionID = Session.ID.make("ses_prompt_test")
+const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 const messageID = SessionMessage.ID.create()
 
 const setup = Effect.gen(function* () {
@@ -490,6 +500,135 @@ describe("Session.prompt", () => {
       expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([
         { session_id: mediaSessionID, message_id: message.id, seq: expect.any(Number), hash },
       ])
+    }),
+  )
+
+  it.effect("forks a session's inline media into blobs when its location enables media_blob", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* Session.Service
+      const parentID = Session.ID.make("ses_fork_media")
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: parentID,
+          project_id: Project.ID.global,
+          slug: "media",
+          directory: mediaDirectory,
+          title: "media",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionMessageTable)
+        .values({
+          id: SessionMessage.ID.make("msg_fork_media_user"),
+          session_id: parentID,
+          type: "user",
+          seq: 1,
+          time_created: 1,
+          data: {
+            text: "look",
+            files: [{ data: pngBase64, mime: "image/png", source: { type: "inline" } }],
+            time: { created: 1 },
+          },
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const child = yield* session.fork({ sessionID: parentID })
+
+      const hash = SessionBlob.hashBytes(Buffer.from(pngBase64, "base64"))
+      const row = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, child.id))
+        .get()
+        .pipe(Effect.orDie)
+      expect(row?.data).toMatchObject({ files: [{ uri: SessionStored.ref(hash), mime: "image/png" }] })
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([
+        { session_id: child.id, message_id: row!.id, seq: 1, hash },
+      ])
+    }),
+  )
+
+  it.effect("imports media into blobs only where the location enables media_blob", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      const session = yield* Session.Service
+      const transfer = yield* SessionTransfer.Service
+      const template = yield* session.get(sessionID)
+      const messages = (prefix: string) =>
+        [
+          {
+            id: `msg_${prefix}_user`,
+            type: "user",
+            text: "look",
+            files: [{ data: pngBase64, mime: "image/png", source: { type: "inline" }, name: "shot.png" }],
+            time: { created: 1 },
+          },
+          {
+            id: `msg_${prefix}_assistant`,
+            type: "assistant",
+            agent: "build",
+            model: { id: "model", providerID: "provider" },
+            content: [
+              {
+                type: "tool",
+                id: "call_shot",
+                name: "screenshot",
+                executed: true,
+                state: {
+                  status: "completed",
+                  input: {},
+                  content: [{ type: "file", uri: `data:image/png;base64,${pngBase64}`, mime: "image/png" }],
+                },
+                time: { created: 2, ran: 2, completed: 2 },
+              },
+            ],
+            time: { created: 2, completed: 3 },
+          },
+        ].map((message) => Schema.decodeUnknownSync(SessionMessage.Info)(message))
+      const imported = (id: string, directory: string) =>
+        transfer.import({
+          data: { info: { ...template, id: Session.ID.make(id) }, messages: messages(id) },
+          location: { directory: AbsolutePath.make(directory) },
+        })
+      const rows = (id: Session.ID) =>
+        db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, id))
+          .orderBy(SessionMessageTable.seq)
+          .all()
+          .pipe(Effect.orDie)
+
+      const media = yield* imported("ses_import_media", mediaDirectory)
+      const plain = yield* imported("ses_import_plain", "/project")
+
+      const hash = SessionBlob.hashBytes(Buffer.from(pngBase64, "base64"))
+      const uri = SessionStored.ref(hash)
+      const mediaRows = yield* rows(media.id)
+      expect(mediaRows.map((row) => row.data)).toMatchObject([
+        { files: [{ uri, mime: "image/png", name: "shot.png" }] },
+        { content: [{ state: { content: [{ type: "file", uri, mime: "image/png" }] } }] },
+      ])
+      expect(JSON.stringify(mediaRows)).not.toContain(pngBase64)
+      expect(JSON.stringify(yield* rows(plain.id))).toContain(pngBase64)
+      expect(yield* db.select({ hash: BlobTable.hash }).from(BlobTable).all().pipe(Effect.orDie)).toEqual([{ hash }])
+      expect(
+        yield* db
+          .select({ session: BlobRefTable.session_id, message: BlobRefTable.message_id, seq: BlobRefTable.seq })
+          .from(BlobRefTable)
+          .orderBy(BlobRefTable.seq)
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual(mediaRows.map((row) => ({ session: media.id, message: row.id, seq: row.seq })))
+      expect(yield* session.messages({ sessionID: media.id, order: "asc" })).toEqual(messages("ses_import_media"))
+      expect(yield* session.messages({ sessionID: plain.id, order: "asc" })).toEqual(messages("ses_import_plain"))
     }),
   )
 

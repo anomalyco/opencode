@@ -8,6 +8,7 @@ import type { Attachment, FileAttachment } from "@opencode/schema/prompt"
 import type { Tool } from "@opencode/schema/tool"
 import { Config } from "../config.js"
 import type { Database } from "../database/database.js"
+import type { Instance } from "../instance/service.js"
 import type { SessionMessage } from "./message.js"
 import type { SessionSchema } from "./schema.js"
 import { BlobRefTable, BlobTable, SessionInboxTable, SessionMessageTable } from "./sql.js"
@@ -258,6 +259,17 @@ export const enabled = Effect.gen(function* () {
   return Config.latest(yield* config.value.entries(), "experimental")?.media_blob === true
 })
 
+/** {@link enabled} as `session`'s location configures it, where its media is written; off when that config can't load. */
+export const enabledFor = (instances: Instance.Interface, session: SessionSchema.Info) =>
+  enabled.pipe(
+    instances.provide(session),
+    Effect.catch((cause) =>
+      Effect.logWarning("could not resolve experimental.media_blob; keeping media inline", { cause }).pipe(
+        Effect.as(false),
+      ),
+    ),
+  )
+
 const DATA_URI = /^data:[^,]*;base64,(.*)$/s
 
 function take(pending: Pending, raw: Buffer, mime: string) {
@@ -285,11 +297,11 @@ function toolPartRefs(pending: Pending, part: AssistantPart): AssistantPart {
   return { ...part, state: { ...part.state, content: map(content, (item) => toolRef(pending, item)) } }
 }
 
-const save = Effect.fnUntraced(function* (db: DatabaseService, pending: Pending) {
-  if (pending.size === 0) return
+const save = Effect.fnUntraced(function* (db: DatabaseService, blobs: ReadonlyArray<typeof BlobTable.$inferInsert>) {
+  if (blobs.length === 0) return
   yield* db
     .insert(BlobTable)
-    .values([...pending.values()])
+    .values([...blobs])
     .onConflictDoNothing()
     .run()
     .pipe(Effect.orDie)
@@ -303,7 +315,7 @@ export const externalizePayload = Effect.fnUntraced(function* <
   const pending: Pending = new Map()
   const files = input.files.map((file) => fileRef(pending, file))
   if (pending.size === 0) return input
-  yield* save(db, pending)
+  yield* save(db, [...pending.values()])
   return { ...input, files }
 })
 
@@ -320,7 +332,7 @@ export const externalize = Effect.fnUntraced(function* (
   const pending: Pending = new Map()
   const content = message.content.map((part) => toolPartRefs(pending, part))
   if (pending.size === 0) return message
-  yield* save(db, pending)
+  yield* save(db, [...pending.values()])
   return { ...message, content }
 })
 
@@ -341,6 +353,9 @@ function storedPartRefs(pending: Pending, part: Part): Part {
  * Moves a stored row's inline media into blobs whatever the flag says, for offline backfills. Returns the row to
  * store (the same object when nothing moved), the blobs to insert, and every hash the row then names.
  */
+export function split<T extends MessageRow["data"] | InboxRow["payload"]>(
+  data: T,
+): { data: T; moved: boolean; blobs: Array<typeof BlobTable.$inferInsert>; hashes: Set<string> }
 export function split(data: MessageRow["data"] | InboxRow["payload"]) {
   const pending: Pending = new Map()
   const stored =
@@ -352,6 +367,17 @@ export function split(data: MessageRow["data"] | InboxRow["payload"]) {
   const result = pending.size > 0 ? stored : data
   return { data: result, moved: pending.size > 0, blobs: [...pending.values()], hashes: hashesOf(result) }
 }
+
+/**
+ * {@link split} for a message row copied into another session, such as a fork or an import: saves the moved blobs
+ * and returns the row to store. Callers check {@link enabled} and record the copy's refs.
+ */
+export const externalizeRow = Effect.fnUntraced(function* (db: DatabaseService, data: MessageRow["data"]) {
+  const result = split(data)
+  if (!result.moved) return data
+  yield* save(db, result.blobs)
+  return result.data
+})
 
 /** Records that `owner` references each blob its stored row names, so release keeps them until it lets go. */
 export const recordRefs = Effect.fnUntraced(function* (
