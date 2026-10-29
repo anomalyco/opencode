@@ -751,13 +751,6 @@ function App() {
   })
 
   const connected = useConnected()
-  const moveActiveTab = (direction: 1 | -1) => {
-    const sessionID = sessionTabs.current()
-    if (!sessionID) return
-    const index = sessionTabs.tabs().findIndex((tab) => tab.sessionID === sessionID)
-    if (index === -1) return
-    sessionTabs.move(sessionID, index + direction)
-  }
   const appCommands = createMemo(() =>
     [
       {
@@ -876,7 +869,7 @@ function App() {
         category: "Session",
         palette: undefined,
         enabled: sessionTabs.enabled,
-        run: () => moveActiveTab(-1),
+        run: () => sessionTabs.moveCurrent(-1),
       },
       {
         name: "session.tab.move_down",
@@ -884,7 +877,7 @@ function App() {
         category: "Session",
         palette: undefined,
         enabled: sessionTabs.enabled,
-        run: () => moveActiveTab(1),
+        run: () => sessionTabs.moveCurrent(1),
       },
       {
         name: "session.tab.next_unread",
