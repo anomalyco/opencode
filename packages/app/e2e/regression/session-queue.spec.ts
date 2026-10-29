@@ -334,11 +334,14 @@ for (const count of [2, 6]) {
 
     if (!target) throw new Error("The target queue row is not visible")
     await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 })
+    const dragged = await first.elementHandle()
     await page.mouse.up()
 
     const reordered = [...order.slice(1, targetIndex + 1), order[0], ...order.slice(targetIndex + 1)]
     await admission.arrived
     await expect(texts).toHaveText(reordered)
+    // The dropped row glides from where it was released, so the optimistic reorder must move it rather than remount it.
+    expect(await dragged?.evaluate((el) => el.isConnected)).toBe(true)
     await expect(view.rows).toHaveCount(count)
     admission.release()
 
@@ -378,6 +381,23 @@ for (const count of [2, 6]) {
     await expect(view.input).toHaveText(order[0])
   })
 }
+
+test("arrow keys reorder a queued prompt and keep focus on its grip once it is re-admitted", async ({ page }) => {
+  const order = ["queued prompt 1", "queued prompt 2", "queued prompt 3"]
+  const mock = createQueueMock(order)
+  const view = await openQueue(page, mock)
+  const texts = view.rows.locator('[data-action="session-queue-edit"]')
+  const reordered = [order[1], order[0], order[2]]
+
+  await view.rows.first().getByRole("button", { name: "Reorder queued prompt" }).press("ArrowDown")
+  await expect(texts).toHaveText(reordered)
+  await expect.poll(() => mock.changes.length).toBe(order.length)
+  await expect(
+    view.rows.filter({ hasText: order[0] }).getByRole("button", { name: "Remove", exact: true }),
+  ).toBeEnabled()
+  expect(mock.prompts.map((prompt) => prompt.text)).toEqual(reordered)
+  await expect(view.rows.nth(1).getByRole("button", { name: "Reorder queued prompt" })).toBeFocused()
+})
 
 test("a partially cancelled reorder reconciles the server's queue instead of restoring stale rows", async ({
   page,

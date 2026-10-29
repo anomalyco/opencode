@@ -76,6 +76,7 @@
     "./textarea": "./src/forms/textarea/textarea.tsx",
     "./typeahead": "./src/forms/typeahead/typeahead.tsx",
     "./slash": "./src/typography/slash/slash.tsx",
+    "./sortable": "./src/sortable/index.ts",
     "./text-shimmer": "./src/typography/text-shimmer/text-shimmer.tsx",
     "./toast": "./src/feedback/toast/toast.tsx",
     "./tooltip": "./src/overlays/tooltip/tooltip.tsx",
