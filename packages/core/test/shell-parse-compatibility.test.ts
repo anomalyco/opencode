@@ -45,14 +45,37 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       "bash",
       "cd $HOME; pwd",
       { HOME: "/session-home" },
-      { commands: [{ resource: "pwd", save: "pwd *" }], directories: [] },
+      {
+        commands: [
+          { resource: "cd $HOME", save: "cd *" },
+          { resource: "pwd", save: "pwd *" },
+        ],
+        directories: [],
+      },
     ],
-    ["bash", "cd; pwd", { HOME: "/session-home" }, { commands: [{ resource: "pwd", save: "pwd *" }], directories: [] }],
+    [
+      "bash",
+      "cd; pwd",
+      { HOME: "/session-home" },
+      {
+        commands: [
+          { resource: "cd", save: "cd *" },
+          { resource: "pwd", save: "pwd *" },
+        ],
+        directories: [],
+      },
+    ],
     [
       "bash",
       'target=/outside; cd "$target"; pwd',
       {},
-      { commands: [{ resource: "pwd", save: "pwd *" }], directories: [] },
+      {
+        commands: [
+          { resource: 'cd "$target"', save: "cd *" },
+          { resource: "pwd", save: "pwd *" },
+        ],
+        directories: [],
+      },
     ],
     [
       "bash",
@@ -81,7 +104,18 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       {},
       { commands: [{ resource: "FOO=bar git status", save: "git status *" }], directories: [] },
     ],
-    ["bash", "HOME=/outside; cd; pwd", {}, { commands: [{ resource: "pwd", save: "pwd *" }], directories: [] }],
+    [
+      "bash",
+      "HOME=/outside; cd; pwd",
+      {},
+      {
+        commands: [
+          { resource: "cd", save: "cd *" },
+          { resource: "pwd", save: "pwd *" },
+        ],
+        directories: [],
+      },
+    ],
     ["bash", "CDPATH=/outside cd child", {}, { commands: [], directories: ["child"] }],
     [
       "bash",
@@ -103,7 +137,7 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       {
         commands: [
           { resource: "printf ok", save: "printf *" },
-          { resource: "git status", save: "git status *" },
+          { resource: "git status > output", save: "git status *" },
         ],
         directories: [],
       },
@@ -115,7 +149,7 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       {
         commands: [
           { resource: "printf ok", save: "printf *" },
-          { resource: "cat", save: "cat *" },
+          { resource: "cat < input > output", save: "cat *" },
         ],
         directories: [],
       },
@@ -126,7 +160,20 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       {},
       { commands: [{ resource: "pwd", save: "pwd *" }], directories: ["-/../../../etc"] },
     ],
-    ["bash", "cd -; pushd; popd; pwd", {}, { commands: [{ resource: "pwd", save: "pwd *" }], directories: [] }],
+    [
+      "bash",
+      "cd -; pushd; popd; pwd",
+      {},
+      {
+        commands: [
+          { resource: "cd -", save: "cd *" },
+          { resource: "pushd", save: "pushd *" },
+          { resource: "popd", save: "popd *" },
+          { resource: "pwd", save: "pwd *" },
+        ],
+        directories: [],
+      },
+    ],
     [
       "bash",
       "command cd /outside; builtin cd /elsewhere",
@@ -171,7 +218,10 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
       "pwsh",
       "Set-Location $HOME; Set-Location $PWD; Set-Location $target",
       { HOME: "/session-home" },
-      { commands: [], directories: [process.platform === "win32" ? os.homedir() : "/session-home", "/workspace"] },
+      {
+        commands: [{ resource: "Set-Location $target", save: "Set-Location *" }],
+        directories: [process.platform === "win32" ? os.homedir() : "/session-home", "/workspace"],
+      },
     ],
     [
       "pwsh",
@@ -209,8 +259,7 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
           const command = ${JSON.stringify(command)}
           const shell = ${JSON.stringify(shell)}
           const scanned = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace"))
-          const native = await Effect.runPromise(ShellParse.scanPortable(command, shell, "/workspace"))
-          console.log(JSON.stringify([scanned, native]))
+          console.log(JSON.stringify(scanned))
         `,
           ],
           cwd: `${import.meta.dir}/..`,
@@ -224,14 +273,11 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
           child.exited,
         ])
         expect(code, error).toBe(0)
-        const [scanned, native] = JSON.parse(output)
-        expect(scanned).toEqual(expected)
-        expect(native).toEqual(scanned)
+        expect(JSON.parse(output)).toEqual(expected)
         return
       }
       const scanned = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace"))
       expect(scanned).toEqual(expected)
-      expect(await Effect.runPromise(ShellParse.scanPortable(command, shell, "/workspace"))).toEqual(scanned)
     },
   )
 
@@ -243,7 +289,7 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
 
   test("extracts inline PowerShell directory flags with case-insensitive names and quoted values", async () => {
     const result = await Effect.runPromise(
-      ShellParse.scanPortable(
+      ShellParse.scan(
         "Set-Location -LITERALPATH:C:\\outside; Set-Location -pAtH:'../other dir'; Set-Location -p:/short; Set-Location -lp /literal; Set-Location -l:/prefix; Set-Location -lit:/litprefix; Set-Location -pat:/patprefix; Set-Location -PSPath:/pspath; Set-Location '-outside'; Set-Location -/../../outside; Set-Location -Path -- -/../../outside2; Set-Location -- -outside2; Set-Location -`outside3; Set-Location \"../`$a/../outside4\"; Set-Location /out`side; Set-Location 'C:\\quoted'",
         "pwsh",
         "/workspace",
@@ -274,7 +320,7 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
 
   test("retains statement-head ForEach-Object cmdlet calls when non-scriptblock parameters are present", async () => {
     const result = await Effect.runPromise(
-      ShellParse.scanPortable("ForEach-Object -InputObject $proc -MemberName Kill", "pwsh", "/workspace"),
+      ShellParse.scan("ForEach-Object -InputObject $proc -MemberName Kill", "pwsh", "/workspace"),
     )
     expect(result).toEqual({
       commands: [{ resource: "ForEach-Object -InputObject $proc -MemberName Kill", save: "ForEach-Object *" }],
@@ -286,16 +332,22 @@ const compatibilityCases: Array<[string, string, Record<string, string>, ShellPa
 describe("scanner behavior on former tree-sitter gaps", () => {
   for (const fixture of [
     {
-      name: "omits synthetic command nodes for an assignment with redirection",
+      name: "retains redirect resource for an assignment with redirection",
       shell: "bash",
       command: "FOO=bar > output",
-      expected: { commands: [], directories: [] },
+      expected: { commands: [{ resource: "FOO=bar > output", save: "FOO=bar > *" }], directories: [] },
     },
     {
-      name: "retains nested executable commands without empty assignment command nodes",
+      name: "retains both redirect resource and nested executable commands on assignment redirection",
       shell: "bash",
       command: "FOO=$(printf value) > output",
-      expected: { commands: [{ resource: "printf value", save: "printf *" }], directories: [] },
+      expected: {
+        commands: [
+          { resource: "FOO=$(printf value) > output", save: "FOO=$(printf value) > *" },
+          { resource: "printf value", save: "printf *" },
+        ],
+        directories: [],
+      },
     },
     {
       name: "keeps numeric arguments in saved prefixes",
@@ -357,13 +409,24 @@ describe("scanner behavior on former tree-sitter gaps", () => {
       command: "Set-Location a,b",
       expected: { commands: [], directories: ["a,b"] },
     },
+    {
+      name: "retains unresolved PowerShell stack, history, and dot-wildcard directory commands",
+      shell: "pwsh",
+      command: "Set-Location -StackName old; Set-Location -; Set-Location +; Set-Location .[.] ; Set-Location -LiteralPath '.[.]'",
+      expected: {
+        commands: [
+          { resource: "Set-Location -StackName old", save: "Set-Location *" },
+          { resource: "Set-Location -", save: "Set-Location *" },
+          { resource: "Set-Location +", save: "Set-Location *" },
+          { resource: "Set-Location .[.]", save: "Set-Location *" },
+        ],
+        directories: [".[.]"],
+      },
+    },
   ]) {
     test(fixture.name, async () => {
       const scanned = await Effect.runPromise(ShellParse.scan(fixture.command, fixture.shell, "/workspace"))
       expect(scanned).toEqual(fixture.expected)
-      expect(await Effect.runPromise(ShellParse.scanPortable(fixture.command, fixture.shell, "/workspace"))).toEqual(
-        fixture.expected,
-      )
     })
   }
 })
