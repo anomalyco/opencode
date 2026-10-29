@@ -49,6 +49,9 @@ turns off until you set it up again.
 
 The **Billing** card on **Activity** shows the balance for owners and admins and opens **Settings › Billing**.
 
+The **Billing** button in the workspace header, or the `B` key, opens a drawer with live Go limits, credits, and usage.
+Owners and admins see the workspace's balance, usage, and auto-recharge; members see only their own usage and limits.
+
 ## When credits run out
 
 Paid requests fail with HTTP `402` once the balance reaches zero. The balance never goes negative.
@@ -61,13 +64,16 @@ Upstream request failed: Insufficient account funds
 
 Every payment appears under **Invoices** with its status and a link to **Download invoice** or **View receipt**.
 
-| Entry            | Created by         |
-| ---------------- | ------------------ |
-| Balance top-up   | Adding credits     |
-| Automatic top-up | Auto-recharge      |
-| Go subscription  | Subscribing to Go  |
-| Go renewal       | Monthly Go renewal |
-| Monthly Usage    | Invoiced billing   |
+| Entry            | Created by                               |
+| ---------------- | ---------------------------------------- |
+| Balance top-up   | Adding credits                           |
+| Automatic top-up | Auto-recharge                            |
+| Go subscription  | Subscribing to Go, Go Plus, or Go Teams  |
+| Go renewal       | Monthly Go renewal                       |
+| Go Plus upgrade  | Upgrading Go to Go Plus                  |
+| Go Teams upgrade | Upgrading Go or Go Plus to Go Teams      |
+| Go Teams member  | A member joining a workspace on Go Teams |
+| Monthly Usage    | Invoiced billing                         |
 
 ## Invoiced billing
 

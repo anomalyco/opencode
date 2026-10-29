@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import type { Eval } from "../interpreter/runner.js"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { constructor, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
 import { IteratorSymbol, rangeError, syntaxError, typeError } from "../interpreter/model.js"
@@ -25,51 +25,50 @@ import { callbackMethods, sortArray } from "./array.js"
  * The bytes a Uint8Array, array, or other iterable of numbers describes; the host array clamps each value. As in
  * TypedArray.from, a mapper sees the original values, after the source is consumed in full.
  */
-const collectBytes = <R>(
+function* collectBytes<R>(
   ctx: Interpreter<R>,
   source: Value,
   name: string,
   mapper?: Value,
   thisArg?: Value,
-): Effect.Effect<Uint8Array, unknown, R> => {
+): Eval<Uint8Array> {
   const apply = mapper === undefined ? undefined : applyCollectionCallback(ctx, mapper, name)
-  if (source instanceof Bytes && apply === undefined) return Effect.succeed(new Uint8Array(source.bytes))
-  return Effect.gen(function* () {
-    const cursor = yield* ctx.iterate(source)
-    if (cursor === undefined) {
-      throw typeError(
-        `${name} expects a Uint8Array, an array, or an iterable of numbers, received ${describeValue(source)}.`,
-      )
-    }
-    const values: Array<Value> = []
-    while (true) {
-      const step = yield* cursor.next
-      if (step.done) break
-      values.push(step.value)
-      checkArrayLength(values.length)
-    }
-    const mapped =
-      apply === undefined ? values : yield* Effect.forEach(values, (value, index) => apply([value, index], thisArg))
-    return Uint8Array.from(mapped, coerceToNumber)
-  })
+  if (source instanceof Bytes && apply === undefined) return new Uint8Array(source.bytes)
+  const cursor = yield* ctx.iterate(source)
+  if (cursor === undefined) {
+    throw typeError(
+      `${name} expects a Uint8Array, an array, or an iterable of numbers, received ${describeValue(source)}.`,
+    )
+  }
+  const values: Array<Value> = []
+  while (true) {
+    const step = yield* cursor.next()
+    if (step.done) break
+    values.push(step.value)
+    checkArrayLength(values.length)
+  }
+  if (apply === undefined) return Uint8Array.from(values, coerceToNumber)
+  const mapped: Array<Value> = []
+  for (const [index, value] of values.entries()) mapped.push(yield* apply([value, index], thisArg))
+  return Uint8Array.from(mapped, coerceToNumber)
 }
 
-const constructBytes = <R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj) => {
+function* constructBytes<R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj): Eval<Bytes> {
   const source = args[0]
   if (source !== null && typeof source === "object") {
-    return Effect.map(collectBytes(ctx, source, "new Uint8Array(...)"), (bytes) => new Bytes(proto, bytes))
+    return new Bytes(proto, yield* collectBytes(ctx, source, "new Uint8Array(...)"))
   }
   const length = source === undefined ? 0 : coerceToNumber(source)
   if (!Number.isInteger(length) || length < 0) throw rangeError(`Invalid typed array length: ${coerceToString(source)}`)
   checkArrayLength(length)
-  return Effect.succeed(new Bytes(proto, new Uint8Array(length)))
+  return new Bytes(proto, new Uint8Array(length))
 }
 
 export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const proto = builtins.Uint8Array
   const wrap = (bytes: Uint8Array) => new Bytes(proto, bytes)
-  const uint8Array = constructor<R>(builtins, proto, {
+  const uint8Array = constructor(builtins, proto, {
     name: "Uint8Array",
     length: 3,
     call: requiresNew("Uint8Array"),
@@ -84,7 +83,13 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     }
   }
   methods(builtins, uint8Array, [
-    ["from", 1, (_, args) => Effect.map(collectBytes(ctx, args[0], "Uint8Array.from", args[1], args[2]), wrap)],
+    [
+      "from",
+      1,
+      function* (_, args) {
+        return wrap(yield* collectBytes(ctx, args[0], "Uint8Array.from", args[1], args[2]))
+      },
+    ],
     ["of", 0, (_, args) => wrap(Uint8Array.from(args, coerceToNumber))],
     ["fromBase64", 1, (_, args) => decode("fromBase64", args, (text) => Uint8Array.fromBase64(text))],
     ["fromHex", 1, (_, args) => decode("fromHex", args, (text) => Uint8Array.fromHex(text))],
@@ -112,16 +117,15 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "set",
       1,
-      (thisValue, args) => {
+      function* (thisValue, args) {
         const target = self(thisValue, "set")
         const offset = optNumber(args[1]) ?? 0
-        return Effect.map(collectBytes(ctx, args[0], "Uint8Array.set"), (source) => {
-          if (!Number.isInteger(offset) || offset < 0 || source.length + offset > target.bytes.length) {
-            throw rangeError("Uint8Array.set: the source does not fit at that offset.")
-          }
-          target.bytes.set(source, offset)
-          return undefined
-        })
+        const source = yield* collectBytes(ctx, args[0], "Uint8Array.set")
+        if (!Number.isInteger(offset) || offset < 0 || source.length + offset > target.bytes.length) {
+          throw rangeError("Uint8Array.set: the source does not fit at that offset.")
+        }
+        target.bytes.set(source, offset)
+        return undefined
       },
     ],
     [
@@ -145,17 +149,16 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "sort",
       1,
-      (thisValue, args) => {
+      function* (thisValue, args) {
         const target = self(thisValue, "sort")
         // Without a comparator, typed arrays sort numerically rather than by string.
         if (args[0] === undefined) {
           target.bytes.sort()
           return target
         }
-        return Effect.map(sortArray(ctx, [...target.bytes], args[0], "Uint8Array.sort"), (sorted) => {
-          target.bytes.set(Uint8Array.from(sorted, coerceToNumber))
-          return target
-        })
+        const sorted = yield* sortArray(ctx, [...target.bytes], args[0], "Uint8Array.sort")
+        target.bytes.set(Uint8Array.from(sorted, coerceToNumber))
+        return target
       },
     ],
     ["indexOf", 1, (thisValue, args) => self(thisValue, "indexOf").bytes.indexOf(search(args[0]), optNumber(args[1]))],
@@ -219,10 +222,10 @@ export const textEncoderGlobal = <R>(ctx: Interpreter<R>) => {
   methods(builtins, proto, [
     ["encode", 0, (_, args) => new Bytes(builtins.Uint8Array, encoder.encode(coerceToString(args[0] ?? "")))],
   ])
-  return constructor<R>(builtins, proto, {
+  return constructor(builtins, proto, {
     name: "TextEncoder",
     call: requiresNew("TextEncoder"),
-    construct: (_, newTarget) => Effect.succeed(new Obj(prototypeFrom(newTarget, proto))),
+    construct: (_, newTarget) => new Obj(prototypeFrom(newTarget, proto)),
   })
 }
 
@@ -264,19 +267,18 @@ export const textDecoderGlobal = <R>(ctx: Interpreter<R>) => {
       },
     ],
   ])
-  return constructor<R>(builtins, proto, {
+  return constructor(builtins, proto, {
     name: "TextDecoder",
     call: requiresNew("TextDecoder"),
-    construct: (args, newTarget) =>
-      Effect.sync(() => {
-        const label = args[0] === undefined ? "utf-8" : coerceToString(args[0]).trim().toLowerCase()
-        if (!utf8Labels.has(label)) throw rangeError(`The "${label}" encoding is not supported; only UTF-8 is.`)
-        const options = args[1] instanceof Obj ? args[1] : undefined
-        const flag = (name: string) => options !== undefined && Boolean(get(options, name))
-        return new TextDecoderObj(
-          prototypeFrom(newTarget, proto),
-          new TextDecoder("utf-8", { fatal: flag("fatal"), ignoreBOM: flag("ignoreBOM") }),
-        )
-      }),
+    construct: (args, newTarget) => {
+      const label = args[0] === undefined ? "utf-8" : coerceToString(args[0]).trim().toLowerCase()
+      if (!utf8Labels.has(label)) throw rangeError(`The "${label}" encoding is not supported; only UTF-8 is.`)
+      const options = args[1] instanceof Obj ? args[1] : undefined
+      const flag = (name: string) => options !== undefined && Boolean(get(options, name))
+      return new TextDecoderObj(
+        prototypeFrom(newTarget, proto),
+        new TextDecoder("utf-8", { fatal: flag("fatal"), ignoreBOM: flag("ignoreBOM") }),
+      )
+    },
   })
 }

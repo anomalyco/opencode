@@ -298,14 +298,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const file = path.normalize(input)
 
       if (!file || path.absolute(file)) return
-      void serverSDK.api.file.watch({ path: file, location: { directory: scope() } }).catch(() => {})
+      void serverSDK.api.experimental.file.watch({ path: file, location: { directory: scope() } }).catch(() => {})
     }
 
     const unwatch = (input: string) => {
       const file = path.normalize(input)
 
       if (!file || path.absolute(file)) return
-      void serverSDK.api.file.unwatch({ path: file, location: { directory: scope() } }).catch(() => {})
+      void serverSDK.api.experimental.file.unwatch({ path: file, location: { directory: scope() } }).catch(() => {})
     }
 
     createEffect(() => {

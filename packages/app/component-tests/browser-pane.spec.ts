@@ -210,6 +210,7 @@ story("keeps a still of the page under an open dialog instead of blanking the pa
 
 story("comments on a picked element over a still of the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("zoomed")
   const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
   await picker.click()
   await expect(picker).toHaveAttribute("aria-pressed", "true")
@@ -223,20 +224,25 @@ story("comments on a picked element over a still of the page", async ({ page }) 
   await expect(picker).toHaveAttribute("aria-pressed", "false")
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
   await expect(editor).toBeFocused()
+  await expect(editor).toHaveAttribute("placeholder", "Add an optional comment...")
+  await expect(editor).toHaveAccessibleName("Comment on this element")
   await expect(root.getByText("Session getter reads: 0", { exact: true })).toBeVisible()
   await expect(root.locator('[data-slot="browser-comment-editor"]')).toContainText("button.primary")
   // The spotlight frames the picked element in surface pixels.
-  await expect(root.locator('[data-slot="browser-comment-spotlight"]')).toHaveCSS("left", "48px")
+  await expect(root.locator('[data-slot="browser-comment-spotlight"]')).toHaveCSS("left", "38.4px")
+  await expect(root.locator('[data-slot="browser-comment-spotlight"]')).toHaveCSS("width", "128px")
   // The native page hides behind its still so the editor can float over it.
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
   await expect(root.locator("#browser-panel img")).toBeVisible()
 
   await editor.fill("Make this the primary colour")
-  await editor.press("Enter")
+  await root.getByRole("button", { name: "Add element comment", exact: true }).click()
   await expect(root.getByTestId("fixture-comments")).toHaveText("button.primary @e7: Make this the primary colour")
   await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
   await expect(root.getByText("Highlights: clear", { exact: true })).toBeVisible()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await expect(root.getByTestId("fixture-comment-metadata")).toContainText('selector \\"main > button.primary\\"')
+  await expect(root.getByTestId("fixture-comment-metadata")).toContainText("accessible name")
 
   // The pane stays mounted when Beta is routed, and its picker then listens to Beta's page.
   await root.getByRole("button", { name: "Beta", exact: true }).click()
@@ -323,28 +329,146 @@ story("keeps a comment draft but drops its ref when the page navigates", async (
   )
 })
 
-story("keeps the comment editor and its actions inside the page", async ({ page }) => {
+story("grows the compact comment upward without flipping and keeps its actions inside the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("low")
   await root.getByRole("button", { name: "Select an element to comment on", exact: true }).click()
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   const editor = root.locator('[data-slot="browser-comment-editor"]')
-  // As if the user dragged the textarea's resize handle far past the page.
-  await editor.locator("textarea").evaluate((element) => {
-    element.style.height = "900px"
-  })
-  // The editor moves once it has measured its new height.
+  const field = editor.locator("textarea")
+  await expect(editor).toHaveCSS("width", "320px")
+  await expect(field).toBeFocused()
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const opening = await editor.boundingBox()
+
+  if (!opening) throw new Error("Missing opening annotation")
+  await field.fill("A line of feedback\n".repeat(6))
+  await expect(field).toHaveCSS("height", "140px")
+  // The field lays out before ResizeObserver repositions its parent.
+  await expect
+    .poll(async () => {
+      const grown = await editor.boundingBox()
+
+      return !!grown && grown.y < opening.y && Math.abs(grown.y + grown.height - opening.y - opening.height) < 0.5
+    })
+    .toBe(true)
+  await field.fill("A line of feedback\n".repeat(30))
+  await expect(field).toHaveCSS("height", "160px")
+  expect(await field.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
   await expect
     .poll(async () => {
       const surface = await root.locator('[data-component="browser-comment"]').boundingBox()
       const box = await editor.boundingBox()
 
-      return !!surface && !!box && box.y + box.height <= surface.y + surface.height
+      return !!surface && !!box && box.y >= surface.y && box.y + box.height <= surface.y + surface.height
     })
     .toBe(true)
-  const submit = editor.getByRole("button", { name: "Comment", exact: true })
+  const submit = editor.getByRole("button", { name: "Add element comment", exact: true })
   await submit.scrollIntoViewIfNeeded()
   await expect(submit).toBeInViewport()
+  // Near the surface's top, growth stops at the opening bottom rather than pushing the card down.
+  await field.press("Escape")
+  await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("default")
+  await root.getByRole("button", { name: "Select an element to comment on", exact: true }).click()
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(field).toBeFocused()
+  const nearTop = await editor.boundingBox()
+
+  if (!nearTop) throw new Error("Missing near-top annotation")
+  await field.fill("A line of feedback\n".repeat(30))
+  await expect
+    .poll(() => field.evaluate((element) => element.clientHeight < 160 && element.scrollHeight > element.clientHeight))
+    .toBe(true)
+  await expect
+    .poll(async () => {
+      const box = await editor.boundingBox()
+
+      return !!box && Math.abs(box.y + box.height - nearTop.y - nearTop.height) < 0.5
+    })
+    .toBe(true)
+  // A narrow, short pane still keeps the compact editor and action within its surface.
+  await root.locator("#browser-panel").evaluate((element) => {
+    const container = element.parentElement
+
+    if (!container) throw new Error("Missing pane container")
+    container.style.width = "280px"
+    container.style.height = "150px"
+  })
+  await expect(editor).toHaveCSS("width", "262px")
+  await expect
+    .poll(async () => {
+      const surface = await root.locator('[data-component="browser-comment"]').boundingBox()
+      const box = await editor.boundingBox()
+
+      return !!surface && !!box && box.y >= surface.y && box.y + box.height <= surface.y + surface.height
+    })
+    .toBe(true)
+  await expect(submit).toBeInViewport()
 })
+
+story(
+  "wraps the selector, attaches elements without comments, and cancels only empty drafts on clickaway",
+  async ({ page }) => {
+    const root = page.getByTestId("browser-pane-fixture")
+    const scenario = root.getByRole("combobox", { name: "Picked element scenario" })
+    const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+    const editor = root.locator('[data-slot="browser-comment-editor"]')
+    const overlay = root.locator('[data-component="browser-comment"]')
+    await scenario.selectOption("long")
+    await root.evaluate((element) => element.setAttribute("dir", "rtl"))
+    await picker.click()
+    await root.getByRole("button", { name: "Pick element", exact: true }).click()
+    const preview = editor.locator('[data-slot="line-comment-v2-preview"] [dir="ltr"]')
+    const selector = `main > section[data-label="إعدادات"] > ${".nested-selector".repeat(24)} > button.primary`
+    await expect(preview).toHaveText(selector)
+    await expect(preview).toHaveAttribute("dir", "ltr")
+    await expect(preview).toHaveCSS("unicode-bidi", "isolate")
+    await expect(preview).toHaveCSS("-webkit-line-clamp", "2")
+    await expect(preview).toHaveCSS("height", "40px")
+    await preview.hover()
+    await expect(page.getByRole("tooltip")).toHaveText(selector)
+    await editor.locator("textarea").press("Enter")
+    await expect(overlay).toHaveCount(0)
+    const comments = root.getByTestId("fixture-comments").getByRole("listitem")
+    await expect(comments).toHaveText(["button.primary @e7:"])
+
+    await scenario.selectOption("default")
+    await picker.click()
+    await root.getByRole("button", { name: "Pick element", exact: true }).click()
+    await editor.getByRole("button", { name: "Add element", exact: true }).click()
+    await expect(overlay).toHaveCount(0)
+    await expect(comments).toHaveText(["button.primary @e7:", "button.primary @e7:"])
+    expect(JSON.parse(await root.getByTestId("fixture-comment-metadata").innerText())).toEqual(
+      [selector, "main > button.primary"].map((value) =>
+        expect.objectContaining({
+          type: "note",
+          label: "button.primary",
+          title: value,
+          subtitle: "Browser annotation",
+          comment: "",
+          subject: `the "button.primary" element in browser tab tab_11111111-1111-1111-1111-111111111111 at https://alpha.example/ (role button; accessible name "Save changes"; selector ${JSON.stringify(value)})`,
+          live: {
+            href: "tab_11111111-1111-1111-1111-111111111111#e7",
+            subject: `the "button.primary" element in browser tab tab_11111111-1111-1111-1111-111111111111 at https://alpha.example/ (role button; accessible name "Save changes"; selector ${JSON.stringify(value)}; browser ref @e7, usable as ref in any browser tool including browser.evaluate until the page navigates)`,
+          },
+        }),
+      ),
+    )
+
+    await scenario.selectOption("fallback")
+    await picker.click()
+    await root.getByRole("button", { name: "Pick element", exact: true }).click()
+    await expect(preview).toHaveText("button.primary")
+    await editor.locator("textarea").fill("Keep this feedback")
+    await overlay.click({ position: { x: 620, y: 290 } })
+    await expect(editor.locator("textarea")).toHaveValue("Keep this feedback")
+    await editor.locator("textarea").fill("")
+    await overlay.click({ position: { x: 620, y: 290 } })
+    await expect(overlay).toHaveCount(0)
+    await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+    await expect(comments).toHaveText(["button.primary @e7:", "button.primary @e7:"])
+  },
+)
 
 story("shows the empty state over a blank native page and restores navigation", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
@@ -569,7 +693,7 @@ story("suggests visited pages and opens the first one that completes the typed a
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.click()
   await address.pressSequentially("localhost")
-  const options = page.getByRole("option")
+  const options = page.getByRole("listbox", { name: "Suggestions" }).getByRole("option")
   await expect(options).toHaveCount(1)
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
   // Arrow keys that pick IME candidates leave the suggestions alone.

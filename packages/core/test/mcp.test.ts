@@ -2684,7 +2684,14 @@ it.effect("does not call MCP when permission is blocked", () =>
   Effect.gen(function* () {
     calls = 0
     assertion = yield* Deferred.make<Permission.AssertInput>()
-    decision = Effect.fail(new Permission.BlockedError({ rules: [], permission: "demo_search", resources: ["*"] }))
+    decision = Effect.fail(
+      new Permission.BlockedError({
+        rules: [],
+        permission: "demo_search",
+        resources: ["*"],
+        reason: "Search is disabled in this workspace",
+      }),
+    )
     const registry = yield* Tool.Service
     const registration = yield* McpTool.Service
     yield* registration.flush
@@ -2701,10 +2708,55 @@ it.effect("does not call MCP when permission is blocked", () =>
         input: { code: "return await tools.demo.search({})" },
       },
     })
-    expect(execution.content).toEqual([{ type: "text", text: "Unable to execute demo_search" }])
+    expect(execution.content).toEqual([{ type: "text", text: "Search is disabled in this workspace" }])
     expect(execution.metadata).toEqual({
       toolCalls: [{ tool: "demo.search", status: "error" }],
       error: true,
+    })
+    expect(
+      yield* executeTool(registry, {
+        sessionID: Session.ID.make("ses_mcp_blocked"),
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call_mcp_blocked_direct", name: "direct_lookup", input: {} },
+      }),
+    ).toEqual({
+      status: "error",
+      error: { type: "permission.rejected", message: "Search is disabled in this workspace" },
+    })
+    expect(calls).toBe(0)
+  }),
+)
+
+it.effect("returns permission feedback instead of calling MCP", () =>
+  Effect.gen(function* () {
+    calls = 0
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    decision = Effect.fail(new Permission.CorrectedError({ feedback: "Search the docs folder instead" }))
+    const registry = yield* Tool.Service
+    const registration = yield* McpTool.Service
+    yield* registration.flush
+    const toolSet = yield* registry.snapshot()
+
+    const execution = yield* toolSet.execute({
+      sessionID: Session.ID.make("ses_mcp_corrected"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_corrected",
+        name: "execute",
+        input: { code: "return await tools.demo.search({})" },
+      },
+    })
+    expect(execution.content).toEqual([{ type: "text", text: "Search the docs folder instead" }])
+    expect(
+      yield* executeTool(registry, {
+        sessionID: Session.ID.make("ses_mcp_corrected"),
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call_mcp_corrected_direct", name: "direct_lookup", input: {} },
+      }),
+    ).toEqual({
+      status: "error",
+      error: { type: "permission.rejected", message: "Search the docs folder instead" },
     })
     expect(calls).toBe(0)
   }),
@@ -2738,7 +2790,7 @@ for (const modern of [false, true]) {
       }).pipe(
         Effect.provide(
           resourceMcpLayer(server.url, undefined, undefined, {
-            policies: [{ action: "integration.use", resource: "mcp:*", effect: "deny" }],
+            policies: [{ action: "mcp.use", resource: "*", effect: "deny" }],
           }),
         ),
       )
@@ -2762,7 +2814,7 @@ for (const source of ["config", "organization"] as const) {
               mcp: new ConfigMCP.Info({
                 servers: { resources: new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }) },
               }),
-              policies: [{ action: "integration.use", resource: "mcp:*", effect }],
+              policies: [{ action: "mcp.use", resource: "*", effect }],
             }),
           })
         yield* test.setEntries([document("allow")])
@@ -2772,7 +2824,7 @@ for (const source of ["config", "organization"] as const) {
           expect((yield* service.tools()).length).toBeGreaterThan(0)
           if (source === "config") yield* test.setEntries([document("deny")])
           if (source === "organization")
-            yield* setOrganizationPolicy([{ action: "integration.use", resource: "mcp:*", effect: "deny" }])
+            yield* setOrganizationPolicy([{ action: "mcp.use", resource: "*", effect: "deny" }])
           yield* PubSub.publish(updates, { type: Event.Updated.type })
           yield* service.servers().pipe(
             Effect.filterOrFail(

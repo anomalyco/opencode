@@ -124,6 +124,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     rows,
     sessionMessageByID,
     userContextByID: indexUserContext(input.sessionMessages),
+    previousSelectionByID: indexPreviousSelection(input.sessionMessages),
   }
 }
 
@@ -144,6 +145,7 @@ export function createReactiveTimelineProjection(input: {
   )
 
   const userContextByID = createMemo(() => indexUserContext(input.sessionMessages()))
+  const previousSelectionByID = createMemo(() => indexPreviousSelection(input.sessionMessages()))
   const assistantMessagesByParent = createMemo(() => indexAssistantMessages(input.sessionMessages()))
 
   // Row structure depends on the empty/non-empty boundary, not each text delta.
@@ -224,6 +226,7 @@ export function createReactiveTimelineProjection(input: {
     rows,
     sessionMessageByID,
     userContextByID,
+    previousSelectionByID,
   }
 }
 
@@ -572,7 +575,7 @@ export namespace Timeline {
           new TimelineRow.Error({
             userMessageID: turnID,
             text: unwrapErrorMessage(lastAssistant.error.message),
-            ...freeLimit(lastAssistant),
+            ...usageLimit(lastAssistant),
             ...budgetLimit(lastAssistant),
           }),
         )
@@ -594,7 +597,7 @@ export namespace Timeline {
               new TimelineRow.Error({
                 userMessageID: turnID,
                 text: unwrapErrorMessage(entry.message.error.message),
-                ...freeLimit(entry.message),
+                ...usageLimit(entry.message),
                 ...budgetLimit(entry.message),
               }),
             )
@@ -648,11 +651,15 @@ export namespace Timeline {
 
 const MAX_RETRY_AFTER_MS = 7 * 86_400_000
 
-function freeLimit(
+function usageLimit(
   message: Pick<SessionMessageAssistant, "error"> & { time: { created: number; completed?: number } },
 ) {
-  if (message.error?.type !== "provider.free-limit") return {}
-  const delay = message.error.retryAfterMs
+  const type = message.error?.type
+
+  if (type !== "provider.free-limit" && type !== "provider.go-limit") return {}
+
+  const kind = type === "provider.go-limit" ? ("go-limit" as const) : ("free-limit" as const)
+  const delay = message.error?.retryAfterMs
   const base = message.time.completed ?? message.time.created
 
   if (
@@ -663,23 +670,22 @@ function freeLimit(
     !Number.isFinite(base) ||
     Number.isNaN(new Date(base + delay).getTime())
   )
-    return { kind: "free-limit" as const }
+    return { kind }
 
-  return {
-    kind: "free-limit" as const,
-    resetAt: base + delay,
-  }
+  return { kind, resetAt: base + delay }
 }
 
 // OpenCode Console says when the budget resets in its refusal's metadata, which every protocol's envelope names `resetsAt`.
 function budgetLimit(message: Pick<SessionMessageAssistant, "error">) {
   const type = message.error?.type
+
   if (type !== "provider.budget-limit" && type !== "provider.model-budget-limit") return {}
+  const kind = type === "provider.budget-limit" ? ("budget-limit" as const) : ("model-budget-limit" as const)
   const at = Date.parse(/"resetsAt"\s*:\s*"([^"]+)"/.exec(message.error?.response?.body ?? "")?.[1] ?? "")
-  return {
-    kind: type === "provider.budget-limit" ? ("budget-limit" as const) : ("model-budget-limit" as const),
-    ...(Number.isNaN(at) ? {} : { resetAt: at }),
-  }
+
+  if (Number.isNaN(at)) return { kind }
+
+  return { kind, resetAt: at }
 }
 
 function isInterrupted(error: SessionMessageAssistant["error"]) {
@@ -791,8 +797,24 @@ export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefine
   return next
 }
 
+type UserSelection = { agent: string; model: ModelRef }
+
+/** The agent and model a user message's metadata names, when it names them. */
+function localSelection(message: SessionMessageUser): Partial<UserSelection> {
+  const localModel = Option.getOrUndefined(decodeLocalModel(message.metadata))?.model
+  const localModelID = localModel?.id ?? localModel?.modelID
+
+  return {
+    agent: Option.getOrUndefined(decodeLocalAgent(message.metadata))?.agent,
+    model:
+      localModel && localModelID
+        ? { id: localModelID, providerID: localModel.providerID, variant: localModel.variant }
+        : undefined,
+  }
+}
+
 function indexUserContext(messages: SessionMessageInfo[]) {
-  const result = new Map<string, { agent: string; model: ModelRef }>()
+  const result = new Map<string, UserSelection>()
   let agent = ""
   let model: ModelRef = { id: "", providerID: "" }
   let userID: string | undefined
@@ -804,19 +826,8 @@ function indexUserContext(messages: SessionMessageInfo[]) {
 
     if (message.type === "user") {
       userID = message.id
-      const localModel = Option.getOrUndefined(decodeLocalModel(message.metadata))?.model
-      const localModelID = localModel?.id ?? localModel?.modelID
-
-      result.set(message.id, {
-        agent: Option.match(decodeLocalAgent(message.metadata), {
-          onNone: () => agent,
-          onSome: (local) => local.agent,
-        }),
-        model:
-          localModel && localModelID
-            ? { id: localModelID, providerID: localModel.providerID, variant: localModel.variant }
-            : model,
-      })
+      const local = localSelection(message)
+      result.set(message.id, { agent: local.agent ?? agent, model: local.model ?? model })
     }
 
     if (message.type === "shell") userID = undefined
@@ -826,6 +837,45 @@ function indexUserContext(messages: SessionMessageInfo[]) {
     model = message.model
 
     if (userID) result.set(userID, { agent, model })
+  })
+
+  return result
+}
+
+/**
+ * The agent and model the previous user message chose, for each user message after the first. A message whose
+ * metadata names neither chose what its first reply ran with; later replies, which a steer's switch reconfigures,
+ * do not count, so a waiting steer can tell whether it changes the agent or model of the turn it joins.
+ */
+function indexPreviousSelection(messages: SessionMessageInfo[]) {
+  const result = new Map<string, UserSelection>()
+  let agent = ""
+  let model: ModelRef = { id: "", providerID: "" }
+  let previous: { chosen: Partial<UserSelection>; current: UserSelection } | undefined
+
+  messages.forEach((message) => {
+    if (message.type === "agent-switched") agent = message.agent
+
+    if (message.type === "model-switched") model = message.model
+
+    if (message.type === "assistant") {
+      agent = message.agent
+      model = message.model
+
+      if (previous) {
+        previous.chosen.agent ??= message.agent
+        previous.chosen.model ??= message.model
+      }
+    }
+
+    if (message.type !== "user") return
+
+    if (previous)
+      result.set(message.id, {
+        agent: previous.chosen.agent ?? previous.current.agent,
+        model: previous.chosen.model ?? previous.current.model,
+      })
+    previous = { chosen: localSelection(message), current: { agent, model } }
   })
 
   return result

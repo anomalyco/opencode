@@ -301,6 +301,14 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.post("sessionCreate", "/api/session", { payload: JsonPayload, success: Json }))
   .add(HttpApiEndpoint.get("sessionActive", "/api/session/active", { success: Json }))
   .add(
+    HttpApiEndpoint.post("rpcCall", "/api/rpc/:rpcID/:method", {
+      params: { rpcID: Schema.String, method: Schema.String },
+      payload: JsonPayload,
+      success: Json,
+      error: Unsupported,
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("sessionGet", "/api/session/:sessionID", {
       params: SessionParams,
       success: Json,
@@ -309,6 +317,12 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(
     HttpApiEndpoint.delete("sessionRemove", "/api/session/:sessionID", {
+      params: SessionParams,
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionView", "/api/session/:sessionID/view", {
       params: SessionParams,
       success: NoContent,
     }),

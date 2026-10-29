@@ -12,6 +12,7 @@ import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import { Variant } from "../../variant.js"
 import { ConfigIntegration } from "../integration.js"
+import { ConfigManaged } from "../managed.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
 
 export const Plugin = define({
@@ -140,10 +141,21 @@ export const Plugin = define({
 
 // Integration documents are left out: their providers authenticate with the integration's connection, so they add no
 // integration or method, and the integration's own plugin applies them earlier in the provider chain (`integrate`).
+// A provider the Console supplies is shaped only by the Console and managed configuration: user, project, and remote
+// documents cannot override any part of it, since it carries the org's token and a repository must not redirect it.
 function configuredProviders(entries: readonly Entry[]) {
+  const supplied = new Set(
+    entries
+      .filter((entry): entry is ConfigIntegration.Document => entry instanceof ConfigIntegration.Document)
+      .flatMap((document) => Object.keys(document.info.providers ?? {})),
+  )
   return entries
     .filter((entry): entry is Document => entry.type === "document" && !(entry instanceof ConfigIntegration.Document))
-    .flatMap((file) => Object.entries(file.info.providers ?? {}))
+    .flatMap((file) =>
+      Object.entries(file.info.providers ?? {}).filter(
+        ([id]) => !supplied.has(id) || file instanceof ConfigManaged.Document,
+      ),
+    )
 }
 
 /**

@@ -7,10 +7,6 @@ describe("native shell syntax compatibility", () => {
   test("PowerShell invocation approvals include the operator instead of saving an ineffective prefix", async () => {
     const command = "& $Command value"
     expect(await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace"))).toEqual({
-      commands: [{ resource: command, save: "$Command *" }],
-      directories: [],
-    })
-    expect(await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace", { portable: true }))).toEqual({
       commands: [{ resource: command, save: "& $Command *" }],
       directories: [],
     })
@@ -26,9 +22,7 @@ describe("native shell syntax compatibility", () => {
     "% { Write-Output value }",
     "Where-Object { Write-Output value }",
   ])("PowerShell scriptblock callers preserve permission resources and usable approvals: %s", async (command) => {
-    const legacy = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace"))
-    const native = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace", { portable: true }))
-    expect(native.commands.map((item) => item.resource)).toEqual(legacy.commands.map((item) => item.resource))
+    const native = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace"))
     for (const item of native.commands) expect(Wildcard.match(item.resource, item.save), item.resource).toBe(true)
   })
 
@@ -60,6 +54,7 @@ describe("native shell syntax compatibility", () => {
       "echo ${value//before/after}",
       "echo ${arr[$(printf index)]}",
       "printf '%s' $'line1\\nline2'",
+      "printf '%s' $'\\u2713\\U0001f642'",
       'printf "%s" $"hello"',
       "echo $((1 + ${value:-2}))",
       "echo $((array[$(printf 0)]))",
@@ -67,11 +62,10 @@ describe("native shell syntax compatibility", () => {
       "((count++))",
       "for ((i=0; i<2; i++)); do printf ok; done",
       "echo `printf \\2`",
+      "F='$HOME/bin'; SIZE=4096; N=$(( (SIZE + 1023) / 1024 )); echo $N",
     ])(`${shell} extracts commands without rejecting ordinary syntax: %s`, async (command) => {
-      const legacy = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace"))
-      const native = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace", { portable: true }))
-      expect(native).toEqual(legacy)
-      expect(await Effect.runPromise(ShellParse.scanPortable(command, shell, "/workspace"))).toEqual(native)
+      const scanned = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace"))
+      expect(await Effect.runPromise(ShellParse.scanPortable(command, shell, "/workspace"))).toEqual(scanned)
     })
   }
 
@@ -84,10 +78,105 @@ describe("native shell syntax compatibility", () => {
       ],
       directories: [],
     }
-    expect(await Effect.runPromise(ShellParse.scanPortable(command, "bash", "/workspace"))).toEqual(expected)
-    expect(await Effect.runPromise(ShellParse.scan(command, "bash", "/workspace", { portable: true }))).toEqual(
-      expected,
-    )
+    expect(await Effect.runPromise(ShellParse.scan(command, "bash", "/workspace"))).toEqual(expected)
+  })
+
+  test("keeps heredoc and here-string spans attached to their own commands across lists and pipelines", async () => {
+    expect(
+      await Effect.runPromise(
+        ShellParse.scan("true && cat <<'EOF' && git status\nhello\nEOF", "bash", "/workspace"),
+      ),
+    ).toEqual({
+      commands: [
+        { resource: "true", save: "true *" },
+        { resource: "cat", save: "cat *" },
+        { resource: "git status", save: "git status *" },
+      ],
+      directories: [],
+    })
+
+    expect(
+      await Effect.runPromise(ShellParse.scan("cat <<'EOF' && git status\nhello\nEOF", "bash", "/workspace")),
+    ).toEqual({
+      commands: [
+        { resource: "cat <<'EOF'", save: "cat *" },
+        { resource: "git status", save: "git status *" },
+      ],
+      directories: [],
+    })
+
+    expect(
+      await Effect.runPromise(
+        ShellParse.scan("if cat <<'EOF' | grep -q hi; then echo ok; fi\nhi\nEOF", "bash", "/workspace"),
+      ),
+    ).toEqual({
+      commands: [
+        { resource: "cat <<'EOF'", save: "cat *" },
+        { resource: "grep -q hi", save: "grep *" },
+        { resource: "echo ok", save: "echo *" },
+      ],
+      directories: [],
+    })
+
+    expect(
+      await Effect.runPromise(
+        ShellParse.scan("true && git add -p file.rs <<< $'n\\ny\\n' >/dev/null", "bash", "/workspace"),
+      ),
+    ).toEqual({
+      commands: [
+        { resource: "true", save: "true *" },
+        { resource: "git add -p file.rs <<< $'n\\ny\\n'", save: "git add *" },
+      ],
+      directories: [],
+    })
+  })
+
+  test("scans Zsh glob qualifiers, indirect parameter flags, and disown operators while rejecting code qualifiers", async () => {
+    expect(
+      await Effect.runPromise(
+        ShellParse.scan(
+          'for f in locks/waiter-*(N); do echo "${(P)f}"; done; ls -d src/**/target(N/) *.ts(.OL[1,3]); nohup sleep 1 >/dev/null 2>&1 &! ; echo started',
+          "zsh",
+          "/workspace",
+        ),
+      ),
+    ).toEqual({
+      commands: [
+        { resource: 'echo "${(P)f}"', save: "echo *" },
+        { resource: "ls -d src/**/target(N/) *.ts(.OL[1,3])", save: "ls *" },
+        { resource: "nohup sleep 1 >/dev/null 2>&1", save: "nohup *" },
+        { resource: "echo started", save: "echo *" },
+      ],
+      directories: [],
+    })
+
+    for (const unsafe of [
+      "echo *(e:'rm -rf /':)",
+      "echo *(+cmd)",
+      "echo *(+1)",
+      "echo *(P:-f:)",
+      "echo *(u:root:)",
+      "echo *(:Q)",
+      "a=(1); r='a[$(printf pwn)]'; echo ${(P)r}",
+    ]) {
+      expect(await Effect.runPromise(Effect.result(ShellParse.scan(unsafe, "zsh", "/workspace")))).toMatchObject({
+        _tag: "Failure",
+        failure: { message: "Portable shell scanner cannot analyze command: dynamic-execution" },
+      })
+    }
+  })
+
+  test.each([
+    ["bash", "x=\"a$(printf '\\x5b')\\$(touch pwn)]\"; echo $((x))"],
+    ["bash", "x=$(printf 'a\\x5b\\x24\\x28touch pwn\\x29]'); echo $((x))"],
+    ["bash", "x=$(echo 'a{$(touch pwn)]' | tr '{' '\\133'); (( x ))"],
+    ["bash", "F='$HOME/bin'; SIZE=$(stat -f %z file); N=$(( (SIZE + 1023) / 1024 )); echo $N"],
+    ["zsh", "r=\"a$(printf '\\x5b')\\$(touch pwn)]\"; echo ${(P)r}"],
+  ])("%s rejects variable sinks when a substitution can build the subscript: %s", async (shell, command) => {
+    expect(await Effect.runPromise(Effect.result(ShellParse.scan(command, shell, "/workspace")))).toMatchObject({
+      _tag: "Failure",
+      failure: { message: "Portable shell scanner cannot analyze command: dynamic-execution" },
+    })
   })
 
   test.each([
@@ -106,9 +195,7 @@ describe("native shell syntax compatibility", () => {
     "Write-Output @'\nhello\n'@",
     "git st`atus",
   ])("PowerShell extracts commands without rejecting ordinary syntax: %s", async (command) => {
-    const legacy = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace"))
-    const native = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace", { portable: true }))
-    expect(native).toEqual(legacy)
-    expect(await Effect.runPromise(ShellParse.scanPortable(command, "pwsh", "/workspace"))).toEqual(native)
+    const scanned = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace"))
+    expect(await Effect.runPromise(ShellParse.scanPortable(command, "pwsh", "/workspace"))).toEqual(scanned)
   })
 })

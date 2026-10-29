@@ -20,8 +20,13 @@ const HIGHLIGHT_ACTIVE = "timeline-search-hit-active"
 
 const TEXT_SELECTORS = '[data-slot="text-part-body"], [data-slot="user-message-text"]'
 
+const FOLD_TOGGLE = '[data-slot="user-message-fold-toggle"]'
+
+// Matches the fold's mask in session-ui's message-part.css.
+const FOLD_FADE = 40
+
 function supportsHighlights() {
-  return typeof CSS !== "undefined" && typeof CSS.highlights === "object" && CSS.highlights !== null
+  return !!globalThis.CSS?.highlights
 }
 
 function clearHighlights() {
@@ -46,7 +51,14 @@ function collectRanges(
     const partID = part?.getAttribute("data-timeline-part-id")
     const isActivePart = activePartID !== undefined && partID === activePartID
     let occurrenceInPart = 0
-    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
+
+    // A folded user message's Read more button sits inside its text.
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) =>
+        node.parentElement?.closest(FOLD_TOGGLE) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+    })
+
+    // SAFETY: SHOW_TEXT restricts this walker to Text nodes.
     let node = walker.nextNode() as Text | null
 
     while (node) {
@@ -67,6 +79,7 @@ function collectRanges(
         at = lowerValue.indexOf(lower, from)
       }
 
+      // SAFETY: SHOW_TEXT restricts this walker to Text nodes.
       node = walker.nextNode() as Text | null
     }
   }
@@ -266,6 +279,24 @@ export function createTimelineSearchController(input: {
       }
 
       const rect = active[0].getBoundingClientRect()
+
+      const fold = active[0].startContainer.parentElement?.closest<HTMLElement>(
+        '[data-slot="user-message-fold"][data-folded]',
+      )
+
+      // A match in or past a folded message's fading last lines opens the message, then scrolls to it.
+      const toggle =
+        fold && rect.bottom > fold.getBoundingClientRect().bottom - FOLD_FADE
+          ? root.querySelector<HTMLElement>(`${FOLD_TOGGLE}[aria-controls="${CSS.escape(fold.id)}"]`)
+          : null
+
+      if (toggle) {
+        toggle.click()
+        requestAnimationFrame(seek)
+
+        return
+      }
+
       const rootRect = root.getBoundingClientRect()
       const sticky = root.querySelector("[data-session-title]")
       const inset = sticky instanceof HTMLElement ? sticky.offsetHeight : 0

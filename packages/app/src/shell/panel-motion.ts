@@ -36,7 +36,11 @@ export const panelOpacity = (closed: number) => (closed === 0 ? "" : `${Math.min
 /** Where a neighbour's content sits: centred content follows its box's centre, start-pinned content its start edge. */
 export type Anchor = "center" | "start"
 
-type Hold = { box: () => HTMLElement | null | undefined; anchor?: (() => HTMLElement | null | undefined) | "blocks" }
+type Hold = {
+  box: () => HTMLElement | null | undefined
+  anchor?: (() => HTMLElement | null | undefined) | "blocks"
+  target?: () => HTMLElement | null | undefined
+}
 
 // `rest` 1 for a box laid out where it is rather than where it lands, so its shift runs from nothing to the whole.
 type Shift = { element: HTMLElement; shift: number; rest: number }
@@ -63,9 +67,10 @@ let shifted: Shift[] = []
 
 /**
  * Keeps a content box beside the panels at the width it will have once every spring flight lands, so its text wraps
- * once as a flight starts rather than on every frame while its container's width moves. For the flight, the box gets
- * `--panel-hold-width`, which its layout uses in place of its container's width. A box that lands at no width, like the
- * contents of a closing panel, is left to its own layout.
+ * once as a flight starts rather than on every frame while its container's width moves. For the flight, `target` (the
+ * box by default) gets `--panel-hold-width`, which its own layout uses in place of its container's width. The property
+ * doesn't inherit, so setting and clearing it restyles only the target, not every element of a long transcript or file
+ * tree under it. A box that lands at no width, like the contents of a closing panel, is left to its own layout.
  *
  * `anchor` is an element inside the box whose start edge must not jump when the box takes its landing width: the box
  * shifts by the difference, with a transform, and the shift runs out over the flight. `"blocks"` holds the box at the
@@ -73,8 +78,8 @@ let shifted: Shift[] = []
  * doesn't keep to the box's start, like a centred column or an end-aligned label, from where it was to where it lands
  * with the flight; content at the start moves with the box's start edge.
  */
-export function holdLandingWidth(box: Hold["box"], anchor?: Hold["anchor"]) {
-  const hold = { box, anchor }
+export function holdLandingWidth(box: Hold["box"], anchor?: Hold["anchor"], target?: Hold["target"]) {
+  const hold = { box, anchor, target }
   holds.add(hold)
   onCleanup(() => holds.delete(hold))
 }
@@ -87,13 +92,14 @@ function rehold(next: Landing | undefined) {
   const boxes = flights.length
     ? [...holds].flatMap((hold) => {
         const box = hold.box()
+        const target = hold.target ? hold.target() : box
 
-        if (!box?.isConnected) return []
+        if (!box?.isConnected || !target) return []
 
         // The width now, which a "blocks" box keeps if it would land narrower.
         const wide = hold.anchor === "blocks" ? box.getBoundingClientRect().width : 0
 
-        return [{ box, wide, shifts: measureAnchors(box, hold.anchor) }]
+        return [{ box, target, wide, shifts: measureAnchors(box, hold.anchor) }]
       })
     : []
 
@@ -113,17 +119,17 @@ function rehold(next: Landing | undefined) {
     .map((item, index) => ({ ...item, width: widths[index]! }))
     .filter((item) => {
       if (item.width === 0) return false
-      item.box.style.setProperty("--panel-hold-width", `${item.width}px`)
+      item.target.style.setProperty("--panel-hold-width", `${item.width}px`)
 
       return true
     })
 
-  held = kept.map((item) => item.box)
+  held = kept.map((item) => item.target)
   shifted = kept.flatMap((item) => {
     const shifts = item.shifts()
 
     if (item.wide <= item.width) return shifts
-    item.box.style.setProperty("--panel-hold-width", `${item.wide}px`)
+    item.target.style.setProperty("--panel-hold-width", `${item.wide}px`)
 
     return shifts.map((shift) => ({ ...shift, rest: 1 }))
   })

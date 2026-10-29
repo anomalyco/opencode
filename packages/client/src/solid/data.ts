@@ -780,6 +780,11 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "permissions", event.data.permissions)
         return
+      case "session.metadata.updated":
+        // The event carries the whole record, so keys it drops must go too.
+        if (store.session.info[event.data.sessionID])
+          setStore("session", "info", event.data.sessionID, "metadata", reconcile(event.data.metadata))
+        return
       case "session.archived":
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "time", "archived", event.created)
@@ -1103,6 +1108,10 @@ export function createData(config: CreateDataInput) {
         return
       case "session.execution.started":
         setSessionActive(event.data.sessionID, "running")
+        // Revalidate so `time.busy` follows the projected execution start.
+        if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
+        result.session.invalidate(event.data.sessionID)
+        refresh(() => result.session.sync(event.data.sessionID))
         return
       case "session.compaction.started":
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
@@ -1433,7 +1442,7 @@ export function createData(config: CreateDataInput) {
   }
 
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
-  const usageLimits = locationResource("usageLimits", (location) => api().usage.limits({ location }))
+  const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
     const ref = { directory: response.location.directory }

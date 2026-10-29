@@ -738,6 +738,7 @@ export const dict = {
   "dialog.server.menu.remove": "הסרה",
   "home.workspaceTip": "כדאי להתחיל את ההפעלה הבאה בעץ עבודה חדש כדי לשמור את השינויים מבודדים",
   "session.tab.add": "הוספת כרטיסייה",
+  "session.tab.closeOthers": "סגור כרטיסיות אחרות",
   "session.queue.attachments.one": "בנוסף ל-{{count}} קובץ מצורף",
   "session.queue.attachments.other": "בנוסף ל-\u2068{{count}}\u2069 קבצים מצורפים",
   "settings.backToSettings": "חזרה להגדרות",

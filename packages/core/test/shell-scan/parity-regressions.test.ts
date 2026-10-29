@@ -121,29 +121,22 @@ describe("legacy-accepted shell syntax regressions", () => {
     expect(await Effect.runPromise(ShellParse.scanPortable(source, "zsh", "/workspace"))).toEqual(legacy)
   })
 
-  // Tree-sitter recovers these valid Zsh forms with synthetic commands or truncated outer resources.
-  // Pin both results rather than treating recovery artifacts as executable shell syntax.
   test.each([
     {
       source: "if () { scan_probe; }; then printf visible; fi",
-      legacy: ["scan_probe", "then printf visible", "fi"],
-      portable: ["scan_probe", "printf visible"],
+      expected: ["scan_probe", "printf visible"],
     },
     {
       source: "check() { () { scan_probe; }; }; check",
-      legacy: ["scan_probe", "}", "check"],
-      portable: ["scan_probe", "check"],
+      expected: ["scan_probe", "check"],
     },
     {
       source: "printf '%s' \"$( () { scan_probe; }; printf visible)\"",
-      legacy: ["printf '%s'", "scan_probe", "printf visible"],
-      portable: ["printf '%s' \"$( () { scan_probe; }; printf visible)\"", "scan_probe", "printf visible"],
+      expected: ["printf '%s' \"$( () { scan_probe; }; printf visible)\"", "scan_probe", "printf visible"],
     },
-  ])("accepts anonymous-function compositions despite legacy recovery artifacts: $source", async (fixture) => {
-    const legacy = await Effect.runPromise(ShellParse.scan(fixture.source, "zsh", "/workspace"))
-    const portable = await Effect.runPromise(ShellParse.scanPortable(fixture.source, "zsh", "/workspace"))
-    expect(legacy.commands.map((command) => command.resource)).toEqual([...fixture.legacy])
-    expect(portable.commands.map((command) => command.resource)).toEqual([...fixture.portable])
+  ])("accepts anonymous-function compositions without recovery artifacts: $source", async (fixture) => {
+    const parsed = await Effect.runPromise(ShellParse.scan(fixture.source, "zsh", "/workspace"))
+    expect(parsed.commands.map((command) => command.resource)).toEqual([...fixture.expected])
   })
 
   test.each([

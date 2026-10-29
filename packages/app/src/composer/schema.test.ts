@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
+import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
 import { Persistence } from "@/runtime/persistence/schema"
 import { SessionMessage } from "@opencode/schema/session-message"
 import {
@@ -79,6 +80,8 @@ describe("composer persistence schemas", () => {
       type: "note" as const,
       origin: "example",
       label: "button#save",
+      title: "button#save",
+      subtitle: "Browser annotation",
       icon: "select-element",
       subject: 'the "button#save" element',
       href: "tab_00000000-0000-4000-8000-000000000000",
@@ -102,7 +105,19 @@ describe("composer persistence schemas", () => {
       key: "browser:tab_00000000-0000-4000-8000-000000000000:c=picked",
     }
 
-    const value = decode({ context: { items: [note, { ...note, subject: null }, browser, { ...browser, url: null }] } })
+    const value = decode({
+      context: {
+        items: [
+          note,
+          { ...note, subject: null },
+          browser,
+          { ...browser, url: null },
+          { ...note, comment: "", commentID: "empty-live" },
+          { ...durable, comment: "", commentID: "empty-durable" },
+        ],
+      },
+    })
+
     expect(value.context.items).toEqual([
       { ...durable, key: "note:example:c=note" },
       {
@@ -117,7 +132,10 @@ describe("composer persistence schemas", () => {
         commentID: "picked",
         key: "note:browser:c=picked",
       },
+      { ...durable, comment: "", commentID: "empty-live", key: "note:example:c=empty-live" },
+      { ...durable, comment: "", commentID: "empty-durable", key: "note:example:c=empty-durable" },
     ])
+    expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
   })
 
   test("drops invalid parts without losing valid mentions or optional field recovery", () => {
@@ -221,6 +239,23 @@ describe("composer persistence schemas", () => {
     const encoded = Schema.encodeSync(ComposerStore)(value)
     expect(JSON.stringify(encoded)).not.toContain("dataUrl")
     expect(decode(encoded)).toEqual(value)
+  })
+
+  test("persists a restored media:<hash> image as a reference without a URL", () => {
+    const ref = `media:${"a".repeat(64)}`
+
+    const value = decode({
+      prompt: [
+        { ...image, blob: createLegacyBlobReference(ref) },
+        { ...image, blob: { id: ref, url: ref } },
+      ],
+    })
+
+    expect(value.prompt).toEqual([
+      { ...image, blob: { id: ref, url: "" } },
+      { ...image, blob: { id: ref, url: "" } },
+    ])
+    expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
   })
 
   test("migrates legacy history arrays and recovers entries, parts, and comments independently", () => {
