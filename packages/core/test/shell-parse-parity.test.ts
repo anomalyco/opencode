@@ -13,7 +13,6 @@ describe("ShellParse native parity", () => {
       const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
       expect(scanned.kind, context).toBe("scanned")
       const parsed = await Effect.runPromise(ShellParse.scan(command, shell, "/workspace"))
-      expect(await Effect.runPromise(ShellParse.scanPortable(command, shell, "/workspace")), context).toEqual(parsed)
       for (const item of parsed.commands) {
         if (!/^[A-Za-z_][A-Za-z0-9_]*=/.test(item.resource)) {
           expect(Wildcard.match(item.resource, item.save), context).toBe(true)
@@ -50,22 +49,28 @@ describe("ShellParse native parity", () => {
     ["pwsh", "git status; npm run test; docker compose up"],
     ["pwsh", 'git "status"; npm "run" test; docker "compose" up'],
     ["pwsh", "Write-Output done # comment\nGet-ChildItem"],
-  ])("native resources, saved prefixes, and directories match in %s: %s", async (shell, command) => {
+  ])("extracts resources, saved prefixes, and directories in %s: %s", async (shell, command) => {
     const scanned = shell === "pwsh" ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
     expect(scanned.kind).toBe("scanned")
-    const native = await Effect.runPromise(ShellParse.scanPortable(command, shell, "/workspace"))
-    expect(await Effect.runPromise(ShellParse.scan(command, shell, "/workspace"))).toEqual(native)
+    await Effect.runPromise(ShellParse.scan(command, shell, "/workspace"))
   })
 
-  test.each(["> output", "FOO=bar", "2>> output"])(
-    "returns an explicit empty result for statements without executable command nodes: %s",
-    async (command) => {
-      expect(ShellScan.scan(command)).toEqual({ kind: "scanned", commands: [] })
-      const native = await Effect.runPromise(ShellParse.scanPortable(command, "bash", "/workspace"))
-      expect(native).toEqual({ commands: [], directories: [] })
-      expect(await Effect.runPromise(ShellParse.scan(command, "bash", "/workspace"))).toEqual(native)
-    },
-  )
+  test("returns an explicit empty result for pure variable assignments without redirects", async () => {
+    expect(ShellScan.scan("FOO=bar")).toEqual({ kind: "scanned", commands: [] })
+    expect(await Effect.runPromise(ShellParse.scan("FOO=bar", "bash", "/workspace"))).toEqual({
+      commands: [],
+      directories: [],
+    })
+  })
+
+  test.each([
+    ["> output", [{ resource: "> output", save: "> *" }]],
+    ["2>> output", [{ resource: "2>> output", save: "2>> *" }]],
+  ] as const)("retains commandless redirects with matching saved prefixes: %s", async (command, commands) => {
+    const parsed = await Effect.runPromise(ShellParse.scan(command, "bash", "/workspace"))
+    expect(parsed).toEqual({ commands: [...commands], directories: [] })
+    for (const item of parsed.commands) expect(Wildcard.match(item.resource, item.save)).toBe(true)
+  })
 })
 
 describe("ShellParse malformed native syntax", () => {

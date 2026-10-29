@@ -7,7 +7,7 @@ import { ConfigPolicy } from "./policy.js"
 
 export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   portable_shell_scanner: Schema.Boolean.pipe(optional).annotate({
-    description: "Enable the experimental portable shell permission scanner. Defaults to false.",
+    description: "Deprecated: the built-in shell permission scanner is now always enabled.",
   }),
   todo: Schema.Boolean.pipe(optional).annotate({
     description: "Enable the experimental todowrite tool. Defaults to false.",
