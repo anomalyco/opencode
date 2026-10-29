@@ -309,16 +309,22 @@ export const Plugin = {
                 if (!image) return yield* Effect.fail(new Error(`${ref} returned no image.`))
                 const bytes = Buffer.from(image.data, "base64")
                 const file = stem + (EXTENSIONS[Mime.detect(bytes)] ?? ".png")
-                // The edit prompt covered the requested path; a different extension must still not be denied.
+                // The edit prompt covered the requested path. Replacing a different existing file needs its own
+                // approval; a new file only has to pass the deny rules.
                 if (target && file !== target.absolute) {
                   const actual = yield* access.resolve({ path: file, kind: "file" })
-                  yield* permission.assertNotDenied({
+                  const replaces = yield* environment.files.stat(file).pipe(
+                    Effect.as(true),
+                    Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
+                  )
+                  const request = {
                     action: "edit",
                     resources: [actual.resource],
                     sessionID: context.sessionID,
                     agent: context.agent,
                     source,
-                  })
+                  }
+                  yield* replaces ? permission.assert({ ...request, save: ["*"] }) : permission.assertNotDenied(request)
                 }
                 yield* environment.files.write(file, bytes)
                 return `Image request finished. Saved image: ${file} (${ref}).\nUse the read tool on this path to view the image.`

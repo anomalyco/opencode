@@ -281,6 +281,17 @@ describe("image_generate", () => {
         ["cat.png"],
       ])
       expect(fixture.checked.map((item) => [item.action, item.resources])).toEqual([["edit", ["cat.jpg"]]])
+
+      // Replacing an existing file under the real extension asks for its own edit approval.
+      fixture.assertions.length = 0
+      fixture.checked.length = 0
+      const again = yield* run({ prompt: "a cat", path: "cat.png" })
+      yield* notice(again)
+      expect(fixture.assertions.filter((item) => item.action === "edit").map((item) => item.resources)).toEqual([
+        ["cat.png"],
+        ["cat.jpg"],
+      ])
+      expect(fixture.checked).toEqual([])
     }),
   )
 
