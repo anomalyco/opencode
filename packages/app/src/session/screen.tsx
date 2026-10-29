@@ -256,13 +256,8 @@ function SessionScreenContent(props: {
 
   createTimelineQuoteHighlight({
     root: timeline.scroller,
-    visible: timeline.visible,
     source: composer.quote.source,
     enabled: () => conversationVisible() && composer.quote.available(),
-    reveal: (id, partID) => {
-      if (!timeline.actions.revealPart(partID)) timeline.actions.revealMessage(id, partID)
-    },
-    unpin: timeline.view.unpin,
   })
 
   const sessionErrorFallback = (cause: unknown, reset: () => void) => {
