@@ -29,7 +29,6 @@ const layer = Layer.effect(
     const rpc = yield* Rpc.Service
     const project = yield* Project.Service
     const scope = yield* Effect.scope
-    yield* project.activate(location.project.id)
     const unsubscribe = yield* bus.listen((event) => {
       if (!isSessionEvent(event) || !event.location) return Effect.void
       const ref = LocationServiceMap.canonical(event.location)

@@ -21,7 +21,8 @@ const layer = (ref: Ref) =>
     Service,
     Effect.gen(function* () {
       const project = yield* Project.Service
-      const resolved = yield* project.resolve(ref.directory)
+      // LocationProject saves the Project once FileSystem has accepted the directory.
+      const resolved = yield* project.resolve(ref.directory, { persist: false })
       return Service.of({
         directory: ref.directory,
         workspaceID: ref.workspaceID,

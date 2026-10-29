@@ -6,6 +6,7 @@ import { Agent } from "@opencode/schema/agent"
 import { Integration } from "@opencode/schema/integration"
 import { ServerInfo } from "@opencode/protocol/groups/server"
 import { Effect, Schedule, Schema } from "effect"
+import { Project } from "@opencode/schema/project"
 import { Session } from "@opencode/schema/session"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
@@ -38,6 +39,21 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
     const session = Schema.decodeUnknownSync(Schema.Struct({ data: Session.Info }))(
       yield* Effect.promise(() => created.json()),
     ).data
+    // Failed boots must leave the Project that session creation saved alone: recorded activity would keep the
+    // hourly sweep from archiving it while the folder is gone.
+    const activity = () =>
+      Effect.promise(() =>
+        handler(new Request("http://opencode.local/api/project")).then((response) => response.json()),
+      ).pipe(
+        Effect.map(
+          (body) =>
+            Schema.decodeUnknownSync(Schema.Array(Project.Info))(body).find(
+              (project) => project.canonical === directory,
+            )?.time.active,
+        ),
+      )
+    const active = yield* activity()
+    expect(active).toBeGreaterThan(0)
     const endpoints = [
       "/api/model",
       "/api/integration",
@@ -59,6 +75,7 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
         message: `Location not found: ${directory}`,
       })
     }
+    expect(yield* activity()).toBe(active)
     yield* Effect.promise(() => fs.mkdir(directory))
     const recovered = yield* Effect.promise(() =>
       handler(
@@ -68,6 +85,33 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
       ),
     )
     expect(recovered.status).toBe(200)
+  }),
+)
+
+it.live("does not save a project for a missing folder", () =>
+  Effect.gen(function* () {
+    const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-missing-project-")))
+    const directory = path.join(config.path, "deleted")
+    const handler = yield* ServerFetch.make({ ...options, config: { directory: config.path } })
+    const status = () =>
+      Effect.promise(() =>
+        handler(
+          new Request("http://opencode.local/api/vcs/status", {
+            headers: { "x-opencode-directory": encodeURIComponent(directory) },
+          }),
+        ),
+      ).pipe(Effect.map((response) => response.status))
+    const projects = () =>
+      Effect.promise(() =>
+        handler(new Request("http://opencode.local/api/project")).then((response) => response.json()),
+      )
+
+    expect(yield* status()).toBe(404)
+    expect(yield* projects()).not.toContainEqual(expect.objectContaining({ canonical: directory }))
+
+    yield* Effect.promise(() => fs.mkdir(directory))
+    expect(yield* status()).toBe(200)
+    expect(yield* projects()).toContainEqual(expect.objectContaining({ canonical: directory }))
   }),
 )
 

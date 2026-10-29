@@ -21,6 +21,7 @@ import { LocationWatcher } from "./filesystem/location-watcher.js"
 import { Integration } from "./integration.js"
 import { Location } from "./location.js"
 import { LocationLifecycle } from "./location-lifecycle.js"
+import { LocationProject } from "./location-project.js"
 import { FileAccess } from "./file-access.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Mcp } from "./mcp/index.js"
@@ -79,6 +80,7 @@ const nodes = [
   WorktreeStrategies.node,
   FileSystemSearch.node,
   FileSystem.node,
+  LocationProject.node,
   ShellSelect.node,
   Pty.node,
   Shell.node,
