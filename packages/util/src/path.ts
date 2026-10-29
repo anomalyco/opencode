@@ -22,12 +22,13 @@ export function getFilenameTruncated(path: string | undefined, maxLength = 20) {
   return filename.slice(0, available) + "…" + extension
 }
 
-export function truncateMiddle(text: string, maxLength = 20) {
+export function truncateMiddle(text: string, maxLength = 35) {
   if (text.length <= maxLength) return text
+  if (maxLength <= 1) return "…"
   const available = maxLength - 1
   const start = Math.ceil(available / 2)
   const end = Math.floor(available / 2)
-  return text.slice(0, start) + "…" + text.slice(-end)
+  return text.slice(0, start) + "…" + (end > 0 ? text.slice(-end) : "")
 }
 
 const isDrive = (value: string) => {
