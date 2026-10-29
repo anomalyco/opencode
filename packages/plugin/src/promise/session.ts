@@ -154,6 +154,12 @@ export type SessionIdleBackground =
       readonly agent: string
       readonly description: string
     }
+  | {
+      readonly kind: "image"
+      readonly sessionID: Session.ID
+      readonly path: string
+      readonly model: string
+    }
 
 /**
  * Runs when a Session finishes model work and has no pending input, just before it goes idle.
