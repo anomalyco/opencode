@@ -463,6 +463,40 @@ story("keeps toolbar focus rings whole and keyboard-only", async ({ mount, page 
   await expect(variant).toHaveCSS("outline-style", "none")
 })
 
+story("keeps command selection on the keyboard until the pointer moves", async ({ mount, page }) => {
+  const component = await mount("opencode-composer-flow--slash-suggestions")
+
+  const input = component.getByRole("textbox", { name: "Prompt", exact: true })
+
+  const menu = component.locator('[data-component="composer-suggestions"]')
+
+  const test = menu.getByRole("button", { name: "/test", exact: true })
+
+  const review = menu.getByRole("button", { name: "/review", exact: true })
+
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  await expect(test).toHaveAttribute("data-active", "")
+
+  const box = await review.boundingBox()
+
+  if (!box) throw new Error("Missing review command")
+
+  await input.press("Escape")
+  await expect(menu).toHaveCount(0)
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await input.fill("/")
+  await expect(test).toHaveAttribute("data-active", "")
+  await expect(review).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+
+  // Layout changes can deliver pointer events without any actual mouse movement.
+  await review.dispatchEvent("pointermove", { movementX: 0, movementY: 0 })
+  await expect(test).toHaveAttribute("data-active", "")
+
+  await page.mouse.move(box.x + box.width / 2 + 2, box.y + box.height / 2)
+  await expect(review).toHaveAttribute("data-active", "")
+  await expect(test).not.toHaveAttribute("data-active")
+})
+
 story("grows suggestions while preserving visible timeline context", async ({ mount }) => {
   const component = await mount("opencode-composer-flow--constrained-command-suggestions")
   const boundary = component.locator('[data-slot="composer-suggestion-boundary-story"]')

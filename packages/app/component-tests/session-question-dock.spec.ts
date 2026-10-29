@@ -2,6 +2,70 @@ import type { Locator } from "@playwright/test"
 import type { MotionKnob } from "@opencode/ui/motion-tuning"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
+for (const variant of ["classic", "experimental"] as const) {
+  story(`${variant} answer cards allow text selection without changing answers`, async ({ mount, page }) => {
+    await page.addInitScript(
+      (enabled) => localStorage.setItem("settings.v3", JSON.stringify({ general: { newQuestionUI: enabled } })),
+      variant === "experimental",
+    )
+
+    const component = await mount("app-current-session-surface--question-request")
+
+    const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+
+    const wide = question.getByRole("radio", { name: /Wide/ })
+
+    await expect(question.getByRole("radio", { name: /Focused/ })).toBeFocused()
+    await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+    const drag = async (text: Locator) => {
+      await text.scrollIntoViewIfNeeded()
+
+      const box = await text.boundingBox()
+
+      expect(box).not.toBeNull()
+      await page.mouse.move(box!.x + 1, box!.y + box!.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(box!.x + box!.width - 1, box!.y + box!.height / 2, { steps: 12 })
+      await page.mouse.up()
+      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString().trim())).toBe(await text.innerText())
+    }
+
+    for (const slot of ["option-label", "option-description"]) {
+      await drag(wide.locator(`[data-slot="${slot}"] bdi`))
+      await expect(wide).not.toBeChecked()
+    }
+
+    await wide.locator('[data-slot="option-description"] bdi').click({ modifiers: ["Shift"] })
+    await expect(wide).not.toBeChecked()
+    await wide.click({ position: { x: 4, y: 4 } })
+    await expect(wide).toBeChecked()
+    await question.getByRole("radio", { name: /Focused/ }).click()
+    await drag(wide.locator('[data-slot="option-description"] bdi'))
+    await expect(wide).not.toBeChecked()
+
+    const mark = await wide.locator('[data-slot="question-option-check"]').boundingBox()
+
+    expect(mark).not.toBeNull()
+    await page.mouse.move(mark!.x + mark!.width / 2, mark!.y + mark!.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(mark!.x + mark!.width / 2 + 1, mark!.y + mark!.height / 2)
+    await page.mouse.up()
+    await expect(wide).toBeChecked()
+    await question.getByRole("button", { name: "Next", exact: true }).click()
+
+    const files = question.getByRole("checkbox", { name: "Changed files", exact: true })
+
+    await expect(files).toBeFocused()
+    await files.click()
+    await expect(files).toBeChecked()
+    await drag(files.locator('[data-slot="option-label"] bdi'))
+    await expect(files).toBeChecked()
+    await files.click({ position: { x: 4, y: 4 } })
+    await expect(files).not.toBeChecked()
+  })
+}
+
 story(
   "uses the original question cards by default and submits selected and custom answers",
   async ({ mount, page }) => {
@@ -32,7 +96,9 @@ story(
     const submit = question.getByRole("button", { name: "Submit", exact: true })
     expect(await submit.evaluate((button) => button.getBoundingClientRect().width)).toBe(width)
     await expect(shortcuts).toHaveText(["1", "2", "3", "4"])
-    await files.click()
+    await page.keyboard.down(" ")
+    await page.keyboard.down(" ")
+    await page.keyboard.up(" ")
     await terminal.click()
     await expect(files).toBeChecked()
     await expect(terminal).toBeChecked()

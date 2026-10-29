@@ -117,15 +117,16 @@ export function describe(condition: ScheduleSchema.Condition): string {
 export const authorize = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
   name: string | undefined,
+  when: ScheduleSchema.When,
   check: ScheduleSchema.StoredCheck,
 ) {
   const plugins = yield* Plugin.Service
   yield* plugins.awaitActivation
   switch (check.condition.type) {
     case "shell":
-      return yield* authorizeShell(session, name, check.mode, check.condition)
+      return yield* authorizeShell(session, name, when, check.mode, check.condition)
     case "code":
-      return yield* authorizeCode(session, name, check.mode, check.condition)
+      return yield* authorizeCode(session, name, when, check.mode, check.condition)
   }
 })
 
@@ -182,6 +183,7 @@ const resolveCodeTools = Effect.fnUntraced(function* (paths: ReadonlyArray<strin
 const authorizeCode = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
   name: string | undefined,
+  when: ScheduleSchema.When,
   mode: ScheduleSchema.CheckMode,
   condition: ScheduleSchema.CodeCondition,
 ) {
@@ -206,7 +208,7 @@ const authorizeCode = Effect.fnUntraced(function* (
     yield* permission.assert({
       action: "execute",
       resources: ["*"],
-      metadata: { schedule: name, mode, code: condition.code, tools: [] },
+      metadata: { schedule: name, mode, when, unattended: true, code: condition.code, tools: [] },
       sessionID: session.id,
       agent: agent.id,
     })
@@ -233,7 +235,7 @@ const authorizeCode = Effect.fnUntraced(function* (
         action,
         resources: ["*"],
         // No `save`: "always" would save a project-wide allow, while scheduled ticks run via Unattended.
-        metadata: { schedule: name, mode, code: condition.code, tools: [...paths] },
+        metadata: { schedule: name, mode, when, unattended: true, code: condition.code, tools: [...paths] },
         sessionID: session.id,
         agent: agent.id,
       }),
@@ -388,6 +390,7 @@ const assertShellPermissions = Effect.fnUntraced(function* (
 const authorizeShell = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
   name: string | undefined,
+  when: ScheduleSchema.When,
   mode: ScheduleSchema.CheckMode,
   condition: ScheduleSchema.ShellCondition,
 ) {
@@ -395,6 +398,8 @@ const authorizeShell = Effect.fnUntraced(function* (
   yield* assertShellPermissions(session, scanned, {
     schedule: name,
     mode,
+    when,
+    unattended: true,
     run: condition.run,
   })
 })

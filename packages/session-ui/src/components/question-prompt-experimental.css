@@ -303,6 +303,8 @@
   }
 
   [data-slot="question-option-check"] {
+    -webkit-user-select: none;
+    user-select: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -358,6 +360,8 @@
   }
 
   [data-slot="question-option-main"] {
+    -webkit-user-select: text;
+    user-select: text;
     display: flex;
     flex-direction: column;
     gap: 4px;
