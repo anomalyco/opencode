@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir as osTmpdir } from "node:os"
 import path from "node:path"
+import type { PeerCertificate } from "node:tls"
 import { Buffer } from "node:buffer"
 import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Exit } from "effect"
@@ -9,7 +10,7 @@ import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpTls } from "@opencode/core/mcp/tls"
 import { hostEnvironmentLayer } from "./fixture/environment"
-import { CERT, startTlsMcpServer, TLS_FIXTURE_DIR } from "./fixture/tls-server"
+import { CERT, CERT_APPLIANCE, KEY_APPLIANCE, startTlsMcpServer, TLS_FIXTURE_DIR } from "./fixture/tls-server"
 
 const SAMPLE_CERT = `-----BEGIN CERTIFICATE-----
 MIIDXTCCAkWgAwIBAgIJALRNRw0Gx+9FMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
@@ -192,49 +193,71 @@ describe("derToPem", () => {
   })
 })
 
-describe("buildTlsCa", () => {
+describe("resolveTls", () => {
   const url = new URL("https://example.com/mcp")
 
-  test("returns empty string when no TLS options configured", async () => {
-    await expect(McpTls.buildTlsCa({}, "/workspace", url)).resolves.toBe("")
+  test("returns undefined when no TLS options configured", async () => {
+    await expect(McpTls.resolveTls({}, "/workspace", url)).resolves.toBeUndefined()
   })
 
-  test("builds CA from ca_pem", async () => {
-    await expect(McpTls.buildTlsCa({ ca_pem: SAMPLE_CERT }, "/workspace", url)).resolves.toBe(SAMPLE_CERT)
+  test("resolves CA from ca_pem", async () => {
+    await expect(McpTls.resolveTls({ ca_pem: SAMPLE_CERT }, "/workspace", url)).resolves.toEqual({ ca: SAMPLE_CERT })
   })
 
-  test("builds CA from ca_file", async () => {
+  test("resolves CA from ca_file", async () => {
     using dir = tmpdir()
-    await expect(McpTls.buildTlsCa({ ca_file: writeTempFile(dir.path, "ca.pem", SAMPLE_CERT) }, dir.path, url)).resolves.toBe(
-      SAMPLE_CERT_TRIMMED,
-    )
+    await expect(
+      McpTls.resolveTls({ ca_file: writeTempFile(dir.path, "ca.pem", SAMPLE_CERT) }, dir.path, url),
+    ).resolves.toEqual({ ca: SAMPLE_CERT_TRIMMED })
   })
 
   test("concatenates ca_pem and ca_file", async () => {
     using dir = tmpdir()
     await expect(
-      McpTls.buildTlsCa({ ca_pem: SAMPLE_CERT, ca_file: writeTempFile(dir.path, "ca2.pem", SAMPLE_CERT) }, dir.path, url),
-    ).resolves.toBe(SAMPLE_CERT + SAMPLE_CERT_TRIMMED)
+      McpTls.resolveTls({ ca_pem: SAMPLE_CERT, ca_file: writeTempFile(dir.path, "ca2.pem", SAMPLE_CERT) }, dir.path, url),
+    ).resolves.toEqual({ ca: SAMPLE_CERT + SAMPLE_CERT_TRIMMED })
   })
 
   test("throws if ca_pem is not valid PEM", async () => {
-    await expect(McpTls.buildTlsCa({ ca_pem: "not a cert" }, "/workspace", url)).rejects.toThrow(
+    await expect(McpTls.resolveTls({ ca_pem: "not a cert" }, "/workspace", url)).rejects.toThrow(
       "missing PEM certificate header",
     )
   })
 
   test("throws if ca_file does not exist", async () => {
-    await expect(McpTls.buildTlsCa({ ca_file: "nonexistent.pem" }, "/workspace", url)).rejects.toThrow("CA file not found")
+    await expect(McpTls.resolveTls({ ca_file: "nonexistent.pem" }, "/workspace", url)).rejects.toThrow("CA file not found")
   })
 
   test("throws if fingerprint is invalid format", async () => {
-    await expect(McpTls.buildTlsCa({ fingerprint: "not-a-fingerprint" }, "/workspace", url)).rejects.toThrow(
+    await expect(McpTls.resolveTls({ fingerprint: "not-a-fingerprint" }, "/workspace", url)).rejects.toThrow(
       "Invalid SHA256 fingerprint",
     )
   })
+
+  test("accepts a matching fingerprint against the presented certificate", async () => {
+    const server = await startTlsMcpServer()
+    try {
+      await expect(
+        McpTls.resolveTls({ fingerprint: FINGERPRINT }, import.meta.dir, new URL(server.url)),
+      ).resolves.toEqual({ fingerprint: FINGERPRINT })
+    } finally {
+      await server.close()
+    }
+  })
+
+  test("throws on a fingerprint mismatch before connecting", async () => {
+    const server = await startTlsMcpServer()
+    try {
+      await expect(
+        McpTls.resolveTls({ fingerprint: "a".repeat(64) }, import.meta.dir, new URL(server.url)),
+      ).rejects.toThrow("fingerprint mismatch")
+    } finally {
+      await server.close()
+    }
+  })
 })
 
-describe("withTlsCa", () => {
+describe("withTls", () => {
   test("injects tls.ca and preserves the caller's init", async () => {
     const calls: Array<{ url: string | URL; init?: RequestInit }> = []
     const base = ((url: string | URL, init?: RequestInit) => {
@@ -242,7 +265,7 @@ describe("withTlsCa", () => {
       return Promise.resolve(new Response("ok"))
     }) as typeof fetch
 
-    await McpTls.withTlsCa(SAMPLE_CERT, base)("https://example.com/mcp", { method: "POST", headers: { a: "b" } })
+    await McpTls.withTls({ ca: SAMPLE_CERT }, base)("https://example.com/mcp", { method: "POST", headers: { a: "b" } })
 
     expect(calls).toHaveLength(1)
     expect(calls[0].url).toBe("https://example.com/mcp")
@@ -259,16 +282,62 @@ describe("withTlsCa", () => {
       return Promise.resolve(new Response("ok"))
     }) as typeof fetch
 
-    await McpTls.withTlsCa(SAMPLE_CERT, base)("https://example.com/mcp")
+    await McpTls.withTls({ ca: SAMPLE_CERT }, base)("https://example.com/mcp")
 
     expect((calls[0].init as BunFetchRequestInit).tls).toEqual({ ca: SAMPLE_CERT })
   })
+
+  test("disables certificate validation and installs the fingerprint check for a pin", async () => {
+    const calls: Array<{ init?: RequestInit }> = []
+    const base = ((_: string | URL, init?: RequestInit) => {
+      calls.push({ init })
+      return Promise.resolve(new Response("ok"))
+    }) as typeof fetch
+
+    await McpTls.withTls({ fingerprint: FINGERPRINT }, base)("https://127.0.0.1:8443/mcp")
+
+    const tls = (calls[0].init as BunFetchRequestInit).tls
+    expect(tls?.rejectUnauthorized).toBe(false)
+    const check = tls?.checkServerIdentity
+    expect(typeof check).toBe("function")
+    const der = Buffer.from(CERT.split("\n").slice(1, -1).join(""), "base64")
+    expect(check!("127.0.0.1", { raw: der } as PeerCertificate)).toBeUndefined()
+    const mismatch = check!("127.0.0.1", { raw: Buffer.alloc(32) } as PeerCertificate)
+    expect(mismatch).toBeInstanceOf(Error)
+    expect((mismatch as Error).message).toContain("fingerprint mismatch")
+  })
+})
+
+describe("isTlsCertificateError", () => {
+  const tlsErrors: Array<[string, unknown]> = [
+    ["self-signed message (bun)", new Error("self signed certificate")],
+    ["altname message", new Error('ERR_TLS_CERT_ALTNAME_INVALID fetching "https://127.0.0.1:8443/mcp"')],
+    ["expired message", new Error("certificate has expired")],
+    ["node depth-zero code", Object.assign(new Error("self-signed certificate"), { code: "DEPTH_ZERO_SELF_SIGNED_CERT" })],
+    ["node self-signed-in-chain code", Object.assign(new Error("unable to verify the first certificate"), { code: "SELF_SIGNED_CERT_IN_CHAIN" })],
+    ["caused by a self-signed error", Object.assign(new TypeError("fetch failed"), { cause: new Error("self signed certificate") })],
+    ["nested cause", Object.assign(new Error("connect failed"), { cause: Object.assign(new Error("tls error"), { cause: new Error("certificate has expired") }) })],
+  ]
+  for (const [name, error] of tlsErrors) test(`matches ${name}`, () => expect(McpTls.isTlsCertificateError(error)).toBe(true))
+
+  const otherErrors: Array<[string, unknown]> = [
+    ["connection refused", new Error("Unable to connect. Is the computer able to access the url?")],
+    ["http failure", new Error("HTTP error: 500 Internal Server Error")],
+    ["bare fetch failed", new TypeError("fetch failed")],
+    ["timeout", new Error("Request timed out after 30000ms")],
+    ["non-error value", "self signed certificate is not the issue"],
+    ["null", null],
+  ]
+  for (const [name, error] of otherErrors) test(`rejects ${name}`, () => expect(McpTls.isTlsCertificateError(error)).toBe(false))
 })
 
 // The fingerprint is the SHA256 of the DER body, the same value
 // tls.getPeerX509Certificate().fingerprint256 reports.
 const FINGERPRINT = createHash("sha256")
   .update(Buffer.from(CERT.split("\n").slice(1, -1).join(""), "base64"))
+  .digest("hex")
+const FINGERPRINT_APPLIANCE = createHash("sha256")
+  .update(Buffer.from(CERT_APPLIANCE.split("\n").slice(1, -1).join(""), "base64"))
   .digest("hex")
 
 const connect = (name: string, config: ConfigMCP.Remote) =>
@@ -330,13 +399,14 @@ describe("MCP connect over TLS", () => {
     }
   })
 
-  test("buildTlsCa pins by fingerprint and the result acts as a trust anchor", async () => {
-    const server = await startTlsMcpServer()
+  test("a fingerprint pin reaches an appliance certificate without IP SANs", async () => {
+    const server = await startTlsMcpServer({ cert: CERT_APPLIANCE, key: KEY_APPLIANCE })
     try {
-      const ca = await McpTls.buildTlsCa({ fingerprint: FINGERPRINT }, import.meta.dir, new URL(server.url))
-      expect(ca).toStartWith("-----BEGIN CERTIFICATE-----")
-      // A bare GET is rejected by the streamable transport, so prove the trust anchor with an initialize.
-      const response = await McpTls.withTlsCa(ca, globalThis.fetch)(server.url, {
+      const resolved = await McpTls.resolveTls({ fingerprint: FINGERPRINT_APPLIANCE }, import.meta.dir, new URL(server.url))
+      if (!resolved || !("fingerprint" in resolved) || resolved.fingerprint !== FINGERPRINT_APPLIANCE)
+        throw new Error(`unexpected resolved tls: ${JSON.stringify(resolved)}`)
+      // A bare GET is rejected by the streamable transport, so prove the trust with an initialize.
+      const response = await McpTls.withTls(resolved, globalThis.fetch)(server.url, {
         method: "POST",
         headers: { accept: "application/json, text/event-stream", "content-type": "application/json" },
         body: JSON.stringify({
@@ -348,6 +418,22 @@ describe("MCP connect over TLS", () => {
       })
       expect(response.status).toBe(200)
       await response.body?.cancel()
+    } finally {
+      await server.close()
+    }
+  })
+
+  test("connects an appliance certificate without IP SANs via a fingerprint pin", async () => {
+    const server = await startTlsMcpServer({ cert: CERT_APPLIANCE, key: KEY_APPLIANCE })
+    try {
+      await Effect.runPromise(
+        withConnection(
+          "tls-appliance",
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, tls: { fingerprint: FINGERPRINT_APPLIANCE } }),
+          (connection) =>
+            connection.tools().pipe(Effect.map((tools) => expect(tools.map((tool) => tool.name)).toEqual(["echo"]))),
+        ),
+      )
     } finally {
       await server.close()
     }
