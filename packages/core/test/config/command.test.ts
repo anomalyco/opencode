@@ -7,6 +7,7 @@ import { Directory, Document, Event, Info } from "@opencode/schema/config"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { Job } from "@opencode/core/job"
+import { SubagentJob } from "@opencode/core/session/subagent-job"
 import { Agent } from "@opencode/core/agent"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -55,6 +56,7 @@ const it = testEffect(
       ShellSelect.node,
       Session.node,
       Job.node,
+      SubagentJob.node,
       Agent.node,
     ]),
     [
@@ -86,6 +88,21 @@ describe("ConfigCommandPlugin.Plugin", () => {
       template: "First $1. Rest $2.",
       input: '"alpha beta" gamma delta',
       expected: "First alpha beta. Rest gamma delta.",
+    },
+    {
+      template: "Run awk '{print $0}' on $1.",
+      input: "app.log",
+      expected: "Run awk '{print $0}' on app.log.",
+    },
+    {
+      template: "Run awk '{print $0}'.",
+      input: "app.log",
+      expected: "Run awk '{print $0}'.\n\napp.log",
+    },
+    {
+      template: "First $1. Rest $2.",
+      input: '"$ARGUMENTS" tail',
+      expected: "First $ARGUMENTS. Rest tail.",
     },
     { template: "$ARGUMENTS / $ARGUMENTS", input: "$& $$", expected: "$& $$ / $& $$" },
   ]) {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { model } from "@opencode/ai/providers/openai"
-import { LLM } from "../src/index.js"
+import { LLM } from "../src/effect.js"
 import { Endpoint } from "../src/route/endpoint.js"
 
 const configuration = (provider: string, message: string) =>
@@ -56,6 +56,37 @@ describe("provider package entrypoints", () => {
       expect(selected.route.defaults.headers).toEqual(settings.headers)
       expect(selected.route.defaults.http?.body).toEqual(settings.body)
     })
+  })
+
+  test("maps OpenRouter, DigitalOcean and Venice Responses entrypoints onto provider-owned routes", async () => {
+    const providers = [
+      ["openrouter", "https://openrouter.ai/api/v1", await import("@opencode/ai/providers/openrouter/responses")],
+      ["digitalocean", "https://inference.do-ai.run/v1", await import("@opencode/ai/providers/digitalocean/responses")],
+      ["venice", "https://api.venice.ai/api/v1", await import("@opencode/ai/providers/venice/responses")],
+    ] as const
+    const settings = {
+      apiKey: "fixture",
+      headers: { "x-test": "fixture" },
+      body: { future_option: true },
+      reasoningEffort: "low",
+    }
+    for (const [provider, baseURL, module] of providers) {
+      const selected = module.model("gpt-5.4", settings)
+      expect(selected.provider).toBe(provider)
+      expect(selected.route.id).toBe(`${provider}-responses`)
+      expect(selected.route.protocol).toBe("open-responses")
+      expect(selected.route.endpoint).toMatchObject({ baseURL, path: "/responses" })
+      expect(selected.route.defaults.headers).toEqual(settings.headers)
+      expect(selected.route.defaults.http?.body).toEqual(settings.body)
+      expect(selected.route.defaults.providerOptions).toEqual({
+        reasoningEffort: "low",
+        store: false,
+        include: ["reasoning.encrypted_content"],
+      })
+      expect(module.model("gpt-5.4", { ...settings, baseURL: "https://gateway.test/v1" }).route.endpoint.baseURL).toBe(
+        "https://gateway.test/v1",
+      )
+    }
   })
 
   test("maps Cohere entrypoints onto native and compatibility routes", async () => {
@@ -449,6 +480,29 @@ describe("provider package entrypoints", () => {
       store: false,
       include: ["reasoning.encrypted_content"],
     })
+  })
+
+  test("maps Vertex Interactions package settings onto the shared protocol", async () => {
+    const GoogleVertexInteractions = await import("@opencode/ai/providers/google-vertex/interactions")
+    const selected = GoogleVertexInteractions.model("gemini-3.8-flash", {
+      accessToken: "fixture",
+      project: "vertex-project",
+      location: "global",
+      headers: { "x-application": "opencode" },
+      body: { generation_config: { temperature: 0.5 } },
+      thinkingLevel: "low",
+      store: false,
+    })
+    expect(selected.route.id).toBe("google-vertex-interactions")
+    expect(selected.route.protocol).toBe("google-interactions")
+    expect(selected.route.endpoint).toMatchObject({
+      baseURL: "https://aiplatform.googleapis.com/v1beta1/projects/vertex-project/locations/global",
+      path: "/interactions",
+      query: { alt: "sse" },
+    })
+    expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
+    expect(selected.route.defaults.http?.body).toEqual({ generation_config: { temperature: 0.5 } })
+    expect(selected.route.defaults.providerOptions).toEqual({ thinkingLevel: "low", store: false })
   })
 
   test("rejects conflicting Vertex auth settings at runtime", async () => {

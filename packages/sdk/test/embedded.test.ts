@@ -1,14 +1,17 @@
 import fs from "fs/promises"
 import path from "path"
 import { expect } from "bun:test"
-import { LanguageModel, LLMClient } from "@opencode/ai"
+import { LanguageModel, LLMClient } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
 import { makeMemoryDriver } from "@opencode/core/environment/index"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
-import { Deferred, Effect, Fiber, Latch, Layer, Option, Schedule, Stream } from "effect"
+import { Plugin } from "@opencode/plugin/effect"
+import { makeDurableObjectStorage } from "../../core/test/fixture/durable-object-storage"
+import { OpenCodeWorkerd } from "../src/effect/workerd"
+import { Deferred, Effect, Fiber, Latch, Layer, Option, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import type { OpenCodeEvent } from "../src/effect"
@@ -65,15 +68,7 @@ for (const selection of ["explicit", "default"] as const) {
           },
         )
 
-        yield* opencode.model.list({ location: location(fixture) }).pipe(
-          Effect.filterOrFail((page) =>
-            page.data.some((model) => model.providerID === "custom" && model.id === "fictional-chat"),
-          ),
-          Effect.retry(Schedule.spaced("10 millis")),
-          Effect.timeout("2 seconds"),
-        )
-
-        const result = yield* opencode.generate.text({
+        const result = yield* opencode.experimental.generate.text({
           prompt: "Say ready",
           ...(selection === "explicit"
             ? {
@@ -93,6 +88,112 @@ for (const selection of ["explicit", "default"] as const) {
     ),
   )
 }
+
+it.live("seeds host plugins from CreateOptions and waits for delayed model plugins without self-deadlock", () =>
+  withEmbedded("opencode-embedded-seeded-plugin-", (fixture) =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLM.Test.pipe(
+        Effect.provide(TestLLM.testLayer({ fallback: TestLLM.text("ready", "answer") })),
+      )
+      const listedDuringSetup: number[] = []
+      const plugin = Plugin.define({
+        id: "seeded-models",
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            yield* Effect.sleep("25 millis")
+            const before = yield* ctx.model.list()
+            listedDuringSetup.push(before.data.length)
+            yield* ctx.provider.transform((providers) => {
+              providers.update(fixture.sdk.Provider.ID.make("seeded"), (provider) => {
+                provider.name = "Seeded Provider"
+                provider.activation = "enabled"
+                provider.package = "@opencode/ai/providers/openai-compatible"
+                provider.settings = { baseURL: "https://provider.example/v1", apiKey: "secret" }
+              })
+              providers.models.update(
+                fixture.sdk.Provider.ID.make("seeded"),
+                fixture.sdk.Model.ID.make("fictional-chat"),
+                (model) => {
+                  model.name = "Seeded Fictional Chat"
+                },
+              )
+            })
+          }).pipe(Effect.orDie),
+      })
+      const opencode = yield* fixture.sdk.OpenCode.create(
+        {
+          config: {
+            directory: fixture.directory,
+            project: false,
+            content: JSON.stringify({ model: "seeded/fictional-chat" }),
+          },
+          models: { fetch: false },
+          fs: { filewatcher: false },
+          plugins: [plugin],
+        },
+        {
+          overrides: [llmClient.replace(Layer.succeed(LLMClient.Service, llm))],
+        },
+      )
+
+      const [defaultModel, generated] = yield* Effect.all(
+        [opencode.model.default({ location: location(fixture) }), opencode.experimental.generate.text({ prompt: "Say ready" })],
+        { concurrency: "unbounded" },
+      )
+
+      expect(listedDuringSetup.length).toBeGreaterThan(0)
+      expect(defaultModel.data).toMatchObject({
+        providerID: "seeded",
+        id: "fictional-chat",
+        name: "Seeded Fictional Chat",
+      })
+      expect(generated.text).toBe("ready")
+    }),
+  ),
+)
+
+it.live("OpenCodeWorkerd seeds plugins before cold model resolution", () =>
+  withEmbedded("opencode-workerd-seeded-plugin-", (fixture) =>
+    Effect.gen(function* () {
+      const opencode = yield* OpenCodeWorkerd.create({
+        storage: makeDurableObjectStorage(),
+        models: { fetch: false },
+        config: { model: "workerd-seeded/fictional-chat" },
+        plugins: [
+          Plugin.define({
+            id: "workerd-seeded-models",
+            effect: (ctx) =>
+              Effect.gen(function* () {
+                yield* Effect.sleep("20 millis")
+                yield* ctx.model.list()
+                yield* ctx.provider.transform((providers) => {
+                  providers.update(fixture.sdk.Provider.ID.make("workerd-seeded"), (provider) => {
+                    provider.name = "Workerd Seeded"
+                    provider.activation = "enabled"
+                    provider.package = "@opencode/ai/providers/openai-compatible"
+                    provider.settings = { baseURL: "https://provider.example/v1", apiKey: "secret" }
+                  })
+                  providers.models.update(
+                    fixture.sdk.Provider.ID.make("workerd-seeded"),
+                    fixture.sdk.Model.ID.make("fictional-chat"),
+                    () => {},
+                  )
+                })
+              }).pipe(Effect.orDie),
+          }),
+        ],
+      })
+
+      const selected = yield* opencode.model.default({
+        location: fixture.sdk.Location.Ref.make({ directory: fixture.sdk.AbsolutePath.make("/workspace") }),
+      })
+      expect(selected.data).toMatchObject({
+        providerID: "workerd-seeded",
+        id: "fictional-chat",
+      })
+    }),
+  ),
+)
 
 it.live(
   "embedded client uses the real router and handlers",
@@ -122,16 +223,16 @@ it.live(
         })
         const context = yield* opencode.sessions.context({ sessionID: id })
         const pendingAfterAdmit = yield* opencode.sessions.inbox.list({ sessionID: id })
-        yield* opencode.sessions.instructions.entry.put({ sessionID: id, key: "deploy-target", value: "production" })
-        yield* opencode.sessions.instructions.entry.put({ sessionID: id, key: "flags", value: { beta: true } })
-        const contextEntries = yield* opencode.sessions.instructions.entry.list({ sessionID: id })
-        yield* opencode.sessions.instructions.entry.remove({ sessionID: id, key: "flags" })
-        const remainingContextEntries = yield* opencode.sessions.instructions.entry.list({ sessionID: id })
+        yield* opencode.experimental.session.instructions.entry.put({ sessionID: id, key: "deploy-target", value: "production" })
+        yield* opencode.experimental.session.instructions.entry.put({ sessionID: id, key: "flags", value: { beta: true } })
+        const contextEntries = yield* opencode.experimental.session.instructions.entry.list({ sessionID: id })
+        yield* opencode.experimental.session.instructions.entry.remove({ sessionID: id, key: "flags" })
+        const remainingContextEntries = yield* opencode.experimental.session.instructions.entry.list({ sessionID: id })
         const wake = yield* opencode.sessions.prompt({
           sessionID: id,
           text: "Promote this input",
         })
-        const prompted = yield* opencode.sessions.log({ sessionID: id, follow: true }).pipe(
+        const prompted = yield* opencode.experimental.session.log({ sessionID: id, follow: true }).pipe(
           Stream.filter((event) => event.type === "session.inbox.delivered" && event.data.inboxID === wake.id),
           Stream.runHead,
           Effect.timeout("10 seconds"),
@@ -139,7 +240,7 @@ it.live(
         )
         const wakeContext = yield* opencode.sessions.context({ sessionID: id })
         const pendingAfterPromote = yield* opencode.sessions.inbox.list({ sessionID: id })
-        const event = yield* opencode.sessions.log({ sessionID: id }).pipe(
+        const event = yield* opencode.experimental.session.log({ sessionID: id }).pipe(
           Stream.filter((item) => item.type === "session.model.selected"),
           Stream.take(1),
           Stream.runHead,
@@ -154,10 +255,10 @@ it.live(
         const missingSessionID = fixture.sdk.Session.ID.create()
         const missing = yield* Effect.all(
           [
-            opencode.sessions.log({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
+            opencode.experimental.session.log({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
             opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.message.get({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
-            opencode.sessions.instructions.entry.list({ sessionID: missingSessionID }).pipe(Effect.flip),
+            opencode.experimental.session.instructions.entry.list({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.inbox.list({ sessionID: missingSessionID }).pipe(Effect.flip),
           ],
           { concurrency: "unbounded" },
@@ -534,7 +635,7 @@ it.live(
         expect(calls).toEqual(["create"])
 
         yield* Deferred.succeed(createRelease, undefined)
-        yield* opencode.sessions.wait({ sessionID: session.id })
+        yield* opencode.experimental.session.wait({ sessionID: session.id })
         // Provisioning settled, the workspace connected, and the turn completed. The
         // memory driver rejects the actual spawn, which surfaces to the model as an
         // ordinary tool error before the final text response.

@@ -182,6 +182,36 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("converts schemas at registration and reuses them in every snapshot", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      let builds = 0
+      const portable = {
+        "~standard": {
+          version: 1,
+          vendor: "test",
+          validate: (value: unknown) => ({ value }),
+          jsonSchema: {
+            input: () => {
+              builds++
+              return { type: "object", properties: { text: { type: "string" } } }
+            },
+            output: () => ({ type: "string" }),
+          },
+        },
+      } as const
+      yield* transform(service, { portable: { ...make(), input: portable } }, { codemode: false })
+      const registered = builds
+
+      const first = yield* service.snapshot()
+      const second = yield* service.snapshot()
+
+      expect(builds).toBe(registered)
+      expect(second.definitions).toHaveLength(2)
+      second.definitions.forEach((item, index) => expect(item).toBe(first.definitions[index]))
+    }),
+  )
+
   it.effect("skips invalid updates without dropping the existing definition", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
@@ -677,6 +707,27 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("exposes Code Mode tools directly when execute is denied", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, { lookup: make() }, { namespace: "mcp" })
+      yield* transform(service, { bash: make() }, { codemode: false })
+      const denyExecute: Permission.Ruleset = [{ action: "execute", resource: "*", effect: "deny" }]
+
+      const snapshot = yield* service.snapshot(denyExecute)
+      expect(snapshot.definitions.map((tool) => tool.name)).toEqual(["bash", "mcp_lookup"])
+      expect(snapshot.codeModeCatalog).toBeUndefined()
+      expect((yield* snapshot.execute(call("mcp_lookup"))).output).toEqual({ text: "mcp_lookup" })
+
+      const hidden = yield* service.snapshot([
+        ...denyExecute,
+        { action: "mcp_lookup", resource: "*", effect: "deny" },
+      ])
+      expect(hidden.definitions.map((tool) => tool.name)).toEqual(["bash"])
+      expect(yield* hidden.execute(call("mcp_lookup")).pipe(Effect.flip)).toBeInstanceOf(Tool.Error)
+    }),
+  )
+
   it.effect("filters disabled tools with edit aliases and ordered wildcard precedence", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
@@ -1041,7 +1092,7 @@ describe("Tool", () => {
               value: Schema.Boolean.pipe(
                 Schema.decodeTo(Schema.String, {
                   decode: SchemaGetter.transform((value) => String(value)),
-                  encode: SchemaGetter.transformOrFail((value) =>
+                  encode: SchemaGetter.transformEffect((value) =>
                     value === "valid"
                       ? Effect.succeed(true)
                       : Effect.fail(new SchemaIssue.InvalidValue({ message: "invalid output" }, value)),

@@ -30,7 +30,7 @@ Effect `4.0.0-beta.107` currently contains unresolved symbols in its published d
 ```ts
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest } from "effect/http"
 import { HttpRecorder } from "@opencode/http-recorder"
 
 const User = Schema.Struct({
@@ -111,26 +111,18 @@ Real applications often select WebSocket URLs inside domain services. Effect rep
 ```ts
 import { NodeSocket } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { Deferred, Effect, Layer } from "effect"
-import { Socket } from "effect/unstable/socket"
+import { Effect, Layer } from "effect"
+import { Socket } from "effect/socket"
 import { HttpRecorder } from "@opencode/http-recorder"
 
 const roundTrip = Effect.fn("Echo.roundTrip")(function* (url: string, message: string) {
-  const socket = yield* Socket.makeWebSocket(url, { closeCodeIsError: () => false })
-  const write = yield* socket.writer
-  const echoed = yield* Deferred.make<string>()
-
-  yield* socket.runString(
-    (response) => {
-      return Deferred.succeed(echoed, response).pipe(
-        Effect.andThen(write(new Socket.CloseEvent(1000, "done"))),
-        Effect.orDie,
-      )
-    },
-    { onOpen: write(message).pipe(Effect.orDie) },
-  )
-
-  return yield* Deferred.await(echoed)
+  const socket = yield* Socket.makeWebSocket(url)
+  const writer = yield* socket.writer
+  const pull = yield* Socket.readerString(socket)
+  yield* writer.write(message)
+  const [echoed] = yield* pull
+  yield* writer.write(new Socket.CloseEvent(1000, "done"))
+  return echoed
 })
 
 it.effect("round trips a message", () =>
@@ -147,17 +139,15 @@ it.effect("round trips a message", () =>
 
 The production application supplies only `NodeSocket.layerWebSocketConstructor`. The recorder appears in test wiring and observes each call to `Socket.makeWebSocket`, including URLs selected at runtime.
 
-`socket.runString` owns the receive loop and finishes when the connection closes or fails. Its optional `onOpen` effect is the safe place to send protocols whose client speaks first. The writer is scoped because sending is valid only while a connection run is active.
+Acquiring a reader with `socket.reader` or `Socket.readerString` opens the connection within the current scope, and each `pull` returns the next batch of frames. Every close, clean or not, fails `pull` with a `SocketCloseError`. Write only while a reader is open.
 
 WebSocket cassettes preserve one ordered transcript of client and server text or binary frames. Replay releases recorded server frames until it reaches a client frame, waits for the application to write the matching frame, then continues. This preserves causal ordering without reproducing network timing.
 
 Client text frames containing JSON compare canonically, so object-key order does not matter. Changed fields, extra fields, non-JSON text, and binary frames must match exactly after redaction. There is intentionally no custom WebSocket matcher in this beta.
 
-Incoming frame handlers start in recorded order and may run concurrently, matching Effect's socket abstraction. Replay waits for all handlers before the socket run completes, but handler completion order is not guaranteed. Use Effect synchronization such as `Queue`, `Ref`, or `Deferred` instead of unsynchronized mutable state.
-
 A constructor cassette records the URL, requested protocols, frames, and terminal close for each connection. Replay validates the URL and protocols before opening the simulated socket. Closing before every recorded frame is consumed fails the test.
 
-Use `layerSocket` when a protocol layer already consumes one application-provided `Socket.Socket`, including non-WebSocket transports. Because that lower-level abstraction has no URL or protocols, its cassettes use the cassette name and connection order as identity.
+Use `layerSocket` when a protocol layer already consumes one application-provided `Socket.Socket`, including non-WebSocket transports. Because that lower-level abstraction has no URL or protocols, its cassettes use the cassette name and connection order as identity. A connection is recorded when its reader scope ends with a normal close (`1000`) or succeeds without a socket failure; abnormal closes, failures, and interruptions record nothing.
 
 Text frames use the same JSON-field and body redaction as HTTP bodies. Binary frames are stored losslessly as base64. Client and server frame kinds must match during replay.
 

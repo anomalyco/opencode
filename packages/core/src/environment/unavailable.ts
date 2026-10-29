@@ -1,5 +1,5 @@
 import { Effect, Layer, PlatformError } from "effect"
-import { ChildProcessSpawner, make } from "effect/unstable/process/ChildProcessSpawner"
+import { ChildProcessSpawner, make } from "effect/process/ChildProcessSpawner"
 
 export const spawner = make(() =>
   Effect.fail(

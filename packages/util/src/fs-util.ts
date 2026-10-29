@@ -5,7 +5,6 @@ import { lookup } from "mime-types"
 import { Context, Effect, FileSystem, Layer, Schema } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { Glob } from "./glob.js"
-import { serviceUse } from "./effect/service-use.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem } from "./effect/app-node-platform.js"
 import { sameDirectory } from "./path.js"
@@ -57,8 +56,6 @@ export namespace FSUtil {
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/FSUtil") {}
 
-  export const use = serviceUse(Service)
-
   // Exported so simulation can wrap this layer and override the methods that
   // bypass the injected FileSystem (readDirectoryEntries, scan, globUp).
   export const layer = Layer.effect(
@@ -71,10 +68,11 @@ export namespace FSUtil {
       })
 
       const readFileStringSafe = Effect.fn("FileSystem.readFileStringSafe")(function* (path: string) {
-        return yield* fs.readFileString(path).pipe(
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
-          Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.undefined),
-        )
+        return yield* fs
+          .readFileString(path)
+          .pipe(
+            Effect.catchIf((error) => error.reason._tag === "NotFound" || isAccessDenied(error), () => Effect.undefined),
+          )
       })
 
       const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {
@@ -104,8 +102,12 @@ export namespace FSUtil {
 
       const resolve = Effect.fn("FileSystem.resolve")(function* (input: string) {
         const resolved = path.resolve(windowsPath(input))
+        // Sandboxes deny reads outside granted paths; canonicalize what we can see.
         return yield* fs.realPath(resolved).pipe(
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(resolved)),
+          Effect.catchIf(
+            (error) => error.reason._tag === "NotFound" || isAccessDenied(error),
+            () => Effect.succeed(resolved),
+          ),
           Effect.orDie,
         )
       })
@@ -230,6 +232,18 @@ export namespace FSUtil {
 
   export const node = makeGlobalNode({ service: Service, layer: layer, deps: [filesystem] })
 
+  /** Permission denial, including macOS sandbox and privacy denials that surface as Unknown with an EPERM cause. */
+  export function isAccessDenied(error: PlatformError) {
+    if (error.reason._tag === "PermissionDenied") return true
+    const cause = error.reason.cause
+    return (
+      error.reason._tag === "Unknown" &&
+      cause instanceof globalThis.Error &&
+      "code" in cause &&
+      cause.code === "EPERM"
+    )
+  }
+
   // Pure helpers that don't need Effect (path manipulation, sync operations)
   export function mimeType(p: string): string {
     return lookup(p) || "application/octet-stream"
@@ -245,21 +259,12 @@ export namespace FSUtil {
     }
   }
 
-  export function normalizePathPattern(p: string): string {
-    if (process.platform !== "win32") return p
-    if (p === "*") return p
-    const match = p.match(/^(.*)[\\/]\*$/)
-    if (!match) return normalizePath(p)
-    const dir = /^[A-Za-z]:$/.test(match[1]) ? match[1] + "\\" : match[1]
-    return join(normalizePath(dir), "*")
-  }
-
   export function resolve(p: string): string {
     const resolved = path.resolve(windowsPath(p))
     try {
       return normalizePath(realpathSync(resolved))
     } catch (e: any) {
-      if (e?.code === "ENOENT" || e?.code === "ENOTDIR") return normalizePath(resolved)
+      if (["ENOENT", "ENOTDIR", "EPERM", "EACCES"].includes(e?.code)) return normalizePath(resolved)
       throw e
     }
   }
@@ -272,6 +277,10 @@ export namespace FSUtil {
       .replace(/^\/cygdrive\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
       .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
   }
+
+  export const ignoredDirectories = ["node_modules", ".git", ".venv", "venv", "__pycache__"]
+
+  export const ignoreGlobs = [...ignoredDirectories, `**/{${ignoredDirectories.join(",")}}/**`]
 
   export function overlaps(a: string, b: string) {
     return contains(a, b) || contains(b, a)

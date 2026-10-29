@@ -1,7 +1,7 @@
 import { Credential } from "@opencode/core/credential"
 import { ConflictError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
-import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Api } from "../api"
 
 export const CredentialHandler = HttpApiBuilder.group(Api, "server.credential", (handlers) =>

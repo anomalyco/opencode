@@ -51,7 +51,7 @@ Vous pouvez personnaliser la base URL pour n'importe quel fournisseur en défini
 ## OpenCode Zen
 
 OpenCode Zen est une liste de modèles fournis par l'équipe OpenCode qui ont été
-testé et vérifié pour fonctionner correctement avec OpenCode. [En savoir plus](/docs/zen).
+testé et vérifié pour fonctionner correctement avec OpenCode. [En savoir plus](https://opencode.ai/v2/docs/console/).
 
 :::tip
 Si vous êtes nouveau, nous vous recommandons de commencer par OpenCode Zen.
@@ -563,7 +563,7 @@ Vous pouvez également ajouter des modèles via votre configuration opencode.
   "provider": {
     "cloudflare-ai-gateway": {
       "models": {
-        "openai/gpt-4o": {},
+        "openai/gpt-6.1-sol": {},
         "anthropic/claude-sonnet-4": {}
       }
     }
@@ -746,8 +746,6 @@ Sélectionnez **OAuth** et votre navigateur s'ouvrira pour autorisation.
     /models
     ```
 
-````
-
 Trois modèles basés sur Claude sont disponibles :
 
 - **duo-chat-haiku-4-5** (Par défaut) - Réponses rapides pour des tâches rapides
@@ -765,15 +763,14 @@ pour stocker le jeton dans le stockage d'authentification opencode.
 OpenCode utilise un petit modèle pour certaines tâches d'IA telles que la génération du titre de la session.
 Il est configuré pour utiliser gpt-5-nano par défaut, hébergé par Zen. Pour verrouiller OpenCode
 pour utiliser uniquement votre propre instance hébergée par GitLab, ajoutez ce qui suit à votre
-Fichier `opencode.json`. Il est également recommandé de désactiver le partage de session.
+Fichier `opencode.json`.
 
 ```json
 {
-"$schema": "https://opencode.ai/config.json",
-"small_model": "gitlab/duo-chat-haiku-4-5",
-"share": "disabled"
+  "$schema": "https://opencode.ai/config.json",
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
-````
+```
 
 :::
 
@@ -1407,7 +1404,7 @@ Si vous disposez déjà d'une clé API, vous pouvez sélectionner **Entrer manue
 
 ### OpenCode Zen
 
-OpenCode Zen est une liste de modèles testés et vérifiés fournie par l'équipe OpenCode. [En savoir plus](/docs/zen).
+OpenCode Zen est une liste de modèles testés et vérifiés fournie par l'équipe OpenCode. [En savoir plus](https://opencode.ai/v2/docs/console/).
 
 1. Connectez-vous à **<a href={console}>OpenCode Zen</a>** et cliquez sur **Créer une clé API**.
 

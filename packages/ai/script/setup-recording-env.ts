@@ -5,7 +5,7 @@ import * as path from "node:path"
 import * as prompts from "@clack/prompts"
 import { AwsV4Signer } from "aws4fetch"
 import { Config, ConfigProvider, Effect, FileSystem, PlatformError, Redacted } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http"
 import * as ProviderShared from "../src/protocols/shared"
 import { CloudflareAIGateway } from "../src/providers/cloudflare-ai-gateway.js"
 import { CloudflareWorkersAI } from "../src/providers/cloudflare-workers-ai.js"
@@ -103,53 +103,6 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     note: "OpenAI-compatible xAI chat endpoint",
     vars: [{ name: "XAI_API_KEY" }],
     validate: (env) => validateBearer("https://api.x.ai/v1/models", Redacted.make(env.XAI_API_KEY)),
-  },
-  {
-    id: "fal",
-    label: "fal",
-    tier: "canary",
-    note: "fal queue image and video recorded tests",
-    vars: [{ name: "FAL_KEY" }],
-    // fal has no free authenticated list endpoint; a 404 for an unknown request id proves the key was accepted.
-    validate: (env) =>
-      Effect.gen(function* () {
-        const http = yield* HttpClient.HttpClient
-        const response = yield* http.execute(
-          HttpClientRequest.get(
-            "https://queue.fal.run/fal-ai/veo3.1/requests/00000000-0000-0000-0000-000000000000/status",
-          ).pipe(HttpClientRequest.setHeaders({ authorization: `Key ${Redacted.value(Redacted.make(env.FAL_KEY))}` })),
-        )
-        if (response.status === 404) return undefined
-        return yield* responseError(response)
-      }),
-  },
-  {
-    id: "black-forest-labs",
-    label: "Black Forest Labs",
-    tier: "canary",
-    note: "BFL FLUX queued image recorded tests",
-    vars: [{ name: "BFL_API_KEY" }],
-    validate: (env) =>
-      HttpClientRequest.get("https://api.bfl.ai/v1/credits").pipe(
-        HttpClientRequest.setHeader("x-key", Redacted.value(Redacted.make(env.BFL_API_KEY))),
-        executeRequest,
-      ),
-  },
-  {
-    id: "replicate",
-    label: "Replicate",
-    tier: "canary",
-    note: "Replicate prediction image recorded tests",
-    vars: [{ name: "REPLICATE_API_TOKEN" }],
-    validate: (env) => validateBearer("https://api.replicate.com/v1/account", Redacted.make(env.REPLICATE_API_TOKEN)),
-  },
-  {
-    id: "stability",
-    label: "Stability AI",
-    tier: "canary",
-    note: "Stability inline generate and queued upscale recorded tests",
-    vars: [{ name: "STABILITY_API_KEY" }],
-    validate: (env) => validateBearer("https://api.stability.ai/v1/user/balance", Redacted.make(env.STABILITY_API_KEY)),
   },
   {
     id: "runway",
@@ -383,7 +336,7 @@ const readEnvFile = Effect.fn("RecordingEnv.readFile")(function* () {
 })
 
 const readConfigString = (provider: ConfigProvider.ConfigProvider, name: string) =>
-  Config.string(name)
+  Config.String(name)
     .parse(provider)
     .pipe(
       Effect.match({

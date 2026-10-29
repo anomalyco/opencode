@@ -1,7 +1,7 @@
 import { Command } from "@opencode/schema/command"
 import { Location } from "@opencode/schema/location"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const CommandGroup = HttpApiGroup.make("server.command")

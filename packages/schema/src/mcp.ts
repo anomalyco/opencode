@@ -91,6 +91,8 @@ export interface Server extends Schema.Schema.Type<typeof Server> {}
 export const Server = Schema.Struct({
   name: Schema.String,
   status: Status,
+  // Display title from the connected server's `serverInfo.title`; absent while disconnected or when not provided.
+  title: optional(Schema.String),
   // Set for remote servers registered as OAuth integrations; lets clients act on the right integration
   // without matching by name, which could collide with provider or plugin integrations.
   integrationID: optional(IntegrationID),

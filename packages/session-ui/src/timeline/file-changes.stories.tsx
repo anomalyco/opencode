@@ -10,6 +10,7 @@ import {
   writeFileDocument,
 } from "../storybook/current-session-fixtures"
 import { storyDocument, storyPatchFile, storyTool } from "../storybook/current-session-scenarios"
+import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
 import { ToolDisplay } from "../tools/tool-renderer"
 
@@ -198,6 +199,76 @@ const WrittenSource = {
   ),
 }
 
+// A finished turn: the step records which files changed, and the idle marker ends the turn.
+function finishedTurnDocument(files: { file: string; before: string; after: string }[]): SessionDocument {
+  const document = storyDocument([
+    storyTool("tool_turn_shell", "shell", "completed", { command: "bun run format" }, { output: "Formatted" }),
+  ])
+
+  const step = document.messages.at(-1)
+
+  if (step?.type !== "assistant") throw new Error("Expected the story document to end with a step")
+
+  return {
+    ...document,
+    messages: [
+      ...document.messages.slice(0, -1),
+      { ...step, snapshot: { files: files.map((item) => item.file) } },
+      { id: "msg_turn_idle", type: "idle", outcome: "succeeded", time: { created: step.time.created + 400 } },
+    ],
+    diffs: files.map((item) => {
+      const lines = (text: string) => (text ? text.split("\n").length - 1 : 0)
+      const changes = createTwoFilesPatch(item.file, item.file, item.before, item.after)
+
+      return {
+        file: item.file,
+        patch: changes,
+        additions: item.before ? (item.after ? 1 : 0) : lines(item.after),
+        deletions: item.after ? (item.before ? 1 : 0) : lines(item.before),
+        status: !item.before ? "added" : !item.after ? "deleted" : "modified",
+      }
+    }),
+  }
+}
+
+export const TurnChangeSummary = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Turn change summary"
+      description="Once the turn ends, every file it changed is summarized below it, including changes made by shell commands."
+      document={finishedTurnDocument([
+        {
+          file: "packages/app/src/session/timeline/message-timeline.tsx",
+          before: "export const before = true\n",
+          after: "export const after = true\n",
+        },
+        { file: "packages/app/src/session/turn-summary.ts", before: "", after: "export const summary = []\n" },
+        { file: "packages/app/src/session/legacy-summary.ts", before: "export const legacy = []\n", after: "" },
+      ])}
+      width="860px"
+      turnDiffs
+    />
+  ),
+}
+
+export const TurnChangeSummaryOverflow = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Turn change summary with many files"
+      description="Past five files, the rest of the turn's changes wait behind Show all."
+      document={finishedTurnDocument(
+        Array.from({ length: 14 }, (_, index) => ({
+          file: `src/modules/module-${index + 1}.ts`,
+          before: `export const value = ${index}\n`,
+          after: `export const value = ${index + 1}\n`,
+        })),
+      )}
+      width="860px"
+      turnDiffs
+    />
+  ),
+}
+
 const fileScenarios = {
   repeated: RepeatedEdits,
   streaming: EditWithStreamedSibling,
@@ -256,6 +327,7 @@ export const AppendingToolCalls = {
 export const ChangingFiles = {
   args: { scenario: "streaming" },
   argTypes: { scenario: { control: "select", options: Object.keys(fileScenarios) } },
+  // SAFETY: the scenario control only offers fileScenarios keys.
   render: (args: { scenario: string }) => fileScenarios[args.scenario as keyof typeof fileScenarios].render(),
 }
 

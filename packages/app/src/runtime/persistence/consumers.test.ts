@@ -1,14 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { WorkspaceOnboardingSchema, ProviderTipSchema, WorkspaceTipSchema } from "@/new-session/view"
+import { WorkspaceOnboardingSchema, ProviderTipSchema } from "@/new-session/view"
 import { ModelSelectionSchema } from "@/providers/models/selection"
 import { Persistence } from "@/runtime/persistence/schema"
 import { FileViewsSchema } from "@/workspaces/files/view-cache"
 import { languageSchema } from "@/runtime/i18n/language"
 import { HomeServersSchema } from "@/home/projects/controller"
 import { ModelProvidersSchema } from "@/settings/models/models"
-import { NotificationStore, type Notification } from "@/shell/notifications/notification"
-import { IconState, ProjectState, VcsState } from "@/runtime/server/persistence"
+import { ProjectState, VcsState } from "@/runtime/server/persistence"
 
 function stored<S extends Schema.ConstraintCodec<object, unknown>>(
   name: string,
@@ -20,11 +19,6 @@ function stored<S extends Schema.ConstraintCodec<object, unknown>>(
 
   return { name, decode: Schema.decodeUnknownSync(codec), encode: Schema.encodeUnknownSync(codec), cases }
 }
-
-const notifications: Notification[] = [
-  { type: "turn-complete", time: 123, viewed: false, session: "session-1" },
-  { type: "error", time: 124, viewed: true, error: { type: "api", message: "failed", status: 500 } },
-]
 
 const collapsed = [
   [{}, { collapsed: {} }],
@@ -48,25 +42,8 @@ describe("persisted consumer schemas", () => {
       [{ dismissedAt: Infinity }, { dismissedAt: 0 }],
       [{ dismissedAt: 123 }, { dismissedAt: 123 }],
     ]),
-    stored("workspace tip", WorkspaceTipSchema, { dismissedAt: 0 }, [[{ dismissedAt: 123 }, { dismissedAt: 123 }]]),
     stored("home server collapse", HomeServersSchema, { collapsed: {} }, collapsed),
     stored("model provider collapse", ModelProvidersSchema, { collapsed: {} }, collapsed),
-    stored("notifications", NotificationStore, { list: [] }, [
-      [
-        {
-          list: [
-            notifications[0],
-            null,
-            { type: "unknown", time: 123, viewed: false },
-            { ...notifications[1], error: "invalid" },
-            notifications[1],
-          ],
-        },
-        { list: notifications },
-      ],
-      [{}, { list: [] }],
-      [{ list: {} }, { list: [] }],
-    ]),
     stored("VCS cache", VcsState, { value: undefined }, [
       [{}, { value: undefined }],
       [{ value: null }, { value: undefined }],
@@ -99,13 +76,6 @@ describe("persisted consumer schemas", () => {
           },
         },
       ],
-    ]),
-    stored("icon cache", IconState, { value: undefined }, [
-      [{}, { value: undefined }],
-      [{ value: 42 }, { value: undefined }],
-      [{ value: null }, { value: undefined }],
-      [{ value: "" }, { value: "" }],
-      [{ value: "data:image/png;base64,abc" }, { value: "data:image/png;base64,abc" }],
     ]),
   ])("$name defaults missing or invalid values and round-trips valid ones", (row) => {
     row.cases.forEach(([input, expected]) => {

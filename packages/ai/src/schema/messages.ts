@@ -1,4 +1,5 @@
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
+import { withStatics } from "@opencode/schema/schema"
 import { Tool } from "@opencode/schema/tool"
 import {
   CacheHint,
@@ -14,6 +15,7 @@ import {
 } from "./options.js"
 import { ProviderID } from "./ids.js"
 import { Media } from "../media.js"
+import { Json } from "../utils/json.js"
 
 export const MessageRole = Schema.Literals(["system", "user", "assistant", "tool"])
 export type MessageRole = Schema.Schema.Type<typeof MessageRole>
@@ -28,7 +30,7 @@ export type SystemPart = Schema.Schema.Type<typeof systemPartSchema>
 
 const makeSystemPart = (text: string): SystemPart => ({ type: "text", text })
 
-export const SystemPart = Object.assign(systemPartSchema, {
+export const SystemPart = withStatics(systemPartSchema, {
   make: makeSystemPart,
   content: (input?: string | SystemPart | ReadonlyArray<SystemPart>) => {
     if (input === undefined) return []
@@ -76,7 +78,7 @@ const toolResultValueSchema = Schema.Union([
 export type ToolResultValue = Schema.Schema.Type<typeof toolResultValueSchema>
 const isToolResultValue = Schema.is(toolResultValueSchema)
 
-export const ToolResultValue = Object.assign(toolResultValueSchema, {
+export const ToolResultValue = withStatics(toolResultValueSchema, {
   is: isToolResultValue,
   make: (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
     if (isToolResultValue(value)) return value
@@ -90,7 +92,7 @@ export interface ToolOutput {
   readonly content: ReadonlyArray<Tool.Content>
 }
 
-export const ToolOutput = Object.assign(
+export const ToolOutput = withStatics(
   Schema.Struct({
     structured: Schema.Unknown,
     content: Schema.Array(Tool.Content),
@@ -118,16 +120,14 @@ export const ToolOutput = Object.assign(
   },
 )
 
+const encodeJsonOption = Schema.encodeUnknownOption(Json)
+
 const toolResultText = (value: unknown) => {
   if (typeof value === "string") return value
-  try {
-    return JSON.stringify(value) ?? String(value)
-  } catch {
-    return String(value)
-  }
+  return Option.getOrElse(encodeJsonOption(value), () => String(value))
 }
 
-export const ToolCallPart = Object.assign(
+export const ToolCallPart = withStatics(
   Schema.Struct({
     type: Schema.Literal("tool-call"),
     id: Schema.String,
@@ -145,7 +145,7 @@ export const ToolCallPart = Object.assign(
 )
 export type ToolCallPart = Schema.Schema.Type<typeof ToolCallPart>
 
-export const ToolResultPart = Object.assign(
+export const ToolResultPart = withStatics(
   Schema.Struct({
     type: Schema.Literal("tool-result"),
     id: Schema.String,
@@ -209,7 +209,7 @@ const compactionPartSchema = Schema.Struct({
   )
   .annotate({ identifier: "LLM.Content.Compaction" })
 export type CompactionPart = typeof compactionPartSchema.Type
-export const CompactionPart = Object.assign(compactionPartSchema, {
+export const CompactionPart = withStatics(compactionPartSchema, {
   make: (input: Omit<CompactionPart, "type" | "encrypted" | "text"> & CompactionContent): CompactionPart =>
     Schema.decodeUnknownSync(compactionPartSchema)({ type: "compaction", ...input }),
 })
@@ -284,11 +284,23 @@ export namespace Message {
     make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })
 }
 
+/**
+ * Raw-text wire encoding for a tool with exactly one required string parameter. Models that accept the format
+ * write that parameter's value directly instead of JSON arguments; calls still decode to the normal object input.
+ */
+export const Freeform = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("text") }),
+  Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String }),
+]).annotate({ identifier: "LLM.Freeform" })
+export type Freeform = Schema.Schema.Type<typeof Freeform>
+
 const toolDefinitionFields = {
   name: Schema.String,
   description: Schema.String,
   inputSchema: JsonSchema,
   outputSchema: Schema.optional(JsonSchema),
+  freeform: Schema.optional(Freeform),
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
@@ -310,6 +322,15 @@ export namespace ToolDefinition {
 
   /** Normalize tool definition input into the canonical `ToolDefinition` class. */
   export const make = (input: Input) => (input instanceof ToolDefinition ? input : new ToolDefinition(input))
+
+  /** The parameter a freeform call fills: the input schema's only property, when it is a required string. */
+  export const freeformField = (schema: JsonSchema) => {
+    const properties = Object.entries(Schema.is(JsonSchema)(schema.properties) ? schema.properties : {})
+    if (properties.length !== 1) return undefined
+    const [name, property] = properties[0]
+    if (!Schema.is(JsonSchema)(property) || property.type !== "string") return undefined
+    return Array.isArray(schema.required) && schema.required.includes(name) ? name : undefined
+  }
 }
 
 export type ToolNamespace = {
@@ -326,7 +347,7 @@ export type ToolNamespaceEntryInput = ToolNamespaceInput & { readonly type: "nam
 
 export const ToolNamespace: Schema.Codec<ToolNamespace> & {
   readonly make: (input: ToolNamespace | ToolNamespaceInput) => ToolNamespace
-} = Object.assign(
+} = withStatics(
   Schema.Struct({
     type: Schema.Literal("namespace"),
     name: Schema.String,
@@ -346,7 +367,7 @@ export type ToolEntry = ToolDefinition | ToolNamespace
 export type ToolEntryInput = ToolDefinition.Input | ToolNamespaceEntryInput
 export const ToolEntry: Schema.Codec<ToolEntry> & {
   readonly make: (input: ToolEntryInput) => ToolEntry
-} = Object.assign(
+} = withStatics(
   Schema.Union([ToolDefinition, ToolNamespace]).pipe(
     Schema.toTaggedUnion("type"),
     Schema.annotate({ identifier: "LLM.ToolEntry" }),
@@ -395,6 +416,8 @@ const requestSchema = Schema.Struct({
   // Stable cache affinity for protocols that support provider-managed prompt caching.
   promptCacheKey: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  /** Emit a `raw` event with each provider frame before the events parsed from it. */
+  includeRaw: Schema.optional(Schema.Boolean),
 })
 
 export class LLMRequest<Model extends LanguageModel = LanguageModel> extends Schema.Class<LLMRequest>("LLM.Request")(
@@ -427,6 +450,7 @@ export namespace LLMRequest {
     cache: request.cache,
     promptCacheKey: request.promptCacheKey,
     metadata: request.metadata,
+    includeRaw: request.includeRaw,
   })
 
   export function update<Model extends LanguageModel>(

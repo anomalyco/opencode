@@ -14,7 +14,7 @@ import copyLogoSvgDark from "../asset/lander/opencode-logo-dark.svg"
 import copyWordmarkSvgLight from "../asset/lander/opencode-wordmark-light.svg"
 import copyWordmarkSvgDark from "../asset/lander/opencode-wordmark-dark.svg"
 import { A, useNavigate } from "@solidjs/router"
-import { createMemo, Match, Show, Switch } from "solid-js"
+import { Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createEffect, onCleanup } from "solid-js"
 import { config } from "~/config"
@@ -44,6 +44,18 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
     mobileMenuOpen: false,
     contextMenuOpen: false,
     contextMenuPosition: { x: 0, y: 0 },
+  })
+
+  let mobileToggle: HTMLButtonElement | undefined
+  createEffect(() => {
+    if (!store.mobileMenuOpen) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      setStore("mobileMenuOpen", false)
+      mobileToggle?.focus()
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    onCleanup(() => document.removeEventListener("keydown", handleKeyDown))
   })
 
   createEffect(() => {
@@ -148,23 +160,45 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
             </a>
           </li>
           <li>
-            <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
+            <a href="/v2/docs">{i18n.t("nav.docs")}</a>
           </li>
           <li>
             <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
           </li>
           <li>
-            <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+            {/* Console links use a full page load into its separate application. */}
+            <Show
+              when={config.consoleMarketingEnabled}
+              fallback={<A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>}
+            >
+              <a href="/console/models" target="_self">
+                {i18n.t("nav.models")}
+              </a>
+            </Show>
           </li>
           <li>
-            <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
+            <Show
+              when={config.consoleMarketingEnabled}
+              fallback={<A href={language.route("/go")}>{i18n.t("nav.go")}</A>}
+            >
+              <a href="/console/go" target="_self">
+                {i18n.t("nav.go")}
+              </a>
+            </Show>
           </li>
           <li>
-            <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
+            <Show
+              when={config.consoleMarketingEnabled}
+              fallback={<A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>}
+            >
+              <a href="/console/teams" target="_self">
+                {i18n.t("nav.teams")}
+              </a>
+            </Show>
           </li>
           <Show when={props.zen || props.go}>
             <li>
-              <a href="/auth">{i18n.t("nav.login")}</a>
+              <a href="/console">{i18n.t("nav.login")}</a>
             </li>
           </Show>
           <Show when={!props.hideGetStarted}>
@@ -193,9 +227,10 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
       </nav>
       <nav data-component="nav-mobile">
         <button
+          ref={mobileToggle}
           type="button"
           data-component="nav-mobile-toggle"
-          aria-expanded="false"
+          aria-expanded={store.mobileMenuOpen}
           aria-controls="nav-mobile-menu"
           class="nav-toggle"
           onClick={() => setStore("mobileMenuOpen", !store.mobileMenuOpen)}
@@ -248,27 +283,48 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
                   </a>
                 </li>
                 <li>
-                  <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
+                  <a href="/v2/docs">{i18n.t("nav.docs")}</a>
                 </li>
                 <li>
                   <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
                 </li>
                 <Show when={!props.zen}>
                   <li>
-                    <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+                    <Show
+                      when={config.consoleMarketingEnabled}
+                      fallback={<A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>}
+                    >
+                      <a href="/console/models" target="_self">
+                        {i18n.t("nav.models")}
+                      </a>
+                    </Show>
                   </li>
                 </Show>
                 <Show when={!props.go}>
                   <li>
-                    <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
+                    <Show
+                      when={config.consoleMarketingEnabled}
+                      fallback={<A href={language.route("/go")}>{i18n.t("nav.go")}</A>}
+                    >
+                      <a href="/console/go" target="_self">
+                        {i18n.t("nav.go")}
+                      </a>
+                    </Show>
                   </li>
                 </Show>
                 <li>
-                  <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
+                  <Show
+                    when={config.consoleMarketingEnabled}
+                    fallback={<A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>}
+                  >
+                    <a href="/console/teams" target="_self">
+                      {i18n.t("nav.teams")}
+                    </a>
+                  </Show>
                 </li>
                 <Show when={props.zen || props.go}>
                   <li>
-                    <a href="/auth">{i18n.t("nav.login")}</a>
+                    <a href="/console">{i18n.t("nav.login")}</a>
                   </li>
                 </Show>
                 <Show when={!props.hideGetStarted}>

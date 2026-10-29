@@ -80,6 +80,26 @@ test.each<{
     popover: { type: "context", query: "sr" },
   },
   {
+    name: "keeps an open mention searching across single spaces",
+    from: { popover: { type: "context", query: "open" } },
+    event: { type: "input.changed", value: "see @open con", persist: false },
+    draft: persisted("see @open con"),
+    popover: { type: "context", query: "open con" },
+  },
+  {
+    name: "does not reopen a mention across a space",
+    event: { type: "input.changed", value: "see @open con", persist: false },
+    draft: persisted("see @open con"),
+    popover: { type: "closed" },
+  },
+  {
+    name: "ends an open mention at a double space",
+    from: { popover: { type: "context", query: "open " } },
+    event: { type: "input.changed", value: "see @open  ", persist: false },
+    draft: persisted("see @open  "),
+    popover: { type: "closed" },
+  },
+  {
     name: "enters shell mode from an initial exclamation mark",
     event: { type: "input.changed", value: "!", persist: false },
     draft: persisted("!"),

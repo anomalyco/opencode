@@ -62,7 +62,7 @@ export const provider = {
   configure,
 }
 
-export const model: ProviderPackage.Definition<Settings, AnthropicMessages.ProviderOptionsInput>["model"] = (
+export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput> = (
   modelID,
   { apiKey, authToken, baseURL, body, headers, provider, ...providerOptions },
 ) => {
@@ -74,8 +74,8 @@ export const model: ProviderPackage.Definition<Settings, AnthropicMessages.Provi
   return configure({
     ...(authToken === undefined ? { apiKey: apiKey } : { auth: Auth.bearer(authToken) }),
     baseURL,
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     provider,
     providerOptions,
   }).model(modelID)

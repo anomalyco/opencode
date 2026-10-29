@@ -11,7 +11,8 @@ using OpenCode, on your own or as a team.
 - Usage tracking and [budget](/console/budgets) controls
 - Deploy team wide policies to control OpenCode behavior
 - [Web search](/console/websearch)
-- [OpenCode Go and Go Plus](/console/go), $10 and $40 monthly subscriptions for open source model access
+- [Harnesses](/console/harnesses) for using Console models from Claude Code, Codex, and other agents
+- [OpenCode Go, Go Plus, and Go Teams](/console/go), $10, $40, and $20/member monthly subscriptions for open source model access
 
 ## Get started
 
@@ -29,7 +30,8 @@ member.
 
 ## Policies
 
-Providers and Tools rules from the Policies page apply to every OpenCode V2 client
+Providers and Tools rules from the Policies page apply to every OpenCode client
 connected to the workspace. They are delivered as [policy](/policies#console)
-statements with final authority over the member's own configuration and take effect
-within about a minute.
+statements that outrank the member's user and project configuration and take effect
+within about a minute. Managed preferences and the system configuration file still
+outrank the workspace; see [precedence](/policies#precedence).

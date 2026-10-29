@@ -3,7 +3,7 @@ import { render } from "solid-js/web"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { Markdown } from "../src/components/markdown"
 import { preloadMarkdown } from "../src/components/markdown-cache"
-import { MarkdownProvider } from "../src/context/markdown"
+import { MarkdownProvider, type MarkdownLocalFileExists } from "../src/context/markdown"
 import { OpenCode } from "@opencode/client/promise"
 import { readLocalImage } from "../../app/src/runtime/server/image"
 
@@ -20,11 +20,16 @@ export { MarkdownWorkerDisposedError } from "../src/components/markdown-worker"
 
 export { preloadMarkdown }
 
+// Inline code naming one of these is a file link; any other path stays plain code.
+const existingFiles = new Set(["src/file.ts", "new/file.ts"])
+
 export async function mountMarkdown(options: {
   text: string
   streaming?: boolean
   cached?: boolean
   images?: boolean
+  synchronousFiles?: boolean
+  localFileExists?: MarkdownLocalFileExists
 }) {
   if (options.cached) await preloadMarkdown(options.text, "markdown-test")
   const host = document.createElement("div")
@@ -54,6 +59,10 @@ export async function mountMarkdown(options: {
           readImage={(path, signal) =>
             options.images ? readLocalImage(api, "C:/project", path, signal) : Promise.resolve(undefined)
           }
+          localFileExists={(path) =>
+            options.localFileExists?.(path) ??
+            (options.synchronousFiles ? existingFiles.has(path) : Promise.resolve(existingFiles.has(path)))
+          }
         >
           <Show when={visible()}>
             <Markdown
@@ -67,4 +76,10 @@ export async function mountMarkdown(options: {
       </DialogProvider>
     )
   }, host)
+
+  // Capture before Promise callbacks run: eventual assertions cannot catch a flash on insertion.
+  return Array.from(host.querySelectorAll<HTMLElement>(":not(pre) > code"), (node) => ({
+    text: node.textContent,
+    kind: node.dataset.inlineCodeKind ?? null,
+  }))
 }

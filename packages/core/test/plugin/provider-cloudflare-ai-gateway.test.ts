@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schedule } from "effect"
+import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -17,6 +18,16 @@ const seed = Effect.fn(function* (fn: (provider: Provider.MutableInfo) => void) 
   yield* catalog.transform((catalog) => catalog.update(providerID, fn))
   return catalog
 })
+
+const settingsWhen = (predicate: (settings: Provider.Settings | undefined) => boolean) =>
+  Effect.gen(function* () {
+    const catalog = yield* Provider.Service
+    return (yield* catalog.get(providerID))?.settings
+  }).pipe(
+    Effect.filterOrFail(predicate, () => new Error("settings not applied")),
+    Effect.retry({ schedule: Schedule.spaced("1 millis") }),
+    Effect.timeout("10 seconds"),
+  )
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
@@ -89,6 +100,47 @@ describe("CloudflareAIGatewayPlugin", () => {
         expect((yield* catalog.get(providerID))?.settings).toEqual({
           accountId: "configured-account",
           gatewayId: "configured-gateway",
+        })
+      }),
+    ),
+  )
+
+  it.effect("gives the provider the account and gateway IDs of a stored form login", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined, CLOUDFLARE_GATEWAY_ID: undefined }, () =>
+      Effect.gen(function* () {
+        const catalog = yield* seed(() => {})
+        const credentials = yield* Credential.Service
+        yield* credentials.create({
+          integrationID: Integration.ID.make("cloudflare-ai-gateway"),
+          value: Credential.Key.make({
+            type: "key",
+            key: "token",
+            metadata: { accountId: "form-account", gatewayId: "form-gateway" },
+          }),
+        })
+        yield* addPlugin()
+        expect((yield* catalog.get(providerID))?.settings).toEqual({
+          accountId: "form-account",
+          gatewayId: "form-gateway",
+        })
+      }),
+    ),
+  )
+
+  it.live("applies the account and gateway IDs of a form login made after startup", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined, CLOUDFLARE_GATEWAY_ID: undefined }, () =>
+      Effect.gen(function* () {
+        yield* seed(() => {})
+        yield* addPlugin()
+        const integrations = yield* Integration.Service
+        yield* integrations.connection.key({
+          integrationID: Integration.ID.make("cloudflare-ai-gateway"),
+          key: "token",
+          answer: { accountId: "form-account", gatewayId: "form-gateway" },
+        })
+        expect(yield* settingsWhen((settings) => settings?.accountId !== undefined)).toEqual({
+          accountId: "form-account",
+          gatewayId: "form-gateway",
         })
       }),
     ),

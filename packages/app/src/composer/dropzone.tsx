@@ -7,7 +7,7 @@ import { createAnimatedPresence } from "@/runtime/animated-presence"
 export function ComposerDropzone(props: {
   active: boolean
   input?: { image?: boolean; pdf?: boolean }
-  identity?: () => unknown
+  identity?: () => string | undefined
 }) {
   const language = useLanguage()
   const [elements, setElements] = createStore<{ dropzone?: HTMLDivElement }>({})
@@ -33,7 +33,7 @@ export function ComposerDropzone(props: {
       <div
         data-slot="session-dropzone-blur"
         data-visible={props.active}
-        class="pointer-events-none absolute inset-0 z-[79] rounded-[inherit] opacity-[0.001] backdrop-blur-[1.5px] transition-opacity duration-200 ease-[cubic-bezier(0.215,0.61,0.355,1)] will-change-[opacity,backdrop-filter] data-[visible=true]:opacity-100 motion-reduce:transition-none"
+        class="pointer-events-none absolute inset-0 z-[79] rounded-[inherit] opacity-0 transition-[opacity,backdrop-filter] duration-200 ease-[cubic-bezier(0.215,0.61,0.355,1)] data-[visible=true]:opacity-100 data-[visible=true]:backdrop-blur-[1.5px] data-[visible=true]:will-change-[opacity,backdrop-filter] motion-reduce:transition-none"
         style={{
           "-webkit-mask-image":
             "linear-gradient(to right, transparent 0%, black 25%, black 75%, transparent 100%), linear-gradient(to bottom, transparent 0%, black 28%, black 72%, transparent 100%)",
@@ -52,7 +52,7 @@ export function ComposerDropzone(props: {
         >
           <div class="absolute inset-0 bg-v2-background-bg-base/25" />
           <div
-            class="absolute inset-y-0 left-1/2 w-full -translate-x-1/2 md:max-w-200 2xl:max-w-[1000px]"
+            class="absolute inset-y-0 left-1/2 w-full -translate-x-1/2 md:max-w-session"
             style={{
               "-webkit-mask-image": "linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)",
               "mask-image": "linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)",

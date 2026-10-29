@@ -3,11 +3,9 @@ import { NodeWS } from "@effect/platform-node/NodeSocket"
 import { HttpProxyAgent } from "http-proxy-agent"
 import { HttpsProxyAgent } from "https-proxy-agent"
 import { Layer } from "effect"
-import { Headers } from "effect/unstable/http"
-import { Socket } from "effect/unstable/socket"
+import { Socket } from "effect/socket"
 
-interface WebSocketOptions {
-  readonly headers?: Headers.Headers
+interface WebSocketOptions extends Socket.WebSocketClientOptions {
   readonly protocols?: string | Array<string>
 }
 
@@ -48,11 +46,8 @@ const proxy = (value: string, environment: Environment = process.env) => {
   )
 }
 
-const constructorOptions = (input: string | Array<string> | undefined): WebSocketOptions => {
-  if (typeof input === "string" || Array.isArray(input)) return { protocols: input }
-  // AI routes pass handshake options through Effect's browser-shaped constructor.
-  return (input ?? {}) as WebSocketOptions
-}
+const constructorOptions = (input: Socket.WebSocketConstructorOptions | undefined): WebSocketOptions =>
+  typeof input === "string" || Array.isArray(input) ? { protocols: input } : { headers: input?.headers }
 
 const proxyAgent = (url: string, selectedProxy: string | undefined) => {
   if (!selectedProxy) return undefined
@@ -80,11 +75,7 @@ const layer = Layer.succeed(Socket.WebSocketConstructor, (url, input) => {
     // Reject redirects before headers can cross an origin boundary; the caller safely falls back to HTTP.
     followRedirects: false,
   }
-  const socket = config.protocols
-    ? new NodeWS.WebSocket(url, config.protocols, native)
-    : new NodeWS.WebSocket(url, native)
-  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- ws implements the WebSocket surface consumed by the AI transport.
-  return socket as unknown as globalThis.WebSocket
+  return config.protocols ? new NodeWS.WebSocket(url, config.protocols, native) : new NodeWS.WebSocket(url, native)
 })
 
 export const WebSocketConstructor = { layer, proxy } as const

@@ -8,7 +8,7 @@ import { useClipboard } from "../../context/clipboard"
 import { Keymap } from "../../context/keymap"
 import { useTheme, useThemes } from "../../context/theme"
 import { usePlugin } from "../../plugin/context"
-import { useDialog } from "../../ui/dialog"
+import { DIALOG_INSET, DialogBleed, DialogFooter, DialogHeader, DialogLayout } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { getScrollAcceleration } from "../../util/scroll"
 
@@ -90,7 +90,6 @@ export function Answer(props: {
   answer: string
   markdown: ReturnType<typeof usePlugin>["markdown"]
 }) {
-  const dialog = useDialog()
   const toast = useToast()
   const clipboard = useClipboard()
   const theme = useTheme().surface("dialog")
@@ -125,48 +124,66 @@ export function Answer(props: {
   })
 
   return (
-    <box gap={1} paddingBottom={1}>
-      <box flexDirection="row" gap={2} paddingLeft={2} paddingRight={2}>
-        <text attributes={TextAttributes.BOLD} fg={theme.text.base} flexShrink={0}>
-          /btw
-        </text>
-        <text fg={theme.text.muted} wrapMode="none" flexGrow={1} truncate>
-          {props.question.replace(/\s+/g, " ")}
-        </text>
-        <text fg={theme.text.muted} flexShrink={0} onMouseUp={() => dialog.clear()}>
-          esc
-        </text>
-      </box>
-      <scrollbox
-        ref={(element: ScrollBoxRenderable) => (scroll = element)}
-        maxHeight={maxHeight()}
-        contentOptions={{ minHeight: 0 }}
-        backgroundColor={overlay.background.raised.high}
-        scrollbarOptions={{ visible: false }}
-        scrollAcceleration={getScrollAcceleration(config)}
-      >
-        <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
-          <markdown
-            syntaxStyle={syntax()}
-            renderNode={props.markdown()}
-            content={props.answer}
-            conceal
-            internalBlockMode="top-level"
-            tableOptions={{ style: "grid", cellPaddingX: 1 }}
-            fg={overlay.markdown.text}
-            bg={overlay.background.raised.high}
-          />
-        </box>
-      </scrollbox>
-      <box flexDirection="row" gap={3} paddingLeft={2} paddingRight={2}>
-        <text onMouseUp={copy}>
-          <span style={{ fg: copied() ? theme.text.feedback.success.base : theme.text.base }}>
-            <b>{copied() ? "✓ copied" : "c"}</b>
-          </span>
-          <span style={{ fg: theme.text.muted }}>{copied() ? "" : " copy"}</span>
-        </text>
-        <text fg={theme.text.muted}>j/k ↑/↓ scroll</text>
-      </box>
-    </box>
+    <DialogLayout
+      header={
+        <DialogHeader
+          gap={2}
+          titleView={
+            <text attributes={TextAttributes.BOLD} fg={theme.text.base} flexShrink={0}>
+              /btw
+            </text>
+          }
+        >
+          <text fg={theme.text.muted} wrapMode="none" flexGrow={1} truncate>
+            {props.question.replace(/\s+/g, " ")}
+          </text>
+        </DialogHeader>
+      }
+      footer={{
+        actions: {
+          primary: [
+            copied()
+              ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: copy }
+              : { title: "copy response", key: "c", onTrigger: copy },
+          ],
+        },
+      }}
+      legacyFooter={
+        <DialogFooter
+          actions={{
+            secondary: [
+              copied()
+                ? { title: "✓ copied", color: theme.text.feedback.success.base, onTrigger: copy }
+                : { title: "copy", key: "c", onTrigger: copy },
+              { title: "scroll", key: "j/k ↑/↓" },
+            ],
+          }}
+        />
+      }
+    >
+      <DialogBleed>
+        <scrollbox
+          ref={(element: ScrollBoxRenderable) => (scroll = element)}
+          maxHeight={maxHeight()}
+          contentOptions={{ minHeight: 0 }}
+          backgroundColor={overlay.background.raised.high}
+          scrollbarOptions={{ visible: false }}
+          scrollAcceleration={getScrollAcceleration(config)}
+        >
+          <box paddingLeft={DIALOG_INSET} paddingRight={DIALOG_INSET} paddingTop={1} paddingBottom={1}>
+            <markdown
+              syntaxStyle={syntax()}
+              renderNode={props.markdown()}
+              content={props.answer}
+              conceal
+              internalBlockMode="top-level"
+              tableOptions={{ style: "grid", cellPaddingX: 1 }}
+              fg={overlay.markdown.text}
+              bg={overlay.background.raised.high}
+            />
+          </box>
+        </scrollbox>
+      </DialogBleed>
+    </DialogLayout>
   )
 }

@@ -1,10 +1,26 @@
 import { describe, expect, test } from "bun:test"
 import { fileContentFromBytes, MAX_MEDIA_BYTES } from "./artifact"
+import { approxBytes } from "./content-cache"
 
 describe("fileContentFromBytes", () => {
-  test("keeps media as base64 with a mime type", () => {
-    const content = fileContentFromBytes("a.png", new Uint8Array([137, 80, 78, 71]))
-    expect(content).toEqual({ type: "binary", content: "iVBORw==", encoding: "base64", mimeType: "image/png" })
+  test("keeps media bytes with a mime type, including videos past 25 MiB", () => {
+    const png = new Uint8Array([137, 80, 78, 71])
+    expect(fileContentFromBytes("a.png", png)).toEqual({
+      type: "binary",
+      content: "",
+      bytes: png,
+      mimeType: "image/png",
+    })
+
+    const video = new Uint8Array(40 * 1024 * 1024)
+    const content = fileContentFromBytes("arcade-update-draft.mp4", video)
+    expect(content).toEqual({
+      type: "binary",
+      content: "",
+      bytes: video,
+      mimeType: "video/mp4",
+    })
+    expect(approxBytes(content)).toBe(video.byteLength)
   })
 
   test("decodes text and svg with a mime type", () => {

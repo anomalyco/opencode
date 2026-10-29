@@ -1,6 +1,6 @@
 import { AwsV4Signer } from "aws4fetch"
 import { Effect } from "effect"
-import { Headers } from "effect/unstable/http"
+import { Headers } from "effect/http"
 import { Auth, type AuthInput } from "../../route/auth.js"
 import { AIError, AuthenticationError } from "../../schema/index.js"
 import { ProviderShared } from "../shared.js"

@@ -1,24 +1,21 @@
-export function SectionHeading(props: {
-  href: string
-  title: string
-  description: string
-  as?: "h2" | "p"
-  slot?: string
-}) {
-  const content = (
-    <>
+export function SectionHeading(props: { href: string; title: string; description?: string; slot?: string }) {
+  return (
+    <h2 data-slot={props.slot ?? "section-title"}>
       <strong>
         <a data-slot="heading-link" href={props.href}>
           <span data-slot="heading-anchor" aria-hidden="true">
             #
           </span>
-          {props.title}.
+          {props.title}
+          {props.description ? "." : ""}
         </a>
-      </strong>{" "}
-      <span>{props.description}</span>
-    </>
+      </strong>
+      {props.description && (
+        <>
+          {" "}
+          <span>{props.description}</span>
+        </>
+      )}
+    </h2>
   )
-
-  if (props.as === "h2") return <h2 data-slot={props.slot ?? "section-title"}>{content}</h2>
-  return <p data-slot={props.slot ?? "section-title"}>{content}</p>
 }

@@ -1,5 +1,5 @@
 import { Config, Effect, Option, Redacted } from "effect"
-import { Headers } from "effect/unstable/http"
+import { Headers } from "effect/http"
 import { AuthenticationError, AIError, type HttpOptions } from "../schema/index.js"
 
 export class MissingCredentialError extends Error {
@@ -39,9 +39,6 @@ export interface Definition {
   readonly orElse: (that: Definition) => Definition
   readonly pipe: <A>(f: (self: Definition) => A) => A
 }
-
-export const isAuth = (input: unknown): input is Definition =>
-  typeof input === "object" && input !== null && "apply" in input && typeof input.apply === "function"
 
 const credential = (load: Effect.Effect<Redacted.Redacted, CredentialError>): Credential => {
   const self: Credential = {
@@ -95,7 +92,7 @@ export const optional = (secret: Secret | undefined, source = "optional value") 
 export const config = (name: string) =>
   credential(
     Effect.gen(function* () {
-      const secret = yield* Config.option(Config.redacted(name))
+      const secret = yield* Config.option(Config.Redacted(name))
       if (Option.isSome(secret) && Redacted.value(secret.value) !== "") return secret.value
       return yield* Effect.fail(new MissingCredentialError(name, `${name} is not set`))
     }),
@@ -124,8 +121,6 @@ export function bearer(source: Secret | Credential) {
   return credentialInput(source).bearer()
 }
 
-export const apiKey = bearer
-
 export function header(name: string): (source: Secret | Credential) => Definition
 export function header(name: string, source: Secret | Credential): Definition
 export function header(name: string, source?: Secret | Credential) {
@@ -144,7 +139,7 @@ export function bearerHeader(name: string, source?: Secret | Credential) {
   return render(source)
 }
 
-/** `Authorization: <scheme> <secret>` for providers whose scheme is not `Bearer`, such as fal's `Key`. */
+/** `Authorization: <scheme> <secret>` for providers whose scheme is not `Bearer`, such as Deepgram's `Token`. */
 export function scheme(name: string): (source: Secret | Credential) => Definition
 export function scheme(name: string, source: Secret | Credential): Definition
 export function scheme(name: string, source?: Secret | Credential) {

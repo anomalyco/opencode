@@ -2,7 +2,7 @@ import { LocationNotFoundError, InvalidRequestError, SessionNotFoundError } from
 import { makeDefaultApi } from "./api.js"
 import type { Api } from "./api.js"
 import type { Context } from "effect"
-import { HttpApiMiddleware } from "effect/unstable/httpapi"
+import { HttpApiMiddleware } from "effect/http-api"
 import type { EventGroup } from "./groups/event.js"
 
 class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware>()(
@@ -44,9 +44,11 @@ export const groupNames = {
   "server.message": "message",
   "server.model": "model",
   "server.generate": "generate",
+  "server.voice": "voice",
   "server.provider": "provider",
   "server.integration": "integration",
   "server.websearch": "websearch",
+  "server.usage": "usage",
   "server.credential": "credential",
   "server.form": "form",
   "server.permission": "permission",
@@ -66,5 +68,24 @@ export const groupNames = {
   "server.config": "config",
 } as const
 
-export const promiseOmitEndpoints = new Set(["pty.connect", "persistentPty.connect"])
-export const effectOmitEndpoints = new Set(["fs.read", "fs.write", "pty.connect", "persistentPty.connect"])
+// Experimental routes carry no compatibility promise, so the generated clients nest them under
+// `client.experimental` instead of beside stable methods. The URL decides rather than the OpenAPI
+// id, because the URL is what callers depend on and an id can miss its `experimental.` prefix.
+export const clientNamespace = (endpoint: { readonly path: string }) =>
+  endpoint.path === "/api/experimental" || endpoint.path.startsWith("/api/experimental/") ? "experimental" : undefined
+
+export const promiseOmitEndpoints = new Set([
+  "pty.connect",
+  "persistentPty.connect",
+  "mcp.client",
+  "generate.textLegacy",
+])
+export const effectOmitEndpoints = new Set([
+  "fs.read",
+  "fs.write",
+  "media.get",
+  "pty.connect",
+  "persistentPty.connect",
+  "mcp.client",
+  "generate.textLegacy",
+])

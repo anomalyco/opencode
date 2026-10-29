@@ -1,11 +1,12 @@
 export * as Media from "./media.js"
 
-import { Effect, Encoding, FileSystem, Schema, SchemaGetter } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { Effect, FileSystem, Schema, SchemaGetter } from "effect"
+import { Base64 } from "effect/encoding"
+import { HttpClientRequest } from "effect/http"
 import { ProviderID } from "./schema/ids.js"
-import { AIError, HttpContext, InvalidProviderOutputError, InvalidRequestError } from "./schema/errors.js"
+import { AIError, InvalidProviderOutputError, InvalidRequestError } from "./schema/errors.js"
 import { ProviderMetadata } from "./schema/options.js"
-import { Service } from "./route/executor-service.js"
+import { responseHttp, Service } from "./route/executor-service.js"
 import { detectMediaType, fileMediaType } from "./utils/media-type.js"
 
 export { detectMediaType } from "./utils/media-type.js"
@@ -50,7 +51,7 @@ export const Source = Schema.Union([BytesSource, Base64Source, UrlSource, RefSou
 export type Source = Schema.Schema.Type<typeof Source>
 
 // ---------------------------------------------------------------------------
-// Kind, Info, Notice
+// Kind, Info
 // ---------------------------------------------------------------------------
 
 export type AspectRatio = `${number}:${number}`
@@ -82,14 +83,6 @@ export const Info = Schema.Struct({
   format: Schema.optional(Schema.String),
 }).annotate({ identifier: "Media.Info" })
 export type Info = Schema.Schema.Type<typeof Info>
-
-/** A provider-side partial result such as stripped audio or a moderated sample; never a silent drop. */
-export const Notice = Schema.Struct({
-  type: Schema.Literals(["moderated", "filtered", "other"]),
-  message: Schema.String,
-  providerMetadata: Schema.optional(ProviderMetadata),
-}).annotate({ identifier: "Media.Notice" })
-export type Notice = Schema.Schema.Type<typeof Notice>
 
 // ---------------------------------------------------------------------------
 // Asset
@@ -140,7 +133,7 @@ export class Asset {
   inline(): Inline | undefined {
     const source = this.source
     if (source.type !== "bytes" && source.type !== "base64") return undefined
-    const base64 = source.type === "base64" ? source.data : (this.#base64 ??= Encoding.encodeBase64(source.data))
+    const base64 = source.type === "base64" ? source.data : (this.#base64 ??= Base64.encode(source.data))
     const mime = this.mediaType.toLowerCase()
     return { mime, base64, dataUrl: `data:${mime};base64,${base64}` }
   }
@@ -155,7 +148,7 @@ export class Asset {
         return Effect.fail(invalid(`Cannot materialize provider ref ${source.provider}:${source.id}`))
       const decoded =
         source.type === "base64"
-          ? Effect.fromResult(Encoding.decodeBase64(source.data)).pipe(
+          ? Effect.fromResult(Base64.decode(source.data)).pipe(
               Effect.mapError((cause) => invalid(`Media asset contains invalid base64 data`, cause)),
             )
           : download(source, this.headers)
@@ -168,7 +161,7 @@ export class Asset {
       const source = this.source
       if (source.type === "base64") return Effect.succeed(source.data)
       if (this.#base64 !== undefined) return Effect.succeed(this.#base64)
-      return this.bytes().pipe(Effect.map((data) => (this.#base64 = Encoding.encodeBase64(data))))
+      return this.bytes().pipe(Effect.map((data) => (this.#base64 = Base64.encode(data))))
     })
   }
 
@@ -183,7 +176,7 @@ export class Asset {
   toJSON() {
     const source = this.source
     return {
-      source: source.type === "bytes" ? { ...source, data: Encoding.encodeBase64(source.data) } : source,
+      source: source.type === "bytes" ? { ...source, data: Base64.encode(source.data) } : source,
       info: this.info,
       providerMetadata: this.providerMetadata,
     }
@@ -253,7 +246,7 @@ const download = Effect.fn("Media.download")(function* (
         new AIError({
           reason: new InvalidProviderOutputError({
             message: `Failed to read media from ${source.url}`,
-            http: new HttpContext({ url: response.request.url, status: response.status, headers: response.headers }),
+            http: responseHttp(response),
             cause,
           }),
         }),

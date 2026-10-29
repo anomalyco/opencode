@@ -10,7 +10,7 @@ export type HeaderLink = { href: string; label: string }
 export const githubLink = {
   href: "https://github.com/anomalyco/opencode",
   apiHref: "https://api.github.com/repos/anomalyco/opencode",
-  fallbackStars: "205K",
+  fallbackStars: "220K",
 }
 export const themePreferences = ["dark", "light", "system"] as const
 export const themeStorageKey = "opencode:stats-theme"
@@ -28,6 +28,7 @@ export const getGitHubStars = query(async () => {
     headers: {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "opencode-stats",
     },
   })
     .then((response) => (response.ok ? response.json() : undefined))
@@ -231,6 +232,7 @@ export function Footer(props: {
     { href: "#cache-ratio", label: i18n.t("nav.cacheRatio") },
     { href: "#market-share", label: i18n.t("nav.marketShare") },
     { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown") },
+    { href: "#methodology", label: i18n.t("methodology.title") },
   ]
   const legal = [
     { href: "https://opencode.ai/legal/terms-of-service", label: i18n.t("footer.terms") },
@@ -241,7 +243,7 @@ export function Footer(props: {
     { href: "https://opencode.ai/discord", label: i18n.t("footer.community") },
     { href: "https://x.com/opencode", label: "X" },
     { href: githubLink.href, label: i18n.t("header.github") },
-    { href: "https://www.youtube.com/@anomaly-co", label: i18n.t("footer.youtube") },
+    { href: "https://www.youtube.com/@anomalyco", label: i18n.t("footer.youtube") },
   ]
   const bridge = () =>
     props.bridge === undefined
@@ -307,7 +309,6 @@ function FooterLanguageSwitcher() {
     <label data-slot="footer-language">
       <span>{i18n.t("footer.language")}</span>
       <select
-        value={language.locale()}
         aria-label={i18n.t("footer.language")}
         onChange={(event) => {
           const locale = event.currentTarget.value as Locale
@@ -318,7 +319,14 @@ function FooterLanguageSwitcher() {
           if (href !== current) window.location.assign(href)
         }}
       >
-        <For each={language.locales}>{(locale) => <option value={locale}>{language.label(locale)}</option>}</For>
+        {/* Mark the option, not the select: SSR ignores a select value and hydration does not apply it. */}
+        <For each={language.locales}>
+          {(locale) => (
+            <option value={locale} selected={locale === language.locale()}>
+              {language.label(locale)}
+            </option>
+          )}
+        </For>
       </select>
     </label>
   )

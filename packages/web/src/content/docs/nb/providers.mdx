@@ -51,7 +51,7 @@ Du kan tilpasse base-URL-en for enhver leverandør ved å angi alternativet `bas
 ## OpenCode Zen
 
 OpenCode Zen er en liste over modeller levert av OpenCode-teamet som har vært
-testet og verifisert for å fungere godt med OpenCode. [Finn ut mer](/docs/zen).
+testet og verifisert for å fungere godt med OpenCode. [Finn ut mer](https://opencode.ai/v2/docs/console/).
 
 :::tip
 Hvis du er ny, anbefaler vi å starte med OpenCode Zen.
@@ -561,7 +561,7 @@ Cloudflare AI Gateway lar deg få tilgang til modeller fra OpenAI, Anthropic, Wo
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
-           "openai/gpt-4o": {},
+           "openai/gpt-6.1-sol": {},
            "anthropic/claude-sonnet-4": {}
          }
        }
@@ -759,13 +759,12 @@ for å lagre token i OpenCode auth-lagring.
 OpenCode bruker en liten modell for noen AI oppgaver som å generere økttittelen.
 Den er konfigurert til å bruke gpt-5-nano som standard, hostet av Zen. For å låse OpenCode
 for kun å bruke din egen GitLab-hostede forekomst, legg til følgende i din
-`opencode.json` fil. Det anbefales også å deaktivere øktdeling.
+`opencode.json` fil.
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 
@@ -1401,7 +1400,7 @@ Hvis du allerede har en API-nøkkel, kan du velge **Angi API-nøkkel manuelt** o
 
 ### OpenCode Zen
 
-OpenCode Zen er en liste over testede og verifiserte modeller levert av OpenCode-teamet. [Finn ut mer](/docs/zen).
+OpenCode Zen er en liste over testede og verifiserte modeller levert av OpenCode-teamet. [Finn ut mer](https://opencode.ai/v2/docs/console/).
 
 1. Logg på **<a href={console}>OpenCode Zen</a>** og klikk på **Create API Key**.
 

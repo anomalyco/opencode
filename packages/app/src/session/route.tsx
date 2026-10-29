@@ -1,8 +1,12 @@
 import { ErrorBoundary, createEffect, createMemo, Show, type ParentProps } from "solid-js"
+import { Title } from "@solidjs/meta"
 import { useParams } from "@solidjs/router"
+import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { DataProvider } from "@opencode/session-ui/context"
 import { SessionUserMessage } from "@opencode/session-ui/message"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import { CommentsProvider } from "@/composer/comments"
 import { readPromptPresentation } from "@/composer/comment-note"
 import { FileProvider } from "@/workspaces/files/model"
@@ -15,13 +19,14 @@ import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { useData, useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useSettingsCommand } from "@/settings/command"
+import { useSettings } from "@/settings/model"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import { useTabs, type PendingSession } from "@/shell/tabs/tabs"
 import { requireServerKey } from "@/shell/routes/session"
 import { useSessionModel } from "./model"
 import { SessionPanelFrame } from "./session-frame"
 import { SessionIdentityHeader } from "./session-identity-header"
-import { IncompatibleServerPanel } from "./incompatible-server-panel"
+import { ServerUnavailablePanel } from "./server-unavailable-panel"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionResolution } from "./session-resolution"
 import { SessionScreenView } from "./screen"
@@ -36,8 +41,9 @@ export function TargetSessionRouteContent() {
 
   return (
     <>
-      <MarkSessionNotificationsViewed sessionID={() => params.id} />
-      <ModelsProvider directory={directory}>
+      <MarkSessionViewed sessionID={() => params.id} />
+      <SessionDocumentTitle sessionID={() => params.id} />
+      <ModelsProvider directory={directory()}>
         <TargetSessionSettingsCommand />
         <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
           <Show when={tabs.pendingSession(server.key, params.id)} fallback={<ResolvedTargetSessionRoute />}>
@@ -52,11 +58,13 @@ export function TargetSessionRouteContent() {
 function PreparingSession(props: { sessionID: string; pending: PendingSession }) {
   const language = useLanguage()
   const providers = useProviders(() => props.pending.draft.directory)
+  const settings = useSettings()
 
   return (
     <SessionStatePanel>
       <DataProvider
         directory={props.pending.draft.directory}
+        agents={settings.visibility.customAgents()}
         data={{
           session: [],
           session_status: {},
@@ -64,9 +72,9 @@ function PreparingSession(props: { sessionID: string; pending: PendingSession })
           provider: { all: providers.all(), default: providers.default(), connected: [] },
         }}
       >
-        <div data-component="session-preparing" data-workspace-session class="min-h-0 flex-1 overflow-y-auto">
+        <div data-component="session-preparing" class="min-h-0 flex-1 overflow-y-auto">
           <SessionIdentityHeader sessionID={props.sessionID} />
-          <div class="mx-auto w-full min-w-0 max-w-[1000px] px-4 pb-5 md:px-5">
+          <div class="mx-auto w-full min-w-0 px-4 pb-5 md:max-w-session md:px-6">
             <SessionUserMessage
               sessionID={props.sessionID}
               message={props.pending.message}
@@ -126,18 +134,39 @@ function ResolvedTargetSessionRoute() {
 
   const directory = createMemo(() => current()?.location.directory)
 
+  // Only a failed health check: a version mismatch has its own panel, and a rejected credential is not an outage.
+  const unreachable = () => {
+    const health = server.health
+
+    return !!health && !health.healthy && !health.checking && !health.unauthorized && !health.incompatible
+  }
+
   return (
     <Show
       when={!server.health?.incompatible}
       fallback={
         <SessionStatePanel>
-          <IncompatibleServerPanel
+          <ServerUnavailablePanel
+            reason="incompatible"
             onClose={() => tabs.removeSessionTab({ server: server.key, sessionId: params.id })}
           />
         </SessionStatePanel>
       }
     >
-      <Show when={directory()} fallback={<PendingSessionState sessionID={params.id} />}>
+      <Show
+        when={directory()}
+        fallback={
+          // Nothing is cached and an unreachable server never resolves the session, so explain instead of waiting blank.
+          <Show when={unreachable()} fallback={<PendingSessionState sessionID={params.id} />}>
+            <SessionStatePanel>
+              <ServerUnavailablePanel
+                reason="unreachable"
+                onClose={() => tabs.removeSessionTab({ server: server.key, sessionId: params.id })}
+              />
+            </SessionStatePanel>
+          </Show>
+        }
+      >
         {(value) => (
           <LocationProvider directory={value()}>
             <SessionUIProvider directory={value()} server={server.key}>
@@ -186,16 +215,40 @@ function SessionPage() {
   return <SessionScreenView session={session} />
 }
 
-function MarkSessionNotificationsViewed(props: { sessionID: () => string | undefined }) {
+function MarkSessionViewed(props: { sessionID: () => string | undefined }) {
   const notification = useNotification()
+  const [focus, setFocus] = createStore({ window: document.hasFocus() })
+  const update = () => setFocus("window", document.hasFocus())
+  makeEventListener(window, "focus", update)
+  makeEventListener(window, "blur", update)
+  makeEventListener(document, "visibilitychange", update)
+
+  // Viewed state is shared by every client, so only a focused window reports what its user has seen.
+  // markViewed reads the session's idle watermark, so a turn finishing while it stays open re-runs this.
   createEffect(() => {
     const sessionID = props.sessionID()
 
-    if (!notification.ready() || !sessionID) return
-
-    if (notification.session.unseenCount(sessionID) === 0) return
+    if (!sessionID || !focus.window) return
     notification.session.markViewed(sessionID)
   })
 
   return null
+}
+
+// Browser tabs and desktop windows are otherwise indistinguishable, so name them after the open session.
+function SessionDocumentTitle(props: { sessionID: () => string }) {
+  const data = useData()
+
+  const title = createMemo(() => {
+    const value = data.session.get(props.sessionID())?.title
+
+    return isFallbackTitle(value) ? undefined : value
+  })
+
+  // Keyed: <Title> reads its text inside a meta effect, which would hit a stale Show accessor once the session is deleted.
+  return (
+    <Show when={title()} keyed>
+      {(value) => <Title>{`${value} · OpenCode`}</Title>}
+    </Show>
+  )
 }

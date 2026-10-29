@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { State } from "@opencode/core/state"
 import { Effect } from "effect"
-import { FastCheck } from "effect/testing"
+import FastCheck from "fast-check"
 
 type Operation = { multiply: number; add: number }
 type Value = { value: number; order: number[] }

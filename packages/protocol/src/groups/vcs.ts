@@ -3,7 +3,7 @@ import { Location } from "@opencode/schema/location"
 import { NonNegativeInt, PositiveInt, optional } from "@opencode/schema/schema"
 import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 import { ConflictError, InvalidRequestError, ServiceUnavailableError } from "../errors.js"
 
@@ -29,6 +29,7 @@ const DiffQuery = Schema.Struct({
   mode: Vcs.Mode,
   base: optional(Schema.String),
   context: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
+  untracked: optional(Vcs.Untracked),
 })
 
 export const VcsGroup = HttpApiGroup.make("server.vcs")

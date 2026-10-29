@@ -8,7 +8,7 @@ import { verifySimulationGraph } from "./script/verify-artifact"
 
 const dir = import.meta.dirname
 
-function rawTextPlugin(): Plugin {
+function rawTextPlugin(modelsSnapshot?: string): Plugin {
   return {
     name: "opencode:raw-text",
     // "pre" is load-bearing for .txt: Vite's built-in asset plugin claims
@@ -18,7 +18,9 @@ function rawTextPlugin(): Plugin {
     enforce: "pre",
     async load(id) {
       if (!id.endsWith(".md") && !id.endsWith(".txt")) return
-      return `export default ${JSON.stringify(await readFile(id, "utf8"))}`
+      const text =
+        modelsSnapshot && /models-dev[/\\]snapshot\.txt$/.test(id) ? modelsSnapshot : await readFile(id, "utf8")
+      return `export default ${JSON.stringify(text)}`
     },
   }
 }
@@ -251,6 +253,8 @@ if (process.platform === "linux") process.env.OPENTUI_LIBC = "glibc"`
 export type NodeBuildInput = {
   readonly version: string
   readonly channel: string
+  readonly highlights?: string
+  readonly modelsSnapshot?: string
   readonly assetHash: string
   readonly target: NodeTarget
 }
@@ -260,7 +264,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
     root: dir,
     plugins: [
       appAssetsPlugin(),
-      rawTextPlugin(),
+      rawTextPlugin(input.modelsSnapshot),
       runtimeRequirePlugin(),
       fffNodePlugin(),
       simulationGraphPlugin(),
@@ -278,6 +282,7 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
       OPENCODE_CLI_NAME: JSON.stringify("opencode2-node"),
       OPENCODE_CHANNEL: JSON.stringify(input.channel),
       OPENCODE_ARTIFACT: JSON.stringify("cli-node"),
+      ...(input.highlights ? { OPENCODE_RELEASE_HIGHLIGHTS: JSON.stringify(input.highlights) } : {}),
       OPENCODE_LIBC: input.target.platform === "linux" ? JSON.stringify("glibc") : "undefined",
       FFF_LIBC: input.target.platform === "linux" ? JSON.stringify("gnu") : "undefined",
       "process.env.WS_NO_BUFFER_UTIL": JSON.stringify("1"),

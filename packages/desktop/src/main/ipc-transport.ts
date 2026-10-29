@@ -1,6 +1,6 @@
 import type { MessagePortMain, WebContents } from "electron"
 import { Context, Effect, Layer, Option, Queue, Schema, Stream } from "effect"
-import { RpcMessage, RpcServer } from "effect/unstable/rpc"
+import { RpcMessage, RpcServer } from "effect/rpc"
 import { bindIpcEvents } from "./ipc-events"
 
 type PortBinding = {

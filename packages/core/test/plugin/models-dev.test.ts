@@ -706,6 +706,67 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
+  it.effect("lists non-chat models only by type, so sessions never see them", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const providers = yield* Provider.Service
+      const modelState = yield* Model.Service
+      const providerID = Provider.ID.make("acme")
+      const model = {
+        providerID,
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        variants: [],
+        time: { released: Date.parse("2026-01-01") },
+        cost: [],
+        status: "active",
+        enabled: true,
+        limit: { context: 128_000, output: 32_000 },
+      } satisfies Omit<Model.Info, "id" | "modelID" | "name">
+      // An unset type means chat; image and decision models list text too, but only chat is offered.
+      const types = { "gpt-5.5": undefined, "gpt-audio": "chat", "jev-1.13": "decision", "gpt-image-2": "image" }
+      const snapshot = {
+        info: {
+          id: providerID,
+          name: "Acme",
+          activation: "auto",
+          package: "@opencode/ai/providers/openai-compatible",
+        },
+        environment: [],
+        models: Object.entries(types).map(([id, type]) => ({
+          ...model,
+          id: Model.ID.make(id),
+          modelID: Model.ID.make(id),
+          name: id,
+          type,
+        })),
+      } satisfies ModelsDev.Snapshot
+
+      yield* ModelsDevPlugin.effect(
+        host({
+          provider: providerHost(providers),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({ get: () => Effect.succeed([snapshot]), refresh: () => Effect.void }),
+        ),
+      )
+
+      yield* activate(providers)
+      const ids = (models: readonly Model.Info[]) => models.map((item) => item.id).sort()
+      expect(ids(yield* modelState.available())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
+      expect(ids(yield* modelState.all())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
+      expect(yield* modelState.get(providerID, Model.ID.make("jev-1.13"))).toBeUndefined()
+      expect(ids(yield* modelState.available(["decision"]))).toEqual([Model.ID.make("jev-1.13")])
+      expect(ids(yield* modelState.available(["image"]))).toEqual([Model.ID.make("gpt-image-2")])
+      expect(ids(yield* modelState.available(["chat", "image", "image"]))).toEqual(
+        ["gpt-5.5", "gpt-audio", "gpt-image-2"].map((id) => Model.ID.make(id)),
+      )
+      expect(yield* modelState.available(["embedding"])).toEqual([])
+    }),
+  )
+
   it.effect("registers key methods for providers with environment variables", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
@@ -903,7 +964,7 @@ describe("ModelsDevPlugin", () => {
       expect(yield* providers.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toMatchObject({
-        methods: [{ type: "key" }, { type: "env", names: ["AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_API_KEY"] }],
+        methods: [{ type: "key" }, { type: "env", names: ["AZURE_RESOURCE_NAME", "AZURE_API_KEY"] }],
       })
       expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
@@ -913,7 +974,7 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
-  it.effect("advertises only credential-bearing environment variables", () =>
+  it.effect("registers every listed environment variable for provider plugins to narrow", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const providers = yield* Provider.Service
@@ -955,29 +1016,15 @@ describe("ModelsDevPlugin", () => {
         ),
       )
 
-      // Vertex authenticates through ADC; project, location, and the credentials
-      // file path are configuration, not API keys.
       expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toMatchObject({
-        methods: [{ type: "key" }, { type: "env", names: ["GOOGLE_VERTEX_API_KEY"] }],
-      })
-      expect(yield* integrations.get(Integration.ID.make("cloudflare-workers-ai"))).toMatchObject({
         methods: [
           { type: "key" },
-          {
-            type: "env",
-            names: ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"],
-          },
+          { type: "env", names: ["GOOGLE_VERTEX_PROJECT", "GOOGLE_VERTEX_LOCATION", "GOOGLE_APPLICATION_CREDENTIALS"] },
         ],
       })
-      yield* withEnv({ CLOUDFLARE_ACCOUNT_ID: "account", CLOUDFLARE_API_KEY: "token" }, () =>
-        integrations.connection
-          .active(Integration.ID.make("cloudflare-workers-ai"))
-          .pipe(
-            Effect.tap((connection) =>
-              Effect.sync(() => expect(connection).toEqual({ type: "env", name: "CLOUDFLARE_API_KEY" })),
-            ),
-          ),
-      )
+      expect(yield* integrations.get(Integration.ID.make("cloudflare-workers-ai"))).toMatchObject({
+        methods: [{ type: "key" }, { type: "env", names: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"] }],
+      })
     }),
   )
 

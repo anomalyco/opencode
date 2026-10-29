@@ -1,4 +1,3 @@
-import { AISDK } from "@opencode/core/aisdk"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Model } from "@opencode/core/model"
@@ -6,7 +5,6 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { GoogleVertexPlugin } from "@opencode/core/plugin/provider/google-vertex"
 import { Provider } from "@opencode/core/provider"
-import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -224,28 +222,32 @@ describe("GoogleVertexPlugin", () => {
     ),
   )
 
-  it.effect("keeps OpenAI-compatible Vertex endpoint templates regional for eu", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Provider.Service
-      yield* catalog.transform((catalog) =>
-        catalog.update(Provider.ID.make("google-vertex"), (provider) => {
-          provider.package = "@opencode/ai/providers/google-vertex/chat"
-          provider.settings = {
-            ...provider.settings,
-            baseURL:
-              "https://${GOOGLE_VERTEX_ENDPOINT}/v1/projects/${GOOGLE_VERTEX_PROJECT}/locations/${GOOGLE_VERTEX_LOCATION}",
-          }
-          provider.settings = { ...provider.settings, project: "config-project", location: "eu" }
-        }),
-      )
-      yield* addPlugin()
-      const provider = required(yield* catalog.get(Provider.ID.make("google-vertex")))
-      expect(provider).toMatchObject({
-        package: "@opencode/ai/providers/google-vertex/chat",
-        settings: { baseURL: "https://eu-aiplatform.googleapis.com/v1/projects/config-project/locations/eu" },
-      })
-    }),
-  )
+  for (const location of ["eu", "us"]) {
+    it.effect(`expands Vertex endpoint templates to the multi-region host for ${location}`, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Provider.Service
+        yield* catalog.transform((catalog) =>
+          catalog.update(Provider.ID.make("google-vertex"), (provider) => {
+            provider.package = "@opencode/ai/providers/google-vertex/chat"
+            provider.settings = {
+              baseURL:
+                "https://${GOOGLE_VERTEX_ENDPOINT}/v1/projects/${GOOGLE_VERTEX_PROJECT}/locations/${GOOGLE_VERTEX_LOCATION}",
+              project: "config-project",
+              location,
+            }
+          }),
+        )
+        yield* addPlugin()
+        const provider = required(yield* catalog.get(Provider.ID.make("google-vertex")))
+        expect(provider).toMatchObject({
+          package: "@opencode/ai/providers/google-vertex/chat",
+          settings: {
+            baseURL: `https://aiplatform.${location}.rep.googleapis.com/v1/projects/config-project/locations/${location}`,
+          },
+        })
+      }),
+    )
+  }
 
   it.effect("expands endpoint templates on Vertex chat models", () =>
     Effect.gen(function* () {
@@ -271,13 +273,13 @@ describe("GoogleVertexPlugin", () => {
         settings: {
           project: "config-project",
           location: "eu",
-          baseURL: "https://eu-aiplatform.googleapis.com/v1/projects/config-project/locations/eu/endpoints/openapi",
+          baseURL: "https://aiplatform.eu.rep.googleapis.com/v1/projects/config-project/locations/eu/endpoints/openapi",
         },
       })
     }),
   )
 
-  it.effect("defaults location to us-central1 when only project is configured", () =>
+  it.effect("defaults location to global when only project is configured", () =>
     withEnv(
       {
         GOOGLE_CLOUD_PROJECT: undefined,
@@ -299,26 +301,8 @@ describe("GoogleVertexPlugin", () => {
           yield* addPlugin()
           const provider = required(yield* catalog.get(Provider.ID.make("google-vertex")))
           expect(provider.settings?.project).toBe("config-project")
-          expect(provider.settings?.location).toBe("us-central1")
+          expect(provider.settings?.location).toBe("global")
         }),
     ),
-  )
-
-  it.effect("trims model IDs before selecting language models", () =>
-    Effect.gen(function* () {
-      const aisdk = yield* AISDK.Service
-      const calls: string[] = []
-      yield* addPlugin()
-      yield* aisdk.runLanguage({
-        model: Model.Info.make({
-          ...Model.Info.default(Provider.ID.make("google-vertex"), Model.ID.make(" gemini-2.5-pro ")),
-          modelID: Model.ID.make(" gemini-2.5-pro "),
-          package: "aisdk:test-provider",
-        }),
-        sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
-        options: {},
-      })
-      expect(calls).toEqual(["languageModel:gemini-2.5-pro"])
-    }),
   )
 })

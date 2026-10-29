@@ -151,7 +151,7 @@ _Режим_: `primary`
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
@@ -171,7 +171,7 @@ _Режим_: `primary`
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -195,7 +195,7 @@ _Режим_: `primary`
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
@@ -366,7 +366,7 @@ Provide constructive feedback without making direct changes.
 }
 ```
 
-Идентификатор модели в вашей конфигурации opencode использует формат `provider/model-id`. Например, если вы используете [OpenCode Zen](/docs/zen), вы должны использовать `opencode/gpt-5.1-codex` для кодекса GPT 5.1.
+Идентификатор модели в вашей конфигурации opencode использует формат `provider/model-id`. Например, если вы используете [OpenCode Zen](https://opencode.ai/v2/docs/console/), вы должны использовать `opencode/gpt-6.1-sol` для GPT-6.1 Sol.
 
 ---
 
@@ -653,7 +653,7 @@ Only analyze code and suggest changes.
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -671,19 +671,9 @@ Only analyze code and suggest changes.
 
 ## Создание агентов
 
-Вы можете создать новых агентов, используя следующую команду:
+Чтобы создать нового агента, добавьте файл Markdown в `.opencode/agents/` для проекта или в `~/.config/opencode/agents/` глобально. Имя файла становится именем агента, а frontmatter задает его описание, режим, модель и разрешения. Формат файла описан выше в разделе [Markdown](#markdown).
 
-```bash
-opencode agent create
-```
-
-Эта интерактивная команда:
-
-1. Спрашивает, где сохранить агента: глобально или в проекте.
-2. Запрашивает описание того, что должен делать агент.
-3. Создает соответствующий системный промпт и идентификатор.
-4. Позволяет выбрать, к каким инструментам агент будет иметь доступ.
-5. Наконец, создает файл Markdown с конфигурацией агента.
+Выполните `opencode agent list`, чтобы вывести список агентов, загруженных OpenCode.
 
 ---
 

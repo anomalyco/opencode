@@ -111,6 +111,8 @@ describe("public event manifest", () => {
         "session.metadata.updated.1",
         "session.permissions.1",
         "session.viewed.1",
+        "session.archived.1",
+        "session.unarchived.1",
         "session.message.content.updated.1",
         "session.usage.recorded.1",
         "session.forked.2",
@@ -184,7 +186,7 @@ describe("public event manifest", () => {
       assistantMessageID,
       ordinal: 0,
       text: "thought",
-      state: { signature: "sig" },
+      native: { signature: "sig" },
     })
     const tool = SessionEvent.Tool.Called.data.make({
       sessionID,
@@ -192,7 +194,7 @@ describe("public event manifest", () => {
       id: "call_test",
       input: {},
       executed: true,
-      state: { itemId: "item_test" },
+      native: { itemId: "item_test" },
     })
 
     expect(text).not.toHaveProperty("textID")

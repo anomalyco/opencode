@@ -1,4 +1,4 @@
-import { AIError, ToolFailure, type FinishReasonDetails } from "@opencode/ai"
+import { AIError, ToolFailure, type FinishReasonDetails } from "@opencode/ai/effect"
 import { Tool } from "@opencode/schema/tool"
 import { SessionError } from "@opencode/schema/session-error"
 import { Permission } from "../permission.js"
@@ -25,6 +25,11 @@ const tokenSharingMessages = {
     "This ChatGPT connection isn't authorized for this request. Reconnect to ChatGPT or choose another connection.",
 }
 
+const FREE_USAGE_LIMIT_MESSAGE =
+  "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models."
+const BUDGET_LIMIT_MESSAGE = "Workspace usage limit reached. Model use is paused until the limit resets."
+const MODEL_BUDGET_LIMIT_MESSAGE = "You've reached the spend limit for this model. Switch models to keep going."
+
 export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof AIError) {
     switch (cause.reason._tag) {
@@ -33,6 +38,9 @@ export function toSessionError(cause: unknown): SessionError.Error {
       case "Authentication":
         return providerError("provider.auth", cause.reason)
       case "QuotaExceeded":
+        if (cause.reason.body?.includes("FreeUsageLimitError"))
+          return { ...providerError("provider.free-limit", cause.reason), message: FREE_USAGE_LIMIT_MESSAGE }
+        if (cause.reason.body?.includes("BudgetLimitError")) return budgetLimit(cause.reason)
         return providerError("provider.quota", cause.reason)
       case "ContentPolicy":
         return providerError("provider.content-filter", cause.reason)
@@ -94,12 +102,21 @@ export function contentFilterError(summary: string, reason: FinishReasonDetails)
   }
 }
 
+// OpenCode Console names what a refusing budget covers, in its envelope's metadata or, for Google clients, ErrorInfo.
+function budgetLimit(reason: AIError["reason"]): SessionError.Error {
+  if (/"coverage"\s*:\s*"models"/.test(reason.body ?? ""))
+    return { ...providerError("provider.model-budget-limit", reason), message: MODEL_BUDGET_LIMIT_MESSAGE }
+  return { ...providerError("provider.budget-limit", reason), message: BUDGET_LIMIT_MESSAGE }
+}
+
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
   const status = reason.http?.status
+  const retryAfterMs = "retryAfterMs" in reason ? reason.retryAfterMs : undefined
   return {
     type,
     message: Object.entries(tokenSharingMessages).find(([code]) => reason.body?.includes(code))?.[1] ?? reason.message,
     ...(status === undefined ? {} : { status }),
     ...(reason.body === undefined ? {} : { response: { body: reason.body } }),
+    ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
   }
 }

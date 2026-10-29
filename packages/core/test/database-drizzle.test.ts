@@ -7,8 +7,8 @@ import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { eq, sql } from "drizzle-orm"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import { Cause, Effect, Tracer } from "effect"
-import type { SqlClient } from "effect/unstable/sql/SqlClient"
-import { isSqlError } from "effect/unstable/sql/SqlError"
+import type { SqlClient } from "effect/sql/SqlClient"
+import { isSqlError } from "effect/sql/SqlError"
 import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
 import { EffectDrizzleQueryError } from "drizzle-orm/effect-core/errors"
 
@@ -48,7 +48,7 @@ test("selects rows through Effect-yieldable query builders", async () => {
   )
 })
 
-test("maps query failures with query, params, and cause", async () => {
+test("maps query failures with query, redacted params, and cause", async () => {
   await run(
     Effect.gen(function* () {
       const db = yield* EffectDrizzleSqlite.makeWithDefaults()
@@ -56,7 +56,7 @@ test("maps query failures with query, params, and cause", async () => {
 
       expect(error).toBeInstanceOf(EffectDrizzleQueryError)
       expect(error.query).toBe("select * from missing_table where id = ?")
-      expect(error.params).toEqual([42])
+      expect(error.params).toEqual(["[redacted]"])
       expect(Cause.isCause(error.cause)).toBe(true)
       if (!Cause.isCause(error.cause)) return
       expect(error.cause.reasons[0]?._tag).toBe("Fail")

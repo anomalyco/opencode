@@ -1,5 +1,5 @@
 import { Effect, Stream } from "effect"
-import { makeParser } from "effect/unstable/encoding/Sse"
+import { makeParser } from "effect/encoding/Sse"
 import { AIError, InvalidProviderOutputError } from "../schema/index.js"
 
 /**
@@ -23,6 +23,8 @@ export interface Definition<Frame> {
   readonly frame: (bytes: Stream.Stream<Uint8Array, AIError>) => Stream.Stream<Frame, AIError>
   /** Original wire representation when framing transforms the provider payload. */
   readonly body?: (frame: Frame) => string | undefined
+  /** Provider value exposed as a `raw` event when framing adds fields of its own. Defaults to the frame. */
+  readonly raw?: (frame: Frame) => unknown
 }
 
 /**

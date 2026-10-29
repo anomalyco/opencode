@@ -3,6 +3,8 @@
 }
 
 [data-slot="segmented-control-v2"] {
+  position: relative;
+  isolation: isolate;
   box-sizing: border-box;
   display: flex;
   flex-direction: row;
@@ -16,9 +18,28 @@
   border-radius: 6px;
   box-shadow: 0 0 0 0.5px var(--v2-border-border-base);
   flex: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+[data-slot="segmented-control-v2-indicator"] {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 6px;
+  background: var(--v2-background-bg-base);
+  box-shadow: 0 0 0 0.5px var(--v2-border-border-strong);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  z-index: 0;
+  will-change: transform, width;
 }
 
 [data-slot="segmented-control-v2-item"] {
+  position: relative;
+  z-index: 1;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -34,18 +55,24 @@
   background: transparent;
   box-shadow: none;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
   font-style: normal;
   font-weight: 440;
   font-size: 13px;
-  line-height: var(--line-height-compact);
+  line-height: 100%;
   letter-spacing: -0.04px;
   font-variant-numeric: tabular-nums;
   font-variation-settings: "slnt" 0;
   color: var(--v2-text-text-muted);
   transition:
+    color 0.15s ease,
     background-color 0.12s ease,
-    color 0.12s ease,
     box-shadow 0.12s ease;
+}
+
+[data-slot="segmented-control-v2-item"]:where(:hover:not(:disabled):not([data-pressed])) {
+  color: var(--v2-text-text-base);
 }
 
 [data-slot="segmented-control-v2-item"]:where(:disabled) {
@@ -60,10 +87,13 @@
 }
 
 [data-slot="segmented-control-v2-item"]:where([data-pressed]) {
-  background: var(--v2-background-bg-base);
   color: var(--v2-text-text-base);
-  box-shadow: 0 0 0 0.5px var(--v2-border-border-strong);
   z-index: 1;
+}
+
+[data-slot="segmented-control-v2"]:not([data-ready]) [data-slot="segmented-control-v2-item"]:where([data-pressed]) {
+  background: var(--v2-background-bg-base);
+  box-shadow: 0 0 0 0.5px var(--v2-border-border-strong);
 }
 
 [data-slot="segmented-control-v2-item-label"] {
@@ -77,4 +107,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
 }

@@ -2,7 +2,7 @@ import { Rpc } from "@opencode/core/rpc"
 import { Plugin } from "@opencode/core/plugin"
 import { RpcError, RpcInternalError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 
 export const RpcHandler = HttpApiBuilder.group(Api, "server.rpc", (handlers) =>

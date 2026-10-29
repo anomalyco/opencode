@@ -1,4 +1,4 @@
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { Venice } from "../../src/providers.js"
 
 LLM.request({

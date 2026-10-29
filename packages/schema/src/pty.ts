@@ -6,7 +6,10 @@ import { ephemeral, inventory } from "./event.js"
 import { ascending } from "./identifier.js"
 import { NonNegativeInt, PositiveInt, statics } from "./schema.js"
 
-const IDSchema = Schema.String.check(Schema.isStartsWith("pty")).pipe(Schema.brand("PtyID"))
+const IDSchema = Schema.String.check(Schema.isStartingWith("pty")).pipe(
+  Schema.brand("PtyID"),
+  Schema.annotate({ identifier: "Pty.ID" }),
+)
 
 export const ID = IDSchema.pipe(
   statics((schema: typeof IDSchema) => {

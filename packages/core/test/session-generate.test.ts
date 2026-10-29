@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
 import {
+  AIError,
   LLMClient,
   LLMEvent,
   LLMResponse,
@@ -7,9 +8,11 @@ import {
   Message,
   SystemPart,
   ToolDefinition,
+  TransportError,
   type LLMRequest,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { TestLLM } from "@opencode/ai/testing"
 import type { StreamOptions } from "@opencode/ai/route"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
@@ -51,7 +54,8 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Tool } from "@opencode/core/tool"
 import { asc, eq } from "drizzle-orm"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { testEffect } from "./lib/effect"
 
 const requests: LLMRequest[] = []
@@ -392,6 +396,39 @@ it.effect(
       expect(requests[0]?.providerOptions).toEqual({ reasoningEffort: "low" })
     }),
   { timeout: 15_000 },
+)
+
+it.effect("regenerates a failed partial answer without mutating Session history", () =>
+  Effect.gen(function* () {
+    instruction = "Initial context"
+    const { db, bus, instructions, session, instances } = yield* setup
+    yield* InstructionState.prepare(db, bus, instructions, sessionID)
+    const before = yield* durableState(db, sessionID)
+    const llm = yield* TestLLM.Test
+    yield* llm.push(
+      TestLLM.failAfter(
+        new AIError({
+          reason: new TransportError({ message: "Disconnected", transport: "http", operation: "read" }),
+        }),
+        LLMEvent.textStart({ id: "failed" }),
+        LLMEvent.textDelta({ id: "failed", text: "Discard this" }),
+      ),
+      TestLLM.text("Fresh answer", "success"),
+    )
+    const result = yield* SessionGenerate.generate({ session, prompt: "Summarize privately" }).pipe(
+      Effect.provideService(Instance.Service, instances),
+      Effect.provideService(LLMClient.Service, llm),
+      Effect.forkChild({ startImmediately: true }),
+    )
+    yield* llm.wait(1)
+    yield* TestClock.adjust("3 seconds")
+    expect(yield* Fiber.join(result)).toBe("Fresh answer")
+    const requests = yield* llm.requests()
+    expect(requests).toHaveLength(2)
+    expect(requests[1]).toBe(requests[0])
+    expect(userTexts(requests[1])).toContain("Summarize privately")
+    expect(yield* durableState(db, sessionID)).toEqual(before)
+  }).pipe(Effect.provide(TestLLM.testLayer())),
 )
 
 it.effect(

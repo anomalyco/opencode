@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"

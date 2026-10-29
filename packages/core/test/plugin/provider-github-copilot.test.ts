@@ -17,7 +17,7 @@ import {
   GithubCopilotPlugin,
   utilityTitle,
 } from "@opencode/core/plugin/provider/github-copilot"
-import { Message, SystemPart } from "@opencode/ai"
+import { Message, SystemPart } from "@opencode/ai/effect"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
@@ -487,7 +487,7 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
-  it.effect("uses responses for Grok, Gemini, and MAI Code models", () =>
+  it.effect("uses responses for Grok and MAI Code models and chat for Gemini", () =>
     Effect.gen(function* () {
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
@@ -512,8 +512,8 @@ describe("GithubCopilotPlugin", () => {
       })
       yield* aisdk.runLanguage({
         model: Model.Info.make({
-          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gemini-3.5-flash")),
-          modelID: Model.ID.make("gemini-3.5-flash"),
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gemini-3.8-flash")),
+          modelID: Model.ID.make("gemini-3.8-flash"),
           package: "aisdk:test-provider",
         }),
         sdk: fakeSelectorSdk(calls),
@@ -540,7 +540,7 @@ describe("GithubCopilotPlugin", () => {
       expect(calls).toEqual([
         "responses:grok-4.5",
         "responses:grok-4.6",
-        "responses:gemini-3.5-flash",
+        "chat:gemini-3.8-flash",
         "responses:mai-code-1.1-flash",
         "chat:gpt-4o",
       ])

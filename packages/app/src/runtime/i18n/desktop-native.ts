@@ -218,10 +218,6 @@ export function detectDesktopNativeLocale(languages: readonly string[]): Desktop
   return "en"
 }
 
-export function desktopNativePluralCategories(locale: DesktopNativeLocale) {
-  return new Intl.PluralRules(DESKTOP_NATIVE_LOCALE_TAGS[locale]).resolvedOptions().pluralCategories
-}
-
 function locale(value: string) {
   try {
     return new Intl.Locale(value).maximize()
@@ -234,6 +230,7 @@ function locale(value: string) {
 const normalizeScript = (script?: string) => (script === "Aran" ? "Arab" : script)
 
 export const DESKTOP_NATIVE_ENGLISH = {
+  "desktop.microphoneUsage": "OpenCode uses your microphone for voice calls.",
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "File",
   "desktop.menu.edit": "Edit",
@@ -301,7 +298,6 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.dialog.chooseFile": "Choose a file",
   "desktop.dialog.saveFile": "Save file",
   "desktop.dialog.files": "Files",
-  "desktop.server.local": "Local Server",
   "desktop.onboarding.defaultProject": "Default Project",
 
   "desktop.picker.error.notSelected": "File was not selected by the picker",

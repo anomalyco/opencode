@@ -1,4 +1,4 @@
-import { OpenApi } from "effect/unstable/httpapi"
+import { OpenApi } from "effect/http-api"
 import { format } from "prettier"
 import { fileURLToPath } from "url"
 import { ClientApi } from "../src/client.js"

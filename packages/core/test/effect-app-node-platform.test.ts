@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { WebSocketTransport } from "@opencode/ai/route"
 import { WebSocketConstructor } from "@opencode/core/effect/websocket-constructor"
 import { Effect } from "effect"
-import { Headers } from "effect/unstable/http"
-import { Socket } from "effect/unstable/socket"
+import { Headers } from "effect/http"
+import { Socket } from "effect/socket"
 
 const makeServer = (fetch: (request: Request, server: Bun.Server<undefined>) => Response | undefined) =>
   Effect.acquireRelease(

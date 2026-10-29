@@ -17,9 +17,12 @@ async function setup(route: Route = { type: "session", sessionID: "session" }) {
   const sessions: Record<string, Session> = {
     session: session("session", "Demo session"),
     subagent: session("subagent", "Subagent session", "session"),
+    second: session("second", "Second subagent session", "session"),
+    nested: session("nested", "Nested subagent session", "subagent"),
     abort: session("abort", "Abort session"),
     timeout: session("timeout", "Timeout session"),
   }
+  const running = new Set<string>()
 
   await Notifications.setup({
     ui: {
@@ -50,7 +53,8 @@ async function setup(route: Route = { type: "session", sessionID: "session" }) {
       },
       session: {
         get: (sessionID: string) => sessions[sessionID],
-        status: () => "running" as const,
+        family: () => Object.keys(sessions),
+        status: (sessionID: string) => (running.has(sessionID) ? "running" : "idle"),
       },
     },
   } as unknown as Context)
@@ -58,6 +62,7 @@ async function setup(route: Route = { type: "session", sessionID: "session" }) {
   return {
     notifications,
     toasts,
+    running,
     emit(event: OpenCodeEvent) {
       for (const handler of handlers.get(event.type) ?? []) handler(event)
     },
@@ -157,6 +162,19 @@ describe("internal notifications TUI plugin", () => {
     harness.emit(executionStarted("retry"))
     harness.emit(executionFailed("failed-again"))
     expect(harness.toasts).toHaveLength(2)
+
+    harness.emit(executionStarted("free-limit"))
+    harness.emit({
+      id: "free-limit-failed",
+      created: 0,
+      type: "session.execution.failed",
+      data: {
+        sessionID: "session",
+        error: { type: "provider.free-limit", message: "Free usage limit reached." },
+      },
+    } as OpenCodeEvent)
+    expect(harness.toasts).toHaveLength(2)
+    expect(harness.notifications).toHaveLength(2)
   })
 
   test.each<Route>([{ type: "home" }, { type: "session", sessionID: "other" }])(
@@ -276,6 +294,32 @@ describe("internal notifications TUI plugin", () => {
         message: "Session done",
         notification: false,
         sound: { name: "subagent_done", when: "always" },
+      },
+    ])
+  })
+
+  test("plays done only once none of the session's direct children is running", async () => {
+    const harness = await setup()
+    for (const id of ["subagent", "second", "nested"]) harness.running.add(id)
+
+    // Each running child's report wakes the session again, so it isn't done yet.
+    harness.emit(executionStarted("event-1"))
+    harness.emit(executionSucceeded("event-2"))
+    harness.running.delete("subagent")
+    harness.emit(executionStarted("event-3"))
+    harness.emit(executionSucceeded("event-4"))
+    expect(harness.notifications).toEqual([])
+
+    // Once the last child is idle the session is done. The grandchild still running reports to its own parent.
+    harness.running.delete("second")
+    harness.emit(executionStarted("event-5"))
+    harness.emit(executionSucceeded("event-6"))
+    expect(harness.notifications).toEqual([
+      {
+        title: "Demo session",
+        message: "Session done",
+        notification: { when: "blurred" },
+        sound: { name: "done", when: "always" },
       },
     ])
   })

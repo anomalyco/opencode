@@ -3,7 +3,7 @@ import { OpenCode } from "@opencode/client/effect"
 import { Service } from "@opencode/client/effect/service"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { Effect, Option } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 import { Writable } from "node:stream"
 import { ACP } from "../../acp/agent"
 import { Commands } from "../commands"
@@ -19,8 +19,6 @@ export default Runtime.handler(
         target: Option.none(),
         method: Option.none(),
         answer: [],
-        server: Option.none(),
-        standalone: false,
       })
     }
     process.env.OPENCODE_CLIENT = "acp"

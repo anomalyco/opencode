@@ -21,7 +21,7 @@ import { canonical, DirectoryUnavailableError } from "./worktree/directory.js"
 import type { EffectDrizzleSqlite } from "./database/drizzle.js"
 import { ProjectTable } from "./project/sql.js"
 import { AppProcess } from "@opencode/util/process"
-import { ChildProcess } from "effect/unstable/process"
+import { ChildProcess } from "effect/process"
 import { WorktreeStrategies } from "./worktree/strategies.js"
 
 export type { Strategy, Editor } from "./worktree/strategies.js"
@@ -83,7 +83,7 @@ export const Event = Worktree.Event
 
 interface StoredInput {
   readonly directory: AbsolutePath
-  readonly strategy?: string
+  readonly strategy?: StrategyID
   readonly replace?: boolean
 }
 
@@ -260,7 +260,7 @@ const layer = Layer.effect(
       const stored = yield* ops.find(input.projectID, worktreeDirectory)
       if (!stored?.strategy) return yield* new InvalidDirectoryError({ directory: worktreeDirectory })
       const settings = yield* load(row.worktree, current)
-      const strategy = yield* getStrategy(StrategyID.make(stored.strategy), settings.strategies)
+      const strategy = yield* getStrategy(stored.strategy, settings.strategies)
       yield* strategy
         .remove({
           directory: worktreeDirectory,

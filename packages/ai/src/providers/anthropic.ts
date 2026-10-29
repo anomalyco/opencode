@@ -52,9 +52,9 @@ export const configure = (input: Config = {}) => {
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings, AnthropicMessages.ProviderOptionsInput>["model"] = (
+export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput> = (
   modelID,
-  { apiKey, authToken, baseURL, body, headers, ...providerOptions },
+  { apiKey, authToken, baseURL, body, headers, ...providerOptions }: Settings = {},
 ) => {
   if (apiKey !== undefined && authToken !== undefined)
     throw new ProviderConfigurationError({
@@ -64,8 +64,8 @@ export const model: ProviderPackage.Definition<Settings, AnthropicMessages.Provi
   return configure({
     ...(authToken === undefined ? { apiKey: apiKey } : { auth: Auth.bearer(authToken) }),
     baseURL,
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     providerOptions,
   }).model(modelID)
 }

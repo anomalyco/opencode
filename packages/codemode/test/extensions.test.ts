@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Context, Effect, Schema } from "effect"
 import { CodeMode, Extension, Tool } from "../src/index.js"
 
 const held: Array<unknown> = []
@@ -251,6 +251,69 @@ describe("values are converted at the boundary, never shared", () => {
       extensions: [Extension.make({ name: "odd", globals: { detached: () => new Other() } })],
     })
     expect((await failure(`detached()`, target)).message).toContain("produced a Other, which the program cannot hold")
+  })
+})
+
+describe("Effect globals", () => {
+  class Session extends Context.Service<Session, { readonly id: string }>()("test/Session") {}
+  const sent: Array<string> = []
+  const web = Extension.make({
+    name: "web",
+    globals: {
+      fetch: (url: string) =>
+        Effect.gen(function* () {
+          const session = yield* Session
+          sent.push(url)
+          return { url, session: session.id }
+        }),
+      fail: () => Effect.fail(new RangeError("denied")),
+    },
+  })
+
+  test("the runtime requires what the Effect globals require", () => {
+    const runtime = CodeMode.make({ extensions: [web] })
+    const provided: CodeMode.Runtime<Session> = runtime
+    // @ts-expect-error Session must be provided
+    const missing: CodeMode.Runtime<never> = runtime
+    expect([provided, missing]).toEqual([runtime, runtime])
+    // An explicit tools type argument must name the extensions too, so their requirements are never dropped.
+    // @ts-expect-error web is not in the default empty extensions list
+    expect(CodeMode.make<{}>({ extensions: [web] })).toBeDefined()
+  })
+
+  test("an Effect global is a promise that runs with the execution's services", async () => {
+    sent.length = 0
+    const result = await Effect.runPromise(
+      CodeMode.make({ extensions: [web] })
+        .execute(`const pending = fetch("https://a.test/"); return [pending instanceof Promise, await pending]`)
+        .pipe(Effect.provideService(Session, { id: "ses_1" })),
+    )
+    expect(result).toMatchObject({ ok: true, value: [true, { url: "https://a.test/", session: "ses_1" }] })
+    expect(sent).toEqual(["https://a.test/"])
+  })
+
+  test("a failing Effect rejects with the host's error", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.make({ extensions: [web] })
+        .execute(`try { await fail() } catch (e) { return [e instanceof RangeError, e.message] }`)
+        .pipe(Effect.provideService(Session, { id: "ses_1" })),
+    )
+    expect(result).toMatchObject({ ok: true, value: [true, "denied"] })
+  })
+
+  test("a denying before hook stops the Effect before it runs", async () => {
+    sent.length = 0
+    const runtime = CodeMode.make({
+      extensions: [web],
+      hooks: { "extension.before": (call) => Effect.fail(new Error(`${call.name} is not allowed`)) },
+    })
+    const result = await Effect.runPromise(
+      runtime
+        .execute(`try { await fetch("https://a.test/") } catch (e) { return e.message }`)
+        .pipe(Effect.provideService(Session, { id: "ses_1" })),
+    )
+    expect(result).toMatchObject({ ok: true, value: "fetch is not allowed" })
+    expect(sent).toEqual([])
   })
 })
 

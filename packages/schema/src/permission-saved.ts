@@ -7,6 +7,7 @@ import { DateTimeUtcFromMillis, statics } from "./schema.js"
 
 export const ID = Schema.String.pipe(
   Schema.brand("PermissionSaved.ID"),
+  Schema.annotate({ identifier: "PermissionSaved.ID" }),
   statics((schema) => ({ create: () => schema.make("psv_" + ascending()) })),
 )
 export type ID = typeof ID.Type

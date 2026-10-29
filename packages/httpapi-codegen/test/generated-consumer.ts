@@ -1,5 +1,5 @@
 import { Effect, Stream } from "effect"
-import { HttpClient } from "effect/unstable/http"
+import { HttpClient } from "effect/http"
 import { ClientError, OpenCode } from "./generated"
 import { Missing } from "./fixture"
 

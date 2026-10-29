@@ -110,7 +110,6 @@ export const configure = (input: Config = {}) => {
       id: modelID,
       compatibility: {
         maxTokensField: "max_tokens",
-        supportsStore: false,
         supportsStrictMode: false,
         supportsPromptCacheKey: true,
         sanitizer: "moonshot",
@@ -134,15 +133,15 @@ export const chat = provider.chat
 export const messages = provider.messages
 export const responses = provider.responses
 
-export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (
+export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (
   modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
+  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
 ) =>
   configure({
     apiKey,
     baseURL,
     headers,
-    http: body === undefined ? undefined : { body: { ...body } },
+    http: body === undefined ? undefined : { body },
     providerOptions,
   }).model(modelID)
 

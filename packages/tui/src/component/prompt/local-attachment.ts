@@ -1,4 +1,6 @@
+import { existsSync } from "node:fs"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 
 // Bound filesystem work per terminal paste; the byte budget also bounds staged data.
 const MAX_PASTED_FILEPATHS = 32
@@ -54,8 +56,20 @@ export async function resolvePastedAttachments(text: string, platform: string) {
       type: "file" as const,
       uri: `data:${item.attachment.mime};base64,${Buffer.from(item.attachment.content).toString("base64")}`,
       filename,
+      path: path.resolve(item.filepath),
     }
   })
+}
+
+// A local server reads the file itself so the model sees its path. The pasted bytes are the
+// fallback for remote servers and for files deleted before submit, like screenshot drags.
+export function promptFilesForServer<T extends { uri: string; path?: string }>(
+  files: readonly T[] | undefined,
+  localServer: boolean,
+) {
+  return files?.map(({ path: file, ...rest }) =>
+    file && localServer && existsSync(file) ? { ...rest, uri: pathToFileURL(file).href } : rest,
+  )
 }
 
 const mimeTypes: Record<string, string> = {

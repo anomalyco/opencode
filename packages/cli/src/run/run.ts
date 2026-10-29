@@ -1,6 +1,7 @@
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionMessageAssistantTool } from "@opencode/client/promise"
 import { FSUtil } from "@opencode/util/fs-util"
+import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { open } from "node:fs/promises"
 import path from "node:path"
 import { readStdin } from "../util/io"
@@ -85,8 +86,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     baseUrl: endpoint.url,
     headers: Service.headers(endpoint),
     // Bun's default five-minute deadline terminates the event stream used by long-running sessions.
-    fetch: ((request: RequestInfo | URL, init?: RequestInit) =>
-      fetch(request, { ...init, timeout: false } as BunFetchRequestInit)) as typeof fetch,
+    fetch: noTimeoutFetch,
   })
   const explicit = parseRunModel(input.model)
   const target = await resolveSessionTarget({

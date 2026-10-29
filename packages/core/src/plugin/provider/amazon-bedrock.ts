@@ -4,6 +4,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Provider } from "../../provider.js"
+import { credentialSettings, metadataSettings } from "./credential-settings.js"
 
 // Ambient inputs the AWS default credential chain can turn into credentials
 // without any key stored in opencode. Mirrors the presence checks the AWS CLI
@@ -45,9 +46,6 @@ export const AmazonBedrockPlugin = define({
     )
       .filter(Boolean)
       .toSorted()
-    const sources = paths
-      .map((file) => (file.startsWith(Global.Path.home + path.sep) ? `~${file.slice(Global.Path.home.length)}` : file))
-      .join(" and ")
     yield* ctx.integration.transform((editor) => {
       // models.dev advertises AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and
       // AWS_REGION alongside the bearer token. Only the bearer token is a key;
@@ -72,8 +70,8 @@ export const AmazonBedrockPlugin = define({
               type: "string",
               title: "AWS profile",
               description: profiles.length
-                ? `Found ${profiles.length} profile${profiles.length === 1 ? "" : "s"} in ${sources} on the server.`
-                : `No AWS profiles found in ${sources} on the server.`,
+                ? `Found ${profiles.length} profile${profiles.length === 1 ? "" : "s"} in your AWS configuration.`
+                : "No profiles found in your AWS configuration.",
               required: true,
               minLength: 1,
               pattern: "\\S",
@@ -85,11 +83,20 @@ export const AmazonBedrockPlugin = define({
         },
       })
     })
+    // The AWS profile method stores its form answer as credential metadata.
+    const login = yield* credentialSettings(ctx, Provider.ID.amazonBedrock, (value) =>
+      value.type === "external" && value.methodID === "aws-profile"
+        ? metadataSettings(value.metadata, ["profile"])
+        : {},
+    )
     yield* ctx.provider.transform((evt) => {
       for (const item of evt.list()) {
         if (!isBedrock(item.provider)) continue
         evt.update(item.provider.id, (provider) => {
-          const settings = provider.settings ?? {}
+          const settings = {
+            ...provider.settings,
+            ...((provider.integrationID ?? provider.id) === Provider.ID.amazonBedrock ? login.settings : {}),
+          }
           const chain = typeof settings.profile === "string" || CHAIN_ENV.some((name) => process.env[name])
           // SigV4 authenticates through the AWS default chain rather than a key
           // credential, so ambient AWS configuration is what makes Bedrock usable.

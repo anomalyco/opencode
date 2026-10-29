@@ -2,8 +2,8 @@ export * as McpStdio from "./stdio.js"
 
 import { ReadBuffer, serializeMessage, type JSONRPCMessage, type Transport } from "@modelcontextprotocol/client"
 import { Cause, Duration, Effect, Fiber, Option, Queue, Scope, Stream } from "effect"
-import { ChildProcess } from "effect/unstable/process"
-import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner"
+import { ChildProcess } from "effect/process"
+import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner"
 import { Environment } from "../environment/index.js"
 
 /** Mirrors StdioClientTransport: wait this long for a graceful exit after stdin closes. */
