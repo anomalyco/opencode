@@ -123,7 +123,7 @@ export function createHomeProjectsController(home: HomeController) {
                 Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
               )(await file.text())
 
-              const api = home.server.context(conn).sdk.api.session
+              const api = home.server.context(conn).sdk.api.experimental.session
 
               // SAFETY: the import endpoint validates the transcript, including exports written by earlier releases.
               const imported = await api.import({

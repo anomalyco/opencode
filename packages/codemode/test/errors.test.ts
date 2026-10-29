@@ -151,11 +151,11 @@ describe("source locations", () => {
   test("names a missing method on a call instead of the previous line", async () => {
     const failure = await error(`// Try search with different namespaces
 for (const ns of ["github", "tools.github", "tools", ""]) {
-  const s = await search({query: "star", namespace: ns, limit: 100}).catch(e=>({items:[],error:String(e)}));
+  const s = await search({query: "star", namespace: ns, limit: 100}).filter((item) => item.path);
   return s
 }`)
     expect(failure.location).toEqual({ line: 3, column: 19 })
-    expect(failure.message).toBe("TypeError: search(...).catch is not a function. (line 3, col 19)")
+    expect(failure.message).toBe("TypeError: search(...).filter is not a function. (line 3, col 19)")
   })
 })
 

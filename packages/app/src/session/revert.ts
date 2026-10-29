@@ -88,7 +88,7 @@ export function createSessionRevert(input: {
     // Like the TUI, stop at the first failure instead of waiting on work that was never interrupted.
     if (!(await request(() => server.api.session.interrupt({ sessionID })))) return
 
-    if (!(await request(() => server.api.session.wait({ sessionID })))) return
+    if (!(await request(() => server.api.experimental.session.wait({ sessionID })))) return
 
     // Read before staging: the staged event can land before the request resolves.
     const prior = input.session.data.revertMessageID()

@@ -98,8 +98,8 @@
     "fast-check": "catalog:"
   },
   "dependencies": {
-    "@ai-sdk/provider": "3.0.8",
-    "@ai-sdk/provider-utils": "4.0.23",
+    "@ai-sdk/provider": "3.0.19",
+    "@ai-sdk/provider-utils": "4.0.62",
     "@ff-labs/fff-bun": "0.10.5",
     "@ff-labs/fff-node": "0.10.5",
     "@lydell/node-pty": "catalog:",

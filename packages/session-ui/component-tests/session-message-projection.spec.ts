@@ -308,6 +308,74 @@ story("renders user image, file attachment, file reference, and agent reference"
   expect(bodyBox!.y - (attachmentsBox!.y + attachmentsBox!.height)).toBe(8)
 })
 
+story("shows note selectors and keeps annotation subtitles with or without comments", async ({ mount, page }) => {
+  const gallery = await mount("current-session-timeline-rows--note-attachments")
+
+  const cases = [
+    { name: "Named", heading: "button#save", secondary: "Browser annotation" },
+    { name: "Unnamed", heading: "button.icon-only", secondary: "Browser annotation" },
+    { name: "Legacy", heading: "Legacy element", secondary: "Legacy element" },
+    { name: "Whitespace", heading: "Fallback element", secondary: "Fallback element" },
+    { name: "Title only", heading: "button#save", secondary: "Original label" },
+    { name: "Commented", heading: "Fix this", secondary: "Browser annotation" },
+    { name: "RTL subtitle", heading: "button#save", secondary: "تعليق المتصفح" },
+    { name: "RTL legacy", heading: "العنصر الأصلي", secondary: "العنصر الأصلي" },
+    {
+      name: "Long selector",
+      heading: 'main > section.settings-panel > form > button[data-action="save-all-account-preferences"]',
+      secondary: "Browser annotation",
+    },
+  ]
+
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+  for (const item of cases) {
+    const section = gallery.getByRole("region", { name: item.name, exact: true })
+    const card = section.getByRole("button")
+    const heading = card.locator('[data-slot="attachment-card-title"]')
+    const label = card.locator('[data-slot="attachment-card-label"]')
+    await expect(heading).toHaveText(item.heading)
+    await expect(label).toHaveText(item.secondary)
+  }
+
+  const long = gallery.getByRole("region", { name: "Long selector", exact: true }).getByRole("button")
+  await expect(long).toHaveCSS("width", "160px")
+  await expect(long).toHaveCSS("height", "52px")
+  await expect(long.locator('[data-slot="attachment-card-title"]')).toHaveCSS("white-space", "nowrap")
+  await expect(long.locator('[data-slot="attachment-card-title"]')).toHaveCSS("text-overflow", "ellipsis")
+  const rtl = gallery.getByRole("region", { name: "RTL subtitle", exact: true }).getByRole("button")
+  const label = rtl.locator('[data-slot="attachment-card-label"]')
+  await expect(label).toHaveCSS("white-space", "nowrap")
+  await expect(label).toHaveCSS("text-overflow", "ellipsis")
+  await expect(label).toHaveAttribute("dir", "ltr")
+  await expect(label).toHaveCSS("unicode-bidi", "isolate")
+  expect(
+    await long
+      .locator('[data-slot="attachment-card-title"]')
+      .evaluate((element) => element.scrollWidth > element.clientWidth),
+  ).toBe(true)
+
+  const named = gallery.getByRole("region", { name: "Named", exact: true }).getByRole("button")
+  await page.clock.install()
+  await named.hover()
+  await page.clock.runFor(1000)
+  await expect(page.getByRole("tooltip")).toHaveText("button#save\nBrowser annotation")
+  await long.hover()
+  await page.clock.runFor(1000)
+  await expect(page.getByRole("tooltip", { name: /^main > section/ })).toHaveText(
+    'main > section.settings-panel > form > button[data-action="save-all-account-preferences"]\nBrowser annotation',
+  )
+  await page.clock.resume()
+  await named.click()
+  await expect(gallery.getByLabel("Selected attachment")).toHaveText("Named")
+  await rtl.focus()
+  await page.keyboard.press("Enter")
+  await expect(gallery.getByLabel("Selected attachment")).toHaveText("RTL subtitle")
+  await named.focus()
+  await page.keyboard.press("Space")
+  await expect(gallery.getByLabel("Selected attachment")).toHaveText("Named")
+})
+
 story("links URLs in user messages without swallowing punctuation or mentions", async ({ mount }) => {
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "links" } })
   const links = timeline.locator('[data-slot="user-message-text"] a[data-slot="user-message-link"]')

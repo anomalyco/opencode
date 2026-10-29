@@ -18,6 +18,19 @@ function notify(
   })
 }
 
+// Only direct children: a grandchild reports to its own parent, so waiting on it could mean no sound at all. Running
+// shells don't count, or a session with a dev server running would never play one.
+function hasRunningChild(context: Plugin.Context, sessionID: string) {
+  return context.data.session
+    .family(sessionID)
+    .some(
+      (child) =>
+        child !== sessionID &&
+        context.data.session.get(child)?.parentID === sessionID &&
+        context.data.session.status(child) === "running",
+    )
+}
+
 export default Plugin.define({
   id: "opencode.notifications",
   setup(context) {
@@ -56,7 +69,12 @@ export default Plugin.define({
       }),
       context.data.on("permission.replied", (event) => permissions.delete(event.data.requestID)),
       context.data.on("session.execution.started", (event) => started(event.data.sessionID)),
-      context.data.on("session.execution.succeeded", (event) => ended(event.data.sessionID)),
+      context.data.on("session.execution.succeeded", (event) => {
+        // A running subagent's report wakes the session again, so it isn't done yet. Subagent sounds stay as they were.
+        const session = context.data.session.get(event.data.sessionID)
+        if (!session?.parentID && hasRunningChild(context, event.data.sessionID)) return
+        ended(event.data.sessionID)
+      }),
       context.data.on("session.execution.interrupted", (event) => ended(event.data.sessionID)),
       context.data.on("session.execution.failed", (event) => {
         const sessionID = event.data.sessionID

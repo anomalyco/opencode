@@ -2,7 +2,8 @@ export * as Schedule from "./schedule.js"
 
 import { and, asc, eq, gt, isNull, lte, min, or } from "drizzle-orm"
 import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schema } from "effect"
-import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Schedule as ScheduleSchema } from "@opencode/schema/schedule"
 import { Config } from "./config.js"
 import { Database } from "./database/database.js"
@@ -20,10 +21,20 @@ export const Info = ScheduleSchema.Info
 export type Info = ScheduleSchema.Info
 export const CreateInput = ScheduleSchema.CreateInput
 export type CreateInput = ScheduleSchema.CreateInput
+export const Request = ScheduleSchema.Request
+export type Request = ScheduleSchema.Request
+export const When = ScheduleSchema.When
+export const Status = ScheduleSchema.Status
+export const Outcome = ScheduleSchema.Outcome
+export const toCreateInput = ScheduleSchema.toCreateInput
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Schedule.NotFoundError", {
   scheduleID: ID,
-}) {}
+}) {
+  override get message() {
+    return `Schedule not found: ${this.scheduleID}`
+  }
+}
 
 export class InvalidError extends Schema.TaggedError<InvalidError>()("Schedule.InvalidError", {
   reason: Schema.String,
@@ -46,6 +57,8 @@ export interface Interface {
   readonly pause: (id: ID) => Effect.Effect<Info, NotFoundError>
   readonly resume: (id: ID) => Effect.Effect<Info, NotFoundError>
   readonly remove: (id: ID) => Effect.Effect<void, NotFoundError>
+  /** Whether experimental.schedules is on in the config where the Session lives. */
+  readonly enabled: (sessionID: SessionSchema.ID) => Effect.Effect<boolean, Session.NotFoundError>
   /** Fires every schedule that is due now, at most once each. */
   readonly tick: Effect.Effect<void>
   /**
@@ -457,13 +470,16 @@ const layer = Layer.effect(
         yield* find(id)
         yield* db.delete(ScheduleTable).where(eq(ScheduleTable.id, id)).run().pipe(Effect.orDie)
       }),
+      enabled: Effect.fn("Schedule.enabled")(function* (sessionID) {
+        return (yield* settings(yield* sessions.get(sessionID)).pipe(Effect.orDie)).enabled
+      }),
       tick,
       run,
     })
   }),
 )
 
-export const node = makeGlobalNode({
+export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = makeGlobalNode({
   service: Service,
   layer,
   deps: [Database.node, Session.node, SessionExecution.node, Instance.node],

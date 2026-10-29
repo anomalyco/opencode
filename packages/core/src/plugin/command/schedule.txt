@@ -1,0 +1,11 @@
+Manage scheduled prompts for this session.
+
+Request: $ARGUMENTS
+
+Use the schedule tools in the `opencode` namespace. They only see this session's schedules.
+
+- To schedule something, call `schedule_create`. Choose exactly one `when`: `{ in: "20 minutes" }`, `{ at: "2026-10-27T09:00" }`, `{ every: "1 hour" }` or `{ cron: "0 9 * * 1-5" }`. Wall-clock times use the configured time zone unless you pass `tz`. To stop a repeating schedule, add `ends`: `{ after: "8 hours" }`, `{ at: "..." }` or `{ times: 3 }`. Write `prompt` as the instruction you will receive when it fires, with enough context to act on it without this conversation.
+- To pause, resume or delete one, find its id with `schedule_list`, then call `schedule_pause`, `schedule_resume` or `schedule_delete`.
+- If the request is empty, call `schedule_list` and show this session's schedules: name, when, status and next run.
+
+Reply in one line: what changed and when it next fires.

@@ -383,23 +383,15 @@ export function PaneTabs(props: {
       </Show>
       <Show when={props.placeholder && !current() && props.pane.active() === undefined}>
         <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
-          {/* After + runs a primary item, its tab owns the empty pane until it arrives. */}
+          {/* After + runs a primary item, its tab owns the empty pane until it arrives. The launchers list only in a
+              New tab, not in a pane with no tabs. */}
           <Show when={!primary()}>
-            <Show
-              when={launchers().length > 0}
-              fallback={
-                <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                  <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-6">
-                    <Mark class="w-14 opacity-10" />
-                    <div class="text-14-regular text-text-weak max-w-56">
-                      {language.t("session.files.selectToOpen")}
-                    </div>
-                  </div>
-                </div>
-              }
-            >
-              <Launchers items={launchers()} onChoose={target} closed={closed} />
-            </Show>
+            <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+              <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-6">
+                <Mark class="w-14 opacity-10" />
+                <div class="text-14-regular text-text-weak max-w-56">{language.t("session.files.selectToOpen")}</div>
+              </div>
+            </div>
           </Show>
         </Tabs.Content>
       </Show>
@@ -518,7 +510,7 @@ function AddMenu(props: { items: readonly SessionPanelMenuItem[]; onChoose: () =
   )
 }
 
-/** The + menu items as rows, then the session's recently closed tabs, in the empty side region and the new tab view. */
+/** The + menu items as rows, then the session's recently closed tabs, in the new tab view. */
 function Launchers(props: {
   items: readonly SessionPanelMenuItem[]
   onChoose: () => void

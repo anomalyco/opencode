@@ -1,11 +1,10 @@
 import { Effect } from "effect"
-import type { Extension } from "../extension.js"
+import { type Extension, isAsync } from "../extension.js"
 import { type ExtensionInvocation, hooked } from "../tool-runtime.js"
 import type { Interpreter } from "./interpreter.js"
 import { createErrorValue, isErrorType } from "./intrinsics.js"
 import { MAX_VALUE_DEPTH } from "./limits.js"
 import { type AstNode, PendingThrow, Throw, typeError } from "./model.js"
-import type { Host } from "./runner.js"
 import { fn } from "./native.js"
 import {
   define,
@@ -134,25 +133,32 @@ export const extensionGlobals = <R>(
     throw typeError(`${label} produced ${describeHost(value)}, which the program cannot hold.`)
   }
 
-  // A host function as a program function. Arguments cross in; a global's call runs inside the host's extension
-  // hooks, which see the host's own error on failure; then whatever came back, or was thrown, crosses out so the
-  // program catches a copy. Functions inside results are part of a value's API and skip the hooks.
+  // A host function as a program function. Arguments cross in; for a global, the `extension.before` hook runs before
+  // the host function is called, so a call it denies never reaches the host. The host's result, or what it threw,
+  // crosses out so the program catches a copy, and `extension.after` sees how the call ended. Functions inside
+  // results are part of a value's API and skip the hooks.
   const wrap = (value: Function, label: string, describe?: (args: ReadonlyArray<unknown>) => ExtensionInvocation) =>
-    fn(builtins, value.name, value.length, (_, values, site) => {
+    fn(builtins, value.name, value.length, function* (_, values, site) {
       const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
-      const call = callHost<R>(value, args)
+      const cross = (reason: unknown) => new Throw(fromHost(reason, label))
+      const call = describe?.(args)
       const hooks = ctx.tools.hooks
-      const work = (
-        describe === undefined
-          ? call.effect
-          : hooked(describe(args), hooks["extension.before"], hooks["extension.after"], call.effect)
-      ).pipe(
-        Effect.mapBoth({
-          onFailure: (reason) => new Throw(fromHost(reason, label)),
-          onSuccess: (result) => fromHost(result, label),
-        }),
-      )
-      return call.async ? pending(work, site) : blocking(ctx.runner.blocking(work))
+      const before = call && hooks["extension.before"]?.(call).pipe(Effect.mapError(cross))
+      const after = call && hooks["extension.after"]
+      const settle = (effect: Effect.Effect<unknown, unknown, R>) =>
+        (after ? hooked(call, undefined, after, effect) : effect).pipe(
+          Effect.mapBoth({ onFailure: cross, onSuccess: (result) => fromHost(result, label) }),
+        )
+      // A denied call fails the way the global would: an async global rejects its promise, a sync one throws.
+      if (isAsync(value))
+        return pending(
+          Effect.andThen(before ?? Effect.void, settle(Effect.suspend(() => callHost<R>(value, args).effect))),
+          site,
+        )
+      if (before) yield ctx.runner.blocking(before)
+      const host = callHost<R>(value, args)
+      if (host.async) return pending(settle(host.effect), site)
+      return (yield ctx.runner.blocking(settle(host.effect))) as Value
     })
 
   // An asynchronous host call: the program holds a promise that settles when the host's work does.
@@ -176,7 +182,7 @@ export const extensionGlobals = <R>(
 
 /**
  * Calls a host function and describes what the program waits on. A returned Effect or Promise settles later; a
- * returned value or a throw settles now. An Effect has not started yet, so it runs only once the hooks admit it.
+ * returned value or a throw settles now.
  */
 const callHost = <R>(value: Function, args: ReadonlyArray<unknown>) => {
   try {
@@ -189,11 +195,6 @@ const callHost = <R>(value: Function, args: ReadonlyArray<unknown>) => {
   } catch (reason) {
     return { async: false, effect: Effect.fail(reason) }
   }
-}
-
-// A synchronous host call: its hooks run before any other job, as the call itself did.
-function* blocking(host: Host) {
-  return (yield host) as Value
 }
 
 /**

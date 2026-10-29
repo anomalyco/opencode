@@ -102,6 +102,7 @@ for (const locale of ["en", "ar"]) {
     page.on("request", (request) => {
       if (request.method() === "POST" && new URL(request.url()).pathname.endsWith("/interrupt"))
         stopped.push(request.url())
+
       if (request.method() === "DELETE" && new URL(request.url()).pathname.startsWith("/api/shell/"))
         stopped.push(request.url())
     })
@@ -113,7 +114,7 @@ for (const locale of ["en", "ar"]) {
       ],
       sessionStatus: { [id]: { type: "busy" }, [childID]: { type: "busy" } },
       seed: { locale },
-      pageMessages: (): { items: SessionMessageInfo[] } => ({
+      pageMessages: () => ({
         items: [
           { id: "msg_activity_user", type: "user", text: "Inspect the activity capsule", time: { created: 1 } },
           {
@@ -168,7 +169,7 @@ for (const locale of ["en", "ar"]) {
     await expect(capsule).toBeVisible()
     await expect(page.locator("html")).toHaveAttribute("dir", locale === "ar" ? "rtl" : "ltr")
 
-    for (const value of ["Center", "Right", "Hidden", "Left", "Right"]) {
+    for (const value of ["Center", "Right", "Hidden", "Left", "Right"] as const) {
       await page.keyboard.press("Control+,")
       const settings = page.getByTestId("settings-screen")
       const control = settings.getByLabel("Background activity", { exact: true })
@@ -179,24 +180,28 @@ for (const locale of ["en", "ar"]) {
       await options.getByRole("option", { name: value, exact: true }).click()
       await expect(control).toHaveText(value)
       await page.goBack()
+
       if (value === "Hidden") {
         await expect(capsule).toHaveCount(0)
         await expect(panel).toHaveCount(0)
         continue
       }
+
       await expect(capsule).toBeVisible()
       await expect
         .poll(async () => {
           const anchor = await capsule.boundingBox()
           const container = await page.locator('[data-component="session-composer-lane"]').boundingBox()
+
           if (!anchor || !container) return Infinity
-          return Math.abs(
-            value === "Center"
-              ? anchor.x + anchor.width / 2 - container.x - container.width / 2
-              : value === "Left"
-                ? anchor.x - container.x
-                : anchor.x + anchor.width - container.x - container.width,
-          )
+
+          const offset = {
+            Left: anchor.x - container.x,
+            Center: anchor.x + anchor.width / 2 - container.x - container.width / 2,
+            Right: anchor.x + anchor.width - container.x - container.width,
+          }
+
+          return Math.abs(offset[value])
         })
         .toBeLessThan(1)
       await capsule.click()
@@ -205,18 +210,21 @@ for (const locale of ["en", "ar"]) {
         .poll(async () => {
           const anchor = await capsule.boundingBox()
           const bounds = await panel.boundingBox()
+
           if (!anchor || !bounds) return Infinity
-          return Math.abs(
-            value === "Center"
-              ? anchor.x + anchor.width / 2 - bounds.x - bounds.width / 2
-              : value === "Left"
-                ? anchor.x - bounds.x
-                : anchor.x + anchor.width - bounds.x - bounds.width,
-          )
+
+          const offset = {
+            Left: anchor.x - bounds.x,
+            Center: anchor.x + anchor.width / 2 - bounds.x - bounds.width / 2,
+            Right: anchor.x + anchor.width - bounds.x - bounds.width,
+          }
+
+          return Math.abs(offset[value])
         })
         .toBeLessThan(1)
       await page.keyboard.press("Escape")
     }
+
     expect(stopped).toEqual([])
     await expect
       .poll(() =>
@@ -585,6 +593,7 @@ test("shortcuts list Search sessions once and unbind a shortcut while recording 
   await expect(binding).toHaveText("Press keys")
   await expect(unbind).toHaveCount(0)
 })
+
 for (const own of [false, true]) {
   test(`shortcuts list a command that shares Close tab only with its own shortcut: ${own}`, async ({ page }) => {
     const { settings } = await open(page, {
@@ -621,6 +630,7 @@ test("single extension rows stay aligned when switching tabs", async ({ page }) 
     plugins: [{ id: "demo-plugin", source: { type: "package", target: "demo-plugin" } }],
     skills: [{ name: "demo-skill", description: "Demo skill", path: "/skills/demo/SKILL.md" }],
   })
+
   await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
   await expect(settings.getByRole("switch", { name: "demo-mcp", exact: true })).toBeChecked()
   const mcp = settings.getByRole("tabpanel", { name: "MCPs", exact: true }).locator(".settings-extension-row")
@@ -1197,7 +1207,7 @@ test("providers: the connect dialog lists connected providers and manages their 
   await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
   const dialog = page.getByRole("dialog")
   const openai = dialog.locator('[data-provider-id="openai"]')
-  await expect(openai.locator('[data-slot="provider-connected"]')).toHaveText("2 connections")
+  await expect(openai.locator('[data-slot="provider-connected"]')).toHaveText("Work")
   await expect(
     dialog.locator('[data-provider-id="anthropic"]').locator('[data-slot="provider-connected"]'),
   ).toHaveCount(0)
@@ -1290,7 +1300,7 @@ test("providers: adding an account starts a lone method once", async ({ page, co
 
   await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
   await expect(dialog.getByRole("radio", { name: "Go key", exact: true })).toBeVisible()
-  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await dialog.getByRole("button", { name: "Integrations", exact: true }).click()
   await dialog.locator('[data-provider-id="github-copilot"]').click()
   const popup = page.waitForEvent("popup")
   await dialog.getByRole("button", { name: "Add account", exact: true }).click()
