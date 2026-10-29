@@ -197,11 +197,13 @@ function PillIcon(props: { name?: IconName; tone?: ComposerPillTone }) {
   return (
     <Show when={props.name}>
       {(name) => (
-        <Icon
-          name={name()}
-          size="small"
-          class={`shrink-0 ${props.tone ? tones[props.tone] : "text-v2-icon-icon-muted"}`}
-        />
+        <span data-composer-pill-icon class="flex size-4 shrink-0 items-center justify-center">
+          <Icon
+            name={name()}
+            size="small"
+            class={`shrink-0 ${props.tone ? tones[props.tone] : "text-v2-icon-icon-muted"}`}
+          />
+        </span>
       )}
     </Show>
   )
