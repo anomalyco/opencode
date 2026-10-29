@@ -68,9 +68,12 @@ and errors. It supports two schema formats:
 
 ### Input and output
 
-Each method can define an `input` schema for its argument and an `output` schema
-for its return value. Leave either one out if the method does not accept or
-return a value.
+Each method defines an `input` schema for its argument and an `output` schema
+for its return value. Every method declares both. For a method that takes or
+returns nothing, use an empty object schema,
+`{ type: "object", additionalProperties: false }`, then call it with `{}` and
+return `{}` from the handler. JSON Schema cannot describe a missing value, so
+leaving out the argument or returning nothing fails validation.
 
 ```ts
 search: {
@@ -110,7 +113,8 @@ Error names beginning with `rpc.` are reserved by OpenCode.
 
 ### Events
 
-Add events to the top-level `events` map. Each event has a schema for the data
+Add events to the top-level `events` map. The map is required, so pass
+`events: {}` when the RPC has no events. Each event has a schema for the data
 sent to subscribers.
 
 Event data must be an object. Use an empty object schema when there is no data:
