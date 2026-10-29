@@ -18,7 +18,6 @@ const session = (viewed: number): SessionInfo => ({
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   outcome: "succeeded",
   time: { created: 0, updated: 0, idle: 2, viewed },
-  status: "idle",
   location: { directory: "/project" },
 })
 
@@ -439,6 +438,89 @@ test("reads families from servers without the family route, once per connection"
   }
 })
 
+test("a fallback read invalidated in flight reads no pending requests", async () => {
+  const release = Promise.withResolvers<void>()
+  const setup = sessionFixture(async (path) => {
+    if (path.endsWith("/family")) return new Response(null, { status: 404 })
+    if (path === "/api/session") return Response.json({ data: [], cursor: {} })
+    await release.promise
+    return Response.json({ data: member("ses_root") })
+  })
+
+  try {
+    const read = setup.data.session.sync("ses_root", { children: true })
+    await wait(() => setup.requests.includes("/api/session/ses_root"))
+    setup.emit(sessionEvent("session.deleted", { sessionID: "ses_root" }))
+    release.resolve()
+    await read
+    expect(setup.requests.filter((path) => path.endsWith("/permission") || path.endsWith("/form"))).toEqual([])
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+test("a family whose top names a missing parent keeps its members and live events", async () => {
+  const release = Promise.withResolvers<void>()
+  const setup = sessionFixture(async () => {
+    await release.promise
+    return Response.json({
+      data: {
+        rootID: "ses_top",
+        sessions: [member("ses_top", "ses_missing"), member("ses_child", "ses_top")],
+        permissions: [],
+        forms: [],
+      } satisfies SessionFamily,
+    })
+  })
+
+  try {
+    const read = setup.data.session.sync("ses_child", { children: true })
+    await wait(() => setup.requests.length === 1)
+    setup.emit(sessionEvent("session.renamed", { sessionID: "ses_child", title: "Live" }))
+    release.resolve()
+    await read
+    expect(setup.data.session.family("ses_child")).toEqual(["ses_top", "ses_child"])
+    expect(setup.data.session.get("ses_child")?.title).toBe("Live")
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+test("metadata updates and permission replies made during a read survive its response", async () => {
+  const release = Promise.withResolvers<void>()
+  const setup = sessionFixture(async (path) => {
+    if (path.endsWith("/reply")) return new Response(null, { status: 204 })
+    await release.promise
+    if (path === "/api/session/ses_refresh/permission")
+      return Response.json({ data: [permission("per_answered", "ses_refresh")] })
+    return Response.json({ data: { ...session(0), metadata: { stale: true } } })
+  })
+
+  try {
+    const reads = Promise.all([
+      setup.data.session.sync("ses_refresh"),
+      setup.data.session.permission.sync("ses_refresh"),
+    ])
+    await wait(() => setup.requests.length === 2)
+    setup.emit(sessionEvent("session.metadata.updated", { sessionID: "ses_refresh", metadata: { live: true } }, 5))
+    await setup.data.session.permission.reply({
+      sessionID: "ses_refresh",
+      requestID: "per_answered",
+      decision: "once",
+    })
+    release.resolve()
+    await reads
+    expect(setup.data.session.get("ses_refresh")).toMatchObject({ metadata: { live: true }, time: { updated: 5 } })
+    expect(setup.data.session.get("ses_refresh")?.metadata).not.toHaveProperty("stale")
+    expect(setup.data.session.permission.list("ses_refresh")).toEqual([])
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
 test("a missing Session on the family route rejects without falling back", async () => {
   const setup = sessionFixture(() =>
     Response.json(
@@ -673,7 +755,6 @@ test("folds idle, viewed, and updated times from events without reading the Sess
     setup.emit(sessionEvent("session.renamed", { sessionID: "ses_refresh", title: "Older" }, 3))
     expect(setup.data.session.get("ses_refresh")?.time.updated).toBe(27)
 
-    await Bun.sleep(20)
     expect(setup.requests).toEqual(["/api/session/ses_refresh", "/api/session/ses_refresh/permission"])
   } finally {
     release.resolve()

@@ -853,6 +853,65 @@ test("reconnects the event stream and resyncs active data", async () => {
   }
 })
 
+test("learns whether the server has the family route from the first read of each connection", async () => {
+  const events = createEventStream()
+  const families: string[] = []
+  let upgraded = false
+  let hydrations = 0
+  const calls = createFetch((url) => {
+    if (url.pathname.endsWith("/family")) {
+      families.push(url.pathname)
+      return upgraded ? undefined : new Response(null, { status: 404 })
+    }
+    if (url.pathname === "/api/session/active") hydrations++
+    if (url.pathname === "/api/session")
+      return json({
+        data: url.searchParams.get("parentID") === "root" ? [sessionInfo("child", "root")] : [],
+        cursor: {},
+      })
+    const match = url.pathname.match(/^\/api\/session\/(root|child)$/)
+    if (match) return json({ data: sessionInfo(match[1], match[1] === "child" ? "root" : undefined) })
+  }, events)
+  let data!: ReturnType<typeof useData>
+  let client!: ReturnType<typeof useClient>
+
+  // Like the session route, read the family as soon as the connection reports connected, before server.connected.
+  function Probe() {
+    data = useData()
+    client = useClient()
+    createEffect(() => {
+      if (client.connection.status() === "connected") void data.session.sync("root", { children: true })
+    })
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => data.session.family("root").includes("child") && hydrations === 1)
+    await data.session.sync("child", { children: true })
+    expect(families).toEqual(["/api/experimental/session/root/family"])
+
+    upgraded = true
+    events.disconnect()
+    await wait(() => client.connection.status() === "reconnecting")
+    await wait(() => families.length === 2, 4000)
+    expect(families[1]).toBe("/api/experimental/session/root/family")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("completes exploration and keeps live rows when a queued prompt is promoted", async () => {
   const events = createEventStream()
   const sessionID = "session-promotion"
@@ -3184,32 +3243,19 @@ function sessionInfo(id: string, parentID: string | undefined, cost = 0) {
   }
 }
 
-// Mounts a DataProvider whose `/api/session/:id` and family responses are driven by the
-// given parent map (sessionID -> parentID). Roots omit the entry. Reused across
-// the family-index tests below.
+// Mounts a DataProvider whose `/api/session/:id` and child-list responses, and so the family the fixture derives
+// from them, are driven by the given parent map (sessionID -> parentID). Roots omit the entry. Reused across the
+// family-index tests below.
 async function mountData(parents: Record<string, string>, costs: Record<string, number> = {}) {
   // A live event stream keeps the connection up, so a reconnect cannot invalidate the family reads under test.
   const calls = createFetch((url) => {
-    const family = url.pathname.match(/^\/api\/experimental\/session\/([^/]+)\/family$/)
-    if (family) {
-      const rootID = (function up(id: string): string {
-        return parents[id] ? up(parents[id]) : id
-      })(family[1])
-      const members = (function down(id: string): string[] {
-        return [
-          id,
-          ...Object.keys(parents)
-            .filter((child) => parents[child] === id)
-            .flatMap(down),
-        ]
-      })(rootID)
+    if (url.pathname === "/api/session") {
+      const parentID = url.searchParams.get("parentID")
       return json({
-        data: {
-          rootID,
-          sessions: members.map((id) => sessionInfo(id, parents[id], costs[id])),
-          permissions: [],
-          forms: [],
-        },
+        data: Object.entries(parents)
+          .filter(([, parent]) => parent === parentID)
+          .map(([id, parent]) => sessionInfo(id, parent, costs[id])),
+        cursor: {},
       })
     }
     const match = url.pathname.match(/^\/api\/session\/([^/]+)$/)

@@ -570,7 +570,6 @@ async function createSessionFixture(
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 1, updated: 12 },
-    status: "idle",
   } satisfies SessionInfo
   const permission = {
     id: `per_panel_${crypto.randomUUID()}`,

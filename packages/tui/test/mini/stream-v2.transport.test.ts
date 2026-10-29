@@ -145,7 +145,7 @@ function eventForm(info: FormInfo): Extract<RunV2Event, { type: "form.created" }
 
 function sdk(input: {
   streams: ReturnType<typeof feed>[]
-  active?: () => Record<string, { type: "running"; rootID: string }>
+  active?: () => Record<string, { type: "running" }>
   messages?: Record<string, SessionMessages>
   sessions?: Array<{ id: string; parentID?: string; title?: string; agent?: string; time: { updated: number } }>
   forms?: Record<string, FormInfo[]>
@@ -239,7 +239,7 @@ describe("V2 mini transport", () => {
     const admitted = defer()
     const client = sdk({
       streams: [events],
-      active: () => ({ ses_1: { type: "running", rootID: "ses_1" } }),
+      active: () => ({ ses_1: { type: "running" } }),
       messages: { ses_1: [] },
       pending: { ses_1: inbox },
       wait: () => idle.promise,
@@ -517,7 +517,7 @@ describe("V2 mini transport", () => {
     const transport = await createSessionTransport({
       sdk: sdk({
         streams: [events],
-        active: () => ({ ses_1: { type: "running", rootID: "ses_1" } }),
+        active: () => ({ ses_1: { type: "running" } }),
         messages: {
           ses_1: [compaction("running", "")],
         },
@@ -1671,8 +1671,8 @@ describe("V2 mini transport", () => {
     const client = sdk({
       streams: [first, second],
       active: () => {
-        const active: Record<string, { type: "running"; rootID: string }> = {}
-        if (running) active.ses_1 = { type: "running", rootID: "ses_1" }
+        const active: Record<string, { type: "running" }> = {}
+        if (running) active.ses_1 = { type: "running" }
         return active
       },
       wait: () => idle.promise,
@@ -1755,8 +1755,8 @@ describe("V2 mini transport", () => {
       streams: [first, second],
       wait: () => idle.promise,
       active: () => {
-        const active: Record<string, { type: "running"; rootID: string }> = {}
-        if (running) active.ses_1 = { type: "running", rootID: "ses_1" }
+        const active: Record<string, { type: "running" }> = {}
+        if (running) active.ses_1 = { type: "running" }
         return active
       },
     })
