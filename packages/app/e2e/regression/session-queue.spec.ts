@@ -667,6 +667,14 @@ test("editing drops a file whose mention was deleted and keeps unmentioned conte
 test("editing a comment-only prompt keeps its notes once", async ({ page }) => {
   const note = "The user made the following comment regarding line 2 of /repo/app.ts: check the guard"
   const mock = createQueueMock([note])
+  mock.rows[0].payload.files = [
+    {
+      data: "aGk=",
+      mime: "text/plain",
+      source: { type: "uri", uri: "file:///repo/app.ts?start=2&end=2" },
+      name: "app.ts",
+    },
+  ]
   mock.rows[0].payload.metadata = {
     displayText: "",
     comments: [
@@ -679,8 +687,8 @@ test("editing a comment-only prompt keeps its notes once", async ({ page }) => {
     ],
   }
   const view = await openQueue(page, mock)
-  // With no display text, the editor shows the note itself, so the edit owns it as text.
-  await view.rows.getByText(note, { exact: true }).click()
+  // The queue counts the context file; the existing editor still loads its model-visible note as text.
+  await view.rows.getByRole("button", { name: "1 attachment", exact: true }).click()
   await expect(view.input).toHaveText(note)
   await view.input.press("End")
   await view.input.pressSequentially(", please")

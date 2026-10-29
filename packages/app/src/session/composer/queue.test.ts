@@ -51,6 +51,127 @@ const edited = (id: string) => ({ id, text: "edited", attachments: 1, pending: t
 // One edit's life in the strip: sent from the composer, re-admitted by the server, its originals
 // cancelled last first, then settled once the server's queue reflects it, or rolled back on failure.
 describe("queuedPromptRows", () => {
+  const quote = { type: "quote" as const, text: "Earlier answer" }
+  const annotation = {
+    type: "note" as const,
+    origin: "browser",
+    label: "Save button",
+    icon: "select-element",
+    subject: 'the "Save" button',
+    comment: "",
+  }
+  const file = { path: "src/app.ts", comment: "Keep this" }
+  const files = [
+    {
+      data: "aGk=",
+      mime: "text/plain",
+      source: { type: "uri" as const, uri: "file:///repo/src/app.ts" },
+      name: "app.ts",
+    },
+  ]
+
+  test.each([
+    {
+      name: "text with a quote",
+      displayText: "Summarize this",
+      comments: [quote],
+      files: [],
+      visible: { text: "Summarize this", attachments: 1 },
+    },
+    {
+      name: "text with an annotation without a comment",
+      displayText: "Inspect this",
+      comments: [annotation],
+      files: [],
+      visible: { text: "Inspect this", attachments: 1 },
+    },
+    {
+      name: "text with an annotation comment",
+      displayText: "Inspect this",
+      comments: [{ ...annotation, comment: "Rename it" }],
+      files: [],
+      visible: { text: "Inspect this", attachments: 1 },
+    },
+    {
+      name: "quote-only context without model framing",
+      displayText: "",
+      comments: [quote],
+      files: [],
+      visible: { text: "", attachments: 1 },
+    },
+    {
+      name: "annotation-only context without model framing",
+      displayText: "",
+      comments: [annotation],
+      files: [],
+      visible: { text: "", attachments: 1 },
+    },
+    {
+      name: "whitespace-only display text without model framing",
+      displayText: " \n\t ",
+      comments: [quote],
+      files: [],
+      visible: { text: "", attachments: 1 },
+    },
+    {
+      name: "trimmed text with mixed comments without double counting the context file",
+      displayText: "  Check these\n",
+      comments: [quote, annotation, file],
+      files,
+      visible: { text: "Check these", attachments: 3 },
+    },
+    {
+      name: "valid comments beside malformed metadata entries",
+      displayText: "Check this",
+      comments: [{ type: "quote", text: 42 }, quote, { ...annotation, label: 42 }, file],
+      files,
+      visible: { text: "Check this", attachments: 2 },
+    },
+    {
+      name: "no attachments when every comment is malformed",
+      displayText: "Check this",
+      comments: [{ type: "quote", text: 42 }],
+      files: [],
+      visible: { text: "Check this", attachments: 0 },
+    },
+    {
+      name: "no attachments for plain presentation text",
+      displayText: "Check this",
+      comments: [],
+      files: [],
+      visible: { text: "Check this", attachments: 0 },
+    },
+    {
+      name: "pending edited text with the original preserved comments",
+      displayText: "Original text",
+      comments: [quote, annotation, file],
+      files,
+      pending: true,
+      visible: { text: "edited", attachments: 3 },
+    },
+    {
+      name: "pending context-only edit retains its raw edited text",
+      displayText: "",
+      comments: [quote],
+      files: [],
+      pending: true,
+      visible: { text: "edited", attachments: 1 },
+    },
+  ])("shows $name", ({ displayText, comments, files, pending, visible }) => {
+    const item = {
+      ...queued[0],
+      payload: {
+        text: "Raw model-visible framing and context",
+        files: [...files],
+        metadata: { displayText, comments: [...comments] },
+      },
+    } satisfies SessionInboxInfo
+
+    expect(queuedPromptRows([item], pending ? [sent()] : [])).toStrictEqual([
+      { id: item.id, pending: pending || undefined, ...visible },
+    ])
+  })
+
   test.each([
     [
       "shows a sent edit on the original row and marks the rows it rewrites as pending",
