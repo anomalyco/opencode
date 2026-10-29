@@ -16,6 +16,7 @@ import {
   limitScope,
   modelUsage,
   refusalReset,
+  retryReset,
   servedByConsole,
   usageLevel,
   type ModelUsage,
@@ -255,11 +256,17 @@ export function useLimitNotice(message: () => SessionMessageAssistant) {
     const value = message()
     const error = value.error
     if (!error) return
-    const reset = refusalReset(error)
+    const reset = refusalReset(error) ?? retryReset(error, value.time.completed ?? value.time.created)
     const resets = reset === undefined ? "" : `Resets ${formatReset(reset)}. `
     const name =
       limits.models().find((item) => item.providerID === value.model.providerID && item.id === value.model.id)?.name ??
       value.model.id
+    if (error.type === "provider.go-limit")
+      return {
+        title: "OpenCode Go usage limit reached",
+        body: `${resets}Switch model with`,
+        key: shortcut() ?? "/models",
+      }
     if (error.type === "provider.model-budget-limit")
       return { title: `${name} usage limit reached`, body: `${resets}Switch model with`, key: shortcut() ?? "/models" }
     if (error.type === "provider.budget-limit")

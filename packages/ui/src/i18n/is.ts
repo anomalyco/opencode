@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "Breytingar setunnar",
   "ui.sessionReview.title.git": "Git breytingar",
   "ui.sessionReview.title.branch": "Breytingar greinar",
@@ -71,10 +71,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Gerast áskrifandi að OpenCode Go fyrir $10 á mánuði og fá áreiðanlegan aðgang að bestu opnu gerðunum.",
   "dialog.usageExceeded.freeTier.actionLabel": "Gerast áskrifandi",
-  "dialog.usageExceeded.accountRateLimit.title": "Go takmörkum náð",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Notkunarmörkum náð. Til að halda áfram að nota þetta líkan núna skaltu virkja notkun úr tiltæku stöðunni þinni",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Opna stillingar",
   "ui.sessionTurn.status.delegating": "Framselja vinnu",
   "ui.sessionTurn.status.planning": "Skipuleggja næstu skref",
   "ui.sessionTurn.status.gatheringContext": "Að kanna",

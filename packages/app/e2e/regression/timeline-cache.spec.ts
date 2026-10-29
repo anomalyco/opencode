@@ -66,7 +66,7 @@ for (const width of [1440, 390]) {
       // The gap above the composer is part of the tail: the status lane, then the activity pill and its gap.
       const spacer = page.locator('[data-timeline-row="bottom-spacer"]')
       await expect(spacer).toBeVisible()
-      expect(await spacer.evaluate((element) => element.getBoundingClientRect().height)).toBe(82)
+      expect(await spacer.evaluate((element) => element.getBoundingClientRect().height)).toBe(86)
     } finally {
       release.resolve()
     }

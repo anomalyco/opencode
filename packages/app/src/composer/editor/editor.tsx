@@ -528,7 +528,9 @@ function renderComposerEditor(editor: HTMLDivElement, prompt: ComposerPrompt) {
     }),
   )
 
-  if (!active) return
+  // Emptying the editor already collapses its caret to the start, which is also its end. Any selection call, even a
+  // read, forces a layout, and a submit empties the editor from its key handler.
+  if (!active || prompt.every((part) => isAttachment(part) || (part.type === "text" && !part.content))) return
   const selection = window.getSelection()
   const range = document.createRange()
   range.selectNodeContents(editor)

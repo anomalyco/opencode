@@ -191,6 +191,59 @@ test("the combined location picker shows checkout branches and chooses the base 
     .toEqual([expect.objectContaining({ body: expect.objectContaining({ text: "Use the selected base" }) })])
 })
 
+test("the checkout branch opens the current project's worktree step", async ({ page }) => {
+  const existing = "C:/OpenCode/BranchWorktrees/.worktrees/quiet-river"
+
+  const view = await openDraft(page, {
+    name: "BranchWorktrees",
+    vcs: (directory) => ({ current: directory === existing ? "quiet-river-branch" : "dev", default: "main" }),
+    worktrees: () => [{ directory: "C:/OpenCode/BranchWorktrees" }, { directory: existing, strategy: "git" }],
+  })
+
+  const screen = page.locator('[data-component="new-session"]')
+  const branch = screen.getByRole("button", { name: "dev", exact: true })
+  const dialog = page.getByRole("dialog")
+  const search = dialog.getByRole("combobox", { name: "Search worktrees", exact: true })
+  const options = dialog.getByRole("option")
+  const back = dialog.getByRole("button", { name: "Back to projects", exact: true })
+
+  await branch.click()
+  await expect(search).toBeFocused()
+  await expect(back).toHaveText("Run session in")
+  await expect(options.locator(".command-palette-title")).toHaveText([
+    "BranchWorktrees",
+    "New worktree",
+    "quiet-river",
+  ])
+  await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
+
+  // Stepping back lands on the projects step with the drilled project active, as after drilling in with →.
+  await search.press("Backspace")
+  const projects = dialog.getByRole("combobox", { name: "Search projects", exact: true })
+  await expect(projects).toBeFocused()
+  await expect(back).toHaveCount(0)
+  await expect(options.filter({ hasText: "BranchWorktrees" })).toHaveAttribute("aria-selected", "true")
+  await projects.press("Escape")
+  await expect(dialog).toHaveCount(0)
+  await expect(view.editor).toBeFocused()
+
+  // Escape also steps back first, then closes.
+  await branch.focus()
+  await page.keyboard.press("Enter")
+  await expect(search).toBeFocused()
+  await search.press("Escape")
+  await expect(projects).toBeFocused()
+  await projects.press("Escape")
+  await expect(dialog).toHaveCount(0)
+
+  await branch.click()
+  await options.filter({ hasText: "quiet-river" }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(newSessionLocation(page)).toContainText("quiet-river")
+  await expect(screen.getByRole("button", { name: "quiet-river-branch", exact: true })).toBeVisible()
+  await expect(view.editor).toBeFocused()
+})
+
 test("a pending branch picker can be dismissed before its results arrive", async ({ page }) => {
   const listed = Promise.withResolvers<string[]>()
 
