@@ -378,7 +378,7 @@ export const dict = {
   "dialog.mcp.error.details":
     "MCP server: {{name}}\nStatus: failed\nConfiguration: mcp.servers.{{name}}\nError: {{error}}",
   "dialog.fork.search.empty": "No messages found",
-  "dialog.fork.description": "Edit an earlier message in a new session",
+  "dialog.fork.description": "Choose a message to fork from",
 
   "mcp.status.connected": "Connected",
   "mcp.status.failed": "Failed",
