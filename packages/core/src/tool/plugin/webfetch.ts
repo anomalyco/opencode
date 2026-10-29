@@ -50,11 +50,16 @@ const acceptHeader = (format: Format) => {
   }
 }
 
-const headers = (url: string, format: Format, userAgent: string) => ({
-  "User-Agent": userAgent,
-  Accept: new URL(url).pathname.toLowerCase().endsWith(".md") ? "*/*" : acceptHeader(format),
-  "Accept-Language": "en-US,en;q=0.9",
-})
+const headers = (url: string, format: Format, userAgent: string) => {
+  const pathname = new URL(url).pathname.toLowerCase()
+  const isMarkdownPath = pathname.endsWith(".md") || pathname.endsWith(".markdown")
+
+  return {
+    "User-Agent": userAgent,
+    Accept: isMarkdownPath ? "*/*" : acceptHeader(format),
+    "Accept-Language": "en-US,en;q=0.9",
+  }
+}
 
 const openCodeUserAgent =
   "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OpenCode-User/1.0; +https://opencode.ai"
