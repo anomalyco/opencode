@@ -372,6 +372,91 @@ test("a family member without status keeps the status already known", async () =
   }
 })
 
+test("reads families from servers without the family route, once per connection", async () => {
+  const older = ({ status: _, ...info }: SessionInfo) => info
+  const setup = sessionFixture((path, url) => {
+    if (path.endsWith("/family")) return new Response(null, { status: 404 })
+    if (path === "/api/session/active") return Response.json({ data: { ses_a: { type: "running" } } })
+    const id = path.match(/^\/api\/session\/([^/]+)$/)?.[1]
+    if (id) return Response.json({ data: older(member(id, id === "ses_root" ? undefined : "ses_root")) })
+    if (path === "/api/session")
+      return Response.json({
+        data:
+          url.searchParams.get("parentID") === "ses_root"
+            ? [older(member("ses_a", "ses_root")), older(member("ses_b", "ses_root"))]
+            : [],
+        cursor: {},
+      })
+    if (path === "/api/session/ses_a/permission") return Response.json({ data: [permission("per_a", "ses_a")] })
+    if (path === "/api/session/ses_b/permission")
+      return Response.json(
+        { _tag: "LocationNotFoundError", location: { directory: "/gone" }, message: "Location not found" },
+        { status: 404 },
+      )
+    if (path === "/api/session/ses_grandchild/permission")
+      return Response.json({ data: [permission("per_grandchild", "ses_grandchild")] })
+    if (path === "/api/session/ses_b/form") return Response.json({ data: [form("frm_b", "ses_b")] })
+    if (path.endsWith("/permission") || path.endsWith("/form")) return Response.json({ data: [] })
+    if (path === "/api/project") return Response.json([])
+    if (path === "/api/location") return Response.json({ directory: "/project" })
+    return Response.json({ location: { directory: "/project" }, data: { branch: "main" } })
+  })
+  const familyReads = () => setup.requests.filter((path) => path.endsWith("/family"))
+
+  try {
+    setup.data.session.remember(member("ses_known", "ses_root"))
+    // Beyond the direct children the fallback lists, so only the family index knows it.
+    setup.data.session.remember(member("ses_grandchild", "ses_known"))
+    setup.emit(sessionEvent("session.execution.started", { sessionID: "ses_b" }))
+    await setup.data.session.sync("ses_root", { children: true })
+
+    expect(setup.data.session.family("ses_root").toSorted()).toEqual([
+      "ses_a",
+      "ses_b",
+      "ses_grandchild",
+      "ses_known",
+      "ses_root",
+    ])
+    // Only the requested Session's pending requests are awaited; the other members' load in the background.
+    await wait(() => setup.data.session.permission.list("ses_grandchild")?.[0]?.id === "per_grandchild")
+    await wait(() => setup.data.session.form.list("ses_b")?.[0]?.id === "frm_b")
+    expect(setup.data.session.permission.list("ses_a")?.map((request) => request.id)).toEqual(["per_a"])
+    expect(setup.data.session.status("ses_b")).toBe("running")
+
+    await setup.data.session.sync("ses_a", { children: true })
+    expect(familyReads()).toEqual(["/api/experimental/session/ses_root/family"])
+
+    setup.emit({ type: "server.connected", data: {} })
+    await wait(() => setup.data.session.status("ses_a") === "running")
+    await setup.data.session.sync("ses_b", { children: true })
+    expect(familyReads()).toEqual([
+      "/api/experimental/session/ses_root/family",
+      "/api/experimental/session/ses_b/family",
+    ])
+    expect(setup.data.session.status("ses_a")).toBe("running")
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("a missing Session on the family route rejects without falling back", async () => {
+  const setup = sessionFixture(() =>
+    Response.json(
+      { _tag: "SessionNotFoundError", sessionID: "ses_gone", message: "Session not found" },
+      { status: 404 },
+    ),
+  )
+
+  try {
+    await expect(setup.data.session.sync("ses_gone", { children: true })).rejects.toMatchObject({
+      _tag: "SessionNotFoundError",
+    })
+    expect(setup.requests).toEqual(["/api/experimental/session/ses_gone/family"])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("events recorded during a family read survive its response", async () => {
   const release = Promise.withResolvers<void>()
   const setup = sessionFixture(async (path) => {
@@ -1662,15 +1747,15 @@ function activityFixture(read: () => Response | Promise<Response>, family?: Sess
   })
 }
 
-function sessionFixture(respond: (path: string) => Response | Promise<Response>) {
+function sessionFixture(respond: (path: string, url: URL) => Response | Promise<Response>) {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const requests: string[] = []
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
     fetch: async (input, init) => {
-      const path = new URL((input instanceof Request ? input : new Request(input, init)).url).pathname
-      requests.push(path)
-      return respond(path)
+      const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
+      requests.push(url.pathname)
+      return respond(url.pathname, url)
     },
   })
   return createRoot((dispose) => ({

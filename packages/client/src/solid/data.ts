@@ -29,6 +29,7 @@ import type {
   SessionMessageAssistantText,
   SessionMessageAssistantTool,
   SessionInfo,
+  SessionListInput,
   SessionInboxInfo,
   SessionInboxCompaction,
   ShellInfo,
@@ -44,6 +45,7 @@ import { Worktree } from "@opencode/schema/worktree"
 import { SessionID } from "@opencode/schema/session-id"
 import { SessionMessage } from "@opencode/schema/session-message"
 import {
+  ClientError,
   isFormAlreadySettledError,
   isFormNotFoundError,
   isMessageNotFoundError,
@@ -255,7 +257,17 @@ function createSync() {
   }
 }
 
+const CHILD_PAGE = 200
 const DELETED_SESSION_LIMIT = 512
+
+// Servers that predate the family route answer it with an empty 404. This also matches any declared status without a
+// readable JSON error body, such as a non-JSON 401 or a proxy page; the fallback reads then fail the same way. A missing
+// Session is a typed SessionNotFoundError, and transport failures and undeclared statuses keep their own reasons.
+function isMissingRoute(error: unknown) {
+  return (
+    error instanceof ClientError && (error.reason === "UnsupportedContentType" || error.reason === "MalformedResponse")
+  )
+}
 
 export function createData(config: CreateDataInput) {
   const api = config.api
@@ -318,6 +330,8 @@ export function createData(config: CreateDataInput) {
   const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
+  // Learned once per connection, since a reconnect may reach an upgraded server.
+  let familyRouteMissing = false
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
   // One journal per Session, family, or pending-request read in flight. Reads and events arrive in either order, and an
   // event recorded during a read is newer than the read, so the read applies its response and then replays the events
@@ -601,6 +615,16 @@ export function createData(config: CreateDataInput) {
     return created
   }
 
+  // Every direct subagent, not only the server's default first page, so a root's family cost
+  // counts all of them. Pages stay newest first, the order the family index has always used.
+  async function listChildren(input: SessionListInput): Promise<SessionInfo[]> {
+    const page = await api().session.list(input)
+
+    if (page.data.length < CHILD_PAGE || !page.cursor.next) return page.data
+
+    return [...page.data, ...(await listChildren({ cursor: page.cursor.next, limit: CHILD_PAGE }))]
+  }
+
   // Walk parentID upward through loaded session info to the family root. When a
   // parent's info is missing, that missing ID is the furthest-known ancestor and
   // is returned so orphan subtrees group under it until the parent arrives. A
@@ -731,6 +755,7 @@ export function createData(config: CreateDataInput) {
   function handleEvent(event: OpenCodeEvent) {
     switch (event.type) {
       case "server.connected": {
+        familyRouteMissing = false
         const updates = new Map<string, DataSessionStatus | undefined>()
         activeUpdates = updates
         refresh(() =>
@@ -1864,8 +1889,41 @@ export function createData(config: CreateDataInput) {
             ),
           )
         // The family's membership is unknown until the read lands, so events for every Session are recorded.
-        return sync.run(`session.family:${sessionID}`, (stale) =>
-          observeRead(
+        return sync.run(`session.family:${sessionID}`, (stale) => {
+          // Servers without the family route: the Session and its direct children, merged into what is already known.
+          // Status comes only from /session/active and events, and pending requests are read per member.
+          const fallback = async () => {
+            const loaded: string[] = []
+            await observeRead(
+              () =>
+                Promise.all([
+                  api().session.get({ sessionID }).catch(evictMissing),
+                  listChildren({ parentID: sessionID, order: "desc", limit: CHILD_PAGE }),
+                ]).then(([info, children]) => [info, ...children]),
+              (sessions) => {
+                for (const session of sessions) {
+                  clearDeleted(session.id)
+                  setStore("session", "info", session.id, reconcile(session))
+                  registerSession(session.id)
+                  sync.complete(`session:${session.id}`)
+                  loaded.push(session.id)
+                }
+                return (id) => loaded.includes(id)
+              },
+              stale,
+            )
+            // Read every known member's pending requests, but wait only for the requested Session's. Older servers fail
+            // a member's reads when its worktree is gone; the other members still load.
+            const pending = (id: string) => [result.session.permission.sync(id), result.session.form.sync(id)]
+            void Promise.allSettled(
+              [...new Set([...loaded, ...(store.session.family[resolveRoot(sessionID)] ?? [])])]
+                .filter((id) => id !== sessionID)
+                .flatMap(pending),
+            )
+            await Promise.allSettled(pending(sessionID))
+          }
+          if (familyRouteMissing) return fallback()
+          return observeRead(
             () => api().experimental.sessionFamily.get({ sessionID }).catch(evictMissing),
             (family, journal) => {
               const ids = new Set(family.sessions.map((session) => session.id))
@@ -1919,8 +1977,13 @@ export function createData(config: CreateDataInput) {
             },
             // A read invalidated in flight is superseded by a newer one, and its older snapshot would undo that read.
             stale,
-          ),
-        )
+          ).catch((error: unknown) => {
+            if (!isMissingRoute(error)) throw error
+            if (stale()) return
+            familyRouteMissing = true
+            return fallback()
+          })
+        })
       },
       invalidate(sessionID: string) {
         sync.invalidate(`session:${sessionID}`)
