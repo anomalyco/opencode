@@ -1,4 +1,4 @@
-import { createMemo, createResource, createSignal, onMount, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onMount, Show, type JSX } from "solid-js"
 import path from "path"
 import type { SessionInfo } from "@opencode/client"
 import { Project } from "@opencode/schema/project"
@@ -146,8 +146,19 @@ export function DialogSessionList() {
         .filter((session) => !session.parentID)
         .map((session) => [session.id, session]),
     )
-    const pinned = sessionTabs.enabled() ? [] : local.session.pinned().filter((sessionID) => sessionMap.has(sessionID))
-    const pinnedSet = new Set(pinned)
+    const query = filter().trim()
+    const current = data.location.info(pickerLocation())
+    const pinned = local.session.pinned().flatMap((sessionID) => {
+      const session = sessionMap.get(sessionID) ?? (query ? undefined : data.session.get(sessionID))
+      if (!session || session.parentID) return []
+      if (
+        !allProjects() &&
+        (session.projectID !== current?.project.id || session.location.directory !== current.directory)
+      )
+        return []
+      return [session]
+    })
+    const pinnedSet = new Set(pinned.map((session) => session.id))
     const slotByID = new Map(local.session.slots().map((sessionID, index) => [sessionID, index + 1]))
 
     const option = (session: SessionInfo, category: string) => {
@@ -189,7 +200,14 @@ export function DialogSessionList() {
         return option(session, date === today ? "Today" : date)
       })
 
-    return [...pinned.map((sessionID) => option(sessionMap.get(sessionID)!, "Pinned")), ...remaining]
+    return [...pinned.map((session) => option(session, "Pinned")), ...remaining]
+  })
+
+  createEffect(() => {
+    local.session
+      .pinned()
+      .filter((sessionID) => !data.session.get(sessionID))
+      .forEach((sessionID) => void data.session.sync(sessionID).catch(() => undefined))
   })
 
   onMount(() => dialog.setSize("large"))
@@ -253,7 +271,6 @@ export function DialogSessionList() {
         {
           command: "session.pin.toggle",
           title: "pin/unpin",
-          hidden: sessionTabs.enabled(),
           onTrigger: (option) => local.session.togglePin(option.value),
         },
         {
