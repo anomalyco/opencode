@@ -437,6 +437,40 @@ describe("MCP OAuth", () => {
     expect(tokenRequests[0]?.get("resource")).toBe(url)
   })
 
+  test("preserves a pathless resource from metadata", async () => {
+    const tokenRequests: URLSearchParams[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: url.origin,
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            response_types_supported: ["code"],
+          })
+        if (url.pathname === "/.well-known/oauth-protected-resource/mcp")
+          return Response.json({ resource: url.origin, authorization_servers: [url.origin] })
+        if (request.method === "POST" && url.pathname === "/token") {
+          tokenRequests.push(new URLSearchParams(await request.text()))
+          return Response.json({ access_token: "next", token_type: "Bearer" })
+        }
+        return new Response(null, { status: 404 })
+      },
+    })
+    const url = `${server.url.origin}/mcp`
+    const oauthProvider = await connectProvider(
+      remote(url),
+      memoryCredentials([credential({ access: "expired", refresh: "refresh", url })]),
+    )
+
+    await auth(oauthProvider, { serverUrl: url }).finally(() => server.stop(true))
+
+    expect(tokenRequests[0]?.get("grant_type")).toBe("refresh_token")
+    expect(tokenRequests[0]?.get("resource")).toBe(server.url.origin)
+  })
+
   test("finds resource metadata through the 401 header when the well-known path is not served", async () => {
     const server = Bun.serve({
       port: 0,
