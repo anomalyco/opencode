@@ -1,6 +1,7 @@
 # @opencode/ai
 
-Schema-first APIs for text, images, video, speech, transcription, and decisions, built with Effect.
+Schema-first APIs for text, images, and decisions, built with Effect. Video, speech, transcription, extraction, and
+realtime voice are [experimental](#experimental).
 
 `@opencode/ai` is the Promise API: one managed runtime behind the LLM and media methods, plus asset helpers. `ai.file`
 and `ai.write` load `node:fs/promises` on first use, so no Effect `FileSystem` is needed:
@@ -165,8 +166,8 @@ Raw usage is preserved in `usage.providerMetadata.google`. `inputTokens` follows
 `contextTokens` uses its full `raw_prompt_token` count when supplied. These can differ substantially with server-side
 continuation. Explicit caches, hosted tools, and generated media are not supported by this initial protocol.
 
-The same configured facade names image, video, speech, and transcription models. `Image.generate` resolves the
-provider's image route from the model and returns `Media.Asset`s with lazily decoded bytes:
+The same configured facade names image models (and the experimental video, speech, and transcription models).
+`Image.generate` resolves the provider's image route from the model and returns `Media.Asset`s with lazily decoded bytes:
 
 ```ts
 import { NodeFileSystem } from "@effect/platform-node"
@@ -308,38 +309,6 @@ CloudflareAIGateway.configure({ accountId }).decision("typesafe/jev")
 
 OpenAI and Vercel AI Gateway use OpenAI's `/v1/decisions` API. TypeSafe, OpenCode, OpenRouter, Baseten and
 DigitalOcean use System One (`/systemone`), and Cloudflare sends the System One body through `/ai/run`.
-
-### Extraction (experimental)
-
-Extraction models read typed values out of text instead of answering questions with probabilities. A field of type
-`text`, `number`, `date`, `time`, `datetime`, `duration`, `list`, `estimate` or `forecast` gets an answer typed to
-match; other types are sent and answered as-is. Only Cloudflare's Clairic serves it today, so it lives under
-`@opencode/ai/experimental`.
-
-```ts
-import { ai } from "@opencode/ai"
-import { Extraction } from "@opencode/ai/experimental"
-import { CloudflareWorkersAI } from "@opencode/ai/providers"
-
-const response = await ai.run(
-  Extraction.generate({
-    model: CloudflareWorkersAI.configure({ accountId }).experimental.extraction("@cf/cloudflare/clairic"),
-    input: "Invoice INV-2291, issued 2026-09-02, net 30. Total $1,080.00. Contact: Dana Ruiz, Priya Shah.",
-    fields: {
-      invoiceNumber: { type: "text" },
-      dueDate: { type: "date", instructions: "Issue date plus the net payment days" },
-      total: { type: "number", decimals: 2, unit: "USD" },
-      contacts: { type: "list", items: "text" },
-    },
-  }),
-)
-response.answers.total.value // 1080, or null when the input does not say
-```
-
-Value answers carry `guess`, `nullProbability` and `confidence`; text answers carry a `span` into `input`. Estimates and
-forecasts return `median`, `p10` and `p90`. Field options other than `type`, `instructions` and `nullThreshold` go to
-Clairic as written. Effect users provide `RequestExecutor.fetchLayer` (or `AIClient.layer`). Images are not supported
-yet.
 
 ## Alibaba Cloud Model Studio
 
@@ -910,7 +879,42 @@ const program = Effect.gen(function* () {
 
 The hosted result is represented as a provider-executed tool call and a tool result whose content carries the generated image as a file. Gemini image-capable models instead emit a first-class `media` `LLMEvent` for inline image output (`response.message` then carries a `media` part). Retaining `response.message` preserves the generated image for continuation on both routes.
 
-## Video generation
+## Public API
+
+Everything below is exported from `@opencode/ai/effect` unless noted.
+
+- **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
+- **`LLM.generate` / `LLM.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
+- **`LLM.loop`** — stream model calls, running `tool(...)` tools between them until the model stops calling tools.
+- **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
+- **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
+- **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
+- **`Image.request` / `generate` / `stream` / `start` / `resume`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model.
+- **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
+- **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
+- **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
+- **`Decision.request` / `Decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
+- **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
+- **`@opencode/ai`** (Promise root) — `AI.make({ layer?, clients? })` and a default `ai` client exposing `llm`, `image`, and `decision` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets.
+- **`@opencode/ai/experimental`** — APIs that may change without compatibility guarantees: `Video`, `Speech`, `Transcription`, `Extraction`, and `Realtime`. See [Experimental](#experimental).
+
+## Experimental
+
+These APIs may change without compatibility guarantees. The Effect API is exported from `@opencode/ai/experimental`,
+the Promise client exposes it under `ai.experimental`, and test layers come from `@opencode/ai/experimental/testing`.
+
+- **`Video`**, **`Speech`**, and **`Transcription`** — media generation and speech-to-text, with `VideoClient`,
+  `SpeechClient`, and `TranscriptionClient` as their Effect services. Promise: `ai.experimental.video`, `.speech`, and
+  `.transcription`. Testing: `TestVideo`, `TestSpeech`, and `TestTranscription`.
+- **`Extraction`** — typed values read out of text.
+- **`Realtime`** — `Realtime.connect` starts an OpenAI, xAI, or Gemini voice session and returns a WebRTC answer SDP or
+  a short-lived WebSocket URL and token.
+
+The provider selectors for these modalities (`.video(...)`, `.speech(...)`, `.transcription(...)`,
+`.experimental.extraction(...)`) and their protocol entrypoints (such as `@opencode/ai/protocols/openai-speech`) are
+part of the same experimental surface.
+
+### Video generation
 
 Video mirrors `Image` with one difference: every provider is asynchronous, so the route is a submit-then-poll
 `Generation`. Models come from `.video(...)` selectors on the `Google` (Veo), `XAI`, and `Runway` facades.
@@ -919,7 +923,7 @@ Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspect`, `re
 under `providerOptions`, inferred from the selected model.
 
 ```ts
-import { Video } from "@opencode/ai/effect"
+import { Video } from "@opencode/ai/experimental"
 import { Google, Runway } from "@opencode/ai/providers"
 
 const google = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY })
@@ -981,9 +985,9 @@ Provider notes:
 - **Runway** expects pixel ratios in `aspect` for most models (`"1280:720"`), pins `X-Runway-Version`, reports
   `usage: { type: "credits" }`, and its output URLs expire after 24–48 hours.
 
-The promise client exposes the same surface: `ai.video.start(...)` resolves to a handle with `await`, `events`,
-`result`, `refresh`, `cancel`, and `token`; `ai.video.generate`, `ai.video.resume(model, token)`, and
-`ai.video.stream` mirror the Effect API. The handle's `status` and `progress` are a snapshot from when it was
+The promise client exposes the same surface: `ai.experimental.video.start(...)` resolves to a handle with `await`, `events`,
+`result`, `refresh`, `cancel`, and `token`; `ai.experimental.video.generate`, `ai.experimental.video.resume(model, token)`, and
+`ai.experimental.video.stream` mirror the Effect API. The handle's `status` and `progress` are a snapshot from when it was
 created; `refresh()` resolves to a new handle. Every promise method and stream accepts `{ signal }`: like `fetch`,
 aborting rejects the Promise or throws from the `for await` loop with `signal.reason` (an `AbortError` `DOMException`
 unless `abort(reason)` passed one), while `break` stops a stream without throwing.
@@ -991,13 +995,13 @@ unless `abort(reason)` passed one), while `break` stops a stream without throwin
 ```ts
 import { ai } from "@opencode/ai"
 
-const generation = await ai.video.start({ model, prompt })
+const generation = await ai.experimental.video.start({ model, prompt })
 for await (const event of generation.events({ poll: { interval: 10_000 } })) console.log(event.type)
 const video = await generation.result({ signal })
 await ai.write(video.video, "./kite.mp4")
 ```
 
-## Speech generation
+### Speech generation
 
 Speech (text-to-speech) is one request whose response is parsed incrementally, so every route supports both
 `Speech.generate` (the whole file) and `Speech.stream` (audio chunks as they arrive). Models come from `.speech(...)`
@@ -1006,7 +1010,8 @@ selectors on the `OpenAI`, `Google` (Gemini TTS), `ElevenLabs`, `Cartesia`, and 
 before any network call; provider-native controls live under `providerOptions`, inferred from the selected model.
 
 ```ts
-import { Media, Speech, SpeechClient, SpeechEvent } from "@opencode/ai/effect"
+import { Media } from "@opencode/ai/effect"
+import { Speech, SpeechEvent } from "@opencode/ai/experimental"
 import { ElevenLabs, OpenAI } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
@@ -1068,20 +1073,20 @@ Provider notes:
   and `providerOptions` lower to query parameters (`encoding`, `container`, `sample_rate`, `bit_rate`); `pcm` is
   `linear16` without a container. Auth is `Authorization: Token <DEEPGRAM_API_KEY>`.
 
-The promise client mirrors the Effect API; `ai.speech.stream` is an `AsyncIterable`.
+The promise client mirrors the Effect API; `ai.experimental.speech.stream` is an `AsyncIterable`.
 
 ```ts
 import { ai } from "@opencode/ai"
 
-const response = await ai.speech.generate({ model, text: "Hello from OpenCode.", voice: "coral" })
+const response = await ai.experimental.speech.generate({ model, text: "Hello from OpenCode.", voice: "coral" })
 await ai.write(response.audio, "hello.mp3")
 
-for await (const event of ai.speech.stream({ model, text: "Hello from OpenCode.", voice: "coral" })) {
+for await (const event of ai.experimental.speech.stream({ model, text: "Hello from OpenCode.", voice: "coral" })) {
   if (event.type === "audio-delta") player.write(event.chunk)
 }
 ```
 
-## Transcription
+### Transcription
 
 Transcription (speech-to-text) is the one modality whose providers use every route kind: OpenAI and Gemini stream,
 Deepgram and ElevenLabs answer inline, and AssemblyAI is queued. `Transcription.generate` and `Transcription.stream`
@@ -1093,7 +1098,8 @@ any network call; a route may return more than asked.
 
 ```ts
 import { Console, Effect, Stream } from "effect"
-import { Media, Transcription, TranscriptionEvent } from "@opencode/ai/effect"
+import { Media } from "@opencode/ai/effect"
+import { Transcription, TranscriptionEvent } from "@opencode/ai/experimental"
 import { AssemblyAI, Deepgram, OpenAI } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
@@ -1146,33 +1152,43 @@ The promise client mirrors the Effect API:
 
 ```ts
 const audio = await ai.file("./call.mp3")
-const text = (await ai.transcription.generate({ model, audio })).text
-for await (const event of ai.transcription.stream({ model, audio })) if (event.type === "text-delta") write(event.delta)
-const generation = await ai.transcription.start({ model: assemblyai, audio })
+const text = (await ai.experimental.transcription.generate({ model, audio })).text
+for await (const event of ai.experimental.transcription.stream({ model, audio }))
+  if (event.type === "text-delta") write(event.delta)
+const generation = await ai.experimental.transcription.start({ model: assemblyai, audio })
 const transcript = await generation.await({ poll: { interval: 3_000 } })
 ```
 
-## Public API
+### Extraction
 
-Everything below is exported from `@opencode/ai/effect` unless noted.
+Extraction models read typed values out of text instead of answering questions with probabilities. A field of type
+`text`, `number`, `date`, `time`, `datetime`, `duration`, `list`, `estimate` or `forecast` gets an answer typed to
+match; other types are sent and answered as-is. Only Cloudflare's Clairic serves it today.
 
-- **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
-- **`LLM.generate` / `LLM.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
-- **`LLM.loop`** — stream model calls, running `tool(...)` tools between them until the model stops calling tools.
-- **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
-- **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
-- **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
-- **`Image.request` / `generate` / `stream` / `start` / `resume`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model.
-- **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
-- **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
-- **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
-- **`Video.request` / `generate` / `stream` / `start` / `resume`** — queued video generation through a provider-neutral request; `VideoClient` is its Effect service and layer.
-- **`Speech.request` / `Speech.generate` / `Speech.stream`** — text-to-speech through a provider-neutral request; `SpeechClient` is its Effect service and layer.
-- **`Transcription.request` / `generate` / `stream` / `start` / `resume`** — speech-to-text over inline, streaming, and queued routes; `TranscriptionClient` is its Effect service and layer.
-- **`Decision.request` / `Decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
-- **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
-- **`@opencode/ai`** (Promise root) — `AI.make({ layer?, clients? })` and a default `ai` client exposing `llm`, `image`, `video`, `speech`, `transcription`, and `decision` as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets.
-- **`@opencode/ai/experimental`** — APIs that may still change: `Extraction` (typed values read out of text) and `Realtime` (`Realtime.connect` starts an OpenAI, xAI, or Gemini voice session and returns a WebRTC answer SDP or a short-lived WebSocket URL and token).
+```ts
+import { ai } from "@opencode/ai"
+import { Extraction } from "@opencode/ai/experimental"
+import { CloudflareWorkersAI } from "@opencode/ai/providers"
+
+const response = await ai.run(
+  Extraction.generate({
+    model: CloudflareWorkersAI.configure({ accountId }).experimental.extraction("@cf/cloudflare/clairic"),
+    input: "Invoice INV-2291, issued 2026-09-02, net 30. Total $1,080.00. Contact: Dana Ruiz, Priya Shah.",
+    fields: {
+      invoiceNumber: { type: "text" },
+      dueDate: { type: "date", instructions: "Issue date plus the net payment days" },
+      total: { type: "number", decimals: 2, unit: "USD" },
+      contacts: { type: "list", items: "text" },
+    },
+  }),
+)
+response.answers.total.value // 1080, or null when the input does not say
+```
+
+Value answers carry `guess`, `nullProbability` and `confidence`; text answers carry a `span` into `input`. Estimates and
+forecasts return `median`, `p10` and `p90`. Field options other than `type`, `instructions` and `nullThreshold` go to
+Clairic as written. Effect users provide `RequestExecutor.fetchLayer` (or `AIClient.layer`). Images are not supported
+yet.
 
 ## Testing
 
@@ -1218,7 +1234,7 @@ For explicit compaction, script a `CompactionResponse` through `push`, `always`,
 
 For `compact(request, { mechanism: "trigger" })`, script a `CompactionCheckpointResponse` instead. It carries `checkpoint`, `responseID`, and optional `usage`. Endpoint and trigger calls reject each other's fixtures; both share the same queue, gates, lazy recording, and fallback controls.
 
-`TestImage`, `TestVideo`, `TestSpeech`, `TestTranscription`, and `TestDecision` follow the same pattern: `testLayer()` provides the modality's client and `Test`, with the same `push`, `always`, `serve`, `requests`, `wait`, and `gate` controls. Script an `ImageResponse` (or the modality's response) or an `AIError`. `stream` expands the response into its events, and `start` returns an already finished generation that `resume` accepts by token. Decision responses are returned as scripted, without checking the answers against the questions.
+`TestImage` and `TestDecision` (and `TestVideo`, `TestSpeech`, and `TestTranscription` from `@opencode/ai/experimental/testing`) follow the same pattern: `testLayer()` provides the modality's client and `Test`, with the same `push`, `always`, `serve`, `requests`, `wait`, and `gate` controls. Script an `ImageResponse` (or the modality's response) or an `AIError`. `stream` expands the response into its events, and `start` returns an already finished generation that `resume` accepts by token. Decision responses are returned as scripted, without checking the answers against the questions.
 
 The Promise client accepts the same layers as `AI.make({ clients: TestImage.testLayer() })`; `ai.run(TestImage.Test.use(...))` reaches the controls.
 

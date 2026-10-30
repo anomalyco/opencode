@@ -1,6 +1,7 @@
 import type { Effect, Stream } from "effect"
 import type { Client, GenerationHandle } from "../src/index.js"
 import type { Decision, Generation, Image, LLM, LLMClient } from "../src/effect.js"
+import type { Speech, Transcription, Video } from "../src/experimental.js"
 
 // The Promise client mirrors the Effect API: same methods, same arguments, same results. The only allowed differences
 // are `signal` on the options bag, Promise for Effect, AsyncIterable for Stream and GenerationHandle for Generation.
@@ -13,6 +14,9 @@ export type Surface = {
   readonly llm: Operations<typeof LLM> & Pick<typeof LLMClient, "compact" | "canCompact">
   readonly image: typeof Image
   readonly decision: typeof Decision
+  readonly speech: typeof Speech
+  readonly transcription: typeof Transcription
+  readonly video: typeof Video
 }
 
 type Operations<M> = { [K in keyof M as M[K] extends (...args: never) => unknown ? K : never]: M[K] }
@@ -68,4 +72,7 @@ export type Checks = [
   Assert<Drift<Client["llm"], Surface["llm"]>>,
   Assert<Drift<Client["image"], Surface["image"]>>,
   Assert<Drift<Client["decision"], Surface["decision"]>>,
+  Assert<Drift<Client["experimental"]["speech"], Surface["speech"]>>,
+  Assert<Drift<Client["experimental"]["transcription"], Surface["transcription"]>>,
+  Assert<Drift<Client["experimental"]["video"], Surface["video"]>>,
 ]

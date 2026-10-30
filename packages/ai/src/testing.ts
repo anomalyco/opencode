@@ -2,9 +2,6 @@ export * as TestLLM from "./testing.js"
 export { compileRequest } from "./route/client.js"
 export { TestDecision } from "./testing/decision.js"
 export { TestImage } from "./testing/image.js"
-export { TestSpeech } from "./testing/speech.js"
-export { TestTranscription } from "./testing/transcription.js"
-export { TestVideo } from "./testing/video.js"
 
 import {
   LLMClient,
