@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, Show } from "solid-js"
-import { contextUsage } from "../../util/session"
+import { costEstimate, contextUsage } from "../../util/session"
+import { useCostEstimate } from "../../config"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -9,6 +10,7 @@ const money = new Intl.NumberFormat("en-US", {
 
 export function SidebarContext(props: { context: Plugin.Context; sessionID: string }) {
   const theme = props.context.theme
+  const enabled = useCostEstimate()
   const msg = createMemo(() => props.context.data.session.message.list(props.sessionID))
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
   const cost = createMemo(() => props.context.data.session.cost(props.sessionID))
@@ -17,8 +19,31 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
     contextUsage(msg(), props.context.data.location.model.list(session()?.location), session()?.revert?.messageID),
   )
 
+  const estimate = createMemo(() => {
+    if (!enabled()) return 0
+    const info = session()
+    if (!info) return 0
+    const data = props.context.data.session
+    return costEstimate(
+      info.parentID
+        ? [info]
+        : data
+            .family(props.sessionID)
+            .map((id) => data.get(id))
+            .filter((info) => info !== undefined),
+      props.context.data.location.model.list(info.location),
+      (id) => data.message.list(id),
+    )
+  })
+
+  const spent = createMemo(() => {
+    if (cost() > 0) return `${money.format(cost())} spent`
+    // The tilde marks the catalog-price figure as an estimate; the recorded cost stays authoritative.
+    return estimate() > 0 ? `≈ ${money.format(estimate())} spent` : undefined
+  })
+
   return (
-    <Show when={state() || cost() > 0}>
+    <Show when={state() || spent()}>
       <box>
         <text fg={theme.text.base}>
           <b>Context</b>
@@ -33,8 +58,8 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
             </>
           )}
         </Show>
-        <Show when={cost() > 0}>
-          <text fg={theme.text.muted}>{money.format(cost())} spent</text>
+        <Show when={spent()}>
+          <text fg={theme.text.muted}>{spent()}</text>
         </Show>
       </box>
     </Show>

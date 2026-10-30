@@ -4,6 +4,8 @@ import { RGBA, TextRenderable, type Renderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import type { Context } from "@opencode/plugin/tui/context"
 import { createSignal } from "solid-js"
+import { ConfigProvider } from "../../src/config"
+import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 import { PromptFooter } from "../../src/feature-plugins/prompt/footer"
 
 test("prompt footer separates simultaneous subagent, shell, and usage status", async () => {
@@ -42,7 +44,11 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
     },
   } as unknown as Context
   const app = await testRender(
-    () => <PromptFooter context={context} sessionID="session" mode="normal" showDetails={true} />,
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig()}>
+        <PromptFooter context={context} sessionID="session" mode="normal" showDetails={true} />
+      </ConfigProvider>
+    ),
     {
       width: 80,
       height: 2,
@@ -113,7 +119,14 @@ test("prompt footer can hide details", async () => {
   const app = await testRender(
     () => (
       <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
-        <PromptFooter context={context} sessionID={sessionID()} mode="normal" showDetails={showDetails()} />
+        <ConfigProvider config={createTuiResolvedConfig()}>
+          <PromptFooter
+            context={context}
+            sessionID={sessionID()}
+            mode="normal"
+            showDetails={showDetails()}
+          />
+        </ConfigProvider>
       </box>
     ),
     {
@@ -188,7 +201,11 @@ test("prompt footer shows the session's goal without its objective and opens it 
     },
   } as unknown as Context
   const app = await testRender(
-    () => <PromptFooter context={context} sessionID="session" mode="normal" showDetails={true} />,
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig()}>
+        <PromptFooter context={context} sessionID="session" mode="normal" showDetails={true} />
+      </ConfigProvider>
+    ),
     { width: 80, height: 2 },
   )
 
@@ -219,6 +236,69 @@ test("prompt footer shows the session's goal without its objective and opens it 
     change("session", null)
     await app.renderOnce()
     expect(app.captureCharFrame()).not.toContain("goal")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test.each([
+  { sessionID: "session", expected: "≈ $12.60" },
+  { sessionID: "child", expected: "≈ $1.50" },
+])("prompt footer estimates $sessionID spend", async ({ sessionID, expected }) => {
+  const color = RGBA.fromInts(200, 200, 200)
+  const context = {
+    location: { directory: "/workspace" },
+    theme: { text: { base: color, muted: color } },
+    keymap: { shortcuts: () => [] },
+    client: { rpc: () => ({ get: () => Promise.resolve(null), events: { on: () => () => {} } }) },
+    data: {
+      on: () => () => {},
+      session: {
+        family: () => ["session", "child", "sibling"],
+        status: () => "idle",
+        get: (id: string) => ({
+          id,
+          parentID: id === "session" ? undefined : "session",
+          location: { directory: "/workspace" },
+          model: { providerID: "provider", id: "model" },
+          tokens:
+            id === "session"
+              ? { input: 1_000_000, output: 100_000, reasoning: 0, cache: { read: 2_000_000, write: 0 } }
+              : { input: id === "child" ? 500_000 : 2_000_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          cost: 0,
+        }),
+        cost: () => 0,
+        message: { list: () => [] },
+      },
+      shell: { list: () => [] },
+      location: {
+        model: {
+          list: () => [
+            {
+              providerID: "provider",
+              id: "model",
+              cost: [{ input: 3, output: 15, cache: { read: 0.3, write: 0 } }],
+            },
+          ],
+        },
+      },
+    },
+  } as unknown as Context
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig({ experimental: { "cost-estimate": true } })}>
+        <PromptFooter context={context} sessionID={sessionID} mode="normal" showDetails={true} />
+      </ConfigProvider>
+    ),
+    {
+      width: 80,
+      height: 1,
+    },
+  )
+
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain(expected)
   } finally {
     app.renderer.destroy()
   }
