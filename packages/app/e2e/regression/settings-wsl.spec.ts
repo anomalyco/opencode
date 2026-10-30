@@ -50,7 +50,7 @@ for (const mode of ["failed", "stopped", "ready"] as const) {
   })
 }
 
-test("adding a WSL server while the WSL extension is down shows that WSL is unavailable", async ({ page }) => {
+test("adding a WSL server while the WSL plugin is down shows that WSL is unavailable", async ({ page }) => {
   await mockOpenCodeServer(page, {
     directory: "/repo",
     project: project({ id: "proj_wsl_unavailable", directory: "/repo", name: "WSL project" }),
@@ -62,7 +62,7 @@ test("adding a WSL server while the WSL extension is down shows that WSL is unav
   const settings = page.getByTestId("settings-screen")
   await settings.getByRole("tab", { name: "Servers", exact: true }).click()
   await expect(settings.getByRole("region", { name: "Ubuntu", exact: true })).toHaveCount(1)
-  await page.getByRole("checkbox", { name: "WSL extension" }).uncheck()
+  await page.getByRole("checkbox", { name: "WSL plugin" }).uncheck()
 
   await settings.getByRole("button", { name: "Add server", exact: true }).press("Enter")
   await page.getByRole("menuitem", { name: "Add WSL server", exact: true }).click()
@@ -72,7 +72,7 @@ test("adding a WSL server while the WSL extension is down shows that WSL is unav
   await expect(dialog.getByText("WSL is unavailable", { exact: true })).toBeVisible()
 })
 
-test("adding an SSH server while the SSH extension is down fails instead of connecting forever", async ({ page }) => {
+test("adding an SSH server while the SSH plugin is down fails instead of connecting forever", async ({ page }) => {
   await mockOpenCodeServer(page, {
     directory: "/repo",
     project: project({ id: "proj_ssh_unavailable", directory: "/repo", name: "SSH project" }),
@@ -84,7 +84,7 @@ test("adding an SSH server while the SSH extension is down fails instead of conn
   const settings = page.getByTestId("settings-screen")
   await settings.getByRole("tab", { name: "Servers", exact: true }).click()
   await expect(settings.getByRole("region", { name: "Ubuntu", exact: true })).toHaveCount(1)
-  await page.getByRole("checkbox", { name: "SSH extension" }).uncheck()
+  await page.getByRole("checkbox", { name: "SSH plugin" }).uncheck()
 
   await settings.getByRole("button", { name: "Add server", exact: true }).press("Enter")
   await page.getByRole("menuitem", { name: "Add SSH server", exact: true }).click()
@@ -137,7 +137,7 @@ test("an open session's terminal follows its WSL server to the endpoint it resta
   expect(servers[REMOTE_SERVER]!.pty.sockets.map((socket) => socket.id)).toEqual(["pty_before1"])
 })
 
-test("WSL session and draft tabs outlive the extension going away until the server is removed", async ({ page }) => {
+test("WSL session and draft tabs outlive the plugin going away until the server is removed", async ({ page }) => {
   const directory = "/home/ubuntu/project"
   const wsl = session({ id: "ses_wsl_tabs", directory, title: "WSL tabs session" })
 
@@ -170,11 +170,11 @@ test("WSL session and draft tabs outlive the extension going away until the serv
 
   await expectTabs()
 
-  const extension = page.getByRole("checkbox", { name: "WSL extension" })
-  await extension.uncheck()
+  const plugin = page.getByRole("checkbox", { name: "WSL plugin" })
+  await plugin.uncheck()
   await expectTabs()
   await expect(editor).toHaveText("keep this draft")
-  await extension.check()
+  await plugin.check()
   await expectTabs()
   await tabs.nth(0).click()
   await expectSessionTitle(page, wsl.title)

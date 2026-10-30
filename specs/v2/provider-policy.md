@@ -15,9 +15,17 @@ resource: provider ID, such as openai or company-ai
 action:   tool.use
 resource: <permission action>:<resource>, such as shell:sudo * or edit:*.env
 
+action:   integration.connect
+resource: integration ID, such as opencode, anthropic, or https://ai.acme.com
+
 action:   integration.use
-resource: mcp:<server ID>, plugin:<unversioned package or absolute local path>,
-          hosted:<integration ID>, or skill:<skill ID>
+resource: <integration ID>#<account>, or the bare integration ID without an account
+
+action:   mcp.use | skill.use | plugin.use
+resource: MCP server name, skill ID, or unversioned package / absolute local path
+
+Legacy integration.use statements with an mcp:, skill:, or plugin: prefix are
+converted to the matching *.use action when ConfigPolicy.Info decodes them.
 ```
 
 Provider configuration and provider policy remain separate:
@@ -62,7 +70,14 @@ A provider can be correctly configured and have valid credentials while policy s
 ```ts
 interface PolicyInfo {
   effect: "allow" | "deny"
-  action: "provider.use" | "tool.use" | "integration.use"
+  action:
+    | "provider.use"
+    | "tool.use"
+    | "integration.connect"
+    | "integration.use"
+    | "mcp.use"
+    | "skill.use"
+    | "plugin.use"
   resource: string
 }
 ```
@@ -272,14 +287,14 @@ Skills use their OpenCode IDs, including a namespace when present. Denied skills
 {
   "experimental": {
     "policies": [
-      { "action": "integration.use", "resource": "skill:*", "effect": "deny" },
-      { "action": "integration.use", "resource": "skill:team:review", "effect": "allow" },
+      { "action": "skill.use", "resource": "*", "effect": "deny" },
+      { "action": "skill.use", "resource": "team:review", "effect": "allow" },
     ],
   },
 }
 ```
 
-The protected terminal config policy plugin filters `skill:<id>` through `ctx.skill.transform`, following the provider and MCP catalog pattern. The skill domain does not interpret policy statements. Config and managed policy changes reload the catalog and publish an update after the transformed values are visible. Removing a restriction restores the registered skill without reinstallation. A global integrations allow list also excludes skills unless it explicitly allows their IDs. Skill policy does not remove content already stored in session history or sandbox plugin filesystem access.
+The protected terminal config policy plugin filters `skill.use` statements through `ctx.skill.transform`, following the provider and MCP catalog pattern. The skill domain does not interpret policy statements. Config and managed policy changes reload the catalog and publish an update after the transformed values are visible. Removing a restriction restores the registered skill without reinstallation. Skill policy does not remove content already stored in session history or sandbox plugin filesystem access.
 
 Plugin hooks are governed by the existing plugin integration resource: blocking an external plugin prevents its import or unloads its active generation, including its hooks. There is no separate hook resource; required built-in policy and Console authentication plugins remain protected.
 
@@ -372,7 +387,7 @@ Equivalent v2 policy:
 
 ## MCP Integration Policy
 
-The protected terminal config policy plugin applies `integration.use` statements to `mcp:<server-name>` using `ctx.mcp.transform`. It removes denied servers after configured and plugin-provided catalog entries are assembled. The MCP domain owns connections and resource cleanup; it does not interpret policy statements.
+The protected terminal config policy plugin applies `mcp.use` statements to MCP server names using `ctx.mcp.transform`. It removes denied servers after configured and plugin-provided catalog entries are assembled. The MCP domain owns connections and resource cleanup; it does not interpret policy statements.
 
 Plugin activation batches catalog registrations, so denied servers never open an initial connection. Config and managed policy updates reload the catalog. Removing an existing server closes its connection and removes its tools, instructions, prompts, resources, and resource templates. Explicit connect and direct tool, prompt, and resource calls reject removed servers through the ordinary not-found path. Allowing the server again restores its catalog entry and reconnects it.
 

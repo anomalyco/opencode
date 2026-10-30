@@ -8,8 +8,10 @@ import {
   setTitlebar,
   setTrafficLightsPosition,
   setWindowThemeReady,
+  setZoomLevel,
   updateTitlebar,
 } from "../windows"
+import { storedZoomLevel } from "../windows/defaults"
 import { focusWindow, showWindow } from "../windows/focus"
 import { sender } from "./context"
 
@@ -50,6 +52,8 @@ export const windowHandlers = WindowRpcs.toLayer(
 
           if (win) updateTitlebar(win)
         }),
+      WindowGetZoomLevel: () => Effect.sync(storedZoomLevel),
+      WindowSetZoomLevel: ({ level }) => Effect.sync(() => setZoomLevel(level)),
       WindowGetPinchZoomEnabled: () => Effect.sync(getPinchZoomEnabled),
       WindowSetPinchZoomEnabled: ({ enabled }) => Effect.sync(() => setPinchZoomEnabled(enabled)),
       WindowSetTitlebar: ({ theme }, context) =>

@@ -96,9 +96,10 @@ type Face<T> = {
 
 // The composer and the docks that stand in for it as one surface: a new face grows the region to its height on one
 // spring while the old face closes in its own box above or below it, so the two never draw over each other. Faces
-// present on mount rest immediately.
+// present on mount rest immediately, as does a change to or from a face `instant` picks.
 export function ComposerMorph<T extends { key: string }>(props: {
   face: T
+  instant?: (face: T) => boolean
   children: (face: Accessor<T>) => JSX.Element
 }) {
   const born = performance.now()
@@ -220,6 +221,12 @@ export function ComposerMorph<T extends { key: string }>(props: {
 
         if (!root || performance.now() - born < 250) return setFaces([face(next, 1)])
 
+        if (props.instant?.(next) || list.some((item) => props.instant?.(item.value()))) {
+          if (stop) settle(list)
+
+          return setFaces([face(next, 1)])
+        }
+
         const from = height ? height.value : root.getBoundingClientRect().height
         const reduced = prefersReducedMotion()
         const back = next.key === "composer" ? list.find((item) => item.key === next.key) : undefined
@@ -259,6 +266,13 @@ export function ComposerMorph<T extends { key: string }>(props: {
       { defer: true },
     ),
   )
+
+  // A face that turns instant mid-flight lands at once.
+  createEffect(() => {
+    const list = untrack(faces)
+
+    if (stop && list.some((item) => props.instant?.(item.value()))) settle(list)
+  })
 
   onCleanup(observeReducedMotion(() => prefersReducedMotion() && stop && settle(untrack(faces))))
   onCleanup(() => stop?.())
@@ -330,9 +344,11 @@ function styleFace(
     hidden > 0 ? `linear-gradient(to top, transparent ${hidden}px, #000 ${hidden + Math.min(24, hidden)}px)` : ""
 }
 
-// Mounts its children when `when` turns truthy and grows them in; when it turns falsy they close and unmount.
+// Mounts its children when `when` turns truthy and grows them in; when it turns falsy they close and unmount. With
+// `instant` they mount and unmount at once.
 export function Grow<T>(props: {
   when: T | undefined | null | false
+  instant?: boolean
   appear?: boolean
   fade?: boolean
   card?: boolean
@@ -348,6 +364,16 @@ export function Grow<T>(props: {
   let el: HTMLDivElement | undefined
   let entering = !!props.when && !!props.appear
 
+  const closed = () => {
+    setPresent(false)
+    props.onClosed?.()
+  }
+
+  // Turning instant mid-grow finishes the grow where it was going.
+  createEffect(() => {
+    if (props.instant && el) growing.get(el)?.end?.()
+  })
+
   createEffect(
     on(
       () => [!!props.when, present()] as const,
@@ -360,10 +386,23 @@ export function Grow<T>(props: {
 
         if (!el || (!entering && (!prev || prev[0] === when))) return
         entering = false
-        grow(el, when, props.fade, props.card, props.close?.(), () => {
-          setPresent(false)
-          props.onClosed?.()
-        })
+
+        if (props.instant) {
+          const current = growing.get(el)
+
+          if (current) {
+            current.open = when
+            current.done = closed
+
+            return current.end?.()
+          }
+
+          if (when) return
+
+          return closed()
+        }
+
+        grow(el, when, props.fade, props.card, props.close?.(), closed)
       },
     ),
   )
@@ -391,7 +430,9 @@ export function Grow<T>(props: {
   )
 }
 
-const growing = new WeakMap<HTMLElement, { spring: Spring; presence: Spring; open: boolean; done?: () => void }>()
+type Growth = { spring: Spring; presence: Spring; open: boolean; done?: () => void; end?: () => void }
+
+const growing = new WeakMap<HTMLElement, Growth>()
 
 function grow(
   el: HTMLElement,
@@ -413,16 +454,9 @@ function grow(
     return
   }
 
-  const mb = parseFloat(getComputedStyle(el).marginBottom) || 0
-
-  const prevMb =
-    (!mb && el.previousElementSibling ? parseFloat(getComputedStyle(el.previousElementSibling).marginBottom) : 0) || 0
-
-  const state = {
-    spring: Spring.fromDuration(
-      open ? 0 : el.getBoundingClientRect().height,
-      reduced ? fade : open ? morph() : (close ?? morph()),
-    ),
+  const state: Growth = {
+    // A closing box starts from its height, which the first frame measures.
+    spring: Spring.fromDuration(0, reduced ? fade : open ? morph() : (close ?? morph())),
     // Opening fades in on its own spring; closing fades with the height, inside the closing box.
     presence: Spring.fromDuration(open ? 0 : 1, reduced ? fade : fadeIn()),
     open,
@@ -433,23 +467,20 @@ function grow(
   el.toggleAttribute("data-moving", true)
   el.toggleAttribute("data-dock-border-underlay", !!card)
 
-  if (!reduced) {
-    el.style.height = `${snap(state.spring.value)}px`
-
-    if (open && mb > 0) el.style.marginBottom = "0px"
-
-    if (open && prevMb > 0) el.style.marginTop = `${-prevMb}px`
-  }
+  // Writes only until the first frame: a grow usually starts inside an input handler that has just changed the DOM,
+  // where a read would force a layout that the frame then repeats.
+  if (open && !reduced) el.style.height = "0px"
 
   if ((withFade || reduced) && open) el.style.opacity = "0"
-
-  // The content's height is read once here, then kept current by a ResizeObserver rather than read every frame.
   const child = el.firstElementChild instanceof HTMLElement ? el.firstElementChild : undefined
-  const margin = child ? parseFloat(getComputedStyle(child).marginBottom) || 0 : 0
+  let mb = 0
+  let prevMb = 0
+  let margin = 0
+  let full = 0
+  let measured = false
 
-  if (margin < 0) el.style.overflowClipMargin = `${-margin}px`
-  let full = child ? child.getBoundingClientRect().height + margin : 0
-
+  // The content's height is read once, on the first frame, then kept current by a ResizeObserver rather than read
+  // every frame.
   const observer = new ResizeObserver((entries) => {
     const size = entries[0]?.borderBoxSize[0]?.blockSize
 
@@ -457,13 +488,29 @@ function grow(
   })
 
   if (child) observer.observe(child)
-  frameLoop.add((dt) => {
+
+  // Runs in the frame loop's read phase, before any of the frame's writes.
+  const measure = () => {
+    if (measured || !el.isConnected) return
+    measured = true
+    mb = parseFloat(getComputedStyle(el).marginBottom) || 0
+    prevMb =
+      (!mb && el.previousElementSibling ? parseFloat(getComputedStyle(el.previousElementSibling).marginBottom) : 0) || 0
+    margin = child ? parseFloat(getComputedStyle(child).marginBottom) || 0 : 0
+    full = child ? child.getBoundingClientRect().height + margin : 0
+
+    if (!open) state.spring.snap(el.getBoundingClientRect().height)
+  }
+
+  const stop = frameLoop.add((dt) => {
     if (!el.isConnected) {
       observer.disconnect()
       growing.delete(el)
 
       return false
     }
+
+    if (margin < 0) el.style.overflowClipMargin = `${-margin}px`
 
     const noMotion = prefersReducedMotion()
     const size = state.open ? full : 0
@@ -508,7 +555,14 @@ function grow(
     }
 
     return true
-  })
+  }, measure)
+
+  state.end = () => {
+    stop()
+    observer.disconnect()
+    growing.delete(el)
+    finish(el, state.open, state.done)
+  }
 }
 
 function finish(el: HTMLElement, open: boolean, done?: () => void) {

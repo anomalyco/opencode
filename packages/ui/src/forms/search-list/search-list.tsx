@@ -1,4 +1,15 @@
-import { createContext, createEffect, createMemo, For, type JSX, on, onCleanup, Show, useContext } from "solid-js"
+import {
+  createContext,
+  createEffect,
+  createMemo,
+  For,
+  type JSX,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  useContext,
+} from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Icon } from "@opencode/ui/icon"
 import { TextInput } from "../text-input/text-input"
@@ -18,6 +29,17 @@ export type SearchListRow = {
   onClick: () => void
 }
 
+/** Attributes for the input of a field passed as `field`: spread them onto it. */
+export type SearchListField = {
+  role: "combobox"
+  "aria-expanded": boolean
+  "aria-autocomplete": "list"
+  "aria-controls": string | undefined
+  "aria-activedescendant": string | undefined
+  onInput: (event: InputEvent & { currentTarget: HTMLInputElement }) => void
+  onKeyDown: (event: KeyboardEvent) => void
+}
+
 export type SearchListHandle<T> = {
   active: () => T | undefined
   setActive: (key: string | undefined) => void
@@ -29,13 +51,22 @@ const QueryContext = createContext<() => string>(() => "")
  * A search field over sectioned results. Rows that share a `section` key list together under one header, which sticks
  * while its rows scroll beneath it until the next header pushes it away. The first row is active until the user picks
  * another: ↑/↓ wrap, ⌘ or ⌥ with ↑/↓ jump between sections, Home/End go to the ends, Enter selects and Escape closes.
+ * A page can keep its own field through `field` and float the results beneath it with `popover`.
  */
 export function SearchList<T>(props: {
   query: string
   onQuery: (query: string) => void
   placeholder: string
+  /** The results' accessible name; the placeholder by default. */
+  label?: string
   /** Controls after the field, such as icon buttons. */
   trailing?: JSX.Element
+  /** A search field of the page's own in place of the built-in one. */
+  field?: (field: SearchListField) => JSX.Element
+  /** Whether the results show. Closed, only the field remains and the list leaves keys to the page. On by default. */
+  open?: boolean
+  /** Float the results beneath the field on a raised surface, over what follows it. */
+  popover?: boolean
   items: T[]
   key: (item: T) => string
   section?: (item: T) => string
@@ -45,6 +76,11 @@ export function SearchList<T>(props: {
   header?: (item: T) => JSX.Element
   /** Shown in place of the rows when there are none. */
   empty: JSX.Element
+  /** A note beneath the rows, such as a hint that more results are hidden. */
+  footer?: JSX.Element
+  /** Where the results start scrolled each time they mount, such as a position kept from an earlier visit. */
+  scrollTop?: number
+  onScroll?: (scrollTop: number) => void
   onSelect: (item: T) => void
   onActive?: (item: T | undefined) => void
   /** Runs before the list's own keys; call `preventDefault` to claim one. */
@@ -59,6 +95,7 @@ export function SearchList<T>(props: {
   let results: HTMLDivElement | undefined
 
   const sectionOf = (item: T) => props.section?.(item) ?? ""
+  const open = () => props.open ?? true
 
   // Sections in the order their first row arrives; rows then list section by section, which is also the arrow order.
   const groups = createMemo(() => {
@@ -173,7 +210,7 @@ export function SearchList<T>(props: {
     if (event.isComposing) return
     props.onKeyDown?.(event, typeahead.activeItem())
 
-    if (event.defaultPrevented) return
+    if (event.defaultPrevented || !open()) return
     const move = searchListMove(event)
 
     if (!move) return typeahead.onKeyDown(event)
@@ -196,6 +233,30 @@ export function SearchList<T>(props: {
     if (target === undefined) return
     typeahead.setActive(props.key(target))
     reveal()
+  }
+
+  onMount(() => {
+    if (viewport && props.scrollTop) viewport.scrollTop = props.scrollTop
+  })
+
+  const field: SearchListField = {
+    role: "combobox",
+    get "aria-expanded"() {
+      return open()
+    },
+    "aria-autocomplete": "list",
+    get "aria-controls"() {
+      return open() ? typeahead.listID : undefined
+    },
+    get "aria-activedescendant"() {
+      return open() ? typeahead.activeID() : undefined
+    },
+    onInput: (event) => {
+      // A new query starts again from its first row.
+      typeahead.setActive(undefined)
+      props.onQuery(event.currentTarget.value)
+    },
+    onKeyDown,
   }
 
   const row = (key: string, item: () => T): SearchListRow => ({
@@ -221,80 +282,91 @@ export function SearchList<T>(props: {
 
   return (
     <QueryContext.Provider value={() => props.query}>
-      <div data-component="search-list" class={props.class}>
-        <div data-slot="search-list-search">
-          <TextInput
-            value={props.query}
-            autofocus
-            autocomplete="off"
-            autocorrect="off"
-            autocapitalize="off"
-            spellcheck={false}
-            appearance="large"
-            placeholder={props.placeholder}
-            aria-label={props.placeholder}
-            leadingIcon={<Icon name="magnifying-glass" />}
-            trailing={props.trailing}
-            role="combobox"
-            aria-expanded="true"
-            aria-autocomplete="list"
-            aria-controls={typeahead.listID}
-            aria-activedescendant={typeahead.activeID()}
-            onInput={(event) => {
-              // A new query starts again from its first row.
-              typeahead.setActive(undefined)
-              props.onQuery(event.currentTarget.value)
-            }}
-            onKeyDown={onKeyDown}
-          />
-        </div>
-        <div data-slot="search-list-scroll" data-scrollable ref={(element) => (viewport = element)} onScroll={edges}>
-          <div data-slot="search-list-fade" aria-hidden="true" />
+      <div data-component="search-list" data-popover={props.popover ? "" : undefined} class={props.class}>
+        <Show
+          when={props.field}
+          fallback={
+            <div data-slot="search-list-search">
+              <TextInput
+                {...field}
+                value={props.query}
+                autofocus
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                spellcheck={false}
+                appearance="large"
+                placeholder={props.placeholder}
+                aria-label={props.placeholder}
+                leadingIcon={<Icon name="magnifying-glass" />}
+                trailing={props.trailing}
+              />
+            </div>
+          }
+        >
+          {(custom) => custom()(field)}
+        </Show>
+        <div data-slot="search-list-body" hidden={!open()}>
           <div
-            ref={results}
-            id={typeahead.listID}
-            data-slot="search-list-results"
-            role="listbox"
-            aria-label={props.placeholder}
+            data-slot="search-list-scroll"
+            data-scrollable
+            ref={(element) => (viewport = element)}
+            onScroll={(event) => {
+              edges()
+              props.onScroll?.(event.currentTarget.scrollTop)
+            }}
           >
-            <For each={sectionKeys()}>
-              {(section) => {
-                const keys = createMemo<string[]>((previous) =>
-                  stable(previous, (groups().get(section) ?? []).map(props.key)),
-                )
+            <div data-slot="search-list-fade" aria-hidden="true" />
+            <div
+              ref={results}
+              id={typeahead.listID}
+              data-slot="search-list-results"
+              role="listbox"
+              hidden={rows().length === 0}
+              aria-label={props.label ?? props.placeholder}
+            >
+              <For each={sectionKeys()}>
+                {(section) => {
+                  const keys = createMemo<string[]>((previous) =>
+                    stable(previous, (groups().get(section) ?? []).map(props.key)),
+                  )
 
-                const first = () => byKey().get(keys()[0] ?? "")
+                  const first = () => byKey().get(keys()[0] ?? "")
 
-                const header = createMemo(() =>
-                  props.header && first() !== undefined ? props.header(first()!) : undefined,
-                )
+                  const header = createMemo(() =>
+                    props.header && first() !== undefined ? props.header(first()!) : undefined,
+                  )
 
-                const id = `${typeahead.listID}-section-${encodeURIComponent(section)}`
+                  const id = `${typeahead.listID}-section-${encodeURIComponent(section)}`
 
-                return (
-                  <div data-slot="search-list-section" role="group" aria-labelledby={header() ? id : undefined}>
-                    <Show when={header()}>
-                      {(content) => (
-                        <div id={id} data-slot="search-list-header">
-                          {content()}
-                        </div>
-                      )}
-                    </Show>
-                    <For each={keys()}>
-                      {(key) => {
-                        // A row that is leaving keeps its last item until it is removed.
-                        const item = createMemo<T>((previous) => byKey().get(key) ?? previous, byKey().get(key)!)
+                  return (
+                    <div data-slot="search-list-section" role="group" aria-labelledby={header() ? id : undefined}>
+                      <Show when={header()}>
+                        {(content) => (
+                          <div id={id} data-slot="search-list-header">
+                            {content()}
+                          </div>
+                        )}
+                      </Show>
+                      <For each={keys()}>
+                        {(key) => {
+                          // A row that is leaving keeps its last item until it is removed.
+                          const item = createMemo<T>((previous) => byKey().get(key) ?? previous, byKey().get(key)!)
 
-                        return props.children(item, row(key, item))
-                      }}
-                    </For>
-                  </div>
-                )
-              }}
-            </For>
+                          return props.children(item, row(key, item))
+                        }}
+                      </For>
+                    </div>
+                  )
+                }}
+              </For>
+            </div>
+            <Show when={rows().length === 0}>
+              <div data-slot="search-list-empty">{props.empty}</div>
+            </Show>
           </div>
-          <Show when={rows().length === 0}>
-            <div data-slot="search-list-empty">{props.empty}</div>
+          <Show when={props.footer}>
+            <div data-slot="search-list-footer">{props.footer}</div>
           </Show>
         </div>
       </div>

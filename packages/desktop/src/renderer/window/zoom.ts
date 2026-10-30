@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-License-Identifier: MIT
 
+import { nextDesktopZoomLevel, type DesktopZoomLevel } from "@opencode/app/desktop-menu"
 import { createSignal } from "solid-js"
 import { api } from "../api"
 
@@ -17,11 +18,13 @@ const OS_NAME = (() => {
 
 const [webviewZoom, setWebviewZoom] = createSignal(1)
 
+const [zoomLevel, setZoomLevelSignal] = createSignal<DesktopZoomLevel>(1)
+
 let requestedZoom = 1
 
 let pinchZoomEnabled = false
 
-let wheelPinch = undefined as
+let wheelPinch:
   | {
       active: boolean
       startZoom: number
@@ -63,9 +66,12 @@ void api.getZoomFactor().then((factor) => {
   setWebviewZoom(requestedZoom)
 })
 
-api.onZoomFactorChanged((factor) => {
-  requestedZoom = clamp(factor)
+void api.getZoomLevel().then(setZoomLevelSignal)
+
+api.onZoomChanged((zoom) => {
+  requestedZoom = clamp(zoom.factor)
   setWebviewZoom(requestedZoom)
+  setZoomLevelSignal(zoom.level)
 })
 
 void api.getPinchZoomEnabled().then((enabled) => {
@@ -87,11 +93,18 @@ const setPinchZoomEnabled = (enabled: boolean) => {
   return api.setPinchZoomEnabled(enabled)
 }
 
-const resetZoom = () => applyZoom(1)
+// Main saves the level and applies it to every window, then reports the new zoom back.
+const setZoomLevel = (level: DesktopZoomLevel) => {
+  requestedZoom = level
 
-const zoomIn = () => applyZoom(clamp(requestedZoom + 0.2))
+  return api.setZoomLevel(level)
+}
 
-const zoomOut = () => applyZoom(clamp(requestedZoom - 0.2))
+const resetZoom = () => void setZoomLevel(1)
+
+const zoomIn = () => void setZoomLevel(nextDesktopZoomLevel(requestedZoom, "in"))
+
+const zoomOut = () => void setZoomLevel(nextDesktopZoomLevel(requestedZoom, "out"))
 
 const resetWheelPinch = () => {
   clearTimeout(wheelPinch?.timeout)
@@ -174,4 +187,4 @@ window.addEventListener("keydown", (event) => {
   }
 })
 
-export { webviewZoom, resetZoom, setPinchZoomEnabled, zoomIn, zoomOut }
+export { webviewZoom, zoomLevel, resetZoom, setPinchZoomEnabled, setZoomLevel, zoomIn, zoomOut }

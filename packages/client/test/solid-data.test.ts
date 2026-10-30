@@ -330,6 +330,50 @@ test("omits inline tool-result file payloads from read and live tool results whe
   }
 })
 
+test("refreshes a loaded session's execution start when it starts running", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (!request.url.endsWith("/api/session/ses_refresh")) throw new Error(`Unexpected request: ${request.url}`)
+      return Response.json({ data: { ...session(2), time: { ...session(2).time, busy: 3 } } })
+    },
+  })
+  const event: CreateDataInput["event"] = {
+    on:
+      <Type extends OpenCodeEvent["type"]>(
+        _type: Type,
+        _handler: (event: Extract<OpenCodeEvent, { type: Type }>) => void,
+      ) =>
+      () => {},
+    listen(handler) {
+      listeners.add(handler)
+      return () => listeners.delete(handler)
+    },
+  }
+  const setup = createRoot((dispose) => ({
+    data: createData({ api: () => api, directory: "/project", event, connection: { status: () => "connected" } }),
+    dispose,
+  }))
+
+  try {
+    setup.data.session.remember(session(2))
+    const started: OpenCodeEvent = {
+      id: "evt_started",
+      created: 3,
+      type: "session.execution.started",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: { sessionID: "ses_refresh" },
+    }
+    listeners.forEach((listener) => listener({ name: started.type, details: started }))
+    expect(setup.data.session.status("ses_refresh")).toBe("running")
+    await wait(() => setup.data.session.get("ses_refresh")?.time.busy === 3)
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("revalidates after an event overtakes an active session read", async () => {
   let release!: () => void
   const gate = new Promise<void>((resolve) => (release = resolve))

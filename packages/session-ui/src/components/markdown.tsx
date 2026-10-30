@@ -46,7 +46,9 @@ import {
 } from "../context/markdown"
 import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
+import { setupFragmentLinks } from "./markdown-fragment-links"
 import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
+import { markdownClipboardHtml } from "./markdown-clipboard"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -556,6 +558,22 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   }
 }
 
+// Selections that leave this message keep the browser's copy, since surrounding UI may hold hidden content.
+function copySelection(event: ClipboardEvent & { currentTarget: HTMLDivElement }) {
+  const selection = window.getSelection()
+
+  if (event.defaultPrevented || !event.clipboardData || !selection || selection.isCollapsed) return
+  const ranges = Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index))
+
+  if (!ranges.every((range) => event.currentTarget.contains(range.commonAncestorContainer))) return
+  event.preventDefault()
+  event.clipboardData.setData("text/plain", selection.toString())
+  event.clipboardData.setData(
+    "text/html",
+    `<meta charset="utf-8">${ranges.map((range) => markdownClipboardHtml(event.currentTarget, range)).join("")}`,
+  )
+}
+
 function initialResult(
   text: string,
   key: string | undefined,
@@ -788,6 +806,7 @@ export function Markdown(
   let linkCleanup: (() => void) | undefined
   let faviconCleanup: (() => void) | undefined
   let sessionLinkCleanup: (() => void) | undefined
+  let fragmentLinkCleanup: (() => void) | undefined
   let readImage: ReadMarkdownImage | undefined
   let images: ReturnType<typeof createMarkdownImages> | undefined
 
@@ -878,6 +897,8 @@ export function Markdown(
 
     if (!sessionLinkCleanup) sessionLinkCleanup = setupSessionLinks(container, () => markdown?.openSession)
 
+    if (!fragmentLinkCleanup) fragmentLinkCleanup = setupFragmentLinks(container)
+
     if (!faviconCleanup) faviconCleanup = setupExternalLinkFavicons(container)
     container.toggleAttribute("data-local-links", !!markdown?.openLocalFile)
 
@@ -907,6 +928,8 @@ export function Markdown(
 
     if (sessionLinkCleanup) sessionLinkCleanup()
 
+    if (fragmentLinkCleanup) fragmentLinkCleanup()
+
     if (faviconCleanup) faviconCleanup()
     const container = root()
 
@@ -929,6 +952,7 @@ export function Markdown(
         [local.class ?? ""]: !!local.class,
       }}
       ref={setRoot}
+      onCopy={copySelection}
       {...others}
     />
   )

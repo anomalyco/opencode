@@ -51,10 +51,12 @@ describe("settings search index", () => {
   test("only advertises settings supported by this platform", () => {
     const targets = (input: Parameters<typeof index>[0]) => index(input).map((item) => item.view.target)
     expect(targets({})).not.toContain("settings-pinch-zoom")
+    expect(targets({})).not.toContain("settings-zoom")
     expect(targets({})).not.toContain("settings-experimental-browser")
     expect(targets({})).not.toContain("settings-show-project-icon")
     expect(targets({})).toContain("settings-tab-layout")
     expect(targets({ desktop: true })).toContain("settings-pinch-zoom")
+    expect(targets({ desktop: true })).toContain("settings-zoom")
     expect(targets({ browser: true })).not.toContain("settings-experimental-browser")
     expect(targets({})).not.toContain("settings-show-project-icon")
     expect(targets({})).not.toContain("settings-mobile-titlebar-bottom")
@@ -73,6 +75,10 @@ describe("settings search index", () => {
         .map((item) => item.page),
     ).toEqual(["Desktop notifications", "Sound effects"])
     expect(rankSettings("follow-up behavior", items)[0].page).toBe("Preferences / General")
+    expect(rankSettings("new question UI", items)[0].view).toMatchObject({
+      tab: "experimental",
+      target: "settings-new-question-ui",
+    })
     expect(rankSettings("capsule", items)[0].view).toMatchObject({
       tab: "general",
       target: "settings-background-activity",

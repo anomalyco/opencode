@@ -2,7 +2,7 @@
 // $DONOTEVALUATE) is host-provided because programs cannot attach properties to functions, which
 // test262's own assert.js relies on.
 import path from "node:path"
-import { Cause, Effect } from "effect"
+import { Effect } from "effect"
 import { materialize } from "../../src/interpreter/errors.js"
 import { executeProgram } from "../../src/interpreter/execute.js"
 import type { Interpreter } from "../../src/interpreter/interpreter.js"
@@ -70,24 +70,26 @@ const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): Readon
   define(test262Prototype, "name", "Test262Error", hidden)
   const test262 = (args: Array<unknown>) =>
     createErrorValue(test262Prototype, args[0] === undefined ? "" : String(args[0]))
-  const fail = (message: string) => Effect.fail(new Throw(test262([message])))
+  const fail = (message: string) => {
+    throw new Throw(test262([message]))
+  }
   const prefix = (message: unknown) => (message === undefined ? "" : `${String(message)} `)
   const compare = (a: unknown, b: unknown) =>
     a instanceof Arr &&
     b instanceof Arr &&
     a.items.length === b.items.length &&
     a.items.every((value, i) => Object.is(value, b.items[i]))
-  const test262Error = constructor<R>(builtins, test262Prototype, {
+  const test262Error = constructor(builtins, test262Prototype, {
     name: "Test262Error",
-    call: (_, args) => Effect.succeed(test262(args)),
-    construct: (args) => Effect.succeed(test262(args)),
+    call: (_, args) => test262(args),
+    construct: (args) => test262(args),
   })
   methods(builtins, test262Error, [["thrower", 1, (_, args) => fail(String(args[0]))]])
-  const compareArray = fn<R>(builtins, "compareArray", 2, (_, args) => compare(args[0], args[1]))
+  const compareArray = fn(builtins, "compareArray", 2, (_, args) => compare(args[0], args[1]))
   methods(builtins, compareArray, [["format", 1, (_, args) => show(args[0])]])
-  const assert = fn<R>(builtins, "assert", 2, (_, args) =>
+  const assert = fn(builtins, "assert", 2, (_, args) =>
     args[0] === true
-      ? Effect.undefined
+      ? undefined
       : fail(args[1] === undefined ? `Expected true but got ${show(args[0])}` : String(args[1])),
   )
   methods(builtins, assert, [
@@ -96,7 +98,7 @@ const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): Readon
       3,
       (_, args) =>
         Object.is(args[0], args[1])
-          ? Effect.undefined
+          ? undefined
           : fail(`${prefix(args[2])}Expected SameValue(«${show(args[0])}», «${show(args[1])}») to be true`),
     ],
     [
@@ -105,14 +107,14 @@ const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): Readon
       (_, args) =>
         Object.is(args[0], args[1])
           ? fail(`${prefix(args[2])}Expected SameValue(«${show(args[0])}», «${show(args[1])}») to be false`)
-          : Effect.undefined,
+          : undefined,
     ],
     [
       "compareArray",
       3,
       (_, args) =>
         compare(args[0], args[1])
-          ? Effect.undefined
+          ? undefined
           : fail(
               `Actual ${show(args[0])} and expected ${show(args[1])} should have the same contents. ${prefix(args[2])}`,
             ),
@@ -120,22 +122,18 @@ const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): Readon
     [
       "throws",
       3,
-      (_, args) => {
+      function* (_, args) {
         const expected = args[0] instanceof Callable ? String(get(args[0], "name")) : show(args[0])
-        return ctx.call(args[1], undefined, []).pipe(
-          Effect.matchCauseEffect({
-            onFailure: (cause) => {
-              if (cause.reasons.some(Cause.isInterruptReason)) return Effect.failCause(cause)
-              const thrown = materialize(ctx, Cause.squash(cause))
-              if (!(thrown instanceof Obj)) return fail(`${prefix(args[2])}Thrown value was not an object!`)
-              const actual = get(thrown, "constructor")
-              if (actual === args[0]) return Effect.undefined
-              return fail(`${prefix(args[2])}Expected a ${expected} but got a ${show(actual)}`)
-            },
-            onSuccess: () =>
-              fail(`${prefix(args[2])}Expected a ${expected} to be thrown but no exception was thrown at all`),
-          }),
-        )
+        try {
+          yield* ctx.call(args[1], undefined, [])
+        } catch (error) {
+          const thrown = materialize(ctx, error)
+          if (!(thrown instanceof Obj)) return fail(`${prefix(args[2])}Thrown value was not an object!`)
+          const actual = get(thrown, "constructor")
+          if (actual === args[0]) return undefined
+          return fail(`${prefix(args[2])}Expected a ${expected} but got a ${show(actual)}`)
+        }
+        return fail(`${prefix(args[2])}Expected a ${expected} to be thrown but no exception was thrown at all`)
       },
     ],
   ])
@@ -145,16 +143,16 @@ const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): Readon
     ["Test262Error", test262Error],
     [
       "$DONE",
-      fn<R>(builtins, "$DONE", 1, (_, args) => {
+      fn(builtins, "$DONE", 1, (_, args) => {
         onDone(args[0])
         return undefined
       }),
     ],
     [
       "$DONOTEVALUATE",
-      fn<R>(builtins, "$DONOTEVALUATE", 0, () =>
-        Effect.fail(new Throw("Test262: This statement should not be evaluated.")),
-      ),
+      fn(builtins, "$DONOTEVALUATE", 0, () => {
+        throw new Throw("Test262: This statement should not be evaluated.")
+      }),
     ],
   ]
 }

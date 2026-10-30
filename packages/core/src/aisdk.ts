@@ -30,9 +30,8 @@ import {
   type ToolDefinition,
   type UsageInput,
 } from "@opencode/ai/effect"
-import { Auth, Endpoint, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
-import { ProviderShared } from "@opencode/ai/protocols/shared"
-import { isRecord } from "@opencode/ai/utils/record"
+import { Auth, Endpoint, ProviderShared, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
+import { isRecord } from "@opencode/util/record"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream, Struct } from "effect"
 import { makeParser } from "effect/encoding/Sse"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"

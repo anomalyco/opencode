@@ -1,0 +1,31 @@
+<footer class="site-footer">
+  <div class="footer-inner">
+    {/* The status page lives at the opencode.ai root, outside this site's base path and client router. */}
+    <a class="system-status" href="/status" data-status="unknown" data-astro-reload>System status</a>
+  </div>
+</footer>
+
+<script>
+  const labels = {
+    operational: "All systems operational",
+    degraded: "Degraded performance",
+    outage: "Service disruption",
+  }
+
+  const summary = fetch("/status/api/summary", { signal: AbortSignal.timeout(10_000) })
+    .then((response) => (response.ok ? response.json() : undefined))
+    .then((body: unknown) => {
+      const status = body && typeof body === "object" && "status" in body ? body.status : undefined
+      if (status === "operational" || status === "degraded" || status === "outage") return status
+    })
+    .catch(() => undefined)
+
+  // Fetch once per full page load and reapply after each client-side navigation swaps in a fresh footer.
+  document.addEventListener("astro:page-load", async () => {
+    const status = await summary
+    const link = document.querySelector<HTMLAnchorElement>(".system-status")
+    if (!status || !link) return
+    link.dataset.status = status
+    link.textContent = labels[status]
+  })
+</script>

@@ -27,8 +27,13 @@ export function SessionUserMessage(props: {
   voice?: boolean
   historicalAgent: string
   historicalModel: SessionMessageAssistant["model"]
+  /** The agent and model the previous prompt chose; a waiting steer names only what it changes. */
+  previousSelection?: { agent: string; model: SessionMessageAssistant["model"] }
   actions?: SessionUserActions
   run?: UserRun
+  fold?: boolean
+  expanded?: boolean
+  onExpandedChange?: (expanded: boolean) => void
 }) {
   return (
     <CurrentUserMessageDisplay
@@ -40,8 +45,12 @@ export function SessionUserMessage(props: {
       voice={props.voice}
       agent={props.historicalAgent}
       model={props.historicalModel}
+      previousSelection={props.previousSelection}
       actions={props.actions}
       run={props.run}
+      fold={props.fold}
+      expanded={props.expanded}
+      onExpandedChange={props.onExpandedChange}
     />
   )
 }

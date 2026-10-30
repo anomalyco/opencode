@@ -1,4 +1,8 @@
 const source = {
+  "ui.preview.controls": "Preview controls",
+  "ui.preview.zoomIn": "Zoom in",
+  "ui.preview.zoomOut": "Zoom out",
+  "ui.preview.fit": "Fit",
   "ui.sessionReview.title": "Session changes",
   "ui.sessionReview.title.git": "Git changes",
   "ui.sessionReview.title.branch": "Branch changes",
@@ -89,6 +93,8 @@ const source = {
   "ui.sessionTurn.budgetLimit.modelsUntilReset": "Model budget reached · this model is paused until it resets",
   "ui.sessionTurn.budgetLimit.useFreeModel": "Use a free model",
   "ui.sessionTurn.budgetLimit.switchModel": "Switch model",
+  "ui.sessionTurn.goLimit.title": "You've reached your OpenCode Go usage limit.",
+  "ui.sessionTurn.goLimit.lineReset": "You've reached your OpenCode Go usage limit. It resets at {{time}}.",
   "ui.sessionTurn.error.freeUsageExceeded": "Free usage exceeded",
   "ui.sessionTurn.error.addCredits": "Add credits",
 
@@ -97,10 +103,6 @@ const source = {
     "Subscribe to OpenCode Go for reliable access to the best open-source models for $10/month.",
   "dialog.usageExceeded.freeTier.reset": "Your free messages reset at {{time}}.",
   "dialog.usageExceeded.freeTier.actionLabel": "Subscribe",
-  "dialog.usageExceeded.accountRateLimit.title": "Go limit reached",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Usage limit reached. To continue using this model now, enable usage from your available balance",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Open settings",
 
   "ui.sessionTurn.status.delegating": "Delegating work",
   "ui.sessionTurn.status.planning": "Planning next steps",
@@ -164,7 +166,6 @@ const source = {
   "ui.promptInput.commands": "Commands",
   "ui.promptInput.history": "Prompt history",
   "ui.promptInput.history.search": "Search prompt history…",
-  "ui.promptInput.history.searchAction": "Search",
   "ui.promptInput.history.contextOnly": "Prompt with context",
   "ui.promptInput.dropFiles": "Drop files to add",
   "ui.promptInput.dropFiles.image": "Drop images or files to add",
@@ -274,11 +275,14 @@ const source = {
 
   "ui.message.expand": "Expand message",
   "ui.message.collapse": "Collapse message",
+  "ui.message.readMore": "Read more",
+  "ui.message.showLess": "Show less",
   "ui.message.copy": "Copy",
   "ui.message.copyMessage": "Copy message",
   "ui.message.copyFullMessage": "Copy full message",
   "ui.message.forkMessage": "Fork from here",
   "ui.message.revertMessage": "Rewind to here",
+  "ui.message.moreActions": "More actions",
   "ui.message.moveToQueue": "Move to queue",
   "ui.message.pending": "Pending",
   "ui.message.voice": "Voice",
@@ -329,6 +333,8 @@ const source = {
   "ui.question.answer.none": "(no answer)",
   "ui.question.review.notAnswered": "(not answered)",
   "ui.question.multiHint": "Pick any",
+  "ui.question.singleHint": "Select one answer",
+  "ui.question.classic.multiHint": "Select all answers that apply",
   "ui.question.custom.placeholder": "Type your answer…",
   "ui.question.custom.answerPlaceholder": "Type your own answer…",
 } satisfies Record<string, string>

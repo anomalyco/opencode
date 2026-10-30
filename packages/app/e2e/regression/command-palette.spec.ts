@@ -146,31 +146,39 @@ test("Search commands lists only commands and runs the chosen one", async ({ pag
   await expect(page).toHaveURL("/settings")
 })
 
-test("Search projects opens a new session's project picker from a session and from Home", async ({ page }) => {
+test("Search projects opens the full location picker from a session, draft, and Home", async ({ page }) => {
   const editor = page.locator('[data-component="composer-editor"]')
   const picker = page.getByRole("combobox", { name: "Search projects", exact: true })
-  const { dialog, input } = await openCommandPalette(page)
-  await input.fill("search projects")
-  await dialog.getByRole("option", { name: /^Search projects/ }).click()
+  await openPaletteWorkspace(page)
+  const shortcut = (await page.evaluate(() => navigator.platform.includes("Mac"))) ? "Meta+Shift+O" : "Control+Shift+O"
+  await page.keyboard.press(shortcut)
   await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)
   await expect(picker).toBeFocused()
-  // Just the projects: no "Add project", no worktrees and no key hints.
   const projects = page.getByRole("dialog").getByRole("option")
-  await expect(projects).toHaveCount(1)
-  await expect(projects).toHaveText(/command-palette/)
-  await expect(projects.getByRole("button", { name: "Worktrees", exact: true })).toHaveCount(0)
-  await expect(page.locator(".new-session-location-hints")).toHaveCount(0)
+  await expect(projects.filter({ hasText: "Add project" })).toBeVisible()
+  await picker.fill("command-palette")
+  await expect(projects).toHaveCount(2)
+  await expect(projects.getByRole("button", { name: "Worktrees", exact: true })).toBeVisible()
+  await picker.press("ArrowRight")
+  await expect(page.getByRole("option", { name: /^New worktree/ })).toBeVisible()
+  await page.getByRole("combobox").press("Escape")
   await picker.press("Escape")
   await expect(picker).toHaveCount(0)
   await expect(editor).toBeFocused()
+
+  await page.keyboard.press(shortcut)
+  await expect(picker).toBeFocused()
+  await expect(projects.filter({ hasText: "Add project" })).toBeVisible()
+  await picker.press("Escape")
 
   await page.goto("/")
   await expect(
     page.getByRole("region", { name: "Recent sessions" }).getByRole("button", { name: /Palette fixture session/ }),
   ).toBeEnabled()
-  await page.keyboard.press("ControlOrMeta+Shift+O")
+  await page.keyboard.press(shortcut)
   await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)
   await expect(picker).toBeFocused()
+  await expect(projects.filter({ hasText: "Add project" })).toBeVisible()
 })
 
 declare global {
@@ -611,18 +619,61 @@ test("keeps matching session and file results steady across keystrokes while sea
   })
 })
 
-test("keeps the same height as the number of results changes", async ({ page }) => {
-  const { dialog, input } = await openCommandPalette(page)
+test("titlebar session search shrinks with results while its field stays anchored through scrolling", async ({
+  page,
+}) => {
+  await openPaletteWorkspace(page, true, [
+    { ...paletteSession, time: { ...paletteSession.time } },
+    ...Array.from({ length: 23 }, (_, index) => ({
+      ...paletteSession,
+      id: `ses_compact_palette_${index}`,
+      title: index === 0 ? "Compact keeper needle" : `Compact keeper result ${index}`,
+      time: { created: 1700000000000 - index - 1, updated: 1700000000000 - index - 1 },
+    })),
+  ])
+  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  const input = dialog.getByRole("combobox")
+  const options = dialog.getByRole("option")
   const container = page.locator('[data-component="dialog-v2"] [data-slot="dialog-container"]')
-  const height = async () => (await container.boundingBox())?.height
-  const initial = await height()
-  expect(initial).toBe(480)
 
-  await input.fill("copy session")
-  await expect(dialog.getByRole("option")).toHaveCount(1)
-  expect(await height()).toBe(initial)
+  const geometry = () =>
+    container.evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      inputTop: element.querySelector('[role="combobox"]')!.getBoundingClientRect().top,
+    }))
 
-  await input.fill("zzzz no palette match")
-  await expect(dialog.getByText("No results found")).toBeVisible()
-  expect(await height()).toBe(initial)
+  await expect(input).toBeFocused()
+  await expect(options).toHaveCount(10)
+  // Hover waits for the field's opening animation to settle before taking the reference position.
+  await input.hover()
+  const initial = await geometry()
+  expect(initial.height).toBeGreaterThan(200)
+
+  await input.fill("Compact keeper needle")
+  await expect(options).toHaveText([/Compact keeper needle/])
+  await expect.poll(async () => (await geometry()).height).toBeLessThan(initial.height - 100)
+  await expect.poll(async () => (await geometry()).inputTop).toBeCloseTo(initial.inputTop, 0)
+
+  await input.clear()
+  await expect(options).toHaveCount(10)
+  await expect.poll(geometry).toEqual({
+    height: expect.closeTo(initial.height, 0),
+    inputTop: expect.closeTo(initial.inputTop, 0),
+  })
+
+  // A broader query exposes more than the recent-session limit and must scroll below the field.
+  await input.fill("Compact keeper")
+  await expect(options).toHaveCount(23)
+  const scroll = dialog.locator('[data-slot="search-list-scroll"]')
+  await expect.poll(() => scroll.evaluate((element) => element.scrollHeight - element.clientHeight)).toBeGreaterThan(0)
+  await expect.poll(async () => (await geometry()).height).toBeLessThanOrEqual(480)
+  const last = dialog.getByRole("option", { name: /Compact keeper result 22/ })
+  await expect(last).not.toBeInViewport()
+  await scroll.hover()
+  await page.mouse.wheel(0, 2000)
+  await expect(last).toBeInViewport()
+  await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+  await expect.poll(async () => (await geometry()).inputTop).toBeCloseTo(initial.inputTop, 0)
+  await expect(input).toBeFocused()
 })

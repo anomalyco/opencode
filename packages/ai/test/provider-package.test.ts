@@ -58,6 +58,37 @@ describe("provider package entrypoints", () => {
     })
   })
 
+  test("maps OpenRouter, DigitalOcean and Venice Responses entrypoints onto provider-owned routes", async () => {
+    const providers = [
+      ["openrouter", "https://openrouter.ai/api/v1", await import("@opencode/ai/providers/openrouter/responses")],
+      ["digitalocean", "https://inference.do-ai.run/v1", await import("@opencode/ai/providers/digitalocean/responses")],
+      ["venice", "https://api.venice.ai/api/v1", await import("@opencode/ai/providers/venice/responses")],
+    ] as const
+    const settings = {
+      apiKey: "fixture",
+      headers: { "x-test": "fixture" },
+      body: { future_option: true },
+      reasoningEffort: "low",
+    }
+    for (const [provider, baseURL, module] of providers) {
+      const selected = module.model("gpt-5.4", settings)
+      expect(selected.provider).toBe(provider)
+      expect(selected.route.id).toBe(`${provider}-responses`)
+      expect(selected.route.protocol).toBe("open-responses")
+      expect(selected.route.endpoint).toMatchObject({ baseURL, path: "/responses" })
+      expect(selected.route.defaults.headers).toEqual(settings.headers)
+      expect(selected.route.defaults.http?.body).toEqual(settings.body)
+      expect(selected.route.defaults.providerOptions).toEqual({
+        reasoningEffort: "low",
+        store: false,
+        include: ["reasoning.encrypted_content"],
+      })
+      expect(module.model("gpt-5.4", { ...settings, baseURL: "https://gateway.test/v1" }).route.endpoint.baseURL).toBe(
+        "https://gateway.test/v1",
+      )
+    }
+  })
+
   test("maps Cohere entrypoints onto native and compatibility routes", async () => {
     const modules = await Promise.all([
       import("@opencode/ai/providers/cohere"),

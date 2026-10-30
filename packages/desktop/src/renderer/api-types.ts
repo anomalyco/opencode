@@ -1,4 +1,4 @@
-import type { DesktopMenuAction } from "@opencode/app/desktop-menu"
+import type { DesktopMenuAction, DesktopZoomLevel } from "@opencode/app/desktop-menu"
 import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import type { WindowBootstrap } from "../shared/window-bootstrap"
 import type {
@@ -62,7 +62,9 @@ export type ElectronAPI = {
   getPinchZoomEnabled(): Promise<boolean>
   setPinchZoomEnabled(enabled: boolean): Promise<void>
   onPinchZoomEnabledChanged(cb: (enabled: boolean) => void): () => void
-  onZoomFactorChanged(cb: (factor: number) => void): () => void
+  getZoomLevel(): Promise<DesktopZoomLevel>
+  setZoomLevel(level: DesktopZoomLevel): Promise<void>
+  onZoomChanged(cb: (zoom: { factor: number; level: DesktopZoomLevel }) => void): () => void
   setTitlebar(theme: TitlebarTheme): Promise<void>
   setTrafficLightsPosition(position: { x: number; y: number }): Promise<void>
   runDesktopMenuAction(action: DesktopMenuAction): Promise<void>

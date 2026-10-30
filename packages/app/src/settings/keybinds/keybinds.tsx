@@ -14,6 +14,7 @@ import {
   type CommandSection,
 } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePluginHost } from "@/runtime/plugin/host"
 import { useSettings } from "@/settings/model"
 import { SettingsList } from "@/settings/list"
 import { SettingsSearchEmpty } from "@/settings/search-empty"
@@ -142,7 +143,12 @@ function signatures(config: string | undefined) {
   return sigs
 }
 
-function listFor(command: Pick<CommandContext, "catalog" | "options">, map: KeybindMap, palette: string) {
+function listFor(
+  command: Pick<CommandContext, "catalog" | "options">,
+  map: KeybindMap,
+  palette: string,
+  plugins: ReadonlySet<string> | undefined,
+) {
   const out = new Map<string, KeybindMeta>()
   out.set(PALETTE_ID, { title: palette, group: "General" })
   // A command that shares another's shortcut is set through that command, unless it already has its own.
@@ -150,6 +156,9 @@ function listFor(command: Pick<CommandContext, "catalog" | "options">, map: Keyb
 
   for (const opt of command.catalog) {
     if (opt.id.startsWith("suggested.")) continue
+
+    // The catalog remembers commands that are not registered right now; a removed or renamed plugin's never return.
+    if (opt.plugin && plugins && !plugins.has(opt.plugin)) continue
 
     if (opt.hidden) continue
 
@@ -237,6 +246,8 @@ function filteredFor(
 export function createKeybindSettingsController(
   input: {
     command: Pick<CommandContext, "catalog" | "options" | "keybinds">
+    /** The ids of the installed GUI plugins; remembered commands of any other plugin are not listed. */
+    plugins?: () => ReadonlySet<string>
     settings: {
       current: { keybinds?: KeybindMap }
       keybinds: Pick<SettingsContext["keybinds"], "get" | "set" | "resetAll">
@@ -252,7 +263,7 @@ export function createKeybindSettingsController(
   const list = createMemo(() => {
     language.locale()
 
-    return listFor(input.command, overrides(), language.t("command.palette"))
+    return listFor(input.command, overrides(), language.t("command.palette"), input.plugins?.())
   })
 
   const grouped = createMemo(() => groupedFor(list()))
@@ -411,9 +422,12 @@ export function createKeybindSettingsController(
 export function SettingsKeybinds(props: { active?: boolean }) {
   const command = useCommand()
   const settings = useSettings()
+  const host = usePluginHost()
+  const plugins = createMemo(() => new Set(host.definitions().map((definition) => definition.id)))
 
   const controller = createKeybindSettingsController({
     command,
+    plugins,
     settings,
   })
 

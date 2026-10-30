@@ -28,7 +28,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { CommentsProvider } from "@/composer/comments"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { ModelsProvider } from "@/providers/models/models"
-import { Contribution } from "@/runtime/extension/render"
+import { Contribution } from "@/runtime/plugin/render"
 import { ServerProvider, useServer } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -63,7 +63,7 @@ const modules = import.meta.glob<StoryModule>([
   "../**/*.stories.tsx",
   "../../../ui/src/**/*.stories.tsx",
   "../../../session-ui/src/**/*.stories.tsx",
-  "../../../gui-extensions/src/**/*.stories.tsx",
+  "../../../gui-plugins/src/**/*.stories.tsx",
 ])
 
 // Each file's text, for the order its states were written in.
@@ -72,7 +72,7 @@ const sources = import.meta.glob<string>(
     "../**/*.stories.tsx",
     "../../../ui/src/**/*.stories.tsx",
     "../../../session-ui/src/**/*.stories.tsx",
-    "../../../gui-extensions/src/**/*.stories.tsx",
+    "../../../gui-plugins/src/**/*.stories.tsx",
   ],
   { query: "?raw", import: "default" },
 )
@@ -484,7 +484,7 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
       onPointerDown={pause}
     >
       <Workspace>
-        <Extension file={entry.file}>
+        <Plugin file={entry.file}>
           <DialogProvider container={canvas()}>
             <Show when={render()} keyed fallback={language.t("lab.empty")}>
               {(fn) => (
@@ -505,7 +505,7 @@ function Stage(props: { entry: LabEntry; inspector: HTMLElement; scheme: "dark" 
               )}
             </Show>
           </DialogProvider>
-        </Extension>
+        </Plugin>
       </Workspace>
     </div>
   )
@@ -567,11 +567,11 @@ function Project(props: { children: JSX.Element }) {
   )
 }
 
-// A story of an extension renders as its contributions do: inside that extension's context from the app's host.
-function Extension(props: { file: string; children: JSX.Element }) {
-  const id = props.file.match(/gui-extensions\/src\/([^/]+)\//)?.[1]
+// A story of a plugin renders as its contributions do: inside that plugin's context from the app's host.
+function Plugin(props: { file: string; children: JSX.Element }) {
+  const id = props.file.match(/gui-plugins\/src\/([^/]+)\//)?.[1]
 
-  return id ? <Contribution extension={id}>{() => props.children}</Contribution> : props.children
+  return id ? <Contribution plugin={id}>{() => props.children}</Contribution> : props.children
 }
 
 /** The tree under `path`: a folder for each further title segment and a row for each story, by name. */

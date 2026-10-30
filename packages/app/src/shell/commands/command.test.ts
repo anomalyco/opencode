@@ -20,12 +20,14 @@ test("command catalog persistence validates metadata and omits executable fields
     open: { title: "Open", keybind: "mod+o", hidden: false, onSelect: "invalid" },
     shell: { title: "Terminal", section: "terminal" },
     stale: { title: "Stale", section: "removed" },
+    "acme.open": { plugin: "acme", title: "Open Acme" },
   })
 
   expect(catalog).toEqual({
     open: { title: "Open", keybind: "mod+o", hidden: false },
     shell: { title: "Terminal", section: "terminal" },
     stale: { title: "Stale" },
+    "acme.open": { plugin: "acme", title: "Open Acme" },
   })
   expect(decode({})).toEqual({})
   expect(() => decode({ open: { title: 1 } })).toThrow()

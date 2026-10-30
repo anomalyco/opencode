@@ -18,8 +18,8 @@ import {
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
-import { compileRequest } from "@opencode/ai/route/client"
-import { TestLLM } from "@opencode/ai/testing"
+import { TestLLM, compileRequest } from "@opencode/ai/testing"
+import { RequestExecutor } from "@opencode/ai/route"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Database } from "@opencode/core/database/database"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -34,6 +34,7 @@ import { EventTable } from "@opencode/core/event/sql"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Form } from "@opencode/core/form"
+import { Job } from "@opencode/core/job"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Snapshot } from "@opencode/core/snapshot"
@@ -95,17 +96,26 @@ type ToolBarrier = {
   active: number
   maxActive: number
 }
-const testLLM = TestLLM.layer({
-  fallback: [],
-  transformRequest: (request) =>
-    LLMRequest.update(request, {
-      system: request.system.map((part) => ({
-        ...part,
-        text: part.text.replace(emptyCodeMode, ""),
-      })),
-      tools: request.tools.filter((tool) => tool.name !== "execute"),
-    }),
-})
+class LLMRequests extends Context.Service<LLMRequests, LLMRequest[]>()("test/LLMRequests") {}
+const testLLM = Layer.unwrap(
+  Effect.sync(() => {
+    const requests: LLMRequest[] = []
+    return TestLLM.testLayer({
+      fallback: [],
+      transformRequest: (request) => {
+        const transformed = LLMRequest.update(request, {
+          system: request.system.map((part) => ({
+            ...part,
+            text: part.text.replace(emptyCodeMode, ""),
+          })),
+          tools: request.tools.filter((tool) => tool.name !== "execute"),
+        })
+        requests.push(transformed)
+        return transformed
+      },
+    }).pipe(Layer.merge(Layer.succeed(LLMRequests, requests)))
+  }),
+)
 type ModelLimit = { readonly context: number; readonly input?: number; readonly output: number }
 const defaultModelLimit = { context: 200_000, output: 32_000 }
 const modelLimits = new Map<string, ModelLimit>()
@@ -413,7 +423,7 @@ const layer = Layer.unwrap(
     })
     const replacements: LayerNode.Replacements = [
       Snapshot.node.replace(Snapshot.noopLayer),
-      LayerNodePlatform.llmClient.replace(TestLLM.clientLayer.pipe(Layer.provide(testLLM))),
+      LayerNodePlatform.llmClient.replace(testLLM),
       SessionRunnerModel.node.replace(models),
       InstructionBuiltIns.node.replace(systemContext),
       InstructionDiscovery.node.replace(instructionContext),
@@ -472,6 +482,7 @@ const layer = Layer.unwrap(
         Model.node,
         Tool.node,
         PluginHooks.node,
+        Job.node,
         echoNode,
         SessionRunnerModel.node,
         InstructionBuiltIns.node,
@@ -501,13 +512,14 @@ const it = testEffect(layer)
 const sessionID = Session.ID.make("ses_runner_test")
 const otherSessionID = Session.ID.make("ses_runner_other")
 
-const insertSession = (id: Session.ID) =>
+const insertSession = (id: Session.ID, parentID?: Session.ID) =>
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     yield* db
       .insert(SessionTable)
       .values({
         id,
+        parent_id: parentID,
         project_id: Project.ID.global,
         slug: id,
         directory: "/project",
@@ -556,7 +568,8 @@ const setup = Effect.gen(function* () {
   yield* insertSession(sessionID)
   const state = yield* RunnerState
   const session = yield* Session.Service
-  const llm = yield* TestLLM.Service
+  const llm = yield* TestLLM.Test
+  const requests = yield* LLMRequests
   const admit = (text: string) => session.prompt({ sessionID, text, resume: false })
   const resume = session.resume(sessionID)
   return Object.assign(state, {
@@ -565,7 +578,7 @@ const setup = Effect.gen(function* () {
     sessionInbox,
     session,
     llm,
-    requests: llm.requests,
+    requests,
     admit,
     resume,
     context: session.context(sessionID),
@@ -578,7 +591,7 @@ const setup = Effect.gen(function* () {
     }),
     // Pause coordinated Session.resume at its first model request, not a direct runner drain.
     resumePaused: Effect.gen(function* () {
-      const gate = yield* llm.gate
+      const gate = yield* llm.gate()
       const run = yield* resume.pipe(Effect.forkChild)
       yield* gate.started
       return { finish: gate.release.pipe(Effect.andThen(Fiber.join(run))) }
@@ -1145,6 +1158,212 @@ describe("SessionRunnerLLM", () => {
     expect(s.executions).toEqual(["renamed"])
   })
 
+  for (const resume of [false, true]) {
+    scenario(
+      `continues instead of going idle when a session idle hook admits input (resume: ${resume})`,
+      function* (s) {
+        const hooks = yield* PluginHooks.Service
+        const idles: Session.ID[] = []
+        yield* hooks.register("session", "experimental.idle", (event) =>
+          Effect.gen(function* () {
+            idles.push(event.sessionID)
+            if (idles.length > 1) return
+            yield* s.session
+              .synthetic({
+                sessionID: event.sessionID,
+                text: "Keep going",
+                description: "Continuing",
+                metadata: { source: "test" },
+                resume,
+              })
+              .pipe(Effect.orDie)
+          }),
+        )
+        yield* s.llm.push(TestLLM.text("First answer", "text-first"), TestLLM.text("Second answer", "text-second"))
+
+        yield* s.runPrompt("Start")
+
+        expect(idles).toEqual([sessionID, sessionID])
+        expect(s.requests).toHaveLength(2)
+        expect(s.requests[1]?.messages.at(-1)).toMatchObject({
+          role: "user",
+          content: [{ type: "text", text: "Keep going" }],
+        })
+        expect(yield* s.context).toMatchObject([
+          Expected.user("Start"),
+          Expected.assistant({}, [Expected.text("First answer")]),
+          { type: "synthetic", text: "Keep going", description: "Continuing", metadata: { source: "test" } },
+          Expected.assistant({}, [Expected.text("Second answer")]),
+        ])
+      },
+    )
+  }
+
+  scenario("runs the session idle hook only once the session would go idle", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    const idles: number[] = []
+    yield* hooks.register("session", "experimental.idle", () => Effect.sync(() => idles.push(s.requests.length)))
+    yield* s.admit("First")
+    yield* s.llm.push(TestLLM.tool("call-echo", "echo", { text: "hello" }), TestLLM.text("Done", "text-done"))
+
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(2)
+    expect(idles).toEqual([2])
+  })
+
+  scenario("passes background work of the session and its descendants to the idle hook", function* (s) {
+    const jobs = yield* Job.Service
+    const hooks = yield* PluginHooks.Service
+    const childID = Session.ID.make("ses_runner_child")
+    yield* insertSession(childID, sessionID)
+    yield* insertSession(otherSessionID)
+    const background = (recovery: Job.Recovery, id: string) =>
+      jobs.start({ id, type: recovery.kind, recovery, run: Effect.never }).pipe(Effect.andThen(jobs.background(id)))
+    yield* background({ kind: "shell", sessionID, shellID: "shell-own", command: "bun dev" }, "shell-own")
+    yield* background(
+      {
+        kind: "subagent",
+        parentSessionID: sessionID,
+        childSessionID: childID,
+        agent: "explore",
+        description: "Find callers",
+      },
+      childID,
+    )
+    yield* background({ kind: "shell", sessionID: childID, shellID: "shell-child", command: "bun test" }, "shell-child")
+    yield* background(
+      { kind: "shell", sessionID: otherSessionID, shellID: "shell-other", command: "bun build" },
+      "shell-other",
+    )
+    // Blocking work is not background work: only jobs moved to the background count.
+    yield* jobs.start({
+      id: "shell-blocking",
+      type: "shell",
+      recovery: { kind: "shell", sessionID, shellID: "shell-blocking", command: "sleep 10" },
+      run: Effect.never,
+    })
+    const events: SessionHooks["experimental.idle"][] = []
+    yield* hooks.register("session", "experimental.idle", (event) => Effect.sync(() => events.push(event)))
+    yield* s.llm.push(TestLLM.text("Waiting on background work", "text-waiting"))
+
+    yield* s.runPrompt("Start")
+
+    expect(events).toHaveLength(1)
+    expect(events[0]?.background).toEqual([
+      { kind: "shell", sessionID, shellID: "shell-own", command: "bun dev" },
+      { kind: "subagent", sessionID, childSessionID: childID, agent: "explore", description: "Find callers" },
+      { kind: "shell", sessionID: childID, shellID: "shell-child", command: "bun test" },
+    ])
+  })
+
+  scenario("runs the idle hook again when a background notice wakes the session", function* (s) {
+    const jobs = yield* Job.Service
+    const hooks = yield* PluginHooks.Service
+    const done = yield* Deferred.make<string>()
+    yield* jobs.start({
+      id: "shell-own",
+      type: "shell",
+      recovery: { kind: "shell", sessionID, shellID: "shell-own", command: "bun test" },
+      run: Deferred.await(done),
+    })
+    yield* jobs.background("shell-own")
+    const background: number[] = []
+    yield* hooks.register("session", "experimental.idle", (event) =>
+      Effect.sync(() => background.push(event.background.length)),
+    )
+    yield* s.llm.push(
+      TestLLM.text("Waiting for the tests", "text-waiting"),
+      TestLLM.text("Tests passed", "text-passed"),
+    )
+
+    yield* s.runPrompt("Start")
+    yield* Deferred.succeed(done, "ok")
+    yield* jobs.wait({ id: "shell-own" })
+    // Admitted the way the shell tool delivers a background notice: the default resume wakes the Session.
+    yield* s.session.synthetic({ sessionID, text: "Command finished" }).pipe(Effect.orDie)
+    yield* s.session.wait(sessionID)
+
+    expect(background).toEqual([1, 0])
+    expect(s.requests).toHaveLength(2)
+  })
+
+  scenario("runs the idle hook after a move delivered at the idle boundary", function* (s) {
+    const runner = yield* SessionRunner.Service
+    const hooks = yield* PluginHooks.Service
+    const idles: Session.ID[] = []
+    yield* hooks.register("session", "experimental.idle", (event) => Effect.sync(() => idles.push(event.sessionID)))
+    yield* s.admit("Before moving")
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+    const stream = yield* s.llm.gate()
+    const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+    yield* stream.started
+    yield* s.sessionInbox.admit({
+      id: SessionMessage.ID.create(),
+      sessionID,
+      item: {
+        type: "move",
+        payload: {
+          location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+          projectID: Project.ID.global,
+        },
+        delivery: "queue",
+      },
+    })
+    yield* stream.release
+    const moved = yield* Fiber.join(run)
+
+    expect(moved).toEqual(SessionRunner.DrainResult.Moved({ stepped: true }))
+    expect(idles).toEqual([])
+    if (moved._tag !== "Moved") throw new Error("Expected a Location handoff")
+
+    // The destination drain has nothing to promote but still owes the idle hook for the step before the move.
+    yield* runner.drain({ sessionID, force: false, stepped: moved.stepped })
+
+    expect(idles).toEqual([sessionID])
+    expect(s.requests).toHaveLength(1)
+  })
+
+  scenario("keeps idle hook input pending across a compaction admitted with it", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    const idles: Session.ID[] = []
+    yield* hooks.register("session", "experimental.idle", (event) =>
+      Effect.gen(function* () {
+        idles.push(event.sessionID)
+        if (idles.length > 1) return
+        yield* s.session.synthetic({ sessionID, text: "Keep going", resume: false }).pipe(Effect.orDie)
+        yield* s.session.compact({ sessionID }).pipe(Effect.orDie)
+      }),
+    )
+    yield* s.llm.push(
+      TestLLM.text("First answer", "text-first"),
+      TestLLM.text("## Objective\n- summary", "hook-summary"),
+      TestLLM.text("Second answer", "text-second"),
+    )
+
+    yield* s.runPrompt("Start")
+
+    expect(idles).toEqual([sessionID, sessionID])
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[2])).toContain("Keep going")
+    expect((yield* s.context).filter((message) => message.type === "synthetic")).toHaveLength(1)
+    expect(yield* s.inbox).toEqual([])
+  })
+
+  scenario("does not run the session idle hook after manual compaction of an idle session", function* (s) {
+    yield* s.runPrompt("First")
+    const hooks = yield* PluginHooks.Service
+    const idles: Session.ID[] = []
+    yield* hooks.register("session", "experimental.idle", (event) => Effect.sync(() => idles.push(event.sessionID)))
+    yield* s.llm.push(TestLLM.text("## Objective\n- summary", "idle-summary"))
+
+    yield* s.session.compact({ sessionID })
+    yield* s.resume
+
+    expect(s.requests).toHaveLength(2)
+    expect(idles).toEqual([])
+  })
+
   scenario("executes the tool advertised before a registry reload", function* (s) {
     const registry = yield* Tool.Service
     const scope = yield* Scope.make()
@@ -1472,7 +1691,7 @@ describe("SessionRunnerLLM", () => {
       TestLLM.text("## Objective\n- Entry summary", "entry-summary"),
       TestLLM.text("Continued", "entry-continuation"),
     )
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
     yield* stream.started
     const compaction = yield* s.sessionInbox.admitCompaction({
@@ -2277,7 +2496,7 @@ describe("SessionRunnerLLM", () => {
     const first = yield* s.admit("STEER_A")
     const second = yield* s.admit("STEER_B")
     yield* s.llm.push(TestLLM.text("## Objective\n- Interrupted checkpoint", "summary"))
-    const summary = yield* s.llm.gate
+    const summary = yield* s.llm.gate()
     const compact = yield* s.session.compact({ sessionID })
     yield* summary.started
     expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
@@ -3392,14 +3611,14 @@ describe("SessionRunnerLLM", () => {
       TestLLM.stop(),
       TestLLM.stop(),
     )
-    const first = yield* s.llm.gate
+    const first = yield* s.llm.gate()
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* first.started
     expect(reads).toBe(1)
     expect(resolutions).toBe(1)
     expect(s.requests[0]?.model).toBe(recoveryModel)
 
-    const summary = yield* s.llm.gate
+    const summary = yield* s.llm.gate()
     yield* first.release
     yield* summary.started
     s.systemBaseline = "Changed during compaction"
@@ -3414,7 +3633,7 @@ describe("SessionRunnerLLM", () => {
       resume: false,
     })
     const steered = yield* s.admit("Steered during compaction")
-    const retry = yield* s.llm.gate
+    const retry = yield* s.llm.gate()
     yield* summary.release
     yield* retry.started
 
@@ -3552,8 +3771,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Continue")
 
     expect(s.requests[0]?.generation?.maxTokens).toBe(64_000)
-    expect(s.requests[1]?.generation?.maxTokens).toBeLessThan(100_000 - 50_000)
-    expect(s.requests[1]?.generation?.maxTokens).toBeGreaterThan(100_000 - 50_000 - 200)
+    // 1% of the window stays unused, since strict providers reject a request that overshoots it by a few tokens.
+    expect(s.requests[1]?.generation?.maxTokens).toBeLessThan(99_000 - 50_000)
+    expect(s.requests[1]?.generation?.maxTokens).toBeGreaterThan(99_000 - 50_000 - 200)
   })
 
   scenario("caps the output limit a large model advertises", function* (s) {
@@ -3633,12 +3853,12 @@ describe("SessionRunnerLLM", () => {
       [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
       TestLLM.text("## Objective\n- Interrupted", "text-summary"),
     )
-    const first = yield* s.llm.gate
+    const first = yield* s.llm.gate()
     yield* s.admit("Continue")
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* first.started
 
-    const summary = yield* s.llm.gate
+    const summary = yield* s.llm.gate()
     yield* first.release
     yield* summary.started
 
@@ -3816,7 +4036,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("consumes the full provider stream before recording its boundary and settling local tools", function* (s) {
     yield* s.admit("Echo this")
-    const request = yield* s.llm.gate
+    const request = yield* s.llm.gate()
     const tail = yield* Deferred.make<void>()
     const complete = yield* Deferred.make<void>()
     const finished = yield* Deferred.make<void>()
@@ -4161,7 +4381,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Run once")
 
     yield* s.llm.push(TestLLM.text("Once", "text-once"))
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
 
     const first = yield* s.resume.pipe(Effect.forkChild)
     yield* stream.started
@@ -4219,7 +4439,7 @@ describe("SessionRunnerLLM", () => {
     const runner = yield* SessionRunner.Service
     yield* s.admit("A")
     yield* s.llm.push(TestLLM.stop(), TestLLM.stop(), TestLLM.stop())
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
     yield* stream.started
 
@@ -4243,7 +4463,7 @@ describe("SessionRunnerLLM", () => {
     const location = Location.Ref.make({ directory: AbsolutePath.make("/moved") })
     yield* s.admit("A")
     yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
     const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
     yield* stream.started
 
@@ -4264,7 +4484,7 @@ describe("SessionRunnerLLM", () => {
     yield* stream.release
 
     expect({ result: yield* Fiber.join(run), location: (yield* s.session.get(sessionID)).location }).toEqual({
-      result: SessionRunner.DrainResult.Moved({}),
+      result: SessionRunner.DrainResult.Moved({ stepped: true }),
       location,
     })
     expect(s.requests.map(userTexts)).toEqual([["A"], ["A"]])
@@ -4277,7 +4497,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Interrupt current work")
 
     yield* s.llm.push([], TestLLM.stop())
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
 
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* stream.started
@@ -4304,7 +4524,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Interrupt current work")
 
     yield* s.llm.push([], TestLLM.stop())
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
 
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* stream.started
@@ -4417,13 +4637,13 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Start working")
 
     yield* s.llm.push(TestLLM.stop(), TestLLM.stop(), TestLLM.stop(), TestLLM.stop())
-    const firstStream = yield* s.llm.gate
+    const firstStream = yield* s.llm.gate()
 
     const first = yield* s.resume.pipe(Effect.forkChild)
     yield* firstStream.started
     yield* s.session.prompt({ sessionID, text: "Queue first", delivery: "queue" })
     yield* s.session.prompt({ sessionID, text: "Queue second", delivery: "queue" })
-    const secondStream = yield* s.llm.gate
+    const secondStream = yield* s.llm.gate()
     yield* firstStream.release
     yield* secondStream.started
     yield* s.session.prompt({ sessionID, text: "Steer before next queued input" })
@@ -4552,7 +4772,7 @@ describe("SessionRunnerLLM", () => {
       inputID: previous,
     })
     yield* s.llm.push(TestLLM.text("## Objective\n- New checkpoint", "new-summary"))
-    const gate = yield* s.llm.gate
+    const gate = yield* s.llm.gate()
     const next = yield* s.session.compact({ sessionID })
     yield* gate.started
     expect((yield* s.messages).filter((message) => message.type === "compaction").toReversed()).toMatchObject([
@@ -4762,7 +4982,7 @@ describe("SessionRunnerLLM", () => {
       resume: false,
     })
 
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
     yield* execution.wake(sessionID)
     yield* stream.started
     yield* stream.release
@@ -4783,7 +5003,7 @@ describe("SessionRunnerLLM", () => {
     s.requests.length = 0
     yield* s.llm.push(TestLLM.stop())
 
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
     yield* execution.wake(sessionID)
     yield* stream.started
     yield* stream.release
@@ -4846,7 +5066,7 @@ describe("SessionRunnerLLM", () => {
       resume: false,
     })
 
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
 
     const first = yield* s.resume.pipe(Effect.forkChild)
     yield* stream.started
@@ -4889,7 +5109,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Retry after failure")
 
     yield* s.llm.push(Stream.fail(invalidRequest()))
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
 
     const first = yield* s.resume.pipe(Effect.forkChild)
     yield* stream.started
@@ -5271,7 +5491,7 @@ describe("SessionRunnerLLM", () => {
 
   scenario("interrupts a blocked step without local tool execution", function* (s) {
     yield* s.admit("Interrupt provider")
-    const stream = yield* s.llm.gate
+    const stream = yield* s.llm.gate()
 
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* stream.started
@@ -6226,6 +6446,44 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.runPrompt("Do not retry").pipe(Effect.flip)).toBe(failure)
     expect(s.requests).toHaveLength(1)
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+  })
+
+  scenario("records OpenCode Console's Go usage limit 429 as a typed step failure without retrying", function* (s) {
+    // The exact refusal Console sends a Go subscriber at a limit.
+    const body = JSON.stringify({
+      type: "error",
+      error: { type: "GoUsageLimitError", message: "Go usage limit exceeded" },
+      metadata: { workspace: "wrk_go_limit", limitName: "5 hour" },
+    })
+    const failure = RequestExecutor.httpFailure({
+      message: "Go usage limit exceeded",
+      url: "https://opencode.ai/inference/go/openai/v1/chat/completions",
+      status: 429,
+      responseHeaders: { "retry-after": "3600" },
+      responseBody: body,
+    })
+    yield* s.llm.push(Stream.fail(failure))
+
+    expect(yield* s.runPrompt("Hit the Go limit").pipe(Effect.flip)).toBe(failure)
+    expect(s.requests).toHaveLength(1)
+    expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+    const assistant = requireAssistant(yield* s.context)
+    expect(yield* recordedStepSettlementEvents(sessionID, assistant.id)).toMatchObject([
+      { type: "session.step.started.1" },
+      {
+        type: "session.step.failed.1",
+        data: {
+          error: {
+            type: "provider.go-limit",
+            message:
+              "OpenCode Go 5 hour usage limit reached. Switch to a free model, or turn on Extra Usage on the Go page in OpenCode Console to keep going.",
+            status: 429,
+            response: { body },
+            retryAfterMs: 3_600_000,
+          },
+        },
+      },
+    ])
   })
 
   scenario("settles malformed streamed tool input before the provider failure", function* (s) {

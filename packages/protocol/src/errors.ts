@@ -136,6 +136,14 @@ export class FileNotFoundError extends Schema.TaggedError<FileNotFoundError>()(
   { httpApiStatus: 404 },
 ) {}
 
+export class PluginNotFoundError extends Schema.TaggedError<PluginNotFoundError>()(
+  "PluginNotFoundError",
+  {
+    pluginID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
 export class AgentNotFoundError extends Schema.TaggedError<AgentNotFoundError>()(
   "AgentNotFoundError",
   {
@@ -270,6 +278,57 @@ export class ShellNotFoundError extends Schema.TaggedError<ShellNotFoundError>()
   "ShellNotFoundError",
   {
     id: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class ModelNotFoundError extends Schema.TaggedError<ModelNotFoundError>()(
+  "ModelNotFoundError",
+  {
+    providerID: Schema.String,
+    modelID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+/** The model exists but cannot serve this request, such as a chat model asked for images. */
+export class UnsupportedModelError extends Schema.TaggedError<UnsupportedModelError>()(
+  "UnsupportedModelError",
+  {
+    providerID: Schema.String,
+    modelID: Schema.String,
+    capability: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 422 },
+) {}
+
+/** The provider rejected or failed the request after the server sent it. */
+export class ProviderRequestError extends Schema.TaggedError<ProviderRequestError>()(
+  "ProviderRequestError",
+  {
+    providerID: Schema.String,
+    reason: Schema.Literals([
+      "authentication",
+      "rate_limit",
+      "content_filter",
+      "invalid_request",
+      "overloaded",
+      "provider",
+    ]),
+    message: Schema.String,
+    status: Schema.optional(Schema.Int),
+    retryAfterMs: Schema.optional(Schema.Int),
+  },
+  { httpApiStatus: 502 },
+) {}
+
+export class ScheduleNotFoundError extends Schema.TaggedError<ScheduleNotFoundError>()(
+  "ScheduleNotFoundError",
+  {
+    scheduleID: Schema.String,
     message: Schema.String,
   },
   { httpApiStatus: 404 },

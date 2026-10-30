@@ -3,6 +3,20 @@
 @import "@opencode/ui/styles/tokens";
 @import "tw-animate-css";
 
+/* Set on the timeline viewport and changed on every frame while the composer region grows. Neither inherits, so a change
+   restyles the viewport alone instead of every row inside it. */
+@property --session-timeline-inset {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --session-timeline-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 @font-face {
   font-family: "JetBrainsMono Nerd Font Mono";
   src: url("/assets/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");
@@ -48,6 +62,13 @@
   font-weight: 100 599;
   font-style: italic;
   font-display: swap;
+}
+
+/* Panel motion sets this on the one element whose own layout reads it. An inherited property would restyle every
+   element under that element each time a flight starts or lands. */
+@property --panel-hold-width {
+  syntax: "*";
+  inherits: false;
 }
 
 @media (display-mode: standalone) {
