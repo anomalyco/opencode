@@ -114,6 +114,7 @@
     "@parcel/watcher": "2.5.1",
     "@silvia-odwyer/photon-node": "0.3.4",
     "@standard-schema/spec": "catalog:",
+    "@stoqey/ib": "1.6.13",
     "bun-pty": "0.4.11",
     "diff": "catalog:",
     "drizzle-orm": "catalog:",

@@ -290,6 +290,18 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`trading_task\` (
+          \`id\` text PRIMARY KEY,
+          \`kind\` text NOT NULL,
+          \`system_ids\` text NOT NULL,
+          \`run_at\` integer NOT NULL,
+          \`status\` text DEFAULT 'pending' NOT NULL,
+          \`resolved_at\` integer,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`workspace\` (
           \`id\` text PRIMARY KEY,
           \`provider\` text NOT NULL,
