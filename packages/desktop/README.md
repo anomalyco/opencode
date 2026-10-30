@@ -27,6 +27,9 @@ Both read the same environment as every other release package:
 | `OPENCODE_VERSION` | Version stamped into the app and its packages.                                                                  |
 | `OPENCODE_TARGET`  | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
 
+Build the bundled CLI and Desktop with the same `OPENCODE_CHANNEL`. `latest` and `prod` use the production app identity
+but separate service registrations.
+
 The CLI is placed outside `app.asar` in the application's resources directory, and packaging fails if it is missing.
 `bun run build` uses `packages/cli/dist` when that holds the target's CLI. Otherwise `dev` (and `local`, unset or unrecognized)
 downloads the published dev CLI, `beta` downloads the beta CLI, and `prod`/`latest` fail.
