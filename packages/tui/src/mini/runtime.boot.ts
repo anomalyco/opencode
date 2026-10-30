@@ -4,15 +4,17 @@
 // needs before the first frame: TUI keymap config, model catalog, and session history for the prompt
 // history ring. All are async because they read config or hit the SDK, but
 // none block each other.
-import type { LocationRef } from "@opencode/client/promise"
+import type { LocationRef, ModelListOutput, SessionMessageInfo } from "@opencode/client/promise"
 import { resolve } from "../config"
-import { loadRunProviders } from "./catalog.shared"
+import type { CostSession } from "../util/session"
+import { loadRunCatalog } from "./catalog.shared"
 import { resolveCurrentSession, sessionHistory } from "./session.shared"
 import type { MiniSettings, RunInput, RunPrompt, RunProvider, RunTuiConfig } from "./types"
 import { pickVariant } from "./variant.shared"
 
 export type ModelInfo = {
   providers: RunProvider[]
+  models: ModelListOutput["data"]
 }
 
 export type SessionInfo = {
@@ -20,11 +22,14 @@ export type SessionInfo = {
   history: RunPrompt[]
   model?: NonNullable<RunInput["model"]>
   variant: string | undefined
+  session?: CostSession
+  messages?: SessionMessageInfo[]
 }
 
 function emptyModelInfo(): ModelInfo {
   return {
     providers: [],
+    models: [],
   }
 }
 
@@ -41,7 +46,7 @@ function defaultRunTuiConfig(platform: NodeJS.Platform): RunTuiConfig {
 }
 
 async function loadModelInfo(sdk: RunInput["sdk"], location: LocationRef, signal?: AbortSignal): Promise<ModelInfo> {
-  return { providers: await loadRunProviders(sdk, location, signal) }
+  return loadRunCatalog(sdk, location, signal)
 }
 
 // Fetches available providers and variants.
@@ -70,6 +75,8 @@ export async function resolveSessionInfo(
       history: sessionHistory(session),
       model: session.model,
       variant: pickVariant(model ?? session.model, session),
+      session: session.session,
+      messages: session.messages,
     }))
     .catch(() => emptySessionInfo())
 }

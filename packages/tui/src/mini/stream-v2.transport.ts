@@ -20,9 +20,12 @@ import { messagePrompt } from "./session.shared"
 import { createSubagentTracker, toolCommit, toolFinalPhase } from "./stream-v2.subagent"
 import { normalizeTool, toolOutputText } from "./tool"
 import { toolDisplayContent } from "../util/tool-display"
+import { sessionSpend } from "./spend"
+import type { CostMessage, CostModel, CostSession } from "../util/session"
 import type {
   FooterApi,
   FooterPatch,
+  FooterState,
   FooterView,
   LocalReplayRow,
   MiniPermissionRequest,
@@ -58,6 +61,16 @@ type StreamInput = {
   signal?: AbortSignal
   onCatalogRefresh?: (signal?: AbortSignal) => unknown | Promise<unknown>
   contextLimit?: (model: NonNullable<RunInput["model"]>) => number | undefined
+  /**
+   * Session-level spend for the status line. When the experiment is enabled and
+   * the provider reports zero, the catalog estimate replaces the per-step cost.
+   */
+  spend?: {
+    enabled: boolean
+    session?: CostSession
+    models?: () => ReadonlyArray<CostModel> | undefined
+    messages?: ReadonlyArray<CostMessage>
+  }
 }
 
 export type SessionTurnInput = {
@@ -163,6 +176,16 @@ type State = {
   admitted: Set<string>
   stepModel: RunInput["model"]
   activeCompaction?: string
+  spend?: {
+    enabled: boolean
+    session?: CostSession
+    models?: () => ReadonlyArray<CostModel> | undefined
+    messages: CostMessage[]
+    /** Step event IDs already priced, so a replayed step cannot add its tier twice. */
+    steps: Set<string>
+  }
+  /** Tokens, context percent, and reported cost of the most recent step. */
+  lastStep?: { tokens: number; percent?: number; cost?: number }
 }
 
 export function formatUnknownError(error: unknown): string {
@@ -511,6 +534,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     pending: new Map(),
     admitted: new Set(),
     stepModel: undefined,
+    spend: input.spend && { ...input.spend, messages: [...(input.spend.messages ?? [])], steps: new Set() },
   }
   let readyResolve!: () => void
   let readyReject!: (error: unknown) => void
@@ -578,6 +602,20 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       { footer: input.footer, trace: input.trace },
       { commits, updates: patch ? [{ type: "stream.patch", patch }] : undefined },
     )
+  }
+
+  const usageFor = (): FooterState["usage"] => {
+    const step = state.lastStep
+    if (!step) return undefined
+    const spend = state.spend
+    if (!spend || step.cost !== undefined) return step
+    const current = sessionSpend({
+      enabled: spend.enabled,
+      session: spend.session,
+      models: spend.models?.(),
+      messages: spend.messages,
+    })
+    return { ...step, estimate: current.estimate }
   }
 
   let syncedPending: string[] | undefined
@@ -1376,6 +1414,23 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       syncBlockers()
       return
     }
+    if (event.type === "session.usage.updated") {
+      const spend = state.spend
+      if (!spend?.session) return
+      spend.session = { ...spend.session, cost: event.data.cost, tokens: event.data.tokens }
+      if (state.lastStep) write([], { usage: usageFor() })
+      return
+    }
+    if (event.type === "session.model.selected") {
+      const spend = state.spend
+      if (!spend?.session) return
+      spend.session = {
+        ...spend.session,
+        model: { providerID: event.data.model.providerID, id: event.data.model.id },
+      }
+      if (state.lastStep) write([], { usage: usageFor() })
+      return
+    }
     if (event.type === "session.step.ended") {
       const total =
         event.data.tokens.input +
@@ -1386,16 +1441,19 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       const limit = state.stepModel ? input.contextLimit?.(state.stepModel) : undefined
       state.stepModel = undefined
       if (!showTools()) flushQuietText(event.data.assistantMessageID)
-      write([], {
-        usage:
-          total > 0 || event.data.cost
-            ? {
-                tokens: total,
-                percent: limit ? Math.round((total / limit) * 100) : undefined,
-                cost: event.data.cost || undefined,
-              }
-            : undefined,
-      })
+      state.lastStep =
+        total > 0 || event.data.cost
+          ? {
+              tokens: total,
+              percent: limit ? Math.round((total / limit) * 100) : undefined,
+              cost: event.data.cost || undefined,
+            }
+          : undefined
+      if (state.spend && !state.spend.steps.has(event.id)) {
+        state.spend.steps.add(event.id)
+        state.spend.messages.push({ type: "assistant", tokens: event.data.tokens, time: { created: event.created } })
+      }
+      write([], { usage: usageFor() })
       return
     }
     if (event.type === "session.step.failed") {
