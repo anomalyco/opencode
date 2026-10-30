@@ -661,7 +661,7 @@ function toolOutput(result: ToolResultValue) {
         type: "content" as const,
         value: result.value.map((item) => {
           if (item.type === "text") return { type: "text" as const, text: item.text }
-          const data = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(item.uri)?.[1]
+          const data = /^data:[^;,]+(?:;[^;,]*)*;base64,(.*)$/s.exec(item.uri)?.[1]
           const image = item.mime.toLowerCase().startsWith("image/")
           if (data !== undefined)
             return image
