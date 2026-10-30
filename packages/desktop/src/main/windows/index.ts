@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { app, BrowserWindow, screen } from "electron"
+import { app, BrowserWindow, powerMonitor, screen } from "electron"
 import { Effect, FileSystem, Path } from "effect"
 import { openExternalURL } from "../files"
 import { scoped } from "../native/logging"
@@ -29,6 +29,7 @@ import { loadWindow } from "./scheme"
 import { createWindowRegistry } from "./registry"
 import { windowRecovery } from "./recovery"
 import { takeEarlyWindow, type EarlyWindow } from "./early"
+import { wireDisplayRecovery } from "./display"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
 
@@ -177,6 +178,8 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
 
     if (!early) loadWindow(win, "index.html")
     wireZoom(win)
+
+    if (process.platform === "win32") wireDisplayRecovery(win, { powerMonitor, screen, updateTitlebar })
     let contentReady = false
     let appliedTheme = false
     let revealed = !!early
@@ -239,5 +242,3 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
 
   return { create, restore }
 })
-
-

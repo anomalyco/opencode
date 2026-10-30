@@ -5,9 +5,60 @@ import { isRendererUrl } from "./scheme"
 
 const rendererPermissions = new Set(["clipboard-sanitized-write", "notifications"])
 
+// Chromium's Windows pointer lock calls Win32 ClipCursor with the requesting RenderWidgetHostView's
+// bounds and does not update the clip when the top-level window moves or maximizes (#57732, #45171).
+// Neither the shell nor embedded WebContentsViews use pointer or keyboard lock, so every session
+// denies both and defaults to deny-all instead of Electron's grant-all fallback.
+const blockedPermissions = new Set(["pointerLock", "keyboardLock"])
+
+export type PermissionSession = Pick<Session, "setPermissionRequestHandler" | "setPermissionCheckHandler">
+
+export type SessionSecurityTarget = {
+  on(event: "session-created", listener: (session: Session) => void): void
+}
+
+const hardenedSessions = new WeakSet<PermissionSession>()
+
 const allowedBySession = new WeakMap<Session, Set<number>>()
 
 const wiredHeaderSessions = new WeakSet<Session>()
+
+export function hardenSessionPermissions(session: PermissionSession) {
+  if (hardenedSessions.has(session)) return
+  hardenedSessions.add(session)
+
+  const setRequest = session.setPermissionRequestHandler.bind(session)
+  const setCheck = session.setPermissionCheckHandler.bind(session)
+
+  const applyRequest: PermissionSession["setPermissionRequestHandler"] = (handler) => {
+    setRequest((webContents, permission, callback, details) => {
+      if (blockedPermissions.has(permission) || !handler) {
+        callback(false)
+
+        return
+      }
+
+      handler(webContents, permission, callback, details)
+    })
+  }
+
+  const applyCheck: PermissionSession["setPermissionCheckHandler"] = (handler) => {
+    setCheck((webContents, permission, requestingOrigin, details) => {
+      if (blockedPermissions.has(permission) || !handler) return false
+
+      return handler(webContents, permission, requestingOrigin, details)
+    })
+  }
+
+  applyRequest(null)
+  applyCheck(null)
+  session.setPermissionRequestHandler = applyRequest
+  session.setPermissionCheckHandler = applyCheck
+}
+
+export function wireSessionSecurity(app: SessionSecurityTarget) {
+  app.on("session-created", hardenSessionPermissions)
+}
 
 // App windows share Electron's default session, where setPermission*Handler replaces the previous
 // handler. One pair of handlers per session evaluates against the live renderer WebContents set.
@@ -30,6 +81,7 @@ export function allowRendererPermissions(win: BrowserWindow) {
 }
 
 function registerPermissionHandlers(session: Session) {
+  hardenSessionPermissions(session)
   const allowed = new Set<number>()
   allowedBySession.set(session, allowed)
 

@@ -21,43 +21,116 @@ export type Displays = {
   matching: (bounds: Rectangle) => Rectangle
 }
 
+type RawWindowState = {
+  readonly x?: unknown
+  readonly y?: unknown
+  readonly width?: unknown
+  readonly height?: unknown
+  readonly displayBounds?: unknown
+  readonly isMaximized?: unknown
+  readonly isFullScreen?: unknown
+}
+
 // Bounds are only trusted when they still fit on one of the current displays; otherwise the window
 // falls back to the default size on the primary display. A saved maximized or fullscreen state
 // without bounds is kept so manage() can restore it.
-export function resolveWindowState(saved: unknown, defaults: { width: number; height: number }, displays: Displays) {
-  const state = isState(saved) ? saved : undefined
+export function resolveWindowState(
+  saved: Partial<WindowState> | undefined,
+  defaults: { width: number; height: number },
+  displays: Displays,
+): WindowState {
+  if (!saved) return { width: defaults.width, height: defaults.height }
 
-  if (!state) return { width: defaults.width, height: defaults.height } satisfies WindowState
+  if (!hasBounds(saved)) {
+    const fallback: WindowState = { width: defaults.width, height: defaults.height }
 
-  if (!hasBounds(state)) {
-    return state.isMaximized || state.isFullScreen
-      ? ({ ...state, width: defaults.width, height: defaults.height } satisfies WindowState)
-      : ({ width: defaults.width, height: defaults.height } satisfies WindowState)
+    if (saved.isMaximized !== undefined) fallback.isMaximized = saved.isMaximized
+
+    if (saved.isFullScreen !== undefined) fallback.isFullScreen = saved.isFullScreen
+
+    return fallback
   }
 
-  if (!state.displayBounds) return state
-  const visible = displays.all().some((bounds) => within(state, bounds))
+  if (!saved.displayBounds) return saved
+  const all = displays.all()
+  const savedDisplay = isRectangle(saved.displayBounds) ? saved.displayBounds : undefined
 
-  if (visible) return state
+  // Maximizing after moving across monitors updates `displayBounds` while keeping the last normal `x`/`y`
+  // on the original display. Re-anchor into `displayBounds` when that monitor is still connected so
+  // `win.maximize()` maximizes on the monitor where the window was closed, including negative coordinates.
+  const target =
+    (saved.isMaximized || saved.isFullScreen) && savedDisplay
+      ? all.find((bounds) => sameBounds(bounds, savedDisplay))
+      : undefined
 
-  return {
+  if (target && !within(saved, target)) {
+    const width = Math.min(saved.width, target.width)
+    const height = Math.min(saved.height, target.height)
+
+    return {
+      ...saved,
+      x: target.x + Math.floor((target.width - width) / 2),
+      y: target.y + Math.floor((target.height - height) / 2),
+      width,
+      height,
+    }
+  }
+
+  const visible = all.some((bounds) => within(saved, bounds))
+
+  if (visible) return saved
+  const primary = displays.primary()
+
+  const fallback: WindowState = {
     width: defaults.width,
     height: defaults.height,
-    x: 0,
-    y: 0,
-    displayBounds: displays.primary(),
-  } satisfies WindowState
+    x: primary.x,
+    y: primary.y,
+    displayBounds: primary,
+  }
+
+  if (saved.isMaximized) fallback.isMaximized = true
+
+  if (saved.isFullScreen) fallback.isFullScreen = true
+
+  return fallback
 }
 
 export function windowStateFile(id: string) {
   return `window-state-${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-export function readWindowState(file: string): unknown {
+export function readWindowState(file: string): Partial<WindowState> | undefined {
   if (!existsSync(file)) return undefined
 
   try {
-    return JSON.parse(readFileSync(file, "utf8"))
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"))
+
+    if (!isRawState(parsed)) return undefined
+    const result: Partial<WindowState> = {}
+
+    if (isInteger(parsed.x)) result.x = parsed.x
+
+    if (isInteger(parsed.y)) result.y = parsed.y
+
+    if (isInteger(parsed.width)) result.width = parsed.width
+
+    if (isInteger(parsed.height)) result.height = parsed.height
+
+    if (isRectangle(parsed.displayBounds)) {
+      result.displayBounds = {
+        x: parsed.displayBounds.x,
+        y: parsed.displayBounds.y,
+        width: parsed.displayBounds.width,
+        height: parsed.displayBounds.height,
+      }
+    }
+
+    if (isBoolean(parsed.isMaximized)) result.isMaximized = parsed.isMaximized
+
+    if (isBoolean(parsed.isFullScreen)) result.isFullScreen = parsed.isFullScreen
+
+    return result
   } catch {
     return undefined
   }
@@ -111,17 +184,38 @@ export function manageWindowState(win: BrowserWindow, file: string, initial: Win
   win.on("closed", closed)
 }
 
-function isState(value: unknown): value is WindowState {
-  return typeof value === "object" && value !== null
+function isRawState(value: unknown): value is RawWindowState {
+  return Boolean(value) && Object(value) === value && !Array.isArray(value)
 }
 
-function hasBounds(state: WindowState): state is WindowState & Required<Pick<WindowState, "x" | "y">> {
+function isInteger(value: unknown): value is number {
+  return Number.isInteger(value)
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return value === true || value === false
+}
+
+function isRectangle(value: unknown): value is Rectangle {
+  if (!isRawState(value)) return false
+
   return (
-    Number.isInteger(state.x) &&
-    Number.isInteger(state.y) &&
-    Number.isInteger(state.width) &&
+    isInteger(value.x) &&
+    isInteger(value.y) &&
+    isInteger(value.width) &&
+    value.width > 0 &&
+    isInteger(value.height) &&
+    value.height > 0
+  )
+}
+
+function hasBounds(state: Partial<WindowState>): state is WindowState & Required<Pick<WindowState, "x" | "y">> {
+  return (
+    isInteger(state.x) &&
+    isInteger(state.y) &&
+    isInteger(state.width) &&
     state.width > 0 &&
-    Number.isInteger(state.height) &&
+    isInteger(state.height) &&
     state.height > 0
   )
 }
@@ -133,4 +227,8 @@ function within(state: WindowState & { x: number; y: number }, bounds: Rectangle
     state.x + state.width <= bounds.x + bounds.width &&
     state.y + state.height <= bounds.y + bounds.height
   )
+}
+
+function sameBounds(a: Rectangle, b: Rectangle) {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 }
