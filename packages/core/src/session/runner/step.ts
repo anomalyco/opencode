@@ -29,7 +29,11 @@ import { SessionRunnerRetry } from "./retry.js"
 
 export type Outcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean }
-  Retry: { readonly error: SessionError.Error; readonly decision: SessionRunnerRetry.Decision }
+  Retry: {
+    readonly error: SessionError.Error
+    readonly decision: SessionRunnerRetry.Decision
+    readonly freshAssistant?: boolean
+  }
   Continue: {
     readonly error: SessionError.Error
     readonly decision: SessionRunnerRetry.Decision
@@ -233,7 +237,7 @@ export const make = Effect.gen(function* () {
               ? TOOLS_INTERRUPTED
               : undefined
         if (toolFailure) yield* publisher.failUnsettledTools(toolFailure)
-        if (interrupted) yield* publisher.failAssistant(STEP_INTERRUPTED)
+        if (interrupted && !recorded.finish) yield* publisher.failAssistant(STEP_INTERRUPTED)
 
         // Parsers may leave unfinished calls without an execution event.
         if (llmError || (Exit.isSuccess(stream) && !recorded.providerFailed)) {
@@ -277,7 +281,9 @@ export const make = Effect.gen(function* () {
           tools.declines.length === 0 &&
           !tools.interrupted
         )
-          return Outcome.Continue({ error: llmError, decision: retry })
+          return record.toolCalled
+            ? Outcome.Continue({ error: llmError, decision: retry })
+            : Outcome.Retry({ error: llmError, decision: retry, freshAssistant: true })
 
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) {

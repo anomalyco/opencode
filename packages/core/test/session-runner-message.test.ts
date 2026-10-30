@@ -1181,11 +1181,11 @@ Earlier work
     ])
   })
 
-  test("drops assistant text provider state across model changes and failures", () => {
-    const messages = toLLMMessages(
+  test("drops assistant text provider state across model changes, aborts, and provider failures", () => {
+    const switched = toLLMMessages(
       [
         SessionMessage.Assistant.make({
-          id: id("assistant-phase"),
+          id: id("assistant-switched"),
           type: "assistant",
           agent: build,
           model: { id: Model.ID.make("old"), providerID: Provider.ID.make("provider") },
@@ -1196,20 +1196,114 @@ Earlier work
               native: { phase: "commentary" },
             }),
           ],
-          error: { type: "provider.unknown", message: "Interrupted after commentary" },
           time: { created, completed: created },
         }),
       ],
       Model.Ref.make({ id: Model.ID.make("new"), providerID: Provider.ID.make("provider") }),
     )
-
-    expect(messages[0]?.content).toEqual([
+    expect(switched[0]?.content).toEqual([
       {
         type: "text",
         text: "Checking.",
         providerMetadata: undefined,
       },
     ])
+
+    const aborted = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-aborted"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              text: "Finished thought",
+              native: { signature: "sig_kept" },
+              time: { created, completed: created },
+            }),
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Closed commentary.",
+              native: { phase: "commentary" },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "uncalled-stream",
+              name: "write",
+              state: SessionMessage.ToolStateError.make({
+                status: "error",
+                input: {},
+                error: { type: "aborted", message: "Step interrupted" },
+              }),
+              time: { created, completed: created },
+            }),
+          ],
+          error: { type: "aborted", message: "Step interrupted" },
+          time: { created, completed: created },
+        }),
+        SessionMessage.Assistant.make({
+          id: id("assistant-aborted-mid-text"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Cut off sentence",
+              native: { phase: "final_answer" },
+            }),
+          ],
+          error: { type: "aborted", message: "Step interrupted" },
+          time: { created, completed: created },
+        }),
+      ],
+      Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
+    )
+    expect(aborted.map((item) => item.content)).toEqual([
+      [
+        {
+          type: "reasoning",
+          text: "Finished thought",
+          providerMetadata: { provider: { signature: "sig_kept" } },
+        },
+        {
+          type: "text",
+          text: "Closed commentary.",
+          providerMetadata: { provider: { phase: "commentary" } },
+        },
+      ],
+      [
+        {
+          type: "text",
+          text: "Cut off sentence",
+          providerMetadata: undefined,
+        },
+      ],
+    ])
+
+    const providerFailed = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-provider-failed"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Partial broken stream",
+              native: { phase: "commentary" },
+            }),
+          ],
+          error: { type: "provider.unknown", message: "Stream dropped" },
+          time: { created, completed: created },
+        }),
+      ],
+      Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
+    )
+    expect(providerFailed).toEqual([])
   })
 
   test("preserves assistant text provider state for the same model", () => {

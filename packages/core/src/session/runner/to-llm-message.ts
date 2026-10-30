@@ -152,28 +152,60 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
+const isUncalledAbortedTool = (item: SessionMessage.AssistantTool) =>
+  item.time.ran === undefined &&
+  item.executed !== true &&
+  item.state.status === "error" &&
+  item.state.error.type === "aborted"
+
+const isUnfinalizedReasoning = (native: Record<string, unknown> | undefined) =>
+  native !== undefined && native.reasoningEncryptedContent === null && typeof native.signature !== "string"
+
 const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
   const sameProvider = message.model.providerID === model.providerID
   const sameModel = sameProvider && message.model.id === model.id
-  const reuseProviderMetadata = sameModel && message.error === undefined
+  const hasRanTool = message.content.some(
+    (item) => item.type === "tool" && (item.time.ran !== undefined || item.executed === true),
+  )
+  // A provider or transport failure before any tool ran is retried from the prompt,
+  // so its broken partial output must not enter model history.
+  if (message.error !== undefined && message.error.type !== "aborted" && !hasRanTool) return []
+  const aborted = message.error?.type === "aborted"
+  const nonAbortError = message.error !== undefined && !aborted
   const reasoningInterrupted = message.content.some(
     (item) => item.type === "reasoning" && item.time !== undefined && item.time.completed === undefined,
   )
-  const content = message.content.flatMap((item): ContentPart[] => {
-    if (item.type === "text")
+  const interrupted = message.error !== undefined || reasoningInterrupted
+  const kept = message.content.flatMap((item, originalIndex) =>
+    item.type === "tool" && isUncalledAbortedTool(item) ? [] : [{ item, originalIndex }],
+  )
+  const hasKeptOutputAfter = (index: number) =>
+    kept
+      .slice(index + 1)
+      .some((entry) => (entry.item.type === "text" && entry.item.text !== "") || entry.item.type === "tool")
+  const content = kept.flatMap((entry, index): ContentPart[] => {
+    const item = entry.item
+    if (item.type === "text") {
+      // Text can carry provider-bound state (e.g. Gemini thought signatures, OpenAI message IDs),
+      // which is only replayable for blocks closed before the stream ended on the producing model.
+      const reuseTextMetadata =
+        sameModel && !nonAbortError && (!interrupted || entry.originalIndex < message.content.length - 1)
       return [
         {
           type: "text",
           text: item.text,
-          // Text can carry provider-bound state (e.g. Gemini thought signatures),
-          // which is only replayable against the model that produced it.
-          providerMetadata: reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined,
+          providerMetadata: reuseTextMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined,
         },
       ]
+    }
     // Let the destination adapter handle readable reasoning after a model/provider switch.
     if (item.type === "reasoning") {
-      if (message.error !== undefined || reasoningInterrupted) return []
-      return reuseProviderMetadata
+      if (nonAbortError) return []
+      if (interrupted) {
+        if (item.time !== undefined && item.time.completed === undefined) return []
+        if (isUnfinalizedReasoning(item.native) || !hasKeptOutputAfter(index)) return []
+      }
+      return sameModel
         ? [
             {
               type: "reasoning",
@@ -189,8 +221,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     // signatures, OpenAI encrypted reasoning): only the producing model may
     // replay it.
     const reuseToolProviderMetadata =
-      reuseProviderMetadata ||
-      (sameModel && item.executed === true && (item.state.status === "completed" || item.state.status === "error"))
+      sameModel &&
+      (!nonAbortError ||
+        (item.executed === true && (item.state.status === "completed" || item.state.status === "error")))
     const call = toolCall(
       item,
       reuseToolProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined,
@@ -207,10 +240,11 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     if (part.type !== "reasoning") return true
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
-  const results = message.content
+  const results = kept
+    .map((entry) => entry.item)
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.executed !== true)
     .map((item) =>
-      toolResult(item, reuseProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined),
+      toolResult(item, sameModel && !nonAbortError ? providerMetadata(providerMetadataKey, item.native) : undefined),
     )
     .filter((message) => message !== undefined)
     .map(Message.tool)
