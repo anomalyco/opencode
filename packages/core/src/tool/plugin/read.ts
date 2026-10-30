@@ -143,19 +143,22 @@ export const Plugin = {
       return join(dirname(absolute), matches[0].name)
     })
 
-    const similar = (directory: string, name: string) => {
-      const base = name.toLowerCase()
-      return fs.readDirectory(directory).pipe(
-        Effect.map((entries) =>
-          entries
-            .filter((entry) => {
-              const candidate = entry.toLowerCase()
-              return candidate.includes(base) || base.includes(candidate)
-            })
-            .slice(0, 3),
-        ),
-        Effect.orElseSucceed(() => [] as string[]),
+    // Lists through the session's environment, which may be a remote workspace rather than this host.
+    const listing = (path: string) =>
+      reader.list(AbsolutePath.make(path)).pipe(
+        Effect.map((entries) => ({ type: "found" as const, names: entries.map((entry) => entry.name) })),
+        Effect.catchTag("Environment.NotFound", () => Effect.succeed({ type: "missing" as const })),
+        Effect.orElseSucceed(() => ({ type: "unknown" as const })),
       )
+
+    const similar = (names: readonly string[], name: string) => {
+      const base = name.toLowerCase()
+      return names
+        .filter((entry) => {
+          const candidate = entry.toLowerCase()
+          return candidate.includes(base) || base.includes(candidate)
+        })
+        .slice(0, 3)
     }
 
     // A missing folder usually means a removed worktree, a moved directory, or a relative path
@@ -163,23 +166,30 @@ export const Plugin = {
     const missingFolder = Effect.fn("ReadTool.missingFolder")(function* (input: string, folder: string) {
       let child = folder
       let parent = dirname(folder)
-      while (parent !== child && !(yield* fs.isDir(parent))) {
+      while (parent !== child) {
+        const found = yield* listing(parent)
+        if (found.type === "unknown") break
+        if (found.type === "found") {
+          const suggestions = similar(found.names, basename(child)).map((entry) => join(parent, entry))
+          const message = [
+            `File not found: ${input}`,
+            `The folder ${child} does not exist. The nearest folder that does is ${parent}.`,
+            ...(suggestions.length === 0 ? [] : [`Did you mean one of these?\n${suggestions.join("\n")}`]),
+          ].join("\n\n")
+          return yield* new ToolFailure({ message })
+        }
         child = parent
         parent = dirname(parent)
       }
-      const suggestions = (yield* similar(parent, basename(child))).map((entry) => join(parent, entry))
-      const message = [
-        `File not found: ${input}`,
-        `The folder ${child} does not exist. The nearest folder that does is ${parent}.`,
-        ...(suggestions.length === 0 ? [] : [`Did you mean one of these?\n${suggestions.join("\n")}`]),
-      ].join("\n\n")
-      return yield* new ToolFailure({ message })
+      return yield* new ToolFailure({ message: `File not found: ${input}` })
     })
 
     const missing = Effect.fn("ReadTool.missing")(function* (input: string, absolute: string) {
       const folder = dirname(absolute)
-      if (!(yield* fs.isDir(folder))) return yield* missingFolder(input, folder)
-      const suggestions = (yield* similar(folder, basename(input))).map((entry) => join(dirname(input), entry))
+      const found = yield* listing(folder)
+      if (found.type === "missing") return yield* missingFolder(input, folder)
+      const suggestions =
+        found.type === "found" ? similar(found.names, basename(input)).map((entry) => join(dirname(input), entry)) : []
       const message =
         suggestions.length === 0
           ? `File not found: ${input}`
