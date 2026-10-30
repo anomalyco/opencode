@@ -1,5 +1,3 @@
-import path from "node:path"
-
 export function parseCliVersion(output: string) {
   const marker = output.lastIndexOf(" v")
   const version = marker === -1 ? output : output.slice(marker + 2)
@@ -32,19 +30,14 @@ export function shouldRetryEnsure(version: string | undefined, message: string) 
   )
 }
 
-export function stageName(version: string, channel: string, arch = process.arch) {
-  // Separate cleanup roots so another channel's running CLI stays on disk.
-  return path.join(`channel-${encodeURIComponent(channel).replaceAll("*", "%2A")}`, versionStage(version, arch))
+export function stageName(version: string, arch = process.arch) {
+  return `${version}-${arch}`.replace(/[^a-zA-Z0-9._-]/g, "-")
 }
 
 export function keptStages(bundledVersion: string, runningVersion?: string, arch = process.arch) {
-  const stages = [versionStage(bundledVersion, arch)]
+  const stages = [stageName(bundledVersion, arch)]
 
-  if (runningVersion && runningVersion !== bundledVersion) stages.push(versionStage(runningVersion, arch))
+  if (runningVersion && runningVersion !== bundledVersion) stages.push(stageName(runningVersion, arch))
 
   return stages
-}
-
-function versionStage(version: string, arch: string) {
-  return `${version}-${arch}`.replace(/[^a-zA-Z0-9._-]/g, "-")
 }

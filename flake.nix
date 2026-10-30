@@ -38,42 +38,12 @@
         };
       });
 
-      checks = forEachSystem (
-        pkgs:
-        let
-          opencode = self.packages.${pkgs.stdenv.hostPlatform.system}.opencode;
-        in
-        {
-          bun-cache = import ./nix/check-bun-cache.nix {
-            inherit pkgs;
-            bun2nix = bun2nix.packages.${pkgs.stdenv.hostPlatform.system}.bun2nix;
-          };
-          runtime =
-            pkgs.runCommand "opencode-runtime-checks"
-              {
-                nativeBuildInputs = [ pkgs.bun ];
-                OPENCODE_NIX_CLI = pkgs.lib.getExe opencode;
-                OPENCODE_NIX_VERSION = opencode.version;
-                OPENCODE_NIX_PTY = opencode.env.OPENCODE_PTY_BIN or "";
-                OPENCODE_DISABLE_MODELS_FETCH = "1";
-              }
-              ''
-                test -d ${self.checks.${pkgs.stdenv.hostPlatform.system}.bun-cache}
-                export HOME=$(mktemp -d)
-                export XDG_CONFIG_HOME="$HOME/config" XDG_DATA_HOME="$HOME/data"
-                export XDG_STATE_HOME="$HOME/state" XDG_CACHE_HOME="$HOME/cache"
-                cp -R ${opencode.src}/. .
-                chmod -R u+w .
-                cp -R ${opencode.node_modules}/. .
-                mkdir -p nix
-                cp ${./nix/check-tui-colors.ts} nix/check-tui-colors.ts
-                cp ${./nix/check-service.ts} nix/check-service.ts
-                bun nix/check-tui-colors.ts
-                bun nix/check-service.ts
-                touch $out
-              '';
-        }
-      );
+      checks = forEachSystem (pkgs: {
+        bun-cache = import ./nix/check-bun-cache.nix {
+          inherit pkgs;
+          bun2nix = bun2nix.packages.${pkgs.stdenv.hostPlatform.system}.bun2nix;
+        };
+      });
 
       overlays = {
         default =

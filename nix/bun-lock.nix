@@ -61,7 +61,7 @@ let
         {
           key = "github:${builtins.elemAt entry 2}";
           value = {
-            url = "https://api.github.com/repos/${builtins.elemAt github 0}/${builtins.elemAt github 1}/tarball/${builtins.elemAt github 2}";
+            url = "https://codeload.github.com/${builtins.elemAt github 0}/${builtins.elemAt github 1}/legacy.tar.gz/${builtins.elemAt github 2}";
             inherit hash;
             name = "package.tgz";
           };

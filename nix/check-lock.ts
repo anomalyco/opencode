@@ -84,7 +84,7 @@ const expected = {
   "@scope/lib@1.2.3": { url: "https://registry.npmjs.org/@scope/lib/-/lib-1.2.3.tgz", hash },
   "tarball:https://example.test/archive": { url: "https://example.test/archive", hash },
   "github:example-editor-abc1234": {
-    url: "https://api.github.com/repos/example/editor/tarball/abc1234",
+    url: "https://codeload.github.com/example/editor/legacy.tar.gz/abc1234",
     hash,
   },
 }

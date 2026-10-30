@@ -7,7 +7,6 @@ import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { sidecarProbe } from "./sidecar-probe"
-import { serviceFile } from "./service-file"
 
 export * as BackgroundService from "./background-service"
 
@@ -37,6 +36,7 @@ export const layer = Layer.effect(
 const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial" | "reconnect") {
   yield* Effect.logInfo("starting v2 background service")
   const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
   const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
@@ -46,11 +46,14 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
-  const file = serviceFile(
-    client.fallback(),
-    import.meta.env.OPENCODE_CHANNEL,
-    process.env.OPENCODE_DESKTOP_SERVER_CHANNEL,
-  )
+  const file =
+    process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
+      ? path.join(
+          process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
+          "opencode",
+          "service-local.json",
+        )
+      : undefined
 
   const ensure = (required = version) =>
     client.Service.ensure({
@@ -77,7 +80,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
 
   // A compatible service the entry module already found is adopted at once; ensure() still runs
   // afterwards for its side effects (terminal handoff completion), off the renderer's path.
-  const early = mode === "initial" && !isolated ? yield* Effect.promise(() => sidecarProbe(file)) : undefined
+  const early = mode === "initial" && !isolated ? yield* Effect.promise(sidecarProbe) : undefined
 
   if (early) yield* Effect.sync(() => void runEnsure().catch(() => undefined))
   const service = early ?? (yield* Effect.tryPromise(runEnsure))
@@ -87,7 +90,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
 
   if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
 
-  const runningVersion = yield* fs.readFileString(file).pipe(
+  const runningVersion = yield* fs.readFileString(file ?? client.fallback()).pipe(
     Effect.map(
       (text) =>
         Option.getOrUndefined(Schema.decodeUnknownOption(Schema.fromJsonString(RegisteredService))(text))?.version,
