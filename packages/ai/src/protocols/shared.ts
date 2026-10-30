@@ -2,6 +2,7 @@ import { Tool } from "@opencode/schema/tool"
 import { Effect, Option, Predicate, Schema, SchemaGetter, SchemaTransformation } from "effect"
 import { Headers, HttpClientRequest } from "effect/http"
 import { Media } from "../media.js"
+import { RequestBodyEncoding } from "../route/request-encoding.js"
 import {
   InvalidProviderOutputError,
   InvalidRequestError,
@@ -431,7 +432,7 @@ export const jsonPost = (input: {
   readonly encoding?: RequestEncoding
 }) => {
   const headers = Headers.set(Headers.fromInput(input.headers), "content-type", "application/json")
-  const compressed = compressBody(input.body, input.encoding)
+  const compressed = RequestBodyEncoding.compress(input.body, input.encoding)
   if (!compressed)
     return HttpClientRequest.post(input.url).pipe(
       HttpClientRequest.setHeaders(headers),
@@ -441,20 +442,6 @@ export const jsonPost = (input: {
     HttpClientRequest.setHeaders(Headers.set(headers, "content-encoding", compressed.encoding)),
     HttpClientRequest.bodyUint8Array(compressed.body, "application/json"),
   )
-}
-
-function compressBody(text: string, encoding: RequestEncoding | undefined) {
-  if (encoding === undefined || encoding === "none") return undefined
-  // Looked up at call time instead of imported: a runtime without node:zlib or its zstd export
-  // (browsers, older Node, some workerd setups) sends plain JSON rather than failing to load this module.
-  const zlib = globalThis.process?.getBuiltinModule?.("node:zlib")
-  try {
-    const body = encoding === "zstd" ? zlib?.zstdCompressSync?.(text) : zlib?.gzipSync(text)
-    return body && { encoding, body }
-  } catch {
-    // Compression is an optimization, so a failure sends plain JSON instead of failing the request.
-    return undefined
-  }
 }
 
 export * as ProviderShared from "./shared.js"

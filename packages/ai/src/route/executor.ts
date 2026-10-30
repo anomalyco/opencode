@@ -10,6 +10,7 @@ import {
 import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
 import { headerDetails, responseHttp, Service, type HttpMiddleware, type Interface } from "./executor-service.js"
+import { RequestBodyEncoding } from "./request-encoding.js"
 
 export { responseHttp, Service } from "./executor-service.js"
 export type { HttpHandler, HttpMiddleware, Interface, RequestExecutorService } from "./executor-service.js"
@@ -230,19 +231,24 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
   Service,
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
-    const executeOnce = (request: HttpClientRequest.HttpClientRequest, middleware?: HttpMiddleware) =>
+    const negotiate = RequestBodyEncoding.middleware()
+    const executeOnce: Interface["execute"] = (request, middleware, options) =>
       Effect.gen(function* () {
-        if (!middleware)
+        if (!middleware && options?.encoding !== "auto")
           return yield* http.execute(request).pipe(
             Effect.mapError((error) => httpError({ error, request, operation: "request" })),
             Effect.flatMap(statusError),
           )
 
-        const response = yield* middleware(request, (input) =>
+        const send = (input: HttpClientRequest.HttpClientRequest) =>
           http
             .execute(input)
-            .pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause))))),
-        ).pipe(Effect.mapError((error) => httpError({ error, request, operation: "request" })))
+            .pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))))
+        const handler = (input: HttpClientRequest.HttpClientRequest) =>
+          options?.encoding === "auto" ? negotiate(input, send) : send(input)
+        const response = yield* (middleware ? middleware(request, handler) : handler(request)).pipe(
+          Effect.mapError((error) => httpError({ error, request, operation: "request" })),
+        )
         return yield* statusError(response)
       })
     return Service.of({
@@ -260,10 +266,11 @@ export const middleware = (fn: HttpMiddleware, executor: Layer.Layer<Service> = 
     Effect.gen(function* () {
       const inner = yield* Service
       return Service.of({
-        execute: (request, next) =>
+        execute: (request, next, options) =>
           inner.execute(
             request,
             next === undefined ? fn : (input, handler) => fn(input, (forwarded) => next(forwarded, handler)),
+            options,
           ),
       })
     }),

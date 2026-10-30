@@ -58,8 +58,8 @@ export const Cache = Schema.Struct({
 }).annotate({ identifier: "Provider.Cache" })
 export type Cache = typeof Cache.Type
 
-/** HTTP request body compression; only endpoints known to decode it should enable it. */
-export const Encoding = Schema.Literals(["zstd", "gzip", "none"]).annotate({ identifier: "Provider.Encoding" })
+/** HTTP request body compression. Defaults to `auto`, learning support from response Accept-Encoding. */
+export const Encoding = Schema.Literals(["zstd", "gzip", "none", "auto"]).annotate({ identifier: "Provider.Encoding" })
 export type Encoding = typeof Encoding.Type
 
 const Timeout = Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional)

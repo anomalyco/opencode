@@ -61,8 +61,8 @@ export const DEFAULT_HTTP_TIMEOUT_MS = 300_000
  */
 export const DEFAULT_CHUNK_TIMEOUT_MS = 900_000
 
-/** `Content-Encoding` for JSON request bodies; `none` sends plain JSON. */
-export const RequestEncoding = Schema.Literals(["zstd", "gzip", "none"])
+/** `auto` (the model HTTP default) learns server support; `none` sends plain JSON. */
+export const RequestEncoding = Schema.Literals(["zstd", "gzip", "none", "auto"])
 export type RequestEncoding = Schema.Schema.Type<typeof RequestEncoding>
 
 export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
@@ -75,7 +75,7 @@ export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
   headerTimeout: Schema.optional(HttpTimeout),
   /** Time allowed between streamed response chunks once headers have arrived. */
   chunkTimeout: Schema.optional(HttpTimeout),
-  /** Compression for JSON request bodies. Only set it for endpoints known to decode it. */
+  /** Compression for JSON request bodies. Defaults to `auto`, which waits for a server advertisement. */
   encoding: Schema.optional(RequestEncoding),
 }) {}
 

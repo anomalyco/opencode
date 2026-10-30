@@ -486,6 +486,7 @@ describe("ModelResolver", () => {
             apiKey: "settings-secret",
             baseURL: "https://compatible.example/v1",
             compatibility: "strict",
+            encoding: "auto",
           },
           headers: {},
           body: {},
@@ -514,6 +515,7 @@ describe("ModelResolver", () => {
       expect(prepared.body).not.toHaveProperty("max_tokens")
       expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
       expect(resolved.route.defaults.http?.body).toEqual({})
+      expect(resolved.defaults?.http?.encoding).toBe("auto")
     }),
   )
 

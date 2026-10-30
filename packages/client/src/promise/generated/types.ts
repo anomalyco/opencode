@@ -27,7 +27,7 @@ export type ProviderCacheTTL = `${number}${"ms" | "s" | "m" | "h" | "d"}`
 
 export type ProviderTransport = "http" | "websocket"
 
-export type ProviderEncoding = "zstd" | "gzip" | "none"
+export type ProviderEncoding = "zstd" | "gzip" | "none" | "auto"
 
 export type AgentColor = string
 

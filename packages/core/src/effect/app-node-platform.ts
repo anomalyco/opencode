@@ -1,5 +1,5 @@
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/http"
 import { Socket } from "effect/socket"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -11,9 +11,16 @@ const withoutBunTimeout = Layer.effect(
   HttpClient.HttpClient,
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient
-    return HttpClient.transformResponse(
-      client,
-      Effect.provideService(FetchHttpClient.RequestInit, { timeout: false } as BunFetchRequestInit),
+    return HttpClient.transformResponse(client, (response) =>
+      Effect.gen(function* () {
+        const init = yield* Effect.serviceOption(FetchHttpClient.RequestInit)
+        return yield* response.pipe(
+          Effect.provideService(FetchHttpClient.RequestInit, {
+            ...Option.getOrUndefined(init),
+            timeout: false,
+          } as BunFetchRequestInit),
+        )
+      }),
     )
   }),
 )

@@ -188,10 +188,20 @@ times before giving up.
 
 ## Request encoding
 
-`settings.encoding` compresses HTTP request bodies with `"zstd"` or `"gzip"`, or sends plain JSON with `"none"`. Set it
-on a provider, model, or variant; the most specific value wins. Only enable an encoding the endpoint decodes: most
-providers and gateways reject compressed bodies. OpenAI defaults to `"zstd"` when signed in with ChatGPT and no custom
-`baseURL` is configured; API keys send plain JSON. WebSocket messages are unaffected.
+Model HTTP requests default to `"auto"`: they send plain JSON until a successful response explicitly advertises
+request compression through `Accept-Encoding` ([RFC 7694](https://www.rfc-editor.org/rfc/rfc7694.html)). Subsequent
+requests to that endpoint can use the advertised gzip or zstd encoding. No configuration is required.
+
+Set `settings.encoding` to `"none"` to disable negotiation, or explicitly choose `"gzip"` or `"zstd"` for an endpoint
+known to decode it. Set it on a provider, model, or variant; the most specific value wins. OpenAI keeps its `"zstd"`
+default when signed in with ChatGPT and no custom `baseURL` is configured. WebSocket messages are unaffected.
+
+Support is cached for five minutes per URL and request headers, including credentials, with at most 128 entries per
+client. Only JSON bodies of at least 1 KiB that become smaller are compressed. A 4xx response to a compressed request,
+an HTTP 415, or an advertisement without a supported encoding clears learned support. Failed requests are not replayed.
+
+Redirects follow the HTTP client's policy, with encoding chosen separately for each destination. Signed and already
+encoded requests pass through unchanged. No capability probes are sent. Response compression keeps its existing behavior.
 
 ```jsonc title="opencode.jsonc"
 {

@@ -11,6 +11,21 @@ import { AbsolutePath } from "../src/schema.js"
 import { WebSearch } from "../src/websearch.js"
 
 describe("Config.Entry", () => {
+  test("round-trips negotiated request encoding and keeps none as an explicit override", () => {
+    const input = {
+      providers: {
+        custom: {
+          settings: { encoding: "auto" },
+          models: { fixture: { settings: { encoding: "none" } } },
+        },
+      },
+    } as const
+    const decoded = Schema.decodeUnknownSync(Config.Info)(input)
+    expect(Schema.encodeSync(Config.Info)(decoded)).toEqual(input)
+    expect(Schema.decodeUnknownSync(Provider.Encoding)("auto")).toBe("auto")
+    expect(() => Schema.decodeUnknownSync(Provider.Encoding)("unknown")).toThrow()
+  })
+
   test("round-trips tool.use and rejects unsupported action spellings", () => {
     const input = {
       experimental: {
