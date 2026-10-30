@@ -32,25 +32,27 @@ describe("window state", () => {
     expect(resolveWindowState(negative, defaults, displays)).toEqual(negative)
   })
 
-  test("re-anchors a maximized window into its saved secondary display when normal bounds stayed on primary", () => {
-    const saved = {
-      x: 0,
-      y: 0,
-      width: 1280,
-      height: 800,
+  test.each([
+    {
+      name: "it is above the primary and the normal bounds stayed on the primary",
+      all: displays.all(),
       displayBounds: upper,
-      isMaximized: true,
-      isFullScreen: false,
-    }
+      expected: { x: 634, y: -976, width: 1280, height: 800 },
+    },
+    {
+      // #58247: Electron reports a 1366x768 panel as 1388x781 DIP, shorter than the 800px default.
+      name: "it is shorter than the normal bounds",
+      all: [{ x: 0, y: 0, width: 1388, height: 781 }],
+      displayBounds: { x: 0, y: 0, width: 1388, height: 781 },
+      expected: { x: 54, y: 0, width: 1280, height: 781 },
+    },
+  ])("maximizes on the saved display when $name", (input) => {
+    const saved = { x: 0, y: 0, width: 1280, height: 800, displayBounds: input.displayBounds, isMaximized: true }
 
-    expect(resolveWindowState(saved, defaults, displays)).toEqual({
-      x: 634,
-      y: -976,
-      width: 1280,
-      height: 800,
-      displayBounds: upper,
+    expect(resolveWindowState(saved, defaults, { ...displays, all: () => input.all })).toEqual({
+      ...input.expected,
+      displayBounds: input.displayBounds,
       isMaximized: true,
-      isFullScreen: false,
     })
   })
 
