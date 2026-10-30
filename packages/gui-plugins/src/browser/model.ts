@@ -278,7 +278,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         (data) => {
           onCleanup(
             data.on("session.created", (event) => {
-              if (event.data.sessionID === ref.id) entry.connection.wake()
+              if (event.data.sessionID === ref.id) entry.connection.wake(true)
             }),
           )
           onCleanup(

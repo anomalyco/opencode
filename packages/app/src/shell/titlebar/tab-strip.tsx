@@ -229,6 +229,7 @@ function SessionTabEntry(props: {
       pending() ||
       !ctx ||
       props.active ||
+      ctx.data.session.missing(id) ||
       (!session() && !persisted()?.title) ||
       ctx.sdk.connection.status() !== "connected"
     )
