@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ModelInfo, SessionInfo, SessionMessageInfo } from "@opencode/client"
+import { Money } from "@opencode/schema/money"
 import { costEstimate, sessionFamily } from "../../src/util/session"
 
 const ref = { providerID: "provider", id: "model" }
@@ -20,6 +21,7 @@ const tiered: ModelInfo = {
   cost: [
     ...pricing.cost,
     { tier: { type: "context", size: 200_000 }, input: 6, output: 22.5, cache: { read: 0.6, write: 7.5 } },
+    { tier: { type: "context", size: 400_000 }, input: 9, output: 30, cache: { read: 0.9, write: 11.25 } },
   ],
 }
 
@@ -132,9 +134,42 @@ describe("util.session", () => {
     ).toBeCloseTo(1.8)
   })
 
-  test("skips sessions without matching catalog pricing", () => {
+  test.each([
+    { tokens: 200_000, expected: 0.6 },
+    { tokens: 200_001, expected: 1.200006 },
+    { tokens: 400_000, expected: 2.4 },
+    { tokens: 400_001, expected: 3.600009 },
+  ])("selects the largest matching tier for $tokens input tokens", ({ tokens, expected }) => {
+    expect(
+      costEstimate([session("root", input(tokens / 1_000_000))], [tiered], () => [message(input(tokens / 1_000_000))]),
+    ).toBeCloseTo(expected, 8)
+  })
+
+  test("prices each family member with its own provider and model", () => {
+    const other = { ...pricing, providerID: "other", id: "other-model", cost: [{ ...pricing.cost[0]!, input: 10 }] }
+    expect(
+      costEstimate(
+        [session("root", input(1)), { ...session("child", input(0.5)), model: other }],
+        [pricing, other],
+        () => [],
+      ),
+    ).toBe(Money.USD.make(8))
+  })
+
+  test("omits estimates when any scoped session lacks catalog pricing", () => {
     const sessions = [session("root", input(1))]
-    expect(costEstimate(sessions, undefined, () => [])).toBe(0)
-    expect(costEstimate(sessions, [{ ...pricing, providerID: "other" }], () => [])).toBe(0)
+    expect(costEstimate(sessions, undefined, () => [])).toBeUndefined()
+    expect(costEstimate(sessions, [{ ...pricing, providerID: "other" }], () => [])).toBeUndefined()
+    expect(costEstimate(sessions, [{ ...pricing, cost: [] }], () => [])).toBeUndefined()
+    expect(
+      costEstimate(
+        [...sessions, { ...session("child", input(0.5)), model: { ...ref, id: "removed" } }],
+        [pricing],
+        () => [],
+      ),
+    ).toBeUndefined()
+    expect(
+      costEstimate(sessions, [{ ...pricing, cost: [{ input: 0, output: 0, cache: { read: 0, write: 0 } }] }], () => []),
+    ).toBe(Money.USD.zero)
   })
 })
