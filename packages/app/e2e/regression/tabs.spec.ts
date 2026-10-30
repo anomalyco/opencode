@@ -579,8 +579,19 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   await resize(-380, "260px")
 
   const scroll = sidebar.locator('[data-slot="vertical-tabs-scroll"]')
+
+  // The list feathers only the edges with more rows past them.
+  const feather = () =>
+    scroll.evaluate((element) => {
+      const style = getComputedStyle(element)
+
+      return [style.getPropertyValue("--vertical-tabs-fade-top"), style.getPropertyValue("--vertical-tabs-fade-bottom")]
+    })
+
+  await expect.poll(feather).toEqual(["0px", "16px"])
   await scroll.evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await expect(tabB).toBeInViewport({ ratio: 1 })
+  await expect.poll(feather).toEqual(["16px", "0px"])
 
   await page.locator("html").evaluate((element) => element.setAttribute("dir", "rtl"))
   const home = sidebar.locator('[data-action="vertical-tabs-home"]')
