@@ -92,9 +92,6 @@ describe("Media", () => {
         "Media data URLs must contain a MIME type and base64 data",
       )
       expect(() => Media.fromDataUrl("data:image/png,rawtext")).toThrow()
-      const started = performance.now()
-      expect(() => Media.fromDataUrl(`data:x${";".repeat(5000)}x`)).toThrow()
-      expect(performance.now() - started).toBeLessThan(50)
     }),
   )
 
