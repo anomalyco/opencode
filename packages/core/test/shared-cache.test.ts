@@ -32,7 +32,7 @@ describe("SharedCache", () => {
     }),
   )
 
-  it.effect("returns the last good value when a load fails and loads again on the next call", () =>
+  it.effect("returns the last good value when a load fails and waits maxAge before loading again", () =>
     Effect.gen(function* () {
       const cache = yield* SharedCache.Service
       const remote = { online: false, loads: 0 }
@@ -52,6 +52,13 @@ describe("SharedCache", () => {
       remote.online = false
       yield* TestClock.adjust("1 minute")
       expect(yield* get).toBe(2)
+      expect(remote.loads).toBe(3)
+
+      yield* TestClock.adjust("59 seconds")
+      expect(yield* get).toBe(2)
+      expect(remote.loads).toBe(3)
+
+      yield* TestClock.adjust("1 second")
       expect(yield* get).toBe(2)
       expect(remote.loads).toBe(4)
     }),

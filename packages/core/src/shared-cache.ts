@@ -6,7 +6,8 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 export interface Interface {
   /**
    * Returns the value stored for `key` when it is newer than `maxAge`, joins a load already running for `key`, or
-   * runs `load`. A failed load returns the last good value when there is one, and the next call loads again.
+   * runs `load`. A failed load keeps the last good value for another `maxAge`; without one it fails and the next
+   * call loads again.
    * The key must include everything that changes the answer, such as the connection and base URL, but never a token.
    */
   readonly get: <A, E>(input: {
@@ -54,13 +55,18 @@ const layer = Layer.effect(
               }),
             ),
           ),
-          Effect.catchCause((cause) =>
-            entry.value
-              ? Effect.logWarning("failed to load shared value", { key: input.key, cause }).pipe(
-                  Effect.as(entry.value.current),
-                )
-              : Effect.failCause(cause),
-          ),
+          Effect.catchCause((cause) => {
+            const last = entry.value
+            if (!last) return Effect.failCause(cause)
+            // A failure waits a full maxAge like a success, so every caller does not retry it.
+            return Clock.currentTimeMillis.pipe(
+              Effect.map((time) => {
+                entry.value = { current: last.current, time }
+              }),
+              Effect.andThen(Effect.logWarning("failed to load shared value", { key: input.key, cause })),
+              Effect.as(last.current),
+            )
+          }),
           Effect.ensuring(
             Effect.sync(() => {
               entry.loading = undefined
