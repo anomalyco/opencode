@@ -187,6 +187,53 @@ const matchView = (source: string, oldString: string, newString: string) => {
   }
 }
 
+const hintLines = 12
+const hintLineLength = 200
+
+/**
+ * A short hint for an oldString miss, so the next attempt can succeed without rereading the file: newString is
+ * already there (often an edit that already applied), or the lines closest to oldString, numbered like Read output.
+ * Lines vote for where oldString starts when they match ignoring all whitespace; at least half must agree.
+ */
+const missHint = (source: string, oldString: string, newString: string) => {
+  const view = source.replaceAll(crlf, "\n")
+  const replacement = newString.replaceAll(crlf, "\n")
+  if (replacement.trim().length >= 20 && normalizeForMatch(view).includes(normalizeForMatch(replacement)))
+    return "newString is already in the file, so this edit may already be applied."
+  const key = (line: string) => normalizeForMatch(line).replace(/\s+/g, " ").trim()
+  const distinct = (line: string) => /[\p{L}\p{N}]/u.test(line)
+  const lines = view.split("\n")
+  const search = oldString.replaceAll(crlf, "\n").split("\n")
+  const positions = new Map<string, number[]>()
+  lines.forEach((line, index) => {
+    const value = key(line)
+    if (!distinct(value)) return
+    const found = positions.get(value)
+    if (found) found.push(index)
+    else positions.set(value, [index])
+  })
+  const votes = new Map<number, number>()
+  const wanted = search.filter((line, offset) => {
+    const value = key(line)
+    if (!distinct(value)) return false
+    for (const index of positions.get(value) ?? []) votes.set(index - offset, (votes.get(index - offset) ?? 0) + 1)
+    return true
+  }).length
+  const [start, count] = [...votes].reduce((best, vote) => (vote[1] > best[1] ? vote : best), [0, 0])
+  if (count === 0 || count * 2 < wanted) return
+  const from = Math.max(0, start)
+  const to = Math.min(lines.length, start + search.length, from + hintLines)
+  return [
+    "The closest lines in the file:",
+    ...lines
+      .slice(from, to)
+      .map(
+        (line, index) =>
+          `${from + index + 1}: ${line.length > hintLineLength ? `${line.slice(0, hintLineLength)}…` : line}`,
+      ),
+  ].join("\n")
+}
+
 /** Number of sorted positions strictly before offset. */
 const countBefore = (positions: number[], offset: number) => {
   let low = 0
@@ -282,8 +329,9 @@ export const Plugin = {
                 source: permissionSource,
               })
               if (replacements === 0) {
+                const hint = missHint(source, input.oldString, input.newString)
                 return yield* new ToolFailure({
-                  message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.`,
+                  message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.${hint ? `\n\n${hint}` : ""}`,
                 })
               }
               if (replacements > 1 && input.replaceAll !== true) {

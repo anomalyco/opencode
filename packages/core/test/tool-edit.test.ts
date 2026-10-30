@@ -430,6 +430,50 @@ describe("EditTool", () => {
     }),
   )
 
+  it.live("points a missed oldString at the closest lines, or at newString already applied", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "miss.ts")
+      const miss = (oldString: string, newString: string) =>
+        withTool(tmp.path, edit, (registry) => executeTool(registry, call({ path: "miss.ts", oldString, newString })))
+      const missed = "Could not find oldString in miss.ts. It must match exactly, including whitespace and indentation."
+      return Effect.promise(() =>
+        fs.writeFile(
+          target,
+          "import { a } from './a'\n\nexport function run() {\n  const value = a()\n  return value + 1\n}\n",
+        ),
+      ).pipe(
+        Effect.andThen(
+          Effect.gen(function* () {
+            expect(yield* miss("export function run() {\n\tconst value = a()\n\treturn value + 2\n}", "x")).toEqual({
+              status: "error",
+              error: {
+                type: "tool.execution",
+                message: `${missed}\n\nThe closest lines in the file:\n3: export function run() {\n4:   const value = a()\n5:   return value + 1\n6: }`,
+              },
+            })
+            expect(yield* miss("  return value + 2", "  return value + 1")).toEqual({
+              status: "error",
+              error: { type: "tool.execution", message: missed },
+            })
+            expect(yield* miss("const value = b()", "  const value = a()\n  return value + 1")).toEqual({
+              status: "error",
+              error: {
+                type: "tool.execution",
+                message: `${missed}\n\nnewString is already in the file, so this edit may already be applied.`,
+              },
+            })
+            expect(yield* miss("nothing like it", "anything")).toEqual({
+              status: "error",
+              error: { type: "tool.execution", message: missed },
+            })
+            expect(edit.writes).toEqual([])
+          }),
+        ),
+      )
+    }),
+  )
+
   it.live("returns specific missing file and directory errors", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()
