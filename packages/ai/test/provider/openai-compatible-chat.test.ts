@@ -1,7 +1,16 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMEvent, LLMRequest, Media, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import {
+  LLM,
+  LLMEvent,
+  LLMRequest,
+  Media,
+  Message,
+  ToolCallPart,
+  ToolChoice,
+  ToolDefinition,
+} from "../../src/effect.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
@@ -156,7 +165,10 @@ describe("OpenAI-compatible Chat route", () => {
       const declared = yield* prepare("anthropic")
       expect(declared.body).toMatchObject({
         messages: [
-          { role: "system", content: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }] },
+          {
+            role: "system",
+            content: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
+          },
           { role: "user", content: [{ type: "text", text: "Say hello.", cache_control: { type: "ephemeral" } }] },
         ],
         tools: [{ function: { name: "lookup" }, cache_control: { type: "ephemeral" } }],
@@ -166,7 +178,10 @@ describe("OpenAI-compatible Chat route", () => {
       const alibaba = yield* prepare("alibaba")
       expect(alibaba.body).toMatchObject({
         messages: [
-          { role: "system", content: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }] },
+          {
+            role: "system",
+            content: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
+          },
           { role: "user", content: [{ type: "text", text: "Say hello.", cache_control: { type: "ephemeral" } }] },
         ],
       })
@@ -651,6 +666,127 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("absorbs tool calls that open after a terminal chunk", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ role: "assistant", content: "Hello" }),
+              deltaChunk({}, "stop"),
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: "{}" } }] }),
+              usageChunk({ prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 }),
+            ),
+          ),
+        ),
+      )
+
+      // The first finish reason still wins; the late call upgrades the settled step.
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "stop" })
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: {} }])
+      expect(response.usage).toMatchObject({ inputTokens: 3, outputTokens: 1, totalTokens: 4 })
+    }),
+  )
+
+  it.effect("absorbs text and reasoning that stream after the finish chunk", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ role: "assistant" }),
+              deltaChunk({}, "stop"),
+              deltaChunk({ reasoning_content: " entangled" }),
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({ content: "!" }),
+              usageChunk({ prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }),
+            ),
+          ),
+        ),
+      )
+
+      // v2 shells order the deltas after the finish chunk (radoxai.com); the
+      // finish event publishes once at the end with the recorded reason.
+      expect(response.text).toBe("Hello!")
+      expect(response.reasoning).toBe(" entangled")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
+    }),
+  )
+
+  it.effect("keeps the first finish reason when trailing chunks repeat one", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "tool_calls"),
+              deltaChunk({ content: " late" }),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello late")
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_calls" })
+    }),
+  )
+
+  it.effect("ignores a replay of an already finalized tool call", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({
+                tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"q":"x"}' } }],
+              }),
+              deltaChunk({}, "stop"),
+              // Identical call replayed after the terminal is dropped, not re-opened.
+              deltaChunk({
+                tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"q":"x"}' } }],
+              }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toHaveLength(1)
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { q: "x" } }])
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "stop" })
+    }),
+  )
+
+  it.effect("fails on tool fragments left unresolvable after the finish", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ role: "assistant", content: "Hello" }),
+              deltaChunk({}, "stop"),
+              // An identity-less fragment after the terminal cannot form a call.
+              deltaChunk({ tool_calls: [{ index: 0, function: { arguments: '{"a":1}' } }] }),
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.message).toContain("OpenAI Chat tool call delta is missing id or name")
+    }),
+  )
+
   it.effect("preserves late text and reasoning for replay without changing the finished tool call", () =>
     Effect.gen(function* () {
       const details = [{ type: "reasoning.encrypted", data: "opaque", id: "late-reasoning" }]
@@ -693,27 +829,70 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
-  it.effect("rejects tool changes after a terminal chunk", () =>
+  it.effect("does not finalize tool calls that open after a truncated finish", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.generate(request).pipe(
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
               deltaChunk({ content: "Hello" }),
-              deltaChunk({}, "stop"),
-              deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: "{}" } }] }),
+              deltaChunk({}, "length"),
+              // Truncation is intentional: a call opening after it stays unconfirmed.
+              deltaChunk({
+                tool_calls: [
+                  { index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query":"weather"}' } },
+                ],
+              }),
             ),
           ),
         ),
-        Effect.flip,
       )
 
-      expect(error.message).toContain("OpenAI Chat received content after the finish reason")
-      expect(error.reason._tag).toBe("InvalidProviderOutput")
-      if (error.reason._tag !== "InvalidProviderOutput") return
-      expect(decodeJson(error.reason.body ?? "")).toMatchObject({
-        choices: [{ delta: { tool_calls: [{ id: "call_1" }] } }],
-      })
+      expect(response.text).toBe("Hello")
+      expect(response.toolCalls).toEqual([])
+      expect(response.finishReason).toEqual({ normalized: "length", raw: "length" })
+
+      const filtered = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({}, "content_filter"),
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_2", function: { arguments: "{}" } }] }),
+            ),
+          ),
+        ),
+      )
+      expect(filtered.finishReason).toEqual({ normalized: "content-filter", raw: "content_filter" })
+      expect(filtered.toolCalls).toEqual([])
+    }),
+  )
+
+  it.effect("ignores trailing no-op tool deltas after a finalized call", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ tool_calls: [{ index: 0, id: "c1", function: { name: "lookup", arguments: "{}" } }] }),
+              deltaChunk({}, "tool_calls"),
+              // Empty trailing delta for the settled call is a no-op, not a fragment.
+              deltaChunk({ tool_calls: [{ index: 0, function: { arguments: "" } }] }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toHaveLength(1)
+      expect(response.toolCalls).toMatchObject([{ id: "c1", name: "lookup", input: {} }])
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_calls" })
     }),
   )
 })
