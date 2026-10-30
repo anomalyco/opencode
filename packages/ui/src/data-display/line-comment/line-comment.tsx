@@ -18,6 +18,8 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
+import { Loader } from "@opencode/ui/loader"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import check from "./quote-check.svg"
 import "./line-comment.css"
 
@@ -100,6 +102,15 @@ export interface LineCommentEditorProps extends Omit<ComponentProps<"div">, "chi
   /** Submit an empty value too, such as to clear a comment that exists (default: false). Compact empty actions otherwise cancel. */
   allowEmpty?: boolean
   mention?: LineCommentEditorMention
+  /** Compact editor action on Mod+Enter or modifier-click. */
+  alternateSubmit?: {
+    label: string
+    keys: string[]
+    disabled?: boolean
+    onSubmit: (value: string) => void
+  }
+  /** Keep the draft read-only and prevent duplicate actions while its submission settles. */
+  submitting?: boolean
 }
 
 function pathFilename(path: string) {
@@ -119,6 +130,8 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
   let textareaRef: HTMLTextAreaElement | undefined
   const [mentionOpen, setMentionOpen] = createSignal(false)
 
+  const [alternate, setAlternate] = createSignal(false)
+
   const [local, rest] = splitProps(props, [
     "label",
     "value",
@@ -134,6 +147,8 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
     "autofocus",
     "allowEmpty",
     "mention",
+    "alternateSubmit",
+    "submitting",
     "class",
     "classList",
   ])
@@ -141,10 +156,25 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
   const canSubmit = () => !!local.allowEmpty || local.value.trim().length > 0
   const compactCancel = () => !canSubmit()
 
+  const alternateActive = () => !!local.alternateSubmit && alternate()
+
   const compactLabel = () =>
-    compactCancel()
-      ? (local.cancelLabel ?? i18n.t("ui.lineComment.cancel"))
-      : (local.submitLabel ?? i18n.t("ui.lineComment.submit"))
+    alternateActive()
+      ? local.alternateSubmit!.label
+      : compactCancel()
+        ? (local.cancelLabel ?? i18n.t("ui.lineComment.cancel"))
+        : (local.submitLabel ?? i18n.t("ui.lineComment.submit"))
+
+  createEffect(() => {
+    if (local.variant !== "compact" || !local.alternateSubmit) return
+
+    const update = (event: KeyboardEvent) => setAlternate(modified(event))
+
+    // Capture modifier releases; the textarea stops key propagation.
+    makeEventListener(document, "keydown", update, { capture: true })
+    makeEventListener(document, "keyup", update, { capture: true })
+    makeEventListener(window, "blur", () => setAlternate(false))
+  })
 
   const closeMention = () => {
     setMentionOpen(false)
@@ -228,10 +258,18 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
     selectMention(items.find((item) => item.path === active) ?? items[0])
   }
 
-  const submit = () => {
+  const submit = (alternate = false) => {
+    if (local.submitting) return
     const v = local.value.trim()
 
     if (!v && !local.allowEmpty) return
+
+    if (alternate && local.alternateSubmit) {
+      if (!local.alternateSubmit.disabled) local.alternateSubmit.onSubmit(v)
+
+      return
+    }
+
     local.onSubmit(v)
   }
 
@@ -278,6 +316,7 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
       data-component="line-comment-v2"
       data-variant="editor"
       data-layout={local.variant ?? "default"}
+      aria-busy={local.submitting || undefined}
       classList={{
         ...local.classList,
         [local.class ?? ""]: !!local.class,
@@ -300,6 +339,7 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
               rows={local.rows ?? (local.variant === "compact" ? 1 : 4)}
               placeholder={local.placeholder ?? i18n.t("ui.lineComment.contextPlaceholder")}
               value={local.value}
+              readOnly={local.submitting}
               style={{ "unicode-bidi": "plaintext", "text-align": "start" }}
               onInput={(e) => {
                 local.onInput(e.currentTarget.value)
@@ -312,7 +352,7 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
 
                 if (e.isComposing || e.keyCode === 229) return
 
-                if (mentionOpen()) {
+                if (mentionOpen() && !local.submitting) {
                   if (e.key === "Escape") {
                     e.preventDefault()
                     closeMention()
@@ -343,6 +383,8 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
 
                 if (e.key === "Escape") {
                   e.preventDefault()
+
+                  if (local.submitting) return
                   e.currentTarget.blur()
                   local.onCancel()
 
@@ -351,11 +393,13 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
 
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault()
-                  submit()
+
+                  if (e.repeat) return
+                  submit(modified(e))
                 }
               }}
             />
-            <Show when={mentionOpen() && mention.flat().length > 0}>
+            <Show when={!local.submitting && mentionOpen() && mention.flat().length > 0}>
               <div data-slot="line-comment-v2-mention-list">
                 <For each={mention.flat().slice(0, 10)}>
                   {(item) => {
@@ -388,9 +432,21 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
           <Show when={local.variant === "compact"}>
             <Tooltip
               value={
-                <>
-                  {compactLabel()} <Keybind keys={[compactCancel() ? "Esc" : "⏎"]} variant="neutral" />
-                </>
+                <div class="flex flex-col gap-1.5">
+                  <div class="flex items-center gap-1.5">
+                    {compactLabel()}
+                    <Keybind
+                      keys={alternateActive() ? local.alternateSubmit!.keys : [compactCancel() ? "Esc" : "⏎"]}
+                      variant="neutral"
+                    />
+                  </div>
+                  <Show when={local.alternateSubmit && !alternateActive()}>
+                    <div class="flex items-center gap-1.5">
+                      {local.alternateSubmit!.label}
+                      <Keybind keys={local.alternateSubmit!.keys} variant="neutral" />
+                    </div>
+                  </Show>
+                </div>
               }
               placement="top"
             >
@@ -398,9 +454,16 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
                 data-slot="line-comment-v2-submit"
                 type="button"
                 size="small"
-                variant={local.value.trim() ? "neutral" : "ghost-muted"}
+                variant={
+                  alternateActive() || local.submitting ? "submit" : local.value.trim() ? "neutral" : "ghost-muted"
+                }
+                disabled={local.submitting || (alternateActive() && local.alternateSubmit?.disabled)}
                 icon={
-                  compactCancel() ? (
+                  local.submitting ? (
+                    <Loader />
+                  ) : alternateActive() ? (
+                    <Icon name="arrow-up" />
+                  ) : compactCancel() ? (
                     <Icon name="close" />
                   ) : (
                     <span
@@ -411,12 +474,30 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
                   )
                 }
                 aria-label={compactLabel()}
-                onClick={() => (compactCancel() ? local.onCancel() : submit())}
+                onPointerEnter={(event) => {
+                  if (modified(event)) setAlternate(true)
+                }}
+                onClick={(event) => {
+                  if (compactCancel() && !alternateActive()) return local.onCancel()
+                  submit(alternateActive() || modified(event))
+                }}
                 onKeyDown={(event) => {
-                  if (event.key !== "Escape" || event.isComposing) return
+                  if (event.isComposing) return
+
+                  if (event.key === "Enter" && modified(event) && local.alternateSubmit) {
+                    event.preventDefault()
+                    event.stopPropagation()
+
+                    if (!event.repeat) submit(true)
+
+                    return
+                  }
+
+                  if (event.key !== "Escape") return
                   event.preventDefault()
                   event.stopPropagation()
-                  local.onCancel()
+
+                  if (!local.submitting) local.onCancel()
                 }}
               />
             </Tooltip>
@@ -440,4 +521,8 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
       </div>
     </div>
   )
+}
+
+function modified(event: Pick<KeyboardEvent, "metaKey" | "ctrlKey" | "altKey" | "shiftKey">) {
+  return (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey
 }
