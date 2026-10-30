@@ -83,7 +83,12 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
       const prompt = withOffsets(store().prompt)
       const length = promptLength(prompt)
       const end = range?.end ?? Math.min(store().cursor ?? length, length)
-      const part = prompt.find((item) => item.type === "text" && end >= item.start && end <= item.end)
+
+      const part = prompt.find(
+        (item): item is Extract<ComposerPrompt[number], { type: "text" }> =>
+          item.type === "text" && end >= item.start && end <= item.end,
+      )
+
       const index = part ? part.content.slice(0, end - part.start).lastIndexOf("@") : -1
       const start = range?.start ?? (part && index >= 0 ? part.start + index : end)
       setStore()("prompt", insertMention(prompt, start, end, mention))
