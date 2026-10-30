@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type OpenCodeEvent, type SessionInboxItem } from "../src/promise"
+import { OpenCode, type FormInfo, type OpenCodeEvent, type SessionInboxItem } from "../src/promise"
 
 const item: SessionInboxItem = {
   id: "msg_remote",
@@ -157,6 +157,73 @@ test("hydration coalesces a concurrent optimistic compaction even if its POST fa
   } finally {
     response.resolve(Response.json({ data: [] }))
     admission.resolve(new Response(null, { status: 204 }))
+    setup.dispose()
+  }
+})
+
+const form: FormInfo = {
+  id: "frm_remote",
+  sessionID: "ses_remote",
+  title: "Pick a branch",
+  metadata: { kind: "question" },
+  fields: [{ type: "string", key: "answer", title: "Answer", required: true }],
+}
+
+test("form hydration retains a form created during the read", async () => {
+  const response = Promise.withResolvers<Response>()
+  const setup = fixture(() => response.promise)
+  try {
+    const reading = setup.data.session.form.sync(form.sessionID)
+    setup.emit({
+      id: "evt_form_created",
+      type: "form.created",
+      created: 1,
+      location: { directory: "/project" },
+      data: { form },
+    })
+    response.resolve(Response.json({ data: [] }))
+    await reading
+    expect(setup.data.session.form.list(form.sessionID)?.map((entry) => entry.id)).toEqual([form.id])
+  } finally {
+    response.resolve(Response.json({ data: [] }))
+    setup.dispose()
+  }
+})
+
+test.each(["replied", "cancelled"] as const)("a delayed form snapshot cannot resurrect a %s form", async (action) => {
+  const response = Promise.withResolvers<Response>()
+  const setup = fixture(() => response.promise)
+  try {
+    setup.emit({
+      id: "evt_form_created",
+      type: "form.created",
+      created: 1,
+      location: { directory: "/project" },
+      data: { form },
+    })
+    const reading = setup.data.session.form.sync(form.sessionID)
+    setup.emit(
+      action === "replied"
+        ? {
+            id: "evt_form_settled",
+            type: "form.replied",
+            created: 2,
+            location: { directory: "/project" },
+            data: { id: form.id, sessionID: form.sessionID, answer: { answer: "main" } },
+          }
+        : {
+            id: "evt_form_settled",
+            type: "form.cancelled",
+            created: 2,
+            location: { directory: "/project" },
+            data: { id: form.id, sessionID: form.sessionID },
+          },
+    )
+    response.resolve(Response.json({ data: [form] }))
+    await reading
+    expect(setup.data.session.form.list(form.sessionID)).toEqual([])
+  } finally {
+    response.resolve(Response.json({ data: [] }))
     setup.dispose()
   }
 })
