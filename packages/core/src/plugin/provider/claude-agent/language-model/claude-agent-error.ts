@@ -17,10 +17,10 @@ export function make() {
     const status = message.subtype === "success" ? (message.api_error_status ?? undefined) : undefined
     const httpError = status !== undefined && status >= 400
     if (message.subtype === "success" && !message.is_error && !httpError) return
-    if (code === "authentication_failed") {
-      return new Error("Claude Code is not logged in. Run `claude auth login` in a terminal.")
-    }
-    const result = message.subtype === "success" ? message.result : message.errors.join("\n")
+    const result = (message.subtype === "success" ? message.result : message.errors.join("\n")).replaceAll(
+      "Please run /login",
+      "Run `claude auth login` in a terminal",
+    )
     const failure =
       status !== undefined && status >= 500
         ? (status === 529 ? "Anthropic is overloaded (529)." : `Anthropic returned HTTP ${status}.`) +
