@@ -4,7 +4,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Effect, Layer, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { AIError, LLMEvent, Media, SpeechEvent, TranscriptionEvent } from "../src/effect.js"
+import { AIError, LLMEvent, Media } from "../src/effect.js"
+import { SpeechEvent, TranscriptionEvent } from "../src/experimental.js"
 import { RequestExecutor, type StreamOptions } from "../src/route.js"
 import { AI } from "../src/index.js"
 import { AssemblyAI, OpenAI, Runway } from "../src/providers.js"
@@ -174,7 +175,7 @@ describe("AI promise client", () => {
     const ai = AI.make({ layer: executor(seen) })
     const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
 
-    const generation = await ai.video.start({ model, prompt: "A kite" })
+    const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
     expect(generation.id).toBe("task_1")
     expect(generation.status).toBe("queued")
     expect(generation.token).toEqual({ taskID: "task_1" })
@@ -188,12 +189,12 @@ describe("AI promise client", () => {
     expect(response.video.source).toMatchObject({ type: "url", url: "https://runway.test/out.mp4" })
     expect(response.usage).toEqual({ type: "credits", credits: 5 })
 
-    const resumed = await ai.video.resume(model, JSON.parse(JSON.stringify(generation.token)))
+    const resumed = await ai.experimental.video.resume(model, JSON.parse(JSON.stringify(generation.token)))
     expect(resumed.status).toBe("completed")
     expect((await resumed.await()).videos).toHaveLength(1)
 
     const events: Array<string> = []
-    for await (const event of ai.video.stream({ model, prompt: "A kite" }, { poll: { interval: 10 } })) {
+    for await (const event of ai.experimental.video.stream({ model, prompt: "A kite" }, { poll: { interval: 10 } })) {
       events.push(event.type)
     }
     expect(events).toEqual(["video", "finish"])
@@ -229,7 +230,7 @@ describe("AI promise client", () => {
   test("exposes a generation's snapshot and terminal state", async () => {
     const ai = AI.make({ layer: executor([]) })
     const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
-    const generation = await ai.video.start({ model, prompt: "A kite" })
+    const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
     expect(generation.snapshot).toEqual({ id: "task_1", status: "queued", progress: undefined, position: undefined })
     expect(generation.terminal).toBe(false)
     const refreshed = await generation.refresh()
@@ -241,7 +242,7 @@ describe("AI promise client", () => {
   test("observes a started generation's events and fetches its result", async () => {
     const ai = AI.make({ layer: executor([]) })
     const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
-    const generation = await ai.video.start({ model, prompt: "A kite" })
+    const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
 
     const events: Array<string> = []
     for await (const event of generation.events({ poll: { interval: 10 } })) events.push(event.type)
@@ -274,11 +275,16 @@ describe("AI promise client", () => {
     const bytes = Media.bytes(Uint8Array.from([0x49, 0x44, 0x33]), "audio/mpeg")
 
     expect(
-      (await ai.transcription.generate({ model: openai.transcription("gpt-4o-mini-transcribe"), audio: bytes })).text,
+      (
+        await ai.experimental.transcription.generate({
+          model: openai.transcription("gpt-4o-mini-transcribe"),
+          audio: bytes,
+        })
+      ).text,
     ).toBe("Hello there.")
 
     const deltas: Array<string> = []
-    for await (const event of ai.transcription.stream({
+    for await (const event of ai.experimental.transcription.stream({
       model: openai.transcription("gpt-4o-mini-transcribe"),
       audio: bytes,
     }))
@@ -288,7 +294,7 @@ describe("AI promise client", () => {
     const model = AssemblyAI.configure({ apiKey: "test", baseURL: "https://assemblyai.test" }).transcription(
       "universal-2",
     )
-    const generation = await ai.transcription.start({ model, audio })
+    const generation = await ai.experimental.transcription.start({ model, audio })
     expect(generation.token).toEqual({ transcriptID: "tr_1" })
     expect((await generation.await({ poll: { interval: 10 } })).text).toBe("Hello there.")
     await ai.dispose()
@@ -298,11 +304,12 @@ describe("AI promise client", () => {
     const ai = AI.make({ layer: executor([]) })
     const model = openai.speech("gpt-4o-mini-tts")
 
-    const response = await ai.speech.generate({ model, text: "Hello", voice: "coral", format: "pcm" })
+    const response = await ai.experimental.speech.generate({ model, text: "Hello", voice: "coral", format: "pcm" })
     expect(await ai.run(response.audio.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
 
     const events: Array<SpeechEvent> = []
-    for await (const event of ai.speech.stream({ model, text: "Hello", voice: "coral" })) events.push(event)
+    for await (const event of ai.experimental.speech.stream({ model, text: "Hello", voice: "coral" }))
+      events.push(event)
     expect(events.map((event) => event.type)).toEqual(["audio-delta", "audio-delta", "finish"])
     const finish = events.find(SpeechEvent.is.finish)
     expect(await ai.run(finish!.audio.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
@@ -361,7 +368,10 @@ describe("AI promise client", () => {
     ).toBe(reason)
 
     const preAborted = await Array.fromAsync(
-      ai.speech.stream({ model: openai.speech("gpt-4o-mini-tts"), text: "Hello" }, { signal: aborted.signal }),
+      ai.experimental.speech.stream(
+        { model: openai.speech("gpt-4o-mini-tts"), text: "Hello" },
+        { signal: aborted.signal },
+      ),
     ).catch((error: unknown) => error)
     expect(preAborted).toBe(aborted.signal.reason)
     expect(preAborted).toMatchObject({ name: "AbortError" })
@@ -381,7 +391,7 @@ describe("AI promise client", () => {
     expect(midStreamFailure).toMatchObject({ name: "AbortError" })
 
     const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
-    const generation = await ai.video.start({ model, prompt: "A kite" })
+    const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
     const polling = new AbortController()
     const events: Array<string> = []
     const eventsFailure = await Array.fromAsync(
@@ -544,8 +554,8 @@ describe("AI promise client", () => {
   test("the default client is created lazily and can be disposed", async () => {
     expect(typeof AI.ai.llm.generate).toBe("function")
     expect(typeof AI.ai.image.generate).toBe("function")
-    expect(typeof AI.ai.video.start).toBe("function")
-    expect(typeof AI.ai.speech.generate).toBe("function")
+    expect(typeof AI.ai.experimental.video.start).toBe("function")
+    expect(typeof AI.ai.experimental.speech.generate).toBe("function")
     await AI.ai.dispose()
   })
 })

@@ -247,7 +247,7 @@ it.effect(
           current_values: { "test/context": Instructions.hash("newest instructions") },
         })
         const replayed = yield* s.load(target)
-        expect(replayed.initial).toBe("changed instructions")
+        expect(Instructions.join(replayed.initial)).toBe("changed instructions")
         expect(
           toLLMMessages(
             replayed.entries.map((entry) => entry.message),
@@ -264,7 +264,7 @@ it.effect(
           { ...model.ref, providerID: Provider.ID.make("other") },
         ]) {
           const expanded = yield* s.load(incompatible)
-          expect(expanded.initial).toBe("changed instructions")
+          expect(Instructions.join(expanded.initial)).toBe("changed instructions")
           expect(
             toLLMMessages(
               expanded.entries.map((entry) => entry.message),
@@ -277,7 +277,7 @@ it.effect(
           ])
         }
         const preview = yield* SessionHistory.preview(s.db, sessionID, s.instructions, target)
-        expect(preview.initial).toBe("changed instructions")
+        expect(Instructions.join(preview.initial)).toBe("changed instructions")
         expect(preview.messages).toEqual(replayed.entries.map((entry) => entry.message))
         const store = yield* SessionStore.Service
         expect((yield* store.messages({ sessionID })).map((message) => message.type)).toEqual([
@@ -328,7 +328,7 @@ it.effect("falls back to an earlier compatible native or local checkpoint", () =
     s.state.value = "post-epoch update"
     yield* s.prepare
     const replayed = yield* s.load(target)
-    expect(replayed.initial).toBe("new native baseline")
+    expect(Instructions.join(replayed.initial)).toBe("new native baseline")
     expect(replayed.entries.map((entry) => entry.message.type)).toEqual(["compaction", "user", "system"])
     expect(replayed.entries[0]?.message).toMatchObject({ native, model: model.ref })
     expect(
@@ -338,7 +338,7 @@ it.effect("falls back to an earlier compatible native or local checkpoint", () =
       ).filter((message) => message.role === "system"),
     ).toEqual([Message.system("post-epoch update")])
     const local = yield* s.load("local")
-    expect(local.initial).toBe("new native baseline")
+    expect(Instructions.join(local.initial)).toBe("new native baseline")
     expect(local.entries.map((entry) => entry.message.type)).toEqual(["compaction", "user", "user", "system"])
     expect(local.entries[0]?.message).toMatchObject({ summary: "local summary" })
   }),

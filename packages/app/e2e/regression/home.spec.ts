@@ -61,6 +61,19 @@ test("a working Home session keeps its project avatar and shows its activity rin
   expect(box!.x).toBeGreaterThan(title!.x + title!.width)
 })
 
+test("Home lists projects and sessions when stored state hides every server", async ({ page }) => {
+  await mockStressTimeline(page)
+  await seed(page, { usedProjects: { local: [fixture.project.id] } })
+  // A second seed merges into the server entry the first one wrote.
+  await seed(page, { storage: { "opencode.global.dat:server": { hidden: { [fixture.serverKey]: true } } } })
+  await page.goto("/")
+
+  await expect(
+    page.locator('[data-component="home-project-row"]').filter({ hasText: fixture.project.name }),
+  ).toBeVisible()
+  await expect(row(page, fixture.expected.targetTitle)).toBeVisible()
+})
+
 test("the session context menu renames, exports, and deletes a Home session", async ({ page }) => {
   await openHome(page)
   const target = row(page, fixture.expected.targetTitle)

@@ -642,6 +642,7 @@ export function Markdown(
   const completedCode = new Map<string, Extract<RenderedBlock, { mode: "code" }>>()
   const settledMarkdown = new Map<string, Exclude<RenderedBlock, { mode: "code" }>>()
   let renderedBlocks: RenderedBlock[] = []
+  let appliedLabels: CopyLabels | undefined
   let streamed = false
 
   const [projection] = createResource(
@@ -883,9 +884,15 @@ export function Markdown(
     container.querySelectorAll<HTMLImageElement>("img[data-markdown-favicon]").forEach((image) => {
       if (image.complete && image.naturalWidth > 0) image.dataset.loaded = ""
     })
-    container
-      .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
-      .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
+
+    // A button gets the labels of the run that creates it, so the others only need new ones when the language changes.
+    // Relabelling every button on each streamed delta re-rendered each one's tooltip and icon button.
+    if (appliedLabels?.copy !== labels.copy || appliedLabels?.copied !== labels.copied)
+      container
+        .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
+        .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
+
+    appliedLabels = labels
 
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({

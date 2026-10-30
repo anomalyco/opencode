@@ -15,6 +15,7 @@ import {
   inboxDelivered,
   inboxEnqueued,
   messageUpdated,
+  partDelta,
   partUpdated,
   reasoningPart,
   renderedPartID,
@@ -1008,6 +1009,33 @@ test.describe("Working", () => {
     )
     await expect(working).toHaveCount(0)
   })
+})
+
+test("grows a streaming row without a ResizeObserver loop error", async ({ page }) => {
+  // Each streamed paragraph grows its row. An observer on the content that holds every row saw that height inside the
+  // row observer's own delivery, and Chrome reported every such frame as an uncaught error.
+  await page.addInitScript(() => {
+    window.addEventListener("error", (event) => {
+      if (!event.message.startsWith("ResizeObserver loop")) return
+      document.documentElement.dataset.resizeObserverLoops = String(
+        Number(document.documentElement.dataset.resizeObserverLoops ?? 0) + 1,
+      )
+    })
+  })
+
+  const timeline = await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_growth", "Streaming.")], { completed: false })],
+  })
+
+  const text = page.locator(`[data-timeline-part-id="${renderedPartID("prt_growth")}"]`)
+
+  for (const line of [1, 2, 3, 4, 5, 6]) {
+    await timeline.send(partDelta("prt_growth", `\n\nParagraph ${line}.`))
+    await expect(text).toContainText(`Paragraph ${line}.`)
+  }
+
+  await expect(text.locator("p")).toHaveCount(7)
+  expect(await page.evaluate(() => document.documentElement.dataset.resizeObserverLoops)).toBeUndefined()
 })
 
 test.describe("background shortcut", () => {
