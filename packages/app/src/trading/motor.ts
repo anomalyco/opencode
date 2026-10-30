@@ -59,6 +59,30 @@ export interface RegistroInfo {
   readonly evento: "apertura" | "cierre" | "senal" | null
 }
 
+/** One closed trade as the bot itself reported it (its "FUERA … (±X USD brutos)" row). */
+export interface TradeInfo {
+  readonly bot: string
+  readonly hora: number
+  /** The bot's stated gross USD; null when the row carried no figure. */
+  readonly pnl: number | null
+  readonly mensaje: string
+}
+
+/** One equity-curve sample: account values as reported by IBKR (null until they arrive). */
+export interface CurvaInfo {
+  readonly hora: number
+  readonly patrimonio: number | null
+  readonly pnl_dia: number | null
+}
+
+/** The engine's daily-loss guard: stop every bot once the day P/L reaches -limite_dia. */
+export interface RiesgoInfo {
+  /** USD; 0 disables the guard. */
+  readonly limite_dia: number
+  /** Epoch ms when the guard fired; null while armed. */
+  readonly disparada: number | null
+}
+
 export interface SnapshotMotor {
   /** true while the engine has an IBKR connection (TWS demo 7497). */
   enlace: boolean
@@ -70,6 +94,10 @@ export interface SnapshotMotor {
   tareas: TareaInfo[]
   posiciones: PosicionInfo[]
   registros: RegistroInfo[]
+  trades: TradeInfo[]
+  curva: CurvaInfo[]
+  /** Missing when the serving engine predates the risk fields (it has not restarted with the new engine). */
+  riesgo: RiesgoInfo | null
 }
 
 // ----------------------------- sample data -----------------------------
@@ -117,6 +145,12 @@ export const DEMO: SnapshotMotor = {
     RegistroDemo(-20, "aviso", "10_russell_estocastico_h4", "Mercado fuera de sesión · sin señales"),
     RegistroDemo(-1, "info", "motor", "Snapshot listo · 15 sistemas, 3 activos"),
   ],
+  trades: [
+    { bot: "01_nasdaq_apertura_alcista", hora: Date.now() - 75 * 60_000, pnl: 46.25, mensaje: "FUERA a 10:32:14 · +46.25 USD brutos" },
+    { bot: "06_nasdaq_pullback", hora: Date.now() - 52 * 60_000, pnl: -38.5, mensaje: "FUERA a 10:48:02 · -38.5 USD brutos" },
+  ],
+  curva: [],
+  riesgo: { limite_dia: 250, disparada: null },
 }
 
 function RegistroDemo(minutosAtras: number, nivel: RegistroInfo["nivel"], bot: string, mensaje: string): RegistroInfo {
@@ -228,6 +262,22 @@ function desdeNativo(nativo: SnapshotNativo): Omit<SnapshotMotor, "demo"> {
       mensaje: entry.message,
       evento: eventoDeNativo(entry.event),
     })),
+    // An engine predating these fields (the live sidecar until its engine restart) simply omits them.
+    trades: (nativo.trades ?? []).map((trade) => ({
+      bot: trade.system,
+      hora: numero(trade.ts),
+      pnl: numeroNulo(trade.pnl ?? null),
+      mensaje: trade.message,
+    })),
+    curva: (nativo.equity ?? []).map((punto) => ({
+      hora: numero(punto.ts),
+      patrimonio: numeroNulo(punto.equity ?? null),
+      pnl_dia: numeroNulo(punto.pnl_day ?? null),
+    })),
+    riesgo:
+      nativo.risk === undefined
+        ? null
+        : { limite_dia: numero(nativo.risk.loss_day_limit), disparada: numeroNulo(nativo.risk.triggered_at ?? null) },
   }
 }
 
@@ -285,6 +335,30 @@ export function cerrarPosicion(api: OpenCodeClient, símbolo: string) {
  */
 export function cerrarTotal(api: OpenCodeClient) {
   return api.experimental.trading.positions.closeAll().catch(() => undefined)
+}
+
+/** Links the engine's TWS socket up (the user's click; nothing connects on its own). */
+export function conectarCuenta(api: OpenCodeClient) {
+  return api.experimental.trading.connect().catch(() => undefined)
+}
+
+/** Drops the engine's TWS socket until the next connect (running bots are untouched). */
+export function desconectarCuenta(api: OpenCodeClient) {
+  return api.experimental.trading.disconnect().catch(() => undefined)
+}
+
+/**
+ * The panic button: every running bot stops and the emergency close-all runs over the open
+ * positions. The result lists the stopped systems plus the close verdict; undefined when the
+ * server did not answer. A write: it only happens behind the confirmation dialog.
+ */
+export function panicoTotal(api: OpenCodeClient) {
+  return api.experimental.trading.panic().catch(() => undefined)
+}
+
+/** Sets the daily-loss guard's limit in USD; 0 disables it (persisted in the engine). */
+export function fijarLimiteDia(api: OpenCodeClient, limite: number) {
+  return api.experimental.trading.risk.update({ lossDayLimit: limite }).catch(() => undefined)
 }
 
 /** How often the dashboard re-polls the engine. */
