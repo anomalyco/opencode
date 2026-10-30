@@ -62,6 +62,7 @@ test("validates every supported field constraint", () => {
   validate(string({ pattern: "^a+$" }), "bbb", "Must match pattern: ^a+$")
   validate(string({ pattern: "[" }), "value", "Invalid pattern: [")
   validate(string({ format: "email" }), "invalid", "Expected an email address")
+  validate(string({ format: "email" }), "a@b.", "Expected an email address")
   validate(string({ format: "uri" }), "not a URL", "Expected a URL")
   validate(string({ format: "date" }), "2025-02-29", "Expected a date (YYYY-MM-DD)")
   validate(string({ format: "date-time" }), "not a date", "Expected a date and time")
@@ -107,4 +108,10 @@ test("updates multiselects without mutating their source", () => {
   expect(formToggleMultiselect(source, "two")).toEqual(["one", "custom", "two"])
   expect(formSetMultiselectCustom(source, "custom", "replacement")).toEqual(["one", "replacement"])
   expect(source).toEqual(["one", "custom"])
+})
+
+test("rejects a long run of dots in an email quickly", () => {
+  const started = performance.now()
+  expect(formValidateValue({ key: "value", type: "string", format: "email" }, `a@${".".repeat(30000)} `)).toBe("Expected an email address")
+  expect(performance.now() - started).toBeLessThan(50)
 })
