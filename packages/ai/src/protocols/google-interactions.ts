@@ -23,6 +23,7 @@ import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "google-interactions"
+const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 // =============================================================================
@@ -259,6 +260,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
         steps[steps.length - 1] = { type, content: [...last.content, content] }
       else steps.push({ type, content: [content] })
     }
+    let hasSignedStep = false
     for (const part of message.content) {
       if (message.role === "tool") {
         if (part.type !== "tool-result")
@@ -281,21 +283,25 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
         continue
       }
       if (message.role === "assistant" && part.type === "reasoning") {
+        const thoughtSignature = signature(part.providerMetadata, key)
         steps.push({
           type: "thought",
-          signature: signature(part.providerMetadata, key),
+          signature: thoughtSignature,
           summary: part.text ? [{ type: "text", text: part.text }] : undefined,
         })
+        if (thoughtSignature !== undefined) hasSignedStep = true
         continue
       }
       if (message.role === "assistant" && part.type === "tool-call") {
+        const toolSignature = signature(part.providerMetadata, key)
         steps.push({
           type: "function_call",
           id: part.id,
           name: part.name,
           arguments: part.input,
-          signature: signature(part.providerMetadata, key),
+          signature: toolSignature ?? (!hasSignedStep ? SKIP_THOUGHT_SIGNATURE_VALIDATOR : undefined),
         })
+        if (toolSignature !== undefined) hasSignedStep = true
         continue
       }
       return yield* ProviderShared.unsupportedContent(

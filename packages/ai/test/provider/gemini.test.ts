@@ -175,7 +175,12 @@ describe("Gemini route", () => {
       expect(prepared.body.contents).toEqual([
         {
           role: "model",
-          parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }],
+          parts: [
+            {
+              functionCall: { name: "lookup", args: { query: "weather" } },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
+          ],
         },
         {
           role: "user",
@@ -219,8 +224,14 @@ describe("Gemini route", () => {
         {
           role: "model",
           parts: [
-            { functionCall: { name: "lookup", args: { query: "weather" } } },
-            { functionCall: { name: "lookup", args: { query: "time" } } },
+            {
+              functionCall: { name: "lookup", args: { query: "weather" } },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
+            {
+              functionCall: { name: "lookup", args: { query: "time" } },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
           ],
         },
         {
@@ -302,7 +313,15 @@ describe("Gemini route", () => {
       )
 
       expect(legacy.body.contents).toEqual([
-        { role: "model", parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }] },
+        {
+          role: "model",
+          parts: [
+            {
+              functionCall: { name: "lookup", args: { query: "weather" } },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
+          ],
+        },
         {
           role: "user",
           parts: [{ functionResponse: { name: "lookup", response: { name: "lookup", content: "done" } } }],
@@ -331,7 +350,15 @@ describe("Gemini route", () => {
       )
 
       expect(prepared.body.contents).toEqual([
-        { role: "model", parts: [{ functionCall: { id: "call_1", name: "lookup", args: { query: "weather" } } }] },
+        {
+          role: "model",
+          parts: [
+            {
+              functionCall: { id: "call_1", name: "lookup", args: { query: "weather" } },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
+          ],
+        },
         {
           role: "user",
           parts: [
@@ -380,7 +407,12 @@ describe("Gemini route", () => {
           },
           {
             role: "model",
-            parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }],
+            parts: [
+              {
+                functionCall: { name: "lookup", args: { query: "weather" } },
+                thoughtSignature: "skip_thought_signature_validator",
+              },
+            ],
           },
           {
             role: "user",
@@ -434,7 +466,15 @@ describe("Gemini route", () => {
       )
 
       expect(prepared.body.contents).toEqual([
-        { role: "model", parts: [{ functionCall: { name: "read", args: { path: "pixel.png" } } }] },
+        {
+          role: "model",
+          parts: [
+            {
+              functionCall: { name: "read", args: { path: "pixel.png" } },
+              thoughtSignature: "skip_thought_signature_validator",
+            },
+          ],
+        },
         {
           role: "user",
           parts: [
@@ -608,7 +648,13 @@ describe("Gemini route", () => {
         model: "gemini-3-flash-preview",
         input: [
           { type: "user_input", content: [{ type: "video", uri, mime_type: "video/mp4" }] },
-          { type: "function_call", id: "call_video", name: "read", arguments: {} },
+          {
+            type: "function_call",
+            id: "call_video",
+            name: "read",
+            arguments: {},
+            signature: "skip_thought_signature_validator",
+          },
           {
             type: "function_result",
             call_id: "call_video",
@@ -652,7 +698,10 @@ describe("Gemini route", () => {
       )
 
       expect(prepared.body.contents).toEqual([
-        { role: "model", parts: [{ functionCall: { name: "shot", args: {} } }] },
+        {
+          role: "model",
+          parts: [{ functionCall: { name: "shot", args: {} }, thoughtSignature: "skip_thought_signature_validator" }],
+        },
         {
           role: "user",
           parts: [{ functionResponse: { name: "shot", response: { name: "shot", content: "" } } }],
@@ -702,7 +751,10 @@ describe("Gemini route", () => {
       expect(prepared.body.contents).toEqual([
         {
           role: "model",
-          parts: [{ functionCall: { name: "shot", args: {} } }, { functionCall: { name: "shot", args: {} } }],
+          parts: [
+            { functionCall: { name: "shot", args: {} }, thoughtSignature: "skip_thought_signature_validator" },
+            { functionCall: { name: "shot", args: {} }, thoughtSignature: "skip_thought_signature_validator" },
+          ],
         },
         {
           role: "user",

@@ -135,7 +135,6 @@ export const dict = {
   "dialog.provider.search.placeholder": "Search providers",
   "dialog.provider.empty": "No providers found",
   "dialog.provider.group.popular": "Popular",
-  "dialog.provider.group.mcp": "MCP",
   "dialog.provider.group.services": "Services",
   "dialog.provider.environmentOnly": "Environment only",
   "dialog.provider.signInRequired": "Sign in required →",
