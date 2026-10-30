@@ -1,6 +1,7 @@
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import type { ShellOutputInput, ShellOutputOutput } from "@opencode/client/promise"
 import { stripAnsi } from "@opencode/session-ui/tools/ansi"
@@ -79,7 +80,6 @@ export function SessionActivityChips(props: {
     settings.general.backgroundActivity() !== "off" && (counts().subagents > 0 || counts().shells > 0)
 
   const alignment = useComposerLaneAlignment()
-
 
   // A subagent can only be interrupted once its child session exists.
   const stoppable = (item: SessionActivityItem) => item.type === "shell" || !!item.sessionID
@@ -265,7 +265,7 @@ export function SessionActivityChips(props: {
               <Show
                 when={panel.state.shell}
                 fallback={
-                  <>
+                  <MenuScroll>
                     <For each={props.subagents}>
                       {(item) => (
                         <Menu.Item {...row(item)}>
@@ -298,7 +298,7 @@ export function SessionActivityChips(props: {
                         </Menu.Item>
                       )}
                     </For>
-                  </>
+                  </MenuScroll>
                 }
               >
                 {(shell) => (

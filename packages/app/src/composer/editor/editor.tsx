@@ -24,6 +24,7 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { AttachmentCard } from "@opencode/session-ui/attachment-card"
 import { ProgressCircle } from "@opencode/ui/progress-circle"
@@ -1273,7 +1274,7 @@ function ComposerEditorPopover(props: {
             </div>
           )}
         </Show>
-        <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
+        <MenuScroll class="min-h-0 flex-1">
           <div id={listID} role="listbox" aria-label={i18n.t("ui.promptInput.history")} class="flex flex-col">
             <Show
               when={props.items.length}
@@ -1314,7 +1315,7 @@ function ComposerEditorPopover(props: {
               </For>
             </Show>
           </div>
-        </div>
+        </MenuScroll>
       </Show>
       <Show when={!props.history}>
         <Show when={props.search}>

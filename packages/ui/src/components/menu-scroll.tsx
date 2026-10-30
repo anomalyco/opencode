@@ -77,7 +77,9 @@ export function MenuScroll(
           local.onScroll?.(event)
         }}
       >
-        <div ref={content}>{local.children}</div>
+        <div ref={content} data-slot="menu-scroll-content">
+          {local.children}
+        </div>
       </div>
       <Show when={state.overflow}>
         <div
