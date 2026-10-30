@@ -14,6 +14,10 @@ export class TimeoutConfig extends Schema.Class<TimeoutConfig>("Mcp.TimeoutConfi
   execution: PositiveInt.pipe(optional).annotate({
     description: "Maximum time in milliseconds to wait for MCP tool and prompt execution.",
   }),
+  wait: PositiveInt.pipe(optional).annotate({
+    description:
+      "Maximum time in milliseconds a session's first model request waits for the MCP server to finish starting. Defaults to 3000.",
+  }),
 }) {}
 
 export type Protocol = typeof Protocol.Type

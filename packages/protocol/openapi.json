@@ -17181,6 +17181,10 @@
                     "type": "integer",
                     "maximum": 9007199254740991,
                     "exclusiveMinimum": 0
+                  },
+                  "wait": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
                   }
                 },
                 "additionalProperties": false
@@ -20216,6 +20220,10 @@
                 "type": "integer",
                 "maximum": 9007199254740991,
                 "exclusiveMinimum": 0
+              },
+              "wait": {
+                "type": "integer",
+                "exclusiveMinimum": 0
               }
             },
             "additionalProperties": false
@@ -20307,6 +20315,10 @@
               "execution": {
                 "type": "integer",
                 "maximum": 9007199254740991,
+                "exclusiveMinimum": 0
+              },
+              "wait": {
+                "type": "integer",
                 "exclusiveMinimum": 0
               }
             },

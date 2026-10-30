@@ -319,6 +319,7 @@ Timeouts are positive integer milliseconds. Set defaults under `mcp.timeout`; a 
 | `startup` | 30 seconds | Transport connection and server initialization. |
 | `catalog` | 30 seconds | Listing tools, prompts, resources, and resource templates. |
 | `execution` | 12 hours | Tool calls, prompt retrieval, and resource reads. |
+| `wait` | 3 seconds | How long a session's first model request waits for a server that is still starting. Later requests never wait. |
 
 ## Protocol version
 
