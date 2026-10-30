@@ -152,6 +152,7 @@ export function Typeahead<T>(props: {
           </button>
         </Show>
       </div>
+      <div aria-hidden="true" class="h-[0.5px] shrink-0 bg-v2-border-border-base" />
       {/* Initial results and the empty state snap into place; other search resizing animates. */}
       <div
         class="overflow-hidden duration-[200ms] ease-[cubic-bezier(0.645,0.045,0.355,1)] motion-reduce:transition-none"
@@ -164,7 +165,13 @@ export function Typeahead<T>(props: {
             )
           }
         >
-          <div id={typeahead.listID} role="listbox" class="max-h-56 overflow-y-auto px-1 pb-1 empty:hidden">
+          {/* A stable gutter keeps rows from shifting when the list overflows; the end padding gives way to it. */}
+          <div
+            id={typeahead.listID}
+            role="listbox"
+            data-scrollable
+            class="max-h-56 overflow-y-auto py-1 ps-1 pe-[max(0px,calc(4px-var(--scrollbar-size,0px)))] [scrollbar-gutter:stable] empty:hidden"
+          >
             <For each={results().items}>
               {(item) => (
                 <div
@@ -192,7 +199,7 @@ export function Typeahead<T>(props: {
           {/* Stays mounted while a retry or a newer query is pending, so the list never collapses to nothing. */}
           <Show when={results().items.length === 0}>
             <div
-              class="mx-1 flex h-8 items-center px-2 pb-1 text-v2-text-text-faint"
+              class="mx-1 flex h-9 items-center px-2 py-1 text-v2-text-text-faint"
               classList={{ invisible: store.answered === undefined }}
             >
               <Show when={failed()} fallback={props.emptyLabel}>

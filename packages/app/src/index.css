@@ -136,13 +136,27 @@
     }
   }
 
-  ::highlight(timeline-search-hit) {
-    background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+  /* Root rules reach every element where highlights inherit; see quote-highlight.css in session-ui. */
+  @supports selector(:host-context(*)) {
+    :root::highlight(timeline-search-hit) {
+      background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+    }
+
+    :root::highlight(timeline-search-hit-active) {
+      background-color: var(--v2-icon-icon-accent);
+      color: var(--v2-background-bg-deep);
+    }
   }
 
-  ::highlight(timeline-search-hit-active) {
-    background-color: var(--v2-icon-icon-accent);
-    color: var(--v2-background-bg-deep);
+  @supports not selector(:host-context(*)) {
+    ::highlight(timeline-search-hit) {
+      background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+    }
+
+    ::highlight(timeline-search-hit-active) {
+      background-color: var(--v2-icon-icon-accent);
+      color: var(--v2-background-bg-deep);
+    }
   }
 
   [data-component="menu-v2-content"].desktop-app-menu {
@@ -264,15 +278,6 @@
     }
   }
 
-  @keyframes home-projects-fade-bottom {
-    from {
-      visibility: visible;
-    }
-    to {
-      visibility: hidden;
-    }
-  }
-
   @keyframes session-dropzone-enter {
     from {
       opacity: 0;
@@ -344,16 +349,36 @@
     }
   }
 
-  [data-slot="home-projects-scroll"] {
-    timeline-scope: --home-projects-scroll;
+  /* A mask fades the rows themselves, so the edges work over any background, including the dropdown's. */
+  [data-slot="home-projects-viewport"][data-fade-top] {
+    --mask-start: 16px;
+  }
+
+  [data-slot="home-projects-viewport"][data-fade-bottom] {
+    --mask-end: 16px;
+  }
+
+  [data-slot="home-projects-viewport"]:is([data-fade-top], [data-fade-bottom]) {
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--mask-start, 0px),
+      black calc(100% - var(--mask-end, 0px)),
+      transparent
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--mask-start, 0px),
+      black calc(100% - var(--mask-end, 0px)),
+      transparent
+    );
   }
 
   [data-slot="manage-models-scroll"] {
     timeline-scope: --manage-models-scroll;
   }
 
-  [data-slot="home-projects-scroll"]::before,
-  [data-slot="home-projects-scroll"]::after,
   [data-slot="manage-models-scroll"]::before {
     content: "";
     position: absolute;
@@ -365,37 +390,9 @@
     visibility: hidden;
   }
 
-  [data-slot="home-projects-scroll"]::before {
-    top: 0;
-    background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
-  }
-
   [data-slot="manage-models-scroll"]::before {
     top: 0;
     background: linear-gradient(to bottom, var(--v2-background-bg-base), transparent);
-  }
-
-  [data-slot="home-projects-scroll"]::after {
-    bottom: 0;
-    background: linear-gradient(to top, var(--v2-background-bg-base), transparent);
-  }
-
-  @supports (animation-timeline: --home-projects-scroll) and (timeline-scope: --home-projects-scroll) {
-    [data-slot="home-projects-viewport"] {
-      scroll-timeline: --home-projects-scroll y;
-    }
-
-    [data-slot="home-projects-scroll"]::before {
-      animation: home-projects-fade-top linear both;
-      animation-timeline: --home-projects-scroll;
-      animation-range: 0 0.1px;
-    }
-
-    [data-slot="home-projects-scroll"]::after {
-      animation: home-projects-fade-bottom linear both;
-      animation-timeline: --home-projects-scroll;
-      animation-range: calc(100% - 1.1px) calc(100% - 1px);
-    }
   }
 
   @supports (animation-timeline: --manage-models-scroll) and (timeline-scope: --manage-models-scroll) {

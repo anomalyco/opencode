@@ -314,7 +314,7 @@ function SessionScreenContent(props: {
             pinned={timeline.view.pinned()}
             centered={screen.centered()}
             reserveReviewToggle={!sideVisible()}
-            setContentRef={timeline.view.setContentRef}
+            onContentResize={timeline.view.contentResized}
             bottomInset={timeline.inset()}
             setVisibleRef={timeline.view.setVisibleRef}
             anchor={timeline.view.anchor}
@@ -322,6 +322,7 @@ function SessionScreenContent(props: {
             setRevealPart={timeline.view.setRevealPart}
             reveal={timeline.view.reveal}
             setScrollToEnd={timeline.view.setScrollToEnd}
+            setPage={timeline.view.setPage}
             search={
               <Show when={active()}>
                 <TimelineSearchBar controller={timelineSearch} />

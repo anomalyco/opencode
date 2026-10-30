@@ -19,8 +19,10 @@ type Command = {
   wordEnds?: number[]
   statementHead?: true
   declaration?: true
-  // Words after a trailing redirect are destinations in the legacy command span.
+  // Words before the first redirect when redirects appear between arguments.
   redirectWordCount?: number
+  // Exclusive prefix end relative to resource for commandless or group redirects.
+  redirectPrefixEnd?: number
 }
 
 // Opaque describes a parsing limitation, not a permission decision.
@@ -185,9 +187,8 @@ type BashState = {
   wordStart: number
   wordEnd: number
   commandStart: number | undefined
-  commandEnd: number
-  resourceEnd: number | undefined
   redirectWordCount: number | undefined
+  redirectPrefixEnd: number | undefined
   // Posix shells such as Dash read `&>` as `&` and `>`, so later words would start another command there.
   ampersandRedirectWords: number | undefined
   commandWordIndex: number
@@ -195,8 +196,10 @@ type BashState = {
   assignmentHeadUnsafe: boolean
   invalid: OpaqueReason | undefined
   redirectTarget: boolean
+  dupRedirect: boolean
   hereString: boolean
   hasRedirect: boolean
+  hasFileRedirect: boolean
   compoundEnd: boolean
   // A list operator (&&, ||, |, |&) still awaits its right-hand command.
   dangling: boolean
@@ -286,10 +289,14 @@ function finishBashWord(state: BashState) {
     state.words.push(state.word)
     // Unquoted trailing continuations are ignored syntax, not part of the raw token.
     state.rawWords.push(state.input.slice(state.wordStart, state.wordEnd))
-    state.commandEnd = state.wordEnd
   }
-  if (state.hereString && state.resourceEnd === undefined) state.commandEnd = state.wordEnd
+  if (state.redirectTarget) {
+    if (!state.dupRedirect || !/^(?:\d+-?|-)$/.test(state.input.slice(state.wordStart, state.wordEnd)))
+      state.hasFileRedirect = true
+    state.redirectPrefixEnd ??= state.wordEnd
+  }
   state.redirectTarget = false
+  state.dupRedirect = false
   state.hereString = false
   state.word = ""
   state.literal = ""
@@ -369,14 +376,15 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
   const inHeader = bashInHeader(state)
   if (name >= 0 && !state.words[name]) state.invalid ??= "invalid-structure"
   if (name >= 0 && !inHeader) {
-    const resource = state.input
-      .slice(state.commandStart, state.resourceEnd ?? state.wordEnd)
-      .replace(/^[ \t\n]+|[ \t\n]+$/g, "")
+    const resource = state.input.slice(state.commandStart, state.wordEnd).replace(/^[ \t\n]+|[ \t\n]+$/g, "")
     const command: Command = {
       resource,
       words: state.words.slice(name),
       rawWords: state.rawWords.slice(name),
-      ...(name === 0 && BASH_DECLARATIONS.has(state.rawWords[0]) && resource.startsWith(state.rawWords[0])
+      ...(name === 0 &&
+      !state.hasRedirect &&
+      BASH_DECLARATIONS.has(state.rawWords[0]) &&
+      resource.startsWith(state.rawWords[0])
         ? { declaration: true as const }
         : {}),
       ...(state.redirectWordCount !== undefined && state.redirectWordCount < state.words.length
@@ -424,9 +432,40 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
     for (const heredoc of state.heredocs) {
       if (heredoc.owned) continue
       heredoc.owned = true
-      if (newline && state.resourceEnd === undefined) {
+      if (newline) {
         heredoc.command = command
         heredoc.start = state.commandStart
+      }
+    }
+  } else if (
+    name < 0 &&
+    !inHeader &&
+    state.commandStart !== undefined &&
+    (state.hasFileRedirect || (state.hasRedirect && !state.compoundEnd))
+  ) {
+    const rawSpan = state.input.slice(state.commandStart, state.wordEnd)
+    const leading = /^[ \t\n]+/.exec(rawSpan)?.[0].length ?? 0
+    const resource = rawSpan.slice(leading).replace(/[ \t\n]+$/g, "")
+    if (resource) {
+      const prefixEnd =
+        state.redirectPrefixEnd !== undefined
+          ? Math.max(1, Math.min(resource.length, state.redirectPrefixEnd - state.commandStart - leading))
+          : resource.length
+      const prefixToken = resource.slice(0, prefixEnd)
+      const command: Command = {
+        resource,
+        words: [prefixToken],
+        rawWords: [prefixToken],
+        redirectPrefixEnd: prefixEnd,
+      }
+      state.commands.push(command)
+      for (const heredoc of state.heredocs) {
+        if (heredoc.owned) continue
+        heredoc.owned = true
+        if (newline) {
+          heredoc.command = command
+          heredoc.start = state.commandStart
+        }
       }
     }
   }
@@ -440,9 +479,11 @@ function finishBashCommand(state: BashState, boundary = false, newline = false) 
   state.rawWords.length = 0
   state.commandWordIndex = -1
   state.commandStart = undefined
+  state.dupRedirect = false
   state.hasRedirect = false
-  state.resourceEnd = undefined
+  state.hasFileRedirect = false
   state.redirectWordCount = undefined
+  state.redirectPrefixEnd = undefined
   state.ampersandRedirectWords = undefined
   state.compoundEnd = false
   state.dangling = false
@@ -475,17 +516,18 @@ function scanBash(
     wordStart: start,
     wordEnd: start,
     commandStart: undefined,
-    commandEnd: start,
-    resourceEnd: undefined,
     redirectWordCount: undefined,
+    redirectPrefixEnd: undefined,
     ampersandRedirectWords: undefined,
     commandWordIndex: -1,
     assignmentWord: false,
     assignmentHeadUnsafe: false,
     invalid: undefined,
     redirectTarget: false,
+    dupRedirect: false,
     hereString: false,
     hasRedirect: false,
+    hasFileRedirect: false,
     compoundEnd: false,
     dangling: false,
     outer,
@@ -681,8 +723,6 @@ function scanBashOperatorOrSeparator(
     const fdPrefix =
       state.wordStarted && !state.assignmentHeadUnsafe && /^(?:\d+|\{[A-Za-z_][A-Za-z0-9_]*\})$/.test(state.word)
     if (fdPrefix) {
-      // A continuation separates the legacy number token from the redirect descriptor.
-      if (state.wordEnd < index) state.commandEnd = state.wordEnd
       state.word = ""
       state.literal = ""
       state.output = ""
@@ -690,23 +730,24 @@ function scanBashOperatorOrSeparator(
     }
     if (!fdPrefix) finishBashWord(state)
     if (redirect.startsWith("&") && context.dialect === "posix") state.ampersandRedirectWords ??= state.words.length
-    // Trailing redirects wrap a whole list/pipeline in the legacy grammar, not its last command.
-    // Prefix redirects remain part of the command, and later words remain redirect destinations.
     if (state.redirectWordCount === undefined && state.commandWordIndex >= 0) {
       state.redirectWordCount = state.words.length
-    }
-    if (state.dangling && redirect !== "<<<" && state.commandWordIndex >= 0) {
-      state.resourceEnd ??= state.commandEnd
     }
     if (redirect === "<<" || redirect === "<<-") {
       const delimiter = bashHeredocDelimiter(input, index + redirect.length, redirect === "<<-")
       if (!delimiter) return { kind: "opaque", reason: "invalid-redirect" }
+      state.hasFileRedirect = true
+      state.redirectPrefixEnd ??=
+        " \t".includes(input[index + redirect.length] ?? "") ? index + redirect.length : delimiter.end + 1
       state.heredocs.push(delimiter)
       state.wordEnd = delimiter.end + 1
       state.redirectTarget = false
+      state.dupRedirect = false
       return delimiter.end
     }
+    if (" \t\n".includes(input[index + redirect.length] ?? "")) state.redirectPrefixEnd ??= index + redirect.length
     state.redirectTarget = true
+    state.dupRedirect = redirect === "<&" || redirect === ">&"
     state.hereString = redirect === "<<<"
     return index + redirect.length - 1
   }
@@ -1838,6 +1879,9 @@ function scanPowerShellList(
   let clause: PowerShellClause = initialClause
   let after: "do" | "if" | "try" | undefined
   let indexable: false | "variable" | "closed" | "member" = false
+  let memberChainStart: number | undefined
+  let hasMemberAccess = false
+  let hasFileRedirect = false
   let stopParsing = false
   let commandEnd = start
   let statementHead = true
@@ -1846,6 +1890,11 @@ function scanPowerShellList(
   let dangling = false
   let invocation = false
 
+  const resetMember = () => {
+    indexable = false
+    memberChainStart = undefined
+    hasMemberAccess = false
+  }
   const finishWord = (end: number) => {
     if (!started) return
     // Generic tokens can spell stop-parsing with escapes or embedded quotes; literal strings cannot.
@@ -1861,7 +1910,7 @@ function scanPowerShellList(
     )
       stopParsing = true
     if (!redirectTarget) {
-      if (!words.length && !invocation && !expression) segment = wordStart
+      if (!words.length && !invocation) segment = wordStart
       words.push(word)
       rawWords.push(input.slice(wordStart, end))
       wordEnds.push(end)
@@ -1874,13 +1923,13 @@ function scanPowerShellList(
   }
   const finishCommand = (end: number, required = false) => {
     finishWord(end)
-    if (words.length && !expression && !clause)
+    if (words.length && ((!expression && !clause) || hasFileRedirect))
       commands.push({
         resource: input.slice(segment, commandEnd).trimEnd(),
         words: [...words],
         rawWords: [...rawWords],
         wordEnds: wordEnds.map((value) => value - segment),
-        ...(statementHead && !invocation ? { statementHead: true as const } : {}),
+        ...(statementHead && !invocation && !expression && !clause ? { statementHead: true as const } : {}),
       })
     else if (
       (!expression && !clause && invocation) ||
@@ -1894,11 +1943,12 @@ function scanPowerShellList(
     rawWords.length = 0
     wordEnds.length = 0
     redirectTarget = false
+    hasFileRedirect = false
     invocation = false
     expression = initialExpression
     clause = initialClause
     after = undefined
-    indexable = false
+    resetMember()
     stopParsing = false
   }
 
@@ -1960,8 +2010,13 @@ function scanPowerShellList(
     if (char === "'" || char === '"') {
       if (!started && words.length === 0 && !invocation) expression = true
       quote = char
-      standalone = atBoundary || (expression && !redirectTarget) || (indexable === "member" && /[.:]$/.test(word))
-      if (!standalone) indexable = false
+      const dynamicMember = indexable === "member" && /[.:]$/.test(started ? word : (words.at(-1) ?? ""))
+      standalone = atBoundary || (expression && !redirectTarget) || dynamicMember
+      if (dynamicMember) hasMemberAccess = true
+      else if (standalone) {
+        memberChainStart = index
+        hasMemberAccess = false
+      } else resetMember()
       started = true
       continue
     }
@@ -1973,7 +2028,7 @@ function scanPowerShellList(
       // At a token boundary escaped whitespace is trivia, not a new argument.
       else if (!atBoundary || !rawSpace) {
         started = true
-        indexable = false
+        if (!(indexable === "member" && /[\p{L}\p{Nl}\d_]/u.test(escape.value))) resetMember()
         word += escape.value
       }
       index = escape.end
@@ -1998,7 +2053,7 @@ function scanPowerShellList(
       if (started) finishWord(index)
       const end = input.indexOf("#>", index + 2)
       if (end < 0) return { kind: "opaque", reason: "invalid-structure" }
-      if (!memberOperator) indexable = false
+      if (!memberOperator) resetMember()
       index = end + 1
       continue
     }
@@ -2035,7 +2090,8 @@ function scanPowerShellList(
       if (redirectTarget || words.length === 0 || (clause && clause !== "member"))
         return { kind: "opaque", reason: "invalid-redirect" }
       redirectTarget = !redirect.includes("&")
-      indexable = false
+      if (redirectTarget) hasFileRedirect = true
+      resetMember()
       index += redirect.length - 1
       commandEnd = index + 1
       continue
@@ -2104,7 +2160,8 @@ function scanPowerShellList(
       rawWords.length = 0
       wordEnds.length = 0
       expression = false
-      indexable = false
+      hasFileRedirect = false
+      resetMember()
       if (!assign || char !== "=") index++
       continue
     }
@@ -2121,6 +2178,8 @@ function scanPowerShellList(
       started = true
       index = literal.end
       finishWord(index + 1)
+      memberChainStart = wordStart
+      hasMemberAccess = false
       indexable = "closed"
       continue
     }
@@ -2128,7 +2187,15 @@ function scanPowerShellList(
       const end = powerShellBracedVariable(input, index, skipped)
       if (end === undefined) return { kind: "opaque", reason: "invalid-structure" }
       if (!started && !words.length && !invocation && hash !== "switch") expression = true
-      indexable = atBoundary || (indexable === "member" && /[.:]$/.test(word)) ? "closed" : false
+      const dynamicMember = indexable === "member" && /[.:]$/.test(started ? word : (words.at(-1) ?? ""))
+      if (dynamicMember) {
+        indexable = "closed"
+        hasMemberAccess = true
+      } else if (atBoundary) {
+        memberChainStart = index
+        hasMemberAccess = false
+        indexable = "closed"
+      } else resetMember()
       word += input.slice(index, end + 1)
       started = true
       index = end
@@ -2149,7 +2216,17 @@ function scanPowerShellList(
             ? index
             : undefined
     if (opener !== undefined) {
+      const tokenIndex = index
       const openChar = input[opener]
+      const prevMemberWord = started ? word : (words.at(-1) ?? "")
+      const dynamicMemberOpener = indexable === "member" && /[.:]$/.test(prevMemberWord)
+      const priorIndexable = Boolean(indexable)
+      const isMethodCall =
+        char === "(" &&
+        opener === tokenIndex &&
+        memberChainStart !== undefined &&
+        ((indexable === "member" && started && !/[.:]$/.test(word)) ||
+          (indexable === "closed" && !started && hasMemberAccess))
       const standaloneBlock = atBoundary || inExpression || char === "(" || openChar === "{"
       const blockClose = openChar === "(" ? ")" : openChar === "[" ? "]" : "}"
       const blockHash =
@@ -2179,12 +2256,28 @@ function scanPowerShellList(
       started = true
       word += input.slice(index, result.end + 1)
       index = result.end
-      if (openChar === "[") {
+      if (isMethodCall && memberChainStart !== undefined) {
+        finishWord(index + 1)
+        const callResource = input.slice(memberChainStart, result.end + 1)
+        const head = input.slice(memberChainStart, opener)
+        const args = input.slice(opener, result.end + 1)
+        nestedCommands.push({
+          resource: callResource,
+          words: [head, args],
+          rawWords: [head, args],
+          wordEnds: [head.length, callResource.length],
+        })
         indexable = "closed"
+        hasMemberAccess = false
+      } else if (openChar === "[") {
+        indexable = "closed"
+        if (!priorIndexable) memberChainStart = tokenIndex
         if (input[index + 1] !== "[") finishWord(index + 1)
       } else if (standaloneBlock) {
         finishWord(index + 1)
         indexable = "closed"
+        if (!dynamicMemberOpener) memberChainStart = tokenIndex
+        hasMemberAccess = dynamicMemberOpener
       }
       if ((clause === "paren" && char === "(") || (clause && clause !== "paren" && char === "{")) {
         const completed = clause === "do" || clause === "if" || clause === "try" ? clause : undefined
@@ -2210,8 +2303,9 @@ function scanPowerShellList(
       continue
     }
     if (/\s/.test(char) && char !== "\n" && char !== "\r") {
+      const memberOperator = indexable === "member" && /[.:]$/.test(started ? word : (words.at(-1) ?? ""))
       finishWord(index)
-      indexable = false
+      if (!memberOperator) resetMember()
       continue
     }
     const next = input[index + 1]
@@ -2235,12 +2329,12 @@ function scanPowerShellList(
         if ((clause && clause !== "member") || prev.endsWith(",") || memberOperator) {
           finishWord(index)
           index += separator.length - 1
-          if (!memberOperator) indexable = false
+          if (!memberOperator) resetMember()
           continue
         }
         if (!started && !words.length && !invocation) {
           index += separator.length - 1
-          indexable = false
+          resetMember()
           continue
         }
       }
@@ -2252,39 +2346,53 @@ function scanPowerShellList(
     }
     if (!started && !words.length && !invocation && hash !== "switch" && testAt(POWERSHELL_EXPRESSION_RE, input, index))
       expression = true
-    if ((atBoundary || (indexable === "member" && /[.:]$/.test(word))) && char === "$")
-      indexable = testAt(POWERSHELL_INDEXABLE_VAR_RE, input, index + 1) ? "variable" : false
-    else if (indexable === "closed")
+    const prevMember = started ? word : (words.at(-1) ?? "")
+    if ((atBoundary || (indexable === "member" && /[.:]$/.test(prevMember))) && char === "$") {
+      if (testAt(POWERSHELL_INDEXABLE_VAR_RE, input, index + 1)) {
+        if (indexable === "member" && /[.:]$/.test(prevMember)) hasMemberAccess = true
+        else {
+          memberChainStart = index
+          hasMemberAccess = false
+        }
+        indexable = "variable"
+      } else resetMember()
+    } else if (indexable === "closed") {
       indexable =
-        (char === "." && input[index + 1] !== "." && !/\s/.test(input[index + 1] ?? "")) ||
-        (!started && char === ":" && input[index + 1] === ":" && !/\s/.test(input[index + 2] ?? "")) ||
+        (char === "." && input[index + 1] !== "." && (!/\s/.test(input[index + 1] ?? "") || inExpression)) ||
+        (!started && char === ":" && input[index + 1] === ":") ||
         (!started &&
           char === "?" &&
           input[index + 1] === "." &&
           input[index + 2] !== "." &&
-          !/\s/.test(input[index + 2] ?? ""))
+          (!/\s/.test(input[index + 2] ?? "") || inExpression))
           ? "member"
           : !started && char === "?" && input[index + 1] === "["
             ? "closed"
             : false
-    else if (indexable === "variable")
+      if (indexable === "member") hasMemberAccess = true
+      else if (!indexable) resetMember()
+    } else if (indexable === "variable") {
       indexable =
-        (char === "." && input[index + 1] !== "." && !/\s/.test(input[index + 1] ?? "")) ||
-        (char === ":" && input[index + 1] === ":" && !/\s/.test(input[index + 2] ?? ""))
+        (char === "." && input[index + 1] !== "." && (!/\s/.test(input[index + 1] ?? "") || inExpression)) ||
+        (char === ":" && input[index + 1] === ":")
           ? "member"
           : (char === "." && input[index + 1] === ".") || !/[\p{L}\p{Nl}\d_:?]/u.test(char)
             ? false
             : "variable"
-    else if (indexable === "member")
+      if (indexable === "member") hasMemberAccess = true
+      else if (!indexable) resetMember()
+    } else if (indexable === "member") {
       indexable =
         char === "." && input[index + 1] === "."
           ? false
-          : (char === "." && !/\s/.test(input[index + 1] ?? "")) ||
+          : (char === "." && (!/\s/.test(input[index + 1] ?? "") || inExpression)) ||
               (char === ":" && (input[index + 1] === ":" || input[index - 1] === ":")) ||
               (char === "?" && input[index + 1] === "." && input[index + 2] !== ".") ||
               /[\p{L}\p{Nl}\d_]/u.test(char)
             ? "member"
             : false
+      if (!indexable) resetMember()
+    }
     after = undefined
     started = true
     dangling = false

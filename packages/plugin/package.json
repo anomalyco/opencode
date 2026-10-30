@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/plugin",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -51,8 +51,8 @@
   },
   "peerDependencies": {
     "@opencode/theme": "workspace:*",
-    "@opentui/core": "0.7.0",
-    "@opentui/solid": "0.7.0",
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
     "electron": "*",
     "solid-js": ">=1.9.0",
     "vite": ">=6",

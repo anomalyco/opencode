@@ -3,7 +3,7 @@ import { Effect, Schema, SchemaGetter } from "effect"
 import { LLM } from "../src/effect.js"
 import { AnthropicMessages, Gemini, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema.js"
-import { Tool, toDefinitions } from "../src/tool.js"
+import { toDefinitions, tool } from "../src/tool.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { it } from "./lib/effect.js"
@@ -32,14 +32,14 @@ const reversed = Token.pipe(
 describe("tool schema projections", () => {
   test("only normalizes typed empty input structs, preserving raw schemas and output schemas", () => {
     const schema = { not: { type: "null" } }
-    const definitions = Tool.toDefinitions({
-      typed: Tool.make({
+    const definitions = toDefinitions({
+      typed: tool({
         description: "Typed",
         parameters: Schema.Struct({}),
         success: Schema.Struct({}),
         execute: () => Effect.succeed({}),
       }),
-      raw: Tool.make({ description: "Raw", jsonSchema: schema, execute: () => Effect.succeed({}) }),
+      raw: tool({ description: "Raw", jsonSchema: schema, execute: () => Effect.succeed({}) }),
     })
     expect(definitions[0]?.inputSchema).toEqual({ type: "object", properties: {}, additionalProperties: false })
     expect(definitions[0]?.outputSchema).toEqual(schema)
@@ -49,9 +49,9 @@ describe("tool schema projections", () => {
   test("retains empty input descriptions and preserves named outputs and explicit raw schemas", () => {
     const parameters = Schema.Struct({}).annotate({ identifier: "Ping", description: "No arguments" })
     const raw = { $ref: "#/$defs/Raw", $defs: { Raw: { not: { type: "null" }, description: "Raw schema" } } }
-    const definitions = Tool.toDefinitions({
-      typed: Tool.make({ description: "Ping", parameters, success: parameters, execute: () => Effect.succeed({}) }),
-      raw: Tool.make({ description: "Raw", jsonSchema: raw, execute: () => Effect.succeed({}) }),
+    const definitions = toDefinitions({
+      typed: tool({ description: "Ping", parameters, success: parameters, execute: () => Effect.succeed({}) }),
+      raw: tool({ description: "Raw", jsonSchema: raw, execute: () => Effect.succeed({}) }),
     })
     expect(definitions[0]?.inputSchema).toEqual({
       type: "object",
@@ -67,33 +67,33 @@ describe("tool schema projections", () => {
   })
 
   test("normalizes inputs whose encoded side is an empty struct", () => {
-    const definitions = Tool.toDefinitions({
-      defaulted: Tool.make({ description: "Defaulted", parameters: defaulted, success: defaulted }),
-      named: Tool.make({
+    const definitions = toDefinitions({
+      defaulted: tool({ description: "Defaulted", parameters: defaulted, success: defaulted }),
+      named: tool({
         description: "Named",
         parameters: defaulted.annotate({ identifier: "Defaulted" }),
         success: Schema.String,
       }),
-      encodedMetadata: Tool.make({
+      encodedMetadata: tool({
         description: "Encoded metadata",
         parameters: Schema.Struct({})
           .annotate({ identifier: "Ping", title: "Ping", description: "No arguments" })
           .pipe(Schema.decodeTo(Token, fromEmpty)),
         success: Schema.String,
       }),
-      decodedCheck: Tool.make({
+      decodedCheck: tool({
         description: "Decoded check",
         parameters: defaulted.check(Schema.makeFilter(() => true, { toJsonSchema: () => ({ minProperties: 1 }) })),
         success: Schema.String,
       }),
-      reversed: Tool.make({ description: "Reversed", parameters: reversed, success: Schema.String }),
-      encodedCheck: Tool.make({
+      reversed: tool({ description: "Reversed", parameters: reversed, success: Schema.String }),
+      encodedCheck: tool({
         description: "Encoded check",
         parameters: Schema.Struct({}).check(Schema.isMinProperties(1)),
         success: Schema.String,
       }),
       // A filter without a JSON Schema form emits nothing, so the input still describes an empty object.
-      encodedFilter: Tool.make({
+      encodedFilter: tool({
         description: "Encoded filter",
         parameters: Schema.Struct({}).check(Schema.makeFilter(() => true)),
         success: Schema.String,
@@ -161,27 +161,27 @@ describe("tool schema projections", () => {
           LLM.request({
             model: scenario.route.with({ auth: Auth.bearer("test") }).model({ id: "test-model" }),
             prompt: "Use a tool.",
-            tools: Tool.toDefinitions({
-              ping: Tool.make({
+            tools: toDefinitions({
+              ping: tool({
                 description: "Ping",
                 parameters: Schema.Struct({}),
                 success: Schema.String,
                 execute: () => Effect.succeed("pong"),
               }),
-              lookup: Tool.make({
+              lookup: tool({
                 description: "Lookup",
                 parameters: Schema.Struct({ query: Schema.String }),
                 success: Schema.String,
                 execute: (input) => Effect.succeed(input.query),
               }),
-              raw: Tool.make({ description: "Raw", jsonSchema: raw, execute: () => Effect.succeed("raw") }),
-              reversed: Tool.make({
+              raw: tool({ description: "Raw", jsonSchema: raw, execute: () => Effect.succeed("raw") }),
+              reversed: tool({
                 description: "Reversed",
                 parameters: reversed,
                 success: Schema.String,
                 execute: () => Effect.succeed("reversed"),
               }),
-              checked: Tool.make({
+              checked: tool({
                 description: "Checked",
                 parameters: Schema.Struct({}).check(Schema.isMinProperties(1)),
                 success: Schema.String,
@@ -289,7 +289,7 @@ describe("tool schema projections", () => {
           }),
         ).pipe(Effect.map((prepared) => prepared.body.tools?.[0]?.function.parameters))
       const parameterless = toDefinitions({
-        lookup: Tool.make({
+        lookup: tool({
           description: "Lookup data.",
           parameters: Schema.Struct({}).annotate({ description: "No input." }),
           success: Schema.String,

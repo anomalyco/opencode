@@ -1,16 +1,19 @@
 export * as ShellParse from "./parse.js"
 
-import { Effect } from "effect"
+import { Effect, Result } from "effect"
+import fs from "fs"
 import os from "os"
 import path from "path"
 import { ShellScan } from "./scan.js"
 import { ShellSelect } from "./select.js"
 import { Wildcard } from "../util/wildcard.js"
 
-type Part = { type: string; text: string; unquotedTilde?: boolean }
+type Part = { type: string; text: string; raw: string; unquotedTilde?: boolean }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const POWERSHELL_PATH_FLAG_RE =
   /^-(?:p(?:ath|at|a)?|lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
+const POWERSHELL_LITERAL_FLAG_RE = /^-(?:lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
+const POWERSHELL_STACK_FLAG_RE = /^-(?:stack(?:name|nam|na|n)?|st):?$/i
 
 export type Result = {
   commands: Array<{ resource: string; save: string }>
@@ -172,6 +175,13 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
     for (const item of scanned.commands) {
       // Declarations are skipped as standalone permission resources, while nested substitutions remain.
       if (item.declaration) continue
+      if (item.redirectPrefixEnd !== undefined) {
+        const head = item.resource.slice(0, item.redirectPrefixEnd)
+        const next = item.resource[item.redirectPrefixEnd]
+        const separator = next === "\t" || next === "\n" ? next : " "
+        output.commands.push({ resource: item.resource, save: `${head}${separator}*` })
+        continue
+      }
       const words = item.redirectWordCount === undefined ? item.rawWords : item.rawWords.slice(0, item.redirectWordCount)
       // Bare statement-head foreach blocks act as PowerShell control flow rather than cmdlet invocations.
       if (
@@ -186,29 +196,33 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
         ? words.flatMap((raw, index): Part[] => {
             const text =
               !raw.includes("`$") && /['"`]/.test(raw) ? (item.words[index] ?? raw) : raw.replaceAll("`$", "\0")
-            if (!/^-[A-Za-z_?][\w?-]*(?::|$)/.test(raw)) return [{ type: "word", text }]
+            if (!/^-[A-Za-z_?][\w?-]*(?::|$)/.test(raw)) return [{ type: "word", text, raw }]
             const colon = text.indexOf(":")
-            if (colon >= 0)
+            if (colon >= 0) {
+              const rawColon = raw.indexOf(":")
               return colon + 1 < text.length
                 ? [
-                    { type: "command_parameter", text: text.slice(0, colon) },
-                    { type: "word", text: text.slice(colon + 1) },
+                    { type: "command_parameter", text: text.slice(0, colon), raw: raw.slice(0, rawColon) },
+                    { type: "word", text: text.slice(colon + 1), raw: rawColon >= 0 ? raw.slice(rawColon + 1) : raw },
                   ]
-                : [{ type: "command_parameter", text: text.slice(0, colon) }]
-            return [{ type: "command_parameter", text }]
+                : [{ type: "command_parameter", text: text.slice(0, colon), raw }]
+            }
+            return [{ type: "command_parameter", text, raw }]
           })
         : item.rawWords.map((raw, index): Part => {
             const word = item.words[index] ?? raw
             return {
               type: "word",
               text: isStaticBashWord(raw) ? word.replaceAll("$", "\0") : "$",
+              raw,
               unquotedTilde: raw.startsWith("~"),
             }
           })
-      const directoryCommand = unwrapDirectoryCommand(words, parts, powershell)
+      const directoryCommand = unwrapDirectoryCommand(powershell ? words : item.rawWords, parts, powershell)
       if (directoryCommand) {
-        output.directories.push(...directoryArgs(directoryCommand, powershell, cwd, shell))
-        if (directoryCommand === parts) continue
+        const resolved = directoryArgs(directoryCommand, powershell, cwd, shell)
+        output.directories.push(...resolved.directories)
+        if (directoryCommand === parts && resolved.complete) continue
       }
       const selected = prefix(words.slice(0, PREFIX_LENGTH))
       const conventional = `${selected.join(" ")} *`
@@ -217,14 +231,16 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
       const save =
         !powershell || end === undefined || Wildcard.match(item.resource, conventional)
           ? conventional
-          : (() => {
-              const boundary =
-                item.wordEnds?.find(
-                  (value) => value >= end && (value >= item.resource.length || /\s/.test(item.resource[value])),
-                ) ?? end
-              const separator = /^\s+(?:`(?:\r\n|\r|\n)\s*)?/.exec(item.resource.slice(boundary))?.[0]
-              return `${item.resource.slice(0, boundary)}${separator ?? " "}*`
-            })()
+          : item.resource[end] === "("
+            ? `${item.resource.slice(0, end)}(*`
+            : (() => {
+                const boundary =
+                  item.wordEnds?.find(
+                    (value) => value >= end && (value >= item.resource.length || /\s/.test(item.resource[value])),
+                  ) ?? end
+                const separator = /^\s+(?:`(?:\r\n|\r|\n)\s*)?/.exec(item.resource.slice(boundary))?.[0]
+                return `${item.resource.slice(0, boundary)}${separator ?? " "}*`
+              })()
       output.commands.push({
         resource: item.resource,
         save,
@@ -233,8 +249,6 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
     return Effect.succeed(output)
   })
 }
-
-export const scanPortable = scan
 
 function unwrapDirectoryCommand(rawWords: string[], parts: Part[], powershell: boolean) {
   const head = powershell ? rawWords[0]?.toLowerCase() : rawWords[0]
@@ -256,24 +270,58 @@ function unwrapDirectoryCommand(rawWords: string[], parts: Part[], powershell: b
 
 function isStaticBashWord(raw: string) {
   let quote: "'" | '"' | "$'" | undefined
+  let segmentStarted = false
+  let segmentLeadingDot = false
+  let segmentGlob = false
+  let hasAnsiEscape = false
+  let hasUnquotedGlob = false
+  const braces: boolean[] = []
+  const recordChar = (char: string, unquotedGlob = false) => {
+    if (unquotedGlob) hasUnquotedGlob = true
+    if (hasAnsiEscape && hasUnquotedGlob) return false
+    if (char === "/") {
+      segmentStarted = false
+      segmentLeadingDot = false
+      segmentGlob = false
+      return true
+    }
+    if (!segmentStarted) {
+      segmentStarted = true
+      segmentLeadingDot = char === "."
+    }
+    if (unquotedGlob) segmentGlob = true
+    return !(segmentLeadingDot && segmentGlob)
+  }
+
   for (let index = 0; index < raw.length; index++) {
     const char = raw[index]
     const next = raw[index + 1] ?? ""
     if (quote === "'") {
-      if (char === "'") quote = undefined
+      if (char === "'") {
+        quote = undefined
+        continue
+      }
+      if (!recordChar(char)) return false
       continue
     }
     if (quote === "$'") {
       if (char === "\\") {
+        hasAnsiEscape = true
+        if (hasUnquotedGlob) return false
         index++
         continue
       }
-      if (char === "'") quote = undefined
+      if (char === "'") {
+        quote = undefined
+        continue
+      }
+      if (!recordChar(char)) return false
       continue
     }
     if (quote === '"') {
       if (char === "\\" && '$`"\\\n'.includes(next)) {
         index++
+        if (next !== "\n" && !recordChar(next)) return false
         continue
       }
       if (char === '"') {
@@ -282,10 +330,12 @@ function isStaticBashWord(raw: string) {
       }
       if (char === "`" || (char === "$" && (/[A-Za-z_0-9@*#?$!({[-]/.test(next) || raw.startsWith("\\\n", index + 1))))
         return false
+      if (!recordChar(char)) return false
       continue
     }
     if (char === "\\") {
       index++
+      if (next !== "\n" && !recordChar(next)) return false
       continue
     }
     if (char === "'") {
@@ -312,53 +362,165 @@ function isStaticBashWord(raw: string) {
       (char === "$" && (/[A-Za-z_0-9@*#?$!({[-]/.test(next) || raw.startsWith("\\\n", index + 1)))
     )
       return false
+    if (char === "{") {
+      braces.push(false)
+      if (!recordChar(char)) return false
+      continue
+    }
+    if (braces.length > 0 && (char === "," || (char === "." && next === "."))) {
+      braces[braces.length - 1] = true
+    }
+    if (char === "}" && braces.length > 0) {
+      if (braces.pop()) return false
+      if (!recordChar(char)) return false
+      continue
+    }
+    if (!recordChar(char, char === "*" || char === "?" || char === "[")) return false
   }
   return quote === undefined
 }
 
+function hasPowerShellDotWildcard(raw: string) {
+  let quote: "'" | '"' | undefined
+  let segmentStarted = false
+  let segmentLeadingDot = false
+  let segmentGlob = false
+  let hasQuoteEscape = false
+  let hasUnquotedGlob = false
+  const recordChar = (char: string, unquotedGlob = false) => {
+    if (unquotedGlob) hasUnquotedGlob = true
+    if (hasQuoteEscape && hasUnquotedGlob) return true
+    if (char === "/" || char === "\\") {
+      segmentStarted = false
+      segmentLeadingDot = false
+      segmentGlob = false
+      return false
+    }
+    if (!segmentStarted) {
+      segmentStarted = true
+      segmentLeadingDot = char === "."
+    }
+    if (unquotedGlob) segmentGlob = true
+    return segmentLeadingDot && segmentGlob
+  }
+
+  for (let index = 0; index < raw.length; index++) {
+    const char = raw[index]
+    const next = raw[index + 1] ?? ""
+    if (quote === "'") {
+      if (char === "'" && next === "'") {
+        index++
+        if (recordChar("'")) return true
+        continue
+      }
+      if (char === "'") {
+        quote = undefined
+        continue
+      }
+      if (recordChar(char)) return true
+      continue
+    }
+    if (quote === '"') {
+      if (char === "`") {
+        hasQuoteEscape = true
+        if (hasUnquotedGlob) return true
+        index++
+        continue
+      }
+      if (char === '"' && next === '"') {
+        index++
+        if (recordChar('"')) return true
+        continue
+      }
+      if (char === '"') {
+        quote = undefined
+        continue
+      }
+      if (recordChar(char)) return true
+      continue
+    }
+    if (char === "`") {
+      index++
+      if (recordChar(next)) return true
+      continue
+    }
+    if (char === "'" || char === '"') {
+      quote = char
+      continue
+    }
+    if (recordChar(char, char === "*" || char === "?" || char === "[")) return true
+  }
+  return false
+}
+
 function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell: string) {
+  const head = command[0]?.text.toLowerCase() ?? ""
+  if (head === "popd" || head === "pop-location") return { directories: [], complete: false }
+
   if (!powershell) {
     let endOfOptions = false
-    return command
-      .slice(1)
-      .filter((part) => {
-        if (endOfOptions) return true
-        if (part.text === "--") {
-          endOfOptions = true
-          return false
-        }
-        return !part.text.startsWith("-")
-      })
-      .map((part) => directoryArgument(part.text, powershell, cwd, shell, part.unquotedTilde))
-      .filter((part) => part !== undefined)
+    const operands = command.slice(1).filter((part) => {
+      if (endOfOptions) return true
+      if (part.text === "--") {
+        endOfOptions = true
+        return false
+      }
+      if (part.text === "-") return true
+      return !part.text.startsWith("-")
+    })
+    if (operands.length === 0) return { directories: [], complete: false }
+    const resolved = operands.map((part) =>
+      part.text === "-" ? undefined : directoryArgument(part.text, false, cwd, shell, part.unquotedTilde),
+    )
+    const directories = resolved.filter((item): item is string => item !== undefined)
+    return { directories, complete: directories.length === operands.length }
   }
 
   const directories: string[] = []
-  let path = false
+  let pathFlag = false
+  let literalFlag = false
   let endOfParameters = false
+  let sawOperand = false
+  let complete = true
   for (const part of command.slice(1)) {
     if (!endOfParameters && part.text === "--") {
       endOfParameters = true
       continue
     }
-    if (path) {
-      const value = directoryArgument(part.text, powershell, cwd, shell)
+    if (pathFlag) {
+      sawOperand = true
+      const value =
+        !literalFlag && (hasPowerShellDotWildcard(part.raw) || part.text === "-" || part.text === "+")
+          ? undefined
+          : directoryArgument(part.text, true, cwd, shell)
       if (value) directories.push(value)
-      path = false
+      if (!value) complete = false
+      pathFlag = false
+      literalFlag = false
       continue
     }
     if (!endOfParameters && part.type === "command_parameter") {
-      path = POWERSHELL_PATH_FLAG_RE.test(part.text)
+      if (POWERSHELL_STACK_FLAG_RE.test(part.text)) {
+        complete = false
+        return { directories, complete }
+      }
+      pathFlag = POWERSHELL_PATH_FLAG_RE.test(part.text)
+      literalFlag = POWERSHELL_LITERAL_FLAG_RE.test(part.text)
       continue
     }
-    const value = directoryArgument(part.text, powershell, cwd, shell)
+    sawOperand = true
+    const value =
+      hasPowerShellDotWildcard(part.raw) || (!endOfParameters && (part.raw === "-" || part.raw === "+"))
+        ? undefined
+        : directoryArgument(part.text, true, cwd, shell)
     if (value) directories.push(value)
+    if (!value) complete = false
   }
-  return directories
+  return { directories, complete: sawOperand && complete }
 }
 
 function directoryArgument(value: string, powershell: boolean, cwd: string, shell: string, unquotedTilde = false) {
-  if (!powershell) return expandKnownDirectory(value, false, unquotedTilde)
+  if (!powershell) return expandKnownDirectory(value, false, cwd, unquotedTilde)
   const quote = value[0]
   const text = (quote === '"' || quote === "'") && value.at(-1) === quote ? value.slice(1, -1) : value
 
@@ -375,10 +537,11 @@ function directoryArgument(value: string, powershell: boolean, cwd: string, shel
         return path.dirname(shell)
       }),
     true,
+    cwd,
   )
 }
 
-function expandKnownDirectory(value: string, powershell: boolean, unquotedTilde = false) {
+function expandKnownDirectory(value: string, powershell: boolean, cwd: string, unquotedTilde = false) {
   // Unknown shell expressions cannot be resolved safely during permission analysis.
   if (value.includes("$") || value.includes("`") || (powershell && value.startsWith("("))) return
   const resolved = value.replaceAll("\0", "$")
@@ -387,19 +550,50 @@ function expandKnownDirectory(value: string, powershell: boolean, unquotedTilde 
     return path.join(os.homedir(), resolved.slice(2))
   }
   if (unquotedTilde && process.platform !== "win32") {
-    const userMatch = /^~([A-Za-z0-9._-]+)(?=$|\/)/.exec(resolved)
+    if (resolved === "~+") return cwd
+    if (resolved.startsWith("~+/")) return path.join(cwd, resolved.slice(3))
+    if (/^~(?:[-+](?:\d+)?|\d+)(?=$|\/)/.test(resolved)) return
+    const userMatch = /^~([A-Za-z_][A-Za-z0-9._-]*)(?=$|\/)/.exec(resolved)
     if (userMatch) {
       const user = userMatch[1]
-      const home =
-        user === "root"
-          ? process.platform === "darwin"
-            ? "/var/root"
-            : "/root"
-          : path.join(process.platform === "darwin" ? "/Users" : "/home", user)
+      const home = resolveUserHome(user)
+      if (!home) return
       return path.join(home, resolved.slice(user.length + 1))
     }
   }
   return resolved
+}
+
+let cachedPasswdHomes: ReadonlyMap<string, string> | undefined
+
+function passwdHomes() {
+  if (cachedPasswdHomes) return cachedPasswdHomes
+  const content = Result.try(() => fs.readFileSync("/etc/passwd", "utf8"))
+  const entries = Result.isSuccess(content)
+    ? content.success.split("\n").flatMap((line): Array<[string, string]> => {
+        if (!line || line.startsWith("#")) return []
+        const fields = line.split(":")
+        const name = fields[0]
+        const home = fields[5]
+        return name && home ? [[name, home]] : []
+      })
+    : []
+  cachedPasswdHomes = new Map(entries)
+  return cachedPasswdHomes
+}
+
+function resolveUserHome(user: string) {
+  const current = Result.try(() => os.userInfo())
+  if (Result.isSuccess(current) && current.success.username === user && current.success.homedir) {
+    return current.success.homedir
+  }
+  const fromPasswd = passwdHomes().get(user)
+  if (fromPasswd) return fromPasswd
+  if (process.platform === "darwin") {
+    const candidate = path.join("/Users", user)
+    const exists = Result.try(() => fs.statSync(candidate).isDirectory())
+    if (Result.isSuccess(exists) && exists.success) return candidate
+  }
 }
 
 function environment(key: string) {

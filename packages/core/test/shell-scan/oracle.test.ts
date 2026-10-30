@@ -752,7 +752,7 @@ describe.skipIf(process.platform === "win32")("real-shell directory oracle", () 
       )
       expect(changed.length, `Fixture never changed directory in any real shell: ${source}`).toBeGreaterThan(0)
       for (const executable of changed) {
-        const parsed = await Effect.runPromiseExit(ShellParse.scanPortable(source, executable, root))
+        const parsed = await Effect.runPromiseExit(ShellParse.scan(source, executable, root))
         if (Exit.isSuccess(parsed)) expect(parsed.value.directories, `${executable} in: ${source}`).toContain(target)
       }
     },

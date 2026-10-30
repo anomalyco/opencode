@@ -344,7 +344,7 @@ const scanShell = Effect.fnUntraced(function* (command: string) {
     .resolve({ path: location.directory, kind: "directory" })
     .pipe(Effect.mapError((error) => error.message))
   const shell = yield* shellSelect.resolve({ priority: "compat" })
-  const parsed = yield* ShellParse.scanPortable(command, shell, target.absolute).pipe(
+  const parsed = yield* ShellParse.scan(command, shell, target.absolute).pipe(
     Effect.mapError((error) => error.message),
   )
   const directories = yield* Effect.forEach(parsed.directories, (directory) =>
