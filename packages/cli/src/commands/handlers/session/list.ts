@@ -10,10 +10,7 @@ import { errorMessage } from "../../../util/error"
 const handler = Effect.fn("cli.session.list")(function* (
   input: Runtime.Input<typeof Commands.commands.session.commands.list>,
 ) {
-  const server = yield* ServerConnection.resolve({
-    server: Option.getOrUndefined(input.server),
-    standalone: input.standalone,
-  })
+  const server = yield* ServerConnection.resolve()
   const client = OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) })
   const location = yield* Effect.tryPromise({
     try: (signal) => client.location.get({ location: { directory: process.cwd() } }, { signal }),

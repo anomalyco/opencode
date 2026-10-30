@@ -12,6 +12,17 @@ export function workspaceDirectories(project: WorkspaceProject) {
   return (project.sandboxes ?? []).filter((directory) => !sameDirectory(project.worktree, directory))
 }
 
+/** Every non-root directory a new session can run in, from the server inventory and the project's cached lists. */
+export function workspaceSelectionDirectories(project: WorkspaceProject, listed: readonly WorktreeDirectory[]) {
+  return [
+    ...listed.map((item) => item.directory),
+    ...(project.worktrees ?? []).map((item) => item.directory),
+    ...(project.sandboxes ?? []),
+  ]
+    .filter((directory) => !sameDirectory(project.worktree, directory))
+    .filter((directory, index, items) => items.findIndex((item) => sameDirectory(item, directory)) === index)
+}
+
 export function managedWorkspaceDirectories(project: WorkspaceProject) {
   return (project.worktrees ?? [])
     .filter((worktree) => worktree.strategy !== undefined)

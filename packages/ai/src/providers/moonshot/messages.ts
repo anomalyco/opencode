@@ -3,9 +3,9 @@ import { Moonshot } from "../moonshot.js"
 
 export type Settings = Moonshot.Settings<Moonshot.MessagesOptionsInput>
 
-export const model: ProviderPackage.Definition<Settings, Moonshot.MessagesOptionsInput>["model"] = (
+export const model: ProviderPackage.Model<Settings, Moonshot.MessagesOptionsInput> = (
   modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
+  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
 ) =>
   Moonshot.configure({
     apiKey,

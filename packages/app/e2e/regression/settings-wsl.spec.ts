@@ -7,7 +7,7 @@ import { expectSessionTitle } from "../utils/waits"
 test.use({ viewport: { width: 1280, height: 900 } })
 
 for (const mode of ["failed", "stopped", "ready"] as const) {
-  test(`manages a ${mode} configured WSL server from nested settings`, async ({ page }) => {
+  test(`manages a ${mode} configured WSL server from the Servers page`, async ({ page }) => {
     await mockOpenCodeServer(page, {
       directory: "/repo",
       project: project({ id: "proj_wsl_settings", directory: "/repo", name: "WSL project" }),
@@ -17,21 +17,27 @@ for (const mode of ["failed", "stopped", "ready"] as const) {
     })
     await page.goto(`/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode })}`)
     const settings = page.getByTestId("settings-screen")
-    await expect(settings.getByRole("tab", { name: "Local Server", exact: true })).toBeEnabled()
-    const ubuntu = settings.getByRole("tab", { name: "Ubuntu", exact: true })
-    await expect(ubuntu).toHaveCount(1)
-    await ubuntu.click()
-    await expect(settings.getByRole("heading", { name: "Ubuntu", exact: true })).toBeVisible()
-    const connection = settings.locator('[data-component="settings-server-connection"]')
+    const switcher = settings.getByRole("button", { name: /^Server / })
+    await settings.getByRole("tab", { name: "Projects", exact: true }).click()
+    await switcher.click()
+    await page.getByRole("menuitemradio", { name: /^Ubuntu/ }).click()
+    const unavailable = settings.getByRole("status").filter({ hasText: "Can't reach Ubuntu" })
+
+    if (mode !== "ready") await expect(unavailable).toBeVisible()
+
+    await settings.getByRole("tab", { name: "Servers", exact: true }).click()
+    const connection = settings.getByRole("region", { name: "Ubuntu", exact: true })
 
     if (mode !== "ready") {
-      await expect(settings.getByRole("tab", { name: "Projects", exact: true })).toBeDisabled()
       await connection.getByRole("button", { name: "More options", exact: true }).click()
       await page.getByRole("menuitem", { name: "Retry start", exact: true }).click()
       await expect(page.getByLabel("WSL actions")).toHaveText("start:wsl:Ubuntu")
     }
 
-    await expect(settings.getByRole("tab", { name: "Projects", exact: true })).toBeEnabled()
+    await settings.getByRole("tab", { name: "Projects", exact: true }).click()
+    await expect(switcher).toHaveText("ServerUbuntu")
+    await expect(unavailable).toHaveCount(0)
+    await settings.getByRole("tab", { name: "Servers", exact: true }).click()
     await connection.getByRole("button", { name: "Update OpenCode", exact: true }).click()
     await expect(page.getByLabel("WSL actions")).toContainText("update:Ubuntu")
     await expect(connection.getByRole("button", { name: "Update OpenCode", exact: true })).toHaveCount(0)
@@ -39,12 +45,12 @@ for (const mode of ["failed", "stopped", "ready"] as const) {
     await connection.getByRole("button", { name: "More options", exact: true }).click()
     await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
     await expect(page.getByLabel("WSL actions")).toContainText("remove:wsl:Ubuntu")
-    await expect(settings.getByRole("tab", { name: "Ubuntu", exact: true })).toHaveCount(0)
+    await expect(connection).toHaveCount(0)
     await expect(settings.getByRole("tab", { name: "Server", exact: true })).toBeEnabled()
   })
 }
 
-test("adding a WSL server while the WSL extension is down shows that WSL is unavailable", async ({ page }) => {
+test("adding a WSL server while the WSL plugin is down shows that WSL is unavailable", async ({ page }) => {
   await mockOpenCodeServer(page, {
     directory: "/repo",
     project: project({ id: "proj_wsl_unavailable", directory: "/repo", name: "WSL project" }),
@@ -54,8 +60,9 @@ test("adding a WSL server while the WSL extension is down shows that WSL is unav
   })
   await page.goto(`/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready" })}`)
   const settings = page.getByTestId("settings-screen")
-  await expect(settings.getByRole("tab", { name: "Ubuntu", exact: true })).toHaveCount(1)
-  await page.getByRole("checkbox", { name: "WSL extension" }).uncheck()
+  await settings.getByRole("tab", { name: "Servers", exact: true }).click()
+  await expect(settings.getByRole("region", { name: "Ubuntu", exact: true })).toHaveCount(1)
+  await page.getByRole("checkbox", { name: "WSL plugin" }).uncheck()
 
   await settings.getByRole("button", { name: "Add server", exact: true }).press("Enter")
   await page.getByRole("menuitem", { name: "Add WSL server", exact: true }).click()
@@ -65,7 +72,7 @@ test("adding a WSL server while the WSL extension is down shows that WSL is unav
   await expect(dialog.getByText("WSL is unavailable", { exact: true })).toBeVisible()
 })
 
-test("adding an SSH server while the SSH extension is down fails instead of connecting forever", async ({ page }) => {
+test("adding an SSH server while the SSH plugin is down fails instead of connecting forever", async ({ page }) => {
   await mockOpenCodeServer(page, {
     directory: "/repo",
     project: project({ id: "proj_ssh_unavailable", directory: "/repo", name: "SSH project" }),
@@ -75,8 +82,9 @@ test("adding an SSH server while the SSH extension is down fails instead of conn
   })
   await page.goto(`/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready" })}`)
   const settings = page.getByTestId("settings-screen")
-  await expect(settings.getByRole("tab", { name: "Ubuntu", exact: true })).toHaveCount(1)
-  await page.getByRole("checkbox", { name: "SSH extension" }).uncheck()
+  await settings.getByRole("tab", { name: "Servers", exact: true }).click()
+  await expect(settings.getByRole("region", { name: "Ubuntu", exact: true })).toHaveCount(1)
+  await page.getByRole("checkbox", { name: "SSH plugin" }).uncheck()
 
   await settings.getByRole("button", { name: "Add server", exact: true }).press("Enter")
   await page.getByRole("menuitem", { name: "Add SSH server", exact: true }).click()
@@ -116,11 +124,10 @@ test("an open session's terminal follows its WSL server to the endpoint it resta
 
   await page.keyboard.press("Control+,")
   const settings = page.getByTestId("settings-screen")
-  await settings.getByRole("tab", { name: "Ubuntu", exact: true }).click()
-  const connection = settings.locator('[data-component="settings-server-connection"]')
+  await settings.getByRole("tab", { name: "Servers", exact: true }).click()
+  const connection = settings.getByRole("region", { name: "Ubuntu", exact: true })
   await connection.getByRole("button", { name: "Update OpenCode", exact: true }).click()
   await expect(connection.getByRole("button", { name: "Update OpenCode", exact: true })).toHaveCount(0)
-  await settings.getByRole("button", { name: "Back to settings" }).click()
   await settings.getByRole("button", { name: "Back to app" }).click()
   await expectSessionTitle(page, wsl.title)
 
@@ -130,7 +137,7 @@ test("an open session's terminal follows its WSL server to the endpoint it resta
   expect(servers[REMOTE_SERVER]!.pty.sockets.map((socket) => socket.id)).toEqual(["pty_before1"])
 })
 
-test("WSL session and draft tabs outlive the extension going away until the server is removed", async ({ page }) => {
+test("WSL session and draft tabs outlive the plugin going away until the server is removed", async ({ page }) => {
   const directory = "/home/ubuntu/project"
   const wsl = session({ id: "ses_wsl_tabs", directory, title: "WSL tabs session" })
 
@@ -163,19 +170,19 @@ test("WSL session and draft tabs outlive the extension going away until the serv
 
   await expectTabs()
 
-  const extension = page.getByRole("checkbox", { name: "WSL extension" })
-  await extension.uncheck()
+  const plugin = page.getByRole("checkbox", { name: "WSL plugin" })
+  await plugin.uncheck()
   await expectTabs()
   await expect(editor).toHaveText("keep this draft")
-  await extension.check()
+  await plugin.check()
   await expectTabs()
   await tabs.nth(0).click()
   await expectSessionTitle(page, wsl.title)
 
   await page.keyboard.press("Control+,")
   const settings = page.getByTestId("settings-screen")
-  await settings.getByRole("tab", { name: "Ubuntu", exact: true }).click()
-  const connection = settings.locator('[data-component="settings-server-connection"]')
+  await settings.getByRole("tab", { name: "Servers", exact: true }).click()
+  const connection = settings.getByRole("region", { name: "Ubuntu", exact: true })
   await connection.getByRole("button", { name: "More options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
   await expect(page.getByLabel("WSL actions")).toHaveText("remove:wsl:Ubuntu")

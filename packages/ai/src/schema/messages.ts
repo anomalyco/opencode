@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 import { withStatics } from "@opencode/schema/schema"
 import { Tool } from "@opencode/schema/tool"
 import {
@@ -15,6 +15,7 @@ import {
 } from "./options.js"
 import { ProviderID } from "./ids.js"
 import { Media } from "../media.js"
+import { Json } from "../utils/json.js"
 
 export const MessageRole = Schema.Literals(["system", "user", "assistant", "tool"])
 export type MessageRole = Schema.Schema.Type<typeof MessageRole>
@@ -119,13 +120,11 @@ export const ToolOutput = withStatics(
   },
 )
 
+const encodeJsonOption = Schema.encodeUnknownOption(Json)
+
 const toolResultText = (value: unknown) => {
   if (typeof value === "string") return value
-  try {
-    return JSON.stringify(value) ?? String(value)
-  } catch {
-    return String(value)
-  }
+  return Option.getOrElse(encodeJsonOption(value), () => String(value))
 }
 
 export const ToolCallPart = withStatics(
@@ -285,11 +284,23 @@ export namespace Message {
     make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })
 }
 
+/**
+ * Raw-text wire encoding for a tool with exactly one required string parameter. Models that accept the format
+ * write that parameter's value directly instead of JSON arguments; calls still decode to the normal object input.
+ */
+export const Freeform = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("text") }),
+  Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String }),
+]).annotate({ identifier: "LLM.Freeform" })
+export type Freeform = Schema.Schema.Type<typeof Freeform>
+
 const toolDefinitionFields = {
   name: Schema.String,
   description: Schema.String,
   inputSchema: JsonSchema,
   outputSchema: Schema.optional(JsonSchema),
+  freeform: Schema.optional(Freeform),
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
@@ -311,6 +322,15 @@ export namespace ToolDefinition {
 
   /** Normalize tool definition input into the canonical `ToolDefinition` class. */
   export const make = (input: Input) => (input instanceof ToolDefinition ? input : new ToolDefinition(input))
+
+  /** The parameter a freeform call fills: the input schema's only property, when it is a required string. */
+  export const freeformField = (schema: JsonSchema) => {
+    const properties = Object.entries(Schema.is(JsonSchema)(schema.properties) ? schema.properties : {})
+    if (properties.length !== 1) return undefined
+    const [name, property] = properties[0]
+    if (!Schema.is(JsonSchema)(property) || property.type !== "string") return undefined
+    return Array.isArray(schema.required) && schema.required.includes(name) ? name : undefined
+  }
 }
 
 export type ToolNamespace = {
@@ -396,6 +416,8 @@ const requestSchema = Schema.Struct({
   // Stable cache affinity for protocols that support provider-managed prompt caching.
   promptCacheKey: Schema.optional(Schema.String),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  /** Emit a `raw` event with each provider frame before the events parsed from it. */
+  includeRaw: Schema.optional(Schema.Boolean),
 })
 
 export class LLMRequest<Model extends LanguageModel = LanguageModel> extends Schema.Class<LLMRequest>("LLM.Request")(
@@ -428,6 +450,7 @@ export namespace LLMRequest {
     cache: request.cache,
     promptCacheKey: request.promptCacheKey,
     metadata: request.metadata,
+    includeRaw: request.includeRaw,
   })
 
   export function update<Model extends LanguageModel>(

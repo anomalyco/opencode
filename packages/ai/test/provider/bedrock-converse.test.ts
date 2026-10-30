@@ -13,12 +13,12 @@ import {
   LLMEvent,
   LLMRequest,
   Message,
-  Tool,
   ToolCallPart,
   ToolChoice,
   ToolDefinition,
   ToolRuntime,
-} from "../../src/index.js"
+  tool,
+} from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
@@ -849,6 +849,28 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("raw events carry the event payload without decoder fields or padding", () =>
+    Effect.gen(function* () {
+      const body = eventStreamBody(
+        ["contentBlockDelta", { contentBlockIndex: 0, delta: { text: "Hi" }, p: "abc" }],
+        ["messageStop", { stopReason: "end_turn" }],
+        ["metadata", { usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6 } }],
+      )
+      const events = Array.from(
+        yield* LLMClient.stream(LLMRequest.update(baseRequest, { includeRaw: true })).pipe(
+          Stream.runCollect,
+          Effect.provide(fixedBytes(body)),
+        ),
+      )
+
+      expect(events.filter((event) => event.type === "raw").map((event) => event.data)).toEqual([
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: "Hi" } } },
+        { messageStop: { stopReason: "end_turn" } },
+        { metadata: { usage: { inputTokens: 5, outputTokens: 1, totalTokens: 6 } } },
+      ])
+    }),
+  )
+
   it.effect("rejects truncated event-stream frames after message stop", () =>
     Effect.gen(function* () {
       const partialFrames = [
@@ -1070,7 +1092,7 @@ describe("Bedrock Converse route", () => {
       expect(call.name).toBe("browser.tabs.open")
       const dispatched = yield* ToolRuntime.dispatch(
         {
-          browser_tabs_open: Tool.make({
+          browser_tabs_open: tool({
             description: "Open a tab",
             parameters: Schema.Struct({}),
             success: Schema.String,
@@ -1657,9 +1679,9 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("uses originalMessage from model stream exception frames", () =>
+  it.effect("uses originalMessage and originalStatusCode from model stream exception frames", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.generate(baseRequest).pipe(
+      const serverError = yield* LLMClient.generate(baseRequest).pipe(
         Effect.provide(
           fixedBytes(
             exceptionFrame("modelStreamErrorException", {
@@ -1670,8 +1692,20 @@ describe("Bedrock Converse route", () => {
         ),
         Effect.flip,
       )
+      const clientError = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(
+            exceptionFrame("modelStreamErrorException", {
+              originalMessage: "Upstream rejected request",
+              originalStatusCode: 400,
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
 
-      expect(error).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "Upstream model failed" })
+      expect(serverError).toMatchObject({ reason: { _tag: "ProviderInternal" }, message: "Upstream model failed" })
+      expect(clientError).toMatchObject({ reason: { _tag: "InvalidRequest" }, message: "Upstream rejected request" })
     }),
   )
 
@@ -2313,9 +2347,9 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
-  it.effect("maps ttlSeconds >= 3600 to cachePoint ttl: '1h'", () =>
+  it.effect("sends the hint ttl on cachePoint", () =>
     Effect.gen(function* () {
-      const cache = new CacheHint({ type: "ephemeral", ttlSeconds: 3600 })
+      const cache = new CacheHint({ type: "ephemeral", ttl: "1h" })
       const prepared = yield* compileRequest(
         LLM.request({
           model,

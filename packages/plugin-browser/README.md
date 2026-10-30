@@ -30,6 +30,12 @@ Screenshots require a focused, visible tab; call `browser.tabs.focus` first.
 The source of truth for inputs, descriptions, and outputs is
 `Browser.Operations` in `@opencode/plugin-browser/rpc`.
 
+The built-in `browser` skill (`skill.ts`) teaches the workflow: explicit tab
+IDs, snapshots and refs, showing results to the user, recipes for debugging,
+performance and memory, and recovery after failures. It lists every operation
+from `Browser.Operations`. Like the tools, it is hidden until a desktop browser
+attaches to the session.
+
 The plugin entrypoint only composes its two owners: `connection.ts` manages
 desktop attachments and pending RPC requests; `tools.ts` runs the tool workflow.
 Server-local file IO stays in `files.ts`. The public `rpc.ts` entrypoint remains
@@ -38,8 +44,8 @@ pure and does not load any of these runtime modules.
 ## Tests
 
 Run `bun test` and `bun typecheck` from this package for its contract checks.
-The desktop implementation is the built-in `browser` GUI extension
-(`packages/gui-extensions/src/browser`); its URL policy tests live there, not in this package.
+The desktop implementation is the built-in `browser` GUI plugin
+(`packages/gui-plugins/src/browser`); its URL policy tests live there, not in this package.
 
 ## RPC
 

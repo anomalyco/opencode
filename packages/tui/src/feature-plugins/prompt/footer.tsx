@@ -2,7 +2,10 @@ import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { contextUsage, formatContextUsage } from "../../util/session"
 import { useTerminalDimensions } from "@opentui/solid"
+import { TextAttributes } from "@opentui/core"
+import { useInteractivity } from "../../context/interactivity"
 import { stringWidth } from "../../util/string-width"
+import { createGoal, GoalStatus } from "./goal"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -47,6 +50,9 @@ export function PromptFooter(props: {
     ].filter((item): item is string => Boolean(item))
   })
   const live = createMemo(() => Boolean(subagents() || shells()))
+  const goal = createGoal(props.context, () => props.sessionID)
+  // Prompt hints read as disabled while the session does not own input, e.g. while a side panel is focused.
+  const interactive = useInteractivity()
   const shortcut = (id: string) => props.context.keymap.shortcuts(id)[0]
   const layout = createMemo(() => {
     const command = shortcut("command.palette.show")
@@ -62,7 +68,7 @@ export function PromptFooter(props: {
     <Switch>
       <Match when={props.mode === "normal"}>
         <Switch>
-          <Match when={live() || status().length > 0}>
+          <Match when={goal() || live() || status().length > 0}>
             <box flexDirection="row" flexShrink={props.showDetails && layout().usage ? 0 : 1} minWidth={0}>
               <Show when={live()}>
                 <box
@@ -84,23 +90,42 @@ export function PromptFooter(props: {
                   </text>
                 </box>
               </Show>
+              <Show when={props.sessionID && goal()}>
+                <Show when={live()}>
+                  <text fg={props.context.theme.text.muted} wrapMode="none" flexShrink={0}>
+                    {" · "}
+                  </text>
+                </Show>
+                <GoalStatus context={props.context} sessionID={props.sessionID ?? ""} goal={goal} />
+              </Show>
               <Show when={props.showDetails && layout().usage && status().length > 0}>
                 <text fg={props.context.theme.text.muted} wrapMode="none" flexShrink={0}>
-                  <Show when={live()}> · </Show>
+                  <Show when={live() || goal()}> · </Show>
                   {status().join(" · ")}
                 </text>
               </Show>
             </box>
           </Match>
           <Match when={props.showDetails && layout().shortcuts}>
-            <text fg={props.context.theme.text.base} flexShrink={0}>
-              {shortcut("agent.cycle")} <span style={{ fg: props.context.theme.text.muted }}>agents</span>
+            <text
+              fg={interactive() ? props.context.theme.text.base : props.context.theme.text.action.primary.disabled}
+              attributes={interactive() ? 0 : TextAttributes.DIM}
+              flexShrink={0}
+            >
+              {shortcut("agent.cycle")}{" "}
+              <span style={interactive() ? { fg: props.context.theme.text.muted } : {}}>agents</span>
             </text>
           </Match>
         </Switch>
         <Show when={props.showDetails && layout().shortcuts}>
-          <text fg={props.context.theme.text.base} wrapMode="none" flexShrink={0}>
-            {shortcut("command.palette.show")} <span style={{ fg: props.context.theme.text.muted }}>commands</span>
+          <text
+            fg={interactive() ? props.context.theme.text.base : props.context.theme.text.action.primary.disabled}
+            attributes={interactive() ? 0 : TextAttributes.DIM}
+            wrapMode="none"
+            flexShrink={0}
+          >
+            {shortcut("command.palette.show")}{" "}
+            <span style={interactive() ? { fg: props.context.theme.text.muted } : {}}>commands</span>
           </text>
         </Show>
       </Match>

@@ -1,61 +1,41 @@
-import { stringWidth } from "../util/string-width"
+import { measureEditText, type WidthMethod } from "@opentui/core"
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
-export function promptOffsetWidth(value: string) {
-  let width = 0
-  for (const part of graphemes.segment(value)) {
-    // Textarea offsets count newlines as one position; terminal width counts them as zero.
-    width += part.segment === "\n" ? 1 : stringWidth(part.segment)
+/** Returns the index of the last grapheme boundary in `value` whose editor offset is at most `offset`. */
+export function promptOffsetIndex(value: string, offset: number, widthMethod: WidthMethod) {
+  // Offsets never decrease as a prefix grows by whole graphemes, so binary search needs O(log n) measurements.
+  const boundaries = [...Array.from(graphemes.segment(value), (part) => part.index), value.length]
+  let low = 0
+  let high = boundaries.length - 1
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (measureEditText(value.slice(0, boundaries[middle]), { widthMethod }) > offset) {
+      high = middle - 1
+      continue
+    }
+    low = middle
   }
-  return width
+  return boundaries[low]
 }
 
-function displayOffsetIndex(value: string, offset: number) {
-  if (offset <= 0) return 0
-
-  let width = 0
-  for (const part of graphemes.segment(value)) {
-    const next = width + promptOffsetWidth(part.segment)
-    if (next > offset) return part.index
-    width = next
-  }
-
-  return value.length
-}
-
-export function displaySlice(value: string, start = 0, end = promptOffsetWidth(value)) {
-  return value.slice(displayOffsetIndex(value, start), displayOffsetIndex(value, end))
-}
-
-export function displayCharAt(value: string, offset: number) {
-  let width = 0
-  for (const part of graphemes.segment(value)) {
-    const next = width + promptOffsetWidth(part.segment)
-    if (offset === width || offset < next) return part.segment
-    width = next
-  }
-}
-
-export function mentionTriggerIndex(value: string, offset = promptOffsetWidth(value)) {
-  const text = displaySlice(value, 0, offset)
+export function mentionTriggerIndex(text: string, widthMethod: WidthMethod) {
   const index = text.lastIndexOf("@")
   if (index === -1) return
 
   const before = index === 0 ? undefined : text[index - 1]
   const query = text.slice(index)
   if ((before === undefined || /\s/.test(before)) && !/\s/.test(query)) {
-    return promptOffsetWidth(text.slice(0, index))
+    return measureEditText(text.slice(0, index), { widthMethod })
   }
 }
 
-export function slashTriggerIndex(value: string, offset = promptOffsetWidth(value)) {
-  const text = displaySlice(value, 0, offset)
+export function slashTriggerIndex(text: string, widthMethod: WidthMethod) {
   for (let index = text.lastIndexOf("/"); index >= 0; index = text.lastIndexOf("/", index - 1)) {
     const before = index === 0 ? undefined : text[index - 1]
     const query = text.slice(index)
     if (before !== undefined && !/\s/.test(before)) continue
     if (/\s/.test(query) || query.slice(1).includes("/")) return
-    return promptOffsetWidth(text.slice(0, index))
+    return measureEditText(text.slice(0, index), { widthMethod })
   }
 }

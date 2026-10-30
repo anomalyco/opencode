@@ -9,7 +9,7 @@ export default Runtime.handler(
   Commands.commands.auth.commands.export,
   Effect.fn("cli.auth.export")(
     function* (input) {
-      const client = yield* createClient({ server: Option.getOrUndefined(input.server), standalone: input.standalone })
+      const client = yield* createClient()
       const target = Option.getOrUndefined(input.target)
       const integrationID = target ? (yield* resolveIntegration(yield* loadIntegrations(client), target)).id : undefined
       const credentials = (yield* request((signal) => client.credential.list({ signal }))).filter(

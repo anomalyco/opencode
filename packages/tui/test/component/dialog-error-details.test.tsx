@@ -35,7 +35,7 @@ for (const width of [40, 100]) {
       route = useRoute()
       const dialog = useDialog()
       onMount(() =>
-        dialog.replace(
+        dialog.replace(() => (
           <DialogErrorDetails
             title="Server plugin error"
             source={source}
@@ -43,8 +43,8 @@ for (const width of [40, 100]) {
             context={`Plugin: broken\nRuntime: server\nSource: ${source}`}
             diagnosticRef="err_a1b2c3d4"
             onBack={() => dialog.clear()}
-          />,
-        ),
+          />
+        )),
       )
       return null
     }

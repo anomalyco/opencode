@@ -21,6 +21,8 @@ import {
   QuotaExceededError,
   RateLimitError,
   RouteID,
+  TimeoutError,
+  ToolOutput,
   ToolResultValue,
   TransportError,
   UnknownProviderError,
@@ -114,6 +116,28 @@ describe("ToolResultValue", () => {
         metadata: { source: "tool" },
       }),
     ).toBe(true)
+  })
+
+  test("fromResultValue encodes text results and falls back to String for non-JSON values", () => {
+    const circular: Record<string, unknown> = {}
+    circular.self = circular
+
+    expect(ToolOutput.fromResultValue({ type: "text", value: "plain" })).toEqual({
+      structured: {},
+      content: [{ type: "text", text: "plain" }],
+    })
+    expect(ToolOutput.fromResultValue({ type: "text", value: { ok: true } })).toEqual({
+      structured: {},
+      content: [{ type: "text", text: '{"ok":true}' }],
+    })
+    expect(ToolOutput.fromResultValue({ type: "text", value: undefined })).toEqual({
+      structured: {},
+      content: [{ type: "text", text: "undefined" }],
+    })
+    expect(ToolOutput.fromResultValue({ type: "text", value: circular })).toEqual({
+      structured: {},
+      content: [{ type: "text", text: "[object Object]" }],
+    })
   })
 })
 
@@ -326,6 +350,7 @@ test("AI error reasons are tagged Errors with required messages", () => {
     new TransportError({ message: "Connection failed", transport: "http", operation: "request" }),
     new InvalidProviderOutputError({ message: "Invalid output" }),
     new UnknownProviderError({ message: "Unknown failure" }),
+    new TimeoutError({ message: "Timed out", timeoutMs: 5000 }),
   ]
   expect(reasons.map((reason) => reason._tag)).toEqual([
     "InvalidRequest",
@@ -339,7 +364,14 @@ test("AI error reasons are tagged Errors with required messages", () => {
     "Transport",
     "InvalidProviderOutput",
     "UnknownProvider",
+    "Timeout",
   ])
+  expect(Schema.decodeUnknownOption(TimeoutError)({ _tag: "Timeout", message: "Timed out", timeoutMs: -1 })._tag).toBe(
+    "None",
+  )
+  expect(Schema.decodeUnknownOption(TimeoutError)({ _tag: "Timeout", message: "Timed out", timeoutMs: 1.5 })._tag).toBe(
+    "None",
+  )
   reasons.forEach((reason) => {
     expect(reason).toBeInstanceOf(Error)
     const encoded = Schema.encodeSync(AIErrorReason)(reason)

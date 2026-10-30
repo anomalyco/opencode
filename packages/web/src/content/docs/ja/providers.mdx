@@ -51,7 +51,7 @@ config.
 ## OpenCode Zen
 
 OpenCode Zen は、OpenCode チームが提供するモデルのリストです。
-OpenCode で適切に動作することがテストおよび検証されています。 [詳細はこちら](/docs/zen)。
+OpenCode で適切に動作することがテストおよび検証されています。 [詳細はこちら](https://opencode.ai/v2/docs/console/)。
 
 :::tip
 初めての方は、OpenCode Zen から始めることをお勧めします。
@@ -567,7 +567,7 @@ OpenCode 設定を通じてモデルを追加することもできます。
   "provider": {
     "cloudflare-ai-gateway": {
       "models": {
-        "openai/gpt-4o": {},
+        "openai/gpt-6.1-sol": {},
         "anthropic/claude-sonnet-4": {}
       }
     }
@@ -750,39 +750,6 @@ GitLab Duo は、GitLab の Anthropic プロキシを介したネイティブツ
 /models
 ```
 
----
-
-### STACKIT
-
-STACKIT AI Model Serving は、Llama、Mistral、Qwen などの LLM に焦点を当て、ヨーロッパのインフラストラクチャでの最大限のデータ主権を備えた、AI モデル用の完全に管理された主権ホスティング環境を提供します。
-
-1. [STACKIT Portal](https://portal.stackit.cloud) に移動し、**AI Model Serving** に移動して、プロジェクトの認証トークンを作成します。
-
-   :::tip
-   認証トークンを作成する前に、STACKIT 顧客アカウント、ユーザーアカウント、およびプロジェクトが必要です。
-   :::
-
-2. `/connect` コマンドを実行し、**STACKIT** を検索します。
-
-   ```txt
-   /connect
-   ```
-
-3. STACKIT AI Model Serving 認証トークンを入力します。
-
-   ```txt
-   ┌ API key
-   │
-   │
-   └ enter
-   ```
-
-4. `/models` コマンドを実行して、_Qwen3-VL 235B_ や _Llama 3.3 70B_ などの利用可能なモデルから選択します。
-
-   ```txt
-   /models
-   ```
-
 3 つの Claude ベースのモデルが利用可能です。
 
 - **duo-chat-haiku-4-5** (デフォルト) - 素早いタスクに対する素早い応答
@@ -800,12 +767,11 @@ STACKIT AI Model Serving は、Llama、Mistral、Qwen などの LLM に焦点を
 OpenCode は、セッションタイトルの生成などの一部の AI タスクに小規模なモデルを使用します。
 デフォルトでは、Zen によってホストされる gpt-5-nano を使用するように構成されています。 OpenCode をロックするには
 自分の GitLab でホストされているインスタンスのみを使用するには、次の行を
-`opencode.json` ファイル。セッション共有を無効にすることもお勧めします。
+`opencode.json` ファイル。
 
 ```json
 {
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 
@@ -896,8 +862,7 @@ GitLab ツール (マージリクエスト、問題、パイプライン、CI/CD
 GitHub Copilot サブスクリプションを OpenCode で使用するには:
 
 :::note
-一部のモデルでは [Pro+] が必要になる場合があります。
-subscription](https://github.com/features/copilot/plans) を使用します。
+一部のモデルでは [Pro+ subscription](https://github.com/features/copilot/plans) が必要になる場合があります。
 
 一部のモデルは、[GitHub Copilot settings](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use) で構成する必要があります。
 :::
@@ -1442,7 +1407,7 @@ OpenCode で Ollama Cloud を使用するには:
 
 ### OpenCode Zen
 
-OpenCode Zen は、OpenCode チームによって提供される、テストおよび検証されたモデルのリストです。 [詳細はこちら](/docs/zen)。
+OpenCode Zen は、OpenCode チームによって提供される、テストおよび検証されたモデルのリストです。 [詳細はこちら](https://opencode.ai/v2/docs/console/)。
 
 1. **<a href={console}>OpenCode Zen</a>** にサインインし、**API キーの作成** をクリックします。
 
@@ -1581,6 +1546,39 @@ SAP AI コアは、統合プラットフォームを通じて、OpenAI、Anthrop
 :::
 
 5. `/models` コマンドを実行して、40 以上の利用可能なモデルから選択します。
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving は、Llama、Mistral、Qwen などの LLM に焦点を当て、ヨーロッパのインフラストラクチャでの最大限のデータ主権を備えた、AI モデル用の完全に管理された主権ホスティング環境を提供します。
+
+1. [STACKIT Portal](https://portal.stackit.cloud) に移動し、**AI Model Serving** に移動して、プロジェクトの認証トークンを作成します。
+
+   :::tip
+   認証トークンを作成する前に、STACKIT 顧客アカウント、ユーザーアカウント、およびプロジェクトが必要です。
+   :::
+
+2. `/connect` コマンドを実行し、**STACKIT** を検索します。
+
+   ```txt
+   /connect
+   ```
+
+3. STACKIT AI Model Serving 認証トークンを入力します。
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. `/models` コマンドを実行して、_Qwen3-VL 235B_ や _Llama 3.3 70B_ などの利用可能なモデルから選択します。
 
    ```txt
    /models

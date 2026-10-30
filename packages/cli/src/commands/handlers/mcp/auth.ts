@@ -76,9 +76,11 @@ const authenticate = Effect.fn("cli.mcp.auth.run")(function* (name?: string) {
 
 const exampleConfig = `
   "mcp": {
-    "my-server": {
-      "type": "remote",
-      "url": "https://example.com/mcp"
+    "servers": {
+      "my-server": {
+        "type": "remote",
+        "url": "https://example.com/mcp"
+      }
     }
   }`
 

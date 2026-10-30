@@ -31,27 +31,6 @@ OpenCode는 오픈소스이며 코드나 context 데이터를 저장하지 않�
 
 따라서 신뢰할 수 있는 provider 또는 내부 AI gateway를 사용한다면 OpenCode를 안전하게 사용할 수 있습니다.
 
-주의할 점은 선택 기능인 `/share`입니다.
-
----
-
-#### Sharing conversations
-
-사용자가 `/share` 기능을 활성화하면, 대화와 관련 데이터가 opencode.ai의 share 페이지 호스팅 서비스로 전송됩니다.
-
-현재 이 데이터는 CDN edge network를 통해 제공되며, 사용자와 가까운 edge에 캐시됩니다.
-
-trial 단계에서는 이 기능을 비활성화할 것을 권장합니다.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "share": "disabled"
-}
-```
-
-[sharing에 대해 더 알아보기](/docs/share).
-
 ---
 
 ### Code ownership

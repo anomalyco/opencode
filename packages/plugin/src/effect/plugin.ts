@@ -1,9 +1,10 @@
-import type { ExperimentalApi, GenerateApi, PluginApi } from "@opencode/client/effect/api"
+import type { CredentialApi, ExperimentalApi, ExperimentalGenerateApi, PluginApi } from "@opencode/client/effect/api"
 import type { Location } from "@opencode/schema/location"
 import type { Effect, Scope } from "effect"
 import type { PluginOptions } from "../options.js"
 import type { App } from "../app.js"
 import type { AgentDomain } from "./agent.js"
+import type { ExperimentalArtifactDomain } from "./artifact.js"
 import type { AISDKDomain } from "./aisdk.js"
 import type { CommandDomain } from "./command.js"
 import type { EventDomain } from "./event.js"
@@ -30,14 +31,19 @@ export interface Context {
   readonly agent: AgentDomain
   readonly aisdk: AISDKDomain
   readonly command: CommandDomain
+  readonly credential: Pick<CredentialApi<unknown>, "activate">
   readonly event: EventDomain
   readonly experimental: {
     readonly terminal: Pick<ExperimentalApi<unknown>["persistentPty"], "read">
+    /** Stateless generation with a model and a prompt: no session, history or tools. */
+    readonly generate: ExperimentalGenerateApi<unknown>
+    readonly artifact: ExperimentalArtifactDomain
   }
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
   readonly model: ModelDomain
-  readonly generate: GenerateApi<unknown>
+  /** @deprecated Use `experimental.generate.text`. */
+  readonly generate: Pick<ExperimentalGenerateApi<unknown>, "text">
   readonly permission: PermissionDomain
   readonly plugin: Pick<PluginApi<unknown>, "list">
   readonly provider: ProviderDomain

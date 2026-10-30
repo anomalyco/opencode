@@ -49,7 +49,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 ## OpenCode Zen
 
-OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过测试和验证，能够与 OpenCode 良好配合使用。[了解更多](/docs/zen)。
+OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过测试和验证，能够与 OpenCode 良好配合使用。[了解更多](https://opencode.ai/v2/docs/console/)。
 
 :::tip
 如果你是新用户，我们建议从 OpenCode Zen 开始。
@@ -533,7 +533,7 @@ Cloudflare AI Gateway 允许你通过统一端点访问来自 OpenAI、Anthropic
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
-           "openai/gpt-4o": {},
+           "openai/gpt-6.1-sol": {},
            "anthropic/claude-sonnet-4": {}
          }
        }
@@ -727,13 +727,12 @@ GitLab Duo 通过 GitLab 的 Anthropic 代理提供具有原生工具调用能�
 ##### 自托管 GitLab
 
 :::note[合规说明]
-OpenCode 会使用一个小模型来执行部分 AI 任务，例如生成会话标题。默认情况下使用由 Zen 托管的 gpt-5-nano。如果你需要让 OpenCode 仅使用你自己的 GitLab 托管实例，请在 `opencode.json` 文件中添加以下内容。同时建议禁用会话共享。
+OpenCode 会使用一个小模型来执行部分 AI 任务，例如生成会话标题。默认情况下使用由 Zen 托管的 gpt-5-nano。如果你需要让 OpenCode 仅使用你自己的 GitLab 托管实例，请在 `opencode.json` 文件中添加以下内容。
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+  "small_model": "gitlab/duo-chat-haiku-4-5"
 }
 ```
 
@@ -1362,7 +1361,7 @@ Ollama 可以自动为 OpenCode 进行配置。详见 [Ollama 集成文档](http
 
 ### OpenCode Zen
 
-OpenCode Zen 是由 OpenCode 团队提供的经过测试和验证的模型列表。[了解更多](/docs/zen)。
+OpenCode Zen 是由 OpenCode 团队提供的经过测试和验证的模型列表。[了解更多](https://opencode.ai/v2/docs/console/)。
 
 1. 登录 **<a href={console}>OpenCode Zen</a>** 并点击 **Create API Key**。
 

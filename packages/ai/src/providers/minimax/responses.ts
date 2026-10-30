@@ -3,9 +3,9 @@ import { MiniMax } from "../minimax.js"
 
 export type Settings = MiniMax.Settings<MiniMax.ResponsesOptionsInput>
 
-export const model: ProviderPackage.Definition<Settings, MiniMax.ResponsesOptionsInput>["model"] = (
+export const model: ProviderPackage.Model<Settings, MiniMax.ResponsesOptionsInput> = (
   modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
+  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
 ) =>
   MiniMax.configure({
     apiKey,

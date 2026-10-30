@@ -1,5 +1,5 @@
 import "./index.css"
-import { createAsync, query, useSearchParams } from "@solidjs/router"
+import { useSearchParams } from "@solidjs/router"
 import { Title, Meta } from "@solidjs/meta"
 import { For, Show } from "solid-js"
 //import { HttpHeader } from "@solidjs/start"
@@ -9,8 +9,6 @@ import { Legal } from "~/component/legal"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { GoPlanChart } from "~/component/go-plan-chart"
-import { config } from "~/config"
-import { getLastSeenWorkspaceID } from "../workspace/common"
 import {
   IconAlibaba,
   IconAnthropic,
@@ -28,24 +26,20 @@ import {
   IconZai,
 } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
-import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
-import { goUsageLimits } from "~/lib/language"
-
-const checkLoggedIn = query(async () => {
-  "use server"
-  return await getLastSeenWorkspaceID().catch(() => undefined)
-}, "checkLoggedIn.get")
+import { SocialMeta } from "~/component/social-meta"
 
 const models = [
-  { name: "Space Bunny", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "LongCat 2.5 Preview Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "Step 5 Preview Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Kimi K3.1 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "MiniMax M3.1 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Step 5 Preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Beam Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
+  { name: "Iceman Contributor Free", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "Grok 4.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
-  { name: "Grok 4.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Claude Haiku 5.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
+  { name: "Gemini 4 Argon", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.3-Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.2", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -60,45 +54,72 @@ const models = [
   { name: "Qwen3.8 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.7 Plus", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "MiniMax M2.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Muse Spark 1.3 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "Muse Spark 1.2 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "DeepSeek V4.1 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "DeepSeek V4 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "DeepSeek V4 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "DeepSeek V4 Flash Vision Exp", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy4 preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
 ] as const
 
+const audiences = [
+  { id: "individuals", label: "go.plans.individuals" },
+  { id: "teams", label: "go.plans.teams" },
+] as const
+
+const plans = [
+  {
+    id: "go",
+    audience: "individuals",
+    name: "Go",
+    price: "$10",
+    period: "go.plans.month",
+    cta: "go.cta.text",
+    features: ["go.plans.go.feature1", "go.plans.go.feature2", "go.plans.go.feature3"],
+    marker: "square",
+  },
+  {
+    id: "go-plus",
+    audience: "individuals",
+    name: "Go Plus",
+    price: "$40",
+    period: "go.plans.month",
+    cta: "go.plans.plus.cta",
+    features: ["go.plans.plus.feature1", "go.plans.plus.feature2", "go.plans.plus.feature3"],
+    marker: "plus",
+  },
+  {
+    id: "go-teams",
+    audience: "teams",
+    name: "Go Teams",
+    price: "$20",
+    period: "go.plans.memberMonth",
+    cta: "go.plans.teams.cta",
+    features: [
+      "go.plans.teams.feature1",
+      "go.plans.teams.feature2",
+      "go.plans.teams.feature3",
+      "go.plans.teams.feature4",
+      "go.plans.teams.feature5",
+    ],
+    marker: "plus",
+  },
+] as const
+
 export default function Home() {
-  const workspaceID = createAsync(() => checkLoggedIn())
   const subscribeUrl = "https://opencode.ai/console/go"
   const i18n = useI18n()
-  const language = useLanguage()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const audience = () => (searchParams.for === "teams" ? "teams" : "individuals")
+  const description = () =>
+    `${i18n.t("go.meta.description")} ${i18n.t("go.plans.plus.description")} ${i18n.t("go.plans.teams.description")}`
   return (
     <main data-page="go">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>{i18n.t("go.title")}</Title>
-      <Meta name="description" content={`${i18n.t("go.meta.description")} ${i18n.t("go.plans.plus.description")}`} />
+      <Meta name="description" content={description()} />
       <LocaleLinks path="/go" />
-      <Meta property="og:type" content="website" />
-      <Meta property="og:url" content={`${config.baseUrl}${language.route("/go")}`} />
-      <Meta property="og:title" content={i18n.t("go.title")} />
-      <Meta
-        property="og:description"
-        content={`${i18n.t("go.meta.description")} ${i18n.t("go.plans.plus.description")}`}
-      />
-      <Meta property="og:image" content="/social-share-black.png" />
-      <Meta name="twitter:card" content="summary_large_image" />
-      <Meta name="twitter:title" content={i18n.t("go.title")} />
-      <Meta
-        name="twitter:description"
-        content={`${i18n.t("go.meta.description")} ${i18n.t("go.plans.plus.description")}`}
-      />
-      <Meta name="twitter:image" content="/social-share-black.png" />
-      <Meta name="opencode:auth" content={workspaceID() ? "true" : "false"} />
+      <SocialMeta title={i18n.t("go.title")} description={description()} path="/go" />
 
       <div data-component="container">
         <Header go hideGetStarted />
@@ -108,7 +129,7 @@ export default function Home() {
             <div data-component="desktop-app-banner">
               <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
               <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.promo.step5")}</span>
+                <span data-slot="text">{i18n.t("go.promo.kimiK31Pro")}</span>
               </div>
             </div>
             <Show when={searchParams.ref}>
@@ -140,70 +161,81 @@ export default function Home() {
               </div>
               <p data-slot="tagline">{i18n.t("go.hero.tagline")}</p>
             </div>
-            <div data-slot="plans">
-              <For
-                each={
-                  [
-                    {
-                      name: "Go",
-                      price: "$10",
-                      cta: "go.cta.text",
-                      features: ["go.plans.go.feature1", "go.plans.go.feature2", "go.plans.go.feature3"],
-                      marker: "square",
-                    },
-                    {
-                      name: "Go Plus",
-                      price: "$40",
-                      cta: "go.plans.plus.cta",
-                      features: ["go.plans.plus.feature1", "go.plans.plus.feature2", "go.plans.plus.feature3"],
-                      marker: "plus",
-                    },
-                  ] as const
-                }
-              >
-                {(plan) => (
-                  <div data-slot="plan">
-                    <div data-slot="plan-body">
-                      <p data-slot="name">{plan.name}</p>
-                      <p data-slot="price">
-                        {plan.price} <span>{i18n.t("go.plans.month")}</span>
-                      </p>
-                      <ul>
-                        <For each={plan.features}>
-                          {(feature) => (
-                            <li>
-                              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                {plan.marker === "square" ? (
-                                  <path d="M11 5H5V11H11V5Z" fill="currentColor" />
-                                ) : (
-                                  <path d="M8 3.5V12.5M3.5 8H12.5" stroke="currentColor" />
-                                )}
-                              </svg>
-                              {i18n.t(feature)}
-                            </li>
-                          )}
-                        </For>
-                      </ul>
+            <div data-slot="plans-group">
+              <div data-slot="audience" role="group" aria-label={i18n.t("go.plans.audience")}>
+                <For each={audiences}>
+                  {(item) => (
+                    <button
+                      type="button"
+                      aria-pressed={audience() === item.id}
+                      onClick={() =>
+                        setSearchParams(
+                          { for: item.id === "teams" ? "teams" : undefined },
+                          { replace: true, scroll: false },
+                        )
+                      }
+                    >
+                      {i18n.t(item.label)}
+                    </button>
+                  )}
+                </For>
+              </div>
+              {/* Both audiences stay rendered in one grid cell so switching crossfades between them; the hidden one is
+                  inert and out of the accessibility tree. */}
+              <div data-slot="plans-stack">
+                <For each={audiences}>
+                  {(group) => (
+                    <div
+                      data-slot="plans"
+                      data-audience={group.id}
+                      aria-hidden={audience() !== group.id}
+                      inert={audience() !== group.id}
+                    >
+                      <For each={plans.filter((plan) => plan.audience === group.id)}>
+                        {(plan) => (
+                          <div data-slot="plan" data-plan={plan.id}>
+                            <div data-slot="plan-body">
+                              <p data-slot="name">{plan.name}</p>
+                              <p data-slot="price">
+                                {plan.price} <span>{i18n.t(plan.period)}</span>
+                              </p>
+                              <ul>
+                                <For each={plan.features}>
+                                  {(feature) => (
+                                    <li>
+                                      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                        {plan.marker === "square" ? (
+                                          <path d="M11 5H5V11H11V5Z" fill="currentColor" />
+                                        ) : (
+                                          <path d="M8 3.5V12.5M3.5 8H12.5" stroke="currentColor" />
+                                        )}
+                                      </svg>
+                                      {i18n.t(feature)}
+                                    </li>
+                                  )}
+                                </For>
+                              </ul>
+                            </div>
+                            <a href={subscribeUrl}>{i18n.t(plan.cta)}</a>
+                          </div>
+                        )}
+                      </For>
                     </div>
-                    <a href={subscribeUrl}>{i18n.t(plan.cta)}</a>
-                  </div>
-                )}
-              </For>
+                  )}
+                </For>
+              </div>
             </div>
           </section>
 
           <section data-component="comparison">
-            <GoPlanChart href={goUsageLimits(language.locale())} />
+            <GoPlanChart href="/v2/docs/console/go/#usage-limits" audience={audience()} />
           </section>
 
           <section data-component="problem">
             <div data-slot="section-title">
               <h3>{i18n.t("go.problem.title")}</h3>
-              <p>
-                {i18n.t("go.problem.body")} {i18n.t("go.plans.plus.description")}
-              </p>
+              <p>{i18n.t("go.problem.body")}</p>
             </div>
-            <p>{i18n.t("go.problem.subtitle")}</p>
             <ul>
               <li>
                 <span>[*]</span> {i18n.t("go.problem.item1")}
@@ -223,16 +255,14 @@ export default function Home() {
           <section data-component="how">
             <div data-slot="section-title">
               <h3>{i18n.t("go.how.title")}</h3>
-              <p>
-                {i18n.t("go.how.body")} {i18n.t("go.plans.plus.description")}
-              </p>
+              <p>{i18n.t("go.how.body")}</p>
             </div>
             <ul>
               <li>
                 <span>[1]</span>
                 <div>
                   <strong>{i18n.t("go.how.step1.title")}</strong> - {i18n.t("go.how.step1.beforeLink")}{" "}
-                  <a href={language.route("/docs/go/#how-it-works")} title={i18n.t("go.how.step1.link")}>
+                  <a href="/v2/docs/console/go/#how-it-works" title={i18n.t("go.how.step1.link")}>
                     {i18n.t("go.how.step1.link")}
                   </a>
                 </div>
@@ -241,8 +271,8 @@ export default function Home() {
                 <span>[2]</span>
                 <div>
                   <strong>{i18n.t("go.how.step2.title")}</strong> -{" "}
-                  <a href={language.route("/docs/go/#pricing")}>{i18n.t("go.how.step2.link")}</a>{" "}
-                  {i18n.t("go.how.step2.afterLink")} · {i18n.t("go.plans.plus.description")}
+                  <a href="/v2/docs/console/go/">{i18n.t("go.how.step2.link")}</a> {i18n.t("go.how.step2.afterLink")} ·{" "}
+                  {i18n.t("go.plans.plus.description")} · {i18n.t("go.plans.teams.description")}
                 </div>
               </li>
               <li>
@@ -275,16 +305,16 @@ export default function Home() {
               </li>
               <li>
                 <Faq question={i18n.t("go.faq.q3")}>
-                  {i18n.t("go.faq.a3")} {i18n.t("go.plans.plus.description")}
+                  {i18n.t("go.faq.a3")} {i18n.t("go.plans.plus.description")} {i18n.t("go.plans.teams.description")}
                 </Faq>
               </li>
               <li>
                 <Faq question={i18n.t("go.faq.q4")}>
                   {i18n.t("go.faq.a4.p1.beforePricing")}{" "}
-                  <a href={language.route("/docs/go/#pricing")}>{i18n.t("go.faq.a4.p1.pricingLink")}</a>{" "}
+                  <a href="/v2/docs/console/go/">{i18n.t("go.faq.a4.p1.pricingLink")}</a>{" "}
                   {i18n.t("go.faq.a4.p1.afterPricing")} {i18n.t("go.plans.plus.description")}{" "}
-                  {i18n.t("go.faq.a4.p2.beforeAccount")} <a href={subscribeUrl}>{i18n.t("go.faq.a4.p2.accountLink")}</a>
-                  . {i18n.t("go.faq.a4.p3")}
+                  {i18n.t("go.plans.teams.description")} {i18n.t("go.faq.a4.p2.beforeAccount")}{" "}
+                  <a href={subscribeUrl}>{i18n.t("go.faq.a4.p2.accountLink")}</a>. {i18n.t("go.faq.a4.p3")}
                 </Faq>
               </li>
               <li>
@@ -313,7 +343,7 @@ export default function Home() {
                   </div>
                   <div data-slot="faq-retention-notes">
                     <p>
-                      <strong>Grok 4.7/4.6:</strong> {i18n.t("go.faq.a5.grokRetention")}{" "}
+                      <strong>Grok 4.7:</strong> {i18n.t("go.faq.a5.grokRetention")}{" "}
                       <a href="https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr">
                         {i18n.t("go.faq.a5.learnMore")}
                       </a>
@@ -329,10 +359,7 @@ export default function Home() {
                     <p>
                       <strong>Claude Haiku 5.5:</strong> {i18n.t("go.faq.a5.retention")}:{" "}
                       {i18n.t("go.faq.a5.retention30")}.{" "}
-                      <a href="https://docs.anthropic.com/en/docs/claude-code/data-usage">
-                        {i18n.t("go.faq.a5.learnMore")}
-                      </a>
-                      .
+                      <a href="https://code.claude.com/docs/en/data-usage">{i18n.t("go.faq.a5.learnMore")}</a>.
                     </p>
                     <p>
                       <strong>Muse Spark 1.3 Contributor:</strong> {i18n.t("go.faq.a5.museRetention")}{" "}
@@ -349,7 +376,7 @@ export default function Home() {
                       .
                     </p>
                     <p>
-                      <strong>DeepSeek V4 Flash:</strong> {i18n.t("go.faq.a5.deepseekRetention")}
+                      <strong>DeepSeek:</strong> {i18n.t("go.faq.a5.deepseekRetention")}
                     </p>
                   </div>
                 </Faq>

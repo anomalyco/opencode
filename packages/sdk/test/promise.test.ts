@@ -18,7 +18,7 @@ test("Promise host uses the embedded router", async () => {
     const session = await opencode.sessions.create({ location })
     const selected = await opencode.sessions.get({ sessionID: session.id })
     const page = await opencode.sessions.list({ directory: directory.path })
-    const events = Array.fromAsync(opencode.sessions.log({ sessionID: session.id }))
+    const events = Array.fromAsync(opencode.experimental.session.log({ sessionID: session.id }))
 
     expect(selected.id).toBe(session.id)
     expect(page.data.some((item) => item.id === session.id)).toBe(true)
@@ -44,8 +44,8 @@ test("Promise event streams support cancellation", async () => {
     expect(await events.next()).toMatchObject({ value: { type: "server.connected" }, done: false })
     const pending = events.next()
     controller.abort()
-    const error = await pending.catch((error: unknown) => error)
-    expect(error).toMatchObject({ name: "ClientError", reason: "Transport" })
+    // A caller abort ends only this subscriber; client tests pin closing the shared transport after the last one.
+    expect(await pending).toEqual({ done: true, value: undefined })
     await events.return?.()
   }
 })

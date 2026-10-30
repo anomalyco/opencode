@@ -1,5 +1,5 @@
-import type { ToolDefinition } from "@opencode/ai"
-import { emptyInputJsonSchema } from "@opencode/ai/tool"
+import { emptyInputJsonSchema, type ToolDefinition } from "@opencode/ai/effect"
+import { isRecord } from "@opencode/util/record"
 import { Tool } from "@opencode/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
 import { Cache, Effect, JsonPointer, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"
@@ -191,15 +191,26 @@ const flattenAllOf = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(flattenAllOf)
   if (typeof value !== "object" || value === null) return value
 
-  const schema = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, flattenAllOf(item)]))
+  // Effect adds the safe-integer range to every Schema.Int. Drop it so tool schemas don't change and
+  // bust prompt caches.
+  const integer = "type" in value && value.type === "integer"
+  const schema = Object.fromEntries(
+    Object.entries(value)
+      .filter(
+        ([key, item]) =>
+          !integer ||
+          !(
+            (key === "minimum" && item === Number.MIN_SAFE_INTEGER) ||
+            (key === "maximum" && item === Number.MAX_SAFE_INTEGER)
+          ),
+      )
+      .map(([key, item]) => [key, flattenAllOf(item)]),
+  )
   if (!Array.isArray(schema.allOf) || !schema.allOf.every(isRecord) || !canFlattenAllOf(schema.allOf, schema))
     return schema
   const { allOf, ...rest } = schema
   return flattenAllOf({ ...Object.assign({}, ...allOf), ...rest })
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
 
 const canFlattenAllOf = (allOf: ReadonlyArray<Record<string, unknown>>, parent: Record<string, unknown>) => {
   const keys = new Set(Object.keys(parent).filter((key) => key !== "allOf"))
@@ -264,7 +275,7 @@ export const normalizeContent = (value: string | ReadonlyArray<Tool.Content> | u
   return [{ type: "text" as const, text: stringify(output) }]
 }
 
-const stringify = (value: unknown) => {
+export const stringify = (value: unknown) => {
   if (typeof value === "string") return value
   try {
     return JSON.stringify(value) ?? String(value)

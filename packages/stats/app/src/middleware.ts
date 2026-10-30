@@ -12,6 +12,7 @@ import {
 import { fromPathname, LOCALE_HEADER, pageUrl, parseLocale, prefersMarkdown, route, strip } from "./lib/language"
 import { loadComparePage, loadHomePage, loadLabPage, loadModelPage } from "./lib/page-data"
 import { canonicalModelEntry, catalogModelPath, findModelCatalogLab, loadModelCatalog } from "./routes/model-catalog"
+import { statsPageCacheControl } from "./routes/stats-cache"
 
 type Format = "markdown" | "json" | "text"
 type Target =
@@ -28,7 +29,6 @@ type Rendered = {
 }
 
 const reservedSegments = new Set(["api", "_server", "_build", "stats", "sitemap.xml", "banner.jpg", "banner.png"])
-const pageCacheControl = "public, max-age=60, s-maxage=300, stale-while-revalidate=86400"
 const extensionFormats = { ".md": "markdown", ".json": "json" } as const satisfies Record<string, Format>
 const contentTypes = {
   markdown: "text/markdown",
@@ -144,7 +144,7 @@ async function render(target: Target, format: Format): Promise<Rendered> {
 function formatResponse(rendered: Rendered, format: Format, options: { negotiated: boolean; head: boolean }) {
   const headers = new Headers({
     "Content-Type": `${contentTypes[format]}; charset=utf-8`,
-    "Cache-Control": pageCacheControl,
+    "Cache-Control": statsPageCacheControl,
   })
   if (options.negotiated) headers.set("Vary", "Accept")
   if (rendered.path) headers.set("Link", `<${pageUrl(rendered.path)}>; rel="canonical"`)

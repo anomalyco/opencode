@@ -1,4 +1,4 @@
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { GoogleVertexChat } from "../../src/providers.js"
 
 const model = GoogleVertexChat.configure({ accessToken: "test", project: "project" }).model("gemini")

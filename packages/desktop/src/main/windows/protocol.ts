@@ -2,25 +2,25 @@ import { net, protocol } from "electron"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { documentPolicyHeader, jsCallStacksDocumentPolicy } from "./headers"
-import { extensionHost, rendererHost, rendererProtocol } from "./scheme"
+import { rendererHost, rendererProtocol } from "./scheme"
 
-export type ProtocolReport = (level: "warning" | "error", message: string, data: Record<string, unknown>) => void
+/** What a renderer protocol problem is about: the request, and the file or failure behind it. */
+export type ProtocolDetails = {
+  readonly url: string
+  readonly file?: string
+  readonly status?: number
+  readonly statusText?: string
+  readonly error?: Error | string
+}
 
-export type ExtensionAssets = (request: Request, url: URL) => Response | Promise<Response>
+export type ProtocolReport = (level: "warning" | "error", message: string, data: ProtocolDetails) => void
 
 // The entry module registers the handler the moment the first window exists, before logging is up,
 // so problems go to the console until the logging layer installs a reporter.
 let report: ProtocolReport = (level, message, data) => console[level === "error" ? "error" : "warn"](message, data)
 
-// Extension files live in the storage database, which opens after the first window starts loading.
-let extensionAssets: ExtensionAssets = () => new Response(null, { status: 503 })
-
 export function setProtocolReporter(reporter: ProtocolReport) {
   report = reporter
-}
-
-export function setExtensionAssets(provider: ExtensionAssets) {
-  extensionAssets = provider
 }
 
 // Requests in flight and when the last one arrived. The entry module holds the main bundle back
@@ -69,16 +69,6 @@ export function registerRendererProtocol(rendererRoot: string) {
 async function serve(request: Request, rendererRoot: string) {
   const url = new URL(request.url)
 
-  if (url.host === extensionHost) {
-    return Promise.resolve()
-      .then(() => extensionAssets(request, url))
-      .catch((error: unknown) => {
-        report("error", "extension asset error", { url: request.url, error })
-
-        return new Response(null, { status: 500 })
-      })
-  }
-
   if (url.host !== rendererHost) {
     report("warning", "rejected host", { url: request.url })
 
@@ -109,7 +99,7 @@ async function serve(request: Request, rendererRoot: string) {
 
     return addDocumentPolicy(response, file)
   } catch (error) {
-    report("error", "fetch error", { url: request.url, file, error })
+    report("error", "fetch error", { url: request.url, file, error: error instanceof Error ? error : String(error) })
 
     return new Response("Not found", { status: 404 })
   }

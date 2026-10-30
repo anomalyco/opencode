@@ -2,57 +2,38 @@ import { Toaster, toast, type ToasterProps } from "solid-sonner"
 import { boundToastDescription } from "./description"
 import { isRTL } from "@kobalte/core/i18n"
 import type { ComponentProps, JSX } from "solid-js"
-import { createContext, onCleanup, onMount, splitProps, useContext } from "solid-js"
+import { createContext, onCleanup, splitProps, useContext } from "solid-js"
 import { Portal } from "solid-js/web"
 import { useI18n } from "../../context/i18n"
 import "../../actions/button/button.css"
 import "./toast.css"
+import { prefersReducedMotion } from "../../motion"
 
 export interface ToastRegionProps extends ToasterProps {}
 
 function ToastRegion(props: ToastRegionProps) {
   const i18n = useI18n()
   const [local, rest] = splitProps(props, ["class", "className", "style", "toastOptions", "swipeDirections"])
-  onMount(() => {
+
+  // The Portal's container holds the toast region whenever it exists. Watching the container, not the whole body,
+  // keeps every DOM change elsewhere in the page (each streamed delta, each mounted row) from scanning the document.
+  const observe = (container: HTMLDivElement) => {
     const sync = () => {
-      document.querySelectorAll<HTMLElement>(".toast-v2-region .toast-v2").forEach((element) => {
+      container.querySelectorAll<HTMLElement>(".toast-v2-region .toast-v2").forEach((element) => {
         const hidden = element.dataset.visible === "false"
         element.inert = hidden
         element.tabIndex = hidden ? -1 : 0
       })
     }
 
-    let connected = false
-
-    const connect = () => {
-      const regions = document.querySelectorAll(".toast-v2-region")
-
-      if (!regions.length) return
-      observer.disconnect()
-      regions.forEach((region) => {
-        observer.observe(region, {
-          subtree: true,
-          childList: true,
-          attributes: true,
-          attributeFilter: ["data-visible"],
-        })
-      })
-      connected = true
-      sync()
-    }
-
-    const observer = new MutationObserver(() => {
-      if (!connected) connect()
-      else sync()
-    })
-
-    observer.observe(document.body, { subtree: true, childList: true })
-    queueMicrotask(connect)
+    const observer = new MutationObserver(sync)
+    observer.observe(container, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-visible"] })
+    sync()
     onCleanup(() => observer.disconnect())
-  })
+  }
 
   return (
-    <Portal>
+    <Portal ref={observe}>
       <Toaster
         position={isRTL(i18n.locale()) ? "bottom-left" : "bottom-right"}
         offset={isRTL(i18n.locale()) ? { left: 32, bottom: 48 } : { right: 32, bottom: 48 }}
@@ -307,7 +288,7 @@ function pulseToast(toastId: number) {
   requestAnimationFrame(() => {
     const element = document.querySelector<HTMLElement>(`[data-testid="toast-v2-${toastId}"]`)
 
-    if (!element || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    if (!element || prefersReducedMotion()) return
     element.animate([{ scale: 1 }, { scale: 1.025 }, { scale: 1 }], { duration: 160, easing: "ease-out" })
   })
 }

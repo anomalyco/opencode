@@ -9,7 +9,7 @@ const Options = Schema.Struct({
   effort: Schema.optional(OpenResponsesOptions.ReasoningEffort),
   thinking: Schema.optional(
     Schema.Struct({
-      type: Schema.declare<"enabled" | "disabled" | (string & {})>(Schema.is(Schema.String)),
+      type: ProviderShared.knownString<"enabled" | "disabled">(),
       budgetTokens: Schema.optional(Schema.Int),
       budget_tokens: Schema.optional(Schema.Int),
     }),

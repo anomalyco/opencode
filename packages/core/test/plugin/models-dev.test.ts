@@ -706,6 +706,67 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
+  it.effect("lists non-chat models only by type, so sessions never see them", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const providers = yield* Provider.Service
+      const modelState = yield* Model.Service
+      const providerID = Provider.ID.make("acme")
+      const model = {
+        providerID,
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        variants: [],
+        time: { released: Date.parse("2026-01-01") },
+        cost: [],
+        status: "active",
+        enabled: true,
+        limit: { context: 128_000, output: 32_000 },
+      } satisfies Omit<Model.Info, "id" | "modelID" | "name">
+      // An unset type means chat; image and decision models list text too, but only chat is offered.
+      const types = { "gpt-5.5": undefined, "gpt-audio": "chat", "jev-1.13": "decision", "gpt-image-2": "image" }
+      const snapshot = {
+        info: {
+          id: providerID,
+          name: "Acme",
+          activation: "auto",
+          package: "@opencode/ai/providers/openai-compatible",
+        },
+        environment: [],
+        models: Object.entries(types).map(([id, type]) => ({
+          ...model,
+          id: Model.ID.make(id),
+          modelID: Model.ID.make(id),
+          name: id,
+          type,
+        })),
+      } satisfies ModelsDev.Snapshot
+
+      yield* ModelsDevPlugin.effect(
+        host({
+          provider: providerHost(providers),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(
+        Effect.provideService(
+          ModelsDev.Service,
+          ModelsDev.Service.of({ get: () => Effect.succeed([snapshot]), refresh: () => Effect.void }),
+        ),
+      )
+
+      yield* activate(providers)
+      const ids = (models: readonly Model.Info[]) => models.map((item) => item.id).sort()
+      expect(ids(yield* modelState.available())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
+      expect(ids(yield* modelState.all())).toEqual(["gpt-5.5", "gpt-audio"].map((id) => Model.ID.make(id)))
+      expect(yield* modelState.get(providerID, Model.ID.make("jev-1.13"))).toBeUndefined()
+      expect(ids(yield* modelState.available(["decision"]))).toEqual([Model.ID.make("jev-1.13")])
+      expect(ids(yield* modelState.available(["image"]))).toEqual([Model.ID.make("gpt-image-2")])
+      expect(ids(yield* modelState.available(["chat", "image", "image"]))).toEqual(
+        ["gpt-5.5", "gpt-audio", "gpt-image-2"].map((id) => Model.ID.make(id)),
+      )
+      expect(yield* modelState.available(["embedding"])).toEqual([])
+    }),
+  )
+
   it.effect("registers key methods for providers with environment variables", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service

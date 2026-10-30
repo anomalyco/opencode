@@ -10,17 +10,15 @@ import { FileSystemSearch } from "./filesystem/search.js"
 import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode/schema/filesystem"
 
-export const ReadInput = Schema.Struct({
-  path: RelativePath,
-})
-export type ReadInput = typeof ReadInput.Type
+export interface ReadInput {
+  readonly path: RelativePath
+}
 
-export const WriteInput = Schema.Struct({
+export interface WriteInput {
   /** Absolute, or relative to the location directory. */
-  path: Schema.String,
-  data: Schema.Uint8Array,
-})
-export type WriteInput = typeof WriteInput.Type
+  readonly path: string
+  readonly data: Uint8Array
+}
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("FileSystem.NotFoundError", {
   path: RelativePath,
@@ -59,10 +57,9 @@ export const Content = Schema.Struct({
 }).annotate({ identifier: "FileSystem.Content" })
 export type Content = typeof Content.Type
 
-export const ListInput = Schema.Struct({
-  path: Schema.String.pipe(Schema.optional),
-})
-export type ListInput = typeof ListInput.Type
+export interface ListInput {
+  readonly path?: string
+}
 
 export { FindInput, Write }
 
@@ -123,17 +120,12 @@ const baseLayer = Layer.effect(
     const root = location.workspaceID
       ? location.directory
       : yield* fs.realPath(location.directory).pipe(
+          // Linux realpath succeeds on an unreadable directory, so probe readability explicitly.
+          Effect.tap((real) => fs.access(real, { readable: true })),
           Effect.catch((cause): Effect.Effect<never, DirectoryNotFoundError | DirectoryAccessDeniedError> => {
             if (cause.reason._tag === "NotFound")
               return Effect.fail(new DirectoryNotFoundError({ directory: location.directory, cause }))
-            // macOS privacy denials arrive as Unknown with an EPERM cause.
-            if (
-              cause.reason._tag === "PermissionDenied" ||
-              (cause.reason._tag === "Unknown" &&
-                cause.reason.cause instanceof Error &&
-                "code" in cause.reason.cause &&
-                cause.reason.cause.code === "EPERM")
-            )
+            if (FSUtil.isAccessDenied(cause))
               return Effect.fail(new DirectoryAccessDeniedError({ directory: location.directory, cause }))
             return Effect.die(cause)
           }),

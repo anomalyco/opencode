@@ -2,10 +2,9 @@ import type { FileSystem } from "@opencode/core/filesystem"
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Config } from "@opencode/schema/config"
+import { Event } from "@opencode/schema/config"
 import { Money } from "@opencode/schema/money"
 import {
-  Cause,
   DateTime,
   Deferred,
   Duration,
@@ -30,6 +29,7 @@ import { Global } from "@opencode/util/global"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { Location } from "@opencode/core/location"
+import { Config } from "@opencode/core/config"
 import { LocationWatcher } from "@opencode/core/filesystem/location-watcher"
 import { Plugin } from "@opencode/core/plugin"
 import { Model } from "@opencode/core/model"
@@ -60,14 +60,18 @@ const activityLocations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
     (ref) =>
+      // LocationActivity reads each location's config during its sweep.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      Layer.succeed(
-        Location.Service,
-        Location.Service.of({
-          directory: ref.directory,
-          workspaceID: ref.workspaceID,
-          project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
-        }),
+      Layer.merge(
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of({
+            directory: ref.directory,
+            workspaceID: ref.workspaceID,
+            project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
+          }),
+        ),
+        Config.testLayer(),
       ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
     { idleTimeToLive: Duration.infinity },
   ),
@@ -79,11 +83,10 @@ const itWithActivity = testEffect(
 )
 
 describe("LocationServiceMap", () => {
-  for (const failure of ["file", "permissions", "config reference"] as const) {
+  for (const failure of ["file", "permissions"] as const) {
     for (const invalidate of [false, true]) {
       // The file-path fixture boots on Windows rather than failing during
-      // discovery. The config-reference case covers repair on every OS.
-      // Windows does not enforce POSIX directory modes, and root bypasses them.
+      // discovery. Windows does not enforce POSIX directory modes, and root bypasses them.
       const test =
         (failure === "file" && process.platform === "win32") ||
         (failure === "permissions" && (process.platform === "win32" || process.getuid?.() === 0))
@@ -102,20 +105,8 @@ describe("LocationServiceMap", () => {
             yield* Effect.promise(() => fs.mkdir(directory, { mode: 0o000 }))
             yield* Effect.addFinalizer(() => Effect.promise(() => fs.chmod(directory, 0o755)))
           }
-          if (failure === "config reference") {
-            yield* Effect.promise(() => fs.mkdir(directory))
-            yield* Effect.promise(() =>
-              fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ username: "{file:username.txt}" })),
-            )
-          }
           const first = yield* Effect.exit(load)
           expect(Exit.isFailure(first)).toBe(true)
-          if (failure === "config reference" && Exit.isFailure(first)) {
-            expect(Cause.squash(first.cause)).toMatchObject({
-              name: "ConfigInvalidError",
-              data: { message: expect.stringContaining('bad file reference: "{file:username.txt}"') },
-            })
-          }
           if (!invalidate) expect(yield* locations.contextEffectOption(ref).pipe(Effect.scoped)).toEqual(Option.none())
 
           if (failure === "file") {
@@ -123,9 +114,6 @@ describe("LocationServiceMap", () => {
             yield* Effect.promise(() => fs.mkdir(directory))
           }
           if (failure === "permissions") yield* Effect.promise(() => fs.chmod(directory, 0o755))
-          if (failure === "config reference") {
-            yield* Effect.promise(() => fs.writeFile(path.join(directory, "username.txt"), "test-user"))
-          }
           expect((yield* Effect.promise(() => fs.stat(directory))).isDirectory()).toBe(true)
           if (invalidate) yield* locations.invalidate(ref)
           const repaired = yield* Effect.exit(load)
@@ -136,8 +124,8 @@ describe("LocationServiceMap", () => {
     }
   }
 
-  for (const failure of ["file", "missing", "config reference"] as const) {
-    // A file-path Location boots on Windows; use the missing config reference there.
+  for (const failure of ["file", "missing"] as const) {
+    // A file-path Location boots on Windows; the missing directory covers it there.
     const test = failure === "file" && process.platform === "win32" ? it.live.skip : it.live
     test(`keeps the repaired graph after concurrent ${failure} failures release`, () =>
       Effect.gen(function* () {
@@ -146,12 +134,6 @@ describe("LocationServiceMap", () => {
         const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
         const locations = yield* LocationServiceMap.Service
         if (failure === "file") yield* Effect.promise(() => fs.writeFile(directory, "file"))
-        if (failure === "config reference") {
-          yield* Effect.promise(() => fs.mkdir(directory))
-          yield* Effect.promise(() =>
-            fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ username: "{file:username.txt}" })),
-          )
-        }
 
         const scopes = yield* Effect.forEach(Array.from({ length: 8 }), () =>
           Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void)),
@@ -163,10 +145,7 @@ describe("LocationServiceMap", () => {
         )
         expect(failures.every(Exit.isFailure)).toBe(true)
         if (failure === "file") yield* Effect.promise(() => fs.rm(directory))
-        if (failure !== "config reference") yield* Effect.promise(() => fs.mkdir(directory))
-        if (failure === "config reference") {
-          yield* Effect.promise(() => fs.writeFile(path.join(directory, "username.txt"), "test-user"))
-        }
+        yield* Effect.promise(() => fs.mkdir(directory))
         const repaired = yield* locations.contextEffect(ref)
 
         yield* Effect.forEach(scopes, (scope) => Scope.close(scope, Exit.void))
@@ -249,6 +228,45 @@ describe("LocationServiceMap", () => {
         }),
     )
   }
+
+  testEffect(Layer.empty).live("closes every location concurrently on shutdown, including borrowed ones", () =>
+    Effect.gen(function* () {
+      const count = 3
+      const closing = { started: 0 }
+      const allClosing = yield* Deferred.make<void>()
+      const overlapped: boolean[] = []
+      const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
+        Global.node.replace(tempGlobalLayer),
+        offlineModels,
+        LocationWatcher.node.replace(
+          LocationWatcher.node.mapLayer((layer) =>
+            layer.pipe(
+              Layer.tap(() =>
+                Effect.addFinalizer(() =>
+                  Effect.gen(function* () {
+                    if (++closing.started === count) yield* Deferred.succeed(allClosing, undefined)
+                    // Sequential teardown would leave this finalizer waiting alone.
+                    const waited = yield* Deferred.await(allClosing).pipe(Effect.timeoutOption("5 seconds"))
+                    overlapped.push(Option.isSome(waited))
+                  }),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ])
+      const dirs = yield* Effect.forEach(Array.from({ length: count }), () => tmpdirScoped())
+      const borrow = yield* Scope.make()
+      yield* Effect.gen(function* () {
+        const locations = yield* LocationServiceMap.Service
+        const refs = dirs.map((dir) => Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
+        yield* Effect.forEach(refs.slice(1), (ref) => locations.contextEffect(ref).pipe(Effect.scoped))
+        yield* locations.contextEffect(refs[0]).pipe(Scope.provide(borrow))
+      }).pipe(Effect.provide(layer))
+      expect(overlapped).toEqual(Array.from({ length: count }, () => true))
+      yield* Scope.close(borrow, Exit.void)
+    }),
+  )
 
   itWithActivity.effect("does not refresh lifetime from inferred Session routing", () =>
     Effect.gen(function* () {
@@ -364,19 +382,19 @@ describe("LocationServiceMap", () => {
             const firstContext = yield* locations.contextEffect(firstRef)
             const secondContext = yield* locations.contextEffect(secondRef)
             const received = { first: 0, second: 0 }
-            yield* bus.subscribe(Config.Event.Updated).pipe(
+            yield* bus.subscribe(Event.Updated).pipe(
               Stream.runForEach(() => Effect.sync(() => received.first++)),
               Effect.provideContext(firstContext),
               Effect.forkScoped({ startImmediately: true }),
             )
-            yield* bus.subscribe(Config.Event.Updated).pipe(
+            yield* bus.subscribe(Event.Updated).pipe(
               Stream.runForEach(() => Effect.sync(() => received.second++)),
               Effect.provideContext(secondContext),
               Effect.forkScoped({ startImmediately: true }),
             )
             yield* Effect.sleep("10 millis")
 
-            yield* bus.publish(Config.Event.Updated, {}, { location: firstRef })
+            yield* bus.publish(Event.Updated, {}, { location: firstRef })
             yield* Effect.sleep("10 millis")
 
             expect(received).toEqual({ first: 1, second: 0 })
@@ -439,6 +457,23 @@ describe("LocationServiceMap", () => {
             expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([
               Location.Ref.make({ directory, workspaceID: undefined }),
             ])
+
+            const variants = [
+              `${directory}${path.sep}`,
+              `${directory}${path.sep}${path.sep}`,
+              `${path.dirname(directory)}${path.sep}${path.sep}${path.basename(directory)}`,
+              `${directory}${path.sep}.${path.sep}child${path.sep}..${path.sep}`,
+            ]
+            for (const variant of variants) {
+              const ref = Location.Ref.make({ directory: AbsolutePath.make(variant) })
+              expect(LocationServiceMap.canonical(ref).directory).toBe(directory)
+              expect(yield* locations.contextEffect(ref)).toBe(first)
+            }
+            expect(Array.from(yield* RcMap.keys(locations.rcMap))).toHaveLength(1)
+            const root = path.parse(directory).root
+            expect(
+              LocationServiceMap.canonical(Location.Ref.make({ directory: AbsolutePath.make(root) })).directory,
+            ).toBe(AbsolutePath.make(root))
 
             // Invalidating with the shape opposite to the one that booted must evict.
             yield* locations.invalidate(present)

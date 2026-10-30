@@ -2,7 +2,7 @@ import type { SessionMessageInfo } from "@opencode/client/promise"
 import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { Button } from "@opencode/ui/button"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, on } from "solid-js"
+import { createEffect, createMemo, on, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Option, Predicate, Schema } from "effect"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
@@ -56,7 +56,7 @@ export type TimelineSessionSource = {
   history: Pick<SessionModel["history"], "messages">
 }
 
-export function createTimelineController(input: { session: TimelineSessionSource }) {
+export function createTimelineController(input: { session: TimelineSessionSource; active: Accessor<boolean> }) {
   const navigate = useNavigate()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
@@ -68,38 +68,60 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const language = useLanguage()
   const platform = usePlatform()
 
-  const handedOffMessages = createMemo(() =>
-    applyTimelineMessageHandoff(
+  // Pending inputs hold with the history while the view is detached, so a hidden view never shows one against
+  // history it has not caught up with.
+  const pendingItems = createMemo<{ value: ReturnType<typeof data.session.pending.list> } | undefined>(
+    (previous) => {
+      if (previous && !input.active()) return previous
+      const id = input.session.identity.sessionID()
+
+      return { value: id ? data.session.pending.list(id) : [] }
+    },
+    undefined,
+    { equals: (previous, next) => previous?.value === next?.value },
+  )
+
+  const pendingList = () => pendingItems()!.value
+
+  const visibleMessages = createMemo(() =>
+    visibleTimelineMessages(
       input.session.history.messages(),
-      getSessionMessageHandoff(input.session.identity.sessionKey()),
+      pendingList(),
+      input.session.data.info()?.revert?.messageID,
     ),
   )
 
-  const projectedMessages = createMemo(() => {
-    const id = input.session.identity.sessionID()
+  // A handoff projects after visibility: its prompt commits any staged revert, so the boundary does not hide it.
+  const projectedMessages = createMemo(() =>
+    applyTimelineMessageHandoff(
+      visibleMessages(),
+      getSessionMessageHandoff(input.session.identity.sessionKey()),
+      input.session.data.info(),
+    ),
+  )
 
-    return visibleTimelineMessages(
-      handedOffMessages(),
-      id ? data.session.pending.list(id) : [],
-      input.session.data.info()?.revert?.messageID,
-    )
-  })
-
+  // Inputs that wait behind the active turn. A starting steer opens the next turn instead, so the turn before it
+  // stays finished, as it will once the steer is delivered.
   const pendingInputIDs = createMemo(() => {
     const id = input.session.identity.sessionID()
 
+    if (!id) return new Set<string>()
+
     return new Set(
-      (id ? data.session.pending.list(id) : []).flatMap((item) =>
-        (item.type === "user" && item.delivery === "steer") || item.type === "synthetic" ? [item.id] : [],
+      pendingList().flatMap((item) =>
+        (item.type === "user" &&
+          item.delivery === "steer" &&
+          data.session.pending.status(id, item.id) !== "starting") ||
+        item.type === "synthetic"
+          ? [item.id]
+          : [],
       ),
     )
   })
 
-  const queuedCompactionIDs = createMemo(() => {
-    const id = input.session.identity.sessionID()
-
-    return (id ? data.session.pending.list(id) : []).flatMap((item) => (item.type === "compaction" ? [item.id] : []))
-  })
+  const queuedCompactionIDs = createMemo(() =>
+    pendingList().flatMap((item) => (item.type === "compaction" ? [item.id] : [])),
+  )
 
   const titleValue = createMemo(() => input.session.data.info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()) ?? language.t("session.tab.session"))
@@ -145,6 +167,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
       subagents: { ...detail.subagents },
       notices: { ...detail.notices },
       tools: { ...detail.tools },
+      commentary: { ...detail.commentary },
     }
   })
 
@@ -167,6 +190,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
     timelineDetail,
     pendingInputIDs,
     queuedCompactionIDs,
+    turnDiffs: settings.general.showTurnDiffs,
   })
 
   const [pending, setPending] = createStore({ rename: false })
@@ -282,7 +306,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
           />
         </DialogHeader>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => dialog.close()}>
+          <Button variant="ghost" autofocus onClick={() => dialog.close()}>
             {language.t("common.cancel")}
           </Button>
           <Button variant="danger" onClick={confirm}>
