@@ -19,8 +19,10 @@ const CLOSE_GRACE = Duration.seconds(2)
 const FORCE_KILL_AFTER = Duration.seconds(2)
 const OUTGOING_CAPACITY = 64
 const MAX_FRAME_BYTES = 16 * 1024 * 1024
-// The top-level id of an oversized response, when a server writes it before the payload as SDKs do.
-const LEADING_ID = /^\s*\{\s*(?:"jsonrpc"\s*:\s*"2\.0"\s*,\s*)?"id"\s*:\s*(-?\d+|"(?:[^"\\]|\\.)*")/
+// The id of an oversized response, when a server writes it before the payload as SDKs do. Requiring
+// `result` or `error` next rules out server requests, whose ids are not ours.
+const LEADING_ID =
+  /^\s*\{\s*(?:"jsonrpc"\s*:\s*"2\.0"\s*,\s*)?"id"\s*:\s*(-?\d+|"(?:[^"\\]|\\.)*")\s*,\s*"(?:result|error)"/
 // An unexpected exit is reported with its exit code and the end of stderr, which usually names the cause.
 const EXIT_WAIT = Duration.seconds(1)
 const STDERR_TAIL = 1_000

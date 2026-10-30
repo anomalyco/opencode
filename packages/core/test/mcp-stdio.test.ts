@@ -13,7 +13,7 @@ const after = encoder.encode('{"jsonrpc":"2.0","method":"after"}\n')
 // Built once: a 12 MiB frame sits between the SDK read buffer's 10 MiB default and our 16 MiB cap.
 const large = frame(12 * MiB)
 const oversized = frame(17 * MiB)
-const oversizedNotification = frame(17 * MiB, '{"jsonrpc":"2.0","method":"big","params":{"text":"')
+const oversizedRequest = frame(17 * MiB, '{"jsonrpc":"2.0","id":1,"method":"sampling/createMessage","params":{"text":"')
 
 test("receives a frame between 10 and 16 MiB split into pipe-sized chunks", async () => {
   const output = await read(chunks(large, 64 * 1024))
@@ -55,8 +55,8 @@ test("fails only the request whose response is over 16 MiB", async () => {
   ])
 })
 
-test("closes the connection when an oversized message has no leading id", async () => {
-  const output = await read([...chunks(oversizedNotification, 64 * 1024), after])
+test("closes the connection when an oversized message is not a response", async () => {
+  const output = await read([...chunks(oversizedRequest, 64 * 1024), after])
 
   expect(output.errors).toEqual([expect.stringContaining("over 16 MiB")])
   expect(output.messages).toEqual([])
