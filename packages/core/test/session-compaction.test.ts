@@ -430,6 +430,12 @@ it.effect("auto compaction estimates current content against the buffered prompt
     expect(yield* due(native(231_200))).toBe(true)
     expect(yield* due(native(1_000_000, { context: 0, input: undefined, output: 0 }))).toBe(false)
 
+    // An input limit above the context window, as some catalogs and config overrides report, cannot be used in full.
+    const overstated = { context: 128_000, input: 272_000, output: 128_000 }
+    expect(yield* due(input(108_799, overstated))).toBe(false)
+    expect(yield* due(input(108_800, overstated))).toBe(true)
+    expect(yield* due(input(200_000, { context: 0, input: 272_000, output: 0 }))).toBe(false)
+
     // The summary's 16k output limit is more than 15% of a 100k window, so it sets the ceiling.
     const contextLimited = { context: 100_000, output: 10_000 }
     expect(yield* due(input(83_999, contextLimited))).toBe(false)
