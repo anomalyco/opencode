@@ -68,8 +68,7 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
     createResizeObserver(element, () => setState("truncated", element.scrollWidth > element.clientWidth))
 
   return (
-    // The app cannot switch the local checkout's branch, and the worktree trigger already names the local mode.
-    <Show when={props.workspace.selection.value() !== "main" && props.workspace.bar.branch()}>
+    <Show when={props.workspace.bar.branch()}>
       <Tooltip
         placement="top"
         value={label()}

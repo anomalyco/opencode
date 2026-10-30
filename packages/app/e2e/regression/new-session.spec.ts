@@ -193,7 +193,9 @@ test("the combined location picker shows checkout branches and chooses the base 
   await page.getByRole("option", { name: /Custom project C:\/OpenCode\/BranchContext/ }).click()
   await expect(view.editor).toBeFocused()
   await expect(screen.getByRole("button", { name: "Local", exact: true })).toBeVisible()
-  await expect(screen.getByText("timeline-quotes", { exact: true })).toHaveCount(0)
+  // The local checkout's branch is context, not a control: the app cannot switch it.
+  await expect(screen.getByText("timeline-quotes", { exact: true })).toBeVisible()
+  await expect(screen.getByRole("button", { name: "timeline-quotes", exact: true })).toHaveCount(0)
   await expect(screen.getByRole("button", { name: /from / })).toHaveCount(0)
   await select(/^New worktree/)
   await expect(base).toBeVisible()
