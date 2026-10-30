@@ -629,12 +629,22 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest, o
     }),
   )
 
-const generateWith = (stream: Interface["stream"]) =>
+/** Attach the output that arrived before `error`; the error is returned unchanged when nothing arrived. */
+export const withPartial = (error: AIError, events: ReadonlyArray<LLMEvent>) => {
+  const partial = LLMResponse.partial(events)
+  return partial === undefined ? error : new AIError({ reason: error.reason, partial })
+}
+
+export const generateWith = (stream: Interface["stream"]) =>
   Effect.fn("LLM.generate")(function* (request: LLMRequest, options?: StreamOptions) {
-    const state = yield* stream(request, options).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
-    const response = LLMResponse.complete(state)
+    const events: LLMEvent[] = []
+    yield* stream(request, options).pipe(
+      Stream.runForEach((event) => Effect.sync(() => events.push(event))),
+      Effect.mapError((error) => withPartial(error, events)),
+    )
+    const response = LLMResponse.fromEvents(events)
     if (response) return response
-    return yield* incompleteStreamError(`${request.model.provider}/${request.model.route.id}`)
+    return yield* withPartial(incompleteStreamError(`${request.model.provider}/${request.model.route.id}`), events)
   })
 
 export function stream(request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, AIError, Service> {

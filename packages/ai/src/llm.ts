@@ -1,6 +1,6 @@
 import { Effect, JsonSchema, Schema, Stream } from "effect"
 import { tryRequest } from "./media-model.js"
-import { LLMClient, Service, type StreamOptions } from "./route/client.js"
+import { LLMClient, Service, withPartial, type StreamOptions } from "./route/client.js"
 import {
   GenerationOptions,
   HttpOptions,
@@ -80,6 +80,7 @@ export function loop(input: LoopInput, options?: StreamOptions) {
           event.type === "step-start" || event.type === "step-finish" ? { ...event, index: steps.length } : event,
         ),
         Stream.tap((event) => Effect.sync(() => events.push(event))),
+        Stream.mapError((error) => withPartial(error, events)),
         Stream.concat(
           Stream.unwrap(
             Effect.gen(function* () {
@@ -196,8 +197,12 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (options: Ge
   if (!call)
     return yield* new AIError({
       reason: new InvalidProviderOutputError({
-        message: `generateObject: model did not call the forced \`${GENERATE_OBJECT_TOOL_NAME}\` tool`,
+        message:
+          response.finishReason.normalized === "length"
+            ? "generateObject: output hit the token limit before the forced tool call completed"
+            : `generateObject: model did not call the forced \`${GENERATE_OBJECT_TOOL_NAME}\` tool`,
       }),
+      partial: response,
     })
   const object = yield* tool._decode(call.input).pipe(
     Effect.mapError(
@@ -207,6 +212,7 @@ const runGenerateObject = Effect.fn("LLM.generateObject")(function* (options: Ge
             message: `generateObject: tool input failed schema decode: ${error.message}`,
             cause: error,
           }),
+          partial: response,
         }),
     ),
   )

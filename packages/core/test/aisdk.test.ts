@@ -983,7 +983,6 @@ it.effect("preserves existing AI errors and their retry semantics unchanged", ()
       }),
     })
     const error = yield* streamFailure(failure)
-    expect(error).toBe(failure)
     expect(error.reason).toBe(failure.reason)
     expect(error.reason).toBeInstanceOf(RateLimitError)
     expect(error.cause).toBe(error.reason)

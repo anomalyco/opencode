@@ -317,4 +317,5 @@ export const tool = <
 export const ai = make()
 
 export * as AI from "./index.js"
+export { AIError }
 export type { ExecutableTool, Tool, ToolOptions, Tools } from "./tool.js"
