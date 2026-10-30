@@ -1,4 +1,4 @@
-import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { mergeProviderOptions, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import { OpenAICompatibleChat } from "../protocols/openai-compatible-chat.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
 import { MediaRoute } from "../route/media.js"
@@ -39,8 +39,18 @@ export const configure = (input: Config) => {
   return {
     id: ProviderID.make(provider),
     model: (modelID: string | ModelID) => route.model<OpenAIProviderOptionsInput>({ id: modelID }),
+    // Many compatible hosts default to hosted URLs. GPT Image models always return bytes and reject the field; a
+    // proxy serving one under another name can drop the default with `response_format: null`.
     image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-      OpenAIImages.model({ ...media, id: modelID, provider, providerOptions }),
+      OpenAIImages.model({
+        ...media,
+        id: modelID,
+        provider,
+        providerOptions: mergeProviderOptions(
+          /gpt-image|chatgpt-image/.test(modelID) ? undefined : { response_format: "b64_json" },
+          providerOptions,
+        ),
+      }),
     configure,
   }
 }

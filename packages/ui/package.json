@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.2.0",
+  "version": "2.2.2",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -23,6 +23,7 @@
     "!src/**/*.stories.ts",
     "!src/**/*.stories.tsx",
     "src/**/*.css",
+    "src/data-display/line-comment/*.svg",
     "src/theme/themes/*.json",
     "src/components/app-icons/sprite.svg",
     "src/components/provider-icons/sprite.svg",
@@ -131,7 +132,7 @@
     "@solid-primitives/event-listener": "catalog:",
     "@solid-primitives/resize-observer": "catalog:",
     "fuzzysort": "catalog:",
-    "katex": "0.16.47",
+    "katex": "0.18.11",
     "knobs": "npm:@kitlangton/knobs@0.4.0-next.22",
     "marked": "catalog:",
     "solid-list": "catalog:",

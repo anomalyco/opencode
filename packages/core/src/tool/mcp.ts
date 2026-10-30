@@ -105,11 +105,14 @@ export const layer = Layer.effect(
                       ...(content.length === 0 ? {} : { content }),
                     }
                   }).pipe(
-                    Effect.mapError((error) =>
-                      error instanceof ToolFailure
-                        ? error
-                        : new ToolFailure({ message: `Unable to execute ${name(tool.server, tool.name)}` }),
-                    ),
+                    Effect.mapError((error) => {
+                      if (error instanceof ToolFailure) return error
+                      if (error instanceof Permission.BlockedError)
+                        return new ToolFailure({ message: error.message, error })
+                      if (error instanceof Permission.CorrectedError)
+                        return new ToolFailure({ message: error.feedback, error })
+                      return new ToolFailure({ message: `Unable to execute ${name(tool.server, tool.name)}`, error })
+                    }),
                   ),
               })
             }

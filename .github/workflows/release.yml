@@ -24,7 +24,7 @@ on:
         required: false
         type: string
       release_notes:
-        description: "Reviewed V2 release notes for CHANGELOG.md and the GitHub release (optional)"
+        description: "Reviewed V2 release notes for CHANGELOG.md and the GitHub release (required with bump or version)"
         required: false
         type: string
 
@@ -72,6 +72,7 @@ jobs:
           GH_TOKEN: ${{ github.token }} # reads the triggering actor's repository role for stable releases
           INPUT_BUMP: ${{ inputs.bump }}
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_RELEASE_NOTES: ${{ inputs.release_notes }}
 
   # A versioned release builds from a commit with its versions and changelog on the dispatched dev commit,
   # tagged v<version>. Runs git only.
@@ -731,6 +732,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          OPENCODE_RELEASE_NOTES: ${{ inputs.release_notes }}
+
+  publish-discord:
+    needs: [plan, publish-github-release]
+    if: ${{ !cancelled() && !failure() && needs.plan.outputs.release == 'true' }}
+    runs-on: ubuntu-24.04
+    environment: ${{ needs.plan.outputs.dry_run != 'true' && 'release' || '' }}
+    permissions:
+      contents: read
+    env: *env
+    steps:
+      - *checkout-release
+      - name: Publish
+        run: bash .github/release/publish-discord.sh
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           OPENCODE_RELEASE_NOTES: ${{ inputs.release_notes }}
 
   # Brings the release commit back to dev. Pushing to dev is blocked by rulesets, so it opens a PR.

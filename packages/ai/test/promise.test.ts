@@ -7,7 +7,7 @@ import { HttpClientRequest } from "effect/http"
 import { AIError, LLMEvent, Media, SpeechEvent, TranscriptionEvent } from "../src/effect.js"
 import { RequestExecutor } from "../src/route.js"
 import { AI } from "../src/index.js"
-import { AssemblyAI, OpenAI, Replicate, Runway } from "../src/providers.js"
+import { AssemblyAI, OpenAI, Runway } from "../src/providers.js"
 import { handlerLayer, json } from "./lib/http.js"
 import { finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
 import { sseEvents } from "./lib/sse.js"
@@ -50,13 +50,6 @@ const executor = (seen: Array<string>) =>
               : input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }], output_format: "png" }), {
                   headers: { "content-type": "application/json" },
                 })
-          if (web.url.startsWith("https://replicate.test"))
-            return json(input, {
-              id: "p_1",
-              status: "succeeded",
-              output: "https://replicate.test/a.webp",
-              urls: { get: "https://replicate.test/p_1", cancel: "https://replicate.test/p_1/cancel" },
-            })
           if (web.url.startsWith("https://slow.test"))
             return input.respond(
               new ReadableStream({
@@ -173,11 +166,6 @@ describe("AI promise client", () => {
       "https://openai.test/v1/images/generations",
     ])
 
-    const generation = await ai.image.start({
-      model: Replicate.configure({ apiKey: "test", baseURL: "https://replicate.test" }).image("owner/model"),
-      prompt: "A lighthouse",
-    })
-    expect((await generation.await()).image.source).toMatchObject({ url: "https://replicate.test/a.webp" })
     await ai.dispose()
   })
 
@@ -467,6 +455,54 @@ describe("AI promise client", () => {
     })
 
     expect(response.object.city).toBe("Paris")
+    await ai.dispose()
+  })
+
+  test("compacts through the endpoint and the trigger, and rejects unsupported routes with AIError", async () => {
+    const checkpoint = { type: "compaction", id: "cmp_1", encrypted_content: "opaque" }
+    const paths: Array<string> = []
+    const ai = AI.make({
+      layer: RequestExecutor.layer.pipe(
+        Layer.provide(
+          handlerLayer((input) =>
+            Effect.gen(function* () {
+              const path = new URL((yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)).url).pathname
+              paths.push(path)
+              if (path === "/v1/responses/compact")
+                return json(input, {
+                  object: "response.compaction",
+                  output: [checkpoint],
+                  usage: { input_tokens: 100, output_tokens: 10, total_tokens: 110 },
+                })
+              expect(JSON.parse(input.text).input.at(-1)).toEqual({ type: "compaction_trigger" })
+              return input.respond(
+                sseEvents({ type: "response.completed", response: { id: "resp_1", output: [checkpoint] } }),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            }),
+          ),
+        ),
+      ),
+    })
+    const request = ai.llm.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
+
+    const compacted = await ai.llm.compact(request)
+    expect(compacted.replacement.flatMap((message) => message.content.map((part) => part.type))).toEqual([
+      "compaction",
+    ])
+    expect(compacted.usage?.totalTokens).toBe(110)
+
+    const triggered = await ai.llm.compact(request, { mechanism: "trigger" })
+    expect(triggered.checkpoint).toMatchObject({ id: "cmp_1", encrypted: "opaque" })
+    expect(triggered.responseID).toBe("resp_1")
+    expect(paths).toEqual(["/v1/responses/compact", "/v1/responses"])
+
+    const unsupported = await ai.llm
+      // @ts-expect-error Untyped callers on routes without a compact endpoint must reject with AIError.
+      .compact(ai.llm.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }))
+      .catch((error: unknown) => error)
+    expect(unsupported instanceof AIError && unsupported.reason._tag).toBe("UnsupportedOperation")
+    expect(paths).toHaveLength(2)
     await ai.dispose()
   })
 

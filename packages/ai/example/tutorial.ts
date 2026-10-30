@@ -1,7 +1,8 @@
 import { Config, Effect, Formatter, Schema, Stream } from "effect"
 import { HttpClientResponse } from "effect/http"
 import { NodeFileSystem } from "@effect/platform-node"
-import { AIClient, Image, LLM, LLMRequest, Media, Message, ProviderID, Tool, ToolRuntime } from "@opencode/ai/effect"
+import { AIClient, Image, LLM, LLMRequest, Media, Message, ProviderID, ToolRuntime } from "@opencode/ai/effect"
+import { toDefinitions, tool } from "@opencode/ai/effect"
 import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode/ai/route"
 import { OpenAI } from "@opencode/ai/providers"
 
@@ -86,7 +87,7 @@ const streamText = LLM.stream(request).pipe(
 // advertise definitions on the request, stream one turn, dispatch local calls,
 // then persist/build follow-up history in the enclosing product flow.
 const tools = {
-  get_weather: Tool.make({
+  get_weather: tool({
     description: "Get current weather for a city.",
     parameters: Schema.Struct({ city: Schema.String }),
     success: Schema.Struct({ forecast: Schema.String }),
@@ -99,7 +100,7 @@ const streamWithTools = Effect.gen(function* () {
     model,
     prompt: "Use get_weather for San Francisco, then answer in one sentence.",
     generation: { maxTokens: 80, temperature: 0 },
-    tools: Tool.toDefinitions(tools),
+    tools: toDefinitions(tools),
   })
   const events = Array.from(yield* LLM.stream(request).pipe(Stream.runCollect))
   for (const event of events) {

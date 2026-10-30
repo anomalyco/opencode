@@ -77,7 +77,7 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         const owners = [
           ...(yield* execution.active),
           ...(yield* jobs.runningBackground).flatMap((recovery) =>
-            recovery.kind === "shell" ? [recovery.sessionID] : [recovery.childSessionID, recovery.parentSessionID],
+            recovery.kind === "subagent" ? [recovery.childSessionID, recovery.parentSessionID] : [recovery.sessionID],
           ),
         ]
         const occupied = new Set(

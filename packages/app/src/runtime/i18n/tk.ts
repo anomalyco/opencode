@@ -741,6 +741,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Maglumatlar geçirilýär {{current}}/{{total}}",
   "home.workspaceTip": "Üýtgeşmeleri üzňe saklamak üçin indiki sessiýany täze iş ýerinde başlaň",
   "session.tab.add": "Salgy goşuň",
+  "session.tab.closeOthers": "Beýleki salgylary ýapyň",
   "session.queue.attachments.one": "Goşmaça {{count}} goşundy",
   "session.queue.attachments.other": "Goşmaça {{count}} goşundylar",
   "settings.backToSettings": "Sazlamalara dolan",

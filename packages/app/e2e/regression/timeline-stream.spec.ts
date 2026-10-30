@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { createTwoFilesPatch } from "diff"
+import { readSessionDraftText } from "../utils/drafts"
 import {
   assistantID,
   assistantMessage,
@@ -1352,14 +1353,11 @@ test.describe("background shortcut", () => {
       /^Explore\s*Background task\d+h \d{2}m$/,
       /^sleep 120\d+h \d{2}m$/,
     ])
+    // A shell opens its output in the menu rather than revealing its call in the timeline.
     await list.getByRole("menuitem", { name: /sleep 120/ }).click()
-    await expect(list).toHaveCount(0)
-    await expect(used).toHaveAttribute("aria-expanded", "true")
-    const shellCall = page.locator('[data-timeline-part-id="call_shell_backgrounded"]')
-    await expect(shellCall.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
-    await expect(shellCall).toBeInViewport()
-
-    await activity.click()
+    await expect(list).toHaveAttribute("data-view", "shell")
+    await expect(used).toHaveAttribute("aria-expanded", "false")
+    await list.getByRole("menuitem", { name: "Back to background work", exact: true }).click()
 
     const interrupt = page.waitForRequest(
       (request) =>
@@ -1384,6 +1382,7 @@ test.describe("background shortcut", () => {
     await expect(list).toHaveCount(0)
     await expect(backgroundCard).toContainText("Background task (background)")
     await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
+    await used.click()
     await expect(
       page.locator('[data-timeline-part-id="call_shell_backgrounded"] [data-component="text-shimmer"]'),
     ).toHaveAttribute("data-active", "true")
@@ -1407,9 +1406,10 @@ test.describe("background shortcut", () => {
     // Reaching the shell lands on the end of the timeline, which would otherwise follow new content again.
     { name: "at the end of the timeline", before: 40, searches: 0, after: 0 },
   ]) {
-    test(`holds a revealed shell ${fixture.name} just under its stuck group header`, async ({ page }) => {
+    // A starting subagent call is the pill's row that reveals its call; grouping subagents puts it inside the group.
+    test(`holds a revealed call ${fixture.name} just under its stuck group header`, async ({ page }) => {
       const timeline = await setupTimeline(page, {
-        settings: { timelineDetail: detailed },
+        settings: { timelineDetail: { ...detailed, subagents: { placement: "grouped" } } },
         sessionStatus: { [sessionID]: { type: "busy" } },
         messages: [
           userMessage(),
@@ -1417,14 +1417,8 @@ test.describe("background shortcut", () => {
             [
               ...(fixture.before ? [textPart("prt_earlier", notes("Earlier", fixture.before))] : []),
               ...searches(0, 42 - fixture.searches),
-              toolPart(
-                "prt_far_shell",
-                "shell",
-                "completed",
-                { command: "sleep 120" },
-                { output: "working", metadata: { shellID: "shell_far", status: "running" } },
-              ),
-              // The open group outgrows the viewport, so aligning the group instead of the shell misses it.
+              toolPart("prt_far_call", "subagent", "running", { description: "Map the far code", agent: "explore" }),
+              // The open group outgrows the viewport, so aligning the group instead of the call misses it.
               ...searches(42 - fixture.searches, fixture.searches),
               ...(fixture.after ? [textPart("prt_follow_up", notes("Follow-up", fixture.after))] : []),
             ],
@@ -1433,60 +1427,40 @@ test.describe("background shortcut", () => {
         ],
       })
 
-      await timeline.transport.send({
-        id: "evt_far_shell_created",
-        created: 3,
-        type: "shell.created",
-        location: { directory },
-        data: {
-          info: {
-            id: "shell_far",
-            status: "running",
-            command: "sleep 120",
-            cwd: directory,
-            shell: "bash",
-            file: "/tmp/far.out",
-            metadata: { sessionID },
-            time: { started: 2 },
-          },
-        },
-      })
-
       const group = page
         .locator('[data-component="collapsed-tool-group"]')
         .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
 
-      const shellTrigger = page.locator('[data-timeline-part-id="prt_far_shell"] [data-slot="collapsible-trigger"]')
+      const call = page.locator('[data-timeline-part-id="prt_far_call"]')
 
       const aligned = () =>
         expect
           .poll(async () => {
-            const [header, shell] = await Promise.all([group.boundingBox(), shellTrigger.boundingBox()])
+            const [header, row] = await Promise.all([group.boundingBox(), call.boundingBox()])
 
-            return header && shell ? Math.round(shell.y - (header.y + header.height)) : undefined
+            return header && row ? Math.round(row.y - (header.y + header.height)) : undefined
           })
           .toBe(0)
 
       await expect(
         fixture.after ? page.getByText(`Follow-up note ${fixture.after}.`, { exact: true }) : group,
       ).toBeInViewport()
-      await expect(shellTrigger).toHaveCount(0)
-      await page.getByRole("button", { name: "1 shell", exact: true }).click()
+      await expect(call).toHaveCount(0)
+      await page.getByRole("button", { name: "1 subagent", exact: true }).click()
       await page
-        .getByRole("menu", { name: "1 shell", exact: true })
-        .getByRole("menuitem", { name: /sleep 120/ })
+        .getByRole("menu", { name: "1 subagent", exact: true })
+        .getByRole("menuitem", { name: /Map the far code/ })
         .click()
 
       await expect(group).toHaveAttribute("aria-expanded", "true")
-      await expect(shellTrigger).toHaveAttribute("aria-expanded", "true")
-      await expect(shellTrigger).toBeInViewport()
+      await expect(call).toBeInViewport()
 
-      // A shell at the very end cannot rise under the header until more content arrives below it.
+      // A call at the very end cannot rise under the header until more content arrives below it.
       if (fixture.searches) await aligned()
       // Nothing covers the row, so it takes the next click.
-      await shellTrigger.click({ trial: true })
+      await call.click({ trial: true })
 
-      // The agent keeps writing below the shell; the shell stays where it was revealed.
+      // The agent keeps writing below the call; the call stays where it was revealed.
       await timeline.send(partUpdated(textPart("prt_late", notes("Late", 30))))
       await expect(page.getByText("Late note 30.", { exact: true })).toBeAttached()
       await aligned()
@@ -1988,12 +1962,16 @@ test.describe("shell completion", () => {
 
 test("quotes plain timeline text into the composer, with or without a comment", async ({ page }) => {
   const prompts: string[] = []
+  const metadata: unknown[] = []
   await setupTimeline(page, {
     messages: [
       userMessage([userText("Explain the build", { id: "prt_quote_user" })]),
       assistantMessage([textPart("prt_quote_answer", "It has **two** steps:\n\n- compile\n- bundle")]),
     ],
-    onPrompt: (input) => void prompts.push(String(input.body.text)),
+    onPrompt: (input) => {
+      prompts.push(String(input.body.text))
+      metadata.push(input.body.metadata)
+    },
   })
 
   const user = '[data-slot="user-message-text"]'
@@ -2023,21 +2001,37 @@ test("quotes plain timeline text into the composer, with or without a comment", 
   const chips = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
   await expect(chips).toHaveCount(1)
   await expect(chips).toContainText("Explain the build")
+  const comment = page.locator('[data-component="composer-quote-comment"] textarea')
+  await expect(comment).toBeFocused()
+  await expect(comment).toHaveAttribute("placeholder", "Add an optional comment...")
+  const popover = page.locator('[data-component="composer-quote-comment"]')
+  await expect(popover.getByRole("button")).toHaveCount(1)
+  await expect(popover.getByRole("button", { name: "Done", exact: true })).toBeVisible()
+  await expect(
+    popover.getByRole("button", { name: "Done", exact: true }).locator('span[aria-hidden="true"]'),
+  ).not.toHaveCSS("mask-image", "none")
+  await popover.getByRole("button", { name: "Done", exact: true }).click()
+  await expect(page.locator('[data-component="composer-editor"]')).toBeFocused()
+  await expect(chips).toHaveCount(1)
 
   // A quote's chip takes its comment; saving an emptied comment clears it again.
   await select(answer, answer)
   await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
   await expect(chips).toHaveCount(2)
-  const comment = page.locator('[data-component="composer-quote-comment"] textarea')
-  await chips.nth(1).click()
+  await expect(comment).toBeFocused()
   await comment.fill("Why three?")
-  await comment.press("Enter")
+  await expect(popover.getByRole("button")).toHaveCount(1)
+  await expect(popover.getByRole("button", { name: "Add comment", exact: true })).toBeVisible()
+  await popover.getByRole("button", { name: "Add comment", exact: true }).click()
   await expect(comment).toHaveCount(0)
   await expect(chips.nth(1)).toContainText("Why three?")
   await chips.nth(1).click()
   await expect(comment).toHaveValue("Why three?")
+  await expect(popover.getByRole("button")).toHaveCount(1)
+  await expect(popover.getByRole("button", { name: "Save", exact: true })).toBeVisible()
   await comment.fill("")
-  await comment.press("Enter")
+  await expect(popover.getByRole("button", { name: "Save", exact: true })).toBeEnabled()
+  await popover.getByRole("button", { name: "Save", exact: true }).click()
   await expect(chips.nth(1)).not.toContainText("Why three?")
   await chips.nth(1).click()
   await comment.fill("Why two?")
@@ -2050,7 +2044,9 @@ test("quotes plain timeline text into the composer, with or without a comment", 
 
   // The shell turns selection off, so select all in the timeline selects its conversation and offers to quote it.
   await page.locator(answer).getByText("bundle", { exact: true }).click()
-  await page.keyboard.press("ControlOrMeta+a")
+  await page.keyboard.press(
+    await page.evaluate(() => (/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta+a" : "Control+a")),
+  )
   await expect(toolbar).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(toolbar).toHaveCount(0)
@@ -2075,17 +2071,26 @@ test("quotes plain timeline text into the composer, with or without a comment", 
         "The user made the following comment regarding this quote: Why two?",
       ].join("\n"),
     ])
+  expect(metadata).toEqual([
+    expect.objectContaining({
+      comments: [
+        { type: "quote", text: "Explain the build\n\nIt has two steps:\ncompile\nbundle" },
+        { type: "quote", text: "It has two steps:\ncompile\nbundle", comment: "Why two?" },
+      ],
+    }),
+  ])
   await expect(chips).toHaveCount(0)
 })
 
-test("highlights a quote's source only while its first comment is written", async ({ page }) => {
+test("highlights the exact duplicate passage whenever its quote comment is open", async ({ page }) => {
   let reject = true
   await setupTimeline(page, {
+    seedHistory: true,
     messages: [
       userMessage(),
       assistantMessage([
-        textPart("prt_highlight_first", "The same **quoted** **words**."),
-        textPart("prt_highlight_second", "The same **quoted** **words**."),
+        textPart("prt_highlight_first", "The same **quoted** **words**. The same **quoted** **words**."),
+        textPart("prt_highlight_second", "The same **quoted** **words**. The same **quoted** **words**."),
       ]),
     ],
     onPrompt: () => {
@@ -2096,43 +2101,79 @@ test("highlights a quote's source only while its first comment is written", asyn
   const secondID = renderedPartID("prt_highlight_second")
   const first = page.locator(`[data-timeline-part-id="${firstID}"] [data-slot="text-part-body"]`)
   const second = page.locator(`[data-timeline-part-id="${secondID}"] [data-slot="text-part-body"]`)
-  await expect(second).toHaveText("The same quoted words.")
+  await expect(second).toHaveText("The same quoted words. The same quoted words.")
 
   const highlights = () =>
     page.evaluate(() =>
       ["timeline-quote-source"].map((name) =>
-        [...(CSS.highlights.get(name) ?? [])].map((range) => ({
-          part: range.startContainer.parentElement
-            ?.closest("[data-timeline-part-id]")
-            ?.getAttribute("data-timeline-part-id"),
-          text: range.toString(),
-        })),
+        [...(CSS.highlights.get(name) ?? [])].map((range) => {
+          const body = range.startContainer.parentElement?.closest('[data-slot="text-part-body"]')
+
+          if (!body) throw new Error("Highlighted quote has no source body")
+
+          const prefix = document.createRange()
+          prefix.selectNodeContents(body)
+          prefix.setEnd(range.startContainer, range.startOffset)
+
+          return {
+            part: body.closest("[data-timeline-part-id]")?.getAttribute("data-timeline-part-id"),
+            text: range.toString(),
+            start: prefix.toString().length,
+            end: prefix.toString().length + range.toString().length,
+          }
+        }),
       ),
     )
 
   const selectionCollapsed = () => page.evaluate(() => window.getSelection()?.isCollapsed ?? true)
 
-  const select = (target: Locator) =>
-    target.evaluate((element) => {
+  const select = (target: Locator, start: number) =>
+    target.evaluate((element, start) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
       const range = document.createRange()
-      range.selectNodeContents(element)
+      let offset = 0
+      let node = walker.nextNode()
+
+      while (node) {
+        const end = offset + (node.textContent?.length ?? 0)
+
+        if (start >= offset && start < end) range.setStart(node, start - offset)
+
+        if (start + 22 > offset && start + 22 <= end) {
+          range.setEnd(node, start + 22 - offset)
+          break
+        }
+
+        offset = end
+        node = walker.nextNode()
+      }
+
       window.getSelection()?.removeAllRanges()
       window.getSelection()?.addRange(range)
-    })
+    }, start)
 
   const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
   const chips = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
   const editor = page.locator('[data-component="composer-editor"]')
   const comment = page.locator('[data-component="composer-quote-comment"] textarea')
-  const firstRange = { part: firstID, text: "The same quoted words." }
+
+  const jump = page.locator('[data-component="composer-quote-comment"]').getByRole("button", {
+    name: "Jump to quote",
+    exact: true,
+  })
+
+  const firstRange = { part: firstID, text: "The same quoted words.", start: 0, end: 22 }
+  const secondRange = { part: secondID, text: "The same quoted words.", start: 23, end: 45 }
+
   const scroll = page.locator('[data-slot="session-timeline-scroll"] > [data-scrollable]')
 
   await scroll.focus()
-  await select(first)
-  await toolbar.getByRole("button", { name: "Quote", exact: true }).click({ modifiers: ["Alt"] })
+  await select(first, 0)
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
   await expect(comment).toBeFocused()
   await comment.fill("Keep this passage visible while I write.")
   await expect.poll(highlights).toEqual([[firstRange]])
+  await expect(jump).toHaveCount(0)
 
   for (const palette of [
     { colorScheme: "dark" as const, background: "color(srgb 0.635294 0.737255 1 / 0.25)" },
@@ -2142,10 +2183,7 @@ test("highlights a quote's source only while its first comment is written", asyn
     await expect
       .poll(() =>
         first.evaluate((element) =>
-          [
-            "::selection",
-            "::highlight(timeline-quote-source)",
-          ].map((pseudo) => {
+          ["::selection", "::highlight(timeline-quote-source)"].map((pseudo) => {
             const style = getComputedStyle(element, pseudo)
 
             return {
@@ -2165,8 +2203,8 @@ test("highlights a quote's source only while its first comment is written", asyn
   await expect(comment).toHaveCount(0)
   await expect.poll(highlights).toEqual([[]])
 
-  await select(second)
-  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await select(second, 23)
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click({ modifiers: ["Alt"] })
   await expect(chips).toHaveCount(2)
   await expect(editor).toBeFocused()
   await expect.poll(selectionCollapsed).toBe(true)
@@ -2178,13 +2216,34 @@ test("highlights a quote's source only while its first comment is written", asyn
   expect(await scroll.evaluate((element) => element.scrollTop)).toBe(before)
   await expect.poll(highlights).toEqual([[]])
 
-  // Editing an existing quote's comment shows no source highlight.
+  // Reopening either identical quote highlights its own part and exact occurrence, never a text search match.
   await chips.nth(0).click()
   await expect(comment).toBeFocused()
   await expect(comment).toHaveValue("Keep this passage visible while I write.")
-  await expect.poll(highlights).toEqual([[]])
+  await expect.poll(highlights).toEqual([[firstRange]])
+  expect(await scroll.evaluate((element) => element.scrollTop)).toBe(before)
   await comment.press("Escape")
   await expect(comment).toHaveCount(0)
+  await expect.poll(highlights).toEqual([[]])
+  await chips.nth(1).click()
+  await expect(comment).toBeFocused()
+  await expect.poll(highlights).toEqual([[secondRange]])
+  expect(await scroll.evaluate((element) => element.scrollTop)).toBe(before)
+  await comment.press("Escape")
+  await expect.poll(highlights).toEqual([[]])
+
+  // Reopening a short quote never navigates to its offscreen source.
+  await scroll.hover({ position: { x: 20, y: 100 } })
+  await page.mouse.wheel(0, -10000)
+  await expect(second).not.toBeInViewport()
+  const offscreenTop = await scroll.evaluate((element) => element.scrollTop)
+  await chips.nth(1).click()
+  await expect(comment).toBeFocused()
+  await comment.fill("An unsaved short-quote comment")
+  await expect(second).not.toBeInViewport()
+  expect(await scroll.evaluate((element) => element.scrollTop)).toBe(offscreenTop)
+  await comment.press("Escape")
+  await expect(chips.nth(1)).not.toContainText("An unsaved short-quote comment")
 
   await page
     .locator('[data-component="composer-attachments"]')
@@ -2238,28 +2297,51 @@ test("keeps the native selection height after quoting wrapped and formatted text
   await page
     .getByRole("toolbar", { name: "Quote selection" })
     .getByRole("button", { name: "Quote", exact: true })
-    .click({ modifiers: ["Alt"] })
+    .click()
   await expect(page.locator('[data-component="composer-quote-comment"] textarea')).toBeFocused()
 
   await page.setViewportSize({ width: 700, height: 900 })
   const height = await source.locator("p").evaluate((element) => parseFloat(getComputedStyle(element).lineHeight))
   await expect
     .poll(() =>
-      source.locator('[data-component="timeline-quote-background"] > span').evaluateAll(
-        (lines, height) =>
-          lines.length > 0 && lines.every((line) => Math.abs(line.getBoundingClientRect().height - height) < 0.1),
-        height,
-      ),
+      source
+        .locator('[data-component="timeline-quote-background"] > span')
+        .evaluateAll(
+          (lines, height) =>
+            lines.length > 0 && lines.every((line) => Math.abs(line.getBoundingClientRect().height - height) < 0.1),
+          height,
+        ),
     )
     .toBe(true)
+
+  // The source-open preview is compact; editing the attached quote reveals up to four lines of the same passage.
+  const popover = page.locator('[data-component="composer-quote-comment"]')
+  const preview = popover.locator('[data-slot="line-comment-v2-preview"]')
+
+  const previewLines = () =>
+    preview.evaluate(
+      (element) => element.getBoundingClientRect().height / parseFloat(getComputedStyle(element).lineHeight),
+    )
+
+  await expect.poll(previewLines).toBeCloseTo(2, 1)
+  const quotedText = await preview.innerText()
+  await popover.getByRole("button", { name: "Done", exact: true }).click()
+  const chip = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+  await expect(chip).toHaveCount(1)
+  await chip.click()
+  await expect(popover.locator("textarea")).toBeFocused()
+  await expect(preview).toHaveText(quotedText)
+  await expect.poll(previewLines).toBeCloseTo(4, 1)
 })
 
-test("reveals a pending quote's source and restores its retained draft after its row remounts", async ({ page }) => {
-  await setupTimeline(page, {
+test("retains a long quote's source across reload without scrolling when its editor opens", async ({ page }) => {
+  const passage = `Keep this exact source highlighted. ${Array.from({ length: 60 }, (_, index) => `source-word-${index}`).join(" ")}`
+
+  const timeline = await setupTimeline(page, {
     seedHistory: true,
     messages: [
       userMessage(),
-      assistantMessage([textPart("prt_quote_remount", "Keep this exact source highlighted.")]),
+      assistantMessage([textPart("prt_quote_remount", passage)]),
       userMessage([userText("Continue with the next step.")], { id: "msg_quote_following_user" }),
       assistantMessage([textPart("prt_quote_following_answer", "The next step is ready.")], {
         id: "msg_quote_following_answer",
@@ -2267,9 +2349,11 @@ test("reveals a pending quote's source and restores its retained draft after its
       }),
     ],
   })
+
   const partID = renderedPartID("prt_quote_remount")
+
   const source = page.locator(`[data-timeline-part-id="${partID}"] [data-slot="text-part-body"]`)
-  await expect(source).toHaveText("Keep this exact source highlighted.")
+  await expect(source).toHaveText(passage)
   await source.evaluate((element) => {
     const range = document.createRange()
     range.selectNodeContents(element)
@@ -2279,7 +2363,7 @@ test("reveals a pending quote's source and restores its retained draft after its
   await page
     .getByRole("toolbar", { name: "Quote selection" })
     .getByRole("button", { name: "Quote", exact: true })
-    .click({ modifiers: ["Alt"] })
+    .click()
   const chip = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
   const comment = page.locator('[data-component="composer-quote-comment"] textarea')
   await expect(comment).toBeFocused()
@@ -2292,31 +2376,14 @@ test("reveals a pending quote's source and restores its retained draft after its
       ),
     )
 
-  await expect.poll(highlighted).toEqual(["Keep this exact source highlighted."])
+  await expect.poll(highlighted).toEqual([passage])
 
   const scroll = page.locator('[data-slot="session-timeline-scroll"] > [data-scrollable]')
-  await scroll.hover({ position: { x: 20, y: 100 } })
-  await page.mouse.wheel(0, -10000)
-  await expect(source).toHaveCount(0)
-  const top = await scroll.evaluate((element) => element.scrollTop)
-  await chip.hover()
-  expect(await scroll.evaluate((element) => element.scrollTop)).toBe(top)
-
-  // Clicking the pending card closes its open comment, and reveals the source before it does.
-  await chip.click()
+  await comment.fill("Retained quote comment")
+  await comment.press("Enter")
   await expect(comment).toHaveCount(0)
-  await expect(source).toBeInViewport()
+  await expect(chip).toContainText("Retained quote comment")
   await expect.poll(highlighted).toEqual([])
-
-  // An existing quote's card edits its comment without moving the timeline to its source.
-  await scroll.hover({ position: { x: 20, y: 100 } })
-  await page.mouse.wheel(0, -10000)
-  await expect(source).toHaveCount(0)
-  await chip.click()
-  await expect(comment).toBeFocused()
-  await expect(source).toHaveCount(0)
-  await expect.poll(highlighted).toEqual([])
-  await comment.press("Escape")
 
   const href = new URL(page.url()).pathname
   await page.getByRole("button", { name: "Home", exact: true }).click()
@@ -2326,6 +2393,171 @@ test("reveals a pending quote's source and restores its retained draft after its
   await expect(chip).toContainText("Keep this exact source highlighted.")
   await expect.poll(highlighted).toEqual([])
   await expect(comment).toHaveCount(0)
+
+  // A fresh document must recover the local source anchor, not just the quote's displayed text.
+  const editor = page.locator('[data-component="composer-editor"]')
+  await editor.fill("Retained composer draft")
+  // Reload only after the editor's input has reached the durable draft, not merely its DOM.
+  await expect.poll(() => readSessionDraftText(page, sessionID)).toBe("Retained composer draft")
+  await page.reload()
+  await timeline.transport.waitForConnection()
+  await expect(editor).toHaveText("Retained composer draft")
+  await expect(chip).toContainText("Retained quote comment")
+  await scroll.hover({ position: { x: 20, y: 100 } })
+  await page.mouse.wheel(0, -10000)
+  await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBe(0)
+  await expect(source).not.toBeInViewport()
+  const reloadedTop = await scroll.evaluate((element) => element.scrollTop)
+  await chip.click()
+  await expect(comment).toBeFocused()
+  await expect(comment).toHaveValue("Retained quote comment")
+  await expect(source).not.toBeInViewport()
+  expect(await scroll.evaluate((element) => element.scrollTop)).toBe(reloadedTop)
+  await scroll.hover({ position: { x: 20, y: 100 } })
+  await page.mouse.wheel(0, 10000)
+  await expect
+    .poll(() => scroll.evaluate((element) => Math.abs(element.scrollHeight - element.clientHeight - element.scrollTop)))
+    .toBeLessThan(1)
+  await expect(source).toBeInViewport()
+  await expect.poll(highlighted).toEqual([passage])
+  await comment.press("Escape")
+  await expect.poll(highlighted).toEqual([])
+})
+
+test("highlights a horizontally clipped code quote without scrolling its source", async ({ page }) => {
+  const tail = `quoted tail start ${Array.from({ length: 40 }, (_, index) => `distinct-word-${index}`).join(" ")} quoted tail end`
+
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        textPart("prt_quote_code_tail", `\`\`\`plaintext\n${"unquoted prefix ".repeat(80)}${tail}\n\`\`\``),
+      ]),
+    ],
+  })
+
+  const source = page.locator(
+    `[data-timeline-part-id="${renderedPartID("prt_quote_code_tail")}"] [data-slot="text-part-body"]`,
+  )
+
+  const pre = source.locator("pre")
+  const code = pre.locator("code")
+  await expect(code).toContainText(tail)
+  await expect(pre).toBeInViewport()
+  await expect.poll(() => pre.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0)
+  await pre.evaluate((element) => element.scrollTo({ left: element.scrollWidth }))
+
+  const tailVisible = () =>
+    code.evaluate((element) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      let node = walker.nextNode()
+
+      while (node) {
+        // The full quote is wider than the scrollport; check its final words after the user scrolls back.
+        const start = node.textContent?.indexOf("quoted tail end") ?? -1
+
+        if (start >= 0) {
+          const range = document.createRange()
+          range.setStart(node, start)
+          range.setEnd(node, start + "quoted tail end".length)
+
+          const rect = range.getBoundingClientRect()
+          const pre = element.closest("pre")!
+          const bounds = pre.getBoundingClientRect()
+          const left = bounds.left + pre.clientLeft
+
+          return (
+            rect.width > 0 &&
+            rect.left >= left - 1 &&
+            rect.right <= left + pre.clientWidth + 1 &&
+            rect.top >= bounds.top &&
+            rect.bottom <= bounds.bottom
+          )
+        }
+
+        node = walker.nextNode()
+      }
+
+      throw new Error("The quoted tail text node is missing")
+    })
+
+  await expect.poll(tailVisible).toBe(true)
+  await code.evaluate((element, tail) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+    let node = walker.nextNode()
+
+    while (node) {
+      const start = node.textContent?.indexOf(tail) ?? -1
+
+      if (start >= 0) {
+        const range = document.createRange()
+        range.setStart(node, start)
+        range.setEnd(node, start + tail.length)
+        window.getSelection()?.removeAllRanges()
+        window.getSelection()?.addRange(range)
+
+        return
+      }
+
+      node = walker.nextNode()
+    }
+
+    throw new Error("The quoted tail text node is missing")
+  }, tail)
+
+  await page
+    .getByRole("toolbar", { name: "Quote selection" })
+    .getByRole("button", { name: "Quote", exact: true })
+    .click()
+
+  const popover = page.locator('[data-component="composer-quote-comment"]')
+  const comment = popover.locator("textarea")
+  await expect(comment).toBeFocused()
+  await popover.getByRole("button", { name: "Done", exact: true }).click()
+  await expect(comment).toHaveCount(0)
+
+  const chip = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+  await expect(chip).toContainText(tail.slice(0, 200))
+  await expect(chip).not.toContainText("unquoted prefix")
+  await chip.click()
+  await expect(comment).toBeFocused()
+
+  const highlighted = () =>
+    page.evaluate(() => [...(CSS.highlights.get("timeline-quote-source") ?? [])].map((range) => range.toString()))
+
+  await expect.poll(highlighted).toEqual([tail])
+  await comment.fill("Saved code-tail comment")
+  await comment.press("Enter")
+  await expect(comment).toHaveCount(0)
+
+  const timeline = page.locator('[data-slot="session-timeline-scroll"] > [data-scrollable]')
+  const top = await timeline.evaluate((element) => element.scrollTop)
+  await pre.evaluate((element) => element.scrollTo({ left: 0 }))
+  await expect.poll(() => pre.evaluate((element) => element.scrollLeft)).toBe(0)
+  await expect.poll(tailVisible).toBe(false)
+  expect(await timeline.evaluate((element) => element.scrollTop)).toBe(top)
+
+  // Opening even a long quote keeps the nested horizontal scroll exactly where the user left it.
+  await chip.click()
+  await expect(comment).toBeFocused()
+  await expect.poll(highlighted).toEqual([tail])
+  await expect.poll(tailVisible).toBe(false)
+  await expect.poll(() => pre.evaluate((element) => element.scrollLeft)).toBe(0)
+  await expect(comment).toHaveValue("Saved code-tail comment")
+  await comment.fill("Unsaved code-tail edit\nKeep the source offscreen while editing")
+  await expect(comment).toHaveValue("Unsaved code-tail edit\nKeep the source offscreen while editing")
+  await expect.poll(() => pre.evaluate((element) => element.scrollLeft)).toBe(0)
+  expect(await timeline.evaluate((element) => element.scrollTop)).toBe(top)
+
+  await pre.evaluate((element) => element.scrollTo({ left: element.scrollWidth }))
+  await expect.poll(tailVisible).toBe(true)
+  await expect.poll(highlighted).toEqual([tail])
+  await comment.press("Escape")
+  await expect.poll(highlighted).toEqual([])
+  await chip.click()
+  await expect(comment).toHaveValue("Saved code-tail comment")
+  await expect.poll(tailVisible).toBe(true)
+  await expect.poll(highlighted).toEqual([tail])
 })
 
 test("quotes table rows and diff lines selected across a diff viewer", async ({ page }) => {
@@ -2390,7 +2622,7 @@ test("quotes table rows and diff lines selected across a diff viewer", async ({ 
 
   // Headers are unselectable chrome; body cells quote with tabs, followed by the diff lines and their markers.
   await drag(page.locator("td").getByText("a.ts", { exact: true }), added)
-  await toolbar.getByRole("button", { name: "Quote", exact: true }).click({ modifiers: ["Alt"] })
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
   await expect(chips).toHaveCount(1)
   await expect(page.locator('[data-component="composer-quote-comment"] textarea')).toBeFocused()
 
@@ -2406,13 +2638,12 @@ test("quotes table rows and diff lines selected across a diff viewer", async ({ 
   await expect
     .poll(() => diffHighlights("timeline-quote-source"))
     .toEqual(["export const value = 'before'", "export const value = 'after'"])
-  // Only the first comment keeps the source highlighted; saving it clears the highlight.
   await page.locator('[data-component="composer-quote-comment"] textarea').press("Enter")
   await expect.poll(() => diffHighlights("timeline-quote-source")).toEqual([])
 
   // The quote stops where a selection inside the diff viewer ends.
   await drag(page.locator("td").getByText("a.ts", { exact: true }), removed)
-  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click({ modifiers: ["Alt"] })
   await expect(chips).toHaveCount(2)
 
   await page.locator('[data-component="composer-editor"]').press("Enter")
@@ -2634,14 +2865,48 @@ for (const input of [
 
     if (input.touch) expect(Math.round(action.y + action.height)).toBe(Math.round(view.y + view.height - 8))
     else expect(action.y + action.height).toBeLessThanOrEqual(line.y)
+
+    await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+    const popover = page.locator('[data-component="composer-quote-comment"]')
+    await expect(popover.locator("textarea")).toBeFocused()
+    await expect
+      .poll(() =>
+        popover.evaluate((element) => {
+          const box = element.getBoundingClientRect()
+
+          return (
+            box.left >= 8 && box.right <= window.innerWidth - 8 && box.top >= 8 && box.bottom <= window.innerHeight - 8
+          )
+        }),
+      )
+      .toBe(true)
+
+    if (input.touch) {
+      await expect
+        .poll(async () => {
+          const box = await popover.boundingBox()
+
+          const viewport = await page
+            .locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
+            .boundingBox()
+
+          return box && viewport && Math.abs(box.y + box.height - (viewport.y + viewport.height - 8)) < 1
+        })
+        .toBe(true)
+    }
+
     await context.close()
   })
 
-test("opens a quote's comment with Alt-click", async ({ page }) => {
+test("opens an optional comment beside the quote action and skips it with Alt-click", async ({ page }) => {
   await setupTimeline(page, {
     messages: [
       userMessage(),
       assistantMessage([
+        textPart(
+          "prt_alt_preamble",
+          Array.from({ length: 8 }, (_, index) => `Build step ${index + 1} is ready for review.`).join("\n\n"),
+        ),
         textPart("prt_alt_first", "The first sentence to quote."),
         textPart("prt_alt_second", "The second sentence to quote."),
       ]),
@@ -2660,12 +2925,12 @@ test("opens a quote's comment with Alt-click", async ({ page }) => {
     await expect(toolbar).toBeVisible()
   }
 
-  // A plain click adds the quote, leaves the comment closed, and returns the caret to where the draft left it.
+  // Alt-click adds the quote, leaves the comment closed, and returns the caret to where the draft left it.
   const editor = page.locator('[data-component="composer-editor"]')
   await editor.click()
   await page.keyboard.type("Draft")
   await select("The first sentence to quote.")
-  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click({ modifiers: ["Alt"] })
   await expect(chips).toHaveCount(1)
   await expect(comment).toHaveCount(0)
   await expect(editor).toBeFocused()
@@ -2678,32 +2943,138 @@ test("opens a quote's comment with Alt-click", async ({ page }) => {
   // A slow tooltip names the action and its shortcut.
   await select("The first sentence to quote.")
   await toolbar.getByRole("button", { name: "Quote", exact: true }).hover()
-  const tooltip = page.locator('[data-component="tooltip-v2"]', { hasText: "Quote and comment" })
+  const tooltip = page.locator('[data-component="tooltip-v2"]', { hasText: "Quote without comment" })
   await expect(tooltip).toBeVisible()
   await expect(tooltip.locator('[data-slot="keybind-v2-label"]')).toHaveText([/^(⌥|Alt)$/])
 
-  // Alt-click opens the new quote's comment, focused.
-  await page.keyboard.down("Alt")
+  // Plain click replaces the quote action with a focused comment beside the same source.
+  const selected = await page.evaluate(() => {
+    const rect = window.getSelection()!.getRangeAt(0).getBoundingClientRect()
+
+    return { top: rect.top }
+  })
+
   await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
-  await page.keyboard.up("Alt")
   await expect(chips).toHaveCount(1)
   await expect(comment).toBeFocused()
+  const popover = page.locator('[data-component="composer-quote-comment"]')
+  await expect
+    .poll(async () => {
+      const box = await popover.boundingBox()
+
+      return box && Math.abs(box.y + box.height + 8 - selected.top)
+    })
+    .toBeLessThan(2)
+
+  // Reflow must follow the current source glyphs, not the selection's old screen coordinates.
+  await comment.fill("Unsaved reflow comment")
+  await page.setViewportSize({ width: 700, height: 900 })
+  await expect
+    .poll(async () => {
+      const left = await page
+        .locator('[data-slot="text-part-body"]')
+        .getByText("The first sentence to quote.", { exact: true })
+        .evaluate((element) => {
+          const range = document.createRange()
+          range.selectNodeContents(element)
+          const rect = range.getBoundingClientRect()
+          const bounds = element.closest("[data-scrollable]")?.getBoundingClientRect()
+
+          if (!bounds) throw new Error("The quote source has no scroll viewport")
+
+          return Math.min(
+            Math.max((rect.left + rect.right - 320) / 2, bounds.left + 8),
+            Math.max(bounds.left + 8, bounds.right - 320 - 8),
+          )
+        })
+
+      const box = await popover.boundingBox()
+
+      return box ? Math.abs(box.x - left) : Infinity
+    })
+    .toBeLessThan(1)
+  await expect(comment).toHaveValue("Unsaved reflow comment")
+
+  // An above-selection opening keeps its bottom/left while the input grows upwards.
+  await expect
+    .poll(() =>
+      comment.evaluate((element) => {
+        const style = getComputedStyle(element)
+
+        return Math.abs(
+          element.clientHeight -
+            parseFloat(style.paddingTop) -
+            parseFloat(style.paddingBottom) -
+            parseFloat(style.lineHeight),
+        )
+      }),
+    )
+    .toBeLessThan(1)
+  const opening = await popover.boundingBox()
+  const singleLineHeight = await comment.evaluate((element) => element.getBoundingClientRect().height)
+
+  if (!opening) throw new Error("The quote comment is not laid out")
+  await comment.fill("First line\nSecond line\nThird line")
+  await expect
+    .poll(async () => {
+      const box = await popover.boundingBox()
+      const height = await comment.evaluate((element) => element.getBoundingClientRect().height)
+
+      return (
+        !!box &&
+        Math.abs(box.x - opening.x) < 1 &&
+        Math.abs(box.y + box.height - opening.y - opening.height) < 1 &&
+        box.y < opening.y &&
+        box.height > opening.height &&
+        height > singleLineHeight &&
+        height < 160
+      )
+    })
+    .toBe(true)
+
+  await comment.fill("")
   await page.keyboard.type("Why first?")
   await page.keyboard.press("Enter")
   await expect(comment).toHaveCount(0)
   await expect(chips.nth(0)).toContainText("Why first?")
 
-  // Enter on an empty comment keeps the quote without one.
   await select("The second sentence to quote.")
-  await page.keyboard.down("Alt")
   await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
-  await page.keyboard.up("Alt")
   await expect(comment).toBeFocused()
   await page.keyboard.press("Enter")
   await expect(comment).toHaveCount(0)
   await expect(chips).toHaveCount(2)
   await expect(chips.nth(1)).toContainText("The second sentence to quote.")
   await expect(chips.nth(1)).toContainText("Quote")
+  await expect(editor).toBeFocused()
+
+  // Reopening a quote uses its tile, not the original selection's position.
+  await chips.nth(1).click()
+  await expect(comment).toBeFocused()
+  await expect
+    .poll(async () => {
+      const tile = await chips.nth(1).boundingBox()
+      const box = await popover.boundingBox()
+
+      return !!tile && !!box && Math.abs(box.y + box.height + 8 - tile.y) < 1
+    })
+    .toBe(true)
+  await comment.press("Escape")
+  await expect(editor).toBeFocused()
+
+  // Escape and an unchanged click-away also keep newly attached quotes, without submitting a prompt.
+  await select("The first sentence to quote.")
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await expect(comment).toBeFocused()
+  await comment.press("Escape")
+  await expect(chips).toHaveCount(3)
+  await expect(editor).toBeFocused()
+  await select("The second sentence to quote.")
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await expect(comment).toBeFocused()
+  await editor.click()
+  await expect(comment).toHaveCount(0)
+  await expect(chips).toHaveCount(4)
 })
 
 test("reaches the quote action from the keyboard and blocks a selection over the limit", async ({ page }) => {
@@ -2763,11 +3134,11 @@ test("reaches the quote action from the keyboard and blocks a selection over the
   await page.keyboard.press("Escape")
   await short.evaluate((element) => window.getSelection()?.selectAllChildren(element))
   await expect(toolbar).toBeVisible()
-  const copy = page.getByRole("button", { name: "Copy message" })
-  await copy.focus()
+  const more = page.getByRole("button", { name: "More actions" })
+  await more.focus()
   await expect(toolbar).toBeVisible()
   await page.keyboard.press("Tab")
-  await expect(copy).not.toBeFocused()
+  await expect(more).not.toBeFocused()
   expect(await page.evaluate(() => !!document.activeElement?.closest('[data-component="timeline-quote"]'))).toBe(false)
   await expect(composer).toHaveCount(1)
 })

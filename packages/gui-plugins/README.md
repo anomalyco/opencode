@@ -159,6 +159,32 @@ ctx.add(Command, () => ({
 }))
 ```
 
+### Referencing a subject
+
+Attach a `type: "note"` part to reference a subject outside workspace lines. Set `comment: ""` to attach only the
+subject: the model reads "The user referenced <subject>." With a comment it reads "The user made the following
+comment regarding <subject>: <comment>" instead.
+
+For an uncommented note, optional `title` supplies the primary heading. Optional `subtitle` supplies a plain-text
+footer beside the icon, with or without a comment. Each defaults to `label` when omitted. For example, the browser
+uses a selector as `title` and its localized annotation label as `subtitle`; a comment replaces only the heading.
+These display fields do not change `subject`. Both survive draft storage, sent-message metadata and restoration.
+Only the process-bound `live` reference is dropped when a stored draft or sent message is restored.
+
+### Quoting selected content
+
+Attach a `type: "quote"` part with a `commentID`, then call `screen.composer.focus(commentID, { anchor })` to open its
+optional comment beside the source. `anchor(size)` returns the editor's physical viewport `{ top, left }` for its
+current `width` and frozen opening `height`. It is first called after measurement (never with an unmeasured zero
+height), then again on scroll, resize, and changes to reactive values it reads. The editor holds its opening bottom
+edge as its input grows upward. Return `undefined` when the source is hidden or gone to fall back to the quote's
+composer tile. The anchor is client-only and never persisted. Omitting the options
+anchors the editor to the tile, as clicking that tile does. To quote without opening a comment, call
+`screen.composer.focus()` instead; the built-in selection toolbars offer this through Alt-click.
+
+The built-in terminal follows manual scrolling until new output or a grid resize invalidates the captured source.
+It then falls back to the quote's composer tile without closing the editor or discarding its unsaved comment.
+
 ## Primitives
 
 | Primitive                                        | Use it for                                                                     |
@@ -223,7 +249,7 @@ SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the
 | [`Server`](../plugin/src/gui/registries.ts)       | window  | A source of servers, such as SSH hosts                                                                                                                              |
 | [`LinkHandler`](../plugin/src/gui/registries.ts)  | window  | Opens local links, such as file paths in messages, and says whether their target exists                                                                             |
 | [`TitlebarItem`](../plugin/src/gui/registries.ts) | window  | A pill in the titlebar or the tabs footer                                                                                                                           |
-| [`ComposerPill`](../plugin/src/gui/registries.ts) | window  | A pill in the row above a session's composer, optionally opening a menu of rows                                                                                     |
+| [`ComposerPill`](../plugin/src/gui/registries.ts) | window  | A pill in the row above a session's composer, optionally opening a menu of rows or a popover of your own content                                                    |
 | [`Slot`](../plugin/src/gui/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.location.menu`, `session.panel.end`; built-ins also fill `session.location.workspace`, `session.location.branch.menu` and `session.location.path.menu` through `BuiltinSlot` |
 | [`Style`](../plugin/src/gui/registries.ts)        | window  | CSS imported with `?inline`                                                                                                                                         |
 | [`MenubarItem`](../plugin/src/gui/main.ts)        | main    | An item of the native app menu                                                                                                                                      |
@@ -678,6 +704,7 @@ export const builtins = compose({
   wsl: { ...wsl, mainEntry: () => import("./wsl/main") },
   "microsoft-office": microsoftOffice,
   sources,
+  goal,
 })
 ```
 
@@ -702,6 +729,7 @@ export const builtins = compose({
   wsl: { ...wsl, windowEntry: eager(wslRenderer) },
   "microsoft-office": { ...microsoftOffice, windowEntry: eager(microsoftOfficeRenderer) },
   sources: { ...sources, windowEntry: eager(sourcesRenderer) },
+  goal: { ...goal, windowEntry: eager(goalRenderer) },
 })
 ```
 
