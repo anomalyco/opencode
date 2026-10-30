@@ -534,17 +534,19 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
 
   const actions = await Promise.all(
-    ["vertical-tabs-home", "vertical-tabs-search", "vertical-tabs-new-session"].map(async (action) => {
-      const box = await sidebar.locator(`[data-action="${action}"]`).boundingBox()
+    ["vertical-tabs-home", "vertical-tabs-search", "vertical-tabs-automations", "vertical-tabs-new-session"].map(
+      async (action) => {
+        const box = await sidebar.locator(`[data-action="${action}"]`).boundingBox()
 
-      if (!box) throw new Error(`${action} is not rendered`)
+        if (!box) throw new Error(`${action} is not rendered`)
 
-      return box
-    }),
+        return box
+      },
+    ),
   )
 
   const gaps = actions.slice(1).map((box, index) => box.y - (actions[index].y + actions[index].height))
-  expect(gaps).toEqual([4, 4])
+  expect(gaps).toEqual([4, 4, 4])
 
   const handle = sidebar.locator('[data-component="resize-handle"]')
 
@@ -562,7 +564,7 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   await resize(-80, "196px")
   await resize(-40, "156px")
 
-  for (const name of ["Home", "New session"]) {
+  for (const name of ["Home", "Automations", "New session"]) {
     const label = sidebar.getByRole("button", { name, exact: true }).getByText(name, { exact: true })
     await expect(label).toBeVisible()
     await expect

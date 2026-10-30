@@ -55,6 +55,7 @@ export type TabRegions = {
 
 export type LayoutRoute =
   | { type: "home" }
+  | { type: "automations" }
   | { type: "settings" }
   | { type: "connect" }
   | { type: "components" }
@@ -65,6 +66,8 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
 
   if (parts.length === 0) return { type: "home" }
+
+  if (parts[0] === "automations") return { type: "automations" }
 
   if (parts[0] === "settings") return { type: "settings" }
 

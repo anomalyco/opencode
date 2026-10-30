@@ -10,6 +10,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<circle cx="8" cy="8" r="6" stroke="currentColor"/><ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor"/><path d="M2 8h12" stroke="currentColor"/>`,
   },
+  clock: {
+    viewBox: "0 0 16 16",
+    body: `<circle cx="8" cy="8" r="6" stroke="currentColor"/><path d="M8 4.75V8L10.5 9.75" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
   "select-element": {
     viewBox: "0 0 16 16",
     body: `<path d="M12.5 6.5V2.5C12.5 1.94772 12.0523 1.5 11.5 1.5H2.5C1.94772 1.5 1.5 1.94772 1.5 2.5V11.5C1.5 12.0523 1.94772 12.5 2.5 12.5H6.5" stroke="currentColor" stroke-linecap="round"/><path d="M7.5 7.5L14.5 10.1L11.1 11.1L10.1 14.5L7.5 7.5Z" stroke="currentColor" stroke-linejoin="round"/>`,

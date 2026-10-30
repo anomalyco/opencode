@@ -591,6 +591,27 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         navigate("/")
       },
+      toggleAutomations(input: { automations: boolean; current?: Tab }) {
+        if (input.automations) {
+          const tab = store.find((tab) => tabKey(tab) === recentKey())
+
+          if (tab) {
+            navigateTab(tab)
+
+            return
+          }
+
+          navigate("/")
+
+          return
+        }
+
+        if (input.current) {
+          setRecentKey(tabKey(input.current))
+        }
+
+        navigate("/automations")
+      },
       state<T>(tab: Tab, name: string, init: () => T) {
         return memory.ensure(tabKey(tab), name, init)
       },

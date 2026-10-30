@@ -18,6 +18,7 @@ import { applyPath, backPath, forwardPath, type HistoryLocation } from "./histor
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
 import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
+import { useActiveAutomationCount } from "@/automations/model"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
@@ -388,6 +389,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   return true
                 }
 
+                case "automations":
                 case "settings":
                 case "connect":
                 case "components":
@@ -417,6 +419,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             }
 
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
+            const activeAutomations = useActiveAutomationCount()
+
+            const toggleAutomations = () =>
+              tabs.toggleAutomations({ automations: layout.route().type === "automations", current: currentTab() })
 
             const homeButton = (vertical = false) => (
               <Show
@@ -513,6 +519,46 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               </Show>
             )
 
+            const automationsButton = (vertical = false) => (
+              <Show
+                when={vertical}
+                fallback={
+                  <Tooltip placement="bottom" value={language.t("automations.title")} class="shrink-0">
+                    <IconButton
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="!w-9 shrink-0"
+                      icon={<Icon name="clock" />}
+                      state={layout.route().type === "automations" ? "pressed" : undefined}
+                      onClick={toggleAutomations}
+                      aria-label={language.t("automations.title")}
+                      aria-pressed={layout.route().type === "automations"}
+                    />
+                  </Tooltip>
+                }
+              >
+                <button
+                  type="button"
+                  data-titlebar-tab-action
+                  data-action="vertical-tabs-automations"
+                  data-state={layout.route().type === "automations" ? "pressed" : undefined}
+                  class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
+                  onClick={toggleAutomations}
+                  aria-label={language.t("automations.title")}
+                  aria-pressed={layout.route().type === "automations"}
+                >
+                  <Icon name="clock" class="shrink-0" />
+                  <span class="min-w-0 truncate">{language.t("automations.title")}</span>
+                  <Show when={activeAutomations() > 0}>
+                    <span class="ms-auto shrink-0 tabular-nums text-[12px] text-v2-text-text-faint">
+                      {activeAutomations()}
+                    </span>
+                  </Show>
+                </button>
+              </Show>
+            )
+
             command.register("titlebar-home", () => [
               {
                 id: "home.toggle",
@@ -524,6 +570,12 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   if (layout.route().type !== "home") layout.home.searchFocus.request()
                   toggleHome()
                 },
+              },
+              {
+                id: "automations.open",
+                title: language.t("automations.title"),
+                category: language.t("command.category.view"),
+                onSelect: toggleAutomations,
               },
               {
                 id: "sessions.search",
@@ -643,6 +695,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   <div class="flex shrink-0 items-center gap-0.5">
                     {homeButton()}
                     {searchButton()}
+                    {automationsButton()}
                   </div>
                 </Show>
 
@@ -854,6 +907,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                             <div class="flex w-full shrink-0 flex-col gap-1">
                               <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>
                               {searchButton(true)}
+                              {automationsButton(true)}
                               <RecentlyClosedTabsMenu
                                 vertical
                                 onNewTab={openNewTab}

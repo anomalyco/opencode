@@ -1,4 +1,5 @@
 import { createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
+import { useNavigate } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Popover } from "@kobalte/core/popover"
@@ -153,10 +154,12 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
   let observer: MutationObserver | undefined
   let frame = 0
   const [contextMenu, setContextMenu] = createStore<{ open: string | undefined }>({ open: undefined })
+
   const updateFades = (element: HTMLDivElement) => {
     element.toggleAttribute("data-fade-top", element.scrollTop > 0)
     element.toggleAttribute("data-fade-bottom", element.scrollTop + element.clientHeight < element.scrollHeight - 1)
   }
+
   onCleanup(() => {
     observer?.disconnect()
     cancelAnimationFrame(frame)
@@ -332,10 +335,21 @@ export function HomeUtilityNav(props: {
   onOpenHelp: () => void
   language: ReturnType<typeof useLanguage>
 }) {
+  const navigate = useNavigate()
+
   return (
     <div
       class={`${props.class ?? ""} min-w-0 flex-row justify-between gap-1 lg:flex-col lg:justify-start lg:pr-3 [&>button]:w-auto lg:[&>button]:w-full`}
     >
+      <HomeProjectNavButton
+        type="button"
+        data-action="home-automations"
+        class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+        onClick={() => navigate("/automations")}
+      >
+        <Icon name="clock" size="small" />
+        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("automations.title")}</span>
+      </HomeProjectNavButton>
       <HomeProjectNavButton
         type="button"
         class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
