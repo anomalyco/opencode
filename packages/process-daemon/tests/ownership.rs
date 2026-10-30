@@ -110,6 +110,7 @@ impl Daemon {
             env: Default::default(),
             cols: 80,
             rows: 24,
+            mode: Default::default(),
         }) {
             Response::Created { terminal } => terminal,
             response => panic!("create: {response:?}"),
@@ -261,6 +262,7 @@ fn subscription_delivers_final_exit_frame_before_closing() {
                 Response::Exited {
                     exit_code,
                     final_offset,
+                    ..
                 } => {
                     assert_eq!(exit_code, Some(0));
                     assert_eq!(final_offset, output.len() as u64);
@@ -313,10 +315,10 @@ fn rename_is_advertised_and_served() {
     use opencode_pty::protocol::{SubscriptionEvent, read_subscription_event};
 
     let mut daemon = Daemon::start();
-    assert_eq!(daemon.registration.features, ["rename"]);
+    assert_eq!(daemon.registration.features, ["rename", "pipe"]);
     assert!(matches!(
         daemon.request(Request::Ping),
-        Response::Pong { features, .. } if features == ["rename"]
+        Response::Pong { features, .. } if features == ["rename", "pipe"]
     ));
     let (owner, response) = daemon.own(None);
     assert!(matches!(response, Response::Owned));
@@ -352,7 +354,7 @@ fn rename_is_advertised_and_served() {
         }
     }
     assert!(
-        matches!(daemon.request(Request::List), Response::Terminals { terminals }
+        matches!(daemon.request(Request::List { mode: None }), Response::Terminals { terminals }
         if terminals.len() == 1 && terminals[0].title == "renamed"
             && terminals[0].user_title.as_deref() == Some("renamed"))
     );
@@ -408,7 +410,7 @@ fn handoff_preserves_daemon_and_terminal_and_shutdown_overrides_it() {
         if instance_id == daemon.registration.instance_id && pid == daemon.child.id())
     );
     assert!(
-        matches!(daemon.request(Request::List), Response::Terminals { terminals }
+        matches!(daemon.request(Request::List { mode: None }), Response::Terminals { terminals }
         if terminals.len() == 1 && terminals[0].id == terminal.id && terminals[0].pid == terminal.pid)
     );
     assert!(matches!(
@@ -552,7 +554,8 @@ fn stop_signals_stop_terminals_and_clean_up() {
         assert_eq!(unsafe { libc::kill(probe.pid.unwrap() as i32, signal) }, 0);
         let deadline = Instant::now() + Duration::from_secs(3);
         loop {
-            let Response::Terminals { terminals } = daemon.request(Request::List) else {
+            let Response::Terminals { terminals } = daemon.request(Request::List { mode: None })
+            else {
                 panic!("list failed");
             };
             let exited = terminals.iter().any(|value| {
@@ -574,4 +577,92 @@ fn stop_signals_stop_terminals_and_clean_up() {
         daemon.wait();
         assert_terminal_stopped(&terminal);
     }
+}
+
+#[test]
+fn pipe_processes_survive_handoff_and_stay_out_of_default_lists() {
+    use opencode_pty::protocol::{SubscriptionEvent, read_subscription_event};
+    use opencode_pty::service::ProcessMode;
+
+    let mut daemon = Daemon::start();
+    let (owner, response) = daemon.own(None);
+    assert!(matches!(response, Response::Owned));
+    let terminal = daemon.terminal("exec cat");
+    let Response::Created { terminal: process } = daemon.request(Request::Create {
+        program: "/bin/sh".into(),
+        args: vec![
+            "-c".into(),
+            "echo before; sleep 1; echo after; exit 4".into(),
+        ],
+        cwd: daemon.directory.clone(),
+        title: String::new(),
+        group_id: "ownership".into(),
+        env: Default::default(),
+        cols: 0,
+        rows: 0,
+        mode: ProcessMode::Pipe,
+    }) else {
+        panic!("create pipe");
+    };
+    assert_eq!(process.mode, ProcessMode::Pipe);
+    let ids = |mode| match daemon.request(Request::List { mode }) {
+        Response::Terminals { terminals } => terminals
+            .into_iter()
+            .map(|terminal| terminal.id)
+            .collect::<Vec<_>>(),
+        response => panic!("list: {response:?}"),
+    };
+    assert_eq!(ids(None), vec![terminal.id]);
+    assert_eq!(ids(Some(ProcessMode::Pty)), vec![terminal.id]);
+    assert_eq!(ids(Some(ProcessMode::Pipe)), vec![process.id]);
+    assert!(matches!(
+        daemon.request(Request::Snapshot { id: process.id }),
+        Response::Error { message } if message.contains("pipe process")
+    ));
+
+    // Restart handoff: the old owner goes away while the process runs.
+    let mut old = owner;
+    let Response::Handoff { ticket, .. } = daemon.send(&mut old, Request::PrepareHandoff) else {
+        panic!("handoff");
+    };
+    let (successor, response) = daemon.own(Some(ticket));
+    assert!(matches!(response, Response::Owned));
+    drop(old);
+
+    let mut subscription = daemon.connect();
+    let Response::Attached { replay_base64, .. } = daemon.send(
+        &mut subscription,
+        Request::Subscribe {
+            id: process.id,
+            offset: 0,
+            attachment_id: "pipe-observer".into(),
+            role: AttachmentRole::Observer,
+            takeover: false,
+        },
+    ) else {
+        panic!("subscribe");
+    };
+    let mut output = base64::engine::general_purpose::STANDARD
+        .decode(replay_base64)
+        .unwrap();
+    let exit = loop {
+        match read_subscription_event(&mut subscription).unwrap() {
+            SubscriptionEvent::Output { bytes, .. } => output.extend(bytes),
+            SubscriptionEvent::Response(response) => {
+                if let Response::Exited { exit_code, .. } = *response {
+                    break exit_code;
+                }
+            }
+        }
+    };
+    assert_eq!(exit, Some(4));
+    assert_eq!(String::from_utf8(output).unwrap(), "before\nafter\n");
+    assert!(matches!(
+        daemon.request(Request::Terminate { id: process.id }),
+        Response::Ok
+    ));
+    drop(subscription);
+    drop(successor);
+    daemon.wait();
+    assert_terminal_stopped(&terminal);
 }

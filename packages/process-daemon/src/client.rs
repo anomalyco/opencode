@@ -13,7 +13,7 @@ use crate::protocol::{
     AttachmentRole, Envelope, SubscriptionEvent, read_frame, read_subscription_event, write_frame,
 };
 use crate::protocol::{PROTOCOL_VERSION, Request, Response};
-use crate::service::{CreateTerminal, TerminalId, TerminalInfo, TerminalRows};
+use crate::service::{CreateTerminal, ProcessMode, TerminalId, TerminalInfo, TerminalRows};
 #[cfg(unix)]
 use crate::transport::Connection;
 
@@ -165,6 +165,7 @@ impl TerminalClient {
             env: request.env,
             cols: request.cols,
             rows: request.rows,
+            mode: request.mode,
         })? {
             Response::Created { terminal } => Ok(terminal),
             response => unexpected(response),
@@ -172,7 +173,7 @@ impl TerminalClient {
     }
 
     pub fn list(&self) -> Result<Vec<TerminalInfo>> {
-        match self.request(Request::List)? {
+        match self.request(Request::List { mode: None })? {
             Response::Terminals { terminals } => Ok(terminals),
             response => unexpected(response),
         }
@@ -588,6 +589,7 @@ fn play(directory: &Path) -> Result<()> {
                         cwd: env::current_dir()?,
                         cols: 100,
                         rows: 30,
+                        mode: ProcessMode::Pty,
                     }
                 };
                 let info = client.create(request)?;
@@ -665,6 +667,7 @@ fn play(directory: &Path) -> Result<()> {
                     cwd: env::current_dir()?,
                     cols: 100,
                     rows: 30,
+                    mode: ProcessMode::Pty,
                 })?;
                 active = Some(info.id);
                 thread::sleep(Duration::from_millis(200));

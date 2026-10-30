@@ -107,6 +107,42 @@ when it changes; an OSC change hidden behind a user title publishes nothing.
 
 `list` returns terminals in creation order.
 
+## Pipe Processes
+
+`Create` takes `mode: "pty" | "pipe"` (default `"pty"`). A pipe process runs
+any command without a terminal; it is Unix-only for now, and only daemons that
+list the `pipe` feature accept it. Older daemons ignore `mode` and would start
+a PTY instead, so clients check `features` first.
+
+- `title`, `cols` and `rows` are optional for pipe processes; the title
+  defaults to the program's file name and the size is reported as `0x0`.
+- The child gets its own process group, stdin on `/dev/null`, and one pipe for
+  both stdout and stderr, so their bytes stay in order. No `TERM` or
+  `COLORTERM` is added, and nothing parses the output: there is no emulator,
+  no terminal replies, no OSC title and no foreground process.
+- Output goes through the same raw replay and subscriptions as a PTY, with the
+  same absolute offsets. A pipe has no controller or observer distinction for
+  writing, since it accepts no input.
+- `write`, `resize`, `control`, input frames, `snapshot`, `read_rows` and
+  `rename` fail for pipe processes. `replay`, `subscribe` and `terminate`
+  work.
+- Exit is published once both the exit status and the end of output are
+  known. A descendant that keeps the pipe open (`cmd &`) delays that by at
+  most one second after the child exits; output after that is not read.
+- `Exited` (the lifecycle and the subscription response) carries `signal`,
+  the signal's name such as `"SIGTERM"`, when a pipe process was killed by
+  one; `exit_code` is then null. The field is left out when there is no
+  signal, so PTY exits serialize as before.
+- An exited pipe process stays listed, as a zombie, until `terminate`. The
+  zombie keeps its PID and process group ID reserved, so `terminate` can kill
+  any descendants left in the group without reaching an unrelated process.
+  `terminate` kills the whole group with SIGKILL, reaps the child, and never
+  waits on a descendant that left the group and still holds the pipe.
+
+`List` takes `mode` too. Without it, `list` returns PTYs only, so servers that
+predate pipe processes never see them. Clients leave `mode` out of the request
+when it is unset: older daemons reject a `list` with any extra field.
+
 ## Failure Boundary
 
 Losing the owning server connection stops `opencode-pty` and its terminals.
@@ -131,7 +167,7 @@ subscriptions, title updates, rename, controller takeover, terminate, and destru
 shutdown, ownership acquisition, and restart handoff preparation.
 
 `Pong` and the registration carry `features`, the daemon's additive
-capabilities (currently `["rename"]`). Additive changes, such as a new request
+capabilities (currently `["rename", "pipe"]` on Unix and `["rename"]` on Windows). Additive changes, such as a new request
 or field older clients can ignore, extend `features` and keep the protocol
 version; clients check `features` before sending a new request, since a daemon
 that cannot parse one drops the connection. Only breaking changes bump
