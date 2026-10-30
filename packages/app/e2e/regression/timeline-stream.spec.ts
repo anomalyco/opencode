@@ -1022,15 +1022,18 @@ test("grows a streaming row without a ResizeObserver loop error", async ({ page 
       )
     })
   })
+
   const timeline = await setupTimeline(page, {
     messages: [userMessage(), assistantMessage([textPart("prt_growth", "Streaming.")], { completed: false })],
   })
+
   const text = page.locator(`[data-timeline-part-id="${renderedPartID("prt_growth")}"]`)
 
   for (const line of [1, 2, 3, 4, 5, 6]) {
     await timeline.send(partDelta("prt_growth", `\n\nParagraph ${line}.`))
     await expect(text).toContainText(`Paragraph ${line}.`)
   }
+
   await expect(text.locator("p")).toHaveCount(7)
   expect(await page.evaluate(() => document.documentElement.dataset.resizeObserverLoops)).toBeUndefined()
 })
