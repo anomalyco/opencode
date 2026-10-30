@@ -15,11 +15,7 @@ export function createRemoteModelsPlugin<Snapshot>(input: {
   readonly label?: string
   readonly defaultBaseURL?: string
   readonly load: (baseURL: string, apiKey: string) => Promise<Snapshot>
-  readonly derive: (
-    baseURL: string,
-    remote: Snapshot,
-    existing: readonly Model.Info[],
-  ) => Map<Model.ID, Model.Info>
+  readonly derive: (baseURL: string, remote: Snapshot, existing: readonly Model.Info[]) => Map<Model.ID, Model.Info>
 }) {
   const providerID = Provider.ID.make(input.providerID)
   const integrationID = Integration.ID.make(input.providerID)
@@ -44,8 +40,8 @@ export function createRemoteModelsPlugin<Snapshot>(input: {
         const apiKey = credential?.type === "key" ? credential.key : process.env[input.env]
         const provider = yield* providers.get(providerID)
         const baseURL =
-          typeof provider?.settings?.baseURL === "string" ? provider.settings.baseURL : (input.defaultBaseURL ?? "")
-        if (!apiKey || (!baseURL && input.defaultBaseURL === undefined)) {
+          typeof provider?.settings?.baseURL === "string" ? provider.settings.baseURL : input.defaultBaseURL
+        if (!apiKey || !baseURL) {
           loaded.baseURL = undefined
           loaded.models = undefined
           loaded.connection = undefined
