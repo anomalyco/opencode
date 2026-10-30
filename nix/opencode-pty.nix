@@ -7,7 +7,7 @@
 }:
 stdenv.mkDerivation {
   pname = "opencode-pty";
-  version = (lib.importJSON ../packages/core/package.json).dependencies."@opencode-ai/pty";
+  version = (lib.importJSON ../packages/core/package.json).dependencies."@opencode/pty";
 
   nativeBuildInputs = [
     bun
@@ -20,7 +20,7 @@ stdenv.mkDerivation {
 
   installPhase = ''
     runHook preInstall
-    install -Dm755 "$(bun --print 'require("${node_modules}/packages/core/node_modules/@opencode-ai/pty").binaryPath')" \
+    install -Dm755 "$(bun --print 'require("${node_modules}/packages/core/node_modules/@opencode/pty").binaryPath')" \
       "$out/bin/opencode-pty"
     runHook postInstall
   '';
