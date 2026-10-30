@@ -124,10 +124,10 @@ describe("AI promise client", () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor(seen) })
 
-    const request = ai.llm.request({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })
-    const text = await ai.llm.generate(request)
+    const request = ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })
+    const text = await ai.generate(request)
     expect(text.text).toBe("Hello world")
-    expect((await ai.llm.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe(
+    expect((await ai.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe(
       "Hello world",
     )
 
@@ -141,12 +141,12 @@ describe("AI promise client", () => {
     expect(requested.image.mediaType).toBe("image/png")
 
     const deltas: Array<string> = []
-    for await (const event of ai.llm.stream(request)) {
+    for await (const event of ai.stream(request)) {
       if (LLMEvent.is.textDelta(event)) deltas.push(event.text)
     }
     expect(deltas).toEqual(["Hello", " world"])
     const directDeltas: Array<string> = []
-    for await (const event of ai.llm.stream({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })) {
+    for await (const event of ai.stream({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })) {
       if (LLMEvent.is.textDelta(event)) directDeltas.push(event.text)
     }
     expect(directDeltas).toEqual(deltas)
@@ -215,15 +215,15 @@ describe("AI promise client", () => {
     }
     const request = { model: openai.chat("gpt-4o-mini"), prompt: "Say hello." }
 
-    expect((await ai.llm.generate(request, options)).text).toBe("Hello world")
-    await Array.fromAsync(ai.llm.stream(request, options))
-    await Array.fromAsync(ai.llm.loop({ ...request, tools: {} }, options))
+    expect((await ai.generate(request, options)).text).toBe("Hello world")
+    await Array.fromAsync(ai.stream(request, options))
+    await Array.fromAsync(ai.loop({ ...request, tools: {} }, options))
     expect(seen).toEqual(Array(3).fill("https://openai.test/v1/chat/completions"))
 
-    const responses = ai.llm.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
-    expect(ai.llm.canCompact(responses)).toBe(true)
-    expect(ai.llm.canCompact(responses, { mechanism: "trigger" })).toBe(true)
-    expect(ai.llm.canCompact(ai.llm.request(request))).toBe(false)
+    const responses = ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
+    expect(ai.canCompact(responses)).toBe(true)
+    expect(ai.canCompact(responses, { mechanism: "trigger" })).toBe(true)
+    expect(ai.canCompact(ai.request(request))).toBe(false)
     await ai.dispose()
   })
 
@@ -319,14 +319,14 @@ describe("AI promise client", () => {
   test("rethrows AIError unchanged and honors abort signals", async () => {
     const ai = AI.make({ layer: executor([]) })
 
-    const failure = await ai.llm
-      .generate(ai.llm.request({ model: openai.responses("gpt-5"), prompt: "Hello" }))
+    const failure = await ai
+      .generate(ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" }))
       .then(() => undefined)
       .catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(AIError)
     expect(failure instanceof AIError && failure.reason.http?.status).toBe(404)
 
-    const invalidLLM = await ai.llm
+    const invalidLLM = await ai
       // @ts-expect-error Invalid input must reject with AIError instead of throwing synchronously.
       .generate({ model: openai.responses("gpt-5"), messages: [{ role: "bogus" }] })
       .catch((error: unknown) => error)
@@ -339,8 +339,8 @@ describe("AI promise client", () => {
 
     const controller = new AbortController()
     controller.abort()
-    const aborted = await ai.llm
-      .generate(ai.llm.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }), { signal: controller.signal })
+    const aborted = await ai
+      .generate(ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }), { signal: controller.signal })
       .then(() => "completed")
       .catch(() => "aborted")
     expect(aborted).toBe("aborted")
@@ -362,7 +362,7 @@ describe("AI promise client", () => {
     const inFlight = new AbortController()
     setTimeout(() => inFlight.abort(reason), 10)
     expect(
-      await ai.llm
+      await ai
         .generate({ model: slow, prompt: "Hello" }, { signal: inFlight.signal })
         .catch((error: unknown) => error),
     ).toBe(reason)
@@ -379,7 +379,7 @@ describe("AI promise client", () => {
     const midStream = new AbortController()
     const deltas: Array<string> = []
     const midStreamFailure = await Array.fromAsync(
-      ai.llm.stream({ model: slow, prompt: "Hello" }, { signal: midStream.signal }),
+      ai.stream({ model: slow, prompt: "Hello" }, { signal: midStream.signal }),
       (event) => {
         if (!LLMEvent.is.textDelta(event)) return
         deltas.push(event.text)
@@ -412,7 +412,7 @@ describe("AI promise client", () => {
     const slow = OpenAI.configure({ apiKey: "test", baseURL: "https://slow.test/v1" }).chat("gpt-4o-mini")
     const controller = new AbortController()
     const deltas: Array<string> = []
-    for await (const event of ai.llm.stream({ model: slow, prompt: "Hello" }, { signal: controller.signal })) {
+    for await (const event of ai.stream({ model: slow, prompt: "Hello" }, { signal: controller.signal })) {
       if (!LLMEvent.is.textDelta(event)) continue
       deltas.push(event.text)
       break
@@ -457,7 +457,7 @@ describe("AI promise client", () => {
     })
 
     const events = await Array.fromAsync(
-      ai.llm.loop({ model: openai.chat("gpt-4o-mini"), prompt: "Read the files.", tools: { read_file } }),
+      ai.loop({ model: openai.chat("gpt-4o-mini"), prompt: "Read the files.", tools: { read_file } }),
     )
 
     expect(events.filter(LLMEvent.is.toolResult).map((event) => event.result)).toEqual([
@@ -493,7 +493,7 @@ describe("AI promise client", () => {
       ),
     })
 
-    const response = await ai.llm.generateObject({
+    const response = await ai.generateObject({
       model: openai.chat("gpt-4o-mini"),
       prompt: "Pick a city.",
       schema: Schema.Struct({ city: Schema.String }),
@@ -529,33 +529,32 @@ describe("AI promise client", () => {
         ),
       ),
     })
-    const request = ai.llm.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
+    const request = ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
 
-    const compacted = await ai.llm.compact(request)
+    const compacted = await ai.compact(request)
     expect(compacted.replacement.flatMap((message) => message.content.map((part) => part.type))).toEqual([
       "compaction",
     ])
     expect(compacted.usage?.totalTokens).toBe(110)
 
-    const triggered = await ai.llm.compact(request, { mechanism: "trigger" })
+    const triggered = await ai.compact(request, { mechanism: "trigger" })
     expect(triggered.checkpoint).toMatchObject({ id: "cmp_1", encrypted: "opaque" })
     expect(triggered.responseID).toBe("resp_1")
     expect(paths).toEqual(["/v1/responses/compact", "/v1/responses"])
 
-    const unsupported = await ai.llm
+    const unsupported = await ai
       // @ts-expect-error Untyped callers on routes without a compact endpoint must reject with AIError.
-      .compact(ai.llm.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }))
+      .compact(ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }))
       .catch((error: unknown) => error)
     expect(unsupported instanceof AIError && unsupported.reason._tag).toBe("UnsupportedOperation")
     expect(paths).toHaveLength(2)
     await ai.dispose()
   })
 
-  test("the default client is created lazily and can be disposed", async () => {
-    expect(typeof AI.ai.llm.generate).toBe("function")
+  test("the default client is created lazily", () => {
+    expect(typeof AI.ai.generate).toBe("function")
     expect(typeof AI.ai.image.generate).toBe("function")
     expect(typeof AI.ai.experimental.video.start).toBe("function")
     expect(typeof AI.ai.experimental.speech.generate).toBe("function")
-    await AI.ai.dispose()
   })
 })

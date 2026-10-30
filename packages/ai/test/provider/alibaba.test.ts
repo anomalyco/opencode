@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
-import { Auth, LLM, LLMClient, LLMRequest, Message, ReasoningPart, ToolDefinition } from "../../src/effect.js"
+import { ai, Auth, LLMClient, LLMRequest, Message, ReasoningPart, ToolDefinition } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { Endpoint } from "../../src/route/endpoint.js"
@@ -34,7 +34,7 @@ it.effect("Alibaba owns regional shared and workspace-specific endpoints", () =>
       expect(provider.model).toBe(provider.chat)
       for (const api of ["chat", "messages", "responses"] as const) {
         const model = provider[api]("qwen-plus-us")
-        const request = LLM.request({ model, prompt: "Hello" })
+        const request = ai.request({ model, prompt: "Hello" })
         const compiled = yield* compileRequest(request)
         expect(Endpoint.render(model.route.endpoint, { request, body: compiled.body }).toString()).toBe(
           `https://llm-fixture.${region}.maas.aliyuncs.com${paths[api]}`,
@@ -64,7 +64,7 @@ it.effect("Alibaba owns regional shared and workspace-specific endpoints", () =>
     ]) {
       const provider = Alibaba.configure({ region, apiKey: "fixture" })
       for (const api of ["chat", "messages", "responses"] as const) {
-        const request = LLM.request({ model: provider[api]("qwen3.8-max") })
+        const request = ai.request({ model: provider[api]("qwen3.8-max") })
         const compiled = yield* compileRequest(request)
         expect(Endpoint.render(request.model.route.endpoint, { request, body: compiled.body }).toString()).toBe(
           `https://${host}${paths[api]}`,
@@ -118,7 +118,7 @@ it.effect("Alibaba resolves explicit auth, API keys, and regional environment cr
     ]) {
       const provider = Alibaba.configure({ region: "ap-southeast-1", ...item.config })
       for (const api of ["chat", "messages", "responses"] as const) {
-        const request = LLM.request({ model: provider[api]("qwen3.8-max") })
+        const request = ai.request({ model: provider[api]("qwen3.8-max") })
         const headers = yield* request.model.route.auth
           .apply({ request, method: "POST", url: "https://fixture", body: "{}", headers: Headers.empty })
           .pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: item.env }))))
@@ -133,13 +133,13 @@ it.effect("Alibaba keeps native reasoning controls and future efforts on their s
     const provider = Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" })
     for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max", "future-effort"]) {
       const chat = yield* compileRequest(
-        LLM.request({ model: provider.chat("qwen3.8-max"), providerOptions: { reasoningEffort: effort } }),
+        ai.request({ model: provider.chat("qwen3.8-max"), providerOptions: { reasoningEffort: effort } }),
       )
       const messages = yield* compileRequest(
-        LLM.request({ model: provider.messages("qwen3.8-max"), providerOptions: { effort } }),
+        ai.request({ model: provider.messages("qwen3.8-max"), providerOptions: { effort } }),
       )
       const responses = yield* compileRequest(
-        LLM.request({ model: provider.responses("qwen3.8-max"), providerOptions: { reasoningEffort: effort } }),
+        ai.request({ model: provider.responses("qwen3.8-max"), providerOptions: { reasoningEffort: effort } }),
       )
       expect(chat.body.reasoning_effort).toBe(effort)
       expect(messages.body.output_config).toEqual({ effort })
@@ -151,7 +151,7 @@ it.effect("Alibaba keeps native reasoning controls and future efforts on their s
     }
     for (const enableThinking of [true, false]) {
       const chat = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: provider.chat("qwen3.7-plus"),
           tools: [tool],
           generation: { maxTokens: 1234, topK: 20 },
@@ -188,7 +188,7 @@ it.effect("Alibaba keeps native reasoning controls and future efforts on their s
         expect.objectContaining({ function: expect.not.objectContaining({ strict: expect.anything() }) }),
       ])
       const responses = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: provider.responses("qwen3.7-plus"),
           providerOptions: { enableThinking, store: false, previousResponseId: "resp_previous" },
         }),
@@ -206,7 +206,7 @@ it.effect("Alibaba keeps native reasoning controls and future efforts on their s
       { type: "future", budget_tokens: 4096 },
     ]) {
       const messages = yield* compileRequest(
-        LLM.request({ model: provider.messages("qwen3.7-plus"), providerOptions: { thinking } }),
+        ai.request({ model: provider.messages("qwen3.7-plus"), providerOptions: { thinking } }),
       )
       expect(messages.body.thinking).toEqual({
         type: thinking.type,
@@ -221,7 +221,7 @@ it.effect("Alibaba fits explicit thinking budgets to half the output limit", () 
     const provider = Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" })
     const chat = (maxTokens?: number) =>
       compileRequest(
-        LLM.request({
+        ai.request({
           model: provider.chat("qwen3.7-plus"),
           prompt: "hi",
           ...(maxTokens === undefined ? {} : { generation: { maxTokens } }),
@@ -229,7 +229,7 @@ it.effect("Alibaba fits explicit thinking budgets to half the output limit", () 
         }),
       ).pipe(Effect.map((prepared) => prepared.body.thinking_budget))
     const messages = yield* compileRequest(
-      LLM.request({
+      ai.request({
         model: provider.messages("qwen3.7-plus"),
         prompt: "hi",
         generation: { maxTokens: 32_000 },
@@ -252,7 +252,7 @@ it.effect("Alibaba validates malformed options before execution", () =>
       ["responses", { enableThinking: "false" }],
     ] as const) {
       const model = provider[api]("qwen3.8-max").route.with({ providerOptions }).model({ id: "qwen3.8-max" })
-      const error = yield* compileRequest(LLM.request({ model })).pipe(Effect.flip)
+      const error = yield* compileRequest(ai.request({ model })).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
     }
   }),
@@ -261,7 +261,7 @@ it.effect("Alibaba validates malformed options before execution", () =>
 it.effect("Alibaba preserves unsigned and signed Messages thinking without a budget requirement", () =>
   Effect.gen(function* () {
     const result = yield* compileRequest(
-      LLM.request({
+      ai.request({
         model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" }).messages("qwen3.8-max"),
         providerOptions: { thinking: { type: "enabled" }, effort: "low" },
         messages: [
@@ -294,7 +294,7 @@ it.effect("Alibaba preserves unsigned and signed Messages thinking without a bud
 
 it.effect("Alibaba serializes Messages configuration, per-request controls, and final HTTP overlays", () =>
   LLMClient.generate(
-    LLM.request({
+    ai.request({
       model: Alibaba.configure({
         baseURL: "https://gateway.example/v1",
         apiKey: "fixture",
@@ -335,7 +335,7 @@ it.effect("Alibaba serializes Messages configuration, per-request controls, and 
 
 it.effect("Alibaba Responses lowers hosted tools and named selection using HTTP even with a WebSocket executor", () =>
   Effect.gen(function* () {
-    const request = LLM.request({
+    const request = ai.request({
       model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" }).responses("qwen3.8-max"),
       tools: [Alibaba.webSearch(), Alibaba.webExtractor(), Alibaba.codeInterpreter(), tool],
       prompt: "Hello",
