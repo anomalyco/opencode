@@ -91,7 +91,7 @@ type MessageTimelineProps = {
   pinned: boolean
   centered: boolean
   reserveReviewToggle: boolean
-  setContentRef: (el: HTMLDivElement) => void
+  onContentResize: () => void
   bottomInset?: number
   setVisibleRef?: (el: HTMLDivElement | undefined) => void
   anchor: (id: string) => string
@@ -193,7 +193,7 @@ function MessageTimelineView(
     scroll: () => props.scroll,
     onResumeScroll: props.onResumeScroll,
     setScrollRef: props.setScrollRef,
-    setContentRef: props.setContentRef,
+    onContentResize: props.onContentResize,
     bottomInset: () => props.bottomInset ?? 0,
     setVisibleRef: props.setVisibleRef,
     onScheduleScrollState: props.onScheduleScrollState,
@@ -548,7 +548,7 @@ function MessageTimelineView(
                   </Show>
                 </>
               }
-              actions={
+              actions={(fit) => (
                 <Show when={sessionID()} keyed>
                   {(_id) => (
                     <>
@@ -565,13 +565,16 @@ function MessageTimelineView(
                           get active() {
                             return props.active !== false
                           },
+                          get compact() {
+                            return fit.compact
+                          },
                         }}
                       />
                       <SessionHeaderSpacer visible={props.reserveReviewToggle} />
                     </>
                   )}
                 </Show>
-              }
+              )}
             >
               <Show when={parentID() && childTitle()}>
                 {(value) => (

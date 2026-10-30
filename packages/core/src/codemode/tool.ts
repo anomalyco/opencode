@@ -123,7 +123,11 @@ export const create = (
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
                   // The program sees the same failure text the model gets for a direct call.
-                  const executed = yield* executeTool(name, tool, input, context).pipe(
+                  const executed = yield* executeTool(name, tool, input, {
+                    ...context,
+                    // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
+                    progress: () => Effect.void,
+                  }).pipe(
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
                   const content = resultContent(executed)

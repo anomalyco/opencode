@@ -350,3 +350,21 @@ test.each([
     app.connection.dispose()
   }
 })
+
+test("browser.pane.missing stops retry backoff without surfacing an error and wakes only when created", () => {
+  jest.useFakeTimers()
+  const app = fixture()
+
+  try {
+    app.emit(0, { type: "state", state: null, error: "browser.pane.missing" })
+    jest.advanceTimersByTime(60_000)
+    app.connection.wake()
+    expect(app.calls).toHaveLength(1)
+    expect(app.states.at(-1)?.error).toBeUndefined()
+
+    app.connection.wake(true)
+    expect(app.calls).toHaveLength(2)
+  } finally {
+    app.connection.dispose()
+  }
+})

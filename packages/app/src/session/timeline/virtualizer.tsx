@@ -75,7 +75,8 @@ type Input = {
   scroll: Accessor<{ overflow: boolean; jump: boolean }>
   onResumeScroll: (behavior?: ScrollBehavior) => void
   setScrollRef: (element: HTMLDivElement | undefined) => void
-  setContentRef: (element: HTMLDivElement) => void
+  /** The rows' content changed height. */
+  onContentResize: () => void
   /** Height of the composer region floating over the timeline's bottom edge, where the timeline fades out. */
   bottomInset?: Accessor<number>
   setVisibleRef?: (element: HTMLDivElement | undefined) => void
@@ -554,8 +555,6 @@ export function createTimelineVirtualizer(input: Input) {
     const root = listRoot()
 
     if (root) input.setScrollRef(root)
-
-    if (virtualContent) input.setContentRef(virtualContent)
     input.setVisibleRef?.(visibleArea())
     queueMicrotask(() => {
       if (!active() || !root?.isConnected) return
@@ -628,6 +627,15 @@ export function createTimelineVirtualizer(input: Input) {
       },
       { defer: true },
     ),
+  )
+
+  // The content is as tall as the rows the virtualizer sizes, so it reports that height rather than the session
+  // observing the element. A ResizeObserver there sees the height a row's own observer commits during its delivery, and
+  // Chrome reports every such frame as "ResizeObserver loop completed with undelivered notifications."
+  createEffect(
+    on([active, () => virtualizer.getTotalSize() - rendering.scrollAdjustment], () => {
+      if (active()) input.onContentResize()
+    }),
   )
 
   // Only the viewport carries the inset as a variable, for its fade and scroll padding. The variable does not inherit
@@ -1030,11 +1038,7 @@ export function createTimelineVirtualizer(input: Input) {
           </Show>
           <div
             data-timeline-virtual-content
-            ref={(element) => {
-              virtualContent = element
-
-              if (active()) input.setContentRef(element)
-            }}
+            ref={virtualContent}
             style={{
               height: `${virtualizer.getTotalSize() - rendering.scrollAdjustment}px`,
               position: "relative",

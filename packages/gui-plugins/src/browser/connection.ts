@@ -1,5 +1,6 @@
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { IpcClient } from "@opencode/plugin/gui"
+import { uuid } from "@opencode/util/uuid"
 import type { BrowserPane, PaneEvent } from "./ipc"
 
 type Client = IpcClient<(typeof BrowserPane)["spec"]>
@@ -192,14 +193,18 @@ export function createConnection(input: {
           return publish()
         }
 
-        if (event.error === "browser.pane.unsupported" || event.error === "browser.pane.replaced") {
+        if (
+          event.error === "browser.pane.unsupported" ||
+          event.error === "browser.pane.replaced" ||
+          event.error === "browser.pane.missing"
+        ) {
           blocked = true
           registration.close()
           state.registration = undefined
           state.ready = false
           state.embeds = {}
           state.browser = null
-          state.error = event.error
+          state.error = event.error === "browser.pane.missing" ? undefined : event.error
           publish()
 
           return
@@ -246,7 +251,9 @@ export function createConnection(input: {
   }
 
   return {
-    wake() {
+    wake(unblock = false) {
+      if (unblock) blocked = false
+
       // Passive focus, pointer, and key edges wake an idle-evicted pane without bypassing transport backoff.
       if (retry === undefined) register()
     },
@@ -310,7 +317,7 @@ function open(
   listener: (event: PaneEvent) => void,
   failed: (cause: unknown) => void,
 ): Registration {
-  const binding = crypto.randomUUID()
+  const binding = uuid()
   const status = { closed: false }
 
   const stop = listen(binding, (event) => {

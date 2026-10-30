@@ -12,13 +12,8 @@ import {
   LLM,
   LLMClient,
   Media,
-  Speech,
-  SpeechClient,
-  SpeechEvent,
-  TranscriptionClient,
-  Video,
-  VideoClient,
 } from "@opencode/ai/effect"
+import { Speech, SpeechClient, SpeechEvent, TranscriptionClient, Video, VideoClient } from "@opencode/ai/experimental"
 import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import {
   Alibaba,
