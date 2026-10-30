@@ -187,6 +187,10 @@ pub enum Response {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         signal: Option<String>,
         final_offset: u64,
+        /// Same as `TerminalInfo.output_error`, so a live subscriber learns the
+        /// output file is incomplete without another request.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output_error: Option<String>,
     },
     ControllerChanged {
         attachment_id: Option<String>,
@@ -427,6 +431,7 @@ mod tests {
                 exit_code: Some(1),
                 signal: None,
                 final_offset: 2,
+                output_error: None,
             })
             .unwrap(),
             serde_json::json!({"type": "exited", "exit_code": 1, "final_offset": 2})

@@ -705,6 +705,7 @@ mod tests {
                     exit_code: Some(0),
                     signal: None,
                     final_offset: 123,
+                    output_error: None,
                 },
             )
             .unwrap();

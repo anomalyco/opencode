@@ -505,10 +505,12 @@ fn stream_subscription(
                 exit_code,
                 signal,
                 final_offset,
+                output_error,
             } => Response::Exited {
                 exit_code,
                 signal,
                 final_offset,
+                output_error,
             },
             StreamEvent::ControllerChanged {
                 attachment_id,

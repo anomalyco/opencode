@@ -136,6 +136,7 @@ pub enum StreamEvent {
         exit_code: Option<u32>,
         signal: Option<String>,
         final_offset: u64,
+        output_error: Option<String>,
     },
     ControllerChanged {
         attachment_id: Option<String>,
@@ -1399,16 +1400,19 @@ fn run_actor(config: ActorConfig) -> Result<()> {
             && let Some(result) = child_exit.take()
         {
             let (exit_code, signal) = result.clone().unwrap_or_default();
+            let mut output_error = None;
             if let Ok(mut value) = info.write() {
                 value.lifecycle = match result {
                     Ok((exit_code, signal)) => TerminalLifecycle::Exited { exit_code, signal },
                     Err(message) => TerminalLifecycle::Failed { message },
                 };
+                output_error = value.output_error.clone();
             }
             let event = StreamEvent::Exited {
                 exit_code,
                 signal,
                 final_offset: replay.tail,
+                output_error,
             };
             broadcast(
                 &shutdown,
@@ -2144,7 +2148,8 @@ mod tests {
                 [StreamEvent::Exited {
                     exit_code: Some(23),
                     signal: None,
-                    final_offset: 5
+                    final_offset: 5,
+                    output_error: None,
                 }]
             ));
         }

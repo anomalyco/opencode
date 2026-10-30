@@ -25,6 +25,7 @@ fn pipe(script: &str) -> CreateTerminal {
 
 struct Finished {
     output: String,
+    output_error: Option<String>,
     exit_code: Option<u32>,
     signal: Option<String>,
     final_offset: u64,
@@ -49,9 +50,11 @@ fn run(service: &TerminalService, id: TerminalId) -> Finished {
                 exit_code,
                 signal,
                 final_offset,
+                output_error,
             } => {
                 return Finished {
                     output: String::from_utf8(output).unwrap(),
+                    output_error,
                     exit_code,
                     signal,
                     final_offset,
@@ -96,6 +99,7 @@ fn reports_ordered_output_and_exit_code_without_a_terminal() {
     );
     assert_eq!(finished.exit_code, Some(7));
     assert_eq!(finished.signal, None);
+    assert_eq!(finished.output_error, None);
     assert_eq!(finished.final_offset, finished.output.len() as u64);
     let listed = service.list_mode(ProcessMode::Pipe).unwrap();
     assert_eq!(
@@ -396,6 +400,7 @@ fn output_path_appends_to_an_existing_file() {
 fn output_path_must_be_an_absolute_file_for_a_pipe_process() {
     let service = TerminalService::default();
     let missing = TempPath::new("missing-directory").0.join("out");
+    let pty = TempPath::new("pty");
     let marker = TempPath::new("should-not-run");
     let target = TempPath::new("target");
     std::fs::write(&target.0, "").unwrap();
@@ -412,7 +417,7 @@ fn output_path_must_be_an_absolute_file_for_a_pipe_process() {
         ),
         (
             CreateTerminal {
-                output_path: Some(TempPath::new("pty").0.clone()),
+                output_path: Some(pty.0.clone()),
                 cols: 80,
                 rows: 24,
                 mode: ProcessMode::Pty,
@@ -457,6 +462,7 @@ fn a_failing_output_file_is_reported_and_the_process_keeps_running() {
     let finished = run(&service, info.id);
     assert_eq!(finished.output, "lost\nkept\n");
     assert_eq!(finished.exit_code, Some(5));
+    assert!(finished.output_error.is_some());
     let error = service.list_mode(ProcessMode::Pipe).unwrap()[0]
         .output_error
         .clone()
