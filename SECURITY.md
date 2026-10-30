@@ -1,47 +1,53 @@
-# Security
+# Security Architecture: Enhanced OpenCode Universal Agent Ecosystem
 
-## IMPORTANT
+## 1. Threat Model & Security Posture
 
-We do not accept AI generated security reports. We receive a large number of
-these and we absolutely do not have the resources to review them all. If you
-submit one that will be an automatic ban from the project.
+Third-party extensions, skills, rules, and MCP servers originate from external or untrusted sources (e.g. public GitHub repositories, zip archives, community registries). They must be treated as **untrusted code and inputs**.
 
-## Threat Model
-
-### Overview
-
-OpenCode is an AI-powered coding assistant that runs locally on your machine. It provides an agent system with access to powerful tools including shell execution, file operations, and web access.
-
-### No Sandbox
-
-OpenCode does **not** sandbox the agent. The permission system exists as a UX feature to help users stay aware of what actions the agent is taking - it prompts for confirmation before executing commands, writing files, etc. However, it is not designed to provide security isolation.
-
-If you need true isolation, run OpenCode inside a Docker container or VM.
-
-### Server Mode
-
-Server mode is opt-in only. When enabled, set `OPENCODE_SERVER_PASSWORD` to require HTTP Basic Auth. Without this, the server runs unauthenticated (with a warning). It is the end user's responsibility to secure the server - any functionality it provides is not a vulnerability.
-
-### Out of Scope
-
-| Category                        | Rationale                                                               |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| **Server access when opted-in** | If you enable server mode, API access is expected behavior              |
-| **Sandbox escapes**             | The permission system is not a sandbox (see above)                      |
-| **LLM provider data handling**  | Data sent to your configured LLM provider is governed by their policies |
-| **MCP server behavior**         | External MCP servers you configure are outside our trust boundary       |
-| **Malicious config files**      | Users control their own config; modifying it is not an attack vector    |
+The enhanced ecosystem enforces defense-in-depth across five key vectors:
+1. **Source Inspection & AST Analysis**: Before any extension code is loaded or executed.
+2. **Permission Boundary**: Explicit capabilities requested by extensions.
+3. **Execution Isolation & Sandboxing**: Restricting filesystem and network scope.
+4. **Secret Protection**: Preventing leakage of API tokens and environment variables.
+5. **Transactional Installation & Rollback**: Safe recovery from failed or corrupted installations.
 
 ---
 
-# Reporting Security Issues
+## 2. Static Security Inspection
 
-We appreciate your efforts to responsibly disclose your findings, and will make every effort to acknowledge your contributions.
+When importing an extension (via Git repository, archive, or local directory), the Security Engine performs automated checks before registering files:
 
-To report a security issue, please use the GitHub Security Advisory ["Report a Vulnerability"](https://github.com/anomalyco/opencode/security/advisories/new) tab.
+### Checks:
+- **Path Traversal Prevention**: Ensures no filenames contain `..`, absolute drives, or attempt to break out of the extension target sandbox.
+- **Dangerous Executable Patterns**: Scans scripts for unconstrained operations (e.g., `rm -rf /`, `format`, arbitrary remote curl-to-bash execution without integrity pins).
+- **Embedded Credential Detection**: Identifies hardcoded API keys, private keys, or credentials embedded directly into files.
+- **Dependency Audit**: Inspects `package.json` or requirements files for known malicious packages or excessive native dependency compilation.
 
-The team will send a response indicating the next steps in handling your report. After the initial reply to your report, the security team will keep you informed of the progress towards a fix and full announcement, and may ask for additional information or guidance.
+---
 
-## Escalation
+## 3. Sandboxing & Runtime Permissions
 
-If you do not receive an acknowledgement of your report within 6 business days, you may send an email to security@anoma.ly
+- **Explicit Approval for Scripts**: Skills or plugins that include executable binaries or scripts (e.g. Python, Node, Bash scripts in a skill's `scripts/` folder) require explicit user consent before execution.
+- **Process Isolation**: MCP servers and external scripts execute in isolated child processes with dedicated working directories and sanitized environment variables.
+- **Filesystem Access Boundaries**: Extensions are constrained to their declared workspace directories unless granted global read permissions.
+
+---
+
+## 4. Secret & Credential Protection
+
+- MCP configurations often require API keys (e.g., `GITHUB_TOKEN`, `DATABASE_URL`).
+- All secret environment variables are:
+  1. Stored securely using OpenCode's credential vault.
+  2. Redacted from diagnostic logs, error traces, and UI display.
+  3. Transferred to child processes only via direct process environment handles, never logged to stdout/stderr.
+
+---
+
+## 5. Safe Installation, Updates, and Rollback
+
+All installation, update, and removal operations are **transactional**:
+- Prior to altering any files or configuration, a snapshot is created in `.opencode/backup/extensions/<timestamp>/`.
+- If an installation fails, file verification fails, or the extension crashes during health-check verification:
+  1. The transaction is aborted.
+  2. The filesystem state is rolled back to the snapshot.
+  3. The user is notified with an error report explaining the failure without stranding corrupted files.

@@ -2,6 +2,19 @@
 
 Release notes for OpenCode V2, newest first.
 
+## v2.3.0-enhanced — Universal Agent Ecosystem
+
+### Highlights
+
+- **Universal Agent Extension Compatibility Engine**: Comprehensive support for discovering, inspecting, adapting, and installing extensions from OpenCode, Claude Code, OpenAI Codex, Google Antigravity, and Cursor.
+- **Universal Skill Adapter**: Import multi-file skills from GitHub repos, subdirectories, local folders, and zip archives with full structure preservation, metadata translation, and wrapper generation.
+- **Advanced MCP Management & Diagnostics**: Full support for STDIO, HTTP, and SSE transports, connection testing, deep diagnostic troubleshooting, tool discovery, and configuration import from Claude Desktop and Cursor.
+- **Multi-Source Rules & Instruction Engine**: Seamless integration of `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules/*.mdc`, and Antigravity rules with glob-matching, scopes, and explicit precedence resolution.
+- **Dynamic Multi-Folder Workspaces**: Projects can now contain multiple independent filesystem folders across drives and directories, with dynamic attachment, detachment, relinking, and unified workspace explorer views.
+- **Persistent Project Attachments**: Project-level resource storage (PDF, DOCX, CSV, code, markdown, archives) with text extraction indexing and context-efficient agent retrieval tools.
+- **Multi-Conversation Management**: Persistent multi-session management per project with rename, archive, search, and shared project context across conversations.
+- **Extension Security & Rollback**: Static AST security scanner, permission boundaries, and transactional installation with automatic snapshot rollback.
+
 ## v2.2.4 — 2026-10-30
 
 ### Highlights
