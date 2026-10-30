@@ -21,6 +21,8 @@ describe("provider error classification", () => {
       "Prompt exceeds max length",
       "The input is too long for the selected model.",
       "This text request is too large for the model's configured input limit.",
+      // LiteLLM's own check, before it calls the model.
+      "litellm.ContextWindowExceededError: litellm.BadRequestError: litellm._pre_call_checks: Context Window exceeded for given call. No models have context window large enough for this call.",
     ]
 
     expect(messages.every(isContextOverflow)).toBe(true)
@@ -44,6 +46,20 @@ describe("provider error classification", () => {
 
     expect(failures).toEqual(
       failures.map(() => expect.objectContaining({ _tag: "InvalidRequest", classification: "payload-too-large" })),
+    )
+  })
+
+  test("classifies an overflow a gateway reports as a server error as context overflow", () => {
+    // LiteLLM wraps an upstream overflow in a 503 when it falls back mid-stream.
+    expect(
+      classifyProviderFailure({
+        message:
+          "litellm.ServiceUnavailableError: litellm.MidStreamFallbackError: litellm.APIConnectionError: APIConnectionError: OpenAIException - Requested token count exceeds the model's maximum context length of 131072 tokens.",
+        status: 503,
+      }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
+    expect(classifyProviderFailure({ message: "Service temporarily unavailable", status: 503 })._tag).toBe(
+      "ProviderInternal",
     )
   })
 

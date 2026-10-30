@@ -42,6 +42,8 @@ const patterns = [
   // Hugging Face Text Generation Inference, e.g. Together
   /`inputs` tokens \+ `max_new_tokens` must be <= \d+/i,
   /context window exceeds limit/i,
+  // LiteLLM's ContextWindowExceededError
+  /context window exceeded/i,
   /exceeded model token limit/i,
   /context[_ ]length[_ ]exceeded/i,
   /context length is only \d+ tokens/i,
@@ -259,7 +261,8 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   const clientScoped = input.status === undefined || (input.status >= 400 && input.status < 500)
 
   if (
-    clientScoped &&
+    // Gateways can pass an upstream overflow on as a 5xx, e.g. LiteLLM's mid-stream fallback.
+    (input.status === undefined || input.status >= 400) &&
     (codes.includes("context_length_exceeded") ||
       codes.includes("model_context_window_exceeded") ||
       codes.includes("request_too_large") ||
