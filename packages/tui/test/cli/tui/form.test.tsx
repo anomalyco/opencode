@@ -1,19 +1,24 @@
 /** @jsxImportSource @opentui/solid */
+import type { OpenCodeEvent } from "@opencode/client"
+import { InputRenderable, TextareaRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { onMount, Show } from "solid-js"
+import { CommandPaletteDialog } from "../../../src/component/command-palette"
+import { DialogSessionRename } from "../../../src/component/dialog-session-rename"
 import { DataProvider, useData, type FormWithLocation } from "../../../src/context/data"
 import { ClientProvider } from "../../../src/context/client"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Keymap } from "../../../src/context/keymap"
 import { ConfigProvider } from "../../../src/config"
+import { DialogProvider, useDialog, type DialogContext } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import { createApi, createEventStream, createFetch, json } from "../../fixture/tui-client"
+import { createApi, createEventStream, createFetch, directory, json } from "../../fixture/tui-client"
 
 async function mountForm(
   root: string,
@@ -108,7 +113,9 @@ async function mountForm(
             <ClientProvider api={createApi(transport.fetch)}>
               <DataProvider directory={process.cwd()}>
                 <ThemeProvider mode="dark" source={emptyThemeSource}>
-                  <ToastProvider>{response ? <CurrentForm /> : <FormPrompt form={form} />}</ToastProvider>
+                  <ToastProvider>
+                    <DialogProvider>{response ? <CurrentForm /> : <FormPrompt form={form} />}</DialogProvider>
+                  </ToastProvider>
                 </ThemeProvider>
               </DataProvider>
             </ClientProvider>
@@ -729,5 +736,215 @@ test("space does not select a single-choice option", async () => {
     expect(prompt.replies).toEqual([])
   } finally {
     prompt.app.renderer.destroy()
+  }
+})
+
+async function mountDialogForm(root: string) {
+  const state = path.join(root, "state")
+  await mkdir(state, { recursive: true })
+
+  const replies: unknown[] = []
+  const cancellations: unknown[] = []
+  const renames: unknown[] = []
+  const events = createEventStream()
+  const config = createTuiResolvedConfig({ animations: false })
+  let dialog!: DialogContext
+
+  const formID = `frm_${crypto.randomUUID()}`
+  const transport = createFetch((url, request) => {
+    if (url.pathname === "/api/session/ses_test" && request.method === "PATCH")
+      return request.json().then((body) => {
+        renames.push(body)
+        return new Response(null, { status: 204 })
+      })
+    if (url.pathname === "/api/session/ses_test/form" && request.method === "GET") return json({ data: [] })
+    if (url.pathname === `/api/session/ses_test/form/${formID}/reply`)
+      return request.json().then((answer) => {
+        replies.push(answer)
+        events.emit({
+          id: "evt_form_replied",
+          created: 2,
+          type: "form.replied",
+          location: { directory },
+          data: { id: formID, sessionID: "ses_test", answer: answer.answer },
+        })
+        return new Response(null, { status: 204 })
+      })
+    if (url.pathname === `/api/session/ses_test/form/${formID}` && request.method === "DELETE") {
+      cancellations.push(true)
+      events.emit({
+        id: "evt_form_cancelled",
+        created: 2,
+        type: "form.cancelled",
+        location: { directory },
+        data: { id: formID, sessionID: "ses_test" },
+      })
+      return new Response(null, { status: 204 })
+    }
+  }, events)
+  const { FormPrompt } = await import("../../../src/routes/session/form")
+
+  function Scene() {
+    const data = useData()
+    dialog = useDialog()
+    onMount(() => void data.session.form.sync("ses_test"))
+    return (
+      <box height="100%" justifyContent="flex-end">
+        <Show when={data.session.form.list("ses_test")?.[0]} keyed fallback={<text>Composer ready</text>}>
+          {(current) => <FormPrompt form={current} />}
+        </Show>
+      </box>
+    )
+  }
+
+  const app = await testRender(
+    () => (
+      <TestTuiContexts directory={directory} paths={{ home: root, state, worktree: directory }}>
+        <ConfigProvider config={config}>
+          <Keymap.Provider>
+            <ClientProvider api={createApi(transport.fetch)}>
+              <DataProvider directory={directory}>
+                <ThemeProvider mode="dark" source={emptyThemeSource}>
+                  <ToastProvider>
+                    <DialogProvider>
+                      <Scene />
+                    </DialogProvider>
+                  </ToastProvider>
+                </ThemeProvider>
+              </DataProvider>
+            </ClientProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 80, height: 30, kittyKeyboard: true },
+  )
+  app.renderer.start()
+  await app.waitForFrame((frame) => frame.includes("Composer ready"))
+
+  const ask = (fields: Extract<OpenCodeEvent, { type: "form.created" }>["data"]["form"]["fields"]) =>
+    events.emit({
+      id: "evt_form_created",
+      created: 1,
+      type: "form.created",
+      location: { directory },
+      data: {
+        form: {
+          id: formID,
+          sessionID: "ses_test",
+          title: "Question",
+          fields,
+        },
+      },
+    })
+
+  return { app, ask, cancellations, dialog: () => dialog, renames, replies }
+}
+
+test("arriving choice question keeps focus with an open rename dialog until it closes", async () => {
+  await using tmp = await tmpdir()
+  const scene = await mountDialogForm(tmp.path)
+  try {
+    DialogSessionRename.show(scene.dialog(), "ses_test", "Initial")
+    await scene.app.waitForFrame(
+      (frame) =>
+        frame.includes("Rename session") && scene.app.renderer.currentFocusedRenderable instanceof TextareaRenderable,
+    )
+
+    scene.ask([
+      {
+        key: "approach",
+        type: "string",
+        description: "Which approach should I take?",
+        options: [
+          { value: "a", label: "Option A" },
+          { value: "b", label: "Option B" },
+        ],
+        custom: true,
+      },
+    ])
+    await scene.app.waitForFrame((frame) => frame.includes("Option A"))
+
+    await scene.app.mockInput.typeText(" 2")
+    scene.app.mockInput.pressArrow("down")
+    scene.app.mockInput.pressEnter()
+    await scene.app.waitForFrame((frame) => !frame.includes("Rename session"))
+
+    expect(scene.renames).toEqual([{ title: "Initial 2" }])
+    expect(scene.replies).toEqual([])
+    expect(scene.cancellations).toEqual([])
+
+    scene.app.mockInput.pressKey("2")
+    await scene.app.waitFor(() => scene.replies.length === 1)
+    expect(scene.replies).toEqual([{ answer: { approach: "b" } }])
+  } finally {
+    scene.app.renderer.destroy()
+  }
+})
+
+test("arriving text question does not steal editor focus from an open rename dialog", async () => {
+  await using tmp = await tmpdir()
+  const scene = await mountDialogForm(tmp.path)
+  try {
+    DialogSessionRename.show(scene.dialog(), "ses_test", "Draft")
+    await scene.app.waitForFrame(
+      (frame) =>
+        frame.includes("Rename session") && scene.app.renderer.currentFocusedRenderable instanceof TextareaRenderable,
+    )
+
+    scene.ask([{ key: "notes", type: "string", description: "Explain why" }])
+    await scene.app.waitForFrame((frame) => frame.includes("Explain why"))
+
+    await scene.app.mockInput.typeText(" title")
+    scene.app.mockInput.pressEnter()
+    await scene.app.waitForFrame(
+      (frame) =>
+        !frame.includes("Rename session") && scene.app.renderer.currentFocusedRenderable instanceof TextareaRenderable,
+    )
+
+    expect(scene.renames).toEqual([{ title: "Draft title" }])
+    expect(scene.replies).toEqual([])
+
+    await scene.app.mockInput.typeText("because")
+    scene.app.mockInput.pressEnter()
+    scene.app.mockInput.pressEnter()
+    await scene.app.waitFor(() => scene.replies.length === 1)
+    expect(scene.replies).toEqual([{ answer: { notes: "because" } }])
+  } finally {
+    scene.app.renderer.destroy()
+  }
+})
+
+test("escape closes an open command palette instead of cancelling an arriving question", async () => {
+  await using tmp = await tmpdir()
+  const scene = await mountDialogForm(tmp.path)
+  try {
+    scene.dialog().replace(() => <CommandPaletteDialog />)
+    await scene.app.waitForFrame(
+      (frame) => frame.includes("Commands") && scene.app.renderer.currentFocusedRenderable instanceof InputRenderable,
+    )
+
+    scene.ask([
+      {
+        key: "approach",
+        type: "string",
+        options: [
+          { value: "a", label: "Option A" },
+          { value: "b", label: "Option B" },
+        ],
+      },
+    ])
+    await scene.app.waitForFrame((frame) => frame.includes("Option A"))
+
+    scene.app.mockInput.pressEscape()
+    await scene.app.waitForFrame((frame) => !frame.includes("Commands"))
+    expect(scene.cancellations).toEqual([])
+    expect(scene.app.captureCharFrame()).toContain("Option A")
+
+    scene.app.mockInput.pressEnter()
+    await scene.app.waitFor(() => scene.replies.length === 1)
+    expect(scene.replies).toEqual([{ answer: { approach: "a" } }])
+  } finally {
+    scene.app.renderer.destroy()
   }
 })
