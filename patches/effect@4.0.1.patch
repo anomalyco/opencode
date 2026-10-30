@@ -1,0 +1,77 @@
+diff --git a/dist/internal/effect.js b/dist/internal/effect.js
+index dc6b094b432b21d3eedbbe0ef04285b522ca3dc7..18f00fce00f733b72ee484d982b496dd65be3e0b 100644
+--- a/dist/internal/effect.js
++++ b/dist/internal/effect.js
+@@ -911,17 +911,20 @@ const makeFn = (name, bodyOrOptions, defError, pipeables, addSpan, spanOptions)
+       callError = new globalThis.Error();
+       setStackTraceLimit(prevLimit);
+     }
+-    return updateService(addSpan ? useSpan(name, spanOptions, span => provideParentSpan(result, span)) : result, CurrentStackFrame, prev => ({
+-      name,
+-      stack: callError ? fnStackCleaner(() => callError.stack) : constUndefined,
+-      parent: {
+-        name: definitionName,
+-        stack: definitionStack,
+-        parent: prev
+-      }
+-    }));
++    return updateService(addSpan ? useSpan(name, spanOptions, span => provideParentSpan(result, span)) : result, CurrentStackFrame, makeCallFrame(name, callError, definitionName, definitionStack));
+   });
+ };
++// Built outside the traced function so the frame's `stack` closure cannot capture that call's `arguments`.
++// Frames outlive the call in forked fibers, which would otherwise keep every argument alive.
++const makeCallFrame = (name, callError, definitionName, definitionStack) => prev => ({
++  name,
++  stack: callError ? fnStackCleaner(() => callError.stack) : constUndefined,
++  parent: {
++    name: definitionName,
++    stack: definitionStack,
++    parent: prev
++  }
++});
+ /** @internal */
+ export const fnUntracedEager = (body, ...pipeables) => defineFunctionLength(body.length, pipeables.length === 0 ? function () {
+   return fromIteratorEagerUnsafe(() => body.apply(this, arguments));
+diff --git a/src/internal/effect.ts b/src/internal/effect.ts
+index 874e545e1ca695eb8b9ba5359d693ce90786f72f..6155cfbe5ddc4e78173ec453e8573ab39cbd8fac 100644
+--- a/src/internal/effect.ts
++++ b/src/internal/effect.ts
+@@ -1332,19 +1332,29 @@ const makeFn = (
+         useSpan(name, spanOptions!, (span) => provideParentSpan(result, span)) :
+         result,
+       CurrentStackFrame,
+-      (prev) => ({
+-        name,
+-        stack: callError ? fnStackCleaner(() => callError.stack) : constUndefined,
+-        parent: {
+-          name: definitionName,
+-          stack: definitionStack,
+-          parent: prev
+-        }
+-      })
++      makeCallFrame(name, callError, definitionName, definitionStack)
+     )
+   })
+ }
+ 
++// Built outside the traced function so the frame's `stack` closure cannot capture that call's `arguments`.
++// Frames outlive the call in forked fibers, which would otherwise keep every argument alive.
++const makeCallFrame = (
++  name: string,
++  callError: Error | undefined,
++  definitionName: string,
++  definitionStack: () => string | undefined
++) =>
++(prev: StackFrame | undefined): StackFrame => ({
++  name,
++  stack: callError ? fnStackCleaner(() => callError.stack) : constUndefined,
++  parent: {
++    name: definitionName,
++    stack: definitionStack,
++    parent: prev
++  }
++})
++
+ /** @internal */
+ export const fnUntracedEager: Effect.fn.Untraced = (
+   body: Function,
