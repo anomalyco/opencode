@@ -32,7 +32,7 @@ for (const model of [
     ),
   ).effect(`${model.provider} compaction survives generation, serialization, and a second request`, () =>
     Effect.gen(function* () {
-      const request = ai.text.request({
+      const request = ai.request({
         model,
         prompt: "hello",
         providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },
@@ -63,7 +63,7 @@ testEffect(fixedResponse(sseEvents({ type: "response.completed", response: { out
   () =>
     Effect.gen(function* () {
       const result = yield* LLMClient.generate(
-        ai.text.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+        ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
       )
       expect(result.message.content).toHaveLength(1)
       expect(result.message.content[0]?.type).toBe("compaction")
@@ -75,7 +75,7 @@ testEffect(
 ).effect("rejects incomplete compaction payloads without publishing a checkpoint", () =>
   Effect.gen(function* () {
     const error = yield* LLMClient.generate(
-      ai.text.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+      ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
     ).pipe(Effect.flip)
     expect(error.reason._tag).toBe("InvalidProviderOutput")
     expect(error.reason.body).toContain("cmp_bad")
@@ -103,7 +103,7 @@ for (const completed of [false, true]) {
     ),
   ).effect(completed ? "keeps streamed checkpoints before later text" : "rejects order-unsafe terminal recovery", () =>
     Effect.gen(function* () {
-      const request = ai.text.request({
+      const request = ai.request({
         model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
         prompt: "hello",
       })
@@ -131,7 +131,7 @@ testEffect(
 ).effect("mints an id for terminal checkpoints that omit one", () =>
   Effect.gen(function* () {
     const response = yield* LLMClient.generate(
-      ai.text.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" }),
+      ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" }),
     )
     const part = response.message.content[0]
     expect(part?.type).toBe("compaction")

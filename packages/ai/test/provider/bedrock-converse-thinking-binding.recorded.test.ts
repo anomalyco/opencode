@@ -26,7 +26,7 @@ const model = (blockBinding?: { readonly prefix_mismatch_behavior: string }) =>
 
 const question = "How many positive integers below 5000 have exactly 12 positive divisors? Reply with the number only."
 
-const first = ai.text.request({
+const first = ai.request({
   id: "recorded_bedrock_thinking_binding_first",
   model: model(),
   system: "You are a concise assistant.",
@@ -46,7 +46,7 @@ describe("Bedrock Converse thinking binding recorded", () => {
   recorded.effect.with("accepts the default binding with no thinking configured", { tags: ["reasoning"] }, () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.text.request({
+        ai.request({
           id: "recorded_bedrock_thinking_binding_default",
           model: AmazonBedrock.model(modelID, {
             apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",

@@ -18,12 +18,12 @@ const read_file = tool({
 })
 
 const collect = (until?: LLM.LoopInput["until"]) =>
-  ai.text.loop({ model, prompt: "Read the file.", tools: { read_file }, until }).pipe(
+  ai.loop({ model, prompt: "Read the file.", tools: { read_file }, until }).pipe(
     Stream.runCollect,
     Effect.map((events) => Array.from(events)),
   )
 
-describe("ai.text.loop", () => {
+describe("ai.loop", () => {
   it.effect("runs tool calls and sends the full assistant turn back to the model", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
@@ -97,7 +97,7 @@ describe("ai.text.loop", () => {
         toModelOutput: ({ output }) => [{ type: "text", text: `sum=${output}` }],
       })
 
-      const events = yield* ai.text.loop({ model, prompt: "Add.", tools: { add } }).pipe(Stream.runCollect)
+      const events = yield* ai.loop({ model, prompt: "Add.", tools: { add } }).pipe(Stream.runCollect)
 
       expect(Array.from(events).filter(LLMEvent.is.toolResult)).toEqual([
         expect.objectContaining({ id: "call-1", result: { type: "text", value: "sum=5" } }),

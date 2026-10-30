@@ -113,7 +113,7 @@ export const layer = Layer.effect(
         return yield* new UnavailableError({ message: "No model specified and no supported model is available" })
       const response = yield* llm
         .generate(
-          ai.text.request({
+          ai.request({
             model: resolved.model,
             prompt: input.prompt,
             // Gateways require session attribution even for a stateless call; no Session is stored.

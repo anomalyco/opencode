@@ -28,8 +28,8 @@ for (const provider of [
     "compacts and continues with the provider checkpoint",
     () =>
       Effect.gen(function* () {
-        const request = ai.text.request({ model: provider.model, messages: history, generation: { maxTokens: 1024 } })
-        const compacted = yield* LLMClient.compact(request)
+        const request = ai.request({ model: provider.model, messages: history, generation: { maxTokens: 1024 } })
+        const compacted = yield* ai.compact(request)
         const result = yield* LLMClient.generate(
           LLMRequest.update(request, {
             messages: [
@@ -56,7 +56,7 @@ recordedTests({
       const model = Anthropic.configure({ apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture" }).model(
         "claude-sonnet-4-6",
       )
-      const request = ai.text.request({
+      const request = ai.request({
         model,
         messages: [
           Message.user(

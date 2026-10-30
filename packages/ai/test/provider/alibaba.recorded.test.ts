@@ -35,7 +35,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
         { tags: ["text", "reasoning", "usage"] },
         () =>
           Effect.gen(function* () {
-            const request = ai.text.request({
+            const request = ai.request({
               model: alibaba[api]("qwen3.8-max"),
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
               providerOptions: api === "messages" ? { effort } : { reasoningEffort: effort },
@@ -66,7 +66,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
       { tags: ["tool", "tool-loop", "reasoning", "continuation"] },
       () =>
         Effect.gen(function* () {
-          const request = ai.text.request({
+          const request = ai.request({
             model: alibaba[api]("qwen3.8-max"),
             providerOptions:
               api === "messages"

@@ -13,7 +13,7 @@ const bedrock = (id: string, settings: Parameters<typeof AmazonBedrock.model>[1]
 
 const fields = (model: LanguageModel, generation?: GenerationOptions) =>
   compileRequest(
-    ai.text.request({
+    ai.request({
       id: "req_1",
       model,
       system: "You are concise.",

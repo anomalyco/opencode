@@ -16,7 +16,7 @@ it.effect("Meta selects Messages and lowers native search alongside ordinary fun
     expect(model.route.endpoint).toMatchObject({ baseURL: "https://gateway.example/v1", path: "/messages" })
     expect(MetaMessages.protocol.stream).toBe(AnthropicMessages.protocol.stream)
     const compiled = yield* compileRequest(
-      ai.text.request({
+      ai.request({
         model,
         prompt: "Search",
         tools: [
@@ -62,7 +62,7 @@ it.effect("Meta rejects unsupported native tools instead of sending them as loca
       { model: Meta.messages("muse-spark-1.3"), tool: Meta.webSearch({ searchContextSize: "low" }) },
     ]) {
       const error = yield* compileRequest(
-        ai.text.request({ model: input.model, prompt: "Hello", tools: [input.tool] }),
+        ai.request({ model: input.model, prompt: "Hello", tools: [input.tool] }),
       ).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
     }
@@ -151,11 +151,11 @@ for (const streamed of [false, true]) {
     () =>
       Effect.gen(function* () {
         const item = { type: "image_generation_call", id: "ig_signed", status: "completed", result: "iVBORw0KGgo=" }
-        const request = ai.text.request({
+        const request = ai.request({
           model: Meta.configure({ apiKey: "fixture" }).responses("muse-image-1.0"),
           prompt: "Draw",
         })
-        const response = yield* ai.text.generate(request).pipe(
+        const response = yield* ai.generate(request).pipe(
           Effect.provide(
             fixedResponse(
               sseEvents(
@@ -192,9 +192,9 @@ for (const streamed of [false, true]) {
 
 it.effect("Meta rejects malformed image data from terminal-only Responses output", () =>
   Effect.gen(function* () {
-    const error = yield* ai.text
+    const error = yield* ai
       .generate(
-        ai.text.request({ model: Meta.configure({ apiKey: "fixture" }).responses("muse-image-1.0"), prompt: "Draw" }),
+        ai.request({ model: Meta.configure({ apiKey: "fixture" }).responses("muse-image-1.0"), prompt: "Draw" }),
       )
       .pipe(
         Effect.provide(

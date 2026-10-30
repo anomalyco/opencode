@@ -8,7 +8,7 @@ import { it } from "../lib/effect.js"
 it.effect("conversation lowering excludes generation settings and tool definitions", () =>
   Effect.gen(function* () {
     const body = yield* OpenResponses.lowerConversation(
-      ai.text.request({
+      ai.request({
         model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
         system: "Keep the context",
         messages: [Message.user("hello"), Message.assistant("hi")],

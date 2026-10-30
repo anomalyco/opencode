@@ -14,7 +14,7 @@ const model = OpenAI.configure({
 // `CacheHint` is a no-op for the wire body. The stable signal is the
 // `prompt_cache_key` routing hint, which keeps repeated calls on the same shard
 // so cache hits are observable.
-const cacheRequest = ai.text.request({
+const cacheRequest = ai.request({
   id: "recorded_openai_responses_cache",
   model,
   system: LARGE_CACHEABLE_SYSTEM,

@@ -18,7 +18,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
       { tags: ["text", "reasoning", "usage"], metadata: { model: "kimi-k3" } },
       () =>
         Effect.gen(function* () {
-          const request = ai.text.request({
+          const request = ai.request({
             model: Moonshot.configure({
               apiKey,
               providerOptions: api === "messages" ? { effort } : { reasoningEffort: effort },
@@ -66,7 +66,7 @@ for (const item of [
     () =>
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
-          ai.text.request({
+          ai.request({
             model: Moonshot.configure({ apiKey, providerOptions: { thinking: item.thinking } }).chat(item.model),
             prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
             generation: { maxTokens: 4096 },
@@ -106,7 +106,7 @@ for (const item of [
     { tags: ["tool", "tool-loop", "reasoning", "continuation", "usage"], metadata: { model: item.model } },
     () =>
       Effect.gen(function* () {
-        const request = ai.text.request({
+        const request = ai.request({
           model: Moonshot.configure({ apiKey, providerOptions: item.options })[item.api](item.model),
           prompt:
             "Use get_weather to look up the current weather in Paris. After receiving the result, report the weather in one short sentence.",

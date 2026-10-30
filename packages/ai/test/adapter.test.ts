@@ -84,7 +84,7 @@ const gemini = Route.make({
 })
 const configuredGemini = gemini.with({ endpoint: { baseURL: "https://fake.local" } })
 
-const request = ai.text.request({
+const request = ai.request({
   id: "req_1",
   model: LanguageModel.make({
     id: "fake-model",

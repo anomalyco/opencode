@@ -124,7 +124,7 @@ describe("PDF recorded", () => {
       Effect.gen(function* () {
         expectCode(
           yield* LLMClient.generate(
-            ai.text.request({
+            ai.request({
               id: `recorded_pdf_${target.id}_user_input`,
               model: target.model,
               cache: "none",
@@ -154,7 +154,7 @@ describe("PDF recorded", () => {
         if (target.id === "gemini") {
           const events = Array.from(
             yield* runTools({
-              request: ai.text.request({
+              request: ai.request({
                 id: "recorded_pdf_gemini_tool_result",
                 model: target.model,
                 system:
@@ -173,7 +173,7 @@ describe("PDF recorded", () => {
 
         expectCode(
           yield* LLMClient.generate(
-            ai.text.request({
+            ai.request({
               id: `recorded_pdf_${target.id}_tool_result`,
               model: target.model,
               system: "Read the PDF returned by the tool and follow the user's response format exactly.",

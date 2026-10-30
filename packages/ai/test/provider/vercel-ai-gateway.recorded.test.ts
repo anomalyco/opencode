@@ -87,7 +87,7 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(
-        ai.text.request({
+        ai.request({
           model: VercelAIGateway.configure({ apiKey: "invalid-gateway-key" }).messages("anthropic/claude-sonnet-5.5"),
           prompt: "Hello",
           generation: { maxTokens: 32 },
@@ -103,7 +103,7 @@ recorded.effect(
   "automatically caches distinct Claude system blocks",
   () =>
     Effect.gen(function* () {
-      const request = ai.text.request({
+      const request = ai.request({
         model: gateway.messages("anthropic/claude-sonnet-5.5"),
         system: [
           {

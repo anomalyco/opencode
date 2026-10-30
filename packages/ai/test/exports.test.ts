@@ -64,7 +64,7 @@ describe("public exports", () => {
   })
 
   test("root exposes app-facing runtime APIs", () => {
-    expect(ai.text.request).toBeFunction()
+    expect(ai.request).toBeFunction()
     expect(LLMClient.Service).toBeFunction()
     expect(LLMClient.layer).toBeDefined()
     expect(AIError).toBeFunction()

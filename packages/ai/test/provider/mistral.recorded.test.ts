@@ -38,7 +38,7 @@ describe("Mistral recorded", () => {
     () =>
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
-          ai.text.request({
+          ai.request({
             model: configure({ apiKey, providerOptions: { reasoningEffort: "none" } }).model("mistral-small-latest"),
             prompt: "Reply with exactly one word: hello",
             generation: { maxTokens: 40, temperature: 0 },
@@ -59,7 +59,7 @@ describe("Mistral recorded", () => {
     () =>
       Effect.gen(function* () {
         const model = configure({ apiKey, providerOptions: { reasoningEffort: "high" } }).model("mistral-small-latest")
-        const firstRequest = ai.text.request({
+        const firstRequest = ai.request({
           model,
           prompt: "Calculate 17 multiplied by 23. Think briefly, then reply with only the integer.",
           generation: { maxTokens: 512, temperature: 0 },
@@ -95,7 +95,7 @@ describe("Mistral recorded", () => {
     () =>
       Effect.gen(function* () {
         const model = configure({ apiKey, providerOptions: { reasoningEffort: "none" } }).model("mistral-small-latest")
-        const firstRequest = ai.text.request({
+        const firstRequest = ai.request({
           model,
           system: [
             SystemPart.make("Call lookup_weather exactly once with Paris."),
@@ -140,7 +140,7 @@ describe("Mistral hosted GLM recorded", () => {
     () =>
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
-          ai.text.request({
+          ai.request({
             model: configure({ apiKey }).model("zai-glm-5-2"),
             system: "Call lookup_weather exactly once with Paris.",
             prompt: "What is the weather?",

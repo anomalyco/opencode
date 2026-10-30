@@ -25,7 +25,7 @@ for (const effort of [undefined, "low", "high", "max"] as const) {
     { tags: ["text", "reasoning", "usage"] },
     () =>
       Effect.gen(function* () {
-        const request = ai.text.request({
+        const request = ai.request({
           model: ZAI.configure({ apiKey, providerOptions: { reasoningEffort: effort } }).model("glm-5.3"),
           prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
           generation: { maxTokens: 4096 },
@@ -48,7 +48,7 @@ recorded.effect.with(
   { tags: ["tool", "tool-loop", "reasoning", "continuation"] },
   () =>
     Effect.gen(function* () {
-      const request = ai.text.request({
+      const request = ai.request({
         model: ZAI.configure({
           apiKey,
           providerOptions: { reasoningEffort: "high", thinking: { type: "enabled", clear_thinking: false } },

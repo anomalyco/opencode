@@ -33,7 +33,7 @@ testEffect(fixedResponse("unexpected HTTP fallback")).effect(
             close: Effect.void,
           }),
       })
-      const request = ai.text.request({
+      const request = ai.request({
         model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
         prompt: "hello",
         providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },

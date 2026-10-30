@@ -15,7 +15,7 @@ const model = Google.configure({
 // API is out-of-band and intentionally not wired up). This test exists to
 // pin the usage-parsing path: `cachedContentTokenCount` should surface as
 // `cacheReadInputTokens` on the second identical call.
-const cacheRequest = ai.text.request({
+const cacheRequest = ai.request({
   id: "recorded_gemini_cache",
   model,
   system: LARGE_CACHEABLE_SYSTEM,

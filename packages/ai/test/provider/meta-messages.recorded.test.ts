@@ -21,7 +21,7 @@ for (const mode of ["adaptive", "enabled"] as const) {
     { tags: ["text", "reasoning", mode] },
     () =>
       Effect.gen(function* () {
-        const request = ai.text.request({
+        const request = ai.request({
           model,
           prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
           generation: { maxTokens: 2048 },
@@ -60,7 +60,7 @@ recorded.effect.with(
   { tags: ["tool", "tool-loop", "reasoning"] },
   () =>
     Effect.gen(function* () {
-      const request = ai.text.request({
+      const request = ai.request({
         model,
         prompt:
           "Look up the current weather in Paris using lookup_weather. After receiving the result, report Paris's weather in one short sentence.",

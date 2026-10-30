@@ -3,13 +3,13 @@ import { Google } from "../../src/providers.js"
 
 const model = Google.provider.model("gemini-2.5-pro")
 
-ai.text.request({
+ai.request({
   model,
   prompt: "Hello",
   providerOptions: { thinkingConfig: { thinkingBudget: 1024 } },
 })
 
-ai.text.request({
+ai.request({
   model,
   prompt: "Hello",
   providerOptions: {
@@ -18,7 +18,7 @@ ai.text.request({
   },
 })
 
-ai.text.request({
+ai.request({
   model,
   prompt: "Hello",
   providerOptions: {
@@ -29,14 +29,14 @@ ai.text.request({
   },
 })
 
-ai.text.request({
+ai.request({
   model,
   prompt: "Hello",
   // @ts-expect-error Gemini thinking budgets must be numeric.
   providerOptions: { thinkingConfig: { thinkingBudget: "large" } },
 })
 
-ai.text.request({
+ai.request({
   model,
   prompt: "Hello",
   providerOptions: { thinkingConfig: { thinkingLevel: "maximum" } },

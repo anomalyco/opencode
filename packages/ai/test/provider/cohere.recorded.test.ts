@@ -14,7 +14,7 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.text.request({
+        ai.request({
           model: cohere.model("command-a-03-2025"),
           prompt: "Reply exactly: OK",
           generation: { maxTokens: 64 },
@@ -34,7 +34,7 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.text.request({
+        ai.request({
           model: cohere.model("command-a-reasoning-08-2025"),
           prompt: "What is 17 times 23? Answer briefly.",
           providerOptions: { thinking: { type: "enabled", tokenBudget: 128 } },
@@ -81,7 +81,7 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.text.request({
+        ai.request({
           model: cohere.chat("command-a-reasoning-08-2025"),
           prompt: "What is 17 times 23? Answer briefly.",
           providerOptions: { reasoningEffort: "high" },

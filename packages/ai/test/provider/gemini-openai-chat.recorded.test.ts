@@ -29,7 +29,7 @@ describe("Gemini OpenAI-compatible Chat recorded", () => {
     () =>
       Effect.gen(function* () {
         const tools = { [weatherToolName]: weatherRuntimeTool }
-        const request = ai.text.request({
+        const request = ai.request({
           model,
           system: "Call get_weather for every requested city in parallel, then answer in one short sentence.",
           prompt: "What is the weather in Paris and in Tokyo?",

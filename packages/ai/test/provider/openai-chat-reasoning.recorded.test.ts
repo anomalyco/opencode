@@ -56,7 +56,7 @@ for (const item of cases) {
       () =>
         Effect.gen(function* () {
           const response = yield* LLMClient.generate(
-            ai.text.request({
+            ai.request({
               model: item.model,
               system: "Think through the arithmetic, then reply with only the final integer.",
               prompt: "What is 173 multiplied by 219?",
@@ -86,7 +86,7 @@ for (const item of cases) {
             ),
           ).toBe(true)
 
-          const replay = yield* compileRequest(ai.text.request({ model: item.model, messages: [response.message] }))
+          const replay = yield* compileRequest(ai.request({ model: item.model, messages: [response.message] }))
           expect(replay.body.messages).toMatchObject([
             {
               role: "assistant",

@@ -27,7 +27,7 @@ const send = (prompt: string, encoding?: RequestEncoding) =>
         })
       }),
     )
-    yield* LLMClient.generate(ai.text.request({ model, prompt, http: encoding ? { encoding } : undefined })).pipe(
+    yield* LLMClient.generate(ai.request({ model, prompt, http: encoding ? { encoding } : undefined })).pipe(
       Effect.provide(server),
     )
     return seen[0]

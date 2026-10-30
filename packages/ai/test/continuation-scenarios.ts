@@ -98,7 +98,7 @@ export function continuationRequest(input: {
   if (features.has("user-follow-up"))
     messages.push(Message.user("Continue from this conversation in one short sentence."))
 
-  return ai.text.request({
+  return ai.request({
     id: input.id,
     model: input.model,
     system: features.has("system") ? "You are concise. Continue from the provided history." : undefined,

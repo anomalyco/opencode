@@ -3,9 +3,9 @@ import { OpenRouter } from "../../src/providers.js"
 
 const model = OpenRouter.provider.model("anthropic/claude-sonnet-4.5")
 
-ai.text.request({ model, prompt: "Hello", providerOptions: { usage: true } })
+ai.request({ model, prompt: "Hello", providerOptions: { usage: true } })
 
-ai.text.request({
+ai.request({
   model,
   prompt: "Hello",
   providerOptions: {
@@ -25,7 +25,7 @@ ai.text.request({
   },
 })
 
-ai.text.request({
+ai.request({
   model,
   prompt: "Hello",
   // @ts-expect-error OpenRouter usage must be boolean or an option record.
@@ -34,7 +34,7 @@ ai.text.request({
 
 const responses = OpenRouter.provider.responses("openai/gpt-5.4")
 
-ai.text.request({
+ai.request({
   model: responses,
   prompt: "Hello",
   providerOptions: {
@@ -47,7 +47,7 @@ ai.text.request({
   },
 })
 
-ai.text.request({
+ai.request({
   model: responses,
   prompt: "Hello",
   // @ts-expect-error OpenRouter fallback models must be a list of model IDs.

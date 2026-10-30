@@ -21,7 +21,7 @@ for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
       })
       expect(Schema.is(Message)(message)).toBe(true)
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.user("Look up the value."),
@@ -57,7 +57,7 @@ for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
         [{ value: "original" }, '{"value":"original"}'],
       ] as const) {
         const prepared = yield* compileRequest(
-          ai.text.request({
+          ai.request({
             model,
             messages: [
               Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input })]),

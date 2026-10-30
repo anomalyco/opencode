@@ -3,8 +3,8 @@ import { Anthropic } from "../../src/providers.js"
 
 const model = Anthropic.provider.model("claude-sonnet-4-5")
 
-ai.text.request({ model, prompt: "Hello", providerOptions: { thinking: { type: "adaptive" } } })
-ai.text.request({
+ai.request({ model, prompt: "Hello", providerOptions: { thinking: { type: "adaptive" } } })
+ai.request({
   model,
   prompt: "Hello",
   providerOptions: {
@@ -13,7 +13,7 @@ ai.text.request({
     cacheControl: { type: "ephemeral", ttl: "30m" },
   },
 })
-ai.text.request({
+ai.request({
   model,
   prompt: "Hello",
   providerOptions: {
@@ -22,7 +22,7 @@ ai.text.request({
   },
 })
 
-ai.text.request({
+ai.request({
   model,
   prompt: "Hello",
   // @ts-expect-error Anthropic thinking modes are a fixed union.

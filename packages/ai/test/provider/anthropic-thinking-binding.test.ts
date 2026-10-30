@@ -21,7 +21,7 @@ for (const [id, enabled] of [
 ] as const) {
   it.effect(`thinking-binding defaults for ${id}`, () =>
     Effect.gen(function* () {
-      const request = ai.text.request({
+      const request = ai.request({
         model: AnthropicMessages.route.model({ id }),
         prompt: "Hello",
         http: { headers: { "anthropic-beta": "existing-beta" } },
@@ -47,7 +47,7 @@ it.effect("preserves explicit thinking settings and combines required beta heade
       { type: "between_tools" },
       { type: "adaptive", block_binding: { prefix_mismatch_behavior: "error" } },
     ] as const) {
-      const request = ai.text.request({
+      const request = ai.request({
         model: AnthropicMessages.route.model({ id: "claude-fable-5-1" }),
         prompt: "Hello",
         providerOptions: { thinking, contextManagement: { edits: [{ type: "compact_20260112" }] } },

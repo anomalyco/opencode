@@ -21,7 +21,7 @@ for (const api of ["responses", "messages"] as const) {
     { protocol: `meta-${api}` },
     () =>
       Effect.gen(function* () {
-        const request = ai.text.request({
+        const request = ai.request({
           model: meta[api]("muse-spark-1.3"),
           prompt:
             "Use web search to find NASA's page identifying the first person to walk on the Moon. Answer in one sentence with a source citation.",

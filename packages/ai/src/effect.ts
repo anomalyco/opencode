@@ -1,22 +1,19 @@
 import { Decision } from "./decision.js"
 import { Image } from "./image.js"
 import { LLM } from "./llm.js"
-import { LLMClient } from "./route/client.js"
 import { Speech } from "./speech.js"
 import { Transcription } from "./transcription.js"
 import { Video } from "./video.js"
 
-/** The Effect API: the same namespaces and operations as `ai` from `@opencode/ai`, returning `Effect` and `Stream`. */
+/** The Effect API: the same shape as `ai` from `@opencode/ai`, returning `Effect` and `Stream`. */
 export const ai = {
-  text: {
-    request: LLM.request,
-    generate: LLM.generate,
-    stream: LLM.stream,
-    loop: LLM.loop,
-    generateObject: LLM.generateObject,
-    compact: LLMClient.compact,
-    canCompact: LLMClient.canCompact,
-  },
+  request: LLM.request,
+  generate: LLM.generate,
+  stream: LLM.stream,
+  loop: LLM.loop,
+  generateObject: LLM.generateObject,
+  compact: LLM.compact,
+  canCompact: LLM.canCompact,
   image: Image,
   decision: Decision,
   /** Experimental: may change without compatibility guarantees. */

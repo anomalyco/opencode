@@ -20,7 +20,7 @@ for (const model of [
 ]) {
   it.effect(`preserves distinct call/result pairs and history for ${model}`, () =>
     Effect.gen(function* () {
-      const request = ai.text.request({ model: bedrock.model(model), messages: history(["a"]), cache: "none" })
+      const request = ai.request({ model: bedrock.model(model), messages: history(["a"]), cache: "none" })
       const first = Schema.decodeUnknownSync(BedrockConverse.protocol.body.schema)(
         (yield* compileRequest(request)).body,
       )
@@ -40,7 +40,7 @@ for (const model of [
       ]
       const messages = history(ids)
       const before = structuredClone(messages)
-      const input = ai.text.request({ model: bedrock.model(model), messages, cache: "none" })
+      const input = ai.request({ model: bedrock.model(model), messages, cache: "none" })
       const prepared = yield* compileRequest(input)
       const body = Schema.decodeUnknownSync(BedrockConverse.protocol.body.schema)(prepared.body)
       const calls = body.messages.flatMap((message) =>
@@ -65,7 +65,7 @@ it.effect("leaves non-Mistral Bedrock IDs unchanged", () =>
   Effect.gen(function* () {
     const ids = ["a", "tooluse_abcdefghi111111111", "tooluse_abcdefghi222222222", "Ab12Cd34E"]
     const prepared = yield* compileRequest(
-      ai.text.request({
+      ai.request({
         model: bedrock.model("global.anthropic.claude-haiku-4-5-20251001-v1:0"),
         messages: history(ids),
         cache: "none",

@@ -6,7 +6,6 @@ import { Image, type ImageModel, type ImageRequest, type ImageRequestInput } fro
 import { LLM } from "./llm.js"
 import { Media } from "./media.js"
 import {
-  LLMClient,
   type CheckpointRequest,
   type CompactionRequest,
   type EndpointCompactOptions,
@@ -100,7 +99,7 @@ export const make = <R = never>(options: Options<R> = {}) => {
     ),
   )
 
-  /** Run any package Effect (for example `LLMClient.compact(...)`) inside this runtime. */
+  /** Run any package Effect (for example `ai.compact(...)` from `@opencode/ai/effect`) inside this runtime. */
   const run = <A, E>(effect: Effect.Effect<A, E, Services | R>, options?: RunOptions) =>
     runtime.runPromise(Effect.raceFirst(effect, abortEffect(options?.signal)))
 
@@ -136,14 +135,14 @@ export const make = <R = never>(options: Options<R> = {}) => {
     options: TriggerCompactOptions & RunOptions,
   ): Promise<CompactionCheckpointResponse>
   function compact(request: CompactionRequest, options?: EndpointCompactOptions & RunOptions): Promise<CompactionResponse>
-  // The overloads pair each request type with its mechanism; `LLMClient.compact` checks the route's capability at runtime.
+  // The overloads pair each request type with its mechanism; `LLM.compact` checks the route's capability at runtime.
   function compact(
     request: CheckpointRequest | CompactionRequest,
     options?: (TriggerCompactOptions | EndpointCompactOptions) & RunOptions,
   ) {
     return options?.mechanism === "trigger"
-      ? run(LLMClient.compact(request as CheckpointRequest, options), options)
-      : run(LLMClient.compact(request as CompactionRequest, options), options)
+      ? run(LLM.compact(request as CheckpointRequest, options), options)
+      : run(LLM.compact(request as CompactionRequest, options), options)
   }
 
   const handle = <Response>(generation: Generation<Response>): GenerationHandle<Response> => ({
@@ -196,25 +195,23 @@ export const make = <R = never>(options: Options<R> = {}) => {
         options,
       )
     },
-    text: {
-      request: LLM.request,
-      generate: <const Model extends LanguageModel>(
-        input: RequestInput<Model> | LLMRequest,
-        options?: StreamOptions & RunOptions,
-      ) => run(LLM.generate(input, options), options),
-      stream: <const Model extends LanguageModel>(
-        input: RequestInput<Model> | LLMRequest,
-        options?: StreamOptions & RunOptions,
-      ) => iterate(LLM.stream(input, options), options),
-      /** Stream model calls, running their tool calls, until the model stops calling tools or `until` is true. */
-      loop: <const Model extends LanguageModel>(input: LoopInput<Model>, options?: StreamOptions & RunOptions) =>
-        iterate(LLM.loop(input, options), options),
-      /** Decode the model's output against `schema` (or `jsonSchema`, unvalidated). */
-      generateObject,
-      /** Compact a Responses request: a replacement window, or a checkpoint with `mechanism: "trigger"`. */
-      compact,
-      canCompact: LLMClient.canCompact,
-    },
+    request: LLM.request,
+    generate: <const Model extends LanguageModel>(
+      input: RequestInput<Model> | LLMRequest,
+      options?: StreamOptions & RunOptions,
+    ) => run(LLM.generate(input, options), options),
+    stream: <const Model extends LanguageModel>(
+      input: RequestInput<Model> | LLMRequest,
+      options?: StreamOptions & RunOptions,
+    ) => iterate(LLM.stream(input, options), options),
+    /** Stream model calls, running their tool calls, until the model stops calling tools or `until` is true. */
+    loop: <const Model extends LanguageModel>(input: LoopInput<Model>, options?: StreamOptions & RunOptions) =>
+      iterate(LLM.loop(input, options), options),
+    /** Decode the model's output against `schema` (or `jsonSchema`, unvalidated). */
+    generateObject,
+    /** Compact a Responses request: a replacement window, or a checkpoint with `mechanism: "trigger"`. */
+    compact,
+    canCompact: LLM.canCompact,
     image: {
       request: Image.request,
       generate: <const Model extends ImageModel>(

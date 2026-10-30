@@ -243,4 +243,6 @@ export function generateObject(options: GenerateObjectOptions<ToolSchema<any>> |
   return runGenerateObject(rest, tool({ description: GENERATE_OBJECT_TOOL_DESCRIPTION, jsonSchema }))
 }
 
+export { canCompact, compact } from "./route/client.js"
+
 export * as LLM from "./llm.js"

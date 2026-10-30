@@ -26,9 +26,7 @@ const recorded = recordedTests({
 describe("Google Vertex Gemini recorded", () => {
   recorded.effect("streams text", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        ai.text.request({ model, prompt: "Reply with exactly one word: hello" }),
-      )
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Reply with exactly one word: hello" }))
 
       expect(response.text.toLowerCase()).toContain("hello")
     }),
@@ -37,7 +35,7 @@ describe("Google Vertex Gemini recorded", () => {
   recorded.effect("calls a tool", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.text.request({
+        ai.request({
           model,
           prompt: "What is the weather in Paris? Use the lookup_weather tool.",
           tools: [lookupWeather],
@@ -53,7 +51,7 @@ describe("Google Vertex Gemini recorded", () => {
   recorded.effect("continues after a tool result", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.user("What is the weather in Paris?"),

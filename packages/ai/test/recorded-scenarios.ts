@@ -61,7 +61,7 @@ export const weatherToolLoopRequest = (input: {
   readonly maxTokens?: number
   readonly temperature?: number | false
 }) =>
-  ai.text.request({
+  ai.request({
     id: input.id,
     model: input.model,
     system: input.system ?? "Use the get_weather tool, then answer in one short sentence.",
@@ -274,7 +274,7 @@ const runGeneratedConversation = (context: GoldenScenarioContext, steps: Readonl
 
       generated += 1
       const response = yield* generate(
-        ai.text.request({
+        ai.request({
           id: step.id ? `${context.id}_${step.id}` : `${context.id}_${generated}`,
           model: context.model,
           system: step.system,
@@ -345,7 +345,7 @@ const runImageToolResultScenario = (context: GoldenScenarioContext) =>
   Effect.gen(function* () {
     const image = yield* restroomImage()
     const response = yield* generate(
-      ai.text.request({
+      ai.request({
         id: `${context.id}_image_tool_result`,
         model: context.model,
         system: "Read images carefully. Reply only with the visible text, lowercase, no punctuation.",

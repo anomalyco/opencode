@@ -48,7 +48,7 @@ for (const item of [
   recorded.effect.with("streams text", { tags: ["text", "usage"] }, () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.text.request({ model: item.model, prompt: "Reply exactly: OK", generation: { maxTokens: 64 } }),
+        ai.request({ model: item.model, prompt: "Reply exactly: OK", generation: { maxTokens: 64 } }),
       )
       expect(response.text.trim()).toMatch(/^OK\.?$/)
       expect(response.events.some(LLMEvent.is.textDelta)).toBe(true)
@@ -74,7 +74,7 @@ for (const item of [
   recorded.effect.with("calls a freeform text tool", { tags: ["tool", "freeform"] }, () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.text.request({
+        ai.request({
           model: item.model,
           prompt: "Use the run tool to execute exactly this code: print(1)",
           tools: run,

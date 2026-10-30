@@ -63,7 +63,7 @@ describe("tool (dynamic JSON Schema)", () => {
   )
 })
 
-describe("ai.text.generateObject", () => {
+describe("ai.generateObject", () => {
   it.effect("forces a synthetic tool call and decodes the input", () =>
     Effect.gen(function* () {
       const bodies: OpenAIChatBody[] = []
@@ -80,7 +80,7 @@ describe("ai.text.generateObject", () => {
         }),
       )
 
-      const response = yield* ai.text
+      const response = yield* ai
         .generateObject({
           model,
           prompt: "Return a structured weather report.",
@@ -123,7 +123,7 @@ describe("ai.text.generateObject", () => {
         }),
       )
 
-      const response = yield* ai.text
+      const response = yield* ai
         .generateObject({
           model,
           prompt: "Extract the user.",
@@ -154,7 +154,7 @@ describe("ai.text.generateObject", () => {
         ),
       )
 
-      const exit = yield* ai.text
+      const exit = yield* ai
         .generateObject({
           model,
           prompt: "Return a structured value.",
@@ -180,7 +180,7 @@ describe("ai.text.generateObject", () => {
         ),
       )
 
-      const exit = yield* ai.text
+      const exit = yield* ai
         .generateObject({
           model,
           prompt: "Return a structured value.",

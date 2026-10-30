@@ -59,7 +59,7 @@ describe("Route.with", () => {
 
 describe("Route diagnostics", () => {
   const route = OpenAIChat.route.with({ endpoint: { baseURL: "https://provider.test/v1" } })
-  const request = ai.text.request({ model: route.model({ id: "test" }), prompt: "Hello" })
+  const request = ai.request({ model: route.model({ id: "test" }), prompt: "Hello" })
   const headers = { "content-type": "text/event-stream", "x-request-id": "req_stream" }
 
   it.effect("retains an entire invalid event and its validation cause", () =>
@@ -130,7 +130,7 @@ describe("Route diagnostics", () => {
           },
         })
         const error = yield* LLMClient.generate(
-          ai.text.request({ model: failing.model({ id: "test" }), prompt: "Hello" }),
+          ai.request({ model: failing.model({ id: "test" }), prompt: "Hello" }),
         ).pipe(Effect.provide(fixedResponse(sseEvents(frame), { headers })), Effect.flip)
 
         expect(error.message).toBe("Parser failed")
@@ -145,7 +145,7 @@ describe("Route diagnostics", () => {
     Effect.gen(function* () {
       const body = '{"query": BROKEN}'
       const error = yield* LLMClient.generate(
-        ai.text.request({
+        ai.request({
           model: Anthropic.configure({ apiKey: "test", baseURL: "https://provider.test" }).model("claude"),
           prompt: "Hello",
         }),
@@ -195,7 +195,7 @@ describe("Route diagnostics", () => {
         transport: HttpTransport.httpJson({ framing: { id: "failure", frame: () => Stream.fail(failure) } }),
       })
       const error = yield* LLMClient.generate(
-        ai.text.request({ model: failing.model({ id: "test" }), prompt: "Hello" }),
+        ai.request({ model: failing.model({ id: "test" }), prompt: "Hello" }),
       ).pipe(Effect.provide(fixedResponse("wire bytes", { headers })), Effect.flip)
 
       expect(error.reason.body).toBe(failure.reason.body)

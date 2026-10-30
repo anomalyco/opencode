@@ -51,14 +51,12 @@ describe("Media", () => {
         Media.ref("openai", "file:///Users/example/clip.mp4", "video/mp4"),
         restored,
       ]) {
-        const error = yield* compileRequest(ai.text.request({ model, prompt: [Message.media(asset)] })).pipe(
-          Effect.flip,
-        )
+        const error = yield* compileRequest(ai.request({ model, prompt: [Message.media(asset)] })).pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidRequest")
         expect(error.message).toContain("Media.file(path)")
       }
       const error = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([ToolCallPart.make({ id: "read", name: "read", input: {} })]),

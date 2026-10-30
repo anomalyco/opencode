@@ -19,7 +19,7 @@ import { TestLLM } from "../src/testing.js"
 import { Effect, Fiber, Latch, Stream } from "effect"
 import { testEffect } from "./lib/effect.js"
 
-const request = ai.text.request({
+const request = ai.request({
   model: LanguageModel.make({ id: "fictional-model", provider: "fixture", route: OpenAIChat.route }),
   prompt: "Say hello",
 })
@@ -29,14 +29,14 @@ describe("TestLLM first-class client", () => {
   it.effect("returns scripted checkpoints only for trigger compaction", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
-      const request = ai.text.request({ model: OpenAI.configure().responses("fixture"), prompt: "hello" })
+      const request = ai.request({ model: OpenAI.configure().responses("fixture"), prompt: "hello" })
       const checkpoint = new CompactionCheckpointResponse({
         checkpoint: { type: "compaction", provider: ProviderID.make("openai"), encrypted: "opaque" },
         responseID: "resp_fixture",
       })
       const endpoint = new CompactionResponse({ replacement: [] })
       yield* client.push(checkpoint, endpoint, checkpoint, checkpoint)
-      const operation = LLMClient.compact(request, { mechanism: "trigger" })
+      const operation = ai.compact(request, { mechanism: "trigger" })
       expect(yield* client.requests()).toEqual([])
       expect(yield* operation).toBe(checkpoint)
       expect(yield* client.compact(request, { mechanism: "trigger" }).pipe(Effect.catchDefect(Effect.succeed))).toBe(
@@ -54,7 +54,7 @@ describe("TestLLM first-class client", () => {
   it.effect("rejects response fixtures for the wrong operation", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
-      const request = ai.text.request({
+      const request = ai.request({
         model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
         prompt: "hello",
       })
@@ -71,7 +71,7 @@ describe("TestLLM first-class client", () => {
   it.effect("scripts replacement windows with the same lazy recording, gates, and fallback controls", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
-      const request = ai.text.request({
+      const request = ai.request({
         model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
         prompt: "hello",
       })
@@ -83,7 +83,7 @@ describe("TestLLM first-class client", () => {
         ],
       })
       yield* client.push(compacted, TestLLM.text("continued", "answer"))
-      const operation = LLMClient.compact(request)
+      const operation = ai.compact(request)
       expect(yield* client.requests()).toEqual([])
       const gate = yield* client.gate()
       const fiber = yield* operation.pipe(Effect.forkChild({ startImmediately: true }))
@@ -98,9 +98,9 @@ describe("TestLLM first-class client", () => {
         expect(observed).toBe(next)
         return compacted
       })
-      expect(yield* LLMClient.compact(next)).toBe(compacted)
+      expect(yield* ai.compact(next)).toBe(compacted)
       yield* client.always(compacted)
-      expect(yield* LLMClient.compact(next)).toBe(compacted)
+      expect(yield* ai.compact(next)).toBe(compacted)
       expect(yield* client.requests()).toEqual([request, next, next, next])
     }),
   )

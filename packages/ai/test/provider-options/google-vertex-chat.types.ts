@@ -3,5 +3,5 @@ import { GoogleVertexChat } from "../../src/providers.js"
 
 const model = GoogleVertexChat.configure({ accessToken: "test", project: "project" }).model("gemini")
 
-ai.text.request({ model, prompt: "Hello", providerOptions: { serviceTier: "priority" } })
-ai.text.request({ model, prompt: "Hello", providerOptions: { serviceTier: "future-tier" } })
+ai.request({ model, prompt: "Hello", providerOptions: { serviceTier: "priority" } })
+ai.request({ model, prompt: "Hello", providerOptions: { serviceTier: "future-tier" } })

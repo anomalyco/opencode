@@ -10,7 +10,7 @@ const model = Anthropic.configure({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
 }).model("claude-haiku-4-5-20251001")
 
-const malformedToolOrderRequest = ai.text.request({
+const malformedToolOrderRequest = ai.request({
   id: "recorded_anthropic_malformed_tool_order",
   model,
   messages: [

@@ -5,17 +5,17 @@ const gateway = VercelAIGateway.configure({
   apiKey: "fixture",
   providerOptions: { gateway: { only: ["anthropic", "bedrock"], caching: "auto" }, reasoningEffort: "high" },
 })
-ai.text.request({
+ai.request({
   model: gateway.model("meta/muse-spark-1.3"),
   prompt: "Hello",
   providerOptions: { reasoningEffort: "max" },
 })
-ai.text.request({
+ai.request({
   model: gateway.messages("anthropic/claude-sonnet-5.5"),
   prompt: "Hello",
   providerOptions: { thinking: { type: "enabled", budgetTokens: 2048 } },
 })
-ai.text.request({
+ai.request({
   model: gateway.responses("openai/gpt-6-luna"),
   prompt: "Hello",
   providerOptions: { reasoningSummary: "detailed", cacheTTL: "1h" },

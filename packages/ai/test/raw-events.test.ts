@@ -28,16 +28,13 @@ describe("raw provider events", () => {
   it.effect("stream emits every frame before its own events only when requested", () =>
     Effect.gen(function* () {
       const raw = Array.from(
-        yield* LLMClient.stream(ai.text.request({ model, prompt: "Hi", includeRaw: true })).pipe(
+        yield* LLMClient.stream(ai.request({ model, prompt: "Hi", includeRaw: true })).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
       )
       const plain = Array.from(
-        yield* LLMClient.stream(ai.text.request({ model, prompt: "Hi" })).pipe(
-          Stream.runCollect,
-          Effect.provide(layer),
-        ),
+        yield* LLMClient.stream(ai.request({ model, prompt: "Hi" })).pipe(Stream.runCollect, Effect.provide(layer)),
       )
 
       expect(raw.filter((event) => event.type === "raw").map((event) => event.data)).toEqual(frames)
@@ -66,10 +63,10 @@ describe("raw provider events", () => {
 
   it.effect("generate ignores raw events", () =>
     Effect.gen(function* () {
-      const withRaw = yield* LLMClient.generate(ai.text.request({ model, prompt: "Hi", includeRaw: true })).pipe(
+      const withRaw = yield* LLMClient.generate(ai.request({ model, prompt: "Hi", includeRaw: true })).pipe(
         Effect.provide(layer),
       )
-      const plain = yield* LLMClient.generate(ai.text.request({ model, prompt: "Hi" })).pipe(Effect.provide(layer))
+      const plain = yield* LLMClient.generate(ai.request({ model, prompt: "Hi" })).pipe(Effect.provide(layer))
 
       expect(withRaw).toEqual(plain)
       expect(withRaw.text).toBe("Hello")

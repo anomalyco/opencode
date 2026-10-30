@@ -3,7 +3,7 @@ import { AmazonBedrock } from "../../src/providers.js"
 
 const model = AmazonBedrock.provider.model("us.anthropic.claude-sonnet-4-6")
 
-ai.text.request({
+ai.request({
   model,
   prompt: "Hello",
   providerOptions: {
@@ -18,14 +18,14 @@ ai.text.request({
 
 AmazonBedrock.model("us.amazon.nova-2-lite-v1:0", { effort: "low", serviceTier: "flex" })
 
-ai.text.request({
+ai.request({
   model,
   prompt: "Hello",
   // @ts-expect-error Bedrock thinking modes are a fixed union.
   providerOptions: { thinking: { type: "automatic" } },
 })
 
-ai.text.request({
+ai.request({
   model,
   prompt: "Hello",
   // @ts-expect-error Converse request metadata values are strings.

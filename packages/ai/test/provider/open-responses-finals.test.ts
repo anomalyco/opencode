@@ -8,7 +8,7 @@ import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
-const request = ai.text.request({
+const request = ai.request({
   model: configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model("example-model"),
   prompt: "Respond.",
 })

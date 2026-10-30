@@ -1097,7 +1097,7 @@ describe("ChatGPTPlugin", () => {
         const model = required(yield* models.get(Provider.ID.openai, modelID))
         const body = (variant: string, messages: ReadonlyArray<Message>) =>
           resolver.resolveModel(model, Model.VariantID.make(variant)).pipe(
-            Effect.flatMap((resolved) => compileRequest(ai.text.request({ model: resolved.model, messages }))),
+            Effect.flatMap((resolved) => compileRequest(ai.request({ model: resolved.model, messages }))),
             Effect.map((compiled) => compiled.body),
           )
         const switched = [

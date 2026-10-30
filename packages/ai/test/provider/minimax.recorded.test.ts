@@ -92,7 +92,7 @@ describe("MiniMax recorded", () => {
       { tags: ["text", "usage", item.reasoning ? "reasoning" : "thinking-off"] },
       () =>
         Effect.gen(function* () {
-          const request = ai.text.request({
+          const request = ai.request({
             model: item.model,
             prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
             generation: { maxTokens: 1536 },
@@ -126,7 +126,7 @@ describe("MiniMax recorded", () => {
     () =>
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
-          ai.text.request({
+          ai.request({
             model: minimax.model("MiniMax-M3"),
             prompt: "Use get_weather to look up the current weather in Paris.",
             tools: [weather],
@@ -177,7 +177,7 @@ describe("MiniMax recorded", () => {
       { tags: ["tool", "tool-loop", "reasoning", "continuation", "usage"] },
       () =>
         Effect.gen(function* () {
-          const request = ai.text.request({
+          const request = ai.request({
             model: item.model,
             prompt:
               "Look up the current weather in Paris using get_weather before answering. After receiving the result, report the weather in one short sentence.",

@@ -30,7 +30,7 @@ const model = OpenAIChat.route
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 
-const baseRequest = ai.text.request({
+const baseRequest = ai.request({
   id: "req_1",
   model,
   prompt: "Use the tool.",
@@ -679,7 +679,7 @@ describe("LLMClient tools", () => {
       )
 
       yield* TestToolRuntime.runTools({
-        request: ai.text.request({
+        request: ai.request({
           model: OpenAIResponses.route
             .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
             .model({ id: "gpt-5.5" }),

@@ -13,7 +13,7 @@ const model = Anthropic.configure({
 // Two identical generations in a row. The first call writes the prefix into
 // Anthropic's cache; the second should report a cache read against the same
 // prefix. Cassette captures both interactions in order.
-const cacheRequest = ai.text.request({
+const cacheRequest = ai.request({
   id: "recorded_anthropic_cache",
   model,
   system: [{ type: "text", text: LARGE_CACHEABLE_SYSTEM, cache: new CacheHint({ type: "ephemeral" }) }],
@@ -48,7 +48,7 @@ const longToolTurn = [
     ]
   }).flat(),
 ]
-const longToolTurnRequest = ai.text.request({
+const longToolTurnRequest = ai.request({
   id: "recorded_anthropic_cache_long_tool_turn",
   model,
   system: LARGE_CACHEABLE_SYSTEM,

@@ -83,7 +83,7 @@ for (const recovery of ["reconnect", "http-fallback", "ambiguous-send"] as const
         yield* Effect.gen(function* () {
           const channels = yield* SessionModelTransport.Service
           const options = { webSocket: channels.bind(Session.ID.make(`ses_compaction_${recovery}`)) }
-          const first = ai.text.request({
+          const first = ai.request({
             model: OpenAI.configure({ apiKey: "fixture", baseURL: server.url.toString() }).responses("fixture"),
             prompt: "first",
             providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },

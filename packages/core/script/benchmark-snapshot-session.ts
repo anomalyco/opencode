@@ -147,7 +147,7 @@ const run = (snapshots: Layer.Layer<Snapshot.Service>) =>
           model,
           prepared: {
             retry: () => Effect.void,
-            request: ai.text.request({ model: model.model, prompt: "bench" }),
+            request: ai.request({ model: model.model, prompt: "bench" }),
             options: {},
             executeTool: (input) =>
               Effect.gen(function* () {

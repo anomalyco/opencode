@@ -35,7 +35,7 @@ for (const api of ["responses", "chat"] as const) {
         { tags: ["text", "reasoning", "usage", `effort:${effort ?? "default"}`] },
         () =>
           Effect.gen(function* () {
-            const request = ai.text.request({
+            const request = ai.request({
               model: meta[api](modelID),
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
               generation: { maxTokens: 1024 },
@@ -85,7 +85,7 @@ for (const api of ["responses", "chat"] as const) {
       { tags: ["tool", "tool-loop", "reasoning", "usage", "effort:low"] },
       () =>
         Effect.gen(function* () {
-          const request = ai.text.request({
+          const request = ai.request({
             model: meta[api](modelID),
             prompt:
               "Look up the current weather in Paris using lookup_weather before answering. After receiving the result, report Paris's weather in one short sentence.",

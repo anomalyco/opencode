@@ -36,7 +36,7 @@ const model = OpenAIChat.route
   .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
   .model({ id: "gpt-4o-mini" })
 
-const request = ai.text.request({
+const request = ai.request({
   id: "req_1",
   model,
   system: "You are concise.",
@@ -67,7 +67,7 @@ describe("OpenAI Chat route", () => {
   it.effect("omits stream usage options when compatibility disables them", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: LanguageModel.update(model, { compatibility: { streamUsage: false } }),
           prompt: "Hello",
         }),
@@ -81,14 +81,14 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const compatible = OpenAICompatible.configure({ baseURL: "https://api.compatible.test/v1", apiKey: "test" })
       const omitted = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: compatible.model("compatible-model"),
           prompt: "Hello",
           providerOptions: { store: true },
         }),
       )
       const optedIn = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: LanguageModel.update(compatible.model("compatible-model"), {
             compatibility: { supportsStore: true },
           }),
@@ -96,7 +96,7 @@ describe("OpenAI Chat route", () => {
         }),
       )
       const openaiHost = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: OpenAICompatible.configure({ baseURL: "https://api.openai.com/v1", apiKey: "test" }).model(
             "gpt-4o-mini",
           ),
@@ -104,7 +104,7 @@ describe("OpenAI Chat route", () => {
         }),
       )
       const azure = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: Azure.configure({ baseURL: "https://opencode-test.openai.azure.com/openai/", apiKey: "test" }).chat(
             "gpt-4o-mini",
           ),
@@ -122,7 +122,7 @@ describe("OpenAI Chat route", () => {
   it.effect("lowers chronological system updates to escaped user wrappers in order", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.user("Before."),
@@ -145,7 +145,7 @@ describe("OpenAI Chat route", () => {
   it.effect("omits empty and whitespace-only assistant messages", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.user("Before."),
@@ -167,7 +167,7 @@ describe("OpenAI Chat route", () => {
   it.effect("replays canonical reasoning as OpenAI-compatible reasoning_content", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([
@@ -185,7 +185,7 @@ describe("OpenAI Chat route", () => {
   it.effect("concatenates assistant text parts without adding separators", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([
@@ -203,7 +203,7 @@ describe("OpenAI Chat route", () => {
   it.effect("writes reasoning to a configured custom field on every assistant message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: LanguageModel.update(model, { compatibility: { reasoningField: "vendor_reasoning" } }),
           messages: [
             Message.assistant([
@@ -229,7 +229,7 @@ describe("OpenAI Chat route", () => {
   it.effect("preserves observed reasoning fields when reasoning is required", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: LanguageModel.update(model, { compatibility: { requireReasoning: true } }),
           messages: [
             Message.assistant([
@@ -255,7 +255,7 @@ describe("OpenAI Chat route", () => {
   it.effect("omits empty configured reasoning fields when reasoning is explicitly optional", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: LanguageModel.update(model, {
             compatibility: { reasoningField: "reasoning_text", requireReasoning: false },
           }),
@@ -279,7 +279,7 @@ describe("OpenAI Chat route", () => {
   it.effect("rejects reasoning fields that conflict with assistant message fields", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: LanguageModel.update(model, { compatibility: { reasoningField: "content" } }),
           messages: [Message.assistant([{ type: "reasoning", text: "thinking" }])],
         }),
@@ -292,7 +292,7 @@ describe("OpenAI Chat route", () => {
   it.effect("maps OpenAI provider options to Chat options", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o-mini"),
           prompt: "think",
           providerOptions: { reasoningEffort: "max" },
@@ -307,7 +307,7 @@ describe("OpenAI Chat route", () => {
   it.effect("keeps valid Chat options when a sibling option is malformed", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4o-mini"),
           prompt: "think",
           providerOptions: { store: true, reasoningEffort: "max", topLogprobs: 25 },
@@ -322,7 +322,7 @@ describe("OpenAI Chat route", () => {
   it.effect("maps shared OpenAI options to Chat fields", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-5-nano"),
           prompt: "Hello",
           tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
@@ -373,7 +373,7 @@ describe("OpenAI Chat route", () => {
   it.effect("maps the request prompt cache key when the compatibility flag is set", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: OpenAIChat.route
             .with({ endpoint: { baseURL: "https://api.compatible.test/v1" }, auth: Auth.bearer("test") })
             .model({ id: "compatible-model", compatibility: { supportsPromptCacheKey: true } }),
@@ -389,7 +389,7 @@ describe("OpenAI Chat route", () => {
   it.effect("sends the cache TTL as a request option when no markers carry it", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: OpenAICompatible.configure({ baseURL: "https://api.compatible.test/v1", apiKey: "test" }).model(
             "compatible-model",
           ),
@@ -405,7 +405,7 @@ describe("OpenAI Chat route", () => {
   it.effect("omits the prompt cache key without the compatibility flag", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: OpenAICompatible.configure({
             baseURL: "https://api.compatible.test/v1",
             apiKey: "test",
@@ -422,7 +422,7 @@ describe("OpenAI Chat route", () => {
   it.effect("omits the prompt cache key when caching is disabled", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           prompt: "Hello",
           promptCacheKey: "session_123",
@@ -436,7 +436,7 @@ describe("OpenAI Chat route", () => {
 
   it.effect("maps the xAI Chat prompt cache key to conversation affinity header only", () =>
     LLMClient.generate(
-      ai.text.request({
+      ai.request({
         model: XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).chat("grok-4.5"),
         prompt: "Hello",
         promptCacheKey: "session_123",
@@ -462,7 +462,7 @@ describe("OpenAI Chat route", () => {
   it.effect("passes through custom OpenAI-compatible reasoning effort strings", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           prompt: "think",
           providerOptions: { reasoningEffort: "experimental" },
@@ -558,7 +558,7 @@ describe("OpenAI Chat route", () => {
   it.effect("prepares assistant tool-call and tool-result messages", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           id: "req_tool_result",
           model,
           messages: [
@@ -597,7 +597,7 @@ describe("OpenAI Chat route", () => {
   it.effect("replays Gemini thought signatures as tool call extra content", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.user("Weather in Paris and Tokyo?"),
@@ -644,7 +644,7 @@ describe("OpenAI Chat route", () => {
       yield* Effect.forEach(models, (selected) =>
         Effect.gen(function* () {
           const prepared = yield* compileRequest(
-            ai.text.request({
+            ai.request({
               model: selected,
               messages: [
                 Message.assistant([ToolCallPart.make({ id, name: "lookup", input: {} })]),
@@ -666,7 +666,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const error = { error: { type: "unknown", message: "Tool execution interrupted" } }
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_1", name: "bash", input: {} })]),
@@ -686,7 +686,7 @@ describe("OpenAI Chat route", () => {
   it.effect("continues image tool results as vision input without base64 text", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: { path: "pixel.png" } })]),
@@ -730,7 +730,7 @@ describe("OpenAI Chat route", () => {
   it.effect("bridges image tool results before their synthetic user message when required", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: LanguageModel.update(model, { compatibility: { requireAssistantAfterTool: true } }),
           messages: [
             Message.assistant([ToolCallPart.make({ id: "call_image", name: "read", input: {} })]),
@@ -754,7 +754,7 @@ describe("OpenAI Chat route", () => {
   it.effect("orders parallel tool responses before one aggregated vision message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([
@@ -804,7 +804,7 @@ describe("OpenAI Chat route", () => {
   it.effect("aggregates consecutive tool images with a following system update", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.tool({
@@ -845,7 +845,7 @@ describe("OpenAI Chat route", () => {
   it.effect("appends system updates without replacing multipart user content", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.user({ type: "media", media: Media.base64("AAEC", "image/png") }),
@@ -868,7 +868,7 @@ describe("OpenAI Chat route", () => {
   it.effect("passes encoded image media through without local validation", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.user([
@@ -896,7 +896,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const urls = ["https://example.com/image.png?size=64#preview", "http://example.com/image.jpg"]
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           prompt: urls.map((url) => Message.media(Media.url(url, { mediaType: "image/png" }))),
         }),
@@ -911,7 +911,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const url = "https://example.com/tool-image.png?version=2"
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.user("Describe the image."),
@@ -943,7 +943,7 @@ describe("OpenAI Chat route", () => {
   it.effect("rejects non-image media that cannot be lowered", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [Message.user({ type: "media", media: Media.base64("AAECAw==", "audio/mpeg") })],
         }),
@@ -955,7 +955,7 @@ describe("OpenAI Chat route", () => {
   it.effect("lowers inline PDFs as file parts", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.user([
@@ -982,7 +982,7 @@ describe("OpenAI Chat route", () => {
   it.effect("moves PDFs from tool results into a follow-up user message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.user("Read the report."),
@@ -1021,7 +1021,7 @@ describe("OpenAI Chat route", () => {
   it.effect("requires inline data for PDF files", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.user({
@@ -1038,7 +1038,7 @@ describe("OpenAI Chat route", () => {
   it.effect("prepares raw and data URL image media as vision input", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           id: "req_media",
           model,
           messages: [
@@ -1065,7 +1065,7 @@ describe("OpenAI Chat route", () => {
   it.effect("lowers reasoning-only assistant history", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           id: "req_reasoning",
           model,
           messages: [Message.assistant({ type: "reasoning", text: "hidden" })],
@@ -1173,7 +1173,7 @@ describe("OpenAI Chat route", () => {
       expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
       expect(response.message.content).toEqual([{ type: "text", text: "I can't help with that." }])
 
-      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([{ role: "assistant", content: "I can't help with that." }])
     }),
   )
@@ -1245,7 +1245,7 @@ describe("OpenAI Chat route", () => {
           openai: { reasoningField: field },
         })
 
-        const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
+        const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
         expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", [field]: "thinking" }])
       }
     }),
@@ -1313,7 +1313,7 @@ describe("OpenAI Chat route", () => {
         vendor: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
       })
 
-      const replay = yield* compileRequest(ai.text.request({ model: selected, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model: selected, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
         { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
       ])
@@ -1346,7 +1346,7 @@ describe("OpenAI Chat route", () => {
         deepseek: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
       })
 
-      const replay = yield* compileRequest(ai.text.request({ model: selected, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model: selected, messages: [response.message] }))
       expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_content: "thinking" }])
     }),
   )
@@ -1371,7 +1371,7 @@ describe("OpenAI Chat route", () => {
         openai: { reasoningField: "vendor_reasoning" },
       })
 
-      const replay = yield* compileRequest(ai.text.request({ model: custom, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model: custom, messages: [response.message] }))
       expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", vendor_reasoning: "thinking" }])
     }),
   )
@@ -1414,7 +1414,7 @@ describe("OpenAI Chat route", () => {
         openai: { reasoningField: "reasoning", reasoningDetails: details },
       })
 
-      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages[0]).toEqual({
         role: "assistant",
         content: null,
@@ -1455,7 +1455,7 @@ describe("OpenAI Chat route", () => {
         openai: { reasoningDetails: details },
       })
 
-      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_details: details }])
     }),
   )
@@ -1482,7 +1482,7 @@ describe("OpenAI Chat route", () => {
         openai: { reasoningField: "reasoning", reasoningDetails: [] },
       })
 
-      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
         { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: [] },
       ])
@@ -1529,7 +1529,7 @@ describe("OpenAI Chat route", () => {
         openai: { reasoningField: "reasoning_content", reasoningDetails: stored },
       })
 
-      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages[0]).toEqual({
         role: "assistant",
         content: null,
@@ -1561,7 +1561,7 @@ describe("OpenAI Chat route", () => {
 
       expect(response.reasoning).toBe("Plan tools")
 
-      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
         {
           role: "assistant",
@@ -1580,7 +1580,7 @@ describe("OpenAI Chat route", () => {
   it.effect("strips the streaming index from previously stored Kimi details", () =>
     Effect.gen(function* () {
       const replay = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([
@@ -1661,7 +1661,7 @@ describe("OpenAI Chat route", () => {
         openai: { reasoningDetails: merged },
       })
 
-      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_details: merged }])
     }),
   )
@@ -1759,7 +1759,7 @@ describe("OpenAI Chat route", () => {
         openai: { reasoningDetails: [] },
       })
 
-      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_details: [] }])
     }),
   )
@@ -1820,7 +1820,7 @@ describe("OpenAI Chat route", () => {
         response.events.findIndex(LLMEvent.is.textStart),
       )
 
-      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
         { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: merged },
       ])
@@ -1847,7 +1847,7 @@ describe("OpenAI Chat route", () => {
       expect(response.events.filter(LLMEvent.is.reasoningStart)).toHaveLength(1)
       expect(response.events.filter(LLMEvent.is.reasoningEnd)).toHaveLength(1)
 
-      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([{ role: "assistant", content: "", reasoning_details: details }])
     }),
   )
@@ -1878,7 +1878,7 @@ describe("OpenAI Chat route", () => {
       const first = { type: "reasoning.text", text: "first", signature: "signed-0", index: 0 }
       const second = { type: "reasoning.text", text: "second", signature: "signed-1", index: 1 }
       const replay = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([
@@ -1907,7 +1907,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const detail = { type: "reasoning.encrypted", data: "opaque", index: 0 }
       const replay = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([
@@ -1932,7 +1932,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const details = [{ type: "reasoning.encrypted", data: "opaque", index: 0 }]
       const replay = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.make({

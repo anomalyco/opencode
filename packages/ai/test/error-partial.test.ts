@@ -28,7 +28,7 @@ describe("AIError.partial", () => {
       const client = yield* TestLLM.Test
       yield* client.push(textThenFail)
 
-      const error = yield* ai.text.generate({ model, prompt: "Hello" }).pipe(Effect.flip)
+      const error = yield* ai.generate({ model, prompt: "Hello" }).pipe(Effect.flip)
 
       expect(error.reason).toBe(overloaded.reason)
       expect(error.partial?.text).toBe("Partial answer")
@@ -43,7 +43,7 @@ describe("AIError.partial", () => {
       const client = yield* TestLLM.Test
       yield* client.push(TestLLM.failAfter(overloaded, LLMEvent.stepStart({ index: 0 })))
 
-      expect(yield* ai.text.generate({ model, prompt: "Hello" }).pipe(Effect.flip)).toBe(overloaded)
+      expect(yield* ai.generate({ model, prompt: "Hello" }).pipe(Effect.flip)).toBe(overloaded)
     }),
   )
 
@@ -58,7 +58,7 @@ describe("AIError.partial", () => {
         ),
       )
 
-      const error = yield* ai.text
+      const error = yield* ai
         .generateObject({
           model,
           prompt: "Answer",
@@ -84,9 +84,7 @@ describe("AIError.partial", () => {
         success: Schema.String,
         execute: ({ value }) => Effect.succeed(value),
       })
-      const error = yield* ai.text
-        .loop({ model, prompt: "Echo hi.", tools: { echo } })
-        .pipe(Stream.runDrain, Effect.flip)
+      const error = yield* ai.loop({ model, prompt: "Echo hi.", tools: { echo } }).pipe(Stream.runDrain, Effect.flip)
 
       expect(error.partial?.text).toBe("Partial answer")
       expect(error.partial?.toolCalls).toEqual([])
@@ -98,7 +96,7 @@ describe("AIError.partial from the promise client", () => {
   test("rejects with the root-exported AIError carrying partial", async () => {
     const client = AI.make({ clients: TestLLM.testLayer({ fallback: textThenFail }) })
 
-    const error = await client.text.generate({ model, prompt: "Hello" }).catch((error: unknown) => error)
+    const error = await client.generate({ model, prompt: "Hello" }).catch((error: unknown) => error)
 
     expect(error).toBeInstanceOf(AIError)
     expect(error instanceof AIError && error.partial?.text).toBe("Partial answer")

@@ -107,7 +107,7 @@ for (const fixture of [
           model,
           prepared: {
             retry: () => Effect.void,
-            request: ai.text.request({ model: model.model, prompt: "Run one tool", toolChoice: fixture.toolChoice }),
+            request: ai.request({ model: model.model, prompt: "Run one tool", toolChoice: fixture.toolChoice }),
             options: {},
             executeTool: () =>
               Effect.sync(() => {
@@ -209,7 +209,7 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
       model,
       prepared: {
         retry: () => Effect.void,
-        request: ai.text.request({ model: model.model, prompt: "Hello" }),
+        request: ai.request({ model: model.model, prompt: "Hello" }),
         options: {},
         executeTool: () => Effect.die("no tools"),
       },

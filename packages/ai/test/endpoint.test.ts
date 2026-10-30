@@ -5,7 +5,7 @@ import { Endpoint } from "../src/route.js"
 import { LanguageModel } from "../src/schema/index.js"
 
 const request = () =>
-  ai.text.request({
+  ai.request({
     model: LanguageModel.make({
       id: "model-1",
       provider: "test",

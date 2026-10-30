@@ -7,7 +7,7 @@ import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { LanguageModel } from "../src/schema/index.js"
 import { it } from "./lib/effect.js"
 
-const request = ai.text.request({
+const request = ai.request({
   id: "req_auth",
   model: LanguageModel.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route }),
   prompt: "hello",

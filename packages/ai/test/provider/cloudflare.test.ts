@@ -28,16 +28,14 @@ describe("Cloudflare", () => {
         apiKey: "test-token",
       })
       const responses = yield* compileRequest(
-        ai.text.request({ model: gateway.model("openai/gpt-5.4"), prompt: "Say hello." }),
+        ai.request({ model: gateway.model("openai/gpt-5.4"), prompt: "Say hello." }),
       )
       const messages = yield* compileRequest(
-        ai.text.request({ model: gateway.model("anthropic/claude-haiku-4.5"), prompt: "Say hello." }),
+        ai.request({ model: gateway.model("anthropic/claude-haiku-4.5"), prompt: "Say hello." }),
       )
-      const chat = yield* compileRequest(
-        ai.text.request({ model: gateway.model("xai/grok-4.6"), prompt: "Say hello." }),
-      )
+      const chat = yield* compileRequest(ai.request({ model: gateway.model("xai/grok-4.6"), prompt: "Say hello." }))
       const workers = yield* compileRequest(
-        ai.text.request({ model: gateway.model("workers-ai/@cf/meta/llama-3.3-70b-instruct"), prompt: "Say hello." }),
+        ai.request({ model: gateway.model("workers-ai/@cf/meta/llama-3.3-70b-instruct"), prompt: "Say hello." }),
       )
 
       expect(responses.route).toBe("cloudflare-ai-gateway-responses")
@@ -64,9 +62,9 @@ describe("Cloudflare", () => {
 
   it.effect("posts to the Cloudflare REST API with gateway options", () =>
     Effect.gen(function* () {
-      const response = yield* ai.text
+      const response = yield* ai
         .generate(
-          ai.text.request({
+          ai.request({
             model: CloudflareAIGateway.configure({
               accountId: "test-account",
               gatewayId: "test-gateway",
@@ -123,11 +121,11 @@ describe("Cloudflare", () => {
           return input.respond("", { status: 500 })
         }),
       )
-      yield* ai.text
-        .generate(ai.text.request({ model: gateway.model("anthropic/claude-sonnet-4.6"), prompt: "Hi" }))
+      yield* ai
+        .generate(ai.request({ model: gateway.model("anthropic/claude-sonnet-4.6"), prompt: "Hi" }))
         .pipe(Effect.provide(capture), Effect.ignore)
-      yield* ai.text
-        .generate(ai.text.request({ model: gateway.model("openai/gpt-5-nano"), prompt: "Hi" }))
+      yield* ai
+        .generate(ai.request({ model: gateway.model("openai/gpt-5-nano"), prompt: "Hi" }))
         .pipe(Effect.provide(capture), Effect.ignore)
 
       expect(requests.map((request) => request.url)).toEqual([
@@ -147,7 +145,7 @@ describe("Cloudflare", () => {
   it.effect("sends the default gateway ID to the REST API", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: CloudflareAIGateway.configure({ accountId: "test-account", apiKey: "test-token" }).model(
             "workers-ai/@cf/meta/llama-3.3-70b-instruct",
           ),
@@ -180,8 +178,8 @@ describe("Cloudflare", () => {
           index: 0,
         },
       ]
-      const response = yield* ai.text
-        .generate(ai.text.request({ model, prompt: "Say hello." }))
+      const response = yield* ai
+        .generate(ai.request({ model, prompt: "Say hello." }))
         .pipe(
           Effect.provide(
             dynamicResponse((input) =>
@@ -207,7 +205,7 @@ describe("Cloudflare", () => {
         "cloudflare-ai-gateway": { reasoningField: "reasoning", reasoningDetails: merged },
       })
 
-      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
         { role: "assistant", content: "Hello", reasoning: "Thinking", reasoning_details: merged },
       ])
@@ -217,7 +215,7 @@ describe("Cloudflare", () => {
   it.effect("allows a fully configured baseURL override", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model: CloudflareAIGateway.configure({
             baseURL: "https://gateway.proxy.test/v1",
             apiKey: "test-token",
@@ -245,7 +243,7 @@ describe("Cloudflare", () => {
       })
       expect(model.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1")
 
-      const prepared = yield* compileRequest(ai.text.request({ model, prompt: "Say hello." }))
+      const prepared = yield* compileRequest(ai.request({ model, prompt: "Say hello." }))
 
       expect(prepared.route).toBe("cloudflare-workers-ai")
       expect(prepared.body).toMatchObject({
@@ -258,9 +256,9 @@ describe("Cloudflare", () => {
 
   it.effect("posts direct Workers AI requests to the account endpoint with bearer auth", () =>
     Effect.gen(function* () {
-      const response = yield* ai.text
+      const response = yield* ai
         .generate(
-          ai.text.request({
+          ai.request({
             model: CloudflareWorkersAI.configure({
               accountId: "test-account",
               apiKey: "test-token",
@@ -298,9 +296,9 @@ describe("Cloudflare", () => {
   it.effect("supports direct Workers AI token aliases through auth config", () =>
     Effect.gen(function* () {
       yield* Effect.forEach(["CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"], (name) =>
-        ai.text
+        ai
           .generate(
-            ai.text.request({
+            ai.request({
               model: CloudflareWorkersAI.configure({
                 accountId: "test-account",
               }).model("@cf/meta/llama-3.1-8b-instruct"),

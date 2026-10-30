@@ -23,7 +23,7 @@ for (const model of [
       )
       const codec = Schema.fromJsonString(Message)
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [Schema.decodeSync(codec)(Schema.encodeSync(codec)(message))],
         }),
@@ -42,7 +42,7 @@ for (const model of [
 it.effect("rejects malformed image detail instead of silently discarding it", () =>
   Effect.gen(function* () {
     const error = yield* compileRequest(
-      ai.text.request({
+      ai.request({
         model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
         messages: [
           Message.user({

@@ -21,7 +21,7 @@ import { sseEvents } from "../lib/sse.js"
 const model = XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).responses("grok-4.6")
 
 /** Runs a request through the WebSocket transport and hands back its channel driver; the HTTP fallback answers. */
-const channelDriver = (request: ReturnType<typeof ai.text.request>) =>
+const channelDriver = (request: ReturnType<typeof ai.request>) =>
   Effect.gen(function* () {
     let driver: WebSocketChannelDriver | undefined
     yield* LLMClient.generate(request, {
@@ -55,7 +55,7 @@ describe("xAI Responses route", () => {
       expect(XAIResponses.protocol.body).not.toBe(OpenResponses.protocol.body)
       expect(XAIResponses.protocol.body).not.toBe(OpenAIResponses.protocol.body)
 
-      const prepared = yield* compileRequest(ai.text.request({ model, prompt: "Hello" }))
+      const prepared = yield* compileRequest(ai.request({ model, prompt: "Hello" }))
       expect(prepared.route).toBe("xai-responses")
       expect(prepared.protocol).toBe("xai-responses")
       expect(prepared.model.route.providerMetadataKey).toBe("xai")
@@ -66,9 +66,7 @@ describe("xAI Responses route", () => {
 
   it.effect("allows callers to opt out of encrypted reasoning", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        ai.text.request({ model, prompt: "Hello", providerOptions: { include: [] } }),
-      )
+      const prepared = yield* compileRequest(ai.request({ model, prompt: "Hello", providerOptions: { include: [] } }))
 
       expect(prepared.body.store).toBe(false)
       expect(prepared.body.include).toBeUndefined()
@@ -78,7 +76,7 @@ describe("xAI Responses route", () => {
   it.effect("sends top_k and omits unsupported penalties", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           prompt: "Hello",
           generation: { topK: 20, presencePenalty: 0.5, frequencyPenalty: 0.5 },
@@ -93,9 +91,7 @@ describe("xAI Responses route", () => {
 
   it.effect("sends min_p from provider options", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        ai.text.request({ model, prompt: "Hello", providerOptions: { minP: 0.1 } }),
-      )
+      const prepared = yield* compileRequest(ai.request({ model, prompt: "Hello", providerOptions: { minP: 0.1 } }))
 
       expect(prepared.body.min_p).toBe(0.1)
     }),
@@ -103,7 +99,7 @@ describe("xAI Responses route", () => {
 
   it.effect("parses xAI reasoning summaries", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(ai.text.request({ model, prompt: "Think" })).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Think" })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -138,7 +134,7 @@ describe("xAI Responses route", () => {
 
   it.effect("routes xAI reasoning summaries by output index", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(ai.text.request({ model, prompt: "Think" })).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Think" })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -176,7 +172,7 @@ describe("xAI Responses route", () => {
     Effect.gen(function* () {
       const item = { type: "x_search_call", id: "x_search_1", status: "completed", action: { query: "news" } }
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: [
             Message.assistant([
@@ -205,7 +201,7 @@ describe("xAI Responses route", () => {
         { type: "computer_call", id: "computer_1", status: "completed" },
       ]
       const prepared = yield* compileRequest(
-        ai.text.request({
+        ai.request({
           model,
           messages: items.map((item) =>
             Message.assistant({
@@ -242,7 +238,7 @@ describe("xAI Responses route", () => {
         open: () =>
           Effect.succeed({ sendText: () => Effect.void, messages: Stream.make(envelope), close: Effect.void }),
       })
-      const error = yield* LLMClient.generate(ai.text.request({ model, prompt: "Hello" }), { webSocket }).pipe(
+      const error = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" }), { webSocket }).pipe(
         Effect.provide(
           LLMClient.layer.pipe(
             Layer.provide(
@@ -265,7 +261,7 @@ describe("xAI Responses route", () => {
   it.effect("continues stored responses without instructions and sends unstored steps in full", () =>
     Effect.gen(function* () {
       const step = (store: boolean, ...prompts: string[]) =>
-        ai.text.request({
+        ai.request({
           model,
           system: "You are terse.",
           messages: prompts.map((prompt) => Message.user(prompt)),
@@ -303,7 +299,7 @@ describe("xAI Responses route", () => {
   it.effect("parses xAI hosted tool items", () =>
     Effect.gen(function* () {
       const item = { type: "x_search_call", id: "x_search_1", status: "completed", action: { query: "news" } }
-      const response = yield* LLMClient.generate(ai.text.request({ model, prompt: "Search X" })).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Search X" })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -332,7 +328,7 @@ describe("xAI Responses route", () => {
 it.effect("names the xAI Chat route separately from its OpenAI Chat protocol", () =>
   Effect.gen(function* () {
     const prepared = yield* compileRequest(
-      ai.text.request({ model: XAI.configure({ apiKey: "test" }).chat("grok-4.6"), prompt: "Hello" }),
+      ai.request({ model: XAI.configure({ apiKey: "test" }).chat("grok-4.6"), prompt: "Hello" }),
     )
     expect(prepared.route).toBe("xai-chat")
     expect(prepared.protocol).toBe("openai-chat")

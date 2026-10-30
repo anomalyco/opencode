@@ -10,6 +10,8 @@ type Assert<T extends Record<string, true>> = T
 
 type PromiseAI = Omit<Client, "dispose">
 type EffectAI = typeof ai
+type Helpers = "run" | "bytes" | "base64" | "materialize" | "file" | "write"
+type Namespaces = "image" | "decision" | "experimental"
 
 type Signatures<F> = F extends {
   (...args: infer A1): infer R1
@@ -59,11 +61,9 @@ type Same<A, B> = [Exclude<A, B> | Exclude<B, A>] extends [never] ? true : { rea
 
 export type Checks = [
   Assert<{ handle: Same<keyof GenerationHandle<unknown>, Exclude<keyof Generation<unknown>, "route">> }>,
-  Assert<{
-    namespaces: Same<Exclude<keyof PromiseAI, "run" | "bytes" | "base64" | "materialize" | "file" | "write">, keyof EffectAI>
-  }>,
+  Assert<{ keys: Same<Exclude<keyof PromiseAI, Helpers>, keyof EffectAI> }>,
   Assert<{ experimental: Same<keyof PromiseAI["experimental"], keyof EffectAI["experimental"]> }>,
-  Assert<Drift<PromiseAI["text"], EffectAI["text"]>>,
+  Assert<Drift<Omit<PromiseAI, Helpers | Namespaces>, Omit<EffectAI, Namespaces>>>,
   Assert<Drift<PromiseAI["image"], EffectAI["image"]>>,
   Assert<Drift<PromiseAI["decision"], EffectAI["decision"]>>,
   Assert<Drift<PromiseAI["experimental"]["speech"], EffectAI["experimental"]["speech"]>>,

@@ -43,7 +43,7 @@ const lark = tools({ type: "lark", grammar: GRAMMAR })
 const plain = tools()
 
 const body = (model: LanguageModel, freeform = lark) =>
-  compileRequest(ai.text.request({ model, prompt: "Run it.", tools: freeform, toolChoice: "run" })).pipe(
+  compileRequest(ai.request({ model, prompt: "Run it.", tools: freeform, toolChoice: "run" })).pipe(
     Effect.map((prepared) => prepared.body),
   )
 
@@ -151,9 +151,7 @@ describe("freeform tools", () => {
   it.effect("streams Responses custom calls as JSON argument deltas", () =>
     Effect.gen(function* () {
       const item = { type: "custom_tool_call", id: "ctc_1", call_id: "call_1", name: "run", input: "" }
-      const response = yield* LLMClient.generate(
-        ai.text.request({ model: responses, prompt: "Run it.", tools: lark }),
-      ).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model: responses, prompt: "Run it.", tools: lark })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -181,9 +179,7 @@ describe("freeform tools", () => {
       ])
       expect(response.finishReason.normalized).toBe("tool-calls")
 
-      const replay = yield* compileRequest(
-        ai.text.request({ model: responses, messages: [response.message], tools: lark }),
-      )
+      const replay = yield* compileRequest(ai.request({ model: responses, messages: [response.message], tools: lark }))
       expect(replay.body.input[0]).toEqual({
         type: "custom_tool_call",
         id: "ctc_1",
@@ -197,9 +193,7 @@ describe("freeform tools", () => {
   it.effect("parses a Responses custom call that arrives only when done", () =>
     Effect.gen(function* () {
       const item = { type: "custom_tool_call", id: "ctc_1", call_id: "call_1", name: "run", input: "ZZ123" }
-      const response = yield* LLMClient.generate(
-        ai.text.request({ model: responses, prompt: "Run it.", tools: lark }),
-      ).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model: responses, prompt: "Run it.", tools: lark })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -221,7 +215,7 @@ describe("freeform tools", () => {
         id: "chatcmpl_1",
         choices: [{ index: 0, delta: { tool_calls: [{ index: 0, ...call }] }, finish_reason: finish }],
       })
-      const response = yield* LLMClient.generate(ai.text.request({ model: chat, prompt: "Run it.", tools: lark })).pipe(
+      const response = yield* LLMClient.generate(ai.request({ model: chat, prompt: "Run it.", tools: lark })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -258,7 +252,7 @@ describe("freeform tools", () => {
         Message.tool({ id: "call_1", name: "run", result: "ok" }),
       ]
       const input = (declared: typeof lark, metadata: Record<string, unknown>) =>
-        compileRequest(ai.text.request({ model: responses, messages: history(metadata), tools: declared })).pipe(
+        compileRequest(ai.request({ model: responses, messages: history(metadata), tools: declared })).pipe(
           Effect.map((prepared) => prepared.body.input.slice(1)),
         )
       const custom = { itemId: "ctc_1", custom: true }
@@ -281,7 +275,7 @@ describe("freeform tools", () => {
       ])
 
       const messages = (model: LanguageModel, declared = lark) =>
-        compileRequest(ai.text.request({ model, messages: history(custom), tools: declared })).pipe(
+        compileRequest(ai.request({ model, messages: history(custom), tools: declared })).pipe(
           Effect.map((prepared) => prepared.body.messages.slice(1)),
         )
       expect(yield* messages(chat)).toMatchObject([

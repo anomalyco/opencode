@@ -49,7 +49,7 @@ for (const fixture of [
   ).effect(fixture.name, () =>
     Effect.gen(function* () {
       const result = yield* LLMClient.generate(
-        ai.text.request({
+        ai.request({
           model: Anthropic.configure({ apiKey: "test" }).model("claude-opus-4-6"),
           prompt: "hello",
         }),
@@ -113,7 +113,7 @@ for (const model of [
       `${model.provider} replays ${summary === null ? "failed" : "successful"} compaction with billing and context usage`,
       () =>
         Effect.gen(function* () {
-          const request = ai.text.request({
+          const request = ai.request({
             model,
             prompt: "hello",
             http: { headers: { "anthropic-beta": "existing-beta" } },
@@ -163,7 +163,7 @@ for (const events of [
     () =>
       Effect.gen(function* () {
         const error = yield* LLMClient.generate(
-          ai.text.request({ model: Anthropic.configure({ apiKey: "test" }).model("claude-opus-4-6"), prompt: "hello" }),
+          ai.request({ model: Anthropic.configure({ apiKey: "test" }).model("claude-opus-4-6"), prompt: "hello" }),
         ).pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidProviderOutput")
         expect(error.reason.http?.status).toBe(200)

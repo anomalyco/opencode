@@ -33,7 +33,7 @@ describe("Azure OpenAI recorded", () => {
   recorded.effect("chat streams text", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.text.request({ model: chatModel, prompt: "Reply with exactly one word: hello" }),
+        ai.request({ model: chatModel, prompt: "Reply with exactly one word: hello" }),
       )
 
       expect(response.text.toLowerCase()).toContain("hello")
@@ -43,7 +43,7 @@ describe("Azure OpenAI recorded", () => {
   recorded.effect("responses streams text", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.text.request({ model: responsesModel, prompt: "Reply with exactly one word: bonjour" }),
+        ai.request({ model: responsesModel, prompt: "Reply with exactly one word: bonjour" }),
       )
 
       expect(response.text.toLowerCase()).toContain("bonjour")
@@ -53,7 +53,7 @@ describe("Azure OpenAI recorded", () => {
   recorded.effect("responses calls a tool", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.text.request({
+        ai.request({
           model: responsesModel,
           prompt: "What is the weather in Paris? Use the lookup_weather tool.",
           tools: [lookupWeather],
@@ -69,7 +69,7 @@ describe("Azure OpenAI recorded", () => {
   recorded.effect("responses continues after a tool result", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.text.request({
+        ai.request({
           model: responsesModel,
           messages: [
             Message.user("What is the weather in Paris?"),

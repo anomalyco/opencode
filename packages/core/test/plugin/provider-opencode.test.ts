@@ -1574,7 +1574,7 @@ describe("OpencodePlugin", () => {
               })
               expect(projected.settings).toBeUndefined()
               const resolved = yield* ModelResolver.resolveModel(model, Model.VariantID.make(variant.id), credential)
-              yield* LLMClient.stream(ai.text.request({ model: resolved, prompt: "Hello" })).pipe(
+              yield* LLMClient.stream(ai.request({ model: resolved, prompt: "Hello" })).pipe(
                 Stream.runDrain,
                 Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer))),
               )

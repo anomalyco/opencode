@@ -33,7 +33,7 @@ for (const item of [
       { tags: ["cache", "usage"], metadata: { model: item.id } },
       () =>
         Effect.gen(function* () {
-          const request = ai.text.request({
+          const request = ai.request({
             model,
             system: LARGE_CACHEABLE_SYSTEM,
             prompt: "Reply exactly: OK",

@@ -22,7 +22,7 @@ const responsesRoute = OpenAIResponses.route
 
 describe("llm constructors", () => {
   test("normalizes recursive tool namespaces", () => {
-    const request = ai.text.request({
+    const request = ai.request({
       model: LanguageModel.make({ id: "fake-model", provider: "fake", route: responsesRoute }),
       tools: [
         {
@@ -68,7 +68,7 @@ describe("llm constructors", () => {
   })
 
   test("builds canonical schema classes from ergonomic input", () => {
-    const request = ai.text.request({
+    const request = ai.request({
       id: "req_1",
       model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       system: "You are concise.",
@@ -85,7 +85,7 @@ describe("llm constructors", () => {
   })
 
   test("updates requests without spreading schema class instances", () => {
-    const base = ai.text.request({
+    const base = ai.request({
       id: "req_1",
       model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       prompt: "Say hello.",
@@ -103,7 +103,7 @@ describe("llm constructors", () => {
   })
 
   test("keeps request options separate from route defaults", () => {
-    const request = ai.text.request({
+    const request = ai.request({
       model: LanguageModel.make({
         id: "fake-model",
         provider: "fake",
@@ -129,7 +129,7 @@ describe("llm constructors", () => {
   })
 
   test("updates canonical requests from the request datatype", () => {
-    const base = ai.text.request({
+    const base = ai.request({
       id: "req_1",
       model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       prompt: "Say hello.",
@@ -177,7 +177,7 @@ describe("llm constructors", () => {
       },
       compatibility: { sanitizer: "moonshot" },
     })
-    const request = ai.text.request({ model, prompt: "Say hello." })
+    const request = ai.request({ model, prompt: "Say hello." })
 
     expect(request.model.defaults?.generation).toEqual({ maxTokens: 1_024, stop: ["END"] })
     expect(request.model.defaults?.providerOptions).toEqual({ parallelToolCalls: false })
@@ -202,7 +202,7 @@ describe("llm constructors", () => {
     expect(ToolChoice.make("none")).toEqual(new ToolChoice({ type: "none" }))
     expect(ToolChoice.make("required")).toEqual(new ToolChoice({ type: "required" }))
     expect(
-      ai.text.request({
+      ai.request({
         model: LanguageModel.make({
           id: "fake-model",
           provider: "fake",
@@ -228,7 +228,7 @@ describe("llm constructors", () => {
     const update = Message.system([
       { type: "text", text: "Use parameterized SQL.", cache: new CacheHint({ type: "ephemeral" }) },
     ])
-    const request = ai.text.request({
+    const request = ai.request({
       model: LanguageModel.make({ id: "fake-model", provider: "fake", route: chatRoute }),
       system: "Initial operator prompt.",
       messages: [Message.user("Review this."), update],
@@ -249,15 +249,15 @@ describe("llm constructors", () => {
       sseEvents({ choices: [{ delta: { content: "Hello" } }] }, { choices: [{ delta: {}, finish_reason: "stop" }] }),
     )
     const input = { model, prompt: "Say hello." }
-    const request = ai.text.request(input)
-    const generated = await Effect.runPromise(ai.text.generate(input).pipe(Effect.provide(layer)))
-    const generatedFromRequest = await Effect.runPromise(ai.text.generate(request).pipe(Effect.provide(layer)))
+    const request = ai.request(input)
+    const generated = await Effect.runPromise(ai.generate(input).pipe(Effect.provide(layer)))
+    const generatedFromRequest = await Effect.runPromise(ai.generate(request).pipe(Effect.provide(layer)))
     expect(generated.text).toBe("Hello")
     expect(generatedFromRequest.text).toBe(generated.text)
 
-    const streamed = await Effect.runPromise(ai.text.stream(input).pipe(Stream.runCollect, Effect.provide(layer)))
+    const streamed = await Effect.runPromise(ai.stream(input).pipe(Stream.runCollect, Effect.provide(layer)))
     const streamedFromRequest = await Effect.runPromise(
-      ai.text.stream(request).pipe(Stream.runCollect, Effect.provide(layer)),
+      ai.stream(request).pipe(Stream.runCollect, Effect.provide(layer)),
     )
     expect(Array.from(streamed).some(LLMEvent.is.textDelta)).toBe(true)
     expect(streamedFromRequest).toEqual(streamed)

@@ -4,7 +4,7 @@ import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { Auth } from "../src/route.js"
 import { AI } from "../src/index.js"
 
-const request = ai.text.request({
+const request = ai.request({
   model: OpenAIChat.route.with({ auth: Auth.bearer("fixture") }).model({ id: "gpt-4o-mini" }),
   prompt: "Use the tool.",
 })
@@ -32,12 +32,12 @@ tool({
   ],
 })
 
-ai.text.stream(request)
-ai.text.generate(LLMRequest.update(request, { tools: toDefinitions({ schemaOnly }) }))
+ai.stream(request)
+ai.generate(LLMRequest.update(request, { tools: toDefinitions({ schemaOnly }) }))
 ToolRuntime.dispatch({ executable }, { type: "tool-call", id: "call_1", name: "executable", input: { city: "Paris" } })
 
 // @ts-expect-error High-level tool orchestration overloads are intentionally not supported.
-ai.text.stream({ request, tools: { schemaOnly } })
+ai.stream({ request, tools: { schemaOnly } })
 
 const code = Schema.Struct({ code: Schema.String })
 
