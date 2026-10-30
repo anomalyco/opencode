@@ -83,7 +83,7 @@ export const textWithUsage = (value: string, id: string, inputTokens: number) =>
     ...textEvents(value, id),
   )
 
-export const tool = (id: string, name: string, input: unknown) => toolCalls(LLMEvent.toolCall({ id, name, input }))
+export const toolCall = (id: string, name: string, input: unknown) => toolCalls(LLMEvent.toolCall({ id, name, input }))
 
 export const failAfter = (error: AIError, ...events: readonly LLMEvent[]) =>
   Stream.fromIterable(events).pipe(Stream.concat(Stream.fail(error)))

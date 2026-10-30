@@ -221,18 +221,16 @@ export type {
   Snapshot as GenerationSnapshot,
   Status as GenerationStatus,
 } from "./generation.js"
-export { Tool, ToolFailure, emptyInputJsonSchema, toDefinitions } from "./tool.js"
+export { ToolFailure, emptyInputJsonSchema, toDefinitions, tool } from "./tool.js"
 export { ToolRuntime } from "./tool-runtime.js"
 export type { DispatchResult as ToolDispatchResult, ToolSettlement } from "./tool-runtime.js"
 export type {
-  AnyExecutableTool,
-  AnyTool,
   ExecutableTool,
-  ExecutableTools,
-  Definition as ToolShape,
+  Tool,
   ToolExecute,
   ToolExecuteContext,
   ToolModelOutputInput,
+  ToolOptions,
   Tools,
   ToolSchema,
   ToolToModelOutput,

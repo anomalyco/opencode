@@ -5,10 +5,10 @@ export type ComposerInteractionState = {
   mode: "normal" | "shell"
   popover:
     | { type: "closed" }
-    | { type: "context"; query: string; activeID?: string }
-    | { type: "command-inline"; query: string; activeID?: string }
-    | { type: "command-menu"; query: string; activeID?: string }
-    | { type: "history"; query: string; activeID?: string }
+    | { type: "context"; query: string; activeID?: string; chosen?: boolean }
+    | { type: "command-inline"; query: string; activeID?: string; chosen?: boolean }
+    | { type: "command-menu"; query: string; activeID?: string; chosen?: boolean }
+    | { type: "history"; query: string; activeID?: string; chosen?: boolean }
   drag: "idle" | "active"
   focus: "editor" | "command-search" | "history-search" | "external"
   activeContextID?: string
@@ -176,11 +176,11 @@ function queryChanged(state: ComposerInteractionState, query: string): ComposerE
   if (state.popover.type === "closed") return unchanged(state)
 
   if (state.popover.type === "history")
-    return changed({ ...state, popover: { ...state.popover, query, activeID: undefined } })
+    return changed({ ...state, popover: { ...state.popover, query, activeID: undefined, chosen: undefined } })
 
   const popover = state.popover.type === "context" ? "context" : "command"
 
-  return changed({ ...state, popover: { ...state.popover, query, activeID: undefined } }, [
+  return changed({ ...state, popover: { ...state.popover, query, activeID: undefined, chosen: undefined } }, [
     { type: "popover.filter", popover, query },
   ])
 }
@@ -188,21 +188,28 @@ function queryChanged(state: ComposerInteractionState, query: string): ComposerE
 function resultsChanged(state: ComposerInteractionState, ids: string[]): ComposerEditorTransition {
   if (state.popover.type === "closed") return unchanged(state)
 
-  const activeID = state.popover.activeID && ids.includes(state.popover.activeID) ? state.popover.activeID : ids[0]
+  // Until the user picks a row, the highlight follows the first row as results arrive and reorder.
+  const kept =
+    !!state.popover.activeID &&
+    ids.includes(state.popover.activeID) &&
+    (state.popover.chosen || state.popover.type === "history")
+
+  const activeID = kept ? state.popover.activeID : ids[0]
 
   if (activeID === state.popover.activeID) return unchanged(state)
 
   return changed(
-    { ...state, popover: { ...state.popover, activeID } },
+    { ...state, popover: { ...state.popover, activeID, chosen: kept && state.popover.chosen } },
     state.popover.type === "history" && activeID ? [{ type: "history.preview", id: activeID }] : [],
   )
 }
 
 function activeChanged(state: ComposerInteractionState, id: string): ComposerEditorTransition {
-  if (state.popover.type === "closed" || state.popover.activeID === id) return unchanged(state)
+  if (state.popover.type === "closed" || (state.popover.activeID === id && state.popover.chosen))
+    return unchanged(state)
 
   return changed(
-    { ...state, popover: { ...state.popover, activeID: id } },
+    { ...state, popover: { ...state.popover, activeID: id, chosen: true } },
     state.popover.type === "history" ? [{ type: "history.preview", id }] : [],
   )
 }
@@ -296,7 +303,7 @@ function keyDown(
       : index
 
   return changed(
-    { ...state, popover: { ...state.popover, activeID: event.ids[next] } },
+    { ...state, popover: { ...state.popover, activeID: event.ids[next], chosen: true } },
     state.popover.type === "history" ? [{ type: "history.preview", id: event.ids[next] }] : [],
     true,
   )
