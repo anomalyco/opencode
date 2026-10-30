@@ -37,6 +37,13 @@ import { WellKnown } from "@opencode/core/wellknown"
 import { Workspace } from "@opencode/core/workspace"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
+import {
+  ProjectOperations,
+  MultiFolderWorkspace,
+  ProjectAttachments,
+  ProjectConversations,
+} from "@opencode/core/workspace-manager/index"
+import { ExtensionRegistry } from "@opencode/core/extension/registry"
 import { HttpRouter } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Context, Effect, Layer, Option } from "effect"
@@ -83,6 +90,11 @@ const applicationServiceNodes = [
   Schedule.node,
   Workspace.node,
   FileWatch.node,
+  ProjectOperations.node,
+  MultiFolderWorkspace.node,
+  ProjectAttachments.node,
+  ProjectConversations.node,
+  ExtensionRegistry.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 
@@ -180,6 +192,13 @@ function makeRoutes<AuthError, AuthServices>(
             PluginUpdate.Service,
             Project.Service,
             WellKnown.Service,
+            ProjectOperations.Service,
+            MultiFolderWorkspace.Service,
+            ProjectAttachments.Service,
+            ProjectConversations.Service,
+            ExtensionRegistry.Service,
+            Global.Service,
+            FSUtil.Service,
           )(context),
         ),
         ServerInfo.layer(serviceURLs, Context.get(context, Global.Service).tmp, options.app),

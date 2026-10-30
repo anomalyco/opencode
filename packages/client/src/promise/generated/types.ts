@@ -286,6 +286,37 @@ export type ProjectCommands = { start?: string }
 
 export type ProjectTime = { created: number; updated: number; active: number; archived?: number }
 
+export type ProjectWorkspaceFolderStatus = "active" | "missing" | "unreadable"
+
+export type ProjectWorkspaceAttachmentCategory = "source" | "document" | "data" | "image" | "archive" | "other"
+
+export type ExtensionCategory = "skill" | "mcp" | "rule" | "plugin"
+
+export type ExtensionPlatform = "opencode" | "claude" | "codex" | "antigravity" | "cursor" | "custom"
+
+export type ExtensionSourceType = "git" | "local" | "archive" | "builtin"
+
+export type ExtensionScope = "global" | "project"
+
+export type ExtensionPermissions = {
+  filesystem?: Array<string>
+  network?: Array<string>
+  commands?: Array<string>
+  environment?: Array<string>
+}
+
+export type ExtensionStatus = "installed" | "enabled" | "disabled" | "failed" | "needs_auth"
+
+export type ExtensionSecurityFinding = {
+  severity: "info" | "warning" | "error" | "critical"
+  code: string
+  message: string
+  file?: string
+  line?: number
+}
+
+export type ExtensionMcpToolDescriptor = { name: string; description?: string; parameters?: { [x: string]: JsonValue } }
+
 export type PermissionID = string
 
 export type PermissionSource = { type: "tool"; messageID: string; id: string }
@@ -406,6 +437,16 @@ export type ConfigModelVariantSettings = { compaction?: ProviderCompaction; enco
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
 export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
+
+export type ProjectWorkspaceProjectConversation = {
+  sessionID: SessionID
+  projectID: ProjectID
+  title: string
+  createdAt: number
+  updatedAt: number
+  messageCount: number
+  status: "active" | "archived"
+}
 
 export type SessionForkBoundary =
   | { type: "before"; messageID: SessionMessageID }
@@ -786,6 +827,60 @@ export type Project = {
   commands?: ProjectCommands
   time: ProjectTime
   sandboxes: Array<string>
+}
+
+export type ProjectWorkspaceWorkspaceFolder = {
+  id: string
+  projectID: ProjectID
+  path: AbsolutePath
+  name: string
+  isPrimary: boolean
+  drive?: string
+  vcs?: string
+  status: ProjectWorkspaceFolderStatus
+  addedAt: number
+}
+
+export type ProjectWorkspaceProjectAttachment = {
+  id: string
+  projectID: ProjectID
+  name: string
+  originalPath: string
+  storagePath: string
+  mimeType: string
+  category: ProjectWorkspaceAttachmentCategory
+  size: number
+  createdAt: number
+  updatedAt: number
+  indexed: boolean
+  extractedSummary?: string
+  metadata: { [x: string]: JsonValue }
+}
+
+export type ExtensionSource = {
+  type: ExtensionSourceType
+  location: string
+  subpath?: string
+  ref?: string
+  checksum?: string
+}
+
+export type ExtensionSecurityReport = {
+  safe: boolean
+  riskLevel: "low" | "medium" | "high" | "critical"
+  findings: Array<ExtensionSecurityFinding>
+  scannedFiles: number
+  timestamp: number
+}
+
+export type ExtensionMcpDiagnosticResult = {
+  server: string
+  transport: "stdio" | "http" | "sse"
+  success: boolean
+  latencyMs: number
+  tools: Array<ExtensionMcpToolDescriptor>
+  error?: string
+  details: { executableFound: boolean; exitCode?: number; stderr?: string; authValid?: boolean }
 }
 
 export type PermissionRequest = {
@@ -2126,6 +2221,26 @@ export type VoiceSessionResponse = { data: { transport: VoiceTransport } }
 export type CredentialValue = CredentialOAuth | CredentialKey | CredentialExternal
 
 export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
+
+export type ExtensionCIR = {
+  id: string
+  name: string
+  version: string
+  category: ExtensionCategory
+  originPlatform: ExtensionPlatform
+  source: ExtensionSource
+  scope: ExtensionScope
+  description?: string
+  author?: string
+  license?: string
+  homepage?: string
+  permissions: ExtensionPermissions
+  status: ExtensionStatus
+  enabled: boolean
+  security?: ExtensionSecurityReport
+  metadata: { [x: string]: JsonValue }
+  error?: string
+}
 
 export type PtyCreated = {
   id: EventID
@@ -4154,6 +4269,15 @@ export type ProjectListInput = { readonly archived?: boolean | undefined }
 
 export type ProjectListOutput = Array<Project>
 
+export type ProjectCreateInput = {
+  readonly name: string
+  readonly directory: string
+  readonly commands?: { readonly start?: string } | undefined
+  readonly icon?: { readonly url?: string; readonly override?: string; readonly color?: string } | undefined
+}
+
+export type ProjectCreateOutput = Project
+
 export type ProjectUpdateInput = {
   readonly projectID: string
   readonly canonical?: string | undefined
@@ -4163,6 +4287,101 @@ export type ProjectUpdateInput = {
 }
 
 export type ProjectUpdateOutput = Project
+
+export type ProjectDeleteInput = { readonly projectID: string }
+
+export type ProjectDeleteOutput = boolean
+
+export type ProjectFoldersListInput = { readonly projectID: string }
+
+export type ProjectFoldersListOutput = Array<ProjectWorkspaceWorkspaceFolder>
+
+export type ProjectFoldersAddInput = {
+  readonly projectID: string
+  readonly directory: string
+  readonly name?: string | undefined
+  readonly isPrimary?: boolean | undefined
+}
+
+export type ProjectFoldersAddOutput = ProjectWorkspaceWorkspaceFolder
+
+export type ProjectFoldersRemoveInput = { readonly projectID: string; readonly directory: string }
+
+export type ProjectFoldersRemoveOutput = boolean
+
+export type ProjectAttachmentsListInput = { readonly projectID: string }
+
+export type ProjectAttachmentsListOutput = Array<ProjectWorkspaceProjectAttachment>
+
+export type ProjectAttachmentsAddInput = {
+  readonly projectID: string
+  readonly name: string
+  readonly filePath: string
+  readonly mimeType?: string | undefined
+}
+
+export type ProjectAttachmentsAddOutput = ProjectWorkspaceProjectAttachment
+
+export type ProjectConversationsListInput = { readonly projectID: string }
+
+export type ProjectConversationsListOutput = Array<ProjectWorkspaceProjectConversation>
+
+export type ServerExtensionListOutput = Array<ExtensionCIR>
+
+export type ServerExtensionInstallInput = {
+  readonly sourceUrlOrPath: string
+  readonly subpath?: string | undefined
+  readonly ref?: string | undefined
+  readonly targetScope: "global" | "project"
+  readonly expectedCategory?: ("skill" | "mcp" | "rule" | "plugin") | undefined
+  readonly overrideName?: string | undefined
+}
+
+export type ServerExtensionInstallOutput = ExtensionCIR
+
+export type ServerExtensionToggleInput = { readonly id: string; readonly enabled: boolean }
+
+export type ServerExtensionToggleOutput = ExtensionCIR | null
+
+export type ServerExtensionRemoveInput = { readonly id: string }
+
+export type ServerExtensionRemoveOutput = boolean
+
+export type ServerExtensionMcpTestInput = {
+  readonly name: string
+  readonly config:
+    | {
+        readonly type: "local"
+        readonly command: ReadonlyArray<string>
+        readonly cwd?: string
+        readonly environment?: { readonly [x: string]: string }
+        readonly disabled?: boolean
+        readonly codemode?: boolean
+        readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+        readonly protocol?: "legacy" | "auto" | "2026-07-28"
+      }
+    | {
+        readonly type: "remote"
+        readonly url: string
+        readonly headers?: { readonly [x: string]: string }
+        readonly oauth?:
+          | {
+              readonly client_id?: string
+              readonly client_secret?: string
+              readonly scope?: string
+              readonly callback_port?: number
+              readonly redirect_uri?: string
+              readonly auth_server_metadata_url?: string
+            }
+          | false
+        readonly disabled?: boolean
+        readonly codemode?: boolean
+        readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+        readonly protocol?: "legacy" | "auto" | "2026-07-28"
+      }
+}
+
+export type ServerExtensionMcpTestOutput = ExtensionMcpDiagnosticResult
 
 export type FormListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

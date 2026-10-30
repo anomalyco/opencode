@@ -177,8 +177,33 @@ import type {
   CredentialRemoveOutput,
   ProjectListInput,
   ProjectListOutput,
+  ProjectCreateInput,
+  ProjectCreateOutput,
   ProjectUpdateInput,
   ProjectUpdateOutput,
+  ProjectDeleteInput,
+  ProjectDeleteOutput,
+  ProjectFoldersListInput,
+  ProjectFoldersListOutput,
+  ProjectFoldersAddInput,
+  ProjectFoldersAddOutput,
+  ProjectFoldersRemoveInput,
+  ProjectFoldersRemoveOutput,
+  ProjectAttachmentsListInput,
+  ProjectAttachmentsListOutput,
+  ProjectAttachmentsAddInput,
+  ProjectAttachmentsAddOutput,
+  ProjectConversationsListInput,
+  ProjectConversationsListOutput,
+  ServerExtensionListOutput,
+  ServerExtensionInstallInput,
+  ServerExtensionInstallOutput,
+  ServerExtensionToggleInput,
+  ServerExtensionToggleOutput,
+  ServerExtensionRemoveInput,
+  ServerExtensionRemoveOutput,
+  ServerExtensionMcpTestInput,
+  ServerExtensionMcpTestOutput,
   FormListInput,
   FormListOutput,
   PermissionRequestListInput,
@@ -1248,6 +1273,13 @@ const EndpointProjectList = (raw: RawClient["server.project"]) => (input?: Proje
     raw["project.list"]({ query: { archived: input?.["archived"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointProjectCreate = (raw: RawClient["server.project"]) => (input: ProjectCreateInput) =>
+  preserveEffect<ProjectCreateOutput>()(
+    raw["project.create"]({
+      payload: { name: input["name"], directory: input["directory"], commands: input["commands"], icon: input["icon"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointProjectUpdate = (raw: RawClient["server.project"]) => (input: ProjectUpdateInput) =>
   preserveEffect<ProjectUpdateOutput>()(
     raw["project.update"]({
@@ -1256,9 +1288,110 @@ const EndpointProjectUpdate = (raw: RawClient["server.project"]) => (input: Proj
     }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointProjectDelete = (raw: RawClient["server.project"]) => (input: ProjectDeleteInput) =>
+  preserveEffect<ProjectDeleteOutput>()(
+    raw["project.delete"]({ params: { projectID: input["projectID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointProjectFoldersList = (raw: RawClient["server.project"]) => (input: ProjectFoldersListInput) =>
+  preserveEffect<ProjectFoldersListOutput>()(
+    raw["project.folders.list"]({ params: { projectID: input["projectID"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointProjectFoldersAdd = (raw: RawClient["server.project"]) => (input: ProjectFoldersAddInput) =>
+  preserveEffect<ProjectFoldersAddOutput>()(
+    raw["project.folders.add"]({
+      params: { projectID: input["projectID"] },
+      payload: { directory: input["directory"], name: input["name"], isPrimary: input["isPrimary"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointProjectFoldersRemove = (raw: RawClient["server.project"]) => (input: ProjectFoldersRemoveInput) =>
+  preserveEffect<ProjectFoldersRemoveOutput>()(
+    raw["project.folders.remove"]({
+      params: { projectID: input["projectID"] },
+      payload: { directory: input["directory"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointProjectAttachmentsList = (raw: RawClient["server.project"]) => (input: ProjectAttachmentsListInput) =>
+  preserveEffect<ProjectAttachmentsListOutput>()(
+    raw["project.attachments.list"]({ params: { projectID: input["projectID"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointProjectAttachmentsAdd = (raw: RawClient["server.project"]) => (input: ProjectAttachmentsAddInput) =>
+  preserveEffect<ProjectAttachmentsAddOutput>()(
+    raw["project.attachments.add"]({
+      params: { projectID: input["projectID"] },
+      payload: { name: input["name"], filePath: input["filePath"], mimeType: input["mimeType"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointProjectConversationsList = (raw: RawClient["server.project"]) => (input: ProjectConversationsListInput) =>
+  preserveEffect<ProjectConversationsListOutput>()(
+    raw["project.conversations.list"]({ params: { projectID: input["projectID"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const adaptGroupProject = (raw: RawClient["server.project"]) => ({
   list: EndpointProjectList(raw),
+  create: EndpointProjectCreate(raw),
   update: EndpointProjectUpdate(raw),
+  delete: EndpointProjectDelete(raw),
+  folders: {
+    list: EndpointProjectFoldersList(raw),
+    add: EndpointProjectFoldersAdd(raw),
+    remove: EndpointProjectFoldersRemove(raw),
+  },
+  attachments: { list: EndpointProjectAttachmentsList(raw), add: EndpointProjectAttachmentsAdd(raw) },
+  conversations: { list: EndpointProjectConversationsList(raw) },
+})
+
+const EndpointServerExtensionList = (raw: RawClient["server.extension"]) => () =>
+  preserveEffect<ServerExtensionListOutput>()(raw["extension.list"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointServerExtensionInstall = (raw: RawClient["server.extension"]) => (input: ServerExtensionInstallInput) =>
+  preserveEffect<ServerExtensionInstallOutput>()(
+    raw["extension.install"]({
+      payload: {
+        sourceUrlOrPath: input["sourceUrlOrPath"],
+        subpath: input["subpath"],
+        ref: input["ref"],
+        targetScope: input["targetScope"],
+        expectedCategory: input["expectedCategory"],
+        overrideName: input["overrideName"],
+      },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointServerExtensionToggle = (raw: RawClient["server.extension"]) => (input: ServerExtensionToggleInput) =>
+  preserveEffect<ServerExtensionToggleOutput>()(
+    raw["extension.toggle"]({ params: { id: input["id"] }, payload: { enabled: input["enabled"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointServerExtensionRemove = (raw: RawClient["server.extension"]) => (input: ServerExtensionRemoveInput) =>
+  preserveEffect<ServerExtensionRemoveOutput>()(
+    raw["extension.remove"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointServerExtensionMcpTest = (raw: RawClient["server.extension"]) => (input: ServerExtensionMcpTestInput) =>
+  preserveEffect<ServerExtensionMcpTestOutput>()(
+    raw["extension.mcp.test"]({ payload: { name: input["name"], config: input["config"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const adaptGroupServerExtension = (raw: RawClient["server.extension"]) => ({
+  list: EndpointServerExtensionList(raw),
+  install: EndpointServerExtensionInstall(raw),
+  toggle: EndpointServerExtensionToggle(raw),
+  remove: EndpointServerExtensionRemove(raw),
+  mcp: { test: EndpointServerExtensionMcpTest(raw) },
 })
 
 const EndpointFormList = (raw: RawClient["server.form"]) => (input?: FormListInput) =>
@@ -1969,6 +2102,7 @@ const adaptClient = (raw: RawClient) => {
     mcp: adaptGroupMcp(raw["server.mcp"]),
     credential: adaptGroupCredential(raw["server.credential"]),
     project: adaptGroupProject(raw["server.project"]),
+    "server.extension": adaptGroupServerExtension(raw["server.extension"]),
     form: adaptGroupForm(raw["server.form"]),
     permission: adaptGroupPermission(raw["server.permission"]),
     file: adaptGroupFile(raw["server.fs"]),

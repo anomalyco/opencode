@@ -27,6 +27,7 @@ import { UsageHandler } from "./handlers/usage"
 import { McpHandler } from "./handlers/mcp"
 import { CredentialHandler } from "./handlers/credential"
 import { ProjectHandler } from "./handlers/project"
+import { ExtensionHandler } from "./handlers/extension"
 import { WorktreeHandler } from "./handlers/worktree"
 import { VcsHandler } from "./handlers/vcs"
 import { EventFeed } from "./event-feed"
@@ -52,6 +53,7 @@ export const handlers = Layer.mergeAll(
   McpHandler,
   CredentialHandler,
   ProjectHandler,
+  ExtensionHandler,
   FormHandler,
   PermissionHandler,
   FileSystemHandler,

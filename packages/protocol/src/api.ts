@@ -31,6 +31,7 @@ import { UsageGroup } from "./groups/usage.js"
 import { makeMcpGroup } from "./groups/mcp.js"
 import { CredentialGroup } from "./groups/credential.js"
 import { ProjectGroup } from "./groups/project.js"
+import { ExtensionGroup } from "./groups/extension.js"
 import { WorktreeGroup } from "./groups/worktree.js"
 import { VcsGroup } from "./groups/vcs.js"
 import { MigrationGroup } from "./groups/migration.js"
@@ -103,6 +104,7 @@ type ApiGroups<
   | typeof ExperimentalGroup
   | typeof CredentialGroup
   | typeof ProjectGroup
+  | typeof ExtensionGroup
   | LocationGroups<LocationId>
   | LocationGroup<LocationId, LocationService>
   | PtyGroups<LocationId, LocationService>
@@ -179,6 +181,7 @@ const makeApiFromGroup = <
     .add(makeMcpGroup(locationMiddleware))
     .add(CredentialGroup)
     .add(ProjectGroup)
+    .add(ExtensionGroup)
     .add(makeFormGroup(locationMiddleware))
     .add(makePermissionGroup(locationMiddleware, sessionLocationMiddleware))
     .add(FileSystemGroup.middleware(locationMiddleware))
