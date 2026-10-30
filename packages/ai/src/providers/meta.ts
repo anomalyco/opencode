@@ -138,7 +138,6 @@ export const configure = (input: Config = {}) => {
   const messages = (modelID: string | ModelID) =>
     configuredMessages.model<MessagesOptionsInput>({
       id: modelID,
-      compatibility: { requireSignature: false },
     })
   const media = MediaRoute.deployment(input, options.auth)
   const image = (modelID: string | ModelID) => MetaImages.model({ ...media, id: modelID })

@@ -123,7 +123,7 @@ describe("Mistral Chat", () => {
         },
         {
           role: "assistant",
-          content: "ThinkCalling",
+          content: "Calling",
         },
       ])
       const assistant = prepared.body.messages[3]
@@ -173,6 +173,21 @@ describe("Mistral Chat", () => {
       expect(prepared.body.prompt_mode).toBe("reasoning")
       expect(prepared.body.messages).toEqual([
         { role: "assistant", content: "Earlier" },
+        { role: "user", content: "Continue" },
+        { role: "assistant", content: "Prefix", prefix: true },
+      ])
+
+      const trailingDropped = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.user("Continue"),
+            Message.assistant("Prefix"),
+            Message.assistant({ type: "reasoning", text: "Dropped unsigned reasoning" }),
+          ],
+        }),
+      )
+      expect(trailingDropped.body.messages).toEqual([
         { role: "user", content: "Continue" },
         { role: "assistant", content: "Prefix", prefix: true },
       ])
@@ -227,6 +242,7 @@ describe("Mistral Chat", () => {
           messages: [
             Message.assistant(" \n "),
             Message.assistant({ type: "reasoning", text: "\t" }),
+            Message.assistant({ type: "reasoning", text: "Foreign reasoning without mistral metadata" }),
             Message.assistant({ type: "tool-call", id: "Ab12Cd34E", name: "lookup", input: {} }),
           ],
         }),
