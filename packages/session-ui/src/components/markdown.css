@@ -344,16 +344,27 @@
     color: var(--markdown-shell-code-token-color) !important;
   }
 
+  /* The copy button's host spans its code block without taking pointer events, and the button sticks inside it, so
+     the button stays in view while a tall block scrolls and never leaves its own block. */
   [data-slot="markdown-copy-button"] {
     position: absolute;
-    top: 4px;
-    inset-inline-end: 4px;
+    inset: 0;
+    padding: 4px;
+    pointer-events: none;
     transition: opacity 0.15s ease;
     z-index: 1;
 
     @media (hover: hover) {
       opacity: 0;
     }
+  }
+
+  [data-slot="markdown-copy-button-pin"] {
+    position: sticky;
+    top: calc(var(--sticky-accordion-top, 0px) + 4px);
+    width: fit-content;
+    margin-inline-start: auto;
+    pointer-events: auto;
   }
 
   [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"],

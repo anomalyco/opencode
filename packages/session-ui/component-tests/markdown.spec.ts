@@ -321,9 +321,9 @@ story("shows a stable GitHub mark without changing link text or other sites", as
   expect(await mark.evaluate((icon) => getComputedStyle(icon, "::before").width)).toBe("14px")
   expect(await mark.evaluate((icon) => getComputedStyle(icon, "::before").maskImage)).toContain("data:image/svg+xml")
   await expect(mark.locator("img")).toHaveCount(0)
-  await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon[data-github]")).toHaveCount(
-    1,
-  )
+  await expect(
+    markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon[data-github]"),
+  ).toHaveCount(1)
 
   for (const name of ["other site", "lookalike"]) {
     await expect(markdown.getByRole("link", { name }).locator(".markdown-link-favicon[data-github]")).toHaveCount(0)
@@ -761,6 +761,67 @@ story("replaces completed DOM before live rendering and retains streamed code co
   await expect(markdown.locator('pre, [data-slot="markdown-copy-button"]')).toHaveCount(0)
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
   await expect(markdown).toHaveCount(0)
+})
+
+story("keeps the code copy button pinned below the sticky header while a tall block scrolls", async ({ page }) => {
+  const lines = Array.from({ length: 120 }, (_, index) => `const line${index} = ${index}`).join("\n")
+  await page.evaluate(
+    async ({ fixture, text }) => {
+      const { mountMarkdown } = await import(fixture)
+      await mountMarkdown({ text })
+      const scroller = document.createElement("div")
+      scroller.dataset.testid = "markdown-scroller"
+      // The bottom padding lets the end of the block scroll up under the sticky header.
+      scroller.style.cssText = "height: 400px; padding-bottom: 400px; overflow-y: auto; --sticky-accordion-top: 32px"
+      document.body.appendChild(scroller)
+      scroller.appendChild(document.querySelector('[data-testid="markdown-fixture"]')!)
+    },
+    { fixture, text: `Intro\n\n\`\`\`ts\n${lines}\n\`\`\`\n\nOutro` },
+  )
+  const scroller = page.getByTestId("markdown-scroller")
+  const markdown = scroller.locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const pre = markdown.locator("pre")
+  const button = markdown.getByRole("button", { name: "Copy" })
+
+  const offsets = () =>
+    button.evaluate((node) => {
+      const scroller = node.closest<HTMLElement>('[data-testid="markdown-scroller"]')!.getBoundingClientRect()
+      const button = node.getBoundingClientRect()
+      const pre = node.closest('[data-component="markdown-code"]')!.querySelector("pre")!.getBoundingClientRect()
+
+      return { top: button.top - scroller.top, gapBelow: pre.bottom - button.bottom, right: pre.right - button.right }
+    })
+
+  // Partway down the block the button sits below the 32px sticky header instead of scrolling away with the block's top.
+  await pre.evaluate((node) => {
+    const scroller = node.closest<HTMLElement>('[data-testid="markdown-scroller"]')!
+    scroller.scrollTop += node.getBoundingClientRect().top - scroller.getBoundingClientRect().top + 600
+  })
+  await expect.poll(offsets).toEqual({ top: 36, gapBelow: expect.any(Number), right: 4 })
+  expect((await offsets()).gapBelow).toBeGreaterThan(100)
+
+  // The pinned button stays clickable, and the code beneath its host still receives the pointer.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
+  await button.click()
+  await expect(markdown.getByRole("button", { name: "Copied" })).toBeVisible()
+  expect((await page.evaluate(() => navigator.clipboard.readText())).replaceAll("\r\n", "\n")).toBe(lines)
+  expect(
+    await pre.evaluate((node) => {
+      const scroller = node.closest<HTMLElement>('[data-testid="markdown-scroller"]')!.getBoundingClientRect()
+
+      return node.contains(document.elementFromPoint(node.getBoundingClientRect().left + 40, scroller.top + 200))
+    }),
+  ).toBe(true)
+
+  // At the end of the block the button stops inside it rather than hanging over the text that follows.
+  await pre.evaluate((node) => {
+    const scroller = node.closest<HTMLElement>('[data-testid="markdown-scroller"]')!
+    scroller.scrollTop += node.getBoundingClientRect().bottom - scroller.getBoundingClientRect().top - 48
+  })
+  await expect.poll(async () => (await offsets()).gapBelow).toBe(4)
+  expect((await offsets()).top).toBeLessThan(36)
 })
 
 story("highlights streamed code across comment and string boundaries", async ({ page }) => {

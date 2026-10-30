@@ -159,7 +159,11 @@ function createCopyButton(labels: CopyLabels) {
     state.setLabels = setLabels
     state.setCopied = setCopied
 
-    return <MarkdownCopyButton labels={labelState()} copied={copied()} />
+    return (
+      <div data-slot="markdown-copy-button-pin">
+        <MarkdownCopyButton labels={labelState()} copied={copied()} />
+      </div>
+    )
   }, host)
 
   state.dispose = dispose
