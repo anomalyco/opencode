@@ -1,7 +1,20 @@
 export * as Job from "./job.js"
 
 import { asc, eq, or } from "drizzle-orm"
-import { Array, Cause, Clock, Context, Deferred, Effect, Exit, Layer, Schema, Scope, SynchronizedRef } from "effect"
+import {
+  Array,
+  Cause,
+  Clock,
+  Context,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Layer,
+  Schema,
+  Scope,
+  SynchronizedRef,
+} from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Database } from "./database/database.js"
 import { ImageNotice } from "./image/notice.js"
@@ -9,6 +22,8 @@ import { JobTable } from "./job/sql.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { ShellResult } from "./shell/result.js"
+
+export const DEFAULT_YIELD_AFTER_MS = 10_000
 
 const Background = Schema.Struct({
   id: Schema.String,
@@ -32,6 +47,13 @@ const Background = Schema.Struct({
       sessionID: SessionSchema.ID,
       path: Schema.String,
       model: Schema.String,
+    }),
+    Schema.Struct({
+      kind: Schema.Literal("tool"),
+      sessionID: SessionSchema.ID,
+      tool: Schema.String,
+      title: Schema.optionalKey(Schema.String),
+      metadata: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
     }),
   ]),
   status: Schema.Literals(["running", "completed", "error", "cancelled"]),
@@ -90,18 +112,36 @@ export function formatNotice(
       }),
     }
   }
+  if (recovery.kind === "image") {
+    const body =
+      input.status === "running"
+        ? `Image request for ${recovery.path} was cancelled because the server restarted.`
+        : state === "completed"
+          ? (input.output ?? `Image request finished. Saved image: ${recovery.path} (${recovery.model}).`)
+          : state === "error"
+            ? (input.error ?? `Image request failed for ${recovery.path}.`)
+            : `Image request for ${recovery.path} was cancelled.`
+    return {
+      description: "Image generation",
+      text: ImageNotice.text({ id: input.id, state, body }),
+      metadata: { source: "experimental_image_generate", jobID: input.id, state, path: recovery.path },
+    }
+  }
+  const label = recovery.title ? `${recovery.tool} (${recovery.title})` : recovery.tool
   const body =
     input.status === "running"
-      ? `Image request for ${recovery.path} was cancelled because the server restarted.`
+      ? `Tool ${label} was cancelled because the server restarted.`
       : state === "completed"
-        ? (input.output ?? `Image request finished. Saved image: ${recovery.path} (${recovery.model}).`)
+        ? (input.output ?? `Tool ${label} completed.`)
         : state === "error"
-          ? (input.error ?? `Image request failed for ${recovery.path}.`)
-          : `Image request for ${recovery.path} was cancelled.`
+          ? (input.error ?? `Tool ${label} failed.`)
+          : input.output && !restarted
+            ? `${input.output}\n\nCancelled`
+            : `Tool ${label} was cancelled.`
   return {
-    description: "Image generation",
-    text: ImageNotice.text({ id: input.id, state, body }),
-    metadata: { source: "experimental_image_generate", jobID: input.id, state, path: recovery.path },
+    description: recovery.title ?? recovery.tool,
+    text: `<tool id="${input.id}" name="${recovery.tool}" state="${state}">\n${body}\n</tool>`,
+    metadata: { source: recovery.tool, jobID: input.id, state, ...recovery.metadata },
   }
 }
 
@@ -122,13 +162,16 @@ export type Info<Value = unknown> = {
 
 export type RunOutput<Value = unknown> = string | { readonly output: string; readonly value: Value }
 
+type BackgroundedSignal = { info: Info<any>; reason: "signal" | "yield_after" }
+
 type Active = {
   info: Info<any>
   done: Deferred.Deferred<Info<any>>
-  backgrounded: Deferred.Deferred<Info<any>>
+  backgrounded: Deferred.Deferred<BackgroundedSignal>
   scope: Scope.Closeable
   blockingSessions: Map<SessionSchema.ID, number>
   isBackgrounded: boolean
+  backgroundReason?: "signal" | "yield_after"
   autoNotify: boolean
   notified: boolean
   consumed: boolean
@@ -154,7 +197,8 @@ type FinishResult = {
 
 type BackgroundResult = {
   info?: Info<any>
-  backgrounded?: Deferred.Deferred<Info<any>>
+  reason?: "signal" | "yield_after"
+  backgrounded?: Deferred.Deferred<BackgroundedSignal>
   deliver?: Effect.Effect<void>
 }
 
@@ -184,11 +228,13 @@ export type WaitResult<Value = unknown> = {
 export type BlockInput = {
   id: string
   sessionID: SessionSchema.ID
+  yield_after?: number
+  deferYield?: Effect.Effect<boolean>
 }
 
 export type BlockResult<Value = unknown> =
   | { type: "finished"; info: Info<Value> }
-  | { type: "backgrounded"; info: Info<Value> }
+  | { type: "backgrounded"; reason: "signal" | "yield_after"; info: Info<Value> }
 
 export type BackgroundAllInput = {
   sessionID: SessionSchema.ID
@@ -244,7 +290,8 @@ function recoveryTitle(job: Active, recovery: Recovery): string | null {
   if (job.info.title !== undefined) return job.info.title
   if (recovery.kind === "shell") return recovery.command
   if (recovery.kind === "subagent") return recovery.description
-  return recovery.path
+  if (recovery.kind === "image") return recovery.path
+  return recovery.title ?? recovery.tool
 }
 
 function matchesSession(job: Active, sessionID: SessionSchema.ID) {
@@ -466,7 +513,7 @@ export const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const started_at = yield* Clock.currentTimeMillis
         const done = yield* Deferred.make<Info<any>>()
-        const backgrounded = yield* Deferred.make<Info<any>>()
+        const backgrounded = yield* Deferred.make<BackgroundedSignal>()
         const sessionID = resolveSessionID(input)
         const result = yield* SynchronizedRef.modifyEffect(
           state.jobs,
@@ -545,47 +592,12 @@ export const make = Effect.gen(function* () {
     })
   })
 
-  type BlockStart =
-    | { type: "missing" }
-    | { type: "finished"; info: Info<any> }
-    | { type: "backgrounded"; info: Info<any> }
-    | { type: "wait"; done: Deferred.Deferred<Info<any>>; backgrounded: Deferred.Deferred<Info<any>>; generation: Scope.Closeable }
-
-  const block: Interface["block"] = <Value = unknown>(input: BlockInput) =>
-    Effect.gen(function* () {
-      const result = yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [BlockStart, Map<string, Active>] => {
-        const job = jobs.get(input.id)
-        if (!job) return [{ type: "missing" }, jobs]
-        if (job.isBackgrounded) return [{ type: "backgrounded", info: snapshot(job) }, jobs]
-        if (job.info.status !== "running")
-          return [{ type: "finished", info: snapshot(job) }, consumeJob(jobs, input.id, job.scope)]
-        return [
-          { type: "wait", done: job.done, backgrounded: job.backgrounded, generation: job.scope },
-          new Map(jobs).set(input.id, {
-            ...job,
-            blockingSessions: incrementSession(job.blockingSessions, input.sessionID),
-          }),
-        ]
-      })
-      if (result.type === "missing") return undefined
-      if (result.type === "finished") return { type: "finished" as const, info: result.info as Info<Value> }
-      if (result.type === "backgrounded") return { type: "backgrounded" as const, info: result.info as Info<Value> }
-      return yield* Effect.raceFirst(
-        Deferred.await(result.done).pipe(Effect.map((info) => ({ type: "finished" as const, info: info as Info<Value> }))),
-        Deferred.await(result.backgrounded).pipe(
-          Effect.map((info) => ({ type: "backgrounded" as const, info: info as Info<Value> })),
-        ),
-      ).pipe(
-        Effect.tap((outcome) => (outcome.type === "finished" ? consume(input.id, result.generation) : Effect.void)),
-        Effect.ensuring(removeBlock(input)),
-      )
-    })
-
-  const markBackground = Effect.fnUntraced(function* (job: Active) {
+  const markBackground = Effect.fnUntraced(function* (job: Active, reason: "signal" | "yield_after") {
     const shouldDeliver = job.info.status !== "running" && !job.notified && canAutoNotify(job)
     const next: Active = {
       ...job,
       isBackgrounded: true,
+      backgroundReason: reason,
       notified: job.notified || shouldDeliver,
       blockingSessions: new Map<SessionSchema.ID, number>(),
       info: {
@@ -598,21 +610,102 @@ export const make = Effect.gen(function* () {
     return { next, info, deliver: shouldDeliver ? deliverNotice(next, info) : undefined }
   })
 
+  type BlockStart =
+    | { type: "missing" }
+    | { type: "finished"; info: Info<any> }
+    | { type: "backgrounded"; reason: "signal" | "yield_after"; info: Info<any> }
+    | { type: "wait"; done: Deferred.Deferred<Info<any>>; backgrounded: Deferred.Deferred<BackgroundedSignal>; generation: Scope.Closeable }
+
+  const block: Interface["block"] = <Value = unknown>(input: BlockInput) =>
+    Effect.gen(function* () {
+      const result = yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [BlockStart, Map<string, Active>] => {
+        const job = jobs.get(input.id)
+        if (!job) return [{ type: "missing" }, jobs]
+        if (job.isBackgrounded)
+          return [{ type: "backgrounded", reason: job.backgroundReason ?? "signal", info: snapshot(job) }, jobs]
+        if (job.info.status !== "running")
+          return [{ type: "finished", info: snapshot(job) }, consumeJob(jobs, input.id, job.scope)]
+        return [
+          { type: "wait", done: job.done, backgrounded: job.backgrounded, generation: job.scope },
+          new Map(jobs).set(input.id, {
+            ...job,
+            blockingSessions: incrementSession(job.blockingSessions, input.sessionID),
+          }),
+        ]
+      })
+      if (result.type === "missing") return undefined
+      if (result.type === "finished") return { type: "finished" as const, info: result.info as Info<Value> }
+      if (result.type === "backgrounded")
+        return { type: "backgrounded" as const, reason: result.reason, info: result.info as Info<Value> }
+
+      const waitYield =
+        input.yield_after === undefined
+          ? Effect.never
+          : Effect.gen(function* () {
+              if (input.yield_after! > 0) {
+                yield* Effect.sleep(Duration.millis(input.yield_after!))
+                while (input.deferYield && (yield* input.deferYield)) {
+                  yield* Effect.sleep(Duration.millis(Math.max(50, Math.min(input.yield_after!, 250))))
+                }
+              }
+              const yielded = yield* SynchronizedRef.modifyEffect(
+                state.jobs,
+                Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [BackgroundResult, Map<string, Active>]> {
+                  const job = jobs.get(input.id)
+                  if (!job || job.scope !== result.generation || job.info.status !== "running") return [{}, jobs]
+                  if (job.isBackgrounded)
+                    return [{ info: snapshot(job), reason: job.backgroundReason ?? "yield_after" }, jobs]
+                  const marked = yield* markBackground(job, "yield_after")
+                  return [
+                    { info: marked.info, reason: "yield_after", backgrounded: job.backgrounded },
+                    new Map(jobs).set(input.id, marked.next),
+                  ]
+                }),
+              )
+              if (yielded.info && yielded.backgrounded)
+                yield* Deferred.succeed(yielded.backgrounded, { info: yielded.info, reason: yielded.reason ?? "yield_after" })
+              return yield* Effect.never
+            })
+
+      return yield* Effect.gen(function* () {
+        const settled = yield* Effect.raceFirst(
+          Effect.raceFirst(
+            Deferred.await(result.done).pipe(Effect.map((info) => ({ type: "finished" as const, info: info as Info<Value> }))),
+            Deferred.await(result.backgrounded).pipe(
+              Effect.map(({ info, reason }) => ({ type: "backgrounded" as const, reason, info: info as Info<Value> })),
+            ),
+          ),
+          waitYield,
+        )
+        return yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [BlockResult<Value>, Map<string, Active>] => {
+          const latest = jobs.get(input.id)
+          if (!latest || latest.scope !== result.generation) return [settled, jobs]
+          if (latest.isBackgrounded)
+            return [
+              { type: "backgrounded", reason: latest.backgroundReason ?? "signal", info: snapshot<Value>(latest) },
+              jobs,
+            ]
+          return [{ type: "finished", info: snapshot<Value>(latest) }, consumeJob(jobs, input.id, result.generation)]
+        })
+      }).pipe(Effect.ensuring(removeBlock(input)))
+    })
+
   const background: Interface["background"] = Effect.fn("Job.background")(function* (id) {
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [BackgroundResult, Map<string, Active>]> {
         const job = jobs.get(id)
         if (!job || job.consumed || (job.info.status !== "running" && !job.recovery)) return [{}, jobs]
-        if (job.isBackgrounded) return [{ info: snapshot(job) }, jobs]
-        const marked = yield* markBackground(job)
+        if (job.isBackgrounded) return [{ info: snapshot(job), reason: job.backgroundReason ?? "signal" }, jobs]
+        const marked = yield* markBackground(job, "signal")
         return [
-          { info: marked.info, backgrounded: job.backgrounded, deliver: marked.deliver },
+          { info: marked.info, reason: "signal", backgrounded: job.backgrounded, deliver: marked.deliver },
           new Map(jobs).set(id, marked.next),
         ]
       }),
     )
-    if (result.info && result.backgrounded) yield* Deferred.succeed(result.backgrounded, result.info)
+    if (result.info && result.backgrounded)
+      yield* Deferred.succeed(result.backgrounded, { info: result.info, reason: "signal" as const })
     if (result.deliver) yield* result.deliver
     return result.info
   })
@@ -622,21 +715,25 @@ export const make = Effect.gen(function* () {
       state.jobs,
       Effect.fnUntraced(function* (
         jobs,
-      ): Effect.fn.Return<readonly [Array<{ info: Info<any>; backgrounded: Deferred.Deferred<Info<any>> }>, Map<string, Active>]> {
-        const results: Array<{ info: Info<any>; backgrounded: Deferred.Deferred<Info<any>> }> = []
+      ): Effect.fn.Return<readonly [Array<{ info: Info<any>; backgrounded: Deferred.Deferred<BackgroundedSignal> }>, Map<string, Active>]> {
+        const results: Array<{ info: Info<any>; backgrounded: Deferred.Deferred<BackgroundedSignal> }> = []
         const next = new Map(jobs)
         for (const [id, job] of jobs) {
           if (job.info.status !== "running" || job.isBackgrounded) continue
           if (input.type !== undefined && job.info.type !== input.type) continue
           if (!job.blockingSessions.has(input.sessionID)) continue
-          const marked = yield* markBackground(job)
+          const marked = yield* markBackground(job, "signal")
           results.push({ info: marked.info, backgrounded: job.backgrounded })
           next.set(id, marked.next)
         }
         return [results, next]
       }),
     )
-    yield* Effect.forEach(result, (item) => Deferred.succeed(item.backgrounded, item.info), { discard: true })
+    yield* Effect.forEach(
+      result,
+      (item) => Deferred.succeed(item.backgrounded, { info: item.info, reason: "signal" as const }),
+      { discard: true },
+    )
     return result.map((item) => item.info)
   })
 

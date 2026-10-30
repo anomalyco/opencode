@@ -27,6 +27,8 @@ export interface Namespace {
 interface BaseOptions {
   readonly namespace?: string
   readonly permission?: string
+  /** Allow slow top-level calls to move to the background instead of blocking the turn. Defaults to true. */
+  readonly background?: boolean
 }
 
 export type Options = BaseOptions &

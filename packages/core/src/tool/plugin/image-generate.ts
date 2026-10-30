@@ -251,7 +251,7 @@ export const Plugin = {
         if (!enabled || imageGenerate(loaded.entries) === false) return
         editor.add({
           name,
-          options: { codemode: false },
+          options: { codemode: false, background: false },
           description,
           input: Input,
           output: Output,

@@ -467,14 +467,14 @@ describe("Job", () => {
 
       const owned = yield* jobs.start({
         id: "job_cleanup_owned",
-        type: "shell",
-        recovery: { kind: "shell", sessionID, shellID: "job_cleanup_owned", command: "bun run dev" },
+        type: "tool",
+        recovery: { kind: "tool", sessionID, tool: "deploy", title: "deploy preview" },
         run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(interrupted, undefined))),
       })
       const other = yield* jobs.start({
         id: "job_cleanup_other",
-        type: "shell",
-        recovery: { kind: "shell", sessionID: otherSessionID, shellID: "job_cleanup_other", command: "bun test" },
+        type: "tool",
+        recovery: { kind: "tool", sessionID: otherSessionID, tool: "deploy" },
         run: Effect.succeed("kept"),
       })
       yield* jobs.background(owned.id)

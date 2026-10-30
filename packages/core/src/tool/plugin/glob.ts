@@ -55,7 +55,7 @@ export const Plugin = {
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: false },
+          options: { codemode: false, background: false },
           description: 'Search file paths using a glob pattern (examples: "**/*.ts", "src/**/*.tsx").',
           input: Input,
           output: Output,

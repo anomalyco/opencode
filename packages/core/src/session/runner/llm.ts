@@ -53,6 +53,7 @@ const layer = Layer.effect(
     const plugins = yield* Plugin.Service
     const hooks = yield* PluginHooks.Service
     const jobs = yield* Job.Service
+    const toolOutput = yield* ToolOutput.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
@@ -289,7 +290,12 @@ const layer = Layer.effect(
           prepared: {
             ...prepared,
             // A tool call can arrive during a reload; its permission check reads the session's agent.
-            executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
+            executeTool: (call) =>
+              plugins.awaitActivation.pipe(
+                Effect.andThen(prepared.executeTool(call)),
+                Effect.provideService(Job.Service, jobs),
+                Effect.provideService(ToolOutput.Service, toolOutput),
+              ),
           },
           retry: (cause, error, proposed) =>
             retry.decide({

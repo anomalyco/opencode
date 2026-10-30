@@ -18,24 +18,26 @@ export const outstanding = Effect.fnUntraced(function* (
   const owned = yield* Effect.filter(yield* jobs.runningBackground, (recovery) =>
     descends(store, recovery.kind === "subagent" ? recovery.parentSessionID : recovery.sessionID, sessionID),
   )
-  return owned.map((recovery) => {
-    if (recovery.kind === "shell")
+  return owned
+    .filter((recovery): recovery is Exclude<Job.Recovery, { kind: "tool" }> => recovery.kind !== "tool")
+    .map((recovery) => {
+      if (recovery.kind === "shell")
+        return {
+          kind: "shell" as const,
+          sessionID: recovery.sessionID,
+          shellID: recovery.shellID,
+          command: recovery.command,
+        }
+      if (recovery.kind === "image")
+        return { kind: "image" as const, sessionID: recovery.sessionID, path: recovery.path, model: recovery.model }
       return {
-        kind: "shell" as const,
-        sessionID: recovery.sessionID,
-        shellID: recovery.shellID,
-        command: recovery.command,
+        kind: "subagent" as const,
+        sessionID: recovery.parentSessionID,
+        childSessionID: recovery.childSessionID,
+        agent: recovery.agent,
+        description: recovery.description,
       }
-    if (recovery.kind === "image")
-      return { kind: "image" as const, sessionID: recovery.sessionID, path: recovery.path, model: recovery.model }
-    return {
-      kind: "subagent" as const,
-      sessionID: recovery.parentSessionID,
-      childSessionID: recovery.childSessionID,
-      agent: recovery.agent,
-      description: recovery.description,
-    }
-  })
+    })
 })
 
 const descends = Effect.fnUntraced(function* (

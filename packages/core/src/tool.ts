@@ -4,20 +4,29 @@ export type { Context, Metadata, Namespace, Options, Result } from "@opencode/sc
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
+import { Identifier } from "@opencode/schema/identifier"
 import { Tool } from "@opencode/schema/tool"
-import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
+import { isRecord } from "@opencode/util/record"
+import { Cause, Context, Effect, Layer, Option, Ref, Result, Schema, SchemaIssue, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { extension } from "mime-types"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
 import { CodeModeTool } from "./codemode/tool.js"
+import { Form } from "./form.js"
 import { Image } from "./image.js"
+import { Job } from "./job.js"
 import { Permission } from "./permission.js"
 import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
+import { ToolOutput } from "./tool-output.js"
 import { definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
 import { Wildcard } from "./util/wildcard.js"
+
+const BACKGROUND_TOOL_INSTRUCTION =
+  "You will be notified automatically when execution finishes, with its output. DO NOT re-run this call, sleep, or poll in loops; continue with independent work or end your response and wait to be resumed."
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
   name: Schema.String,
@@ -87,6 +96,8 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const image = yield* Image.Service
     const permission = yield* Permission.Service
+    const ambientJobs = Option.getOrUndefined(yield* Effect.serviceOption(Job.Service))
+    const ambientToolOutput = Option.getOrUndefined(yield* Effect.serviceOption(ToolOutput.Service))
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -171,6 +182,100 @@ const layer = Layer.effect(
         content: afterContent,
         ...(afterEvent.result.metadata === undefined ? {} : { metadata: afterEvent.result.metadata }),
       }
+    })
+
+    const executeTopLevel = Effect.fnUntraced(function* (
+      tool: Tool.Info,
+      name: string,
+      input: unknown,
+      context: Tool.Context,
+    ) {
+      const jobs = Option.getOrUndefined(yield* Effect.serviceOption(Job.Service)) ?? ambientJobs
+      if (!jobs || tool.options?.background === false) return yield* executeTool(tool, name, input, context)
+
+      const toolOutput = Option.getOrUndefined(yield* Effect.serviceOption(ToolOutput.Service)) ?? ambientToolOutput
+      const forms = Option.getOrUndefined(yield* Effect.serviceOption(Form.Service))
+      const callContext = yield* Effect.context<never>()
+      const yielded = yield* Ref.make(false)
+      const latestProgress = yield* Ref.make<Tool.Metadata>({})
+      const wrappedContext: Tool.Context = {
+        ...context,
+        progress: (update) =>
+          Effect.gen(function* () {
+            yield* Ref.update(latestProgress, (prev) => ({ ...prev, ...update }))
+            if (!(yield* Ref.get(yielded))) yield* context.progress(update)
+          }),
+      }
+
+      const id = `job_${Identifier.create(false)}`
+      const title = toolJobTitle(input)
+      let caughtFailure: Tool.Error | undefined
+      let caughtDefect: Cause.Cause<never> | undefined
+
+      const outcome = yield* jobs
+        .start<NormalizedResult>({
+          id,
+          sessionID: context.sessionID,
+          type: name,
+          title: title ?? name,
+          metadata: { sessionID: context.sessionID, callID: context.id },
+          recovery: { kind: "tool", sessionID: context.sessionID, tool: name, ...(title ? { title } : {}) },
+          output: Ref.get(latestProgress).pipe(Effect.map(formatProgress)),
+          run: executeTool(tool, name, input, wrappedContext).pipe(
+            Effect.provide(callContext),
+            Effect.flatMap((raw) =>
+              Effect.gen(function* () {
+                const value = toolOutput ? yield* toolOutput.truncate(raw) : raw
+                return { output: yield* renderResultText(value, toolOutput), value }
+              }),
+            ),
+            Effect.tapCause((cause) =>
+              Effect.sync(() => {
+                const err = Option.getOrUndefined(Cause.findErrorOption(cause))
+                if (err instanceof Tool.Error) caughtFailure = err
+                else if (!Cause.hasInterruptsOnly(cause)) caughtDefect = cause as Cause.Cause<never>
+              }),
+            ),
+          ),
+        })
+        .pipe(
+          Effect.andThen(
+            jobs.block<NormalizedResult>({
+              id,
+              sessionID: context.sessionID,
+              yield_after: requestedYieldAfter(input) ?? Job.DEFAULT_YIELD_AFTER_MS,
+              deferYield: Effect.gen(function* () {
+                if ((yield* permission.forSession(context.sessionID)).length > 0) return true
+                return forms
+                  ? (yield* forms.list()).some((item) => item.sessionID === undefined || item.sessionID === context.sessionID)
+                  : false
+              }).pipe(Effect.catchCause(() => Effect.succeed(false))),
+            }),
+          ),
+          Effect.onInterrupt(() => jobs.cancel(id, { notify: false }).pipe(Effect.ignore)),
+        )
+
+      if (outcome?.type === "backgrounded") {
+        yield* Ref.set(yielded, true)
+        const partial = formatProgress(yield* Ref.get(latestProgress))
+        const text = [
+          `Tool "${name}" moved to the background (jobID: ${id}).`,
+          ...(partial ? [`Output so far:\n${partial}`] : []),
+          BACKGROUND_TOOL_INSTRUCTION,
+        ].join("\n\n")
+        return {
+          content: [{ type: "text" as const, text }],
+          metadata: { status: "running", jobID: id },
+        }
+      }
+
+      if (caughtDefect) return yield* Effect.failCause(caughtDefect)
+      if (caughtFailure) return yield* caughtFailure
+      if (outcome?.info.status === "cancelled") return yield* new Tool.Error({ message: "Tool execution cancelled" })
+      if (outcome?.info.status === "error")
+        return yield* new Tool.Error({ message: outcome.info.error ?? `Tool "${name}" failed` })
+      if (!outcome?.info.value) return yield* new Tool.Error({ message: `Tool "${name}" failed` })
+      return outcome.info.value
     })
 
     let catalog:
@@ -330,7 +435,7 @@ const layer = Layer.effect(
               if (name === "execute" && codeModeTool)
                 return yield* executeTool(codeModeTool, name, event.input, context)
               const tool = direct.get(name)
-              if (tool) return yield* executeTool(tool, name, event.input, context)
+              if (tool) return yield* executeTopLevel(tool, name, event.input, context)
               return yield* new Tool.Error({
                 message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
               })
@@ -377,6 +482,61 @@ const layer = Layer.effect(
     })
   }),
 )
+
+function requestedYieldAfter(input: unknown): number | undefined {
+  if (!isRecord(input)) return undefined
+  if (input.background === true) return 0
+  if (typeof input.yield_after === "number" && Number.isFinite(input.yield_after) && input.yield_after >= 0)
+    return Math.floor(input.yield_after)
+  return undefined
+}
+
+function toolJobTitle(input: unknown): string | undefined {
+  if (!isRecord(input)) return undefined
+  for (const key of ["title", "description", "url", "query", "command"]) {
+    const val = input[key]
+    if (typeof val === "string" && val.trim().length > 0) return val.trim().slice(0, 80)
+  }
+  return undefined
+}
+
+function formatProgress(meta: Tool.Metadata): string | undefined {
+  const parts: string[] = []
+  if (typeof meta.title === "string" && meta.title.length > 0) parts.push(meta.title)
+  if (Array.isArray(meta.logs) && meta.logs.length > 0) {
+    parts.push(`Logs:\n${meta.logs.filter((item): item is string => typeof item === "string").join("\n")}`)
+  }
+  if (Array.isArray(meta.toolCalls) && meta.toolCalls.length > 0) {
+    const lines = meta.toolCalls.flatMap((call) =>
+      isRecord(call) && typeof call.tool === "string" && typeof call.status === "string"
+        ? [`- [${call.status}] ${call.tool}`]
+        : [],
+    )
+    if (lines.length > 0) parts.push(`Tool calls:\n${lines.join("\n")}`)
+  }
+  return parts.length > 0 ? parts.join("\n\n") : undefined
+}
+
+const renderResultText = Effect.fnUntraced(function* (result: NormalizedResult, toolOutput?: ToolOutput.Interface) {
+  const parts: string[] = []
+  for (const part of result.content) {
+    if (part.type === "text") {
+      if (part.text.length > 0) parts.push(part.text)
+      continue
+    }
+    const base64 = /^data:([^,;]*)(?:;[^,]*)?;base64,(.*)$/s.exec(part.uri)
+    if (base64 && toolOutput) {
+      const ext = extension((base64[1] || part.mime).toLowerCase())
+      const file = yield* toolOutput.save(Buffer.from(base64[2], "base64"), ext ? `.${ext}` : "")
+      parts.push(`Saved file${part.name ? ` (${part.name})` : ""}: ${file} (${part.mime}). Use the read tool on this path to view it.`)
+    } else {
+      parts.push(`[Attachment ${part.name ?? part.uri} (${part.mime})]`)
+    }
+  }
+  if (parts.length > 0) return parts.join("\n\n")
+  if (result.output !== undefined) return typeof result.output === "string" ? result.output : JSON.stringify(result.output)
+  return ""
+})
 
 const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
   const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
