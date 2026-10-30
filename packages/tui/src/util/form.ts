@@ -86,7 +86,7 @@ export function formValidateValue(field: FormAnswerField, value: FormValue | und
         return `Invalid pattern: ${field.pattern}`
       }
     }
-    if (field.format === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Expected an email address"
+    if (field.format === "email" && !/^[^\s@]+@[^\s@][^\s@.]*\.[^\s@]+$/.test(value)) return "Expected an email address"
     if (field.format === "uri" && !validURL(value)) return "Expected a URL"
     if (field.format === "date" && !validDate(value)) return "Expected a date (YYYY-MM-DD)"
     if (field.format === "date-time" && Number.isNaN(new Date(value).getTime())) return "Expected a date and time"
