@@ -77,6 +77,7 @@ stdenv.mkDerivation (finalAttrs: {
       substituteInPlace \
         packages/desktop/src/main/windows/appearance.ts \
         packages/desktop/src/main/service/desktop-cli.ts \
+        packages/desktop/src/main/service/sidecar-probe.ts \
         --replace-fail "process.resourcesPath" "'$out/opt/opencode-desktop/resources'"
     '';
 
