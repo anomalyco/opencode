@@ -47,3 +47,11 @@ LLM.loop({ model, prompt: "Use any tool.", tools: { add, echo, weather, shout } 
 
 // @ts-expect-error The loop runs tools, so each one needs an execute handler.
 LLM.loop({ model, prompt: "Get weather.", tools: { schemaOnly } })
+
+const unavailable = () => {
+  throw new Error("Unavailable.")
+}
+const fail = AI.tool({ description: "Fail.", parameters: Schema.String, execute: unavailable })
+const parse = AI.tool({ description: "Parse.", parameters: Schema.String, execute: (text) => JSON.parse(text) })
+const inspect = tool({ description: "Inspect.", parameters: Schema.String, execute: () => Effect.succeed<unknown>(1) })
+ai.llm.loop({ model, prompt: "Fail.", tools: { fail, parse, inspect } })

@@ -35,7 +35,8 @@ import {
   type TranscriptionRequest,
   type TranscriptionRequestInput,
 } from "./transcription.js"
-import { ToolFailure, build, type ToolExecuteContext, type ToolOptions, type ToolSchema } from "./tool.js"
+import { ToolFailure, build } from "./tool.js"
+import type { NoExecute, ToolExecuteContext, ToolOptions, ToolSchema } from "./tool.js"
 import { fileMediaType } from "./utils/media-type.js"
 import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } from "./video.js"
 
@@ -282,7 +283,7 @@ const fileError = (message: string, cause: unknown) =>
 export const tool = <
   Parameters extends ToolSchema<any> = typeof Schema.Unknown,
   Success extends ToolSchema<any> = typeof Schema.Unknown,
-  Result extends Schema.Schema.Type<Success> | PromiseLike<Schema.Schema.Type<Success>> = never,
+  Result extends Schema.Schema.Type<Success> | PromiseLike<Schema.Schema.Type<Success>> | NoExecute = NoExecute,
 >(
   config: ToolOptions<
     Parameters,
