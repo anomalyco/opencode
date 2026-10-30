@@ -267,6 +267,8 @@ import type {
   ExperimentalArtifactsUpdateOutput,
   ExperimentalArtifactsDeleteInput,
   ExperimentalArtifactsDeleteOutput,
+  ExperimentalJobListInput,
+  ExperimentalJobListOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1698,6 +1700,16 @@ const EndpointExperimentalArtifactsDelete =
       }).pipe(Effect.mapError(mapClientError)),
     )
 
+const EndpointExperimentalJobList = (raw: RawClient["server.experimental"]) => (input?: ExperimentalJobListInput) =>
+  preserveEffect<ExperimentalJobListOutput>()(
+    raw["job.list"]({
+      query: { sessionID: input?.["sessionID"], kind: input?.["kind"], descendants: input?.["descendants"] },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1727,6 +1739,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     update: EndpointExperimentalArtifactsUpdate(raw),
     delete: EndpointExperimentalArtifactsDelete(raw),
   },
+  job: { list: EndpointExperimentalJobList(raw) },
 })
 
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>
