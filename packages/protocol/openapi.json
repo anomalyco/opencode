@@ -209,6 +209,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -350,6 +360,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -461,6 +481,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "AgentNotFoundError | LocationNotFoundError",
             "content": {
@@ -564,6 +594,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -661,6 +701,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -768,6 +818,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -863,6 +923,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -1791,6 +1861,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "SessionNotFoundError | LocationNotFoundError",
             "content": {
@@ -2241,6 +2321,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "SessionNotFoundError | LocationNotFoundError",
             "content": {
@@ -2380,6 +2470,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "SessionNotFoundError | CommandNotFoundError | LocationNotFoundError",
             "content": {
@@ -2502,6 +2602,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "SessionNotFoundError | SkillNotFoundError | LocationNotFoundError",
             "content": {
@@ -2603,6 +2713,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -2738,6 +2858,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "SessionNotFoundError | LocationNotFoundError",
             "content": {
@@ -2836,6 +2966,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -3022,6 +3162,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "MessageNotFoundError | SessionNotFoundError | LocationNotFoundError",
             "content": {
@@ -3129,6 +3279,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -3418,6 +3578,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -3941,6 +4111,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "SessionNotFoundError | LocationNotFoundError",
             "content": {
@@ -4433,6 +4613,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "SessionNotFoundError | LocationNotFoundError",
             "content": {
@@ -4502,6 +4692,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -4609,6 +4809,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "SessionNotFoundError | FormNotFoundError | LocationNotFoundError",
             "content": {
@@ -4690,6 +4900,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -4779,6 +4999,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -5232,6 +5462,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -5342,6 +5582,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -5400,6 +5650,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -5519,6 +5779,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -5643,6 +5913,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "ProviderNotFoundError | ModelNotFoundError | LocationNotFoundError",
             "content": {
@@ -5741,6 +6021,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -5847,6 +6137,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -5905,6 +6205,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -6045,6 +6355,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -6152,6 +6472,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -6269,6 +6599,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -6370,6 +6710,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "IntegrationNotFoundError | LocationNotFoundError",
             "content": {
@@ -6449,6 +6799,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -6550,6 +6910,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -6678,6 +7048,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -6823,6 +7203,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -6973,6 +7363,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "IntegrationNotFoundError | IntegrationAttemptNotFoundError | LocationNotFoundError",
             "content": {
@@ -7073,6 +7473,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -7161,6 +7571,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -7295,6 +7715,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -7445,6 +7875,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "IntegrationNotFoundError | IntegrationAttemptNotFoundError | LocationNotFoundError",
             "content": {
@@ -7545,6 +7985,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -7641,6 +8091,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -7721,6 +8181,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -7831,6 +8301,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "McpServerNotFoundError | LocationNotFoundError",
             "content": {
@@ -7922,6 +8402,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "McpServerNotFoundError | LocationNotFoundError",
             "content": {
@@ -8009,6 +8499,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -8109,6 +8609,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -8230,11 +8740,18 @@
             }
           },
           "403": {
-            "description": "ForbiddenError",
+            "description": "ForbiddenError | LocationAccessDeniedError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -8344,11 +8861,18 @@
             }
           },
           "403": {
-            "description": "ForbiddenError",
+            "description": "ForbiddenError | LocationAccessDeniedError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -8864,6 +9388,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -8960,6 +9494,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -9034,6 +9578,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -9269,6 +9823,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "SessionNotFoundError | LocationNotFoundError",
             "content": {
@@ -9400,6 +9964,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "SessionNotFoundError | LocationNotFoundError",
             "content": {
@@ -9483,6 +10057,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "SessionNotFoundError | PermissionNotFoundError | LocationNotFoundError",
             "content": {
@@ -9551,6 +10135,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -9676,6 +10270,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "FileNotFoundError | LocationNotFoundError",
             "content": {
@@ -9791,6 +10395,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -9930,6 +10544,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -10032,6 +10656,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -10115,6 +10749,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -10224,6 +10868,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -10342,6 +10996,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -10434,6 +11098,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -10540,6 +11214,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -11014,6 +11698,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -11101,6 +11795,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -11240,6 +11944,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "PtyNotFoundError | LocationNotFoundError",
             "content": {
@@ -11342,6 +12056,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -11464,6 +12188,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -11592,11 +12326,18 @@
             }
           },
           "403": {
-            "description": "ForbiddenError",
+            "description": "ForbiddenError | LocationAccessDeniedError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -11691,11 +12432,18 @@
             }
           },
           "403": {
-            "description": "ForbiddenError",
+            "description": "ForbiddenError | LocationAccessDeniedError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                    }
+                  ]
                 }
               }
             }
@@ -14076,6 +14824,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -14163,6 +14921,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -14296,6 +15064,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "ShellNotFoundError | LocationNotFoundError",
             "content": {
@@ -14381,6 +15159,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -14524,6 +15312,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "ShellNotFoundError | LocationNotFoundError",
             "content": {
@@ -14623,6 +15421,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -14975,6 +15783,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -15098,6 +15916,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -15194,6 +16022,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -15300,6 +16138,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -15423,6 +16271,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -15558,6 +16416,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -16034,6 +16902,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -16133,6 +17011,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -16267,6 +17155,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -16363,6 +17261,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -16418,6 +17326,16 @@
               }
             }
           },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
+                }
+              }
+            }
+          },
           "404": {
             "description": "LocationNotFoundError",
             "content": {
@@ -16459,6 +17377,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "LocationAccessDeniedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationAccessDeniedErrorEncoded"
                 }
               }
             }
@@ -20152,6 +21080,23 @@
           }
         },
         "required": ["directory"],
+        "additionalProperties": false
+      },
+      "LocationAccessDeniedErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["LocationAccessDeniedError"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.PublicRef"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "location", "message"],
         "additionalProperties": false
       },
       "LocationNotFoundErrorEncoded": {

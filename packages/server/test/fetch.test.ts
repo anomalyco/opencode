@@ -19,57 +19,81 @@ const options = {
   fs: { filewatcher: false },
 } as const
 
-it.live("returns LocationNotFoundError for a missing folder and recovers once it exists", () =>
-  Effect.gen(function* () {
-    const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-directory-errors-")))
-    const directory = path.join(config.path, "project")
-    const handler = yield* ServerFetch.make({ ...options, config: { directory: config.path } })
-    // Session creation only resolves its placement; it does not boot the Location graph.
-    const created = yield* Effect.promise(() =>
-      handler(
-        new Request("http://opencode.local/api/session", {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-opencode-directory": encodeURIComponent(directory) },
-          body: JSON.stringify({ location: { directory } }),
-        }),
-      ),
-    )
-    expect(created.status).toBe(200)
-    const session = Schema.decodeUnknownSync(Schema.Struct({ data: Session.Info }))(
-      yield* Effect.promise(() => created.json()),
-    ).data
-    const endpoints = [
-      "/api/model",
-      "/api/integration",
-      `/api/session/${session.id}/permission`,
-      "/api/session/global/form",
-    ]
-    for (const endpoint of endpoints) {
-      const response = yield* Effect.promise(() =>
+for (const input of [
+  {
+    failure: "missing",
+    status: 404,
+    body: (directory: string) => ({
+      _tag: "LocationNotFoundError",
+      location: { directory },
+      message: `Location not found: ${directory}`,
+    }),
+  },
+  {
+    failure: "unreadable",
+    status: 403,
+    body: (directory: string) => ({
+      _tag: "LocationAccessDeniedError",
+      location: { directory },
+      message: expect.stringContaining(`Location access denied: ${directory}`),
+    }),
+  },
+] as const) {
+  // Windows does not enforce POSIX directory modes, and root bypasses them.
+  const test =
+    input.failure === "unreadable" && (process.platform === "win32" || process.getuid?.() === 0) ? it.live.skip : it.live
+  test(`returns a typed error for a ${input.failure} folder and recovers once it is fixed`, () =>
+    Effect.gen(function* () {
+      const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-directory-errors-")))
+      const directory = path.join(config.path, "project")
+      if (input.failure === "unreadable") {
+        yield* Effect.promise(() => fs.mkdir(directory, { mode: 0o000 }))
+        yield* Effect.addFinalizer(() => Effect.promise(() => fs.chmod(directory, 0o755)))
+      }
+      const handler = yield* ServerFetch.make({ ...options, config: { directory: config.path } })
+      // Session creation only resolves its placement; it does not boot the Location graph.
+      const created = yield* Effect.promise(() =>
         handler(
-          new Request(`http://opencode.local${endpoint}`, {
+          new Request("http://opencode.local/api/session", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-opencode-directory": encodeURIComponent(directory) },
+            body: JSON.stringify({ location: { directory } }),
+          }),
+        ),
+      )
+      expect(created.status).toBe(200)
+      const session = Schema.decodeUnknownSync(Schema.Struct({ data: Session.Info }))(
+        yield* Effect.promise(() => created.json()),
+      ).data
+      const endpoints = [
+        "/api/model",
+        "/api/integration",
+        `/api/session/${session.id}/permission`,
+        "/api/session/global/form",
+      ]
+      for (const endpoint of endpoints) {
+        const response = yield* Effect.promise(() =>
+          handler(
+            new Request(`http://opencode.local${endpoint}`, {
+              headers: { "x-opencode-directory": encodeURIComponent(directory) },
+            }),
+          ),
+        )
+        expect({ endpoint, status: response.status }).toEqual({ endpoint, status: input.status })
+        expect(yield* Effect.promise(() => response.json())).toEqual(input.body(directory))
+      }
+      yield* Effect.promise(() => (input.failure === "missing" ? fs.mkdir(directory) : fs.chmod(directory, 0o755)))
+      const recovered = yield* Effect.promise(() =>
+        handler(
+          new Request("http://opencode.local/api/model", {
             headers: { "x-opencode-directory": encodeURIComponent(directory) },
           }),
         ),
       )
-      expect({ endpoint, status: response.status }).toEqual({ endpoint, status: 404 })
-      expect(yield* Effect.promise(() => response.json())).toEqual({
-        _tag: "LocationNotFoundError",
-        location: { directory },
-        message: `Location not found: ${directory}`,
-      })
-    }
-    yield* Effect.promise(() => fs.mkdir(directory))
-    const recovered = yield* Effect.promise(() =>
-      handler(
-        new Request("http://opencode.local/api/model", {
-          headers: { "x-opencode-directory": encodeURIComponent(directory) },
-        }),
-      ),
-    )
-    expect(recovered.status).toBe(200)
-  }),
-)
+      expect(recovered.status).toBe(200)
+    }),
+  )
+}
 
 it.live("manages a session whose directory was deleted", () =>
   Effect.gen(function* () {

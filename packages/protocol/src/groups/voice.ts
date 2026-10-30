@@ -1,6 +1,11 @@
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
-import { InvalidRequestError, LocationNotFoundError, ServiceUnavailableError } from "../errors.js"
+import {
+  InvalidRequestError,
+  LocationAccessDeniedError,
+  LocationNotFoundError,
+  ServiceUnavailableError,
+} from "../errors.js"
 
 export const VoiceTransportType = Schema.Literals(["webrtc", "websocket"]).annotate({
   identifier: "VoiceTransportType",
@@ -54,7 +59,7 @@ export const VoiceGroup = HttpApiGroup.make("server.voice")
           default: Schema.optional(Schema.String),
         }),
       }).annotate({ identifier: "VoiceModelsResponse" }),
-      error: [ServiceUnavailableError, LocationNotFoundError],
+      error: [ServiceUnavailableError, LocationNotFoundError, LocationAccessDeniedError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "experimental.voice.models",
@@ -76,7 +81,7 @@ export const VoiceGroup = HttpApiGroup.make("server.voice")
           transport: VoiceTransport,
         }),
       }).annotate({ identifier: "VoiceSessionResponse" }),
-      error: [InvalidRequestError, ServiceUnavailableError, LocationNotFoundError],
+      error: [InvalidRequestError, ServiceUnavailableError, LocationNotFoundError, LocationAccessDeniedError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "experimental.voice.session",

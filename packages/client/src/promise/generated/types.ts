@@ -2907,6 +2907,14 @@ export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly m
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
+export type LocationAccessDeniedError = {
+  readonly _tag: "LocationAccessDeniedError"
+  readonly location: { readonly directory: string }
+  readonly message: string
+}
+export const isLocationAccessDeniedError = (value: unknown): value is LocationAccessDeniedError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "LocationAccessDeniedError"
+
 export type LocationNotFoundError = {
   readonly _tag: "LocationNotFoundError"
   readonly location: { readonly directory: string }

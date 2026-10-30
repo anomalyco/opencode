@@ -1,7 +1,12 @@
 import { Instance } from "@opencode/core/instance/service"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Session } from "@opencode/core/session"
-import { LocationNotFoundError, InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
+import {
+  LocationAccessDeniedError,
+  LocationNotFoundError,
+  InvalidRequestError,
+  SessionNotFoundError,
+} from "@opencode/protocol/errors"
 import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
@@ -11,7 +16,7 @@ export class FormLocationMiddleware extends HttpApiMiddleware.Service<
   FormLocationMiddleware,
   { provides: LocationServices }
 >()("@opencode/HttpApiFormLocation", {
-  error: [InvalidRequestError, SessionNotFoundError, LocationNotFoundError],
+  error: [InvalidRequestError, SessionNotFoundError, LocationNotFoundError, LocationAccessDeniedError],
 }) {}
 
 export const formLocationLayer = Layer.effect(

@@ -3,7 +3,7 @@ import { Location } from "@opencode/schema/location"
 import { PtyTicket } from "@opencode/schema/pty-ticket"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
-import { ForbiddenError, LocationNotFoundError, McpServerNotFoundError } from "../errors.js"
+import { ForbiddenError, LocationAccessDeniedError, LocationNotFoundError, McpServerNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 import { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER } from "./pty.js"
 
@@ -139,7 +139,7 @@ export const makeMcpGroup = <LocationId extends HttpApiMiddleware.AnyId, Locatio
       HttpApiEndpoint.get("mcp.client", MCP_CLIENT_PATH, {
         query: Schema.Struct({ ...McpClientQuery.fields, [PTY_CONNECT_TICKET_QUERY]: Schema.optional(Schema.String) }),
         success: Schema.Boolean,
-        error: [ForbiddenError, LocationNotFoundError],
+        error: [ForbiddenError, LocationNotFoundError, LocationAccessDeniedError],
       })
         .annotateMerge(locationQueryOpenApi)
         .annotateMerge(

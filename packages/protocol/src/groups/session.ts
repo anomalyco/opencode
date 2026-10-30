@@ -12,6 +12,7 @@ import { Context, Schema, SchemaGetter, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
 import {
   ConflictError,
+  LocationAccessDeniedError,
   LocationNotFoundError,
   CommandExecutionError,
   CommandNotFoundError,
@@ -310,7 +311,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           }),
         }),
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, LocationNotFoundError],
+        error: [SessionNotFoundError, LocationNotFoundError, LocationAccessDeniedError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.update",
@@ -530,7 +531,14 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           }),
         }),
         success: Schema.Struct({ data: Schema.Array(FileDiff.Info) }),
-        error: [InvalidRequestError, MessageNotFoundError, SessionNotFoundError, UnknownError, LocationNotFoundError],
+        error: [
+          InvalidRequestError,
+          MessageNotFoundError,
+          SessionNotFoundError,
+          UnknownError,
+          LocationNotFoundError,
+          LocationAccessDeniedError,
+        ],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.diff",

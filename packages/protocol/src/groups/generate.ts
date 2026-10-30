@@ -4,6 +4,7 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import {
   InvalidRequestError,
+  LocationAccessDeniedError,
   LocationNotFoundError,
   ModelNotFoundError,
   ProviderNotFoundError,
@@ -20,6 +21,7 @@ const errors = [
   ProviderRequestError,
   ServiceUnavailableError,
   LocationNotFoundError,
+  LocationAccessDeniedError,
 ]
 
 const textContract = {

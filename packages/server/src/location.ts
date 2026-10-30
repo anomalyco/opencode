@@ -4,7 +4,12 @@ import { Plugin } from "@opencode/core/plugin"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
-import { LocationNotFoundError, InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
+import {
+  LocationAccessDeniedError,
+  LocationNotFoundError,
+  InvalidRequestError,
+  ServiceUnavailableError,
+} from "@opencode/protocol/errors"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
@@ -14,7 +19,7 @@ export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceM
 
 export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware, { provides: LocationServices }>()(
   "@opencode/HttpApiLocation",
-  { error: [LocationNotFoundError] },
+  { error: [LocationNotFoundError, LocationAccessDeniedError] },
 ) {}
 
 export function locationErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
@@ -29,6 +34,20 @@ export function locationErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
             message: `Location not found: ${error.directory}`,
           }),
         ),
+    ),
+    // Location boot keeps an unreadable folder a defect, so clients would only see an empty 500.
+    Effect.catchDefect((defect) =>
+      defect instanceof FileSystem.DirectoryAccessDeniedError
+        ? Effect.fail(
+            new LocationAccessDeniedError({
+              location: { directory: defect.directory },
+              message:
+                process.platform === "darwin"
+                  ? `Location access denied: ${defect.directory}. Check System Settings > Privacy & Security > Files & Folders.`
+                  : `Location access denied: ${defect.directory}`,
+            }),
+          )
+        : Effect.die(defect),
     ),
   )
 }
