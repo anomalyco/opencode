@@ -1,4 +1,4 @@
-import { Data, Equal, Match } from "effect"
+import { Data, Match } from "effect"
 
 export type PartRef = {
   messageID: string
@@ -131,9 +131,31 @@ export namespace TimelineRow {
     Activity: () => "activity",
   })
 
+  // Every projection change compares each row with its previous version. Effect's structural `Equal.equals` hashes
+  // every nested object first, which cost milliseconds per change on long sessions.
   export function equals(a: TimelineRow, b: TimelineRow) {
-    return Equal.equals(a, b)
+    return a === b || (a._tag === b._tag && same(a, b))
   }
+}
+
+// Row fields are strings, numbers, booleans, and plain objects and arrays of them.
+function same(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false
+
+  if (Array.isArray(a) || Array.isArray(b))
+    return (
+      Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, index) => same(item, b[index]))
+    )
+  const left = a as Record<string, unknown>
+  const right = b as Record<string, unknown>
+  const keys = Object.keys(left)
+
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => Object.hasOwn(right, key) && same(left[key], right[key]))
+  )
 }
 
 export type TimelineRowMap = {
