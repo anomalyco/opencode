@@ -69,6 +69,27 @@ const expectToolResult = (body: AnthropicMessages.AnthropicMessagesBody): Anthro
 }
 
 describe("Anthropic Messages route", () => {
+  it.effect("identifies the offending message and part when tool content is unsupported", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          id: "req_tool_unsupported",
+          model,
+          messages: [
+            Message.user("What is the weather?"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
+            Message.make({ role: "tool", content: [Message.text("not a tool result")] }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("Anthropic Messages tool messages only support tool-result content for now")
+      expect(error.message).toContain("message #2")
+      expect(error.message).toContain("part #0")
+      expect(error.message).toContain("type=text")
+    }),
+  )
+
   it.effect("prepares Anthropic Messages target", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(request)
