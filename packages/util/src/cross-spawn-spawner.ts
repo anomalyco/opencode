@@ -1,7 +1,19 @@
 import { isArrayNonEmpty } from "effect/Array"
 import * as NodeSink from "@effect/platform-node/NodeSink"
 import * as NodeStream from "@effect/platform-node/NodeStream"
-import { Deferred, Effect, Exit, FileSystem, Layer, Path, PlatformError, Predicate, Sink, Stream } from "effect"
+import {
+  Deferred,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  Path,
+  PlatformError,
+  Predicate,
+  Redacted,
+  Sink,
+  Stream,
+} from "effect"
 import type { Scope } from "effect"
 import { ChildProcess } from "effect/process"
 import {
@@ -35,6 +47,9 @@ const killGroups = () =>
       // Already gone.
     }
   })
+
+const unwrap = (value: string | Redacted.Redacted<string>): string =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value
 
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
 
@@ -129,8 +144,15 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     return path.resolve(opts.cwd)
   })
 
-  const env = (opts: ChildProcess.CommandOptions) =>
-    opts.extendEnv ? { ...globalThis.process.env, ...opts.env } : opts.env
+  const env = (opts: ChildProcess.CommandOptions) => {
+    if (opts.env === undefined) return opts.extendEnv ? globalThis.process.env : undefined
+    const result: Record<string, string | undefined> = opts.extendEnv ? { ...globalThis.process.env } : {}
+    for (const [key, value] of Object.entries(opts.env)) {
+      if (value === undefined) delete result[key]
+      else result[key] = unwrap(value)
+    }
+    return result
+  }
 
   const input = (x: ChildProcess.CommandInput | undefined): NodeChildProcess.IOType | undefined =>
     Stream.isStream(x) ? "pipe" : x
@@ -203,37 +225,57 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     const ins = new Map<number, Sink.Sink<void, Uint8Array, never, PlatformError.PlatformError>>()
     const outs = new Map<number, Stream.Stream<Uint8Array, PlatformError.PlatformError>>()
 
+    const setupInput = Effect.fnUntraced(function* (
+      fd: number,
+      node: NodeChildProcess.ChildProcess["stdio"][number],
+      source: Stream.Stream<Uint8Array, PlatformError.PlatformError> | undefined,
+    ) {
+      let sink: Sink.Sink<void, Uint8Array, never, PlatformError.PlatformError> = Sink.drain
+      if (node && "write" in node) {
+        sink = NodeSink.fromWritable({
+          evaluate: () => node,
+          onError: (err) => toPlatformError(`fromWritable(fd${fd})`, toError(err), command),
+          endOnDone: true,
+        })
+      }
+      if (source) yield* Effect.forkScoped(Stream.run(source, sink))
+      ins.set(fd, sink)
+    })
+
+    const setupOutput = (
+      fd: number,
+      node: NodeChildProcess.ChildProcess["stdio"][number],
+      sink: Sink.Sink<Uint8Array, Uint8Array, never, PlatformError.PlatformError> | undefined,
+    ) => {
+      let stream: Stream.Stream<Uint8Array, PlatformError.PlatformError> = Stream.empty
+      if (node && "read" in node) {
+        const tap = new PassThrough()
+        node.on("error", (err) => tap.destroy(toError(err)))
+        node.pipe(tap)
+        stream = NodeStream.fromReadable({
+          evaluate: () => tap,
+          onError: (err) => toPlatformError(`fromReadable(fd${fd})`, toError(err), command),
+        })
+      }
+      if (sink) stream = Stream.transduce(stream, sink)
+      outs.set(fd, stream)
+    }
+
     for (const x of extra) {
       const node = proc.stdio[x.fd]
       switch (x.config.type) {
-        case "input": {
-          let sink: Sink.Sink<void, Uint8Array, never, PlatformError.PlatformError> = Sink.drain
-          if (node && "write" in node) {
-            sink = NodeSink.fromWritable({
-              evaluate: () => node,
-              onError: (err) => toPlatformError(`fromWritable(fd${x.fd})`, toError(err), command),
-              endOnDone: true,
-            })
-          }
-          if (x.config.stream) yield* Effect.forkScoped(Stream.run(x.config.stream, sink))
-          ins.set(x.fd, sink)
+        case "input":
+          yield* setupInput(x.fd, node, x.config.stream)
           break
-        }
-        case "output": {
-          let stream: Stream.Stream<Uint8Array, PlatformError.PlatformError> = Stream.empty
-          if (node && "read" in node) {
-            const tap = new PassThrough()
-            node.on("error", (err) => tap.destroy(toError(err)))
-            node.pipe(tap)
-            stream = NodeStream.fromReadable({
-              evaluate: () => tap,
-              onError: (err) => toPlatformError(`fromReadable(fd${x.fd})`, toError(err), command),
-            })
-          }
-          if (x.config.sink) stream = Stream.transduce(stream, x.config.sink)
-          outs.set(x.fd, stream)
+        case "output":
+          setupOutput(x.fd, node, x.config.sink)
           break
-        }
+        case "duplex":
+          // Keep writing possible after the child closes its write side.
+          if (node && "allowHalfOpen" in node) node.allowHalfOpen = true
+          setupOutput(x.fd, node, x.config.sink)
+          yield* setupInput(x.fd, node, x.config.stream)
+          break
       }
     }
 
@@ -302,11 +344,17 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
-      const proc = launch(command.command, command.args, opts)
+      const proc = launch(command.command, command.args.map(unwrap), opts)
       let settle = () => {}
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
       proc.on("error", (err) => {
+        // Node copies the arguments into `spawnargs`.
+        if (command.args.some(Redacted.isRedacted)) {
+          Object.assign(err, {
+            spawnargs: [command.command, ...command.args.map((arg) => (Redacted.isRedacted(arg) ? "<redacted>" : arg))],
+          })
+        }
         resume(Effect.fail(toPlatformError("spawn", err, command)))
       })
       proc.on("exit", (...args) => {
@@ -567,12 +615,14 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
               )
               continue
             }
+            const name = ChildProcess.fdName(fd) as `fd${number}`
+            const existing = next.options.additionalFds?.[name]
             handle = spawnCommand(
               ChildProcess.make(next.command, next.args, {
                 ...next.options,
                 additionalFds: {
                   ...next.options.additionalFds,
-                  [ChildProcess.fdName(fd) as `fd${number}`]: { type: "input", stream },
+                  [name]: existing?.type === "duplex" ? { ...existing, stream } : { type: "input", stream },
                 },
               }),
             )

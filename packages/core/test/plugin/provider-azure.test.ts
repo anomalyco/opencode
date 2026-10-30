@@ -135,11 +135,12 @@ const fakeAzureCli = Effect.fn(function* (respond: (args: readonly string[]) => 
     ...processes,
     run: (command) => {
       if (command._tag !== "StandardCommand") return processes.run(command)
-      commands.push([...command.args])
-      const value = respond(command.args)
+      const args = command.args.map(String)
+      commands.push(args)
+      const value = respond(args)
       if (value instanceof Error) return Effect.fail(new AppProcess.AppProcessError({ command: "az", cause: value }))
       return Effect.succeed({
-        command: `az ${command.args.join(" ")}`,
+        command: `az ${args.join(" ")}`,
         exitCode: 0,
         stdout: Buffer.from(JSON.stringify(value)),
         stderr: Buffer.alloc(0),
