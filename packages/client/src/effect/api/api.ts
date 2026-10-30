@@ -38,6 +38,7 @@ import type { Command } from "@opencode/schema/command"
 import type { OpenCodeEvent } from "@opencode/protocol/groups/event"
 import type { Pty } from "@opencode/schema/pty"
 import type { Schedule } from "@opencode/schema/schedule"
+import type { Artifact } from "@opencode/schema/artifact"
 import type { Reference } from "@opencode/schema/reference"
 import type { Worktree } from "@opencode/schema/worktree"
 import type { Vcs } from "@opencode/schema/vcs"
@@ -2158,6 +2159,7 @@ export type EventSubscribeInput = {
         | "pty.deleted"
         | "persistent-pty.added"
         | "persistent-pty.removed"
+        | "persistent-pty.updated"
         | "shell.created"
         | "shell.exited"
         | "shell.deleted"
@@ -2165,6 +2167,7 @@ export type EventSubscribeInput = {
         | "form.replied"
         | "form.cancelled"
         | "websearch.updated"
+        | "artifact.updated"
         | "session.status"
         | "session.idle"
         | "tui.prompt.append"
@@ -2272,6 +2275,7 @@ export type ExperimentalPersistentPtyListOutput = ReadonlyArray<{
   readonly pid: number
   readonly exitCode?: number | undefined
   readonly sessionID: Session.ID
+  readonly userTitle: string | null
   readonly foregroundProcess: string | null
   readonly size: { readonly cols: number; readonly rows: number }
   readonly output: { readonly head: number; readonly tail: number }
@@ -2299,6 +2303,7 @@ export type ExperimentalPersistentPtyCreateOutput = {
   readonly pid: number
   readonly exitCode?: number | undefined
   readonly sessionID: Session.ID
+  readonly userTitle: string | null
   readonly foregroundProcess: string | null
   readonly size: { readonly cols: number; readonly rows: number }
   readonly output: { readonly head: number; readonly tail: number }
@@ -2337,6 +2342,7 @@ export type ExperimentalPersistentPtyGetOutput = {
   readonly pid: number
   readonly exitCode?: number | undefined
   readonly sessionID: Session.ID
+  readonly userTitle: string | null
   readonly foregroundProcess: string | null
   readonly size: { readonly cols: number; readonly rows: number }
   readonly output: { readonly head: number; readonly tail: number }
@@ -2348,7 +2354,8 @@ export type ExperimentalPersistentPtyGetOperation<E = never> = (
 export type ExperimentalPersistentPtyUpdateInput = {
   readonly ptyID: Pty.ID
   readonly attachmentID?: string | undefined
-  readonly size: { readonly cols: number; readonly rows: number }
+  readonly size?: { readonly cols: number; readonly rows: number } | undefined
+  readonly title?: string | null | undefined
 }
 export type ExperimentalPersistentPtyUpdateOutput = {
   readonly id: Pty.ID
@@ -2360,6 +2367,7 @@ export type ExperimentalPersistentPtyUpdateOutput = {
   readonly pid: number
   readonly exitCode?: number | undefined
   readonly sessionID: Session.ID
+  readonly userTitle: string | null
   readonly foregroundProcess: string | null
   readonly size: { readonly cols: number; readonly rows: number }
   readonly output: { readonly head: number; readonly tail: number }
@@ -2380,6 +2388,7 @@ export type ExperimentalPersistentPtySnapshotOutput = {
     readonly pid: number
     readonly exitCode?: number | undefined
     readonly sessionID: Session.ID
+    readonly userTitle: string | null
     readonly foregroundProcess: string | null
     readonly size: { readonly cols: number; readonly rows: number }
     readonly output: { readonly head: number; readonly tail: number }
@@ -2451,6 +2460,74 @@ export type ExperimentalScheduleDeleteOperation<E = never> = (
   input: ExperimentalScheduleDeleteInput,
 ) => Effect.Effect<ExperimentalScheduleDeleteOutput, E>
 
+export type ExperimentalArtifactsProvidersInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+export type ExperimentalArtifactsProvidersOutput = {
+  readonly location: Location.PublicRef
+  readonly data: ReadonlyArray<Artifact.Provider>
+}
+export type ExperimentalArtifactsProvidersOperation<E = never> = (
+  input?: ExperimentalArtifactsProvidersInput,
+) => Effect.Effect<ExperimentalArtifactsProvidersOutput, E>
+
+export type ExperimentalArtifactsListInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly sessionID?: Session.ID | undefined
+  readonly provider?: Artifact.ProviderID | undefined
+}
+export type ExperimentalArtifactsListOutput = {
+  readonly location: Location.PublicRef
+  readonly data: ReadonlyArray<Artifact.Info>
+}
+export type ExperimentalArtifactsListOperation<E = never> = (
+  input?: ExperimentalArtifactsListInput,
+) => Effect.Effect<ExperimentalArtifactsListOutput, E>
+
+export type ExperimentalArtifactsCreateInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly title: string
+  readonly files: { readonly [x: string]: string }
+  readonly entry?: string | undefined
+  readonly provider?: Artifact.ProviderID | undefined
+  readonly sessionID?: Session.ID | undefined
+}
+export type ExperimentalArtifactsCreateOutput = { readonly location: Location.PublicRef; readonly data: Artifact.Info }
+export type ExperimentalArtifactsCreateOperation<E = never> = (
+  input: ExperimentalArtifactsCreateInput,
+) => Effect.Effect<ExperimentalArtifactsCreateOutput, E>
+
+export type ExperimentalArtifactsGetInput = {
+  readonly artifactID: Artifact.ID
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+export type ExperimentalArtifactsGetOutput = { readonly location: Location.PublicRef; readonly data: Artifact.Content }
+export type ExperimentalArtifactsGetOperation<E = never> = (
+  input: ExperimentalArtifactsGetInput,
+) => Effect.Effect<ExperimentalArtifactsGetOutput, E>
+
+export type ExperimentalArtifactsUpdateInput = {
+  readonly artifactID: Artifact.ID
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly title?: string | undefined
+  readonly files: { readonly [x: string]: string }
+  readonly entry?: string | undefined
+  readonly sessionID?: Session.ID | undefined
+}
+export type ExperimentalArtifactsUpdateOutput = { readonly location: Location.PublicRef; readonly data: Artifact.Info }
+export type ExperimentalArtifactsUpdateOperation<E = never> = (
+  input: ExperimentalArtifactsUpdateInput,
+) => Effect.Effect<ExperimentalArtifactsUpdateOutput, E>
+
+export type ExperimentalArtifactsDeleteInput = {
+  readonly artifactID: Artifact.ID
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+export type ExperimentalArtifactsDeleteOutput = void
+export type ExperimentalArtifactsDeleteOperation<E = never> = (
+  input: ExperimentalArtifactsDeleteInput,
+) => Effect.Effect<ExperimentalArtifactsDeleteOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2471,6 +2548,14 @@ export interface ExperimentalApi<E = never> {
     readonly pause: ExperimentalSchedulePauseOperation<E>
     readonly resume: ExperimentalScheduleResumeOperation<E>
     readonly delete: ExperimentalScheduleDeleteOperation<E>
+  }
+  readonly artifacts: {
+    readonly providers: ExperimentalArtifactsProvidersOperation<E>
+    readonly list: ExperimentalArtifactsListOperation<E>
+    readonly create: ExperimentalArtifactsCreateOperation<E>
+    readonly get: ExperimentalArtifactsGetOperation<E>
+    readonly update: ExperimentalArtifactsUpdateOperation<E>
+    readonly delete: ExperimentalArtifactsDeleteOperation<E>
   }
 }
 

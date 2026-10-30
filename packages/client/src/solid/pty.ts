@@ -1,6 +1,6 @@
 import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { Schema } from "effect"
-import type { ExperimentalPersistentPtyConnectTokenInput, OpenCodeClient, PtyConnectTokenInput } from "../promise"
+import type { ExperimentalPersistentPtyConnectTokenInput, OpenCodeClient } from "../promise"
 
 // Declares only the fields clients read, so servers can add or drop the rest without a client silently ignoring a
 // message it depends on.
@@ -52,40 +52,11 @@ export type PtyClientOptions = {
   readonly openSocket?: (url: URL) => WebSocket
 }
 
-export type PtyConnectInput = {
-  readonly ptyID: PtyConnectTokenInput["ptyID"]
-  readonly location?: PtyConnectTokenInput["location"]
-  readonly cursor?: number
-}
-
 export type PersistentPtyConnectInput = {
   readonly ptyID: ExperimentalPersistentPtyConnectTokenInput["ptyID"]
   readonly cursor: number
   readonly attachmentID: string
   readonly takeover?: boolean
-}
-
-export function createPtyClient(api: OpenCodeClient, options: PtyClientOptions) {
-  return {
-    async connect(input: PtyConnectInput) {
-      const result = await api.pty.connect.token({
-        ptyID: input.ptyID,
-        location: input.location,
-        "x-opencode-ticket": "1",
-      })
-      const baseUrl = new URL(options.url)
-      if (!baseUrl.pathname.endsWith("/")) baseUrl.pathname += "/"
-      const url = new URL(`api/pty/${encodeURIComponent(input.ptyID)}/connect`, baseUrl)
-      if (input.location?.directory) url.searchParams.set("location[directory]", input.location.directory)
-      if (input.cursor !== undefined) url.searchParams.set("cursor", String(input.cursor))
-      url.searchParams.set("ticket", result.data.ticket)
-      url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-
-      const socket = options.openSocket?.(url) ?? new WebSocket(url)
-      socket.binaryType = "arraybuffer"
-      return socket
-    },
-  }
 }
 
 export function createPersistentPtyClient(api: OpenCodeClient, options: PtyClientOptions) {

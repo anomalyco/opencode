@@ -1,6 +1,4 @@
 import { describe, expect } from "bun:test"
-import { mkdir } from "node:fs/promises"
-import path from "node:path"
 import { Effect, Fiber, Layer, Option, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -18,8 +16,8 @@ import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionStore } from "@opencode/core/session/store"
 import { SessionEnvironment } from "@opencode/core/session/environment"
 import { LocationServiceMap } from "@opencode/core/location-services"
-import { Removed } from "@opencode/schema/persistent-pty"
-import { listen, pong, temporaryDirectory, terminal, writeRegistration } from "./fixture/persistent-pty-daemon"
+import { Removed, Updated } from "@opencode/schema/persistent-pty"
+import { fakeDaemon } from "./fixture/persistent-pty-daemon"
 import { it } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 import { offlineModels } from "./fixture/models"
@@ -88,48 +86,61 @@ describe("PersistentPty session cleanup", () => {
   )
 })
 
-const nextRemoved = (bus: Bus.Interface) =>
-  bus.subscribe(Removed).pipe(Stream.runHead, Effect.map(Option.getOrThrow), Effect.forkScoped({ startImmediately: true }))
+describe("PersistentPty rename", () => {
+  it.live("renames a terminal, publishes the update and clears the user title", () =>
+    Effect.gen(function* () {
+      const daemon = yield* fakeDaemon(["rename"])
+      yield* Effect.gen(function* () {
+        const pty = yield* PersistentPty.Service
+        const bus = yield* Bus.Service
+        const directory = yield* tmpdirScoped()
+        const sessionID = Session.ID.make("ses_rename")
+        const terminal = yield* pty.create(sessionID, { args: [], cwd: directory.path, title: "test", env: {} })
+        expect(terminal.userTitle).toBeNull()
+        const updated = yield* nextUpdated(bus)
 
-// An in-process opencode-pty that the layer adopts through a handoff, so no daemon is spawned.
-const fakeDaemon = Effect.fn(function* () {
-  const base = yield* temporaryDirectory()
-  const root = path.join(base, "root")
-  const directory = path.join(root, "inherited")
-  const socket = path.join(base, "daemon.sock")
-  const terminals: ReturnType<typeof terminal>[] = []
-  const failTerminate = new Set<string>()
-  let nextID = 1
-  yield* listen(socket, (_socket, request) => {
-    if (request.op === "ping") return pong
-    if (request.op === "list") return { type: "terminals", terminals }
-    if (request.op === "create") {
-      const created = terminal(nextID++, String(request.group_id))
-      terminals.push(created)
-      return { type: "created", terminal: created }
-    }
-    if (request.op === "control") return { type: "ok" }
-    if (request.op === "terminate") {
-      if (failTerminate.has(`pty_persistent_${request.id}`)) return { type: "error", message: "terminate failed" }
-      const index = terminals.findIndex((item) => item.id === request.id)
-      if (index === -1) return { type: "error", message: `terminal not found: ${String(request.id)}` }
-      terminals.splice(index, 1)
-      return { type: "ok" }
-    }
-    return { type: "error", message: `unexpected request: ${String(request.op)}` }
-  })
-  yield* Effect.promise(async () => {
-    await mkdir(directory, { recursive: true })
-    await writeRegistration(directory, socket)
-  })
-  return {
-    failTerminate,
-    options: {
-      root,
-      handoff: { directory, instanceID: "test", ticket: "ticket", expiresAt: Date.now() + 60_000 },
-    },
-  }
+        const renamed = yield* pty.rename(terminal.id, "build")
+
+        expect(renamed).toMatchObject({ id: terminal.id, title: "build", userTitle: "build" })
+        expect((yield* Fiber.join(updated)).data).toEqual({ sessionID, terminal: renamed })
+        expect(yield* pty.rename(terminal.id, null)).toMatchObject({ title: "test", userTitle: null })
+      }).pipe(Effect.provide(layer(daemon)))
+    }),
+  )
+
+  it.live("refuses to rename on a daemon without the rename feature and never sends it", () =>
+    Effect.gen(function* () {
+      const daemon = yield* fakeDaemon()
+      yield* Effect.gen(function* () {
+        const pty = yield* PersistentPty.Service
+        const directory = yield* tmpdirScoped()
+        const terminal = yield* pty.create(Session.ID.make("ses_rename"), {
+          args: [],
+          cwd: directory.path,
+          title: "test",
+          env: {},
+        })
+        expect(terminal.userTitle).toBeNull()
+
+        const error = yield* Effect.flip(pty.rename(terminal.id, "build"))
+
+        expect(error).toEqual(new PersistentPty.UnsupportedError({ feature: "rename" }))
+        expect(daemon.ops).not.toContain("rename")
+        expect((yield* pty.get(terminal.id)).title).toBe("test")
+      }).pipe(Effect.provide(layer(daemon)))
+    }),
+  )
 })
+
+const nextUpdated = (bus: Bus.Interface) =>
+  bus
+    .subscribe(Updated)
+    .pipe(Stream.runHead, Effect.map(Option.getOrThrow), Effect.forkScoped({ startImmediately: true }))
+
+const nextRemoved = (bus: Bus.Interface) =>
+  bus
+    .subscribe(Removed)
+    .pipe(Stream.runHead, Effect.map(Option.getOrThrow), Effect.forkScoped({ startImmediately: true }))
 
 const layer = (daemon: { readonly options: PersistentPty.Options }) =>
   AppNodeBuilder.build(

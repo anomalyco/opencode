@@ -141,15 +141,14 @@ const paths = (registry: Tool.Interface) =>
     )
 
 describe("ScheduleTools", () => {
-  it.effect("are absent unless experimental.schedules is enabled", () =>
+  it.effect("are registered by default unless experimental.schedules is false", () =>
     Effect.gen(function* () {
-      expect(yield* paths((yield* setup(undefined)).registry)).not.toContain(names[0])
       const off = yield* setup(new ConfigExperimental.Info({ schedules: false }))
       expect(yield* paths(off.registry)).not.toContain(names[0])
       expect(off.commands).toEqual([])
-      const on = yield* setup(new ConfigExperimental.Info({ schedules: true }))
-      expect(yield* paths(on.registry)).toEqual(expect.arrayContaining(names))
-      expect(on.commands.map((command) => command.name)).toEqual(["schedule"])
+      const byDefault = yield* setup(undefined)
+      expect(yield* paths(byDefault.registry)).toEqual(expect.arrayContaining(names))
+      expect(byDefault.commands.map((command) => command.name)).toEqual(["schedule"])
     }),
   )
 

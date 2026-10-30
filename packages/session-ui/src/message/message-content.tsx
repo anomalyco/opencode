@@ -54,31 +54,30 @@ import { agentLabel } from "./agent-label"
 import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
 
 export async function writeClipboard(text: string): Promise<boolean> {
-  const body = typeof document === "undefined" ? undefined : document.body
-
-  if (body) {
-    const textarea = document.createElement("textarea")
-    textarea.value = text
-    textarea.setAttribute("readonly", "")
-    textarea.style.position = "fixed"
-    textarea.style.opacity = "0"
-    textarea.style.pointerEvents = "none"
-    body.appendChild(textarea)
-    textarea.select()
-    const copied = document.execCommand("copy")
-    body.removeChild(textarea)
-
-    if (copied) return true
-  }
-
-  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
-
-  if (!clipboard?.writeText) return false
-
-  return clipboard.writeText(text).then(
+  const written = await navigator.clipboard?.writeText(text).then(
     () => true,
     () => false,
   )
+
+  if (written) return true
+  // The textarea sits beside the focused element so a focus trap, such as an open menu's, keeps its selection.
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
+  const host = active && active !== document.body ? (active.parentElement ?? document.body) : document.body
+  const textarea = document.createElement("textarea")
+  textarea.value = text
+  textarea.setAttribute("readonly", "")
+  textarea.setAttribute("aria-hidden", "true")
+  textarea.tabIndex = -1
+  textarea.style.position = "fixed"
+  textarea.style.opacity = "0"
+  textarea.style.pointerEvents = "none"
+  host.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand("copy")
+  textarea.remove()
+  active?.focus({ preventScroll: true })
+
+  return copied
 }
 
 type MetaItem = { label: string; variant?: boolean }
