@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Cause, Effect, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { CodeMode, Extension, Tool, toolError } from "../src/index.js"
 
 const run = (tool: Tool.Tool<never>) =>
@@ -391,6 +391,100 @@ describe("CodeMode call hooks", () => {
 
     expect(result).toMatchObject({ ok: false, error: { kind: "TimeoutExceeded" } })
     expect(events).toEqual(['tool.before {"name":"host.call","input":{}}', "tool.after host.call interrupted"])
+  })
+
+  describe("with a stop signal", () => {
+    const lookup = Tool.make({
+      description: "Look up",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.succeed("found"),
+    })
+    const waiting = (started: Deferred.Deferred<void>) =>
+      Tool.make({
+        description: "Wait",
+        input: Schema.Struct({}),
+        output: Schema.String,
+        execute: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+      })
+
+    test("returns what a stopped program logged and called, after its running calls settle", async () => {
+      const events: Array<string> = []
+      const started = Deferred.makeUnsafe<void>()
+      const runtime = CodeMode.make({ tools: { lookup, wait: waiting(started) }, hooks: observe(events) })
+
+      const result = await Effect.runPromise(
+        runtime.execute('console.log("starting"); await tools.lookup({}); await tools.wait({})', undefined, {
+          stop: Deferred.await(started),
+        }),
+      )
+
+      expect(result).toEqual({
+        ok: false,
+        error: { kind: "Interrupted", message: "Execution was interrupted." },
+        logs: ["starting"],
+        toolCalls: [{ name: "lookup" }, { name: "wait" }],
+      })
+      expect(events).toEqual([
+        'tool.before {"name":"lookup","input":{}}',
+        "tool.after lookup success",
+        'tool.before {"name":"wait","input":{}}',
+        "tool.after wait interrupted",
+      ])
+    })
+
+    test("bounds the logs of a stopped program", async () => {
+      const started = Deferred.makeUnsafe<void>()
+      const runtime = CodeMode.make({ tools: { wait: waiting(started) }, limits: { maxOutputBytes: 10 } })
+
+      const result = await Effect.runPromise(
+        runtime.execute('console.log("first"); console.log("second"); await tools.wait({})', undefined, {
+          stop: Deferred.await(started),
+        }),
+      )
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: { kind: "Interrupted" },
+        logs: ["first", "[logs truncated: showing 1 of 2 lines]"],
+        truncated: true,
+      })
+    })
+
+    test("still ends interrupted by an outside interrupt or a call interrupting itself", async () => {
+      const started = Deferred.makeUnsafe<void>()
+      const interrupting = Tool.make({
+        description: "Interrupt",
+        input: Schema.Struct({}),
+        output: Schema.String,
+        execute: () => Effect.interrupt,
+      })
+      const runtime = CodeMode.make({ tools: { wait: waiting(started), interrupting } })
+
+      const outside = await Effect.runPromiseExit(
+        Effect.gen(function* () {
+          const execution = yield* runtime
+            .execute("await tools.wait({})", undefined, { stop: Effect.never })
+            .pipe(Effect.forkChild({ startImmediately: true }))
+          yield* Deferred.await(started)
+          return yield* Fiber.interrupt(execution).pipe(Effect.andThen(Fiber.join(execution)))
+        }),
+      )
+      const inside = await Effect.runPromiseExit(
+        runtime.execute("await tools.interrupting({})", undefined, { stop: Effect.never }),
+      )
+
+      expect(Exit.hasInterrupts(outside)).toBe(true)
+      expect(Exit.hasInterrupts(inside)).toBe(true)
+    })
+
+    test("leaves a program that finishes first unchanged", async () => {
+      const result = await Effect.runPromise(
+        CodeMode.execute({ tools: { lookup }, code: "return await tools.lookup({})", stop: Effect.never }),
+      )
+
+      expect(result).toEqual({ ok: true, value: "found", toolCalls: [{ name: "lookup" }] })
+    })
   })
 })
 
