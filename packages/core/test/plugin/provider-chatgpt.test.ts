@@ -63,12 +63,13 @@ function required<T>(value: T | undefined): T {
   return value
 }
 
-const authorize = Effect.fn(function* () {
+const authorize = Effect.fn(function* (credentialID?: Credential.ID) {
   const integrations = yield* Integration.Service
   const integrationID = Integration.ID.make("openai")
   const attempt = yield* integrations.oauth.connect({
     integrationID,
     methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+    credentialID,
   })
   yield* integrations.oauth.cancel({ integrationID, attemptID: attempt.attemptID })
   return new URL(attempt.url)
@@ -392,7 +393,7 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
-  it.effect("registers a new ChatGPT agent on first sign-in with a loopback callback", () =>
+  it.live("registers a new ChatGPT agent even when another account is already connected", () =>
     Effect.gen(function* () {
       yield* addPlugin()
       const url = yield* authorize()
@@ -414,7 +415,24 @@ describe("ChatGPTPlugin", () => {
       const kv = yield* KV.Service
       const storage = PluginHost.storage(kv, ChatGPTPlugin.id)
       expect(yield* storage.get("chatgpt-agent-host-id")).toBe(hostID)
-      expect((yield* authorize()).searchParams.get("ext_agent_host_id")).toBe(hostID)
+      const credentials = yield* Credential.Service
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "existing-access",
+          refresh: "existing-refresh",
+          expires: Date.now() + 60 * 60_000,
+          metadata: { clientID: "oaiapp_existing" },
+        }),
+      })
+      const next = yield* authorize()
+      expect(Object.fromEntries(next.searchParams)).toMatchObject({
+        client_id: "dynamic_agent_client",
+        agent_name_hint: "OpenCode",
+        ext_agent_host_id: hostID,
+      })
       expect(redirect.hostname).toBe("127.0.0.1")
       expect(redirect.pathname).toBe("/auth/callback")
       expect(Number(redirect.port)).toBeGreaterThan(0)
@@ -439,13 +457,13 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
-  it.effect("reauthorizes with the client ID issued to an existing ChatGPT connection", () =>
+  it.live("reauthorizes with the client ID issued to an existing ChatGPT connection", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
       const kv = yield* KV.Service
       const hostID = "urn:uuid:00000000-0000-4000-8000-000000000000"
       yield* PluginHost.storage(kv, ChatGPTPlugin.id).set("chatgpt-agent-host-id", hostID)
-      yield* credentials.create({
+      const credential = yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
         value: Credential.OAuth.make({
           type: "oauth",
@@ -457,7 +475,7 @@ describe("ChatGPTPlugin", () => {
         }),
       })
       yield* addPlugin()
-      const url = yield* authorize()
+      const url = yield* authorize(credential.id)
       expect(url.searchParams.get("client_id")).toBe("oaiapp_issued")
       expect(url.searchParams.has("agent_name_hint")).toBe(false)
       expect(url.searchParams.get("ext_agent_host_id")).toBe(hostID)
@@ -465,10 +483,104 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
-  it.live("rejects a reauthorization callback that returns a different client ID", () =>
+  it.live("registers a new ChatGPT agent when switching a legacy target to token sharing", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("openai")
+      const legacy = yield* credentials.create({
+        integrationID,
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-browser"),
+          access: "legacy-access",
+          refresh: "legacy-refresh",
+          expires: Date.now() + 60 * 60_000,
+          metadata: { accountID: "acct_legacy" },
+        }),
+      })
       yield* credentials.create({
+        integrationID,
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "active-access",
+          refresh: "active-refresh",
+          expires: Date.now() + 60 * 60_000,
+          metadata: { clientID: "oaiapp_active" },
+        }),
+      })
+      yield* addPlugin()
+      const url = yield* authorize(legacy.id)
+      expect(Object.fromEntries(url.searchParams)).toMatchObject({
+        client_id: "dynamic_agent_client",
+        agent_name_hint: "OpenCode",
+      })
+    }),
+  )
+
+  it.live("reauthorizes a non-active ChatGPT connection instead of the active one", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const integrations = yield* Integration.Service
+      const integrationID = Integration.ID.make("openai")
+      const accounts = yield* Effect.forEach(["a", "b"], (account) =>
+        credentials.create({
+          integrationID,
+          value: Credential.OAuth.make({
+            type: "oauth",
+            methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+            access: `access-${account}`,
+            refresh: `refresh-${account}`,
+            expires: Date.now() + 60 * 60_000,
+            metadata: { clientID: `oaiapp_${account}` },
+          }),
+        }),
+      )
+      const a = required(accounts[0])
+      const b = required(accounts[1])
+      yield* credentials.activate(a.id)
+      yield* addPlugin()
+      expect(yield* integrations.connection.active(integrationID)).toMatchObject({ id: a.id })
+      const before = yield* credentials.list(integrationID)
+
+      const url = yield* authorize(b.id)
+      expect(url.searchParams.get("client_id")).toBe("oaiapp_b")
+      expect(url.searchParams.has("agent_name_hint")).toBe(false)
+      expect(yield* credentials.list(integrationID)).toEqual(before)
+      expect(yield* integrations.connection.active(integrationID)).toMatchObject({ id: a.id })
+    }),
+  )
+
+  for (const metadata of [undefined, {}, { clientID: "" }, { clientID: "   " }]) {
+    it.effect(`rejects a ChatGPT reauthorization target with invalid client metadata ${JSON.stringify(metadata)}`, () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const integrations = yield* Integration.Service
+        const integrationID = Integration.ID.make("openai")
+        const credential = yield* credentials.create({
+          integrationID,
+          value: Credential.OAuth.make({
+            type: "oauth",
+            methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+            access: "access",
+            refresh: "refresh",
+            expires: Date.now() + 60 * 60_000,
+            metadata,
+          }),
+        })
+        yield* addPlugin()
+        const before = yield* credentials.list(integrationID)
+        expect(yield* authorize(credential.id).pipe(Effect.flip)).toBeInstanceOf(Integration.AuthorizationError)
+        expect(yield* credentials.list(integrationID)).toEqual(before)
+        expect(yield* integrations.connection.active(integrationID)).toMatchObject({ id: credential.id })
+      }),
+    )
+  }
+
+  it.live("rejects a different-client callback even after the active ChatGPT connection changes", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const credential = yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
         value: Credential.OAuth.make({
           type: "oauth",
@@ -479,14 +591,29 @@ describe("ChatGPTPlugin", () => {
           metadata: { clientID: "oaiapp_issued" },
         }),
       })
+      const other = yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        activate: false,
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "other-access",
+          refresh: "other-refresh",
+          expires: Date.now() + 60 * 60_000,
+          metadata: { clientID: "oaiapp_other" },
+        }),
+      })
       yield* addPlugin()
       const integrations = yield* Integration.Service
       const attempt = yield* integrations.oauth.connect({
         integrationID: Integration.ID.make("openai"),
         methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+        credentialID: credential.id,
       })
       const authorization = new URL(attempt.url)
       expect(authorization.searchParams.get("client_id")).toBe("oaiapp_issued")
+      yield* credentials.activate(other.id)
+      const before = yield* credentials.list(Integration.ID.make("openai"))
       const callback = new URL(authorization.searchParams.get("redirect_uri") ?? "")
       callback.searchParams.set("code", "test-code")
       callback.searchParams.set("state", authorization.searchParams.get("state") ?? "")
@@ -494,7 +621,7 @@ describe("ChatGPTPlugin", () => {
       const response = yield* Effect.promise(() => fetch(callback))
       expect(response.status).toBe(400)
       expect(yield* Effect.promise(() => response.text())).toContain("different client")
-      expect(yield* credentials.list(Integration.ID.make("openai"))).toHaveLength(1)
+      expect(yield* credentials.list(Integration.ID.make("openai"))).toEqual(before)
     }),
   )
 

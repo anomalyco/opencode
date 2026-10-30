@@ -3977,6 +3977,7 @@ export type IntegrationOauthConnectInput = {
   readonly integrationID: string
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly methodID: string
+  readonly credentialID?: string | undefined
   readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
   readonly label?: string | undefined
 }

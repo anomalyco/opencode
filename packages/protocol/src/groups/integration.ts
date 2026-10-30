@@ -1,4 +1,5 @@
 import { Integration } from "@opencode/schema/integration"
+import { Credential } from "@opencode/schema/credential"
 import { Location } from "@opencode/schema/location"
 import { Form } from "@opencode/schema/form"
 import { Schema } from "effect"
@@ -106,6 +107,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       query: LocationQuery,
       payload: Schema.Struct({
         methodID: Integration.MethodID,
+        credentialID: Schema.optional(Credential.ID),
         answer: Schema.optional(Form.Answer),
         label: Schema.optional(Schema.String),
       }),

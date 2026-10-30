@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
-import type { FormFields, LocationRef } from "@opencode/client"
+import type { ConnectionCredentialInfo, FormFields, LocationRef } from "@opencode/client"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { onMount } from "solid-js"
@@ -44,6 +44,112 @@ test("opens the key connection prompt from the initially focused add account row
     await fixture.app.waitForFrame((frame) => frame.includes("API key") && !frame.includes("Connected accounts"))
 
     expect(fixture.requests).toEqual([])
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+test("starts a new OAuth registration from add account without targeting an existing credential", async () => {
+  const fixture = await renderIntegration(undefined, undefined, { oauth: true })
+
+  try {
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitForFrame(
+      (frame) =>
+        frame.includes("Browser login") &&
+        frame.includes("API key") &&
+        fixture.app.renderer.currentFocusedEditor instanceof InputRenderable,
+    )
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.requests.length === 2)
+
+    expect(fixture.requests).toEqual([
+      { method: "POST", path: "/api/integration/openai/connect/oauth", body: { methodID: "browser" } },
+      { method: "GET", path: "/api/integration/openai/connect/oauth/attempt_test" },
+    ])
+    expect(fixture.accounts.map((account) => account.id)).toEqual(["cred_personal", "cred_work"])
+    fixture.failOAuth()
+    await fixture.app.waitForFrame((frame) => frame.trim() === "")
+    expect(fixture.requests).toHaveLength(2)
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+// This HTTP fixture verifies UI request wiring, not core reauthentication or method-switch semantics.
+test.each([
+  { credentialID: "cred_personal", moves: 1, methodID: "browser" },
+  { credentialID: "cred_work", moves: 2, methodID: "browser" },
+  { credentialID: "cred_work", moves: 2, methodID: "device" },
+])("starts $methodID OAuth for $credentialID without activating it", async ({ credentialID, moves, methodID }) => {
+  const fixture = await renderIntegration(undefined, undefined, { oauth: true })
+
+  try {
+    expect(fixture.app.captureCharFrame()).toContain("Sign in required")
+    for (let index = 0; index < moves; index++) fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitForFrame(
+      (frame) =>
+        frame.includes("Browser login") &&
+        frame.includes("Device login") &&
+        frame.includes("API key") &&
+        fixture.app.renderer.currentFocusedEditor instanceof InputRenderable,
+    )
+    expect(fixture.requests).toEqual([])
+    if (methodID === "device") fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.requests.length === 2)
+
+    expect(fixture.requests).toEqual([
+      { method: "POST", path: "/api/integration/openai/connect/oauth", body: { methodID, credentialID } },
+      { method: "GET", path: "/api/integration/openai/connect/oauth/attempt_test" },
+    ])
+    expect(fixture.accounts.map((account) => account.id)).toEqual(["cred_personal", "cred_work"])
+    expect(fixture.reads.model).toBe(0)
+    expect(fixture.reads.provider).toBe(0)
+
+    fixture.failOAuth()
+    await fixture.app.waitForFrame((frame) => frame.trim() === "")
+    expect(fixture.requests).toHaveLength(2)
+    expect(fixture.accounts.map((account) => account.id)).toEqual(["cred_personal", "cred_work"])
+    expect(fixture.reads.model).toBe(0)
+    expect(fixture.reads.provider).toBe(0)
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+test("starts OAuth from a key credential requiring sign-in without targeting or activating it", async () => {
+  const fixture = await renderIntegration(undefined, undefined, { oauth: true, credentialMethod: "key" })
+
+  try {
+    expect(fixture.accounts[1]?.method).toBe("key")
+    expect(fixture.accounts[1]?.status?.status).toBe("needs_auth")
+    fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressArrow("down")
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitForFrame(
+      (frame) =>
+        frame.includes("Browser login") &&
+        frame.includes("API key") &&
+        fixture.app.renderer.currentFocusedEditor instanceof InputRenderable,
+    )
+    expect(fixture.requests).toEqual([])
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.requests.length === 2)
+
+    expect(fixture.requests).toEqual([
+      { method: "POST", path: "/api/integration/openai/connect/oauth", body: { methodID: "browser" } },
+      { method: "GET", path: "/api/integration/openai/connect/oauth/attempt_test" },
+    ])
+    expect(fixture.accounts.map((account) => account.id)).toEqual(["cred_personal", "cred_work"])
+
+    fixture.failOAuth()
+    await fixture.app.waitForFrame((frame) => frame.trim() === "")
+    expect(fixture.requests).toHaveLength(2)
+    expect(fixture.accounts.map((account) => account.id)).toEqual(["cred_personal", "cred_work"])
+    expect(fixture.reads.model).toBe(0)
+    expect(fixture.reads.provider).toBe(0)
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -247,16 +353,29 @@ test("uses the active location for integration data without scoping credential r
   }
 })
 
-async function renderIntegration(activeLocation?: LocationRef, form?: FormFields) {
+async function renderIntegration(
+  activeLocation?: LocationRef,
+  form?: FormFields,
+  options?: { oauth?: boolean; credentialMethod?: ConnectionCredentialInfo["method"] },
+) {
   const events = createEventStream()
   const requests: Array<{ method: string; path: string; body?: unknown }> = []
   const locations: LocationRef[] = []
   const credentialQueries: string[] = []
   const reads = { integration: 0, model: 0, provider: 0 }
-  let accounts = [
+  const oauthFailure = Promise.withResolvers<void>()
+  let accounts: ConnectionCredentialInfo[] = [
     { type: "credential" as const, method: "key" as const, id: "cred_personal", label: "Personal" },
     { type: "credential" as const, method: "key" as const, id: "cred_work", label: "Work" },
-  ]
+  ].map((account) =>
+    options?.oauth
+      ? {
+          ...account,
+          method: options.credentialMethod ?? "oauth",
+          status: { status: "needs_auth", message: "Sign in required" },
+        }
+      : account,
+  )
 
   const calls = createFetch(async (url, request) => {
     const directory =
@@ -277,7 +396,15 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
           {
             id: "openai",
             name: "OpenAI",
-            methods: [{ type: "key", label: "API key", form }],
+            methods: [
+              ...(options?.oauth
+                ? [
+                    { type: "oauth", id: "browser", label: "Browser login" },
+                    { type: "oauth", id: "device", label: "Device login" },
+                  ]
+                : []),
+              { type: "key", label: "API key", form },
+            ],
             connections: [...accounts, { type: "env", name: "OPENAI_API_KEY" }],
           },
         ],
@@ -286,6 +413,30 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
 
     if (request.method === "POST" && url.pathname === "/api/integration/openai/connect/key") {
       requests.push({ method: request.method, path: url.pathname, body: await request.json() })
+      return new Response(null, { status: 204 })
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/integration/openai/connect/oauth") {
+      requests.push({ method: request.method, path: url.pathname, body: await request.json() })
+      return json({
+        location,
+        data: {
+          attemptID: "attempt_test",
+          mode: "auto",
+          url: "https://example.com/oauth",
+          instructions: "Authorize in your browser",
+        },
+      })
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/integration/openai/connect/oauth/attempt_test") {
+      requests.push({ method: request.method, path: url.pathname })
+      await oauthFailure.promise
+      return json({ location, data: { status: "failed", message: "Authorization failed" } })
+    }
+
+    if (request.method === "DELETE" && url.pathname === "/api/integration/openai/connect/oauth/attempt_test") {
+      requests.push({ method: request.method, path: url.pathname })
       return new Response(null, { status: 204 })
     }
 
@@ -393,6 +544,7 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
     requests,
     locations,
     credentialQueries,
+    failOAuth: () => oauthFailure.resolve(),
     get accounts() {
       return accounts
     },
