@@ -30,6 +30,12 @@ export const ScrollAcceleration = Schema.Struct({
 export const DiffStyle = Schema.Literals(["auto", "stacked"]).annotate({
   description: "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
 })
+export const Syntax = Schema.Struct({
+  files: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Detect the language of written, edited and patched files beyond their extension: SQL, Dockerfiles, ini-style config and systemd units, dotenv, ERB, HAML, and a #! line on files with none (default: true)",
+  }),
+}).annotate({ description: "Syntax highlighting in tool calls" })
 export const Cursor = Schema.Struct({
   style: Schema.optional(Schema.Literals(["block", "underline", "line", "default"])).annotate({
     description: "Cursor shape. Use 'default' to preserve the terminal setting",
@@ -70,6 +76,7 @@ export const Info = Schema.Struct({
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
+  syntax: Schema.optional(Syntax),
   cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
 })

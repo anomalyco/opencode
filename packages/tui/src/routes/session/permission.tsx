@@ -9,7 +9,7 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useSync } from "../../context/sync"
 import { useProject } from "../../context/project"
-import { filetype } from "../../util/filetype"
+import { detectFiletype, filetype } from "../../util/filetype"
 import { Locale } from "../../util/locale"
 import { webSearchProviderLabel } from "../../util/tool-display"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -41,7 +41,9 @@ function EditBody(props: { request: PermissionRequest }) {
     return dimensions().width > 120 ? "split" : "unified"
   })
 
-  const ft = createMemo(() => filetype(filepath()))
+  const ft = createMemo(() =>
+    config.syntax?.files === false ? filetype(filepath()) : detectFiletype(filepath(), diff()),
+  )
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
 
   return (
