@@ -598,7 +598,7 @@ const layer = Layer.effect(
       const active = yield* hasActiveRows
       if (!active && bootChecked) {
         if (leading) yield* releaseLeader
-        yield* doorbell.await
+        yield* doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
         return
       }
       const now = yield* Clock.currentTimeMillis
@@ -616,7 +616,7 @@ const layer = Layer.effect(
       }
       if (!active) {
         yield* releaseLeader
-        yield* doorbell.await
+        yield* doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
         return
       }
       yield* Effect.scoped(
@@ -628,7 +628,7 @@ const layer = Layer.effect(
       )
       if (!(yield* hasActiveRows)) {
         yield* releaseLeader
-        yield* doorbell.await
+        yield* doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
         return
       }
       const wait = yield* nextWake(now)
