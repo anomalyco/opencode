@@ -6,8 +6,5 @@ export default {
   loading: "Terminal ýüklenýär …",
   "title.numbered": "{{number}} terminaly",
   close: "Terminaly ýapyň",
-  "connectionLost.title": "Baglanyşyk ýitdi",
-  "connectionLost.abnormalClose": "WebSocket adatdan daşary ýapyldy: {{code}}",
-  "connectionLost.description": "Terminal birikmesi kesildi. Serwer täzeden başlanda bolup biler.",
   "tab.title": "Terminal",
 }

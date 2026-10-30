@@ -1,6 +1,7 @@
 export * as SessionCompaction from "./compaction.js"
 
 import {
+  ai,
   AIError,
   type ContentPart,
   InvalidProviderOutputError,
@@ -559,7 +560,7 @@ export const layer = Layer.effect(
         )
 
       const send = (request: LLMRequest) => {
-        if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
+        if (ai.canCompact(request, { mechanism: "trigger" })) {
           return Effect.gen(function* () {
             const history = yield* SessionHistory.load(db, context.session.id, "local").pipe(Effect.orDie)
             const retained = recentUserMessages(history, context.model, keep)
@@ -567,7 +568,7 @@ export const layer = Layer.effect(
             return yield* toResult([...retained, Message.assistant(response.checkpoint)], response.usage)
           })
         }
-        if (LLMClient.canCompact(request)) {
+        if (ai.canCompact(request)) {
           return llm
             .compact(request, { mechanism: "endpoint", http: prepared.options.http })
             .pipe(Effect.flatMap((response) => toResult(response.replacement, response.usage)))

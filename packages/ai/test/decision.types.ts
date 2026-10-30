@@ -1,11 +1,5 @@
 import { Effect } from "effect"
-import {
-  Decision,
-  DecisionClient,
-  DecisionModel,
-  type DecisionRequestInput,
-  type DecisionModelRoute,
-} from "../src/effect.js"
+import { ai, DecisionClient, DecisionModel, type DecisionModelRoute, type DecisionRequestInput } from "../src/effect.js"
 import type { Service } from "../src/decision-client.js"
 import { Baseten, OpenAI, OpenCode, OpenRouter, TypeSafeAI } from "../src/providers.js"
 
@@ -14,7 +8,7 @@ type Success<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : nev
 type Equal<A, B> = [A, B] extends [B, A] ? true : false
 type Assert<T extends true> = T
 
-const request = Decision.request({
+const request = ai.decision.request({
   model: TypeSafeAI.configure({ apiKey: "test" }).decision("jev-latest"),
   input: { ticket: "refund" },
   questions: [
@@ -35,7 +29,7 @@ void (true satisfies Name)
 void (true satisfies ClientRequirements)
 
 Effect.gen(function* () {
-  const response = yield* Decision.generate({
+  const response = yield* ai.decision.generate({
     model: OpenCode.decision("jev-1.13"),
     input: [{ type: "text", text: "hello" }],
     questions: [{ name: "greeting", type: "predicate", instructions: "Greeting?" }],
@@ -57,7 +51,7 @@ Effect.gen(function* () {
 
 declare const route: DecisionModelRoute<{ readonly temperature?: number }>
 const custom = DecisionModel.make({ id: "custom", provider: "custom", route })
-Decision.generate({
+ai.decision.generate({
   model: custom,
   input: { text: "hello" },
   questions: [{ name: "ok", type: "predicate", instructions: "OK?" }],
@@ -71,7 +65,7 @@ Decision.generate({
   providerOptions: { temperature: "high" },
 }) satisfies DecisionRequestInput<typeof custom>
 
-Decision.generate({
+ai.decision.generate({
   model: OpenAI.decision("gpt-6-luna"),
   input: { text: "hello" },
   questions: [{ name: "ok", type: "predicate", instructions: "OK?" }],
@@ -86,7 +80,7 @@ const openai = OpenAI.decision("gpt-6-luna")
   providerOptions: { safetyIdentifier: 1 },
 }) satisfies DecisionRequestInput<typeof openai>
 
-Decision.generate({
+ai.decision.generate({
   model: OpenRouter.decision("typesafe/jev-1.13"),
   input: { text: "hello" },
   questions: [{ name: "ok", type: "predicate", instructions: "OK?" }],
@@ -101,7 +95,7 @@ const openrouter = OpenRouter.decision("typesafe/jev-1.13")
   providerOptions: { session_id: 1 },
 }) satisfies DecisionRequestInput<typeof openrouter>
 
-Decision.generate({
+ai.decision.generate({
   model: Baseten.decision("decision-models/baseten-elephant-9b-latest"),
   input: { text: "hello" },
   questions: [{ name: "ok", type: "predicate", instructions: "OK?" }],
