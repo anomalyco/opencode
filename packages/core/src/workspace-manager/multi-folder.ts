@@ -16,6 +16,7 @@ import { AbsolutePath } from "../schema.js"
 export interface Interface {
   readonly listFolders: (projectID: Project.ID) => Effect.Effect<ReadonlyArray<ProjectWorkspace.WorkspaceFolder>>
   readonly addFolder: (input: ProjectWorkspace.AddFolderInput) => Effect.Effect<ProjectWorkspace.WorkspaceFolder, Error>
+  readonly addFolders: (input: ProjectWorkspace.AddMultipleFoldersInput) => Effect.Effect<ReadonlyArray<ProjectWorkspace.WorkspaceFolder>, Error>
   readonly removeFolder: (input: ProjectWorkspace.RemoveFolderInput) => Effect.Effect<boolean>
   readonly setPrimary: (projectID: Project.ID, directory: AbsolutePath) => Effect.Effect<boolean>
   readonly relinkFolder: (input: ProjectWorkspace.RelinkFolderInput) => Effect.Effect<ProjectWorkspace.WorkspaceFolder, Error>
@@ -119,7 +120,16 @@ export const layer = Layer.effect(
           }
         }
 
-        return result
+        const refreshed: ProjectWorkspace.WorkspaceFolder[] = []
+        for (const f of result) {
+          const exists = yield* fs.existsSafe(f.path)
+          refreshed.push({
+            ...f,
+            status: exists ? "active" : "missing",
+          })
+        }
+
+        return refreshed
       })
 
     return Service.of({
@@ -134,6 +144,12 @@ export const layer = Layer.effect(
         }
 
         const resolved = AbsolutePath.make(yield* fs.resolve(input.directory))
+        const existingFolders = yield* listFoldersInternal(input.projectID)
+        const duplicate = existingFolders.find((f) => f.path === resolved)
+        if (duplicate) {
+          return duplicate
+        }
+
         const exists = yield* fs.existsSafe(resolved)
         const name = input.name || path.basename(resolved) || resolved
         const driveMatch = resolved.match(/^([A-Za-z]:)/)
@@ -161,12 +177,62 @@ export const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
 
-        const folders = yield* listFoldersInternal(input.projectID)
-        const filtered = folders.filter((f) => f.path !== resolved)
+        const filtered = existingFolders.filter((f) => f.path !== resolved)
         filtered.push(folder)
         yield* writeManifest(canonical, filtered)
 
         return folder
+      }),
+
+      addFolders: Effect.fn("MultiFolderWorkspace.addFolders")(function* (input) {
+        const added: ProjectWorkspace.WorkspaceFolder[] = []
+        for (const item of input.folders) {
+          const canonical = yield* getCanonical(input.projectID)
+          if (!canonical) {
+            return yield* Effect.fail(new Error(`Project not found: ${input.projectID}`))
+          }
+
+          const resolved = AbsolutePath.make(yield* fs.resolve(item.directory))
+          const existingFolders = yield* listFoldersInternal(input.projectID)
+          const duplicate = existingFolders.find((f) => f.path === resolved)
+          if (duplicate) {
+            added.push(duplicate)
+            continue
+          }
+
+          const exists = yield* fs.existsSafe(resolved)
+          const name = item.name || path.basename(resolved) || resolved
+          const driveMatch = resolved.match(/^([A-Za-z]:)/)
+          const drive = driveMatch ? driveMatch[1] : undefined
+
+          const folder: ProjectWorkspace.WorkspaceFolder = {
+            id: Hash.fast(`folder:${resolved}`),
+            projectID: input.projectID,
+            path: resolved,
+            name,
+            isPrimary: false,
+            drive,
+            status: exists ? "active" : "missing",
+            addedAt: Date.now(),
+          }
+
+          yield* db
+            .insert(WorktreeTable)
+            .values({
+              project_id: input.projectID,
+              directory: resolved,
+              time_created: folder.addedAt,
+            })
+            .onConflictDoNothing()
+            .run()
+            .pipe(Effect.orDie)
+
+          const filtered = existingFolders.filter((f) => f.path !== resolved)
+          filtered.push(folder)
+          yield* writeManifest(canonical, filtered)
+          added.push(folder)
+        }
+        return added
       }),
 
       removeFolder: Effect.fn("MultiFolderWorkspace.removeFolder")(function* (input) {

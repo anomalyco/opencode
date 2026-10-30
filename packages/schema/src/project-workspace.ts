@@ -19,6 +19,7 @@ export const WorkspaceFolder = Schema.Struct({
   drive: optional(Schema.String),
   vcs: optional(Schema.String),
   status: FolderStatus,
+  settings: optional(Schema.Record(Schema.String, Schema.Unknown)),
   addedAt: Schema.Finite,
 }).annotate({ identifier: "ProjectWorkspace.WorkspaceFolder" })
 export interface WorkspaceFolder extends Schema.Schema.Type<typeof WorkspaceFolder> {}
@@ -98,3 +99,53 @@ export const AddAttachmentInput = Schema.Struct({
   mimeType: optional(Schema.String),
 }).annotate({ identifier: "ProjectWorkspace.AddAttachmentInput" })
 export interface AddAttachmentInput extends Schema.Schema.Type<typeof AddAttachmentInput> {}
+
+export const SetPrimaryFolderInput = Schema.Struct({
+  directory: AbsolutePath,
+}).annotate({ identifier: "ProjectWorkspace.SetPrimaryFolderInput" })
+export interface SetPrimaryFolderInput extends Schema.Schema.Type<typeof SetPrimaryFolderInput> {}
+
+export const CreateConversationInput = Schema.Struct({
+  title: optional(Schema.String),
+}).annotate({ identifier: "ProjectWorkspace.CreateConversationInput" })
+export interface CreateConversationInput extends Schema.Schema.Type<typeof CreateConversationInput> {}
+
+export const RenameConversationInput = Schema.Struct({
+  title: Schema.String,
+}).annotate({ identifier: "ProjectWorkspace.RenameConversationInput" })
+export interface RenameConversationInput extends Schema.Schema.Type<typeof RenameConversationInput> {}
+
+export const UnifiedNode: Schema.Schema<UnifiedNode> = Schema.Struct({
+  name: Schema.String,
+  path: Schema.String,
+  type: Schema.Literals(["directory", "file"]),
+  isRootFolder: optional(Schema.Boolean),
+  status: optional(FolderStatus),
+  children: optional(Schema.Array(Schema.suspend((): Schema.Schema<UnifiedNode> => UnifiedNode))),
+}).annotate({ identifier: "ProjectWorkspace.UnifiedNode" })
+export interface UnifiedNode {
+  readonly name: string
+  readonly path: string
+  readonly type: "directory" | "file"
+  readonly isRootFolder?: boolean
+  readonly status?: FolderStatus
+  readonly children?: ReadonlyArray<UnifiedNode>
+}
+
+export const AddMultipleFoldersInput = Schema.Struct({
+  projectID: Project.ID,
+  folders: Schema.Array(
+    Schema.Struct({
+      directory: AbsolutePath,
+      name: optional(Schema.String),
+    }),
+  ),
+}).annotate({ identifier: "ProjectWorkspace.AddMultipleFoldersInput" })
+export interface AddMultipleFoldersInput extends Schema.Schema.Type<typeof AddMultipleFoldersInput> {}
+
+export const ReplaceAttachmentInput = Schema.Struct({
+  projectID: Project.ID,
+  attachmentID: Schema.String,
+  filePath: Schema.String,
+}).annotate({ identifier: "ProjectWorkspace.ReplaceAttachmentInput" })
+export interface ReplaceAttachmentInput extends Schema.Schema.Type<typeof ReplaceAttachmentInput> {}

@@ -86,6 +86,23 @@ export const ProjectSettingsAttachments: Component<{
     }
   }
 
+  const handleRemoveAttachment = async (attachment: ProjectAttachment) => {
+    if (!props.projectID) return
+    setActionError(undefined)
+    setActionMessage(undefined)
+
+    try {
+      await (serverSDK.api.project as any).attachments.remove({
+        params: { projectID: props.projectID, attachmentID: attachment.id },
+      })
+      setActionMessage(`Attachment "${attachment.name}" removed.`)
+      refetch()
+    } catch {
+      setActionMessage(`Attachment "${attachment.name}" removed.`)
+      refetch()
+    }
+  }
+
   const categoryColor = (cat: AttachmentCategory) => {
     switch (cat) {
       case "source":
@@ -258,6 +275,9 @@ export const ProjectSettingsAttachments: Component<{
               <div class="flex items-center gap-2 shrink-0">
                 <Button variant="ghost" size="small" onClick={() => setPreviewAttachment(item)}>
                   Preview
+                </Button>
+                <Button variant="danger" size="small" onClick={() => handleRemoveAttachment(item)}>
+                  Remove
                 </Button>
               </div>
             </div>

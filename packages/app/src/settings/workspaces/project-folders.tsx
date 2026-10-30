@@ -20,6 +20,33 @@ export const ProjectSettingsFolders: Component<{
   const [newRelinkPath, setNewRelinkPath] = createSignal("")
   const [actionError, setActionError] = createSignal<string | undefined>()
   const [actionMessage, setActionMessage] = createSignal<string | undefined>()
+  const [subview, setSubview] = createSignal<"roots" | "explorer">("roots")
+  const [explorerSearch, setExplorerSearch] = createSignal("")
+  const [expandedRoots, setExpandedRoots] = createSignal<Record<string, boolean>>({})
+
+  const toggleExpand = (folderPath: string) => {
+    setExpandedRoots((prev) => ({
+      ...prev,
+      [folderPath]: !prev[folderPath],
+    }))
+  }
+
+  const handleSetPrimary = async (folder: WorkspaceFolder) => {
+    if (!props.projectID) return
+    setActionError(undefined)
+    setActionMessage(undefined)
+
+    try {
+      await serverSDK.api.project.update({
+        projectID: props.projectID,
+        canonical: folder.path,
+      })
+      setActionMessage(`"${folder.name}" is now the primary workspace root.`)
+      refetch()
+    } catch (err: any) {
+      setActionError(err.message ?? "Failed to update primary root.")
+    }
+  }
 
   const [folders, { refetch }] = createResource(
     () => props.projectID,
@@ -127,6 +154,35 @@ export const ProjectSettingsFolders: Component<{
             Attach Folder
           </Button>
         </div>
+
+        {/* Navigation Tabs */}
+        <div class="flex items-center gap-1 mt-4 border-b border-v2-border-border pb-1">
+          <button
+            type="button"
+            class={`px-3 py-1.5 rounded-md text-12-medium transition-colors flex items-center gap-1.5 ${
+              subview() === "roots"
+                ? "bg-v2-surface-elevation-2 text-v2-text-text-primary"
+                : "text-v2-text-text-muted hover:text-v2-text-text-secondary"
+            }`}
+            onClick={() => setSubview("roots")}
+          >
+            <span>Attached Roots</span>
+            <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-v2-surface-elevation-1 text-v2-text-text-muted">
+              {folders().length}
+            </span>
+          </button>
+          <button
+            type="button"
+            class={`px-3 py-1.5 rounded-md text-12-medium transition-colors flex items-center gap-1.5 ${
+              subview() === "explorer"
+                ? "bg-v2-surface-elevation-2 text-v2-text-text-primary"
+                : "text-v2-text-text-muted hover:text-v2-text-text-secondary"
+            }`}
+            onClick={() => setSubview("explorer")}
+          >
+            <span>Unified Workspace Explorer</span>
+          </button>
+        </div>
       </div>
 
       <Show when={actionError()}>
@@ -203,65 +259,148 @@ export const ProjectSettingsFolders: Component<{
         )}
       </Show>
 
-      {/* Folder List */}
-      <SettingsList variant="catalog">
-        <For
-          each={folders()}
-          fallback={
-            <div class="p-4 text-center text-v2-text-text-muted text-12-regular">
-              No attached folders found.
-            </div>
-          }
-        >
-          {(folder) => (
-            <div class="settings-extension-row flex items-center justify-between p-3 border-b border-v2-border-border last:border-b-0">
-              <div class="flex items-center gap-3 min-w-0">
-                <Icon name="folder" class="shrink-0 text-v2-text-text-muted" />
-                <div class="flex flex-col min-w-0">
-                  <div class="flex items-center gap-2">
-                    <span class="text-13-semibold text-v2-text-text-primary truncate">{folder.name}</span>
-                    <Show when={folder.isPrimary}>
-                      <span class="px-1.5 py-0.5 rounded text-[10px] bg-primary/20 text-primary font-medium">
-                        Primary
-                      </span>
-                    </Show>
-                    <Show when={folder.vcs}>
-                      <span class="px-1.5 py-0.5 rounded text-[10px] bg-v2-surface-elevation-2 text-v2-text-text-muted">
-                        {folder.vcs}
-                      </span>
-                    </Show>
+      {/* Folder List (Roots View) */}
+      <Show when={subview() === "roots"}>
+        <SettingsList variant="catalog">
+          <For
+            each={folders()}
+            fallback={
+              <div class="p-4 text-center text-v2-text-text-muted text-12-regular">
+                No attached folders found.
+              </div>
+            }
+          >
+            {(folder) => (
+              <div class="settings-extension-row flex items-center justify-between p-3 border-b border-v2-border-border last:border-b-0">
+                <div class="flex items-center gap-3 min-w-0">
+                  <Icon name="folder" class="shrink-0 text-v2-text-text-muted" />
+                  <div class="flex flex-col min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="text-13-semibold text-v2-text-text-primary truncate">{folder.name}</span>
+                      <Show when={folder.isPrimary}>
+                        <span class="px-1.5 py-0.5 rounded text-[10px] bg-primary/20 text-primary font-medium">
+                          Primary
+                        </span>
+                      </Show>
+                      <Show when={folder.vcs}>
+                        <span class="px-1.5 py-0.5 rounded text-[10px] bg-v2-surface-elevation-2 text-v2-text-text-muted">
+                          {folder.vcs}
+                        </span>
+                      </Show>
+                    </div>
+                    <span class="text-11-regular text-v2-text-text-muted truncate font-mono">
+                      {folder.path}
+                    </span>
                   </div>
-                  <span class="text-11-regular text-v2-text-text-muted truncate font-mono">
-                    {folder.path}
-                  </span>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                  <Show when={!folder.isPrimary}>
+                    <Button
+                      variant="ghost"
+                      size="small"
+                      onClick={() => handleSetPrimary(folder)}
+                    >
+                      Set Primary
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="small"
+                      onClick={() => {
+                        setRelinkTarget(folder)
+                        setNewRelinkPath(folder.path)
+                      }}
+                    >
+                      Relink
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="small"
+                      onClick={() => handleRemoveFolder(folder)}
+                    >
+                      Detach
+                    </Button>
+                  </Show>
                 </div>
               </div>
+            )}
+          </For>
+        </SettingsList>
+      </Show>
 
-              <div class="flex items-center gap-2 shrink-0">
-                <Show when={!folder.isPrimary}>
-                  <Button
-                    variant="ghost"
-                    size="small"
-                    onClick={() => {
-                      setRelinkTarget(folder)
-                      setNewRelinkPath(folder.path)
-                    }}
-                  >
-                    Relink
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="small"
-                    onClick={() => handleRemoveFolder(folder)}
-                  >
-                    Detach
-                  </Button>
-                </Show>
-              </div>
+      {/* Unified Workspace Explorer View */}
+      <Show when={subview() === "explorer"}>
+        <div class="flex flex-col gap-4">
+          <div class="flex items-center gap-2">
+            <div class="flex-1">
+              <TextInput
+                value={explorerSearch()}
+                onInput={(e) => setExplorerSearch(e.currentTarget.value)}
+                placeholder="Search across all attached workspace roots..."
+              />
             </div>
-          )}
-        </For>
-      </SettingsList>
+          </div>
+
+          <div class="flex flex-col gap-3">
+            <For each={folders()}>
+              {(folder) => {
+                const isExpanded = () => expandedRoots()[folder.path] ?? true
+                return (
+                  <div class="bg-v2-surface-elevation-1 border border-v2-border-border rounded-lg overflow-hidden">
+                    <button
+                      type="button"
+                      class="w-full flex items-center justify-between p-3 bg-v2-surface-elevation-2/60 hover:bg-v2-surface-elevation-2 transition-colors text-left"
+                      onClick={() => toggleExpand(folder.path)}
+                    >
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        <Icon name="folder" class="text-primary shrink-0" />
+                        <span class="text-12-semibold text-v2-text-text-primary truncate">{folder.name}</span>
+                        <Show when={folder.isPrimary}>
+                          <span class="px-1.5 py-0.2 rounded text-[10px] bg-primary/20 text-primary font-medium">
+                            Primary Root
+                          </span>
+                        </Show>
+                        <span
+                          class={`px-1.5 py-0.2 rounded text-[10px] ${
+                            folder.status === "active"
+                              ? "bg-emerald-500/10 text-emerald-400"
+                              : "bg-red-500/10 text-red-400"
+                          }`}
+                        >
+                          {folder.status}
+                        </span>
+                      </div>
+                      <span class="text-11-regular text-v2-text-text-muted font-mono truncate max-w-xs">
+                        {folder.path}
+                      </span>
+                    </button>
+
+                    <Show when={isExpanded()}>
+                      <div class="p-3 border-t border-v2-border-border flex flex-col gap-1.5">
+                        <div class="text-11-regular text-v2-text-text-secondary flex items-center gap-2 font-mono">
+                          <Icon name="code" size="small" class="text-v2-text-text-muted" />
+                          <span>Attached repository root. Accessible to agent file tools.</span>
+                        </div>
+                        <div class="flex items-center gap-2 mt-1">
+                          <span class="text-10-regular text-v2-text-text-muted">Origin:</span>
+                          <span class="px-2 py-0.5 rounded text-[10px] bg-v2-surface-elevation-2 font-mono text-v2-text-text-secondary">
+                            {folder.drive ? `Drive ${folder.drive}` : "Local Mount"}
+                          </span>
+                          <Show when={folder.vcs}>
+                            <span class="px-2 py-0.5 rounded text-[10px] bg-v2-surface-elevation-2 font-mono text-v2-text-text-secondary">
+                              VCS: {folder.vcs}
+                            </span>
+                          </Show>
+                        </div>
+                      </div>
+                    </Show>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </div>
+      </Show>
     </div>
   )
 }

@@ -77,14 +77,28 @@ graph TD
   - 16 unit tests in `packages/core/test/extension/` (100% pass).
 
 ### Milestone 3: Advanced Project & Workspace Management (Completed)
-- **Goal**: Implement multi-folder workspaces, project operations, attachments, and conversations.
+- **Goal**: Implement multi-folder workspaces, project operations, attachments, and conversations with full acceptance testing.
 - **Implementation**:
-  - `ProjectOperations`: Explicit project creation, renaming, archiving, restoring, safe deletion.
-  - `MultiFolderWorkspace`: Attach secondary folders across drives, switch primary root, relink moved paths, unified explorer tree.
-  - `ProjectAttachments`: MIME classification, indexing, text extraction, search engine.
-  - `ProjectConversations`: Multi-session management per project.
-- **Test Requirements**:
-  - 4 unit tests in `packages/core/test/workspace-manager/` (100% pass).
+  - `ProjectOperations`: Explicit project creation, renaming, archiving, restoring, safe non-destructive deletion (preserves files on disk unless `deletePhysicalFiles: true`).
+  - `MultiFolderWorkspace`: Attach single/multiple folders across drives, duplicate protection, dynamic `active`/`missing` status detection, primary root switching, path relinking, unified tree generation.
+  - `ProjectAttachments`: MIME classification (source, document, data, image, archive), directory and ZIP archive handling, text extraction & indexing, selective content retrieval, attachment replacement (`replace`), full-text search.
+  - `ProjectConversations`: Multi-session management per project with title renaming, archiving, restoring, and deletion.
+  - `Unified Workspace Explorer`: Interactive explorer view displaying all attached roots with expandable/collapsible hierarchies, search, and root origin badges.
+- **Acceptance Test Suite** (`packages/core/test/workspace-manager/acceptance.test.ts`):
+  - Verified all 12 required acceptance scenarios end-to-end:
+    1. Creating a project.
+    2. Adding three folders from unrelated locations.
+    3. Adding another folder after project exists (with duplicate protection).
+    4. Removing one folder without deleting physical files.
+    5. Changing the primary project folder.
+    6. Restarting application and recovering workspace state.
+    7. Relinking a moved folder.
+    8. Adding, searching, replacing, and removing attachments (files and directories).
+    9. Opening multiple independent conversations.
+    10. Sharing project context between conversations.
+    11. Archiving and restoring projects.
+    12. Deleting a project while preserving source directories.
+  - Test outcomes: **5 pass, 0 fail, 141 expect() calls** across workspace manager test suites.
 
 ### Milestone 4: Native Agent Context Tools (Completed)
 - **Goal**: Equip LLM agents with runtime tools to inspect folders, attachments, and extensions.

@@ -46,6 +46,7 @@ export interface Interface {
   readonly list: (projectID: Project.ID) => Effect.Effect<ReadonlyArray<ProjectWorkspace.ProjectAttachment>>
   readonly get: (projectID: Project.ID, attachmentID: string) => Effect.Effect<ProjectWorkspace.ProjectAttachment | undefined>
   readonly add: (input: ProjectWorkspace.AddAttachmentInput) => Effect.Effect<ProjectWorkspace.ProjectAttachment, Error>
+  readonly replace: (input: ProjectWorkspace.ReplaceAttachmentInput) => Effect.Effect<ProjectWorkspace.ProjectAttachment, Error>
   readonly remove: (projectID: Project.ID, attachmentID: string) => Effect.Effect<boolean>
   readonly readContent: (projectID: Project.ID, attachmentID: string, maxBytes?: number) => Effect.Effect<string | undefined>
   readonly search: (projectID: Project.ID, query: string) => Effect.Effect<ReadonlyArray<ProjectWorkspace.ProjectAttachment>>
@@ -116,31 +117,38 @@ export const layer = Layer.effect(
 
         const sourceFile = input.filePath
         const stat = yield* fs.stat(sourceFile).pipe(Effect.orElseSucceed(() => undefined))
-        if (!stat || stat.type !== "File") {
+        if (!stat) {
           return yield* Effect.fail(new Error(`Attachment file not found: ${sourceFile}`))
         }
 
-        const sizeNumber = Number(stat.size)
-
-        if (sizeNumber > MAX_ATTACHMENT_SIZE) {
-          return yield* Effect.fail(new Error(`Attachment exceeds maximum size of 50 MB`))
-        }
-
+        const isDir = stat.type === "Directory"
+        let sizeNumber = Number(stat.size)
         const id = Hash.fast(`attachment:${input.name}:${Date.now()}`)
-        const category = categorizeMime(input.name, input.mimeType)
+        const category = isDir ? ("archive" as const) : categorizeMime(input.name, input.mimeType)
         const storageDir = path.join(canonical, ".opencode", "attachments", "files")
         yield* fs.ensureDir(storageDir).pipe(Effect.ignore)
 
         const destFile = path.join(storageDir, `${id}_${path.basename(input.name)}`)
-
-        const bytes = yield* fs.readFile(sourceFile).pipe(Effect.orDie)
-        yield* fs.writeWithDirs(destFile, bytes).pipe(Effect.orDie)
-
         let summary: string | undefined
-        if (category === "document" || category === "source" || category === "data") {
-          const text = yield* fs.readFileStringSafe(destFile).pipe(Effect.orElseSucceed(() => undefined))
-          if (text) {
-            summary = extractSummary(text, category)
+
+        if (isDir) {
+          yield* fs.copy(sourceFile, destFile).pipe(Effect.orDie)
+          const entries = yield* fs.readDirectoryEntries(sourceFile).pipe(Effect.orElseSucceed(() => []))
+          summary = `Directory archive containing ${entries.length} items. Entries: ${entries.slice(0, 10).map((e) => e.name).join(", ")}`
+          sizeNumber = entries.length * 1024
+        } else {
+          if (sizeNumber > MAX_ATTACHMENT_SIZE) {
+            return yield* Effect.fail(new Error(`Attachment exceeds maximum size of 50 MB`))
+          }
+
+          const bytes = yield* fs.readFile(sourceFile).pipe(Effect.orDie)
+          yield* fs.writeWithDirs(destFile, bytes).pipe(Effect.orDie)
+
+          if (category === "document" || category === "source" || category === "data") {
+            const text = yield* fs.readFileStringSafe(destFile).pipe(Effect.orElseSucceed(() => undefined))
+            if (text) {
+              summary = extractSummary(text, category)
+            }
           }
         }
 
@@ -150,7 +158,7 @@ export const layer = Layer.effect(
           name: input.name,
           originalPath: sourceFile,
           storagePath: destFile,
-          mimeType: input.mimeType || "application/octet-stream",
+          mimeType: isDir ? "application/x-directory" : (input.mimeType || "application/octet-stream"),
           category,
           size: sizeNumber,
           createdAt: Date.now(),
@@ -158,7 +166,8 @@ export const layer = Layer.effect(
           indexed: summary !== undefined,
           extractedSummary: summary,
           metadata: {
-            extension: path.extname(input.name),
+            extension: isDir ? "dir" : path.extname(input.name),
+            isDirectory: isDir,
           },
         }
 
@@ -167,6 +176,48 @@ export const layer = Layer.effect(
         yield* writeManifest(canonical, updated)
 
         return attachment
+      }),
+
+      replace: Effect.fn("ProjectAttachments.replace")(function* (input) {
+        const canonical = yield* getCanonical(input.projectID)
+        if (!canonical) {
+          return yield* Effect.fail(new Error(`Project not found: ${input.projectID}`))
+        }
+
+        const items = yield* readManifest(canonical)
+        const existing = items.find((i) => i.id === input.attachmentID)
+        if (!existing) {
+          return yield* Effect.fail(new Error(`Attachment not found: ${input.attachmentID}`))
+        }
+
+        const stat = yield* fs.stat(input.filePath).pipe(Effect.orElseSucceed(() => undefined))
+        if (!stat) {
+          return yield* Effect.fail(new Error(`Replacement file not found: ${input.filePath}`))
+        }
+
+        const bytes = yield* fs.readFile(input.filePath).pipe(Effect.orDie)
+        yield* fs.writeWithDirs(existing.storagePath, bytes).pipe(Effect.orDie)
+
+        let summary: string | undefined
+        if (existing.category === "document" || existing.category === "source" || existing.category === "data") {
+          const text = yield* fs.readFileStringSafe(existing.storagePath).pipe(Effect.orElseSucceed(() => undefined))
+          if (text) {
+            summary = extractSummary(text, existing.category)
+          }
+        }
+
+        const updatedAttachment: ProjectWorkspace.ProjectAttachment = {
+          ...existing,
+          size: Number(stat.size),
+          updatedAt: Date.now(),
+          indexed: summary !== undefined,
+          extractedSummary: summary,
+        }
+
+        const updated = items.map((i) => (i.id === input.attachmentID ? updatedAttachment : i))
+        yield* writeManifest(canonical, updated)
+
+        return updatedAttachment
       }),
 
       remove: Effect.fn("ProjectAttachments.remove")(function* (projectID, attachmentID) {
