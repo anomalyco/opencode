@@ -49,13 +49,20 @@ const billedAmount = lenient(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0
 /** Billing an endpoint reports beside its token usage: `cost` is the USD it charged (OpenRouter, LiteLLM, OpenCode Zen). */
 export const ReportedBilling = Schema.Struct({
   cost: billedAmount,
+  is_byok: lenient(Schema.Boolean),
+  cost_details: lenient(Schema.Struct({ upstream_inference_cost: billedAmount })),
 })
 
 /** Reads `ReportedBilling` from a raw usage object, which provider metadata keeps as the endpoint sent it. */
 export const reportedBilling = (usage: unknown) =>
   Option.match(Schema.decodeUnknownOption(ReportedBilling)(usage), {
     onNone: () => ({}),
-    onSome: (billing) => ({ cost: billing.cost }),
+    onSome: (billing) => ({
+      cost:
+        billing.is_byok === true && billing.cost_details?.upstream_inference_cost !== undefined
+          ? (billing.cost ?? 0) + billing.cost_details.upstream_inference_cost
+          : billing.cost,
+    }),
   })
 
 /**
