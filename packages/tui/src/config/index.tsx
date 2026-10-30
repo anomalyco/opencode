@@ -389,3 +389,9 @@ export function useClientMcpExperiment() {
   const config = useConfig()
   return () => config.data.experimental?.["client-mcp"] === true
 }
+
+/** Reactive accessor for the temporary "live-follow" experiment. */
+export function useLiveFollow() {
+  const config = useConfig()
+  return () => config.data.experimental?.["live-follow"] === true
+}
