@@ -12722,7 +12722,7 @@
             }
           }
         },
-        "description": "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron. Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false).",
         "summary": "Create schedule",
         "requestBody": {
           "content": {
@@ -12811,7 +12811,7 @@
             }
           }
         },
-        "description": "List a Session's schedules, oldest first. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "List a Session's schedules, oldest first. Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false).",
         "summary": "List schedules"
       }
     },
@@ -12889,7 +12889,7 @@
             }
           }
         },
-        "description": "Read one schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Read one schedule. Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false).",
         "summary": "Get schedule"
       },
       "delete": {
@@ -12951,7 +12951,7 @@
             }
           }
         },
-        "description": "Delete a schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Delete a schedule. Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false).",
         "summary": "Delete schedule"
       }
     },
@@ -13029,7 +13029,7 @@
             }
           }
         },
-        "description": "Stop a schedule from firing until it is resumed. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Stop a schedule from firing until it is resumed. Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false).",
         "summary": "Pause schedule"
       }
     },
@@ -13107,7 +13107,7 @@
             }
           }
         },
-        "description": "Resume a paused schedule. A one-shot that fell due while paused fires once; a repeating schedule resumes at its next slot. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Resume a paused schedule. A one-shot that fell due while paused fires once; a repeating schedule resumes at its next slot. Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false).",
         "summary": "Resume schedule"
       }
     },

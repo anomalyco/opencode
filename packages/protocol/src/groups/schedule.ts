@@ -4,7 +4,8 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
 import { ForbiddenError, InvalidRequestError, ScheduleNotFoundError, SessionNotFoundError } from "../errors.js"
 
-const EXPERIMENTAL = "Experimental: needs experimental.schedules in the Session's config and may change without notice."
+const EXPERIMENTAL =
+  "Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false)."
 const errors = [ScheduleNotFoundError, ForbiddenError] as const
 const params = { scheduleID: Schedule.ID }
 const annotations = (identifier: string, summary: string, description: string) =>
