@@ -103,7 +103,7 @@ push_git() {
   if dry_run; then return; fi
   git -C "$dir" add -A
   if git -C "$dir" diff --cached --quiet; then return; fi
-  git -C "$dir" -c user.name="opencode-agent[bot]" -c user.email="opencode-agent[bot]@users.noreply.github.com" \
+  git -C "$dir" -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
     commit -q -m "$message"
   git -C "$dir" push -q origin HEAD:master
 }

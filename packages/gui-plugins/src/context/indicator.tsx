@@ -19,6 +19,8 @@ function ContextTooltipRow(props: { name: JSX.Element; value: JSX.Element }) {
 
 export function SessionContextUsage(props: {
   session: MountedSession
+  /** False while the session's view is detached; it loads nothing until selected again. */
+  active?: boolean
   variant?: "button" | "indicator"
   placement?: ComponentProps<typeof Tooltip>["placement"]
   /** The button shows only its ring and opens the usage in a menu, so a narrow header keeps room for the title. */
@@ -27,7 +29,10 @@ export function SessionContextUsage(props: {
   const ctx = usePlugin()
   const layout = ctx.layout
   const i18n = useI18n()
-  syncCatalog(() => props.session)
+  syncCatalog(
+    () => props.session,
+    () => props.active !== false,
+  )
 
   const variant = createMemo(() => props.variant ?? "button")
 

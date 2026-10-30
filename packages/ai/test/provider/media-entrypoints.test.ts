@@ -125,6 +125,15 @@ const images: ReadonlyArray<Case<ImageModel>> = [
     provider: "azure",
   },
   {
+    name: "meta",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/meta/images")
+      return model("muse-image-1.0", { ...shared, apiKey: "meta-key" })
+    },
+    url: "https://api.meta.ai/v1/images/generations",
+    auth: ["authorization", "Bearer meta-key"],
+  },
+  {
     name: "xai",
     load: async () => {
       const { model } = await import("@opencode/ai/providers/xai/images")
@@ -141,6 +150,15 @@ const images: ReadonlyArray<Case<ImageModel>> = [
     },
     url: "https://open.bigmodel.test/api/paas/v4/images/generations",
     auth: ["authorization", "Bearer zai-key"],
+  },
+  {
+    name: "minimax",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/minimax/images")
+      return model("image-01", { ...shared, apiKey: "minimax-key", baseURL: "https://api.minimax.cn/v1" })
+    },
+    url: "https://api.minimax.cn/v1/image_generation",
+    auth: ["authorization", "Bearer minimax-key"],
   },
   {
     name: "alibaba",

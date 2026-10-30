@@ -21,11 +21,19 @@ export const Pending = {
       voice: boolean
       text: boolean
       grouped: boolean
+      changed: boolean
     }>({
       status: "steering",
       voice: false,
       text: true,
       grouped: false,
+      changed: false,
+    })
+
+    // The prompt before this one; a waiting steer names only the agent and model it changes.
+    const previousSelection = () => ({
+      agent: "build",
+      model: state.changed ? { ...STORY_MODEL, variant: "precise" } : STORY_MODEL,
     })
 
     const message = createMemo<SessionMessageUser>(() => ({
@@ -102,6 +110,14 @@ export const Pending = {
             />{" "}
             Grouped prompts
           </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={state.changed}
+              onChange={(event) => setState("changed", event.currentTarget.checked)}
+            />{" "}
+            Changes model
+          </label>
         </div>
         <CurrentSessionProviders document={document()}>
           <Show when={state.grouped && state.text}>
@@ -111,6 +127,7 @@ export const Pending = {
               text="Keep the earlier prompt in the same run."
               agent="build"
               model={STORY_MODEL}
+              previousSelection={previousSelection()}
               actions={actions}
               run={{ above: false, below: true }}
             />
@@ -121,6 +138,7 @@ export const Pending = {
             text={message().text}
             agent="build"
             model={STORY_MODEL}
+            previousSelection={previousSelection()}
             voice={state.voice}
             actions={actions}
             run={{ above: state.grouped && state.text, below: false }}

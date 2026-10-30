@@ -3,6 +3,7 @@ export default {
   "command.toggle": "Toggle terminal",
   "command.new": "New terminal",
   "command.new.description": "Create a new terminal tab",
+  "location.open": "Open in terminal",
   loading: "Loading terminal…",
   "title.numbered": "Terminal {{number}}",
   close: "Close terminal",
@@ -13,6 +14,7 @@ export default {
   "quote.actions": "Quote selection",
   "quote.add": "Quote",
   "quote.addWithComment": "Quote and comment",
+  "quote.addWithoutComment": "Quote without comment",
   "quote.tooLong": "Selection too long",
   "quote.label": "Terminal",
 }

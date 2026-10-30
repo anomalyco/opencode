@@ -18,7 +18,7 @@ import {
   type LanguageModelProviderOptions,
   type ToolEntryInput,
 } from "./schema/index.js"
-import { make as makeTool, toDefinitions, type ExecutableTools, type ToolSchema } from "./tool.js"
+import { tool, toDefinitions, type ExecutableTool, type Tool, type ToolSchema } from "./tool.js"
 import { ToolRuntime } from "./tool-runtime.js"
 
 /** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
@@ -57,7 +57,7 @@ export type LoopInput<SelectedLanguageModel extends LanguageModel = LanguageMode
   RequestInput<SelectedLanguageModel>,
   "tools"
 > & {
-  readonly tools: ExecutableTools
+  readonly tools: Record<string, ExecutableTool>
   /** Called after each step that has tool calls; returning `true` ends the loop without running them. */
   readonly until?: (state: { readonly steps: ReadonlyArray<LLMResponse> }) => boolean
 }
@@ -185,10 +185,7 @@ export interface GenerateObjectDynamicOptions<SelectedLanguageModel extends Lang
   readonly jsonSchema: JsonSchema.JsonSchema
 }
 
-const runGenerateObject = Effect.fn("LLM.generateObject")(function* (
-  options: GenerateObjectBase,
-  tool: ReturnType<typeof makeTool>,
-) {
+const runGenerateObject = Effect.fn("LLM.generateObject")(function* (options: GenerateObjectBase, tool: Tool) {
   const baseRequest = request(options)
   const generateRequest = LLMRequest.update(baseRequest, {
     tools: toDefinitions({ [GENERATE_OBJECT_TOOL_NAME]: tool }),
@@ -237,23 +234,8 @@ export function generateObject<const SelectedLanguageModel extends LanguageModel
 export function generateObject(options: GenerateObjectOptions<ToolSchema<any>> | GenerateObjectDynamicOptions) {
   if ("schema" in options) {
     const { schema, ...rest } = options
-    return runGenerateObject(
-      rest,
-      makeTool({
-        description: GENERATE_OBJECT_TOOL_DESCRIPTION,
-        parameters: schema,
-        success: Schema.Unknown as ToolSchema<unknown>,
-        execute: () => Effect.void,
-      }),
-    )
+    return runGenerateObject(rest, tool({ description: GENERATE_OBJECT_TOOL_DESCRIPTION, parameters: schema }))
   }
   const { jsonSchema, ...rest } = options
-  return runGenerateObject(
-    rest,
-    makeTool({
-      description: GENERATE_OBJECT_TOOL_DESCRIPTION,
-      jsonSchema,
-      execute: () => Effect.void,
-    }),
-  )
+  return runGenerateObject(rest, tool({ description: GENERATE_OBJECT_TOOL_DESCRIPTION, jsonSchema }))
 }

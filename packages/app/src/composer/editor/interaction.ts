@@ -25,6 +25,7 @@ import {
 import { clonePrompt, isAttachment, promptLength } from "../prompt-parts"
 import type { ComposerQueue } from "../adapter"
 import { isCommentItem } from "../state"
+import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 
 export type ComposerSelectControl = {
   options: Accessor<ComposerOption[]>
@@ -78,7 +79,11 @@ export function createComposerEditor(input: {
   openContext?: (key: string) => void
   onContextRemove?: (item: ComposerComment) => void
   onQuoteComment?: (item: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
-  quoteComment?: { key: Accessor<string | undefined>; set: (key?: string) => void }
+  quoteComment?: {
+    key: Accessor<string | undefined>
+    anchor?: Accessor<ComposerQuoteAnchor | undefined>
+    set: (key?: string) => void
+  }
   onEditor?: (element: HTMLElement) => void
   onSuggestionSelect?: (item: ComposerSuggestion) => (() => void) | void
   view: ComposerEditorView
@@ -161,7 +166,7 @@ export function createComposerEditor(input: {
     )
   }
 
-  const [found, setFound] = createStore<{ files: ComposerSuggestion[] }>({ files: [] })
+  const [found, setFound] = createStore<{ query?: string; files: ComposerSuggestion[] }>({ files: [] })
   let fileQuery: string | undefined
   let fileAbort = new AbortController()
   onCleanup(() => abort(fileAbort))
@@ -176,7 +181,7 @@ export function createComposerEditor(input: {
     fileAbort = controller
 
     if (query === undefined || !query.trim() || /\s/.test(query)) {
-      if (found.files.length) setFound("files", [])
+      if (found.files.length) setFound({ query: undefined, files: [] })
 
       return
     }
@@ -184,7 +189,7 @@ export function createComposerEditor(input: {
     const timer = setTimeout(
       () =>
         void Promise.resolve(input.searchContextFiles(query, controller.signal)).then(
-          (files) => !controller.signal.aborted && setFound("files", files),
+          (files) => !controller.signal.aborted && setFound({ query, files }),
           () => undefined,
         ),
       150,
@@ -258,21 +263,24 @@ export function createComposerEditor(input: {
     })),
   )
 
+  // Files from the previous query stay listed while the next search runs, but the keyboard can't highlight or pick them.
+  const stale = (item: ComposerSuggestion) =>
+    state.popover.type === "context" && item.kind === "file" && !item.recent && found.query !== state.popover.query
+
+  const selectable = () => suggestions().flatMap((item) => (stale(item) ? [] : [item.id]))
+
   const suggestions = () => {
     if (state.popover.type !== "history") return list().flat()
     const query = state.popover.query.trim().toLowerCase()
 
-    return history()
-      .filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(query))
-      .toReversed()
+    return history().filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(query))
   }
 
   const execute = (command: ComposerInteractionCommand) => {
     if (command.type === "history.preview") {
       const item = history().find((entry) => entry.id === command.id)
 
-      if (item?.history)
-        applyHistory(item.history, { focus: state.popover.type === "history" && !state.popover.searching })
+      if (item?.history) applyHistory(item.history, { focus: false })
 
       return
     }
@@ -322,7 +330,9 @@ export function createComposerEditor(input: {
   }
 
   function dispatch(event: ComposerInteractionEvent) {
-    if (event.type === "history.search" || event.type === "popover.close") cancelFocus()
+    if (event.type === "popover.active" && !selectable().includes(event.id)) return false
+
+    if (event.type === "popover.close") cancelFocus()
 
     if (
       event.type === "history.open" ||
@@ -379,21 +389,6 @@ export function createComposerEditor(input: {
     flushFocus()
 
     if (
-      state.popover.type === "history" &&
-      (event.metaKey || event.ctrlKey) &&
-      !event.altKey &&
-      !event.shiftKey &&
-      !event.isComposing &&
-      event.key.toLowerCase() === "f"
-    ) {
-      event.preventDefault()
-      event.stopPropagation()
-      dispatch({ type: "history.search" })
-
-      return true
-    }
-
-    if (
       state.mode === "normal" &&
       (event.metaKey || event.ctrlKey) &&
       !event.altKey &&
@@ -411,7 +406,7 @@ export function createComposerEditor(input: {
       key: event.key,
       ctrl: event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey,
       composing: event.isComposing,
-      ids: suggestions().map((item) => item.id),
+      ids: selectable(),
       empty: draft.state.prompt.every((part) => !("content" in part) || part.content.length === 0),
     })
 
@@ -425,6 +420,21 @@ export function createComposerEditor(input: {
     }
 
     if (handled) return true
+
+    // The suggestion lists don't page, and a page key must not move the caret out of the query or page the timeline.
+    if (
+      state.popover.type !== "closed" &&
+      (event.key === "PageUp" || event.key === "PageDown") &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.isComposing
+    ) {
+      event.preventDefault()
+
+      return true
+    }
 
     if (event.key === "Escape" && input.view.submit.queue?.editing()) {
       event.preventDefault()
@@ -465,9 +475,9 @@ export function createComposerEditor(input: {
 
   createEffect(() => {
     if (state.popover.type === "closed") return
-    const ids = suggestions().map((item) => item.id)
+    const ids = selectable()
 
-    if (state.popover.activeID ? ids.includes(state.popover.activeID) : ids.length === 0) return
+    if (state.popover.activeID ? state.popover.chosen && ids.includes(state.popover.activeID) : ids.length === 0) return
     dispatch({ type: "popover.results", ids })
   })
 
@@ -588,7 +598,9 @@ export function createComposerEditor(input: {
       input.openContext?.(id)
     },
     editingQuote: () => quoteComment.key(),
+    quoteAnchor: () => input.quoteComment?.anchor?.(),
     editQuote: (key?: string) => quoteComment.set(key),
+    focusQuotePrompt: () => restoreFocus(),
     commentQuote(id: string, comment: string) {
       const item = draft.state.context.items.find((entry) => entry.key === id)
 
