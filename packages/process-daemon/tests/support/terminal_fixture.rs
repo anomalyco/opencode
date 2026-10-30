@@ -62,6 +62,7 @@ impl Fixture {
             .into(),
             cols: 80,
             rows: 24,
+            mode: Default::default(),
         }
     }
 

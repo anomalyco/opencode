@@ -43,6 +43,7 @@ impl ResizeFixture {
                 env: [(CHILD.into(), listener.local_addr().unwrap().to_string())].into(),
                 cols: 80,
                 rows: 24,
+                mode: Default::default(),
             })
             .unwrap();
 

@@ -503,9 +503,11 @@ fn stream_subscription(
             },
             StreamEvent::Exited {
                 exit_code,
+                signal,
                 final_offset,
             } => Response::Exited {
                 exit_code,
+                signal,
                 final_offset,
             },
             StreamEvent::ControllerChanged {
@@ -556,6 +558,7 @@ fn dispatch(
             env,
             cols,
             rows,
+            mode,
         } => Response::Created {
             terminal: service.create(CreateTerminal {
                 program,
@@ -566,10 +569,11 @@ fn dispatch(
                 env,
                 cols,
                 rows,
+                mode,
             })?,
         },
-        Request::List => Response::Terminals {
-            terminals: service.list()?,
+        Request::List { mode } => Response::Terminals {
+            terminals: service.list_mode(mode.unwrap_or_default())?,
         },
         Request::Write {
             id,
