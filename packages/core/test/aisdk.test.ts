@@ -1281,6 +1281,35 @@ it.effect("recovers string-encoded arguments", () =>
   }),
 )
 
+it.effect("recovers arguments carrying javascript-style escapes", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            // The model wrote an invalid JSON escape (`\'`) inside the string, as models embedding code payloads do.
+            {
+              type: "text-delta",
+              id: "msg_1",
+              delta: `{"name":"edit","arguments":{"newString":"print('It\\'s a draw!')"}}`,
+            },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
+    const response = yield* LLMClient.generate(
+      LLM.request({ model: resolved, prompt: "Think", tools: [tool("edit")] }),
+    ).pipe(Effect.provide(client))
+
+    expect(response.toolCalls).toMatchObject([
+      { type: "tool-call", id: "recovered-1", name: "edit", input: { newString: "print('It's a draw!')" } },
+    ])
+  }),
+)
+
 it.effect("keeps streamed tool parts even when text quotes a tool call", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service

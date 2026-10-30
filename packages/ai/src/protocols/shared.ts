@@ -484,10 +484,26 @@ function recoverToolInput(text: string, start: number): Record<string, unknown> 
   const source = jsonValueExtent(text, start)
   if (source === undefined) return undefined
   // A doubly encoded argument string carries its JSON indirectly, as in OpenAI's text call format.
-  const value = text[start] === "{" ? source : Option.getOrUndefined(decodeJsonText(source))
-  if (typeof value !== "string") return undefined
-  const parsed = Option.getOrUndefined(decodeJsonText(value))
+  if (text[start] !== "{") {
+    const inner = decodeJsonCode(source)
+    if (typeof inner !== "string") return undefined
+    const parsed = decodeJsonCode(inner)
+    return isRecord(parsed) ? parsed : undefined
+  }
+  const parsed = decodeJsonCode(source)
   return isRecord(parsed) ? parsed : undefined
+}
+
+/** Real JSON escape characters; anything else after a backslash is a JavaScript-style escape to repair. */
+const JsonEscapes = new Set(["\\", '"', "/", "b", "f", "n", "r", "t", "u"])
+
+/** Decodes JSON text, tolerating the JavaScript-style escapes models sometimes write, such as `\'` in code. */
+function decodeJsonCode(value: string): unknown | undefined {
+  const parsed = Option.getOrUndefined(decodeJsonText(value))
+  if (parsed !== undefined) return parsed
+  return Option.getOrUndefined(
+    decodeJsonText(value.replace(/\\(.)/g, (escaped, char: string) => (JsonEscapes.has(char) ? escaped : char))),
+  )
 }
 
 /** The extent of a JSON value at `start`: a balanced object or a complete string literal, else nothing. */
