@@ -26,3 +26,13 @@ export function name(
 ) {
   return get(list, providerID, modelID)?.name ?? modelID
 }
+
+export function label(
+  list: Provider[] | ReadonlyMap<string, Provider> | undefined,
+  providerID: string,
+  modelID: string,
+  style: "name" | "id" | undefined,
+) {
+  if (style === "id") return `${providerID}/${modelID}`
+  return name(list, providerID, modelID)
+}
