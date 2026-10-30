@@ -49,7 +49,7 @@ describe("window state", () => {
   ])("maximizes on the saved display when $name", (input) => {
     const saved = { x: 0, y: 0, width: 1280, height: 800, displayBounds: input.displayBounds, isMaximized: true }
 
-    expect(resolveWindowState(saved, defaults, { ...displays, all: () => input.all })).toEqual({
+    expect(resolveWindowState(saved, defaults, { ...displays, all: () => [...input.all] })).toEqual({
       ...input.expected,
       displayBounds: input.displayBounds,
       isMaximized: true,

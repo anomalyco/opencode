@@ -149,14 +149,7 @@ export function manageWindowState(win: BrowserWindow, file: string, initial: Win
 }
 
 function hasBounds(state: Partial<WindowState>): state is WindowState & Required<Pick<WindowState, "x" | "y">> {
-  return (
-    Number.isInteger(state.x) &&
-    Number.isInteger(state.y) &&
-    Number.isInteger(state.width) &&
-    state.width > 0 &&
-    Number.isInteger(state.height) &&
-    state.height > 0
-  )
+  return state.x !== undefined && state.y !== undefined && (state.width ?? 0) > 0 && (state.height ?? 0) > 0
 }
 
 function within(state: WindowState & { x: number; y: number }, bounds: Rectangle) {
