@@ -57,7 +57,7 @@ export const prepareDesktop = Effect.gen(function* () {
 export const loadProxyEnvironment = Effect.gen(function* () {
   yield* Effect.try(() => {
     ensureLoopbackNoProxy()
-    // Electron 41.2 has a newer Node API than the current @types/node package.
+    // SAFETY: Electron 41.2 ships a Node with http.setGlobalProxyFromEnv, which the current @types/node lacks.
     const proxyAwareHttp = http as typeof http & { setGlobalProxyFromEnv(): void }
     proxyAwareHttp.setGlobalProxyFromEnv()
   }).pipe(Effect.catch((error) => Effect.logWarning("failed to load proxy environment", { error })))
