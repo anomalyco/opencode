@@ -1266,6 +1266,15 @@ export function createData(config: CreateDataInput) {
       case "permission.replied":
         removePermission(event.data.sessionID, event.data.requestID)
         return
+      // A form is owned by a session ID, so a session form does not need a Location to be routed.
+      // The "global" elicitation form is listed per Location and stays below, where the event has one.
+      case "form.created": {
+        const form = event.data.form
+        if (form.sessionID === "global") break
+        if (store.session.form[form.sessionID]?.some((existing) => existing.id === form.id)) return
+        setStore("session", "form", form.sessionID, [...(store.session.form[form.sessionID] ?? []), form])
+        return
+      }
       case "form.replied":
       case "form.cancelled":
         removeForm(event.data.sessionID, event.data.id, event.location)
