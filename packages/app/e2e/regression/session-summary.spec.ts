@@ -870,9 +870,10 @@ test("long MCP lists stay in the viewport in a real RTL locale", async ({ page }
   await summary.getByRole("button", { name: "MCP", exact: true }).click()
   const menu = page.getByRole("group", { name: "MCP", exact: true })
   await expect(menu.locator(".session-mcp-row")).toHaveCount(30)
-  await expect.poll(() => menu.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  const list = menu.locator("[data-scrollable]")
+  await expect.poll(() => list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
   // Long names truncate; the list only scrolls vertically.
-  expect(await menu.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0)
+  expect(await list.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0)
   // The submenu shows and moves without motion unless its Knobs toggle is on.
   expect(
     await page.locator(".session-service-flyout").evaluate((element) => getComputedStyle(element).transitionDuration),

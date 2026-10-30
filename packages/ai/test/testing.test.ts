@@ -337,7 +337,9 @@ describe("TestLLM first-class client", () => {
         ),
       ).toBe(failure)
       expect(observed).toEqual(events)
-      expect(yield* llm.generate(request).pipe(Effect.flip)).toBe(failure)
+      const generated = yield* llm.generate(request).pipe(Effect.flip)
+      expect(generated.reason).toBe(failure.reason)
+      expect(generated.partial?.text).toBe("partial")
 
       const defect = new Error("Broken fixture responder")
       yield* llm.serve(() => {

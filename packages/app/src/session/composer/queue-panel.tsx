@@ -197,7 +197,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
           data-component={leaving() ? undefined : "session-queue-row"}
           data-leaving={leaving() || undefined}
           aria-busy={leaving() ? undefined : entry().pending}
-          class="group/queue-row mb-px flex h-8 shrink-0 items-center justify-between gap-2 rounded-md py-1 ps-0.5 pe-2"
+          class="group/queue-row mb-px flex h-8 shrink-0 items-center justify-between gap-2 rounded-md py-1 ps-0.5 pe-1"
           classList={{
             "bg-v2-overlay-simple-overlay-hover": editing(),
             "opacity-60": sortable.isDragSource(),
@@ -241,7 +241,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
           </div>
           <div
             data-slot="session-queue-actions"
-            class="flex shrink-0 items-center gap-1.5"
+            class="flex shrink-0 items-center gap-1"
             classList={{
               "opacity-0 focus-within:opacity-100 group-hover/queue-row:opacity-100 [@media(hover:none)]:opacity-100":
                 !active() && !editing() && !entry().pending,
@@ -264,7 +264,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
                   variant="ghost-faint"
                   icon="arrow-up"
                   disabled={props.queue.busy()}
-                  class="![font-weight:530]"
+                  class="gap-0.5 ps-1 ![font-weight:530] [&_[data-slot=icon-svg]]:text-v2-icon-icon-muted"
                   onClick={() => void props.queue.steer(props.id)}
                 >
                   {props.queue.working() ? language.t("session.queue.steer") : language.t("session.queue.send")}
@@ -274,7 +274,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
                 <IconButton
                   data-action="session-queue-undo"
                   type="button"
-                  size="small"
+                  class="rounded-sm"
                   variant="ghost-muted"
                   icon={<Icon name="outline-undo" />}
                   disabled={props.queue.busy()}
@@ -288,7 +288,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
                 <IconButton
                   data-action="session-queue-remove"
                   type="button"
-                  size="small"
+                  class="rounded-sm"
                   variant="ghost-muted"
                   icon={<Icon name="outline-xmark" />}
                   disabled={props.queue.busy()}

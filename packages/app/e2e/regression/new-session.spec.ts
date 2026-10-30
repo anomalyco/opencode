@@ -2,7 +2,14 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
 import { draftHref, expectPath, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
-import { newSessionLocation, openDraft, openSession, openWorktreeDraft, type WorkspaceInput } from "../utils/workspace"
+import {
+  newSessionLocation,
+  newSessionWorktree,
+  openDraft,
+  openSession,
+  openWorktreeDraft,
+  type WorkspaceInput,
+} from "../utils/workspace"
 
 const directory = "C:/OpenCode/WorkspacePending"
 
@@ -52,19 +59,32 @@ test("the new session screen does not show session details", async ({ page }) =>
 })
 
 test("the location shortcut keeps cycling after hovering its icon", async ({ page }) => {
-  const view = await openDraft(page, { name: "LocationShortcut" })
+  const existing = "C:/OpenCode/LocationShortcut/.worktrees/quiet-river"
+
+  const view = await openDraft(page, {
+    name: "LocationShortcut",
+    worktrees: () => [{ directory: "C:/OpenCode/LocationShortcut" }, { directory: existing, strategy: "git" }],
+  })
+
   const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+  const path = page.locator('[data-slot="new-session-location-path"]')
+  const icon = page.locator('[data-slot="new-session-location-icon"]')
+
+  // The worktree trigger already says Local, so the local path has no icon of its own.
+  await expect(path).toHaveText(view.directory)
+  await expect(icon).toHaveCount(0)
+  await newSessionWorktree(page).click()
+  await page.getByRole("option", { name: /^quiet-river / }).click()
   await expect(view.editor).toBeFocused()
-  await view.editor.press(`${modifier}+Alt+KeyL`)
-  await expect(newSessionLocation(page)).toContainText("New worktree")
-  await expect(view.editor).toBeFocused()
-  await view.editor.press(`${modifier}+Alt+KeyL`)
-  await expect(newSessionLocation(page)).not.toContainText("New worktree")
-  await expect(page.locator('[data-slot="new-session-location-path"]')).toHaveText(view.directory)
-  await page.locator('[data-slot="new-session-location-icon"]').hover()
+  await expect(path).toHaveText(existing)
+  await icon.hover()
   await expect(page.getByRole("tooltip")).toContainText("Toggle session location")
   await view.editor.press(`${modifier}+Alt+KeyL`)
-  await expect(newSessionLocation(page)).toContainText("New worktree")
+  await expect(newSessionWorktree(page)).toHaveText("Local")
+  await expect(icon).toHaveCount(0)
+  await expect(view.editor).toBeFocused()
+  await view.editor.press(`${modifier}+Alt+KeyL`)
+  await expect(newSessionWorktree(page)).toContainText("New worktree")
   await expect(view.editor).toBeFocused()
 })
 
@@ -172,7 +192,10 @@ test("the combined location picker shows checkout branches and chooses the base 
   await expect(page.getByRole("option")).toHaveCount(1)
   await page.getByRole("option", { name: /Custom project C:\/OpenCode\/BranchContext/ }).click()
   await expect(view.editor).toBeFocused()
+  await expect(screen.getByRole("button", { name: "Local", exact: true })).toBeVisible()
+  // The local checkout's branch is context, not a control: the app cannot switch it.
   await expect(screen.getByText("timeline-quotes", { exact: true })).toBeVisible()
+  await expect(screen.getByRole("button", { name: "timeline-quotes", exact: true })).toHaveCount(0)
   await expect(screen.getByRole("button", { name: /from / })).toHaveCount(0)
   await select(/^New worktree/)
   await expect(base).toBeVisible()
@@ -191,7 +214,7 @@ test("the combined location picker shows checkout branches and chooses the base 
     .toEqual([expect.objectContaining({ body: expect.objectContaining({ text: "Use the selected base" }) })])
 })
 
-test("the checkout branch opens the current project's worktree step", async ({ page }) => {
+test("the worktree trigger opens the current project's worktree step", async ({ page }) => {
   const existing = "C:/OpenCode/BranchWorktrees/.worktrees/quiet-river"
 
   const view = await openDraft(page, {
@@ -201,13 +224,14 @@ test("the checkout branch opens the current project's worktree step", async ({ p
   })
 
   const screen = page.locator('[data-component="new-session"]')
-  const branch = screen.getByRole("button", { name: "dev", exact: true })
+  // The app cannot switch the checkout branch, so the local checkout names the mode instead of "dev".
+  const local = newSessionWorktree(page)
   const dialog = page.getByRole("dialog")
   const search = dialog.getByRole("combobox", { name: "Search worktrees", exact: true })
   const options = dialog.getByRole("option")
   const back = dialog.getByRole("button", { name: "Back to projects", exact: true })
 
-  await branch.click()
+  await local.click()
   await expect(search).toBeFocused()
   await expect(back).toHaveText("Run session in")
   await expect(options.locator(".command-palette-title")).toHaveText([
@@ -228,7 +252,7 @@ test("the checkout branch opens the current project's worktree step", async ({ p
   await expect(view.editor).toBeFocused()
 
   // Escape also steps back first, then closes.
-  await branch.focus()
+  await local.focus()
   await page.keyboard.press("Enter")
   await expect(search).toBeFocused()
   await search.press("Escape")
@@ -236,11 +260,11 @@ test("the checkout branch opens the current project's worktree step", async ({ p
   await projects.press("Escape")
   await expect(dialog).toHaveCount(0)
 
-  await branch.click()
+  await local.click()
   await options.filter({ hasText: "quiet-river" }).click()
   await expect(dialog).toHaveCount(0)
-  await expect(newSessionLocation(page)).toContainText("quiet-river")
-  await expect(screen.getByRole("button", { name: "quiet-river-branch", exact: true })).toBeVisible()
+  await expect(newSessionWorktree(page)).toContainText("quiet-river")
+  await expect(screen.getByText("quiet-river-branch", { exact: true })).toBeVisible()
   await expect(view.editor).toBeFocused()
 })
 
@@ -619,7 +643,7 @@ for (const row of [
 
     if (row.followUp) return
     await expect(page.getByText("Failed to create worktree", { exact: true })).toBeVisible()
-    await expect(newSessionLocation(page)).toContainText("New worktree")
+    await expect(newSessionWorktree(page)).toContainText("New worktree")
     await expect(pending.message).toHaveCount(0)
     await expect(tabLink(page, pending.sessionID)).toHaveCount(0)
     expect(mock.creates).toEqual([])
@@ -636,7 +660,7 @@ test("retains the draft and reuses the created workspace after session creation 
   await expect(page.getByText("Failed to create session", { exact: true })).toBeVisible()
   await expect(editor(page)).toHaveText(text)
   await expect(submit(page)).toBeEnabled()
-  await expect(newSessionLocation(page)).toContainText("pending-workspace")
+  await expect(newSessionWorktree(page)).toContainText("pending-workspace")
   await expect(pending.shimmer).toHaveCount(0)
   await expect(pending.message).toHaveCount(0)
   expect(mock.creates).toEqual([expect.objectContaining({ id: pending.sessionID, location: { directory: workspace } })])
@@ -684,7 +708,7 @@ test("restores the draft after closing and revisiting a pending session that fai
   await expect(page.getByText("Failed to create worktree", { exact: true })).toBeVisible()
   await expect(editor(page)).toHaveText(`${text}\n\n${followUp}`)
   await expect(submit(page)).toBeEnabled()
-  await expect(newSessionLocation(page)).toContainText("New worktree")
+  await expect(newSessionWorktree(page)).toContainText("New worktree")
   await expect(page.locator(`[data-titlebar-tab-link][href="${draftHref(draftID)}"]`)).toHaveCount(1)
   await expect(tab).toHaveCount(0)
   await expect(pending.message).toHaveCount(0)

@@ -2,12 +2,10 @@ export * as TestLLM from "./testing.js"
 export { compileRequest } from "./route/client.js"
 export { TestDecision } from "./testing/decision.js"
 export { TestImage } from "./testing/image.js"
-export { TestSpeech } from "./testing/speech.js"
-export { TestTranscription } from "./testing/transcription.js"
-export { TestVideo } from "./testing/video.js"
 
 import {
   LLMClient,
+  generateWith,
   type CompactionRequest,
   type CheckpointRequest,
   type EndpointCompactOptions,
@@ -15,7 +13,6 @@ import {
 } from "./route/client.js"
 import {
   LLMEvent,
-  LLMResponse,
   CompactionResponse,
   CompactionCheckpointResponse,
   type FinishReasonDetails,
@@ -131,15 +128,7 @@ const make = (options: LayerOptions) =>
       ...script.controls,
       compact,
       stream,
-      generate: (request) =>
-        stream(request).pipe(
-          Stream.runFold(LLMResponse.empty, LLMResponse.reduce),
-          Effect.flatMap((state) => {
-            const response = LLMResponse.complete(state)
-            if (response) return Effect.succeed(response)
-            return Effect.die("TestLLM response ended without a terminal finish event")
-          }),
-        ),
+      generate: generateWith(stream),
     })
   })
 

@@ -230,55 +230,58 @@ export const make = <R = never>(options: Options<R> = {}) => {
       resume: (model: ImageModel, token: unknown, options?: RunOptions) =>
         run(Image.resume(model, token), options).then(handle),
     },
-    video: {
-      request: Video.request,
-      start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
-        run(Video.start(input), options).then(handle),
-      generate: <const Model extends VideoModel>(
-        input: VideoRequestInput<Model> | VideoRequest,
-        options?: AwaitOptions & RunOptions,
-      ) => run(Video.generate(input, { poll: options?.poll }), options),
-      resume: (model: VideoModel, token: unknown, options?: RunOptions) =>
-        run(Video.resume(model, token), options).then(handle),
-      stream: <const Model extends VideoModel>(
-        input: VideoRequestInput<Model> | VideoRequest,
-        options?: AwaitOptions & RunOptions,
-      ) => iterate(Video.stream(input, { poll: options?.poll }), options),
-    },
-    speech: {
-      request: Speech.request,
-      generate: <const Model extends SpeechModel>(
-        input: SpeechRequestInput<Model> | SpeechRequest,
-        options?: RunOptions,
-      ) => run(Speech.generate(input), options),
-      stream: <const Model extends SpeechModel>(
-        input: SpeechRequestInput<Model> | SpeechRequest,
-        options?: RunOptions,
-      ) => iterate(Speech.stream(input), options),
-    },
-    transcription: {
-      request: Transcription.request,
-      generate: <const Model extends TranscriptionModel>(
-        input: TranscriptionRequestInput<Model> | TranscriptionRequest,
-        options?: AwaitOptions & RunOptions,
-      ) => run(Transcription.generate(input, { poll: options?.poll }), options),
-      stream: <const Model extends TranscriptionModel>(
-        input: TranscriptionRequestInput<Model> | TranscriptionRequest,
-        options?: AwaitOptions & RunOptions,
-      ) => iterate(Transcription.stream(input, { poll: options?.poll }), options),
-      start: <const Model extends TranscriptionModel>(
-        input: TranscriptionRequestInput<Model> | TranscriptionRequest,
-        options?: RunOptions,
-      ) => run(Transcription.start(input), options).then(handle),
-      resume: (model: TranscriptionModel, token: unknown, options?: RunOptions) =>
-        run(Transcription.resume(model, token), options).then(handle),
-    },
     decision: {
       request: Decision.request,
       generate: <const Model extends DecisionModel, const Questions extends DecisionQuestions>(
         input: DecisionRequestInput<Model, Questions>,
         options?: RunOptions,
       ) => run(Decision.generate(input), options),
+    },
+    /** Experimental: may change without compatibility guarantees. */
+    experimental: {
+      speech: {
+        request: Speech.request,
+        generate: <const Model extends SpeechModel>(
+          input: SpeechRequestInput<Model> | SpeechRequest,
+          options?: RunOptions,
+        ) => run(Speech.generate(input), options),
+        stream: <const Model extends SpeechModel>(
+          input: SpeechRequestInput<Model> | SpeechRequest,
+          options?: RunOptions,
+        ) => iterate(Speech.stream(input), options),
+      },
+      transcription: {
+        request: Transcription.request,
+        generate: <const Model extends TranscriptionModel>(
+          input: TranscriptionRequestInput<Model> | TranscriptionRequest,
+          options?: AwaitOptions & RunOptions,
+        ) => run(Transcription.generate(input, { poll: options?.poll }), options),
+        stream: <const Model extends TranscriptionModel>(
+          input: TranscriptionRequestInput<Model> | TranscriptionRequest,
+          options?: AwaitOptions & RunOptions,
+        ) => iterate(Transcription.stream(input, { poll: options?.poll }), options),
+        start: <const Model extends TranscriptionModel>(
+          input: TranscriptionRequestInput<Model> | TranscriptionRequest,
+          options?: RunOptions,
+        ) => run(Transcription.start(input), options).then(handle),
+        resume: (model: TranscriptionModel, token: unknown, options?: RunOptions) =>
+          run(Transcription.resume(model, token), options).then(handle),
+      },
+      video: {
+        request: Video.request,
+        start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
+          run(Video.start(input), options).then(handle),
+        generate: <const Model extends VideoModel>(
+          input: VideoRequestInput<Model> | VideoRequest,
+          options?: AwaitOptions & RunOptions,
+        ) => run(Video.generate(input, { poll: options?.poll }), options),
+        resume: (model: VideoModel, token: unknown, options?: RunOptions) =>
+          run(Video.resume(model, token), options).then(handle),
+        stream: <const Model extends VideoModel>(
+          input: VideoRequestInput<Model> | VideoRequest,
+          options?: AwaitOptions & RunOptions,
+        ) => iterate(Video.stream(input, { poll: options?.poll }), options),
+      },
     },
     dispose: () => runtime.dispose(),
   }
@@ -316,5 +319,6 @@ export const tool = <
 /** Default client over `RequestExecutor.fetchLayer` for scripts; the runtime builds its layer on first use. */
 export const ai = make()
 
+export { AIError } from "./schema/index.js"
 export * as AI from "./index.js"
 export type { ExecutableTool, Tool, ToolOptions, Tools } from "./tool.js"

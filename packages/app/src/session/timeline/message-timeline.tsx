@@ -91,7 +91,7 @@ type MessageTimelineProps = {
   pinned: boolean
   centered: boolean
   reserveReviewToggle: boolean
-  setContentRef: (el: HTMLDivElement) => void
+  onContentResize: () => void
   bottomInset?: number
   setVisibleRef?: (el: HTMLDivElement | undefined) => void
   anchor: (id: string) => string
@@ -193,7 +193,7 @@ function MessageTimelineView(
     scroll: () => props.scroll,
     onResumeScroll: props.onResumeScroll,
     setScrollRef: props.setScrollRef,
-    setContentRef: props.setContentRef,
+    onContentResize: props.onContentResize,
     bottomInset: () => props.bottomInset ?? 0,
     setVisibleRef: props.setVisibleRef,
     onScheduleScrollState: props.onScheduleScrollState,

@@ -55,6 +55,8 @@ type ServiceSource = {
   readonly failed: boolean
   retry: () => void
   Body: Component
+  /** The actions under the list, outside its scroll box so they stay in view. */
+  Footer: Component
 }
 
 // How long a pointer may rest inside the safe triangle before the row under it takes over.
@@ -143,6 +145,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
 
   const rows: Partial<Record<Service, HTMLButtonElement>> = {}
   const panes: Partial<Record<Service, HTMLElement>> = {}
+  const scrollers: Partial<Record<Service, HTMLElement>> = {}
   let flyout: HTMLDivElement | undefined
   let surface: HTMLDivElement | undefined
   // The flyout's containing block in the viewport, measured when a list opens and on scroll or resize, so pointer
@@ -341,10 +344,11 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
     entries.forEach((entry) => {
       const service = services.find((item) => panes[item.type]?.contains(entry.target))?.type
       const pane = service ? panes[service] : undefined
+      const scroller = service ? scrollers[service] : undefined
 
-      if (!service || !pane) return
+      if (!service || !pane || !scroller) return
       setMenu("heights", service, pane.offsetHeight)
-      setMenu("overflow", service, pane.scrollHeight > pane.clientHeight + 1)
+      setMenu("overflow", service, scroller.scrollHeight > scroller.clientHeight + 1)
     }),
   )
 
@@ -365,6 +369,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
                   <ServiceBody source={source}>
                     <source.Body />
                   </ServiceBody>
+                  <ServiceFooter source={source} />
                 </div>
               ))
 
@@ -466,11 +471,18 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
                     data-overflow={menu.overflow[service.type] || undefined}
                     inert={menu.pane !== service.type || undefined}
                   >
-                    <div ref={(element) => observer.observe(element)} class="session-service-pane-content">
-                      <ServiceBody source={source}>
-                        <source.Body />
-                      </ServiceBody>
+                    <div
+                      ref={(element) => (scrollers[service.type] = element)}
+                      class="session-service-scroll"
+                      data-scrollable
+                    >
+                      <div ref={(element) => observer.observe(element)} class="session-service-pane-content">
+                        <ServiceBody source={source}>
+                          <source.Body />
+                        </ServiceBody>
+                      </div>
                     </div>
+                    <ServiceFooter source={source} />
                   </div>
                 )
               }}
@@ -524,7 +536,7 @@ function useLsp(props: ServiceProps): ServiceSource {
     failed: false,
     retry: () => void refetch(),
     Body: () => (
-      <Show when={names().length} fallback={<ServiceEmpty owner={props} title={ctx.t("lsp.empty")} service="lsp" />}>
+      <Show when={names().length} fallback={<ServiceEmpty title={ctx.t("lsp.empty")} />}>
         <For each={names()}>
           {(name) => (
             <div class="session-service-row">
@@ -532,6 +544,10 @@ function useLsp(props: ServiceProps): ServiceSource {
             </div>
           )}
         </For>
+      </Show>
+    ),
+    Footer: () => (
+      <Show when={names().length} fallback={<ServiceEmptyFooter owner={props} service="lsp" />}>
         <div class="session-service-footer">
           <span class="session-service-config-separator" role="separator" />
           <ServiceConfigLink owner={props} service="lsp" />
@@ -586,7 +602,7 @@ function useMcp(props: ServiceProps, close: () => void): ServiceSource {
     },
     retry: () => void refetch(),
     Body: () => (
-      <Show when={servers().length} fallback={<ServiceEmpty owner={props} title={ctx.t("mcp.empty")} service="mcp" />}>
+      <Show when={servers().length} fallback={<ServiceEmpty title={ctx.t("mcp.empty")} />}>
         <Index each={servers()}>
           {(server) => {
             const enabled = () => server().status.status !== "disabled"
@@ -674,6 +690,10 @@ function useMcp(props: ServiceProps, close: () => void): ServiceSource {
             )
           }}
         </Index>
+      </Show>
+    ),
+    Footer: () => (
+      <Show when={servers().length} fallback={<ServiceEmptyFooter owner={props} service="mcp" />}>
         <div class="session-service-footer">
           <span class="session-service-config-separator" role="separator" />
           <ServiceConfigLink owner={props} service="mcp" />
@@ -771,11 +791,7 @@ function useCatalog(props: ServiceProps, service: "plugins" | "skills"): Service
       <Show
         when={list().length}
         fallback={
-          <ServiceEmpty
-            owner={props}
-            title={ctx.t(service === "plugins" ? "plugins.empty" : "skills.empty")}
-            service={service}
-          />
+          <ServiceEmpty title={ctx.t(service === "plugins" ? "plugins.empty" : "skills.empty")} />
         }
       >
         <For each={list()}>
@@ -814,6 +830,10 @@ function useCatalog(props: ServiceProps, service: "plugins" | "skills"): Service
             </Show>
           )}
         </For>
+      </Show>
+    ),
+    Footer: () => (
+      <Show when={list().length} fallback={<ServiceEmptyFooter owner={props} service={service} />}>
         <div class="session-service-footer">
           <span class="session-service-config-separator" role="separator" />
           <Show when={service === "skills"}>
@@ -886,6 +906,15 @@ function ServiceBody(props: { source: ServiceSource; children: JSX.Element }) {
       >
         {props.children}
       </Show>
+    </Show>
+  )
+}
+
+// Shown once the list is, as ServiceBody shows it.
+function ServiceFooter(props: { source: ServiceSource }) {
+  return (
+    <Show when={(props.source.ready || !props.source.loading) && !props.source.error}>
+      <props.source.Footer />
     </Show>
   )
 }
@@ -1000,15 +1029,20 @@ function ServiceSetup(props: { owner: ServiceProps; service: Service }) {
   )
 }
 
-function ServiceEmpty(props: { owner: ServiceProps; title: string; service: Service }) {
+function ServiceEmpty(props: { title: string }) {
   return (
     <div class="session-service-empty">
       <strong>{props.title}</strong>
-      <div class="session-service-footer">
-        <ServiceSetup owner={props.owner} service={props.service} />
-        <span class="session-service-config-separator" role="separator" />
-        <ServiceConfigLink owner={props.owner} service={props.service} />
-      </div>
+    </div>
+  )
+}
+
+function ServiceEmptyFooter(props: { owner: ServiceProps; service: Service }) {
+  return (
+    <div class="session-service-footer">
+      <span class="session-service-config-separator" role="separator" />
+      <ServiceSetup owner={props.owner} service={props.service} />
+      <ServiceConfigLink owner={props.owner} service={props.service} />
     </div>
   )
 }
