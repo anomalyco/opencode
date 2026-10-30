@@ -72,15 +72,23 @@ type UsableModel = RemoteModel & {
   }
 }
 
-export function get(baseURL: string, headers: Headers.Input, existing: readonly Model.Info[]) {
-  return load(baseURL, headers).pipe(Effect.map((remote) => derive(baseURL, remote, existing)))
+export function get(
+  http: HttpClient.HttpClient,
+  baseURL: string,
+  headers: Headers.Input,
+  existing: readonly Model.Info[],
+) {
+  return load(http, baseURL, headers).pipe(Effect.map((remote) => derive(baseURL, remote, existing)))
 }
 
 export type Snapshot = ReadonlyMap<string, UsableModel>
 
-export const load = Effect.fn("CopilotModels.load")(function* (baseURL: string, headers: Headers.Input) {
-  const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
-  const response = yield* http
+export const load = Effect.fn("CopilotModels.load")(function* (
+  http: HttpClient.HttpClient,
+  baseURL: string,
+  headers: Headers.Input,
+) {
+  const response = yield* HttpClient.filterStatusOk(http)
     .execute(HttpClientRequest.get(`${baseURL}/models`).pipe(HttpClientRequest.setHeaders(headers)))
     .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(Response)), Effect.timeout("5 seconds"))
   return new Map(

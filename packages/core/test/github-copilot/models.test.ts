@@ -5,8 +5,8 @@ import { FetchHttpClient, HttpClient } from "effect/http"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 
-const run = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(FetchHttpClient.layer)))
+const run = <A, E>(effect: (http: HttpClient.HttpClient) => Effect.Effect<A, E>) =>
+  Effect.runPromise(HttpClient.HttpClient.pipe(Effect.flatMap(effect), Effect.provide(FetchHttpClient.layer)))
 
 test("defensively syncs advertised Copilot models", async () => {
   const server = Bun.serve({
@@ -98,7 +98,7 @@ test("defensively syncs advertised Copilot models", async () => {
       ...Model.Info.default(Provider.ID.githubCopilot, Model.ID.make("stale")),
       modelID: Model.ID.make("stale"),
     })
-    const models = await run(CopilotModels.get(server.url.origin, {}, [existing, stale]))
+    const models = await run((http) => CopilotModels.get(http, server.url.origin, {}, [existing, stale]))
     const model = models.get(Model.ID.make("gpt-5"))
 
     expect(model?.name).toBe("GPT-5 local")
@@ -152,7 +152,7 @@ test("prices cache reads from either token price spelling", async () => {
   })
 
   try {
-    const models = await run(CopilotModels.get(server.url.origin, {}, []))
+    const models = await run((http) => CopilotModels.get(http, server.url.origin, {}, []))
     expect(models.get(Model.ID.make("renamed"))?.cost[0]).toMatchObject({
       input: 2.5,
       output: 15,

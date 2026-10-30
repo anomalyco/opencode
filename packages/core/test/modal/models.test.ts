@@ -7,8 +7,8 @@ import { Provider } from "@opencode/core/provider"
 import { ProviderPlugins } from "@opencode/core/plugin/provider"
 import { Money } from "@opencode/schema/money"
 
-const run = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(FetchHttpClient.layer)))
+const run = <A, E>(effect: (http: HttpClient.HttpClient) => Effect.Effect<A, E>) =>
+  Effect.runPromise(HttpClient.HttpClient.pipe(Effect.flatMap(effect), Effect.provide(FetchHttpClient.layer)))
 
 const providerID = Provider.ID.make("modal")
 
@@ -60,7 +60,7 @@ test("maps live Modal models onto catalog templates", async () => {
   try {
     const base = template("base-model")
     const stale = template("stale")
-    const models = await run(ModalModels.get(`${server.url.origin}/v1`, "test-key", [base, stale]))
+    const models = await run((http) => ModalModels.get(http, `${server.url.origin}/v1`, "test-key", [base, stale]))
 
     expect(models.has(Model.ID.make("stale"))).toBe(false)
     expect(models.has(Model.ID.make("malformed"))).toBe(false)
@@ -118,7 +118,7 @@ test("keeps template cost and limits when the proxy omits them", async () => {
       ],
       limit: { context: 1000, input: 500, output: 250 },
     })
-    const models = await run(ModalModels.get(server.url.origin, "test-key", [base]))
+    const models = await run((http) => ModalModels.get(http, server.url.origin, "test-key", [base]))
     const model = models.get(Model.ID.make("sparse"))
     expect(model?.name).toBe("hf-base catalog")
     expect(model?.cost[0]).toMatchObject({ input: 5, output: 10, cache: { read: 1, write: 2 } })
@@ -135,7 +135,7 @@ test("throws on proxy failure so the plugin can fail soft", async () => {
   })
 
   try {
-    await expect(run(ModalModels.get(server.url.origin, "test-key", []))).rejects.toThrow()
+    await expect(run((http) => ModalModels.get(http, server.url.origin, "test-key", []))).rejects.toThrow()
   } finally {
     await server.stop(true)
   }

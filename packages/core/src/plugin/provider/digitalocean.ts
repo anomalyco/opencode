@@ -1,10 +1,9 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
-import { Clock, Deferred, Effect, Equal, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
+import { Clock, Deferred, Effect, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { Server } from "node:http"
 import { App } from "../../app.js"
-import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
@@ -13,6 +12,7 @@ import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
 import { SharedCache } from "../../shared-cache.js"
 import type { PluginInternal } from "../internal.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const providerID = Provider.ID.make("digitalocean")
 const integrationID = Integration.ID.make("digitalocean")
@@ -117,74 +117,55 @@ const oauth = {
 export const DigitalOceanPlugin = define({
   id: "opencode.provider.digitalocean",
   effect: Effect.fn(function* (ctx) {
-    const bus = yield* Bus.Service
     const cache = yield* SharedCache.Service
     const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
-    const loading = Semaphore.makeUnsafe(1)
-    const discovery = yield* FiberHandle.make<void, never>()
-    const loaded: { routers: Routers } = { routers: [] }
-
-    const load = Effect.fn("DigitalOceanPlugin.load")(function* (since?: number) {
-      const connection = yield* ctx.integration.connection.active(integrationID)
-      const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
-      if (!connection || credential?.type !== "oauth" || credential.methodID !== methodID)
-        return yield* apply(connection, [])
-      const key = `digitalocean:${IntegrationConnection.key(connection)}`
-      // An expired token cannot be refreshed, so it only reuses routers another Location already loaded.
-      if (credential.expires !== 0 && credential.expires <= (yield* Clock.currentTimeMillis))
-        return yield* apply(connection, (yield* cache.peek<Routers>(key)) ?? [])
-      const routers = yield* cache
-        .get({
-          key,
-          maxAge: SharedCache.interval,
-          since,
-          load: Effect.gen(function* () {
-            const current = yield* ctx.integration.connection.resolve(connection)
-            if (current?.type !== "oauth" || current.methodID !== methodID)
-              return yield* Effect.fail(new Error("DigitalOcean connection has no OAuth credential"))
-            const response = yield* http
-              .execute(
-                HttpClientRequest.get(routersEndpoint).pipe(
-                  HttpClientRequest.bearerToken(current.access),
-                  HttpClientRequest.acceptJson,
-                  HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)),
-                ),
-              )
-              .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(RoutersResponse)), Effect.timeout("10 seconds"))
-            return response.model_routers.toSorted((a, b) => a.name.localeCompare(b.name))
-          }),
-        })
-        .pipe(Effect.orElseSucceed((): Routers => []))
-      yield* apply(connection, routers)
+    const discovered = yield* ProviderRefresh.start({
+      integrationID,
+      initial: { routers: [] } as { readonly key?: string; readonly routers: Routers },
+      active: ctx.integration.connection.active(integrationID),
+      reload: ctx.provider.reload(),
+      load: Effect.fn("DigitalOceanPlugin.load")(function* (current) {
+        const connection = yield* ctx.integration.connection.active(integrationID)
+        const credential = connection
+          ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
+          : undefined
+        if (!connection || credential?.type !== "oauth" || credential.methodID !== methodID)
+          return { connection, value: { routers: [] } }
+        const key = `digitalocean:${IntegrationConnection.key(connection)}`
+        // An expired token cannot be refreshed, so it keeps the routers already loaded for the connection.
+        if (credential.expires !== 0 && credential.expires <= (yield* Clock.currentTimeMillis))
+          return { connection, value: current.key === key ? current : { key, routers: [] } }
+        const routers = yield* cache
+          .get({
+            key,
+            maxAge: SharedCache.interval,
+            load: Effect.gen(function* () {
+              const latest = yield* ctx.integration.connection.resolve(connection)
+              if (latest?.type !== "oauth" || latest.methodID !== methodID)
+                return yield* Effect.fail(new Error("DigitalOcean connection has no OAuth credential"))
+              const response = yield* http
+                .execute(
+                  HttpClientRequest.get(routersEndpoint).pipe(
+                    HttpClientRequest.bearerToken(latest.access),
+                    HttpClientRequest.acceptJson,
+                    HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)),
+                  ),
+                )
+                .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(RoutersResponse)), Effect.timeout("10 seconds"))
+              return response.model_routers.toSorted((a, b) => a.name.localeCompare(b.name))
+            }),
+          })
+          .pipe(Effect.orElseSucceed((): Routers => []))
+        return { connection, value: { key, routers } }
+      }),
     })
-
-    const apply = (
-      connection: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>,
-      routers: Routers,
-    ) =>
-      loading
-        .withPermit(
-          Effect.gen(function* () {
-            if (
-              IntegrationConnection.key(connection) !==
-              IntegrationConnection.key(yield* ctx.integration.connection.active(integrationID))
-            )
-              return
-            if (Equal.equals(routers, loaded.routers)) return
-            loaded.routers = routers
-            yield* ctx.provider.reload()
-          }),
-        )
-        .pipe(Effect.uninterruptible)
 
     yield* ctx.integration.transform((draft) => {
       draft.method.update(oauth)
     })
     yield* ctx.provider.transform((evt) => {
       if (!evt.get(providerID)) return
-      for (const router of loaded.routers) {
+      for (const router of discovered.current.routers) {
         const id = `router:${router.name}`
         if (evt.get(providerID)?.models.has(Model.ID.make(id))) continue
         evt.models.update(providerID, id, (draft) => {
@@ -195,15 +176,6 @@ export const DigitalOceanPlugin = define({
         })
       }
     })
-    // A switch replaces whatever refresh is waiting; the timer only starts one when none is running.
-    const refresh = (since?: number) => FiberHandle.run(discovery, load(since), { onlyIfMissing: since === undefined })
-    yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === integrationID),
-      Stream.runForEach((event) => refresh(event.created)),
-      Effect.forkScoped({ startImmediately: true }),
-    )
-    yield* refresh()
-    yield* Effect.sleep(SharedCache.interval).pipe(Effect.andThen(refresh()), Effect.forever, Effect.forkScoped)
   }),
 } satisfies PluginInternal.InternalPlugin)
 

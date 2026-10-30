@@ -2,7 +2,7 @@ import { chmod } from "node:fs/promises"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
 import { describe, expect } from "bun:test"
-import { Effect, Schedule, Schema } from "effect"
+import { Clock, Effect, Schedule, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { Config } from "@opencode/core/config"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
@@ -456,16 +456,14 @@ describe("AzurePlugin discovery", () => {
         { times: 3 },
       )
       expect(yield* azureModelIDs).toEqual(["mini"])
-      expect(azure.requests.some((request) => request.path.startsWith("/openai/deployments"))).toBe(false)
     }),
   )
 
-  it.effect("retries a temporary management API failure instead of falling back to the resource's list", () =>
+  it.effect("reports the management API error when the resource's own list fails too", () =>
     Effect.gen(function* () {
       const cli = yield* fakeAzureCli()
       const state = { failures: 1 }
       const azure = yield* fakeAzure({
-        resource: () => resourceList(listed("fallback", "gpt-5-nano")),
         management: () =>
           state.failures-- > 0
             ? new Response("Unavailable", { status: 503 })
@@ -475,8 +473,10 @@ describe("AzurePlugin discovery", () => {
       yield* connect(cliCredential())
       yield* addPlugin(azure.endpoints).pipe(cli.provide)
 
+      // The resource's 404 would wait for the next refresh; the management API's 503 is retried within seconds.
       expect(yield* eventuallyOnClock(azureModelIDs, (ids) => ids.length === 1)).toEqual(["mini"])
-      expect(azure.requests.some((request) => request.path.startsWith("/openai/deployments"))).toBe(false)
+      expect(yield* Clock.currentTimeMillis).toBeLessThan(60_000)
+      expect(azure.requests.filter((request) => request.path.startsWith("/openai/deployments"))).toHaveLength(1)
     }),
   )
 

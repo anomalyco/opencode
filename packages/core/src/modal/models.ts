@@ -47,15 +47,18 @@ const decodeModel = Schema.decodeUnknownOption(RemoteModel)
 
 type RemoteModel = typeof RemoteModel.Type
 
-export function get(baseURL: string, apiKey: string, existing: readonly Model.Info[]) {
-  return load(baseURL, apiKey).pipe(Effect.map((remote) => derive(baseURL, remote, existing)))
+export function get(http: HttpClient.HttpClient, baseURL: string, apiKey: string, existing: readonly Model.Info[]) {
+  return load(http, baseURL, apiKey).pipe(Effect.map((remote) => derive(baseURL, remote, existing)))
 }
 
 export type Snapshot = readonly RemoteModel[]
 
-export const load = Effect.fn("ModalModels.load")(function* (baseURL: string, apiKey: string) {
-  const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
-  const response = yield* http
+export const load = Effect.fn("ModalModels.load")(function* (
+  http: HttpClient.HttpClient,
+  baseURL: string,
+  apiKey: string,
+) {
+  const response = yield* HttpClient.filterStatusOk(http)
     .execute(HttpClientRequest.get(`${baseURL.replace(/\/+$/, "")}/models`).pipe(HttpClientRequest.bearerToken(apiKey)))
     .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(Response)), Effect.timeout("3 seconds"))
   // Decode each item tolerantly so one malformed entry cannot discard the

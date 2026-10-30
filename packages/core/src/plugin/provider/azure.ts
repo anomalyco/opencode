@@ -262,10 +262,7 @@ export function make(
       const deployments = (url: string, resource: string, credential: Credential.Key | Credential.External) =>
         credential.type === "external"
           ? managementDeployments(resource).pipe(
-              Effect.catchIf(
-                (error) => !SharedCache.transient(error),
-                () => resourceDeployments(url, credential),
-              ),
+              Effect.catch((error) => resourceDeployments(url, credential).pipe(Effect.mapError(() => error))),
             )
           : resourceDeployments(url, credential)
 
@@ -284,7 +281,7 @@ export function make(
           }),
         )
 
-      const discover = Effect.fn("AzurePlugin.discover")(function* (since?: number) {
+      const discover = Effect.fn("AzurePlugin.discover")(function* () {
         const connection = loaded.connection
         const settings = (yield* providers.get(Provider.ID.azure))?.settings
         const name = loaded.resource ?? resolveResourceName(settings)
@@ -314,9 +311,8 @@ export function make(
           return
         const found = yield* cache
           .get({
-            key: `azure:${IntegrationConnection.key(connection)}${credential.type === "key" ? `:${SharedCache.fingerprint(credential.key)}` : ""}:${url}`,
+            key: deploymentsKey(connection, credential, url),
             maxAge: SharedCache.interval,
-            since,
             load: ctx.integration.connection.resolve(connection).pipe(
               Effect.flatMap((current) =>
                 !current || current.type === "oauth" || (current.type === "external" && current.methodID !== methodID)
@@ -328,33 +324,37 @@ export function make(
             ),
           })
           .pipe(Effect.orElseSucceed(() => undefined))
-        yield* Effect.uninterruptible(
-          Effect.gen(function* () {
-            if (
-              loaded.connection !== connection ||
-              IntegrationConnection.key(connection) !==
-                IntegrationConnection.key(yield* ctx.integration.connection.active(Provider.ID.azure))
-            )
-              return
-            if (Equal.equals(found, loaded.deployments)) return
-            const catalog = new Map(
-              Array.from((yield* providers.snapshot()).records.get(Provider.ID.azure)?.models.keys() ?? [], (id) => [
-                id.toLowerCase(),
-                id,
-              ]),
-            )
-            const unmatched = found?.filter((deployment) => !catalogModel(catalog, deployment)) ?? []
-            if (unmatched.length > 0)
-              yield* Effect.logWarning("Azure deployments of models outside the catalog need explicit configuration", {
-                deployments: unmatched.map((deployment) => deployment.name),
-              })
-            loaded.deployments = found
-            yield* ctx.model.reload()
-          }),
-        )
+        if (!found) return
+        yield* loading.withPermit(publish(connection, found)).pipe(Effect.uninterruptible)
       })
 
-      const refresh = (since?: number) => rebind().pipe(Effect.andThen(FiberHandle.run(discovery, discover(since))))
+      const publish = Effect.fn("AzurePlugin.publish")(function* (
+        connection: typeof loaded.connection,
+        found: readonly Deployment[],
+      ) {
+        if (
+          loaded.connection !== connection ||
+          IntegrationConnection.key(connection) !==
+            IntegrationConnection.key(yield* ctx.integration.connection.active(Provider.ID.azure))
+        )
+          return
+        if (Equal.equals(found, loaded.deployments)) return
+        const catalog = new Map(
+          Array.from((yield* providers.snapshot()).records.get(Provider.ID.azure)?.models.keys() ?? [], (id) => [
+            id.toLowerCase(),
+            id,
+          ]),
+        )
+        const unmatched = found.filter((deployment) => !catalogModel(catalog, deployment))
+        if (unmatched.length > 0)
+          yield* Effect.logWarning("Azure deployments of models outside the catalog need explicit configuration", {
+            deployments: unmatched.map((deployment) => deployment.name),
+          })
+        loaded.deployments = found
+        yield* ctx.model.reload()
+      })
+
+      const refresh = () => rebind().pipe(Effect.andThen(FiberHandle.run(discovery, discover())))
 
       // The connection's resource wins over configured settings for Azure itself.
       const resourceFor = (provider: Provider.Info) =>
@@ -436,7 +436,7 @@ export function make(
       // A switch interrupts discovery for the previous connection instead of waiting for its Azure calls.
       yield* bus.subscribe(Credential.Event.Switched).pipe(
         Stream.filter((event) => event.data.integrationID === Integration.ID.make("azure")),
-        Stream.runForEach((event) => refresh(event.created)),
+        Stream.runForEach(() => refresh()),
         Effect.forkScoped({ startImmediately: true }),
       )
       // Deployments load in the background so startup never waits on Azure; the catalog serves until they arrive.
@@ -496,6 +496,15 @@ export function make(
 }
 
 export const AzurePlugin = make()
+
+function deploymentsKey(
+  connection: Parameters<typeof IntegrationConnection.key>[0],
+  credential: Credential.Key | Credential.External,
+  url: string,
+) {
+  const access = credential.type === "key" ? `:${SharedCache.fingerprint(credential.key)}` : ""
+  return `azure:${IntegrationConnection.key(connection)}${access}:${url}`
+}
 
 function resolveResourceName(settings: Readonly<Record<string, unknown>> | undefined, fallback?: string) {
   const configured = settings?.resourceName
