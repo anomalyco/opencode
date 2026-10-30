@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import {
   OpenCode,
   type EventSubscribeOutput,
+  type ExperimentalJobListOutput,
   type SessionMessageAssistantTool,
   type SessionMessageInfo,
 } from "@opencode/client/promise"
@@ -217,6 +218,7 @@ async function run(input: {
   renderToolError?: (part: SessionMessageAssistantTool) => Promise<void>
   messages?: (inboxID: string) => SessionMessageInfo[]
   wait?: () => Promise<void>
+  jobs?: () => ExperimentalJobListOutput
   terminalDelay?: number
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
@@ -254,6 +256,9 @@ async function run(input: {
   spyOn(sdk.session.form, "cancel").mockImplementation((request) => (input.cancel?.(request) ?? ok(undefined)) as never)
   let promptID = "msg_prompt"
   spyOn(sdk.experimental.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
+  spyOn(sdk.experimental.job, "list").mockImplementation(() => ok(input.jobs?.() ?? []) as never)
+  spyOn(sdk.session, "active").mockImplementation(() => ok({}) as never)
+  spyOn(sdk.session.inbox, "list").mockImplementation(() => ok([]) as never)
   spyOn(sdk.message, "list").mockImplementation(() =>
     ok({
       data: input.messages?.(promptID) ?? [{ id: promptID, type: "user", text: "hello", time: { created: 1 } }],
@@ -617,5 +622,342 @@ describe("runNonInteractivePrompt", () => {
     expect(events[0].part.state.metadata.metadata).toBeUndefined()
     expect(events[0].part.state.metadata.content).toBeUndefined()
     expect(output.stderr).toBe("")
+  })
+
+  test("waits for background jobs across idle boundaries and streams the resumed reply", async () => {
+    let jobs: ExperimentalJobListOutput = [
+      {
+        kind: "shell",
+        id: "sh_bg",
+        sessionID: "ses_1",
+        status: "running",
+        shellID: "sh_bg",
+        command: "python train.py",
+        time: { started: 1 },
+      },
+    ]
+    let pushEvent: ((event: V2Event) => void) | undefined
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const queue: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
+    let notifyStream: (() => void) | undefined
+    const stream = (async function* (): AsyncGenerator<V2Event, void, unknown> {
+      while (true) {
+        const next = queue.shift()
+        if (!next) {
+          await new Promise<void>((resolve) => {
+            notifyStream = resolve
+          })
+          continue
+        }
+        yield next
+      }
+    })()
+    pushEvent = (event) => {
+      queue.push(event)
+      notifyStream?.()
+      notifyStream = undefined
+    }
+
+    spyOn(sdk.event, "subscribe").mockImplementation((() => stream) as typeof sdk.event.subscribe)
+    spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
+    spyOn(sdk.session.form, "list").mockImplementation(() => ok([]) as never)
+    spyOn(sdk.form, "list").mockImplementation(
+      () => ok({ location: { ...location, project: { id: "proj_1", directory: location.directory } }, data: [] }) as never,
+    )
+    spyOn(sdk.experimental.session, "wait").mockImplementation(() => ok(undefined) as never)
+    spyOn(sdk.experimental.job, "list").mockImplementation(() => ok(jobs) as never)
+    spyOn(sdk.session, "active").mockImplementation(() => ok({}) as never)
+    spyOn(sdk.session.inbox, "list").mockImplementation(() => ok([]) as never)
+    let promptID = "msg_prompt"
+    spyOn(sdk.message, "list").mockImplementation(() =>
+      ok({
+        data: [{ id: promptID, type: "user", text: "train", time: { created: 1 } }],
+        cursor: {},
+      }),
+    )
+    spyOn(sdk.session, "prompt").mockImplementation((request) => {
+      promptID = request.id ?? "msg_prompt"
+      pushEvent?.(prompted(promptID))
+      pushEvent?.(stepStarted())
+      pushEvent?.({
+        id: "evt_text_start_1",
+        created: 2,
+        type: "session.text.started",
+        durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+        data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", ordinal: 0 },
+      })
+      pushEvent?.({
+        id: "evt_text_end_1",
+        created: 3,
+        type: "session.text.ended",
+        durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+        data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", ordinal: 0, text: "Started background run." },
+      })
+      // Turn 1 ends while sh_bg is still running in the background.
+      pushEvent?.(settled())
+      return ok({ id: promptID, sessionID: "ses_1", time: { created: 1 } }) as never
+    })
+
+    const stdout: string[] = []
+    const stdoutWrite = spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      stdout.push(String(chunk))
+      return true
+    })
+
+    let exited = false
+    const running = runNonInteractivePrompt({
+      client: sdk,
+      sessionID: "ses_1",
+      location,
+      message: "train",
+      files: [],
+      thinking: false,
+      format: "json",
+      auto: false,
+      attached: false,
+      renderTool: () => Promise.resolve(),
+      renderToolError: () => Promise.resolve(),
+    }).then(() => {
+      exited = true
+    })
+
+    try {
+      await Bun.sleep(0)
+      await Bun.sleep(0)
+      expect(exited).toBe(false)
+      expect(sdk.experimental.job.list).toHaveBeenCalledWith({ sessionID: "ses_1", descendants: true })
+
+      // Background shell finishes, clears its job marker, and wakes Turn 2.
+      jobs = []
+      pushEvent({
+        id: "evt_step_2",
+        created: 4,
+        type: "session.step.started",
+        durable: { aggregateID: "ses_1", seq: 4, version: 1 },
+        data: {
+          started: 4,
+          sessionID: "ses_1",
+          assistantMessageID: "msg_assistant_2",
+          agent: "build",
+          model: { providerID: "test", id: "test-model" },
+        },
+      })
+      pushEvent({
+        id: "evt_text_start_2",
+        created: 5,
+        type: "session.text.started",
+        durable: { aggregateID: "ses_1", seq: 5, version: 1 },
+        data: { sessionID: "ses_1", assistantMessageID: "msg_assistant_2", ordinal: 0 },
+      })
+      pushEvent({
+        id: "evt_text_end_2",
+        created: 6,
+        type: "session.text.ended",
+        durable: { aggregateID: "ses_1", seq: 6, version: 1 },
+        data: { sessionID: "ses_1", assistantMessageID: "msg_assistant_2", ordinal: 0, text: "Training succeeded." },
+      })
+      pushEvent(settled())
+
+      await running
+      expect(exited).toBe(true)
+      const texts = stdout
+        .join("")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+        .filter((event) => event.type === "text")
+        .map((event) => event.part.text)
+      expect(texts).toEqual(["Started background run.", "Training succeeded."])
+    } finally {
+      stdoutWrite.mockRestore()
+    }
+  })
+
+  test("stays alive while a descendant subagent still owns a background job", async () => {
+    let jobs: ExperimentalJobListOutput = [
+      {
+        kind: "shell",
+        id: "sh_child",
+        sessionID: "ses_child",
+        status: "running",
+        shellID: "sh_child",
+        command: "pytest",
+        time: { started: 1 },
+      },
+    ]
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const queue: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
+    let notifyStream: (() => void) | undefined
+    const stream = (async function* (): AsyncGenerator<V2Event, void, unknown> {
+      while (true) {
+        const next = queue.shift()
+        if (!next) {
+          await new Promise<void>((resolve) => {
+            notifyStream = resolve
+          })
+          continue
+        }
+        yield next
+      }
+    })()
+    const pushEvent = (event: V2Event) => {
+      queue.push(event)
+      notifyStream?.()
+      notifyStream = undefined
+    }
+
+    spyOn(sdk.event, "subscribe").mockImplementation((() => stream) as typeof sdk.event.subscribe)
+    spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
+    spyOn(sdk.session.form, "list").mockImplementation(() => ok([]) as never)
+    spyOn(sdk.form, "list").mockImplementation(
+      () => ok({ location: { ...location, project: { id: "proj_1", directory: location.directory } }, data: [] }) as never,
+    )
+    spyOn(sdk.session, "get").mockImplementation(({ sessionID }) =>
+      ok({
+        id: sessionID,
+        parentID: sessionID === "ses_child" ? "ses_1" : undefined,
+      }) as never,
+    )
+    spyOn(sdk.experimental.session, "wait").mockImplementation(() => ok(undefined) as never)
+    spyOn(sdk.experimental.job, "list").mockImplementation(() => ok(jobs) as never)
+    spyOn(sdk.session, "active").mockImplementation(() => ok({}) as never)
+    spyOn(sdk.session.inbox, "list").mockImplementation(() => ok([]) as never)
+    let promptID = "msg_prompt"
+    spyOn(sdk.message, "list").mockImplementation(() =>
+      ok({
+        data: [{ id: promptID, type: "user", text: "delegate", time: { created: 1 } }],
+        cursor: {},
+      }),
+    )
+    spyOn(sdk.session, "prompt").mockImplementation((request) => {
+      promptID = request.id ?? "msg_prompt"
+      pushEvent(prompted(promptID))
+      pushEvent(settled())
+      return ok({ id: promptID, sessionID: "ses_1", time: { created: 1 } }) as never
+    })
+
+    let exited = false
+    const running = runNonInteractivePrompt({
+      client: sdk,
+      sessionID: "ses_1",
+      location,
+      message: "delegate",
+      files: [],
+      thinking: false,
+      format: "json",
+      auto: false,
+      attached: true,
+      renderTool: () => Promise.resolve(),
+      renderToolError: () => Promise.resolve(),
+    }).then(() => {
+      exited = true
+    })
+
+    await Bun.sleep(0)
+    await Bun.sleep(0)
+    expect(exited).toBe(false)
+
+    // Unrelated session settling does not end our run while ses_child still owns sh_child.
+    pushEvent({
+      id: "evt_other_done",
+      created: 2,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: "ses_other", seq: 1, version: 1 },
+      data: { sessionID: "ses_other" },
+    })
+    await Bun.sleep(0)
+    expect(exited).toBe(false)
+
+    // Child's background shell completes and ses_child finishes its step.
+    jobs = []
+    pushEvent({
+      id: "evt_child_done",
+      created: 3,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: "ses_child", seq: 2, version: 1 },
+      data: { sessionID: "ses_child" },
+    })
+
+    await running
+    expect(exited).toBe(true)
+  })
+
+  test("SIGINT while idle waiting on background work aborts cleanly with exit code 130", async () => {
+    const jobs: ExperimentalJobListOutput = [
+      {
+        kind: "subagent",
+        id: "ses_child",
+        sessionID: "ses_1",
+        status: "running",
+        childSessionID: "ses_child",
+        agent: "explore",
+        description: "scan repo",
+        time: { started: 1 },
+      },
+    ]
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const queue: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
+    let notifyStream: (() => void) | undefined
+    const stream = (async function* (): AsyncGenerator<V2Event, void, unknown> {
+      while (true) {
+        const next = queue.shift()
+        if (!next) {
+          await new Promise<void>((resolve) => {
+            notifyStream = resolve
+          })
+          continue
+        }
+        yield next
+      }
+    })()
+
+    spyOn(sdk.event, "subscribe").mockImplementation((() => stream) as typeof sdk.event.subscribe)
+    spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
+    spyOn(sdk.session.form, "list").mockImplementation(() => ok([]) as never)
+    spyOn(sdk.form, "list").mockImplementation(
+      () => ok({ location: { ...location, project: { id: "proj_1", directory: location.directory } }, data: [] }) as never,
+    )
+    spyOn(sdk.experimental.session, "wait").mockImplementation(() => ok(undefined) as never)
+    spyOn(sdk.experimental.job, "list").mockImplementation(() => ok(jobs) as never)
+    spyOn(sdk.session, "active").mockImplementation(() => ok({}) as never)
+    spyOn(sdk.session.inbox, "list").mockImplementation(() => ok([]) as never)
+    spyOn(sdk.session, "interrupt").mockImplementation(() => ok({ interrupted: false }) as never)
+    let promptID = "msg_prompt"
+    spyOn(sdk.message, "list").mockImplementation(() =>
+      ok({
+        data: [{ id: promptID, type: "user", text: "scan", time: { created: 1 } }],
+        cursor: {},
+      }),
+    )
+    spyOn(sdk.session, "prompt").mockImplementation((request) => {
+      promptID = request.id ?? "msg_prompt"
+      queue.push(prompted(promptID), settled())
+      notifyStream?.()
+      notifyStream = undefined
+      return ok({ id: promptID, sessionID: "ses_1", time: { created: 1 } }) as never
+    })
+
+    const running = runNonInteractivePrompt({
+      client: sdk,
+      sessionID: "ses_1",
+      location,
+      message: "scan",
+      files: [],
+      thinking: false,
+      format: "json",
+      auto: false,
+      attached: true,
+      renderTool: () => Promise.resolve(),
+      renderToolError: () => Promise.resolve(),
+    })
+
+    await Bun.sleep(0)
+    await Bun.sleep(0)
+    process.emit("SIGINT")
+    await running
+
+    expect(process.exitCode).toBe(130)
+    expect(sdk.session.interrupt).toHaveBeenCalledWith({ sessionID: "ses_child" })
+    expect(sdk.session.interrupt).toHaveBeenCalledWith({ sessionID: "ses_1" })
   })
 })

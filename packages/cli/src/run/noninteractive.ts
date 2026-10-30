@@ -97,6 +97,7 @@ export async function runNonInteractivePrompt(input: Input) {
   let v1InvalidOutput = false
   let prePromotionError: { message: string; [key: string]: unknown } | undefined
   let finalizing = false
+  let waitingForBackground = false
   let admission: AbortController | undefined
   let pendingStep: { timestamp: number; part: Record<string, unknown>; label: string } | undefined
 
@@ -158,6 +159,29 @@ export async function runNonInteractivePrompt(input: Input) {
     return result
   }
 
+  const hasPendingBackgroundWork = async (settledSessionID?: string) => {
+    if (input.compatibility === "v1" || interrupted || permissionRejected || formCancelled || emittedError) return false
+    const jobs = await input.client.experimental.job
+      .list({ sessionID: input.sessionID, descendants: true })
+      .catch(() => [])
+    if (jobs.length > 0) return true
+    if (settledSessionID) {
+      await input.client.experimental.session.wait({ sessionID: settledSessionID }).catch(() => {})
+    }
+    // Background notifiers call sessions.synthetic (waking the owner) strictly before
+    // completeBackground removes the job, so checking active + inbox after job.list === []
+    // closes the handoff window without polling.
+    const [active, inbox] = await Promise.all([
+      input.client.session.active().catch(() => ({})),
+      input.client.session.inbox.list({ sessionID: input.sessionID }).catch(() => []),
+    ])
+    if (inbox.length > 0) return true
+    for (const sessionID of Object.keys(active)) {
+      if (await ownsSession(sessionID)) return true
+    }
+    return false
+  }
+
   const replyPermission = async (request: {
     id: string
     sessionID: string
@@ -210,13 +234,17 @@ export async function runNonInteractivePrompt(input: Input) {
   }
 
   const consume = async () => {
+    const aborted = new Promise<{ done: true; value: undefined }>((resolve) => {
+      if (controller.signal.aborted) resolve({ done: true, value: undefined })
+      else controller.signal.addEventListener("abort", () => resolve({ done: true, value: undefined }), { once: true })
+    })
     while (!controller.signal.aborted) {
-      const next = await stream.next().catch((error) => {
-        if (!emittedError) throw error
+      const next = await Promise.race([stream.next(), aborted]).catch((error) => {
+        if (!emittedError && !interrupted) throw error
         return { done: true as const, value: undefined }
       })
       if (next.done) {
-        if (emittedError) return
+        if (emittedError || interrupted) return
         throw new Error("Event stream disconnected during prompt execution")
       }
       const event = next.value
@@ -236,7 +264,20 @@ export async function runNonInteractivePrompt(input: Input) {
         await cancelForm(event.data.form)
         continue
       }
-      if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
+      if (!("sessionID" in event.data)) continue
+      if (event.data.sessionID !== input.sessionID) {
+        if (
+          waitingForBackground &&
+          (event.type === "session.execution.succeeded" ||
+            event.type === "session.execution.failed" ||
+            event.type === "session.execution.interrupted") &&
+          (await ownsSession(event.data.sessionID)) &&
+          !(await hasPendingBackgroundWork(event.data.sessionID))
+        ) {
+          return
+        }
+        continue
+      }
       const time = toMillis("created" in event ? event.created : undefined)
 
       if (event.type === "session.inbox.delivered") {
@@ -546,7 +587,13 @@ export async function runNonInteractivePrompt(input: Input) {
         }
         return
       }
-      if (event.type === "session.execution.succeeded") return
+      if (event.type === "session.execution.succeeded") {
+        if (await hasPendingBackgroundWork(input.sessionID)) {
+          waitingForBackground = true
+          continue
+        }
+        return
+      }
     }
   }
 
@@ -711,7 +758,28 @@ export async function runNonInteractivePrompt(input: Input) {
     interrupted = true
     process.exitCode = 130
     admission?.abort()
-    void input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+    if (input.compatibility !== "v1") {
+      void input.client.experimental.job
+        .list({ sessionID: input.sessionID, descendants: true })
+        .then((jobs) =>
+          Promise.all(
+            jobs.map((job) =>
+              input.client.session
+                .interrupt({ sessionID: job.kind === "subagent" ? job.childSessionID : job.sessionID })
+                .catch(() => {}),
+            ),
+          ),
+        )
+        .catch(() => {})
+    }
+    void input.client.session
+      .interrupt({ sessionID: input.sessionID })
+      .then((result) => {
+        if (!result.interrupted) controller.abort()
+      })
+      .catch(() => {
+        controller.abort()
+      })
   }
   process.on("SIGINT", interrupt)
 
@@ -790,7 +858,15 @@ export async function runNonInteractivePrompt(input: Input) {
       return
     }
 
-    const waiting = input.client.experimental.session.wait({ sessionID: input.sessionID })
+    const waitUntilIdle = async () => {
+      await input.client.experimental.session.wait({ sessionID: input.sessionID })
+      if (!(await hasPendingBackgroundWork())) return
+      await completed
+      if (!interrupted && !permissionRejected && !formCancelled && !emittedError) {
+        await input.client.experimental.session.wait({ sessionID: input.sessionID })
+      }
+    }
+    const waiting = waitUntilIdle()
     await Promise.race([waiting, completed.then(() => waiting)])
     finalizing = true
     const projected = await reconcile()
