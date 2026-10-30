@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
-import { AIError, Decision, DecisionResponse, Image, ImageResponse, Media, RateLimitError } from "../src/effect.js"
+import { ai, AIError, DecisionResponse, ImageResponse, Media, RateLimitError } from "../src/effect.js"
 import {
   Speech,
   SpeechResponse,
@@ -41,11 +41,11 @@ describe("media test clients", () => {
       yield* test.push(new ImageResponse({ images: [png] }), failure)
       yield* test.always(new ImageResponse({ images: [png, png] }))
 
-      expect((yield* Image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })).image).toBe(png)
-      expect(yield* Image.generate({ model: openai.image("gpt-image-2"), prompt: "A kite" }).pipe(Effect.flip)).toBe(
+      expect((yield* ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })).image).toBe(png)
+      expect(yield* ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A kite" }).pipe(Effect.flip)).toBe(
         failure,
       )
-      const events = yield* Stream.runCollect(Image.stream({ model: openai.image("gpt-image-2"), prompt: "A boat" }))
+      const events = yield* Stream.runCollect(ai.image.stream({ model: openai.image("gpt-image-2"), prompt: "A boat" }))
       expect(Array.from(events, (event) => event.type)).toEqual(["image", "image", "finish"])
       expect((yield* test.requests()).map((request) => request.prompt)).toEqual(["A lighthouse", "A kite", "A boat"])
     }),
@@ -80,7 +80,7 @@ describe("media test clients", () => {
       expect(
         (yield* Transcription.generate({ model: openai.transcription("gpt-4o-mini-transcribe"), audio })).text,
       ).toBe("Hello there.")
-      const response = yield* Decision.generate({
+      const response = yield* ai.decision.generate({
         model: openai.decision("decision-model"),
         input: [{ type: "text", text: "A red apple" }],
         questions: [question],
@@ -96,8 +96,8 @@ describe("media test clients", () => {
   )
 
   test("replace the Promise client's defaults and expose their controls to run", async () => {
-    const ai = AI.make({ clients: doubles() })
-    await ai.run(
+    const client = AI.make({ clients: doubles() })
+    await client.run(
       Effect.gen(function* () {
         yield* (yield* TestImage.Test).push(new ImageResponse({ images: [png] }))
         yield* (yield* TestVideo.Test).push(new VideoResponse({ videos: [mp4] }))
@@ -107,27 +107,29 @@ describe("media test clients", () => {
       }),
     )
 
-    expect((await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })).image).toBe(png)
-    const generation = await ai.experimental.video.start({ model: runway, prompt: "A kite" })
+    expect((await client.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })).image).toBe(
+      png,
+    )
+    const generation = await client.experimental.video.start({ model: runway, prompt: "A kite" })
     expect(
-      (await ai.experimental.video.resume(runway, generation.token).then((resumed) => resumed.await())).video,
+      (await client.experimental.video.resume(runway, generation.token).then((resumed) => resumed.await())).video,
     ).toBe(mp4)
     expect(
-      await ai.bytes(
-        (await ai.experimental.speech.generate({ model: openai.speech("gpt-4o-mini-tts"), text: "Hi" })).audio,
+      await client.bytes(
+        (await client.experimental.speech.generate({ model: openai.speech("gpt-4o-mini-tts"), text: "Hi" })).audio,
       ),
     ).toEqual(Uint8Array.from([4, 5, 6]))
     const deltas = await Array.fromAsync(
-      ai.experimental.transcription.stream({ model: openai.transcription("gpt-4o-mini-transcribe"), audio }),
+      client.experimental.transcription.stream({ model: openai.transcription("gpt-4o-mini-transcribe"), audio }),
     )
     expect(deltas.map((event) => event.type)).toEqual(["finish"])
-    const decided = await ai.decision.generate({
+    const decided = await client.decision.generate({
       model: openai.decision("decision-model"),
       input: [{ type: "text", text: "A red apple" }],
       questions: [question],
     })
     expect(decided.answers).toEqual([{ name: "red", type: "predicate", probability: 0.9 }])
-    expect((await ai.run(TestImage.Test.use((test) => test.requests())))[0].prompt).toBe("A lighthouse")
-    await ai.dispose()
+    expect((await client.run(TestImage.Test.use((test) => test.requests())))[0].prompt).toBe("A lighthouse")
+    await client.dispose()
   })
 })

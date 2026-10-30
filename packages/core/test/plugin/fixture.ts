@@ -1,4 +1,5 @@
 import { Agent } from "@opencode/core/agent"
+import { Artifact } from "@opencode/core/artifact"
 import { AISDK } from "@opencode/core/aisdk"
 import { Command } from "@opencode/core/command"
 import { Config } from "@opencode/core/config"
@@ -102,6 +103,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       LayerNodePlatform.httpClient,
       Plugin.node,
       Agent.node,
+      Artifact.node,
       AISDK.node,
       Provider.node,
       Model.node,

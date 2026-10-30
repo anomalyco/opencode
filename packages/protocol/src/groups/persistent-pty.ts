@@ -4,7 +4,13 @@ import { PtyTicket } from "@opencode/schema/pty-ticket"
 import { Session } from "@opencode/schema/session"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
-import { ForbiddenError, InvalidRequestError, PtyNotFoundError, ServiceUnavailableError } from "../errors.js"
+import {
+  ForbiddenError,
+  InvalidRequestError,
+  PtyFeatureUnsupportedError,
+  PtyNotFoundError,
+  ServiceUnavailableError,
+} from "../errors.js"
 import { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE } from "./pty.js"
 
 export { PTY_CONNECT_TICKET_QUERY, PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE }
@@ -77,8 +83,14 @@ export const PersistentPtyGroup = HttpApiGroup.make("server.experimental")
       params: { ptyID: Pty.ID },
       payload: PersistentPty.UpdateInput,
       success: Schema.Struct({ data: PersistentPty.Info }),
-      error: terminalErrors,
-    }).annotateMerge(OpenApi.annotations({ identifier: "experimental.persistentPty.update" })),
+      error: [...terminalErrors, PtyFeatureUnsupportedError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "experimental.persistentPty.update",
+        description:
+          "Resize when size is present and rename when title is present; a null title clears the user title so the shell's title shows again. Renaming fails with 501 while the terminal service predates renaming.",
+      }),
+    ),
   )
   .add(
     HttpApiEndpoint.get("persistentPty.snapshot", "/api/experimental/persistent-pty/:ptyID/snapshot", {

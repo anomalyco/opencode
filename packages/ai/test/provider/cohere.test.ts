@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMClient, LLMEvent, Media, Message, SystemPart, isRetryable } from "../../src/effect.js"
+import { ai, isRetryable, LLMClient, LLMEvent, Media, Message, SystemPart } from "../../src/effect.js"
 import { Cohere } from "../../src/providers/cohere.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -21,7 +21,7 @@ test("Cohere exposes native and compatible endpoints without Core remapping", ()
 it.effect("Cohere lowers native history, thinking, tools, and sampling", () =>
   Effect.gen(function* () {
     const prepared = yield* compileRequest(
-      LLM.request({
+      ai.request({
         model: cohere.model("command-a-reasoning-08-2025"),
         system: [SystemPart.make("Be concise.\nKeep this newline."), SystemPart.make("Second instructions.")],
         messages: [
@@ -65,7 +65,7 @@ it.effect("Cohere lowers native history, thinking, tools, and sampling", () =>
 it.effect("Cohere compatibility omits unsupported OpenAI fields", () =>
   Effect.gen(function* () {
     const prepared = yield* compileRequest(
-      LLM.request({
+      ai.request({
         model: cohere.chat("command-a-reasoning-08-2025"),
         prompt: "Hello",
         providerOptions: { reasoningEffort: "high" },
@@ -82,7 +82,7 @@ it.effect("Cohere compatibility omits unsupported OpenAI fields", () =>
 it.effect("Cohere maps inclusive usage while retaining distinct billed units", () =>
   Effect.gen(function* () {
     const response = yield* LLMClient.generate(
-      LLM.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" }),
+      ai.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" }),
     ).pipe(
       Effect.provide(
         fixedResponse(
@@ -127,7 +127,7 @@ it.effect("Cohere maps inclusive usage while retaining distinct billed units", (
 it.effect("Cohere rejects incomplete streams", () =>
   Effect.gen(function* () {
     const error = yield* LLMClient.generate(
-      LLM.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" }),
+      ai.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" }),
     ).pipe(Effect.provide(fixedResponse(sseEvents({ type: "message-start" }))), Effect.flip)
     expect(error.message).toContain("without message-end")
   }),
@@ -136,7 +136,7 @@ it.effect("Cohere rejects incomplete streams", () =>
 it.effect("Cohere ignores unknown stream events but rejects malformed known ones", () =>
   Effect.gen(function* () {
     const generate = (...events: ReadonlyArray<unknown>) =>
-      LLMClient.generate(LLM.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" })).pipe(
+      LLMClient.generate(ai.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" })).pipe(
         Effect.provide(fixedResponse(sseEvents(...events))),
       )
     const response = yield* generate(
@@ -160,7 +160,7 @@ it.effect("Cohere ignores unknown stream events but rejects malformed known ones
 it.effect("Cohere preserves native tool plans in continued history", () =>
   Effect.gen(function* () {
     const response = yield* LLMClient.generate(
-      LLM.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" }),
+      ai.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" }),
     ).pipe(
       Effect.provide(
         fixedResponse(
@@ -185,7 +185,7 @@ it.effect("Cohere preserves native tool plans in continued history", () =>
     )
     expect(response.toolCalls[0]?.input).toEqual({ city: "Paris" })
     const prepared = yield* compileRequest(
-      LLM.request({
+      ai.request({
         model: cohere.model("command-a-03-2025"),
         messages: [response.message, Message.tool({ id: "lookup-1", name: "lookup", result: { sunny: true } })],
       }),
@@ -200,7 +200,7 @@ it.effect("Cohere preserves native tool plans in continued history", () =>
 it.effect("Cohere rejects unsupported media instead of silently dropping it", () =>
   Effect.gen(function* () {
     const error = yield* compileRequest(
-      LLM.request({
+      ai.request({
         model: cohere.model("command-a-03-2025"),
         messages: [Message.user([{ type: "media", media: Media.base64("Zm9v", "audio/wav") }])],
       }),
@@ -212,7 +212,7 @@ it.effect("Cohere rejects unsupported media instead of silently dropping it", ()
 it.effect("Cohere thinking budgets must be positive integers", () =>
   Effect.gen(function* () {
     const error = yield* compileRequest(
-      LLM.request({
+      ai.request({
         model: cohere.model("command-a-reasoning-08-2025"),
         providerOptions: { thinking: { tokenBudget: 0 } },
       }),
@@ -224,7 +224,7 @@ it.effect("Cohere thinking budgets must be positive integers", () =>
 it.effect("Cohere fits thinking budgets under the output limit", () =>
   Effect.gen(function* () {
     const prepared = yield* compileRequest(
-      LLM.request({
+      ai.request({
         model: cohere.model("command-a-reasoning-08-2025"),
         prompt: "Hi",
         providerOptions: { thinking: { tokenBudget: 31_999 } },
@@ -275,7 +275,7 @@ it.effect("Cohere HTTP errors map to AI error reasons", () =>
   Effect.forEach(errors, (item) =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(
-        LLM.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" }),
+        ai.request({ model: cohere.model("command-a-03-2025"), prompt: "Hi" }),
       ).pipe(
         Effect.provide(
           fixedResponse(JSON.stringify({ id: "fixture", error_type: item.error_type, message: item.message }), {

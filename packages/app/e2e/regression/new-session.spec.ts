@@ -268,6 +268,46 @@ test("the worktree trigger opens the current project's worktree step", async ({ 
   await expect(view.editor).toBeFocused()
 })
 
+test("the branch shortcut chooses a base branch and stays inactive on Local", async ({ page }) => {
+  const view = await openWorktreeDraft(page, {
+    name: "BranchShortcut",
+    vcs: () => ({ current: "dev", default: "dev" }),
+    branches: () => ["dev", "release/base"],
+  })
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+  const shortcut = `${modifier}+Alt+Period`
+
+  const base = page.getByRole("button", { name: "from dev", exact: true })
+
+  const search = page.getByRole("combobox", { name: "Search branches", exact: true })
+
+  await base.hover()
+  await expect(page.getByRole("tooltip")).toContainText("Choose base branch")
+  await expect(page.getByRole("tooltip").locator('[data-component="keybind-v2"]')).toContainText(".")
+  await expect(view.editor).toBeFocused()
+  await view.editor.press(shortcut)
+  await expect(search).toBeFocused()
+  await search.fill("release/base")
+  await expect(page.getByRole("option")).toHaveText(["release/base"])
+  await search.press("Enter")
+  await expect(page.getByRole("button", { name: "from release/base", exact: true })).toBeVisible()
+  await expect(view.editor).toBeFocused()
+
+  await view.editor.press(shortcut)
+  await expect(search).toBeFocused()
+  await search.press(shortcut)
+  await expect(search).toHaveCount(0)
+  await expect(view.editor).toBeFocused()
+
+  await view.editor.press(`${modifier}+Alt+KeyL`)
+  await expect(newSessionWorktree(page)).toHaveText("Local")
+  await view.editor.press(shortcut)
+  await expect(search).toHaveCount(0)
+  await expect(view.editor).toBeFocused()
+})
+
 test("a pending branch picker can be dismissed before its results arrive", async ({ page }) => {
   const listed = Promise.withResolvers<string[]>()
 

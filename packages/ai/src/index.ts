@@ -3,10 +3,9 @@ import { AIClient } from "./ai-client.js"
 import { Decision, type DecisionModel, type DecisionQuestions, type DecisionRequestInput } from "./decision.js"
 import type { AwaitOptions, Event, Generation, Snapshot } from "./generation.js"
 import { Image, type ImageModel, type ImageRequest, type ImageRequestInput } from "./image.js"
-import { LLM } from "./effect.js"
+import { LLM } from "./llm.js"
 import { Media } from "./media.js"
 import {
-  LLMClient,
   type CheckpointRequest,
   type CompactionRequest,
   type EndpointCompactOptions,
@@ -100,7 +99,7 @@ export const make = <R = never>(options: Options<R> = {}) => {
     ),
   )
 
-  /** Run any package Effect (for example `LLMClient.compact(...)`) inside this runtime. */
+  /** Run any package Effect (for example `ai.compact(...)` from `@opencode/ai/effect`) inside this runtime. */
   const run = <A, E>(effect: Effect.Effect<A, E, Services | R>, options?: RunOptions) =>
     runtime.runPromise(Effect.raceFirst(effect, abortEffect(options?.signal)))
 
@@ -136,14 +135,14 @@ export const make = <R = never>(options: Options<R> = {}) => {
     options: TriggerCompactOptions & RunOptions,
   ): Promise<CompactionCheckpointResponse>
   function compact(request: CompactionRequest, options?: EndpointCompactOptions & RunOptions): Promise<CompactionResponse>
-  // The overloads pair each request type with its mechanism; `LLMClient.compact` checks the route's capability at runtime.
+  // The overloads pair each request type with its mechanism; `LLM.compact` checks the route's capability at runtime.
   function compact(
     request: CheckpointRequest | CompactionRequest,
     options?: (TriggerCompactOptions | EndpointCompactOptions) & RunOptions,
   ) {
     return options?.mechanism === "trigger"
-      ? run(LLMClient.compact(request as CheckpointRequest, options), options)
-      : run(LLMClient.compact(request as CompactionRequest, options), options)
+      ? run(LLM.compact(request as CheckpointRequest, options), options)
+      : run(LLM.compact(request as CompactionRequest, options), options)
   }
 
   const handle = <Response>(generation: Generation<Response>): GenerationHandle<Response> => ({
@@ -196,25 +195,23 @@ export const make = <R = never>(options: Options<R> = {}) => {
         options,
       )
     },
-    llm: {
-      request: LLM.request,
-      generate: <const Model extends LanguageModel>(
-        input: RequestInput<Model> | LLMRequest,
-        options?: StreamOptions & RunOptions,
-      ) => run(LLM.generate(input, options), options),
-      stream: <const Model extends LanguageModel>(
-        input: RequestInput<Model> | LLMRequest,
-        options?: StreamOptions & RunOptions,
-      ) => iterate(LLM.stream(input, options), options),
-      /** Stream model calls, running their tool calls, until the model stops calling tools or `until` is true. */
-      loop: <const Model extends LanguageModel>(input: LoopInput<Model>, options?: StreamOptions & RunOptions) =>
-        iterate(LLM.loop(input, options), options),
-      /** Decode the model's output against `schema` (or `jsonSchema`, unvalidated) like `LLM.generateObject`. */
-      generateObject,
-      /** Compact a Responses request like `LLMClient.compact`: a replacement window, or a checkpoint with `mechanism: "trigger"`. */
-      compact,
-      canCompact: LLMClient.canCompact,
-    },
+    request: LLM.request,
+    generate: <const Model extends LanguageModel>(
+      input: RequestInput<Model> | LLMRequest,
+      options?: StreamOptions & RunOptions,
+    ) => run(LLM.generate(input, options), options),
+    stream: <const Model extends LanguageModel>(
+      input: RequestInput<Model> | LLMRequest,
+      options?: StreamOptions & RunOptions,
+    ) => iterate(LLM.stream(input, options), options),
+    /** Stream model calls, running their tool calls, until the model stops calling tools or `until` is true. */
+    loop: <const Model extends LanguageModel>(input: LoopInput<Model>, options?: StreamOptions & RunOptions) =>
+      iterate(LLM.loop(input, options), options),
+    /** Decode the model's output against `schema` (or `jsonSchema`, unvalidated). */
+    generateObject,
+    /** Compact a Responses request: a replacement window, or a checkpoint with `mechanism: "trigger"`. */
+    compact,
+    canCompact: LLM.canCompact,
     image: {
       request: Image.request,
       generate: <const Model extends ImageModel>(
@@ -316,9 +313,174 @@ export const tool = <
   )
 }
 
-/** Default client over `RequestExecutor.fetchLayer` for scripts; the runtime builds its layer on first use. */
-export const ai = make()
+/** Default client over `RequestExecutor.fetchLayer`; the runtime builds its layer on first use and holds nothing to dispose. */
+export const ai: Omit<Client, "dispose"> = make()
 
-export { AIError } from "./schema/index.js"
 export * as AI from "./index.js"
-export type { ExecutableTool, Tool, ToolOptions, Tools } from "./tool.js"
+export { isContextOverflow, isContextOverflowFailure, isRetryable } from "./provider-error.js"
+export {
+  ProtocolID,
+  RouteID,
+  ModelID,
+  ProviderID,
+  ResponseID,
+  ContentBlockID,
+  ToolCallID,
+  JsonSchema,
+  ProviderOptions,
+  ProviderMetadata,
+  HttpTimeout,
+  RequestEncoding,
+  HttpOptions,
+  GenerationOptions,
+  LanguageModelDefaults,
+  ReasoningEfforts,
+  ReasoningEffort,
+  LanguageModelCompatibility,
+  LanguageModel,
+  LanguageModelSchema,
+  CacheTTL,
+  CacheHint,
+  CachePolicyObject,
+  CachePolicy,
+  MessageRole,
+  SystemPart,
+  TextPart,
+  MediaPart,
+  ToolResultValue,
+  ToolOutput,
+  ToolCallPart,
+  ToolResultPart,
+  ReasoningPart,
+  CompactionPart,
+  EffortPart,
+  ContentPart,
+  Message,
+  Freeform,
+  ToolDefinition,
+  ToolNamespace,
+  ToolEntry,
+  ToolChoice,
+  LLMRequest,
+  FinishReason,
+  Usage,
+  MediaUsage,
+  CompactionResponse,
+  CompactionCheckpointResponse,
+  StepStart,
+  TextStart,
+  TextDelta,
+  TextEnd,
+  ReasoningStart,
+  ReasoningDelta,
+  ReasoningEnd,
+  ToolInputStart,
+  ToolInputDelta,
+  ToolInputEnd,
+  ToolInputError,
+  ToolCall,
+  ToolResult,
+  ToolError,
+  FinishReasonDetails,
+  StepFinish,
+  Finish,
+  MediaEvent,
+  ProviderErrorEvent,
+  LLMEvent,
+  LLMResponse,
+  HttpContext,
+  HttpRateLimitDetails,
+  InvalidRequestError,
+  UnsupportedOperationError,
+  ProviderConfigurationError,
+  NoRouteError,
+  AuthenticationError,
+  RateLimitError,
+  QuotaExceededError,
+  ContentPolicyError,
+  ProviderInternalError,
+  TransportType,
+  TransportOperation,
+  TransportError,
+  InvalidProviderOutputError,
+  UnknownProviderError,
+  TimeoutError,
+  AIErrorReason,
+  AIError,
+} from "./schema/index.js"
+export type {
+  GenerationOptionsFields,
+  GenerationOptionsInput,
+  LanguageModelInput,
+  LanguageModelProviderOptions,
+  ToolDefinitionInput,
+  ToolNamespaceInput,
+  ToolNamespaceEntryInput,
+  ToolEntryInput,
+  UsageInput,
+} from "./schema/index.js"
+export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageRequest, ImageResponse } from "./image.js"
+export type {
+  ImageModelOptions,
+  ImageOptions,
+  ImageRequestFor,
+  ImageRequestInput,
+  ImageResolution,
+  ImageRoute,
+} from "./image.js"
+export {
+  ChoiceAnswer,
+  ChoiceQuestion,
+  ChoiceValue,
+  DecisionAnswer,
+  DecisionJsonPart,
+  DecisionMediaPart,
+  DecisionModel,
+  DecisionModelCompatibility,
+  DecisionModelSchema,
+  DecisionPart,
+  DecisionQuestion,
+  DecisionRequest,
+  DecisionResponse,
+  DecisionTextPart,
+  DecisionUsage,
+  ErrorAnswer,
+  ErrorReason,
+  PredicateAnswer,
+  PredicateQuestion,
+  ScoreAnswer,
+  ScoreQuestion,
+} from "./decision.js"
+export type {
+  AnswerFor,
+  AnswersFor,
+  DecisionInput,
+  DecisionModelOptions,
+  DecisionOptions,
+  DecisionQuestions,
+  DecisionRequestFor,
+  DecisionRequestInput,
+  DecisionResponseFor,
+  DecisionModelRoute,
+} from "./decision.js"
+export { Media } from "./media.js"
+export type {
+  AwaitOptions as GenerationAwaitOptions,
+  Event as GenerationEvent,
+  Poll,
+  Route as GenerationRoute,
+  Snapshot as GenerationSnapshot,
+  Status as GenerationStatus,
+} from "./generation.js"
+export type {
+  ExecutableTool,
+  Tool,
+  ToolExecute,
+  ToolExecuteContext,
+  ToolModelOutputInput,
+  ToolOptions,
+  Tools,
+  ToolSchema,
+  ToolToModelOutput,
+} from "./tool.js"
+export type { LLM } from "./llm.js"
