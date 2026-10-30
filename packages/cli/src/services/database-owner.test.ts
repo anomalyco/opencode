@@ -31,6 +31,7 @@ test("blocks unregistered ownership, but permits a registered service even while
 
 test("uses the service environment's database override without modifying the CLI environment", () => {
   const before = process.env.OPENCODE_DB
-  expect(databasePath("C:/data", { OPENCODE_DB: "configured.sqlite" })).toBe(join("C:/data", "configured.sqlite"))
+  const data = join(tmpdir(), "opencode-owner-data")
+  expect(databasePath(data, { OPENCODE_DB: "configured.sqlite" })).toBe(join(data, "configured.sqlite"))
   expect(process.env.OPENCODE_DB).toBe(before)
 })
