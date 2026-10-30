@@ -38,10 +38,13 @@ export function serverLabel(conn: ServerConnection.Any, current?: { hostname?: s
   return serverName(conn)
 }
 
-function isLocalHost(url: string) {
-  const host = url.replace(/^https?:\/\//, "").split(":")[0]
+function loopbackOrigin(url: string) {
+  if (!URL.canParse(url)) return
+  const parsed = new URL(url)
 
-  if (host === "localhost" || host === "127.0.0.1") return "local"
+  if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1" && parsed.hostname !== "[::1]") return
+
+  return `${parsed.protocol}//127.0.0.1:${parsed.port || (parsed.protocol === "https:" ? "443" : "80")}`
 }
 
 // Project data comes from the server; this keeps which projects this client has used and the last one.
@@ -192,8 +195,18 @@ export namespace ServerConnection {
     return true
   }
 
-  export const local = (conn?: Any) =>
-    !!conn && (builtin(conn) || (conn.type === "http" && isLocalHost(conn.http.url) === "local"))
+  // The desktop sidecar, or a loopback http connection on the same port as the app's own server. Other loopback
+  // ports may belong to a WSL server, tunnel, or container with a separate filesystem.
+  export const local = (conn?: Any, ownUrl?: string) => {
+    if (!conn) return false
+
+    if (builtin(conn)) return true
+
+    if (conn.type !== "http" || !ownUrl) return false
+    const origin = loopbackOrigin(conn.http.url)
+
+    return !!origin && origin === loopbackOrigin(ownUrl)
+  }
 }
 
 export const { use: useServers, provider: ServersProvider } = createSimpleContext({
@@ -265,6 +278,9 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     const current = (conn: ServerConnection.Any) =>
       ServerConnection.builtin(conn) || ServerConnection.key(conn) === props.canonicalLocalServer
 
+    const ownUrl = () => props.servers?.find(ServerConnection.builtin)?.http.url ?? props.canonicalLocalServer
+    const local = (conn?: ServerConnection.Any) => ServerConnection.local(conn, ownUrl())
+
     const label = (conn: ServerConnection.Any) =>
       serverLabel(
         conn,
@@ -294,6 +310,8 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       canRemove,
       scope,
       current,
+      ownUrl,
+      local,
       /** The name switchers, menus and titles show. */
       label,
       /** The name a list row shows next to its item: nothing for the current server or when it is the only one. */
