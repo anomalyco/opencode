@@ -165,36 +165,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       const restore = () => restoreSubmission(input, submission, value, comments)
 
       if (value.mode === "normal" && !command) {
-        // The timeline shows a steer, and any switches it makes, as the composer clears; a queued prompt shows in
-        // the queue once admitted.
-        if (value.delivery === "steer")
-          session.handoff.set({
-            message: handoffMessage(value),
-            selection: {
-              agent: value.selection.agent,
-              model: {
-                id: value.selection.model.modelID,
-                providerID: value.selection.model.providerID,
-                variant: value.selection.variant,
-              },
-            },
-          })
-        const optimisticBusy = !input.adapter.working()
-
-        // Like iOS, a steer moves the run's blocking shells and subagents to the background. The move follows
-        // admission: the steer already waits in the inbox when the moved work ends the step, so that step reads it.
-        const background = value.delivery === "steer" && !optimisticBusy ? session.background?.() : undefined
-
-        if (optimisticBusy) session.data.session.setStatus(session.id, "running")
-
-        const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
-          () => {
-            void background?.move()
-
-            return { ok: true as const }
-          },
-          (error) => ({ ok: false as const, error }),
-        )
+        const dispatch = dispatchPrompt(input, session, value)
 
         await started.cleanupReady
         await started.complete?.()
@@ -203,12 +174,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
         submission.context.forEach((item) => submission.target().context.remove(item.key))
         input.comments.clear()
         clearSubmission(input, submission)
-        void sending.then((result) => {
-          if (!result.ok)
-            failSubmission(input, session, "prompt", result.error, restore, value.id, () => {
-              if (optimisticBusy) session.data.session.setStatus(session.id, "idle")
-            })
-        })
+        void dispatch.sending.then((result) => dispatch.settle(result, restore))
 
         return
       }
@@ -267,44 +233,18 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
         delivery: input.delivery?.(true) ?? "steer",
       }
 
-      const optimisticBusy = !input.adapter.working()
-
-      const background = value.delivery === "steer" && !optimisticBusy ? session.background?.() : undefined
-
       submitting.add(input.adapter.state)
 
       try {
-        if (value.delivery === "steer")
-          session.handoff.set({
-            message: handoffMessage(value),
-            selection: {
-              agent: selection.agent,
-              model: {
-                id: selection.model.modelID,
-                providerID: selection.model.providerID,
-                variant: selection.variant,
-              },
-            },
-          })
+        const dispatch = dispatchPrompt(input, session, value)
 
-        if (optimisticBusy) session.data.session.setStatus(session.id, "running")
+        const sent = dispatch.settle(await dispatch.sending, () => {
+          target.context.updateComment(quote.commentID, { comment })
 
-        const sent = await sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
-          () => true,
-          (error) => {
-            if (session.admitted(value.id)) return true
-            session.handoff.clear(value.id)
-
-            if (optimisticBusy) session.data.session.setStatus(session.id, "idle")
-            target.context.updateComment(quote.commentID, { comment })
-            input.notify.failed("prompt", error)
-
-            return false
-          },
-        )
+          return true
+        })
 
         if (!sent) return false
-        void background?.move()
         target.context.remove(key)
 
         if (target.quoteComment.key() === key) target.quoteComment.set()
@@ -468,6 +408,51 @@ function currentSelection(input: ComposerSubmitInput): ComposerSelection | undef
     agent,
     model: { modelID: model.id, providerID: model.provider.id },
     variant: controls.model.selection.variant.current(),
+  }
+}
+
+function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, value: ComposerSubmission) {
+  // A steer appears in the timeline before the composer clears; queued prompts appear in the queue on admission.
+  if (value.delivery === "steer")
+    session.handoff.set({
+      message: handoffMessage(value),
+      selection: {
+        agent: value.selection.agent,
+        model: {
+          id: value.selection.model.modelID,
+          providerID: value.selection.model.providerID,
+          variant: value.selection.variant,
+        },
+      },
+    })
+  const optimisticBusy = !input.adapter.working()
+
+  const background = value.delivery === "steer" && !optimisticBusy ? session.background?.() : undefined
+
+  if (optimisticBusy) session.data.session.setStatus(session.id, "running")
+
+  const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
+    () => ({ ok: true as const }),
+    (error) => ({ ok: false as const, error }),
+  )
+
+  return {
+    sending,
+    // The composer settles after clearing its captured draft; a quote settles before removing only its context.
+    settle(result: Awaited<typeof sending>, restore: () => boolean) {
+      const admitted =
+        result.ok ||
+        failSubmission(input, session, "prompt", result.error, restore, value.id, () => {
+          if (optimisticBusy) session.data.session.setStatus(session.id, "idle")
+        })
+
+      if (!admitted) return false
+
+      // Move blocking work only once the steer is admitted, so the next step can read it from the inbox.
+      void background?.move()
+
+      return true
+    },
   }
 }
 
@@ -730,10 +715,12 @@ function failSubmission(
   messageID?: string,
   rollback?: () => void,
 ) {
-  if (messageID && session.admitted(messageID)) return
+  if (messageID && session.admitted(messageID)) return true
 
   if (messageID) session.handoff.clear(messageID)
   rollback?.()
   restore()
   input.notify.failed(kind, error)
+
+  return false
 }

@@ -84,14 +84,14 @@ function submitInput(
   commands: () => readonly { name: string }[] | undefined = () => [],
   history: string[] = [],
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined,
-  delivery: ComposerDelivery = "steer",
+  delivery: (alternate: boolean) => ComposerDelivery = () => "steer",
 ) {
   return createComposerSubmit({
     adapter,
     mode: () => mode,
     commands,
     clientCommand,
-    delivery: () => delivery,
+    delivery,
     editor: () => undefined,
     queueScroll() {},
     addToHistory: (prompt) =>
@@ -205,7 +205,11 @@ describe("Composer submission", () => {
         undefined,
         undefined,
         undefined,
-        delivery,
+        (alternate) => {
+          expect(alternate).toBe(true)
+
+          return delivery
+        },
       )
 
       expect(await submission.submitQuote("quote:c=selected", "Compare @src/api.ts")).toBe(true)
@@ -417,9 +421,15 @@ describe("Composer submission", () => {
         switchModel: async () => committed.promise,
       })
 
-      await submitInput(active(state, target), undefined, "normal", undefined, undefined, undefined, delivery).submit(
-        new Event("submit"),
-      )
+      await submitInput(
+        active(state, target),
+        undefined,
+        "normal",
+        undefined,
+        undefined,
+        undefined,
+        () => delivery,
+      ).submit(new Event("submit"))
 
       expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
       expect(statuses).toEqual(["running"])
@@ -728,7 +738,7 @@ describe("Composer submission", () => {
           () => [],
           [],
           undefined,
-          delivery,
+          () => delivery,
         ).submit(new Event("submit"))
         // The send settles after submit returns; let it and the move that follows it finish.
         await new Promise((resolve) => setTimeout(resolve, 0))

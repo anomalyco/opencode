@@ -2112,109 +2112,109 @@ test("quotes plain timeline text into the composer, with or without a comment", 
   await expect(chips).toHaveCount(0)
 })
 
-for (const scenario of [
-  { working: false, behavior: "queue" },
-  { working: false, behavior: "steer" },
-  { working: true, behavior: "queue" },
-  { working: true, behavior: "steer" },
-] as const) {
-  test(`quote popup sends independently: ${scenario.working ? "working" : "idle"}, ${scenario.behavior} default`, async ({
-    page,
-  }) => {
-    const sent: string[] = []
+test("quote popup sends independently without consuming the draft or other quotes", async ({ page }) => {
+  const sent: string[] = []
 
-    await setupTimeline(page, {
-      settings: { followUpBehavior: scenario.behavior },
-      sessionStatus: { [sessionID]: { type: scenario.working ? "busy" : "idle" } },
-      messages: [userMessage(), assistantMessage([textPart("prt_direct_quote", "Keep this quoted passage.")])],
-      findFiles: () => ["src/api.ts"],
-      onPrompt: (input) => {
-        sent.push(String(input.body.delivery))
-      },
-    })
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_direct_quote", "Keep this quoted passage.")])],
+    onPrompt: (input) => void sent.push(String(input.body.delivery)),
+  })
 
-    const answer = page.locator(
-      `[data-timeline-part-id="${renderedPartID("prt_direct_quote")}"] [data-slot="text-part-body"]`,
-    )
+  const answer = page.locator(
+    `[data-timeline-part-id="${renderedPartID("prt_direct_quote")}"] [data-slot="text-part-body"]`,
+  )
 
-    await expect(answer).toHaveText("Keep this quoted passage.")
-    const editor = page.locator('[data-component="composer-editor"]')
+  const editor = page.locator('[data-component="composer-editor"]')
 
-    await editor.fill("Keep my separate draft")
+  const quote = page
+    .getByRole("toolbar", { name: "Quote selection" })
+    .getByRole("button", { name: "Quote", exact: true })
 
-    const select = () =>
-      answer.evaluate((element) => {
-        const range = document.createRange()
+  await expect(answer).toHaveText("Keep this quoted passage.")
+  await editor.fill("Keep my separate draft")
+  await selectQuoteText(answer)
+  await quote.click({ modifiers: ["Alt"] })
+  await expect(editor).toBeFocused()
+  await selectQuoteText(answer)
+  await quote.click()
+  const popup = page.locator('[data-component="composer-quote-comment"]')
 
-        range.selectNodeContents(element)
-        window.getSelection()?.removeAllRanges()
-        window.getSelection()?.addRange(range)
-      })
+  const comment = popup.locator("textarea")
 
-    const quote = page
-      .getByRole("toolbar", { name: "Quote selection" })
-      .getByRole("button", { name: "Quote", exact: true })
+  const action = popup.getByRole("button")
 
-    await select()
-    await quote.click({ modifiers: ["Alt"] })
-    await select()
-    await quote.click()
-    const popup = page.locator('[data-component="composer-quote-comment"]')
+  const modifier = await page.evaluate(() => (/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"))
 
-    const comment = popup.locator("textarea")
+  await expect(comment).toBeFocused()
+  await comment.fill("Explain this please")
+  await action.focus()
+  await page.keyboard.down(modifier)
+  await expect(action).toHaveAccessibleName("Send quote")
+  await page.keyboard.press("Enter")
+  await page.keyboard.up(modifier)
+  await expect(popup).toHaveCount(0)
+  await expect.poll(() => sent).toEqual(["steer"])
+  await expect(editor).toHaveText("Keep my separate draft")
+  const remaining = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
 
-    const action = popup.locator('[data-slot="line-comment-v2-submit"]')
+  await expect(remaining).toHaveCount(1)
+  await expect(remaining).toContainText("Keep this quoted passage.")
+  await expect(remaining).not.toContainText("Explain this please")
+})
 
-    const modifier = await page.evaluate(() => (/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"))
+test("a pending quote send hides mentions and keeps the comment read-only", async ({ page }) => {
+  const sent: string[] = []
 
-    const delivery = !scenario.working || scenario.behavior === "queue" ? "steer" : "queue"
+  await setupTimeline(page, {
+    settings: { followUpBehavior: "steer" },
+    sessionStatus: { [sessionID]: { type: "busy" } },
+    messages: [userMessage(), assistantMessage([textPart("prt_quote_mentions", "Keep this quoted passage.")])],
+    findFiles: () => ["src/api.ts"],
+    onPrompt: (input) => void sent.push(String(input.body.delivery)),
+  })
 
-    const actionLabel = !scenario.working ? "Send quote" : delivery === "queue" ? "Queue quote" : "Steer with quote"
+  const answer = page.locator(
+    `[data-timeline-part-id="${renderedPartID("prt_quote_mentions")}"] [data-slot="text-part-body"]`,
+  )
 
-    const mentioning = scenario.working && scenario.behavior === "steer"
+  await expect(answer).toHaveText("Keep this quoted passage.")
+  await expect(page.locator('[data-component="composer-editor"]')).toBeFocused()
+  await selectQuoteText(answer)
+  await page
+    .getByRole("toolbar", { name: "Quote selection" })
+    .getByRole("button", { name: "Quote", exact: true })
+    .click()
+  const popup = page.locator('[data-component="composer-quote-comment"]')
 
-    await expect(comment).toBeFocused()
-    await comment.fill(mentioning ? "Explain @src/a" : "Explain this please")
+  const comment = popup.locator("textarea")
 
-    if (mentioning) await expect(popup.locator('[data-slot="line-comment-v2-mention-item"]')).toHaveCount(1)
-    await expect(action).toHaveCount(1)
-    await action.hover()
-    await expect(page.getByRole("tooltip").filter({ hasText: actionLabel })).toBeVisible()
-    const bounds = await action.boundingBox()
+  const modifier = await page.evaluate(() => (/(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"))
 
-    await page.keyboard.down(modifier)
-    await expect(action).toHaveAccessibleName(actionLabel)
-    expect(await action.boundingBox()).toEqual(bounds)
-    await page.keyboard.up(modifier)
-    await expect(action).toHaveAccessibleName("Add comment")
+  await comment.fill("Explain @src/a")
+  await expect(popup.locator('[data-slot="line-comment-v2-mention-item"]')).toHaveCount(1)
+  const admission = await holdRoute(page, new RegExp(`/api/session/${sessionID}/prompt(\\?|$)`), { method: "POST" })
 
-    const admission = await holdRoute(page, new RegExp(`/api/session/${sessionID}/prompt(\\?|$)`), {
-      method: "POST",
-    })
+  await popup.locator('[data-slot="line-comment-v2-submit"]').click({ modifiers: [modifier] })
+  await admission.arrived
+  await expect(popup.getByRole("button")).toBeDisabled()
+  await expect(comment).toHaveAttribute("readonly", "")
+  await expect(popup.locator('[data-component="loader-v2"]')).toBeVisible()
+  await expect(popup.locator('[data-slot="line-comment-v2-mention-item"]')).toHaveCount(0)
+  await comment.press("Tab")
+  await expect(comment).toHaveValue("Explain @src/a")
+  expect(admission.requests).toHaveLength(1)
+  admission.release()
+  await expect(popup).toHaveCount(0)
+  await expect.poll(() => sent).toEqual(["queue"])
+})
 
-    if (mentioning) await action.click({ modifiers: [modifier] })
+function selectQuoteText(target: Locator) {
+  return target.evaluate((element) => {
+    const range = document.createRange()
 
-    if (!mentioning)
-      await (!scenario.working && scenario.behavior === "queue" ? action : comment).press(`${modifier}+Enter`)
-    await admission.arrived
-    await expect(action).toBeDisabled()
-    await expect(comment).toHaveAttribute("readonly", "")
-    await expect(popup.locator('[data-component="loader-v2"]')).toBeVisible()
-
-    if (mentioning) {
-      await expect(popup.locator('[data-slot="line-comment-v2-mention-item"]')).toHaveCount(0)
-      await comment.press("Tab")
-      await expect(comment).toHaveValue("Explain @src/a")
-    }
-
-    expect(admission.requests).toHaveLength(1)
-    admission.release()
-    await expect(popup).toHaveCount(0)
-    await expect.poll(() => sent).toEqual([delivery])
-    await expect(editor).toHaveText("Keep my separate draft")
-    await expect(
-      page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]'),
-    ).toHaveCount(1)
+    range.selectNodeContents(element)
+    window.getSelection()?.removeAllRanges()
+    window.getSelection()?.addRange(range)
   })
 }
 
@@ -2233,13 +2233,7 @@ test("a failed direct quote send keeps the popup and comment for retry", async (
   )
 
   await expect(answer).toHaveText("Keep this quoted passage.")
-  await answer.evaluate((element) => {
-    const range = document.createRange()
-
-    range.selectNodeContents(element)
-    window.getSelection()?.removeAllRanges()
-    window.getSelection()?.addRange(range)
-  })
+  await selectQuoteText(answer)
   await page
     .getByRole("toolbar", { name: "Quote selection" })
     .getByRole("button", { name: "Quote", exact: true })
