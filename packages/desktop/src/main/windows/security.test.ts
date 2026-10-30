@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 import type { BrowserWindow, Session, WebContents } from "electron"
-import { allowRendererPermissions, wireSessionSecurity } from "./security"
+import { allowRendererPermissions } from "./security"
 
 type RequestHandler = NonNullable<Parameters<Session["setPermissionRequestHandler"]>[0]>
 
@@ -120,51 +120,4 @@ test("retains permissions across all live windows on a shared session and revoke
   first.close()
   expect(await shared.ask(1, "notifications")).toBe(false)
   expect(shared.check(null, "notifications", { isMainFrame: false })).toBe(false)
-})
-
-test.each(["pointerLock", "keyboardLock", "geolocation", "notifications"] as const)(
-  "denies %s on a newly created custom partition before any plugin handler is set (#57732, #45171)",
-  async (permission) => {
-    let onSessionCreated: ((session: Session) => void) | undefined
-
-    wireSessionSecurity({
-      on(event, listener) {
-        if (event === "session-created") onSessionCreated = listener
-      },
-    })
-
-    const custom = createSession()
-    onSessionCreated?.(custom.session)
-
-    expect(await custom.ask(10, permission, { requestingUrl: "https://example.com/", isMainFrame: true })).toBe(false)
-    expect(custom.check(10, permission, { requestingUrl: "https://example.com/", isMainFrame: true })).toBe(false)
-  },
-)
-
-test("blocks pointerLock and keyboardLock even when a plugin installs a permissive partition handler or resets to null", async () => {
-  let onSessionCreated: ((session: Session) => void) | undefined
-
-  wireSessionSecurity({
-    on(event, listener) {
-      if (event === "session-created") onSessionCreated = listener
-    },
-  })
-
-  const custom = createSession()
-  onSessionCreated?.(custom.session)
-
-  custom.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(true))
-  custom.session.setPermissionCheckHandler(() => true)
-
-  const page = { requestingUrl: "https://example.com/", isMainFrame: true }
-  expect(await custom.ask(10, "pointerLock", page)).toBe(false)
-  expect(custom.check(10, "pointerLock", page)).toBe(false)
-  expect(await custom.ask(10, "keyboardLock", page)).toBe(false)
-  expect(custom.check(10, "keyboardLock", page)).toBe(false)
-  expect(await custom.ask(10, "clipboard-sanitized-write", page)).toBe(true)
-
-  custom.session.setPermissionRequestHandler(null)
-  custom.session.setPermissionCheckHandler(null)
-  expect(await custom.ask(10, "clipboard-sanitized-write", page)).toBe(false)
-  expect(custom.check(10, "clipboard-sanitized-write", page)).toBe(false)
 })

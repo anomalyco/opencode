@@ -94,22 +94,12 @@ export function createEmbeds() {
     // Keep the corner layers up while the box is laid out, even before the page shows.
     // Over the DOM card they match its own rounded corners.
     const visible = placed && entry.shown
-
-    if (!visible) releaseFocus(entry)
     entry.corners.forEach((corner) => corner.setVisible(placed && !!entry.cornerKey))
     entry.view.setVisible(visible)
 
     if (visible === entry.onscreen) return
     entry.onscreen = visible
     entry.listeners.forEach((listener) => listener(visible))
-  }
-
-  const releaseFocus = (entry: Entry) => {
-    if (entry.window.isDestroyed() || entry.view.webContents.isDestroyed()) return
-
-    if (entry.view.webContents.isFocused() && entry.window.isFocused() && !entry.window.webContents.isDestroyed()) {
-      entry.window.webContents.focus()
-    }
   }
 
   const release = (id: string) => {
@@ -120,7 +110,6 @@ export function createEmbeds() {
     entry.listeners.clear()
 
     if (entry.window.isDestroyed()) return
-    releaseFocus(entry)
     entry.view.setVisible(false)
     entry.corners.forEach((corner) => entry.window.contentView.removeChildView(corner))
     entry.window.contentView.removeChildView(entry.view)

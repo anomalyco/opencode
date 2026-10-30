@@ -49,7 +49,9 @@ export function createEarlyWindow() {
   const zoom = storedZoomLevel()
   const icons = app.isPackaged ? path.join(process.resourcesPath, "icons") : path.join(root, "../../resources/icons")
 
-  const deferReveal = Boolean(state.isMaximized || state.isFullScreen)
+  // On Windows, maximize() on a hidden window shows it with SW_SHOWMAXIMIZED, so it never paints at
+  // its normal bounds first. macOS does not reliably enter fullscreen while hidden, so it shows first.
+  const deferReveal = process.platform === "win32" && state.isMaximized
 
   const win = new BrowserWindow({
     x: state.x,
