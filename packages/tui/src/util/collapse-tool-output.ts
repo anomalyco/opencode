@@ -23,6 +23,12 @@ export function collapseToolOutput(output: string, maxLines: number, maxChars: n
   return { output: preview, overflow: true }
 }
 
+/** Lines of a patch without its file headers, which is what a unified diff view renders. */
+export function patchBodyLines(patch: string) {
+  const start = patch.search(/^@@ /m)
+  return start === -1 ? 0 : patch.slice(start).trimEnd().split("\n").length
+}
+
 export function collapseShellOutput(input: string, output: string, maxLines: number, maxChars: number) {
   if (!input) {
     const collapsed = collapseToolOutput(output, maxLines, maxChars)
