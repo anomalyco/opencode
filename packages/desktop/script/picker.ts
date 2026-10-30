@@ -10,20 +10,10 @@ export function pickerPlugin() {
   const plugin = picker()
   const client = "/__vite_opencode_picker_client.js"
 
-  // Scope the dependency's design shortcut so it doesn't swallow the composer's effort shortcut.
-  const load = (id: string) =>
-    plugin
-      .load(id)
-      ?.replace(
-        'window.addEventListener("keydown", (event) => {',
-        'window.addEventListener("keydown", (event) => {\n  if (event.code === "KeyD" && !active && !event.composedPath().includes(host)) return;',
-      )
-
   let workspaceRoot = ""
 
   return {
     ...plugin,
-    load,
     configResolved(config: Parameters<typeof plugin.configResolved>[0]) {
       plugin.configResolved(config)
       workspaceRoot = gitRoot(config.root)
@@ -34,7 +24,7 @@ export function pickerPlugin() {
     configureServer(server: Parameters<typeof plugin.configureServer>[0]) {
       server.middlewares.use(client, (_request, response) => {
         response.setHeader("content-type", "text/javascript")
-        response.end(load(plugin.resolveId("virtual:vite-opencode-picker/client")!))
+        response.end(plugin.load(plugin.resolveId("virtual:vite-opencode-picker/client")!))
       })
       plugin.configureServer(server)
     },

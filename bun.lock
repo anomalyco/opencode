@@ -344,7 +344,6 @@
         "electron": "44.9.1",
         "electron-builder": "26.15.7",
         "electron-vite": "6.0.0-beta.1",
-        "happy-dom": "20.11.1",
         "htmlparser2": "8.0.2",
         "magic-string": "0.30.21",
         "solid-js": "catalog:",
@@ -1012,6 +1011,7 @@
   "patchedDependencies": {
     "@ai-sdk/openai-compatible@2.0.41": "patches/@ai-sdk%2Fopenai-compatible@2.0.41.patch",
     "@tanstack/virtual-core@3.17.8": "patches/@tanstack%2Fvirtual-core@3.17.8.patch",
+    "@brendonovich/vite-plugin-opencode@0.1.3": "patches/@brendonovich%2Fvite-plugin-opencode@0.1.3.patch",
     "electron-updater@6.8.9": "patches/electron-updater@6.8.9.patch",
     "pacote@21.5.1": "patches/pacote@21.5.1.patch",
     "@npmcli/agent@4.0.2": "patches/@npmcli%2Fagent@4.0.2.patch",
