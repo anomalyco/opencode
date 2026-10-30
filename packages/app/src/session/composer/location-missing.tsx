@@ -55,6 +55,7 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
 
   let button: HTMLButtonElement | undefined
   let searchInput: HTMLInputElement | undefined
+  let menuContent: HTMLElement | undefined
 
   const move = useMutation(() => ({
     mutationFn: async (input: { source: "worktree" | "directory"; directory?: string }) => {
@@ -150,9 +151,10 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
             </Menu.Trigger>
             <Menu.Portal>
               <Menu.Content
-                ref={(element: HTMLElement) =>
+                ref={(element: HTMLElement) => {
+                  menuContent = element
                   // Hovering an item moves focus to it, so send typing back to the search field before type-ahead runs.
-                  makeEventListener(
+                  return makeEventListener(
                     element,
                     "keydown",
                     (event) => {
@@ -165,7 +167,7 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
                     },
                     { capture: true },
                   )
-                }
+                }}
                 class="max-h-[66.667dvh] w-[200px] overflow-y-auto"
               >
                 <Menu.Item onSelect={() => move.mutate({ source: "worktree" })} disabled={move.isPending}>
@@ -195,6 +197,22 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
                       class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
                       onInput={(event) => setState("search", event.currentTarget.value)}
                       onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.isComposing) {
+                          // Focus stays here while rows highlight; Kobalte only handles Enter on the row, so forward it.
+                          const highlighted = menuContent?.querySelector<HTMLElement>(
+                            '[data-highlighted]:not([data-disabled])',
+                          )
+
+                          if (highlighted) {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            highlighted.focus({ preventScroll: true })
+                            highlighted.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
+                          }
+
+                          return
+                        }
+
                         if (
                           event.key === "Escape" ||
                           event.key === "ArrowDown" ||

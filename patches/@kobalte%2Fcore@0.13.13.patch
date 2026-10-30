@@ -1,0 +1,150 @@
+diff --git a/dist/chunk/3ARTUDH2.jsx b/dist/chunk/3ARTUDH2.jsx
+index 4a2cfa59cfd0adec119e46de043c590af12ceb60..7ebd96af343c10e20d43b0cf6602603c1e177d4a 100644
+--- a/dist/chunk/3ARTUDH2.jsx
++++ b/dist/chunk/3ARTUDH2.jsx
+@@ -242,7 +242,14 @@ function Menu(props) {
+   const _focusContent = () => {
+     const content = contentRef();
+     if (content) {
+-      focusWithoutScrolling(content);
++      // Keep focus on a focused editable (the menu's search input): moving it restarts the caret blink on every
++      // hover, which reads as a flash and interrupts typing. The selection-manager state below still updates so
++      // data-highlighted and Enter keep tracking the pointer.
++      const active = document.activeElement;
++      const keepFocus = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active?.isContentEditable) && content.contains(active);
++      if (!keepFocus) {
++        focusWithoutScrolling(content);
++      }
+       listState.selectionManager().setFocused(true);
+       listState.selectionManager().setFocusedKey(void 0);
+     }
+@@ -481,7 +488,13 @@ function MenuItemBase(props) {
+     } else {
+       menuContext.onItemEnter(e);
+       if (!e.defaultPrevented) {
+-        focusWithoutScrolling2(e.currentTarget);
++        // Skip only the DOM focus call while a focused editable (search input) inside the menu holds focus; the
++        // selection-manager state must still update so data-highlighted and Enter keep tracking the pointer.
++        const active = document.activeElement;
++        const keepFocus = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active?.isContentEditable) && e.currentTarget.closest('[role="menu"]')?.contains(active);
++        if (!keepFocus) {
++          focusWithoutScrolling2(e.currentTarget);
++        }
+         menuContext.listState().selectionManager().setFocused(true);
+         menuContext.listState().selectionManager().setFocusedKey(key());
+       }
+@@ -1478,7 +1491,13 @@ function MenuSubTrigger(props) {
+         context.listState().selectionManager().setFocused(false);
+         context.listState().selectionManager().setFocusedKey(void 0);
+       }
+-      focusWithoutScrolling4(e.currentTarget);
++      // Skip only the DOM focus call while a focused editable (search input) inside the menu holds focus; the
++      // selection-manager state must still update so data-highlighted and Enter keep tracking the pointer.
++      const active = document.activeElement;
++      const keepFocus = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active?.isContentEditable) && e.currentTarget.closest('[role="menu"]')?.contains(active);
++      if (!keepFocus) {
++        focusWithoutScrolling4(e.currentTarget);
++      }
+       parentMenuContext?.listState().selectionManager().setFocused(true);
+       parentMenuContext?.listState().selectionManager().setFocusedKey(key());
+     }
+diff --git a/dist/chunk/3D6FM2PJ.js b/dist/chunk/3D6FM2PJ.js
+index 6a05111c7de78a88a403e76dc9c4902f90207081..396d84368b5e946654dc7f9d874e1f738de03aca 100644
+--- a/dist/chunk/3D6FM2PJ.js
++++ b/dist/chunk/3D6FM2PJ.js
+@@ -576,10 +576,16 @@ function createSelectableItem(props, ref) {
+       ],
+       ([refEl, key2, shouldUseVirtualFocus2, focusedKey, isFocused]) => {
+         if (refEl && key2 === focusedKey && isFocused && !shouldUseVirtualFocus2 && document.activeElement !== refEl) {
+-          if (props.focus) {
+-            props.focus();
+-          } else {
+-            focusWithoutScrolling(refEl);
++          // Skip only the DOM focus while a focused editable (search input) inside this menu holds focus; the
++          // item still becomes the highlighted row via the selection manager.
++          const active = document.activeElement;
++          const keepFocus = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active?.isContentEditable) && refEl.closest('[role="menu"]')?.contains(active);
++          if (!keepFocus) {
++            if (props.focus) {
++              props.focus();
++            } else {
++              focusWithoutScrolling(refEl);
++            }
+           }
+         }
+       }
+diff --git a/dist/chunk/HGKTPMYY.js b/dist/chunk/HGKTPMYY.js
+index a8fa9b06a97cb3d4d5029fc0c929d78dfdc6edd4..5c252819f980e1ad133c368f1f1d2cf3b9eb60ae 100644
+--- a/dist/chunk/HGKTPMYY.js
++++ b/dist/chunk/HGKTPMYY.js
+@@ -166,7 +166,14 @@ function Menu(props) {
+   const _focusContent = () => {
+     const content = contentRef();
+     if (content) {
+-      focusWithoutScrolling(content);
++      // Keep focus on a focused editable (the menu's search input): moving it restarts the caret blink on every
++      // hover, which reads as a flash and interrupts typing. The selection-manager state below still updates so
++      // data-highlighted and Enter keep tracking the pointer.
++      const active = document.activeElement;
++      const keepFocus = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active?.isContentEditable) && content.contains(active);
++      if (!keepFocus) {
++        focusWithoutScrolling(content);
++      }
+       listState.selectionManager().setFocused(true);
+       listState.selectionManager().setFocusedKey(void 0);
+     }
+@@ -368,7 +375,13 @@ function MenuItemBase(props) {
+     } else {
+       menuContext.onItemEnter(e);
+       if (!e.defaultPrevented) {
+-        focusWithoutScrolling(e.currentTarget);
++        // Skip only the DOM focus call while a focused editable (search input) inside the menu holds focus; the
++        // selection-manager state must still update so data-highlighted and Enter keep tracking the pointer.
++        const active = document.activeElement;
++        const keepFocus = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active?.isContentEditable) && e.currentTarget.closest('[role="menu"]')?.contains(active);
++        if (!keepFocus) {
++          focusWithoutScrolling(e.currentTarget);
++        }
+         menuContext.listState().selectionManager().setFocused(true);
+         menuContext.listState().selectionManager().setFocusedKey(key());
+       }
+@@ -1192,7 +1205,13 @@ function MenuSubTrigger(props) {
+         context.listState().selectionManager().setFocused(false);
+         context.listState().selectionManager().setFocusedKey(void 0);
+       }
+-      focusWithoutScrolling(e.currentTarget);
++      // Skip only the DOM focus call while a focused editable (search input) inside the menu holds focus; the
++      // selection-manager state must still update so data-highlighted and Enter keep tracking the pointer.
++      const active = document.activeElement;
++      const keepFocus = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active?.isContentEditable) && e.currentTarget.closest('[role="menu"]')?.contains(active);
++      if (!keepFocus) {
++        focusWithoutScrolling(e.currentTarget);
++      }
+       parentMenuContext?.listState().selectionManager().setFocused(true);
+       parentMenuContext?.listState().selectionManager().setFocusedKey(key());
+     }
+diff --git a/dist/chunk/RFN6X5VH.jsx b/dist/chunk/RFN6X5VH.jsx
+index 63e2aa3bf4c0e01102440c9bd14aa4ca563ee5d8..f4a24f85de4c43023a029f69697ac759c18ce734 100644
+--- a/dist/chunk/RFN6X5VH.jsx
++++ b/dist/chunk/RFN6X5VH.jsx
+@@ -619,10 +619,16 @@ function createSelectableItem(props, ref) {
+       ],
+       ([refEl, key2, shouldUseVirtualFocus2, focusedKey, isFocused]) => {
+         if (refEl && key2 === focusedKey && isFocused && !shouldUseVirtualFocus2 && document.activeElement !== refEl) {
+-          if (props.focus) {
+-            props.focus();
+-          } else {
+-            focusWithoutScrolling2(refEl);
++          // Skip only the DOM focus while a focused editable (search input) inside this menu holds focus; the
++          // item still becomes the highlighted row via the selection manager.
++          const active = document.activeElement;
++          const keepFocus = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active?.isContentEditable) && refEl.closest('[role="menu"]')?.contains(active);
++          if (!keepFocus) {
++            if (props.focus) {
++              props.focus();
++            } else {
++              focusWithoutScrolling2(refEl);
++            }
+           }
+         }
+       }
