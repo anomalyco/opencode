@@ -311,6 +311,11 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.dialog.files": "Files",
   "desktop.onboarding.defaultProject": "Default Project",
 
+  "desktop.trading.closeWarning": "Trading bots are still running",
+  "desktop.trading.closeWarning.detail": "These systems keep trading while the app is closed:\n\n{{names}}\n\nClose anyway?",
+  "desktop.trading.closeWarning.action.close": "Close Anyway",
+  "desktop.trading.closeWarning.action.cancel": "Cancel",
+
   "desktop.picker.error.notSelected": "File was not selected by the picker",
   "desktop.picker.error.sizeLimit": "Selected attachments exceed the {{limit}} MB limit",
 
