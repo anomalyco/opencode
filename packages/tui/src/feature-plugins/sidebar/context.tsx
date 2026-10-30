@@ -2,6 +2,7 @@ import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo } from "solid-js"
+import { onClick } from "../../ui/click"
 
 const id = "internal:sidebar-context"
 
@@ -39,9 +40,11 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <text fg={theme().text}>
         <b>Context</b>
       </text>
-      <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
-      <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
-      <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      <box {...onClick(() => props.api.keymap.dispatchCommand("opencode.status"))}>
+        <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
+        <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
+        <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      </box>
     </box>
   )
 }

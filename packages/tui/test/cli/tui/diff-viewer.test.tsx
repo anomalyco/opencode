@@ -242,6 +242,33 @@ test("last-turn diff source requests session diff", async () => {
   }
 })
 
+test("a file param opens the viewer scrolled to that file", async () => {
+  const patch = (name: string) =>
+    `--- a/${name}\n+++ b/${name}\n@@ -1,6 +1,6 @@\n` +
+    Array.from({ length: 6 }, (_, line) =>
+      line === 2 ? `-const old_${name} = 1\n+const new_${name} = 1` : ` const keep${line} = 1`,
+    ).join("\n")
+  const files = ["a.ts", "b.ts", "c.ts"].map((name) => ({
+    file: `src/${name}`,
+    additions: 1,
+    deletions: 1,
+    status: "modified",
+    patch: patch(name.replace(".", "_")),
+  }))
+  const viewer = await renderDiffViewer(files, 12, {
+    name: "diff",
+    params: { mode: "git", sessionID: "session-1", returnRoute: startRoute, file: "src/c.ts" },
+  })
+  try {
+    await viewer.app.waitForFrame((frame) => frame.includes("keep"))
+    await viewer.app.waitFor(() => (findScrollBox(viewer.app.renderer.root)?.scrollTop ?? 0) > 0)
+    await viewer.app.flush()
+    expect(viewer.app.captureCharFrame()).toContain("new_c_ts")
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
 async function waitForCommand(
   app: Awaited<ReturnType<typeof testRender>>,
   commands: Map<string, unknown>,
