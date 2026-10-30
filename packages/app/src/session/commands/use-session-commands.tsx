@@ -241,8 +241,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (actions.region.closeNewTab(focusedPane())) {
       const panel = document.getElementById("review-panel")
 
-      // A launcher row that held focus is gone; focus stays in the panel so closing it next returns focus.
-      if (panel && !panel.contains(document.activeElement)) panel.focus({ preventScroll: true, focusVisible: false })
+      // A launcher row that held focus is gone; focus stays in the panel so closing it next returns focus. Closing the
+      // strip's last New tab closes the panel too, which already gave focus back.
+      if (panel && actions.session.layout.view().side.opened() && !panel.contains(document.activeElement))
+        panel.focus({ preventScroll: true, focusVisible: false })
 
       return
     }
