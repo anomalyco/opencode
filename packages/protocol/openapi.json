@@ -8474,7 +8474,7 @@
             }
           }
         },
-        "description": "Store an integration credential. It becomes the integration's active credential unless activate is false and the integration already has one. Fails with a conflict when the requested ID already exists.",
+        "description": "Store an integration credential. It becomes the integration's active credential unless activate is false and the integration already has one. Fails with a conflict when the requested ID already exists, and with an invalid request when an `integration.connect` policy denies the integration.",
         "summary": "Create credential",
         "requestBody": {
           "content": {
@@ -15974,7 +15974,15 @@
               "properties": {
                 "action": {
                   "type": "string",
-                  "enum": ["provider.use", "tool.use", "integration.use"]
+                  "enum": [
+                    "provider.use",
+                    "tool.use",
+                    "integration.connect",
+                    "integration.use",
+                    "mcp.use",
+                    "skill.use",
+                    "plugin.use"
+                  ]
                 },
                 "resource": {
                   "type": "string"
@@ -16319,7 +16327,15 @@
                   "properties": {
                     "action": {
                       "type": "string",
-                      "enum": ["provider.use", "tool.use", "integration.use"]
+                      "enum": [
+                        "provider.use",
+                        "tool.use",
+                        "integration.connect",
+                        "integration.use",
+                        "mcp.use",
+                        "skill.use",
+                        "plugin.use"
+                      ]
                     },
                     "resource": {
                       "type": "string"
@@ -21190,8 +21206,25 @@
         "anyOf": [
           {
             "$ref": "#/components/schemas/Schedule.Condition.Shell"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Condition.Code"
           }
         ]
+      },
+      "Schedule.Condition.Code": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["code"]
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "code"],
+        "additionalProperties": false
       },
       "Schedule.Condition.Shell": {
         "type": "object",
@@ -21217,25 +21250,56 @@
         "additionalProperties": false
       },
       "Schedule.ConditionInput": {
-        "type": "object",
-        "properties": {
-          "run": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Shell command to run in the Session's directory. Alone, exit 0 wakes and stdout is appended."
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "run": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Shell command to run in the Session's directory. Alone, exit 0 wakes and stdout is appended."
+              },
+              "is": {
+                "type": "string"
+              },
+              "matches": {
+                "type": "string"
+              },
+              "changes": {
+                "type": "boolean"
+              },
+              "code": {
+                "not": {}
+              }
+            },
+            "required": ["run"],
+            "additionalProperties": false
           },
-          "is": {
-            "type": "string"
-          },
-          "matches": {
-            "type": "string"
-          },
-          "changes": {
-            "type": "boolean"
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Code Mode JavaScript check (no fetch; 30s, 20 tool calls, 32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. Runs once at creation with state = null (if baselines state without waking; until matches immediately if true), with globals state, now (epoch ms) and runs. Return a boolean or { wake, state?, message? } (message is appended to prompt on wake), e.g.: const t = await tools.slack.read_thread({ id }); return { wake: state !== null && t.count > state.count, state: { count: t.count }, message: \"New reply\" }"
+              },
+              "run": {
+                "not": {}
+              },
+              "is": {
+                "not": {}
+              },
+              "matches": {
+                "not": {}
+              },
+              "changes": {
+                "not": {}
+              }
+            },
+            "required": ["code"],
+            "additionalProperties": false
           }
-        },
-        "required": ["run"],
-        "additionalProperties": false
+        ]
       },
       "Schedule.CreatePayload": {
         "type": "object",

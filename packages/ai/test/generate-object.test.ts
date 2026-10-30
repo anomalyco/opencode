@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect"
 import { LLM } from "../src/effect.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { Auth } from "../src/route.js"
-import { Tool, toDefinitions } from "../src/tool.js"
+import { toDefinitions, tool } from "../src/tool.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 import { finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
@@ -26,14 +26,14 @@ const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 const decodeBody = (text: string): OpenAIChatBody => decodeJson(text) as OpenAIChatBody
 
-describe("Tool.make (dynamic JSON Schema)", () => {
+describe("tool (dynamic JSON Schema)", () => {
   test("forwards JSON Schema and description through toDefinitions", () => {
     const jsonSchema = {
       type: "object" as const,
       properties: { city: { type: "string" } },
       required: ["city"],
     }
-    const lookup = Tool.make({
+    const lookup = tool({
       description: "Look up something",
       jsonSchema,
       execute: () => Effect.succeed({ ok: true }),
@@ -47,7 +47,7 @@ describe("Tool.make (dynamic JSON Schema)", () => {
   it.effect("execute receives the raw input untouched", () =>
     Effect.gen(function* () {
       const seen: unknown[] = []
-      const tool = Tool.make({
+      const echo = tool({
         description: "echo",
         jsonSchema: { type: "object" },
         execute: (params) =>
@@ -56,7 +56,7 @@ describe("Tool.make (dynamic JSON Schema)", () => {
             return { ok: true }
           }),
       })
-      const result = yield* tool.execute({ hello: "world" })
+      const result = yield* echo.execute({ hello: "world" })
       expect(seen).toEqual([{ hello: "world" }])
       expect(result).toEqual({ ok: true })
     }),

@@ -1,8 +1,7 @@
 import { Effect, Schema } from "effect"
-import { LLM, LLMRequest, ToolRuntime, toDefinitions } from "../src/effect.js"
+import { LLM, LLMRequest, ToolRuntime, toDefinitions, tool, type ExecutableTool } from "../src/effect.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { Auth } from "../src/route.js"
-import { Tool } from "../src/tool.js"
 import { AI } from "../src/index.js"
 
 const request = LLM.request({
@@ -10,20 +9,20 @@ const request = LLM.request({
   prompt: "Use the tool.",
 })
 
-const executable = Tool.make({
+const executable = tool({
   description: "Get weather.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ forecast: Schema.String }),
   execute: (input) => Effect.succeed({ forecast: input.city }),
 })
 
-const schemaOnly = Tool.make({
+const schemaOnly = tool({
   description: "Get weather.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ forecast: Schema.String }),
 })
 
-Tool.make({
+tool({
   description: "Encode success before projection.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ forecast: Schema.NumberFromString }),
@@ -42,7 +41,7 @@ LLM.stream({ request, tools: { schemaOnly } })
 
 const code = Schema.Struct({ code: Schema.String })
 
-Tool.make({
+tool({
   description: "Run JavaScript.",
   parameters: code,
   success: Schema.String,
@@ -57,11 +56,11 @@ AI.tool({
   execute: (input) => input.code,
 })
 
-Tool.make({
+tool({
   description: "Run JavaScript.",
-  // @ts-expect-error A freeform tool's only parameter must be a string.
   parameters: Schema.Struct({ code: Schema.Number }),
   success: Schema.String,
+  // @ts-expect-error A freeform tool's only parameter must be a string.
   freeform: { type: "text" },
 })
 
@@ -80,3 +79,19 @@ AI.tool({
   freeform: { type: "text" },
   execute: () => undefined,
 })
+
+const sum = {
+  description: "Add two numbers.",
+  parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
+  success: Schema.Number,
+  toModelOutput: ({ output }: { readonly output: number }) => [{ type: "text" as const, text: String(output) }],
+}
+const declared: AI.Tool<typeof sum.parameters, typeof Schema.Number> = AI.tool(sum)
+const effectSum: ExecutableTool = tool({ ...sum, execute: ({ a, b }) => Effect.succeed(a + b) })
+const promiseSum: AI.ExecutableTool = AI.tool({ ...sum, execute: async ({ a, b }) => a + b })
+toDefinitions({ declared, effectSum, promiseSum, dynamic: AI.tool({ description: "Look up.", jsonSchema: {} }) })
+
+// @ts-expect-error The Effect tool's execute returns an Effect.
+tool({ ...sum, execute: ({ a, b }) => a + b })
+// @ts-expect-error The execute result must match `success`.
+AI.tool({ ...sum, execute: async () => "3" })

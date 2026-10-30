@@ -287,6 +287,18 @@ describe("ScheduleTools", () => {
           prompt: "working tree changed",
         }),
       ).toContain('if "git status -s", active')
+      expect(
+        yield* direct(registry, "schedule_create", {
+          until: { code: "return (await tools.slack.read_thread({})).ok" },
+          prompt: "thread ok",
+        }),
+      ).toContain('until code "return (await tools.slack.read_thread({})).ok", active')
+      expect(
+        yield* call(registry, "schedule_create", {
+          until: { run: "true", code: "return true" },
+          prompt: "both",
+        }),
+      ).toMatchObject({ metadata: { error: true } })
     }),
   )
 })

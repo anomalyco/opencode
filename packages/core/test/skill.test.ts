@@ -44,13 +44,13 @@ describe("Skill", () => {
         new Document({
           type: "document",
           info: {
-            policies: [{ action: "integration.use", resource: "skill:*", effect: "allow" }],
+            policies: [{ action: "skill.use", resource: "*", effect: "allow" }],
           },
         }),
       ])
       yield* setOrganizationPolicy([
-        { action: "integration.use", resource: "*", effect: "deny" },
-        { action: "integration.use", resource: "skill:team:review", effect: "allow" },
+        { action: "skill.use", resource: "*", effect: "deny" },
+        { action: "skill.use", resource: "team:review", effect: "allow" },
       ])
       yield* registerIntegrationPolicy({ skill: skills, events: bus.subscribe() })
       expect(yield* skills.list()).toEqual([info("team:review", "Review")])
@@ -61,7 +61,7 @@ describe("Skill", () => {
       expect(guidance.text).toContain("<id>team:review</id>")
       expect(guidance.text).not.toContain("deploy")
 
-      yield* setOrganizationPolicy([{ action: "integration.use", resource: "skill:team:review", effect: "deny" }])
+      yield* setOrganizationPolicy([{ action: "skill.use", resource: "team:review", effect: "deny" }])
       yield* bus.publish(Event.Updated, {})
       yield* waitUntil(skills.get(Skill.ID.make("team:review")).pipe(Effect.map((skill) => skill === undefined)))
       expect(yield* skills.get(Skill.ID.make("team:review"))).toBeUndefined()
@@ -81,12 +81,12 @@ describe("Skill", () => {
       yield* config.setEntries([
         new Document({
           type: "document",
-          info: { policies: [{ action: "integration.use", resource: "skill:*", effect: "deny" }] },
+          info: { policies: [{ action: "skill.use", resource: "*", effect: "deny" }] },
         }),
         new Document({
           type: "document",
           info: {
-            policies: [{ action: "integration.use", resource: "skill:review", effect: "allow" }],
+            policies: [{ action: "skill.use", resource: "review", effect: "allow" }],
           },
         }),
       ])
@@ -112,7 +112,7 @@ describe("Skill", () => {
         Stream.runForEach(() => skills.list().pipe(Effect.flatMap((values) => Deferred.succeed(updated, values)))),
         Effect.forkScoped({ startImmediately: true }),
       )
-      yield* setOrganizationPolicy([{ action: "integration.use", resource: "skill:review", effect: "deny" }])
+      yield* setOrganizationPolicy([{ action: "skill.use", resource: "review", effect: "deny" }])
       yield* bus.publish(Event.Updated, {})
       expect(yield* Deferred.await(updated).pipe(Effect.timeout("1 second"))).toEqual([])
     }),

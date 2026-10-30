@@ -174,6 +174,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "notifications",
+    label: "settings.general.notifications.questions.title",
+    target: "settings-notifications-questions",
+    section: "settings.general.section.notifications",
+    description: "settings.general.notifications.questions.description",
+    keywords: "desktop notifications questions mcp elicitation input",
+  },
+  {
+    tab: "notifications",
     label: "settings.general.notifications.errors.title",
     target: "settings-notifications-errors",
     section: "settings.general.section.notifications",
@@ -195,6 +203,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     section: "settings.general.section.sounds",
     description: "settings.general.sounds.permissions.description",
     keywords: "sound audio permissions",
+  },
+  {
+    tab: "notifications",
+    label: "settings.general.sounds.questions.title",
+    target: "settings-sounds-questions",
+    section: "settings.general.section.sounds",
+    description: "settings.general.sounds.questions.description",
+    keywords: "sound audio questions mcp elicitation input",
   },
   {
     tab: "notifications",

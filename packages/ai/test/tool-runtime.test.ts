@@ -16,7 +16,7 @@ import { Auth, LLMClient } from "../src/route.js"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAIResponses from "../src/protocols/openai-responses.js"
-import { Tool, ToolFailure, type ToolExecuteContext } from "../src/tool.js"
+import { ToolFailure, tool, type ToolExecuteContext } from "../src/tool.js"
 import { ToolRuntime } from "../src/tool-runtime.js"
 import { it } from "./lib/effect.js"
 import * as TestToolRuntime from "./lib/tool-runtime.js"
@@ -39,7 +39,7 @@ const weatherFailureCause = new Error("weather lookup denied")
 
 test("dispatches namespaced calls by qualified identity", async () => {
   let context: ToolExecuteContext | undefined
-  const lookup = Tool.make({
+  const lookup = tool({
     description: "Look up a customer.",
     parameters: Schema.Struct({}),
     success: Schema.String,
@@ -58,7 +58,7 @@ test("dispatches namespaced calls by qualified identity", async () => {
   expect(result.events).toEqual([expect.objectContaining({ type: "tool-result", namespace: "crm", name: "lookup" })])
 })
 
-const get_weather = Tool.make({
+const get_weather = tool({
   description: "Get current weather for a city.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
@@ -70,7 +70,7 @@ const get_weather = Tool.make({
     }),
 })
 
-const schema_only_weather = Tool.make({
+const schema_only_weather = tool({
   description: "Get current weather for a city.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
@@ -175,7 +175,7 @@ describe("LLMClient tools", () => {
   it.effect("projects encoded typed tool success into canonical model content", () =>
     Effect.gen(function* () {
       const calls: unknown[] = []
-      const projected = Tool.make({
+      const projected = tool({
         description: "Project an encoded success.",
         parameters: Schema.Struct({ prefix: Schema.String }),
         success: Schema.Struct({ count: Schema.NumberFromString }),
@@ -207,7 +207,7 @@ describe("LLMClient tools", () => {
 
   it.effect("preserves provider metadata on dispatched tool results", () =>
     Effect.gen(function* () {
-      const tool = Tool.make({
+      const text = tool({
         description: "Return text.",
         parameters: Schema.Struct({}),
         success: Schema.String,
@@ -215,14 +215,14 @@ describe("LLMClient tools", () => {
       })
       const providerMetadata = { google: { thoughtSignature: "provider_sig" } }
       const dispatched = yield* ToolRuntime.dispatch(
-        { tool },
-        LLMEvent.toolCall({ id: "call_1", name: "tool", input: {}, providerMetadata }),
+        { text },
+        LLMEvent.toolCall({ id: "call_1", name: "text", input: {}, providerMetadata }),
       )
 
       expect(dispatched.events).toEqual([
         LLMEvent.toolResult({
           id: "call_1",
-          name: "tool",
+          name: "text",
           result: { type: "text", value: "hello" },
           output: { structured: "hello", content: [{ type: "text", text: "hello" }] },
           providerMetadata,
@@ -255,13 +255,13 @@ describe("LLMClient tools", () => {
 
   it.effect("uses the narrow default projection for encoded typed success", () =>
     Effect.gen(function* () {
-      const text = Tool.make({
+      const text = tool({
         description: "Return text.",
         parameters: Schema.Struct({}),
         success: Schema.String,
         execute: () => Effect.succeed("hello"),
       })
-      const json = Tool.make({
+      const json = tool({
         description: "Return JSON.",
         parameters: Schema.Struct({}),
         success: Schema.Struct({ ok: Schema.Boolean }),
@@ -279,7 +279,7 @@ describe("LLMClient tools", () => {
 
   it.effect("can retain model media while redacting duplicated structured payloads", () =>
     Effect.gen(function* () {
-      const image = Tool.make({
+      const image = tool({
         description: "Return an image.",
         parameters: Schema.Struct({}),
         success: Schema.Struct({ mime: Schema.String, data: Schema.String }),
@@ -360,7 +360,7 @@ describe("LLMClient tools", () => {
 
   it.effect("settles projected URL files as canonical tool results", () =>
     Effect.gen(function* () {
-      const remote = Tool.make({
+      const remote = tool({
         description: "Return a remote file.",
         parameters: Schema.Struct({}),
         success: Schema.Struct({ ok: Schema.Boolean }),
@@ -389,7 +389,7 @@ describe("LLMClient tools", () => {
     const [typed] = toDefinitions({ get_weather })
     const schema = { type: "object", properties: { result: { type: "string" } } } as const
     const [dynamic] = toDefinitions({
-      dynamic: Tool.make({ description: "Dynamic tool.", jsonSchema: { type: "object" }, outputSchema: schema }),
+      dynamic: tool({ description: "Dynamic tool.", jsonSchema: { type: "object" }, outputSchema: schema }),
     })
 
     expect(typed?.outputSchema).toMatchObject({
@@ -406,7 +406,7 @@ describe("LLMClient tools", () => {
 
   it.effect("preserves content tool results from dynamic tools", () =>
     Effect.gen(function* () {
-      const screenshot = Tool.make({
+      const screenshot = tool({
         description: "Capture a screenshot.",
         jsonSchema: { type: "object", properties: {} },
         execute: () =>
@@ -446,7 +446,7 @@ describe("LLMClient tools", () => {
   it.effect("does not mistake dynamic tool output fields for dispatcher state", () =>
     Effect.gen(function* () {
       const callerOwned = { type: "json" as const, value: { ok: true }, events: ["caller-owned"] }
-      const eventful = Tool.make({
+      const eventful = tool({
         description: "Return an events field.",
         jsonSchema: { type: "object", properties: {} },
         execute: () => Effect.succeed(callerOwned),
@@ -472,7 +472,7 @@ describe("LLMClient tools", () => {
   it.effect("projects malformed tagged dynamic output as opaque JSON", () =>
     Effect.gen(function* () {
       const malformed = { type: "content", value: [{ type: "text" }] }
-      const dynamic = Tool.make({
+      const dynamic = tool({
         description: "Return caller-defined JSON.",
         jsonSchema: { type: "object", properties: {} },
         execute: () => Effect.succeed(malformed),
@@ -518,7 +518,7 @@ describe("LLMClient tools", () => {
   it.effect("passes tool call context to execute", () =>
     Effect.gen(function* () {
       let context: ToolExecuteContext | undefined
-      const contextual = Tool.make({
+      const contextual = tool({
         description: "Capture tool context.",
         parameters: Schema.Struct({ value: Schema.String }),
         success: Schema.Struct({ ok: Schema.Boolean }),

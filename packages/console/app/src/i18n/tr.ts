@@ -218,7 +218,7 @@ export const dict = {
   "go.plans.individuals": "Bireysel",
   "go.plans.teams": "Ekipler",
   "go.plans.month": "aylık",
-  "go.plans.memberMonth": "üye başına aylık",
+  "go.plans.memberMonth": "üye başına\naylık",
   "go.plans.plus.cta": "Go Plus'a abone ol",
   "go.plans.plus.description": "Go Plus ayda 40$'dır ve daha yüksek limitler sunar.",
   "go.plans.teams.cta": "Go Teams'e abone ol",

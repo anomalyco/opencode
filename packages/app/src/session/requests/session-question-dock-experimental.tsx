@@ -194,23 +194,47 @@ function Option(props: {
   shortcut?: string
   disabled: boolean
   tabbable: boolean
-  ref?: (el: HTMLButtonElement) => void
+  ref?: (el: HTMLDivElement) => void
   onFocus?: VoidFunction
   onClick: VoidFunction
 }) {
+  let pointer: { x: number; y: number } | undefined
+
   return (
-    <button
-      type="button"
+    <div
       ref={props.ref}
       data-slot="question-option"
       data-picked={props.picked}
+      data-disabled={props.disabled}
       role={props.multi ? "checkbox" : "radio"}
       aria-checked={props.picked}
       aria-keyshortcuts={props.shortcut}
-      tabindex={props.tabbable ? 0 : -1}
-      disabled={props.disabled}
+      tabindex={!props.disabled && props.tabbable ? 0 : -1}
+      aria-disabled={props.disabled}
       onFocus={props.onFocus}
-      onClick={props.onClick}
+      onPointerDown={(event) => (pointer = { x: event.clientX, y: event.clientY })}
+      onClick={(event) => {
+        const moved = pointer && (event.clientX !== pointer.x || event.clientY !== pointer.y)
+
+        pointer = undefined
+
+        if (props.disabled) return
+
+        const selection = window.getSelection()
+
+        // Padding and nonselectable marks can retain an old highlight without selecting text.
+        if (
+          event.detail > 0 &&
+          (moved || event.shiftKey) &&
+          !(event.target instanceof Element && event.target.closest('[data-slot="question-option-check"]')) &&
+          selection &&
+          !selection.isCollapsed &&
+          selection.getRangeAt(0).intersectsNode(event.currentTarget)
+        )
+          return
+
+        props.onClick()
+      }}
     >
       <Mark multi={props.multi} picked={props.picked} shortcut={props.shortcut} />
       <span data-slot="question-option-main">
@@ -223,7 +247,7 @@ function Option(props: {
           </span>
         </Show>
       </span>
-    </button>
+    </div>
   )
 }
 
@@ -270,7 +294,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   let customRow: HTMLDivElement | undefined
   let highlightRef: HTMLSpanElement | undefined
   let customInput: HTMLInputElement | undefined
-  let optsRef: HTMLButtonElement[] = []
+  let optsRef: HTMLDivElement[] = []
   let replied = false
 
   const question = createMemo(() => questions()[store.tab])
@@ -348,10 +372,12 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   // grows past it and springs back.
   const limit = { max: Infinity, chrome: 0 }
   const cap = () => limit.max - limit.chrome
+  const detailsCap = () => Math.max(48, (limit.max - 120) * 0.45)
+  const shownDetails = (details = content.details) => Math.min(details, detailsCap())
   // The room the answers box has now, while the question text springs to its height, and once it is there.
-  const room = () => cap() - boxes.details.value
-  const settled = (details = content.details) => cap() - details
-  const scroll = { top: 0, view: 0 }
+  const room = () => Math.max(0, cap() - boxes.details.value)
+  const settled = (details = content.details) => Math.max(0, cap() - shownDetails(details))
+  const scroll = { details: 0, top: 0, view: 0 }
 
   const measure = () => {
     if (!root) return
@@ -371,7 +397,10 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     // The dock sits at the foot of the column it shares with the timeline, in the app inside a zero-height row that it
     // overflows upward. Grown past the column it spills out of it, so the column bounds it, not the dock's own edge.
     const column = bounds(dock?.parentElement)
-    const bottom = Math.min(window.innerHeight, column?.bottom ?? window.innerHeight)
+    const parent = dock?.parentElement?.getBoundingClientRect()
+    const edge = parent && parent.width > 0 ? parent.bottom : Infinity
+    const view = window.visualViewport ? window.visualViewport.offsetTop + window.visualViewport.height : Infinity
+    const bottom = Math.min(window.innerHeight, view, column?.bottom ?? Infinity, edge)
 
     // Whatever the dock holds besides the question, above it or below, takes from the same height.
     const around =
@@ -387,6 +416,8 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     if (!store.minimized && optionsRef && detailsFrame)
       limit.chrome = root.offsetHeight - optionsRef.offsetHeight - detailsFrame.offsetHeight
     root.style.setProperty("--question-prompt-max-height", `${limit.max}px`)
+
+    if (content.details > 0) boxes.details.snap(shownDetails())
 
     if (content.list > 0) boxes.list.snap(Math.min(content.list, settled()))
     paint()
@@ -452,6 +483,11 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
     makeEventListener(window, "resize", requestMeasure)
 
+    if (window.visualViewport) {
+      makeEventListener(window.visualViewport, "resize", requestMeasure)
+      makeEventListener(window.visualViewport, "scroll", requestMeasure)
+    }
+
     const dock = root?.closest('[data-component="session-composer-dock"]')
     const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
     createResizeObserver([dock, scroller], requestMeasure)
@@ -485,12 +521,17 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
       // The answers box opens only as far as the room the new question text leaves it at rest.
       ;(["details", "list"] as const).forEach((key) => {
         const spring = boxes[key]
-        const size = key === "list" ? Math.min(content.list, settled()) : content.details
+        const size = key === "list" ? Math.min(content.list, settled()) : shownDetails()
 
         if (spring.target === size) return
 
-        if (fresh[key] || !questionMotion()) spring.snap(size)
-        else tune(spring, resize()).set(size)
+        if (fresh[key] || !questionMotion()) {
+          spring.snap(size)
+
+          return
+        }
+
+        tune(spring, resize()).set(size)
       })
       wake()
     })
@@ -795,7 +836,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
           ...track(live, -dir * reach, moving, options, v.launch()),
           tab: store.tab,
           // The answers box scrolls back to the top for the new question, so the copy keeps its place on screen.
-          els: [copy(detailsRef, detailsFrame), copy(listRef, optionsTrack, -scroll.top)],
+          els: [copy(detailsRef, detailsFrame, -scroll.details), copy(listRef, optionsTrack, -scroll.top)],
           details: content.details,
           list: content.list,
           scroll: scroll.top,
@@ -828,9 +869,10 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
     const sized = questionMotion()
 
     if (detailsFrame && content.details > 0) {
-      const shown = boxes.details.value
+      const shown = Math.min(boxes.details.value, detailsCap())
       detailsFrame.style.height = sized ? `${shown.toFixed(2)}px` : ""
-      mask(detailsFrame, 0, Math.max(content.details, ghost?.details ?? 0) - shown, shown, sliding)
+      const above = store.minimized ? 0 : scroll.details
+      mask(detailsFrame, above, Math.max(content.details, ghost?.details ?? 0) - above - shown, shown, sliding)
     }
 
     if (optionsRef && content.list > 0) {
@@ -980,6 +1022,8 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
       setStore("editing", false)
     })
     optsRef.length = options().length
+
+    if (detailsFrame) detailsFrame.scrollTop = scroll.details = 0
 
     if (optionsRef) optionsRef.scrollTop = scroll.top = 0
 
@@ -1137,7 +1181,24 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
                 />
               </div>
             </div>
-            <div data-slot="question-details-frame" ref={(el) => (detailsFrame = el)}>
+            <div
+              data-slot="question-details-frame"
+              data-scrollable={!store.minimized || undefined}
+              ref={(el) => (detailsFrame = el)}
+              onScroll={(event) => {
+                scroll.details = event.currentTarget.scrollTop
+
+                if (!detailsFrame) return
+                const shown = Math.min(boxes.details.value, detailsCap())
+                mask(
+                  detailsFrame,
+                  scroll.details,
+                  Math.max(content.details, ghost?.details ?? 0) - scroll.details - shown,
+                  shown,
+                  !!(into || ghost),
+                )
+              }}
+            >
               <div data-slot="question-details" ref={(el) => (detailsRef = el)}>
                 <div
                   data-slot="question-text"
@@ -1252,6 +1313,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
         <div
           ref={(el) => (optionsRef = el)}
           data-slot="question-options"
+          data-scrollable
           role={multi() ? "group" : "radiogroup"}
           aria-label={question()?.question}
           inert={store.minimized}

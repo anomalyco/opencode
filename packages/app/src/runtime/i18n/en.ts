@@ -550,6 +550,8 @@ export const dict = {
   "error.chain.configInvalidWithMessage": "Config file at {{path}} is invalid: {{message}}",
 
   "notification.permission.title": "Permission required",
+  "notification.question.title": "Question requires an answer",
+  "notification.elicitation.title": "Input requested",
 
   "notification.session.responseReady.title": "Response ready",
   "notification.session.error.title": "Session error",
@@ -876,6 +878,7 @@ export const dict = {
   "settings.server.preferences.websearch.description": "Select the search provider agents use to search the web",
   "settings.projects.title": "Projects",
   "settings.projects.description": "Manage projects and their settings",
+  "settings.projects.other": "Other projects",
   "settings.projects.empty": "No projects found",
   "settings.projects.empty.title": "No projects yet",
   "settings.projects.empty.description": "Add a project to get started",
@@ -1055,6 +1058,8 @@ export const dict = {
     "Show system notification when the agent is complete or needs attention",
   "settings.general.notifications.permissions.title": "Permissions",
   "settings.general.notifications.permissions.description": "Show system notification when a permission is required",
+  "settings.general.notifications.questions.title": "Questions",
+  "settings.general.notifications.questions.description": "Show system notification when the agent asks a question",
   "settings.general.notifications.errors.title": "Errors",
   "settings.general.notifications.errors.description": "Show system notification when an error occurs",
 
@@ -1062,6 +1067,8 @@ export const dict = {
   "settings.general.sounds.agent.description": "Play sound when the agent is complete or needs attention",
   "settings.general.sounds.permissions.title": "Permissions",
   "settings.general.sounds.permissions.description": "Play sound when a permission is required",
+  "settings.general.sounds.questions.title": "Questions",
+  "settings.general.sounds.questions.description": "Play sound when the agent asks a question",
   "settings.general.sounds.errors.title": "Errors",
   "settings.general.sounds.errors.description": "Play sound when an error occurs",
   "settings.general.sounds.interface.title": "Interface",
