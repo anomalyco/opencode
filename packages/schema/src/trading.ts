@@ -108,6 +108,44 @@ export const Task = Schema.Struct({
 }).annotate({ identifier: "Trading.Task" })
 export interface Task extends Schema.Schema.Type<typeof Task> {}
 
+/**
+ * One closed trade, harvested from the bot's own registro.log rows. `ts` is the bot's own
+ * log timestamp (epoch ms on the PC clock); `message` is that row verbatim, with the bot's
+ * bracketed gross USD figure parsed into `pnl` (null when the row carries none).
+ */
+export const Trade = Schema.Struct({
+  system: Schema.String,
+  ts: Schema.Number,
+  pnl: Schema.NullOr(Schema.Number),
+  message: Schema.String,
+}).annotate({ identifier: "Trading.Trade" })
+export interface Trade extends Schema.Schema.Type<typeof Trade> {}
+
+/** One sampled point of the account's equity curve. Both values stay null until IBKR reports them. */
+export const EquityPoint = Schema.Struct({
+  ts: Schema.Number,
+  equity: Schema.NullOr(Schema.Number),
+  pnl_day: Schema.NullOr(Schema.Number),
+}).annotate({ identifier: "Trading.EquityPoint" })
+export interface EquityPoint extends Schema.Schema.Type<typeof EquityPoint> {}
+
+/** The engine's daily-loss guard: stop every bot when the day P/L reaches `-loss_day_limit`. */
+export const Risk = Schema.Struct({
+  /** USD; 0 disables the guard. */
+  loss_day_limit: Schema.Number,
+  /** Epoch ms when the guard fired and stopped every running bot; null while armed. */
+  triggered_at: Schema.NullOr(Schema.Number),
+}).annotate({ identifier: "Trading.Risk" })
+export interface Risk extends Schema.Schema.Type<typeof Risk> {}
+
+/** The panic button's outcome: the systems stopped (if any were running) plus the close-all verdict. */
+export const PanicResult = Schema.Struct({
+  stopped: Schema.Array(Schema.String),
+  close: PositionCloseResult,
+  message: Schema.String,
+}).annotate({ identifier: "Trading.PanicResult" })
+export interface PanicResult extends Schema.Schema.Type<typeof PanicResult> {}
+
 export const Snapshot = Schema.Struct({
   version: Schema.String,
   /** true while the IBKR TWS socket (demo 7497) is up; account and positions are empty otherwise. */
@@ -118,5 +156,11 @@ export const Snapshot = Schema.Struct({
   logs: Schema.Array(Log),
   /** Recent scheduled tasks, newest first. */
   tasks: Schema.Array(Task),
+  /** Closed trades harvested from the bots' logs, newest first, capped to the most recent 200. */
+  trades: optional(Schema.Array(Trade)),
+  /** The account's equity curve, oldest first, sampled every 15 s from the account data, capped to 1000 points. */
+  equity: optional(Schema.Array(EquityPoint)),
+  /** The daily-loss guard; absent only from snapshots of an engine predating this field. */
+  risk: optional(Risk),
 }).annotate({ identifier: "Trading.Snapshot" })
 export interface Snapshot extends Schema.Schema.Type<typeof Snapshot> {}

@@ -268,6 +268,11 @@ import type {
   ExperimentalTradingTaskAddOutput,
   ExperimentalTradingTaskCancelInput,
   ExperimentalTradingTaskCancelOutput,
+  ExperimentalTradingConnectOutput,
+  ExperimentalTradingDisconnectOutput,
+  ExperimentalTradingPanicOutput,
+  ExperimentalTradingRiskUpdateInput,
+  ExperimentalTradingRiskUpdateOutput,
   ExperimentalArtifactsProvidersInput,
   ExperimentalArtifactsProvidersOutput,
   ExperimentalArtifactsListInput,
@@ -1692,6 +1697,53 @@ export function make(options: ClientOptions) {
                 path: `/api/experimental/trading/task/${encodeURIComponent(input.taskID)}/cancel`,
                 successStatus: 200,
                 declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
+        connect: (requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalTradingConnectOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/trading/connect`,
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        disconnect: (requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalTradingDisconnectOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/trading/disconnect`,
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        panic: (requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalTradingPanicOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/trading/panic`,
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        risk: {
+          update: (input: ExperimentalTradingRiskUpdateInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalTradingRiskUpdateOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/trading/risk`,
+                body: { lossDayLimit: input["lossDayLimit"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401],
                 empty: false,
               },
               requestOptions,

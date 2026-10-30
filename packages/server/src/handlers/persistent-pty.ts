@@ -102,6 +102,25 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
           return { data: task }
         }),
       )
+      .handle("trading.connect", Effect.fn(function* () {
+        return { data: yield* trading.connect() }
+      }))
+      .handle("trading.disconnect", Effect.fn(function* () {
+        return { data: yield* trading.disconnect() }
+      }))
+      .handle("trading.panic", Effect.fn(function* () {
+        return { data: yield* trading.panic() }
+      }))
+      .handle(
+        "trading.risk.update",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* trading.riskUpdate({ loss_day_limit: ctx.payload.lossDayLimit }).pipe(
+              Effect.mapError((error) => invalidTask(error.message)),
+            ),
+          }
+        }),
+      )
       .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {

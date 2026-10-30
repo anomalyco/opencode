@@ -18,7 +18,7 @@ import {
   type Order,
 } from "@stoqey/ib"
 import { Database } from "./database/database.js"
-import { TradingTaskTable } from "./trading/sql.js"
+import { TradingRiskTable, TradingTaskTable, TradingTradeTable } from "./trading/sql.js"
 
 export class SystemNotFoundError extends Schema.TaggedError<SystemNotFoundError>()("TradingEngine.SystemNotFound", {
   systemID: Schema.String,
@@ -66,8 +66,36 @@ export interface Interface {
   readonly taskAdd: (input: TaskAddInput) => Effect.Effect<Trading.Task, InvalidTaskError | SystemNotFoundError>
   /** Withdraws a pending task so it never fires. */
   readonly taskCancel: (id: Trading.TaskID) => Effect.Effect<Trading.Task, InvalidTaskError | TaskNotFoundError>
+  /** Links the TWS socket up (the user's own click); the 5 s reconnect loop starts chasing until TWS accepts. Nothing connects at boot. Returns the current account (null until the balances arrive). */
+  readonly connect: () => Effect.Effect<Trading.Account | null>
+  /** Drops the TWS socket and stops the reconnect chase until the next `connect`. */
+  readonly disconnect: () => Effect.Effect<Trading.Account | null>
+  /**
+   * Stops every running bot (same pid-guarded kill path as the user's stop) and then runs the
+   * emergency close-all over the open positions. Nothing is re-armed afterwards; the systems'
+   * flags stay off until reactivated. The caller must have confirmed with the user first.
+   */
+  readonly panic: () => Effect.Effect<Trading.PanicResult>
+  /** Sets the daily-loss limit; 0 disables the guard. Persisted. */
+  readonly riskUpdate: (input: RiskUpdateInput) => Effect.Effect<Trading.Risk, InvalidTaskError>
   /** The expiry loop; forked once from `process.ts`, like the Schedule loop. */
   readonly run: Effect.Effect<never>
+}
+
+/** When an engine stop was ordered; the record names the caller honestly. */
+export type StopOrigin = "user" | "task" | "riesgo" | "panic"
+
+/** The record's verdict line for each stop origin. */
+const STOP_ORIGIN_MESSAGE: Record<StopOrigin, string> = {
+  user: "Bot parado por el usuario",
+  task: "Bot parado por tarea programada",
+  riesgo: "Bot parado por límite de pérdida diaria",
+  panic: "Bot parado por pánico",
+}
+
+export interface RiskUpdateInput {
+  /** USD; 0 disables the guard. */
+  readonly loss_day_limit: number
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/TradingEngine") {}
@@ -84,6 +112,9 @@ export interface Options {
 /** The user's real system pool folder and the ib_async folder the bots import from. */
 const SISTEMAS_DIR_DEFECTO = "C:\\Users\\iker\\Desktop\\trading-algoritmico-main\\demo"
 const PYTHONPATH_BOTS_DEFECTO = "D:\\.more\\.windows_old\\dash"
+
+/** The daily-loss guard's default limit (USD) for a first run without a persisted row. */
+const DEFAULT_LOSS_DAY_LIMIT = 250
 
 /** Display metadata per known pool folder; a folder without an entry still works and reads as unknown. */
 const META: Record<string, { symbol: string; timeframe: string }> = {
@@ -274,8 +305,27 @@ const layer = (options: Options = {}) =>
       const logs = { value: [] as Trading.Log[] }
       // Recent tasks held in memory so the synchronous snapshot can include them without a DB read.
       const tasks = { value: [] as Trading.Task[] }
+      // Recent closed trades (newest first), harvested from the bots' logs; written to the
+      // trading_trade table as well, so they survive restarts. Capped to 200.
+      const trades = { value: [] as Trading.Trade[] }
+      // The equity curve (oldest first), sampled every 15 s while the tick runs. Memory only;
+      // Capped to 1000 points (~4 hours at 15 s).
+      const equity = { value: [] as Trading.EquityPoint[] }
+      // The daily-loss guard, persisted in the trading_risk single row.
+      const risk = { value: null as Trading.Risk | null }
       const pnlSubscribed = new Set<string>()
       let positionKey = ""
+
+      // Boot state from the DB: the daily-loss guard row (defaulting on a first run) and the
+      // recent-trades ring, so both survive restarts.
+      const guardRow = (yield* db.select().from(TradingRiskTable).where(eq(TradingRiskTable.id, "default")).all().pipe(Effect.orDie))[0]
+      risk.value =
+        guardRow !== undefined
+          ? { loss_day_limit: guardRow.loss_day_limit, triggered_at: guardRow.triggered_at }
+          : { loss_day_limit: DEFAULT_LOSS_DAY_LIMIT, triggered_at: null }
+      trades.value = (yield* db.select().from(TradingTradeTable).orderBy(desc(TradingTradeTable.ts)).limit(200).all().pipe(Effect.orDie)).map(
+        (row) => ({ system: row.system, ts: row.ts, pnl: row.pnl, message: row.message }),
+      )
 
       interface LogExtra {
         readonly ts?: number
@@ -300,7 +350,7 @@ const layer = (options: Options = {}) =>
             : { ts: extra?.ts ?? Date.now(), level, system, message }
         logs.value = logs.value.length >= 800 ? [...logs.value.slice(-799), entry] : [...logs.value, entry]
       }
-      pushLog("info", "motor", `Motor nativo arrancado · esperando TWS en ${host}:${port} (demo)`)
+      pushLog("info", "motor", `Motor nativo arrancado · sin conexión con TWS; pulsa Conectar para enlazar ${host}:${port} (demo)`)
 
       const ib = new IBApiNext({ host, port, reconnectInterval: 5_000, connectionWatchdogInterval: 15 })
 
@@ -440,7 +490,19 @@ const layer = (options: Options = {}) =>
           }),
         )
 
-        ib.connect(CLIENT_ID)
+      // The socket is NOT connected at boot: it links up only through the user's Conectar
+      // action. Once linked, the 5 s reconnect interval keeps chasing a flapping TWS; the
+      // user's Desconectar fully stops that chase until the next Conectar.
+      const connect = Effect.gen(function* () {
+        if (connected.value) return toSchemaAccount()
+        pushLog("info", "motor", `Conectando con TWS en ${host}:${port} (demo)… reintento cada 5 s hasta que acepte`)
+        yield* Effect.sync(() => ib.connect(CLIENT_ID))
+        return toSchemaAccount()
+      })
+      const disconnect = Effect.gen(function* () {
+        yield* Effect.sync(() => ib.disconnect())
+        return null
+      })
 
       // ---------------------------------------------------------- bots ----------
       // One real bot process per system. The truth about a bot is its folder's panel.pid plus
@@ -491,6 +553,13 @@ const layer = (options: Options = {}) =>
         event?: "open" | "close" | "signal"
       }
 
+      /** One close row harvested as a trade: the bot's own timestamp, message and optional gross figure. */
+      interface CosechaCierre {
+        ts: number | null
+        pnl: number | null
+        message: string
+      }
+
       const tsDe = (match: RegExpExecArray) =>
         new Date(
           Number(match[1]),
@@ -514,8 +583,9 @@ const layer = (options: Options = {}) =>
        * result) and its closed-trade result from FUERA rows. Timestamp-less rows are either
        * indented traceback continuations (they glue to the beat above) or plain lifecycle
        * notes that timestamp on arrival. */
-      const parsearChunk = (systemID: string, chunk: string, cosecha = true): Latido[] => {
+      const parsearChunk = (systemID: string, chunk: string, cosecha = true): { latidos: Latido[]; cierres: CosechaCierre[] } => {
         const latidos: Latido[] = []
+        const cierres: CosechaCierre[] = []
         let ultimaTs: number | null = null
         for (const raw of chunk.split("\n")) {
           const texto = raw.trimEnd()
@@ -543,6 +613,8 @@ const layer = (options: Options = {}) =>
               // The bot's own words state what the trade made; that stays its last shown pnl.
               const brutos = /\(([-+0-9.]+) USD brutos\)/.exec(sinTag)
               if (brutos !== null) pnlBots.set(systemID, Number(brutos[1]))
+              // Every close row is one trade for the trade record, timestamped by the bot.
+              cierres.push({ ts, pnl: brutos === null ? null : Number(brutos[1]), message: sinTag })
             }
             latidos.push({ ts, level: nivelError(sinTag), message: sinTag, event })
             continue
@@ -559,7 +631,7 @@ const layer = (options: Options = {}) =>
             // it; inherit that row's hour so the record keeps the fault in its true place.
             latidos.push({ ts: ultimaTs, level: "error", message: texto })
         }
-        return latidos
+        return { latidos, cierres }
       }
 
       const runtimeNuevo = (): Runtime => ({
@@ -607,17 +679,51 @@ const layer = (options: Options = {}) =>
         const registro = await leerCola(`${def.dir}\\registro.log`, runtime.registroOffset)
         if (registro !== null) {
           runtime.registroOffset = registro.size
-          for (const latido of parsearChunk(def.id, registro.chunk, cosecha)) {
+          const salida = parsearChunk(def.id, registro.chunk, cosecha)
+          for (const latido of salida.latidos) {
             pushLog(latido.level, def.name, latido.message, { ts: latido.ts ?? undefined, event: latido.event })
           }
+          if (salida.cierres.length > 0) registrarTrades(def.id, salida.cierres)
         }
         const consola = await leerCola(`${def.dir}\\consola.log`, runtime.consolaOffset)
         if (consola !== null) {
           runtime.consolaOffset = consola.size
-          for (const latido of parsearChunk(def.id, consola.chunk, cosecha)) {
+          const salida = parsearChunk(def.id, consola.chunk, cosecha)
+          for (const latido of salida.latidos) {
             pushLog(latido.level, def.name, latido.message, { ts: latido.ts ?? undefined, event: latido.event })
           }
         }
+      }
+
+      /** Records a bot's closed trades: insert-if-new into the trading_trade table (the
+       * (system, ts) primary key makes a replayed log tail a no-op) and newest-first into
+       * the snapshot ring, capped to the most recent 200. */
+      const registrarTrades = (systemID: string, cierres: readonly CosechaCierre[]) => {
+        const ahora = Date.now()
+        let nueva = [...trades.value]
+        for (const cierre of cierres) {
+          const trade: Trading.Trade = {
+            system: systemID,
+            ts: cierre.ts ?? ahora,
+            pnl: cierre.pnl ?? null,
+            message: cierre.message,
+          }
+          db
+            .insert(TradingTradeTable)
+            .values({
+              system: trade.system,
+              ts: trade.ts,
+              pnl: trade.pnl,
+              message: trade.message,
+              time_created: trade.ts,
+              time_updated: trade.ts,
+            })
+            .onConflictDoNothing()
+            .run()
+          if (!nueva.some((previo) => previo.system === trade.system && previo.ts === trade.ts)) nueva.unshift(trade)
+        }
+        nueva = nueva.sort((a, b) => b.ts - a.ts).slice(0, 200)
+        trades.value = nueva
       }
 
       let ultimoSondeo = 0
@@ -755,7 +861,7 @@ const layer = (options: Options = {}) =>
         return toSchemaSystem(def)
       })
 
-      const detener = Effect.fn("TradingEngine.detener")(function* (id: string, origin: "user" | "task") {
+      const detener = Effect.fn("TradingEngine.detener")(function* (id: string, origin: StopOrigin) {
         const def = sistemas.find((candidata) => candidata.id === id)
         if (def === undefined) return yield* new SystemNotFoundError({ systemID: id })
         const runtime = bots.get(id)
@@ -788,9 +894,77 @@ const layer = (options: Options = {}) =>
         if (def.dir !== null) {
           yield* Effect.promise(() => unlink(`${def.dir}\\panel.pid`).catch(() => undefined))
         }
-        pushLog("info", def.name, origin === "user" ? "Bot parado por el usuario" : "Bot parado por tarea programada")
+        pushLog("info", def.name, STOP_ORIGIN_MESSAGE[origin])
         return toSchemaSystem(def)
       })
+
+      /** Stops every running bot in turn; a stop failure never blocks the rest. */
+      const detenerTodos = Effect.fn("TradingEngine.detenerTodos")(function* (origin: StopOrigin) {
+        const detenidos: string[] = []
+        for (const def of sistemas) {
+          if ((bots.get(def.id)?.startedAt ?? null) === null) continue
+          yield* detener(def.id, origin).pipe(
+            Effect.catch(() => Effect.succeed(toSchemaSystem(def))),
+          )
+          detenidos.push(def.name)
+        }
+        return detenidos
+      })
+
+      /** The daily-loss guard: fires once when the day P/L reaches the minus limit, stopping
+       * every running bot, and stays latched until the day P/L recovers above the limit. */
+      const aplicarRiesgo = Effect.gen(function* () {
+        const riesgo = risk.value
+        if (riesgo === null || riesgo.loss_day_limit <= 0) return
+        const dia = pnl.value.day
+        if (dia === null) return
+        if (riesgo.triggered_at !== null) {
+          if (dia > -riesgo.loss_day_limit) {
+            const rearmado = { ...riesgo, triggered_at: null }
+            yield* guardarRiesgo(rearmado)
+            pushLog(
+              "info",
+              "motor",
+              `Límite de pérdida rearmado · P/L del día ${dia.toFixed(2)} USD vuelve a estar por encima de -${riesgo.loss_day_limit} USD`,
+            )
+          }
+          return
+        }
+        if (dia > -riesgo.loss_day_limit) return
+        yield* detenerTodos("riesgo")
+        const disparado = { ...riesgo, triggered_at: Date.now() }
+        yield* guardarRiesgo(disparado)
+        pushLog(
+          "error",
+          "motor",
+          `Límite de pérdida diaria alcanzado · P/L del día ${dia.toFixed(2)} USD ≤ -${riesgo.loss_day_limit} USD · todo bot detenido`,
+        )
+      })
+
+      const guardarRiesgo = Effect.fn("TradingEngine.guardarRiesgo")(function* (riesgo: Trading.Risk) {
+        const stamp = Date.now()
+        yield* db
+          .insert(TradingRiskTable)
+          .values({ id: "default", loss_day_limit: riesgo.loss_day_limit, triggered_at: riesgo.triggered_at, time_created: stamp, time_updated: stamp })
+          .onConflictDoUpdate({
+            target: TradingRiskTable.id,
+            set: { loss_day_limit: riesgo.loss_day_limit, triggered_at: riesgo.triggered_at, time_updated: stamp },
+          })
+          .run()
+          .pipe(Effect.orDie)
+        risk.value = riesgo
+      })
+
+      /** One equity point every 15 s while the tick runs; only reported values are kept. */
+      let equityUltima = 0
+      const muestrearEquity = () => {
+        const ahora = Date.now()
+        if (ahora - equityUltima < 15_000) return
+        equityUltima = ahora
+        const punto: Trading.EquityPoint = { ts: ahora, equity: balances.value.equity, pnl_day: pnl.value.day }
+        if (punto.equity === null && punto.pnl_day === null) return
+        equity.value = [...equity.value, punto].slice(-1000)
+      }
 
       /** Orders the task list newest first; the snapshot shows this exact slice. */
       const refreshTasks = Effect.gen(function* () {
@@ -926,6 +1100,8 @@ const layer = (options: Options = {}) =>
         // Bots first: one tail pass of every running bot's record, plus the 45 s state sweep.
         yield* Effect.promise(() => Promise.all(sistemas.filter((def) => def.dir !== null).map((def) => ingestaUna(def))))
         yield* Effect.promise(() => sondear())
+        yield* Effect.sync(muestrearEquity)
+        yield* aplicarRiesgo
         const due = yield* db
           .select()
           .from(TradingTaskTable)
@@ -1256,36 +1432,84 @@ const layer = (options: Options = {}) =>
         }
       })
 
+      /** The panic button: every running bot stops (the same pid-guarded kill path the user's
+       * stop takes) and then the emergency close-all runs over the open positions. The
+       * systems' active flags stay off; re-arming is the user's own reactivation. */
+      const panic = Effect.fn("TradingEngine.panic")(function* () {
+        pushLog("warning", "motor", "Pánico · deteniendo todo bot en marcha y limpiando las posiciones abiertas")
+        const detenidos = yield* detenerTodos("panic")
+        const guarda = risk.value
+        if (guarda !== null && guarda.triggered_at === null) {
+          // A manual panic pins the guard's same stop state, so a bot restarted by a pending
+          // task cannot quietly re-open the day's wound.
+          yield* guardarRiesgo({ ...guarda, triggered_at: Date.now() })
+          pushLog("info", "motor", "Pánico · límite de pérdida marcado como disparado hasta que el P/L del día recupere")
+        }
+        const cierre = yield* closeAllPositions()
+        const resumen = `Pánico: ${detenidos.length} bot(s) detenido(s). ${cierre.message}`
+        pushLog("warning", "motor", resumen)
+        return { stopped: detenidos, close: cierre, message: resumen }
+      })
+
+      const riskUpdate = Effect.fn("TradingEngine.riskUpdate")(function* (input: RiskUpdateInput) {
+        if (!Number.isFinite(input.loss_day_limit) || input.loss_day_limit < 0)
+          return yield* new InvalidTaskError({ message: "lossDayLimit must be a non-negative number of USD." })
+        const guarda = risk.value
+        const riesgo: Trading.Risk = {
+          loss_day_limit: input.loss_day_limit,
+          triggered_at: guarda === null ? null : guarda.triggered_at,
+        }
+        yield* guardarRiesgo(riesgo)
+        pushLog(
+          "info",
+          "motor",
+          riesgo.loss_day_limit === 0
+            ? "Límite de pérdida diaria desactivado"
+            : `Límite de pérdida diaria fijado a ${riesgo.loss_day_limit} USD`,
+        )
+        return riesgo
+      })
+
       yield* Effect.promise(() => escanearArranque())
 
       const run: Effect.Effect<never> = reconcileAtBoot.pipe(
         Effect.andThen(Effect.forever(tick().pipe(Effect.andThen(Effect.sleep("5 seconds"))))),
       )
 
+      /** The account view of the last received IBKR values (null until an account id arrives). */
+      const toSchemaAccount = (): Trading.Account | null =>
+        accountId.value === null
+          ? null
+          : {
+              id: accountId.value,
+              type: `${accountType.value ?? "cuenta"} · IBKR demo (${port})`,
+              cash: balances.value.cash,
+              equity: balances.value.equity,
+              pnl_day: pnl.value.day,
+              pnl_realized: pnl.value.realized,
+            }
+
       return {
         snapshot: () => ({
           version: VERSION,
           connected: connected.value,
-          account:
-            accountId.value === null
-              ? null
-              : {
-                  id: accountId.value,
-                  type: `${accountType.value ?? "cuenta"} · IBKR demo (${port})`,
-                  cash: balances.value.cash,
-                  equity: balances.value.equity,
-                  pnl_day: pnl.value.day,
-                  pnl_realized: pnl.value.realized,
-                },
+          account: toSchemaAccount(),
           systems: sistemas.map(toSchemaSystem),
           positions: [...positions.value],
           logs: [...logs.value],
           tasks: [...tasks.value],
+          trades: [...trades.value],
+          equity: [...equity.value],
+          risk: risk.value === null ? { loss_day_limit: DEFAULT_LOSS_DAY_LIMIT, triggered_at: null } : { ...risk.value },
         }),
         activate: (systemID) => arrancar(systemID, "user"),
         pause: (systemID) => detener(systemID, "user"),
         closePosition,
         closeAllPositions,
+        connect: () => connect,
+        disconnect: () => disconnect,
+        panic,
+        riskUpdate,
         taskList: () => Effect.gen(function* () { if (tasks.value.length === 0) yield* refreshTasks; return [...tasks.value] }),
         taskAdd,
         taskCancel,

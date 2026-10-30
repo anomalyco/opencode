@@ -2472,6 +2472,24 @@ export type ExperimentalTradingTaskCancelOperation<E = never> = (
   input: ExperimentalTradingTaskCancelInput,
 ) => Effect.Effect<ExperimentalTradingTaskCancelOutput, E>
 
+export type ExperimentalTradingConnectOutput = Trading.Account | null
+export type ExperimentalTradingConnectOperation<E = never> = () => Effect.Effect<ExperimentalTradingConnectOutput, E>
+
+export type ExperimentalTradingDisconnectOutput = Trading.Account | null
+export type ExperimentalTradingDisconnectOperation<E = never> = () => Effect.Effect<
+  ExperimentalTradingDisconnectOutput,
+  E
+>
+
+export type ExperimentalTradingPanicOutput = Trading.PanicResult
+export type ExperimentalTradingPanicOperation<E = never> = () => Effect.Effect<ExperimentalTradingPanicOutput, E>
+
+export type ExperimentalTradingRiskUpdateInput = { readonly lossDayLimit: number }
+export type ExperimentalTradingRiskUpdateOutput = Trading.Risk
+export type ExperimentalTradingRiskUpdateOperation<E = never> = (
+  input: ExperimentalTradingRiskUpdateInput,
+) => Effect.Effect<ExperimentalTradingRiskUpdateOutput, E>
+
 export type ExperimentalArtifactsProvidersInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
 }
@@ -2574,6 +2592,10 @@ export interface ExperimentalApi<E = never> {
       readonly add: ExperimentalTradingTaskAddOperation<E>
       readonly cancel: ExperimentalTradingTaskCancelOperation<E>
     }
+    readonly connect: ExperimentalTradingConnectOperation<E>
+    readonly disconnect: ExperimentalTradingDisconnectOperation<E>
+    readonly panic: ExperimentalTradingPanicOperation<E>
+    readonly risk: { readonly update: ExperimentalTradingRiskUpdateOperation<E> }
   }
   readonly artifacts: {
     readonly providers: ExperimentalArtifactsProvidersOperation<E>

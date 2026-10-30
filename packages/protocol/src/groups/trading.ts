@@ -28,6 +28,12 @@ export const TaskAddPayload = Schema.Struct({
 }).annotate({ identifier: "Trading.TaskAddPayload" })
 export type TaskAddPayload = typeof TaskAddPayload.Type
 
+export const RiskUpdatePayload = Schema.Struct({
+  /** USD daily-loss limit; 0 disables the guard. */
+  lossDayLimit: Schema.Number,
+}).annotate({ identifier: "Trading.RiskUpdatePayload" })
+export type RiskUpdatePayload = typeof RiskUpdatePayload.Type
+
 /** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
 export const TradingEndpoints = [
   HttpApiEndpoint.get("trading.snapshot", "/api/experimental/trading/snapshot", {
@@ -119,6 +125,47 @@ export const TradingEndpoints = [
       "task.cancel",
       "Cancel a scheduled trading task",
       "Cancel a pending scheduled task so it never fires. Already resolved tasks (ran, missed or cancelled) cannot be cancelled.",
+    ),
+  ),
+  HttpApiEndpoint.post("trading.connect", "/api/experimental/trading/connect", {
+    success: Schema.Struct({ data: Schema.NullOr(Trading.Account) }),
+    error: [InvalidRequestError],
+  }).annotateMerge(
+    annotations(
+      "connect",
+      "Connect the engine to TWS",
+      "Link the engine's TWS socket up; nothing connects at boot or on any automation's behalf. The socket retries every 5 s until TWS accepts, and the account, positions and P/L start flowing afterwards. Returns the account (null while the balances have not arrived yet).",
+    ),
+  ),
+  HttpApiEndpoint.post("trading.disconnect", "/api/experimental/trading/disconnect", {
+    success: Schema.Struct({ data: Schema.NullOr(Trading.Account) }),
+    error: [InvalidRequestError],
+  }).annotateMerge(
+    annotations(
+      "disconnect",
+      "Disconnect the engine from TWS",
+      "Drop the engine's TWS socket and stop the reconnect chase; account, positions and P/L drain until the next connect. The pool's running bots are untouched. Returns null.",
+    ),
+  ),
+  HttpApiEndpoint.post("trading.panic", "/api/experimental/trading/panic", {
+    success: Schema.Struct({ data: Trading.PanicResult }),
+    error: [InvalidRequestError],
+  }).annotateMerge(
+    annotations(
+      "panic",
+      "Trigger the trading panic stop",
+      "Stop every running bot immediately (the engine's pid-guarded kill path) and then run the emergency close-all over every open position, whether or not any bot was running. Nothing is re-armed afterwards; the systems stay stopped until reactivated. Always called behind the user's explicit confirmation in the dashboard.",
+    ),
+  ),
+  HttpApiEndpoint.post("trading.risk.update", "/api/experimental/trading/risk", {
+    payload: RiskUpdatePayload,
+    success: Schema.Struct({ data: Trading.Risk }),
+    error: [InvalidRequestError],
+  }).annotateMerge(
+    annotations(
+      "risk.update",
+      "Update the daily-loss limit",
+      "Set the engine's daily-loss guard: when the account's day P/L reaches the minus limit while trading, every running bot is stopped and the guard stays latched until the day P/L recovers above the limit. A limit of 0 disables the guard. Persisted across restarts.",
     ),
   ),
 ] as const

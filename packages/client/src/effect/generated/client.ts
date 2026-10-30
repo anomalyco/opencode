@@ -268,6 +268,11 @@ import type {
   ExperimentalTradingTaskAddOutput,
   ExperimentalTradingTaskCancelInput,
   ExperimentalTradingTaskCancelOutput,
+  ExperimentalTradingConnectOutput,
+  ExperimentalTradingDisconnectOutput,
+  ExperimentalTradingPanicOutput,
+  ExperimentalTradingRiskUpdateInput,
+  ExperimentalTradingRiskUpdateOutput,
   ExperimentalArtifactsProvidersInput,
   ExperimentalArtifactsProvidersOutput,
   ExperimentalArtifactsListInput,
@@ -1730,6 +1735,39 @@ const EndpointExperimentalTradingTaskCancel =
       ),
     )
 
+const EndpointExperimentalTradingConnect = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalTradingConnectOutput>()(
+    raw["trading.connect"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalTradingDisconnect = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalTradingDisconnectOutput>()(
+    raw["trading.disconnect"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalTradingPanic = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalTradingPanicOutput>()(
+    raw["trading.panic"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalTradingRiskUpdate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalTradingRiskUpdateInput) =>
+    preserveEffect<ExperimentalTradingRiskUpdateOutput>()(
+      raw["trading.risk.update"]({ payload: { lossDayLimit: input["lossDayLimit"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const EndpointExperimentalArtifactsProviders =
   (raw: RawClient["server.experimental"]) => (input?: ExperimentalArtifactsProvidersInput) =>
     preserveEffect<ExperimentalArtifactsProvidersOutput>()(
@@ -1821,6 +1859,10 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
       add: EndpointExperimentalTradingTaskAdd(raw),
       cancel: EndpointExperimentalTradingTaskCancel(raw),
     },
+    connect: EndpointExperimentalTradingConnect(raw),
+    disconnect: EndpointExperimentalTradingDisconnect(raw),
+    panic: EndpointExperimentalTradingPanic(raw),
+    risk: { update: EndpointExperimentalTradingRiskUpdate(raw) },
   },
   artifacts: {
     providers: EndpointExperimentalArtifactsProviders(raw),

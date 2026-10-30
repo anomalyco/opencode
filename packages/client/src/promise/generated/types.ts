@@ -378,6 +378,24 @@ export type TradingTaskKind = "start-systems" | "stop-systems"
 
 export type TradingTaskStatus = "pending" | "ran" | "missed" | "cancelled"
 
+export type TradingTrade = {
+  system: string
+  ts: number | "Infinity" | "-Infinity" | "NaN"
+  pnl: number | "Infinity" | "-Infinity" | "NaN" | null
+  message: string
+}
+
+export type TradingEquityPoint = {
+  ts: number | "Infinity" | "-Infinity" | "NaN"
+  equity: number | "Infinity" | "-Infinity" | "NaN" | null
+  pnl_day: number | "Infinity" | "-Infinity" | "NaN" | null
+}
+
+export type TradingRisk = {
+  loss_day_limit: number | "Infinity" | "-Infinity" | "NaN"
+  triggered_at: number | "Infinity" | "-Infinity" | "NaN" | null
+}
+
 export type TradingSystem1 = {
   id: string
   name: string
@@ -391,6 +409,17 @@ export type TradingSystem1 = {
 }
 
 export type TradingPositionCloseResult = { ok: boolean; message: string }
+
+export type TradingAccount1 = {
+  id: string
+  type: string
+  cash: number | null
+  equity: number | null
+  pnl_day: number | null
+  pnl_realized: number | null
+}
+
+export type TradingRisk1 = { loss_day_limit: number; triggered_at: number | null }
 
 export type ArtifactCapability = "static" | "server-code" | "sqlite" | "durable-objects"
 
@@ -1006,6 +1035,8 @@ export type TradingTask1 = {
   time_created: number
   time_updated: number
 }
+
+export type TradingPanicResult = { stopped: Array<string>; close: TradingPositionCloseResult; message: string }
 
 export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
 
@@ -2282,6 +2313,9 @@ export type TradingSnapshot = {
   positions: Array<TradingPosition>
   logs: Array<TradingLog>
   tasks: Array<TradingTask>
+  trades?: Array<TradingTrade>
+  equity?: Array<TradingEquityPoint>
+  risk?: TradingRisk
 }
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
@@ -4726,6 +4760,16 @@ export type ExperimentalTradingTaskAddOutput = { data: TradingTask1 }["data"]
 export type ExperimentalTradingTaskCancelInput = { readonly taskID: string }
 
 export type ExperimentalTradingTaskCancelOutput = { data: TradingTask1 }["data"]
+
+export type ExperimentalTradingConnectOutput = { data: TradingAccount1 | null }["data"]
+
+export type ExperimentalTradingDisconnectOutput = { data: TradingAccount1 | null }["data"]
+
+export type ExperimentalTradingPanicOutput = { data: TradingPanicResult }["data"]
+
+export type ExperimentalTradingRiskUpdateInput = { readonly lossDayLimit: number }
+
+export type ExperimentalTradingRiskUpdateOutput = { data: TradingRisk1 }["data"]
 
 export type ExperimentalArtifactsProvidersInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
