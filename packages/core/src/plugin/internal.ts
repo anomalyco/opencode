@@ -92,6 +92,12 @@ import { WebFetchTool } from "../tool/plugin/webfetch.js"
 import { WebSearchTool } from "../tool/plugin/websearch.js"
 import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
+import { AttachmentTool } from "../tool/plugin/attachment.js"
+import { WorkspaceFolderTool } from "../tool/plugin/workspace-folder.js"
+import { UniversalExtensionTool } from "../tool/plugin/universal-extension.js"
+import { ProjectAttachments } from "../workspace-manager/attachments.js"
+import { MultiFolderWorkspace } from "../workspace-manager/multi-folder.js"
+import { ExtensionRegistry } from "../extension/registry.js"
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
@@ -165,6 +171,9 @@ const services = [
   WellKnown.Service,
   Worktree.Service,
   WorktreeStrategies.Service,
+  ProjectAttachments.Service,
+  MultiFolderWorkspace.Service,
+  ExtensionRegistry.Service,
 ] as const
 
 export type Requirements = Context.Service.Identifier<(typeof services)[number]>
@@ -221,6 +230,9 @@ export const requirements = LayerNode.group([
   WellKnown.node,
   Worktree.node,
   WorktreeStrategies.node,
+  ProjectAttachments.node,
+  MultiFolderWorkspace.node,
+  ExtensionRegistry.node,
 ])
 
 export type InternalPlugin = Plugin<Requirements | Scope.Scope>
@@ -263,6 +275,9 @@ const pre = [
   WebFetchTool.Plugin,
   WebSearchTool.Plugin,
   WriteTool.Plugin,
+  AttachmentTool.Plugin,
+  WorkspaceFolderTool.Plugin,
+  UniversalExtensionTool.Plugin,
   WarmingPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
 
