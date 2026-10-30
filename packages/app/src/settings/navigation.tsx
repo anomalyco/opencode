@@ -54,7 +54,9 @@ export function SettingsNavigation(props: {
 
   let root: HTMLDivElement | undefined
 
-  // In the wide layout every page shares this scroller, so a newly opened page starts at its top.
+  // In the wide layout every page shares this scroller, so a newly opened page starts at its top. The scroll offset is
+  // DOM state, and a page opens from tabs, search, links between pages and history, so this follows the selected page
+  // instead of one event handler.
   createEffect(
     on(
       () => props.value,
