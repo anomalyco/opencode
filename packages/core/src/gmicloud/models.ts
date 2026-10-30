@@ -48,13 +48,42 @@ export async function load(baseURL: string, apiKey: string): Promise<Snapshot> {
 }
 
 export function derive(baseURL: string, remote: Snapshot, existing: readonly Model.Info[]) {
-  const templates = new Map(existing.map((model) => [model.id, model]))
   const result = new Map<Model.ID, Model.Info>()
   for (const item of remote) {
     const id = Model.ID.make(item.id)
-    result.set(id, build(id, item, baseURL, templates.get(id)))
+    result.set(id, build(id, item, baseURL, template(item.id, existing)))
   }
   return result
+}
+
+function template(id: string, existing: readonly Model.Info[]): { model: Model.Info; exact: boolean } | undefined {
+  const exact = existing.find((model) => model.id.toLowerCase() === id.toLowerCase())
+  if (exact) return { model: exact, exact: true }
+
+  const separator = id.indexOf("/")
+  if (separator <= 0) return undefined
+  const org = id.slice(0, separator).toLowerCase()
+  const model = id.slice(separator + 1)
+  const word = model.match(/^[a-z]+/i)?.[0].toLowerCase()
+  if (!word) return undefined
+
+  const candidate = existing.reduce<{ model: Model.Info; prefix: number } | undefined>((best, item) => {
+    const itemSeparator = item.id.indexOf("/")
+    if (itemSeparator <= 0 || item.id.slice(0, itemSeparator).toLowerCase() !== org) return best
+    const itemModel = item.id.slice(itemSeparator + 1)
+    if (itemModel.match(/^[a-z]+/i)?.[0].toLowerCase() !== word) return best
+    let prefix = 0
+    while (
+      prefix < model.length &&
+      prefix < itemModel.length &&
+      model[prefix]?.toLowerCase() === itemModel[prefix]?.toLowerCase()
+    )
+      prefix++
+    if (best && prefix <= best.prefix) return best
+    return { model: item, prefix }
+  }, undefined)
+  if (!candidate) return undefined
+  return { model: candidate.model, exact: false }
 }
 
 function price(value: string | number | undefined, fallback: Money.USDPerMillionTokens) {
@@ -68,24 +97,32 @@ function limit(value: number | undefined, fallback: number) {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback
 }
 
-function build(id: Model.ID, remote: RemoteModel, baseURL: string, previous?: Model.Info) {
-  const cost = previous?.cost[0]
-  const input = previous?.limit.input
+function build(
+  id: Model.ID,
+  remote: RemoteModel,
+  baseURL: string,
+  selected?: { model: Model.Info; exact: boolean },
+) {
+  const previous = selected?.model
+  const exact = selected?.exact ? previous : undefined
+  const cost = exact?.cost[0]
+  const input = exact?.limit.input
   return Model.Info.make({
     ...Model.Info.default(providerID, id),
     id,
     modelID: Model.ID.make(remote.id),
     providerID,
-    name: remote.name ?? previous?.name ?? remote.id,
+    type: previous?.type,
+    name: remote.name ?? exact?.name ?? remote.id,
     family: previous?.family,
     compatibility: previous?.compatibility,
     package: "@opencode/ai/providers/openai-compatible",
-    settings: Provider.mergeOverlay(previous?.settings, { baseURL, provider: providerID }),
+    settings: Provider.mergeOverlay(exact?.settings, { baseURL, provider: providerID }),
     headers: previous?.headers,
     body: previous?.body,
     capabilities: previous?.capabilities ?? { tools: true, input: ["text"], output: ["text"] },
     variants: previous?.variants ?? [],
-    time: previous?.time ?? { released: 0 },
+    time: exact?.time ?? { released: 0 },
     cost: [
       {
         input: price(remote.pricing?.prompt, cost?.input ?? Money.USDPerMillionTokens.zero),
@@ -96,10 +133,10 @@ function build(id: Model.ID, remote: RemoteModel, baseURL: string, previous?: Mo
         },
       },
     ],
-    status: previous?.status ?? "active",
-    enabled: previous?.enabled ?? true,
+    status: exact?.status ?? "active",
+    enabled: exact?.enabled ?? true,
     limit: {
-      context: limit(remote.context_length, previous?.limit.context ?? 0),
+      context: limit(remote.context_length, exact?.limit.context ?? 0),
       ...(input === undefined ? {} : { input }),
       output: previous?.limit.output ?? 0,
     },

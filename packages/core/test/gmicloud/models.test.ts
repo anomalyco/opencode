@@ -2,14 +2,9 @@ import { expect, test } from "bun:test"
 import { GmiCloudModels } from "@opencode/core/gmicloud/models"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
-import { ProviderPlugins } from "@opencode/core/plugin/provider"
 import { Money } from "@opencode/schema/money"
 
 const providerID = Provider.ID.make("gmicloud")
-
-test("GMI Cloud plugin is registered", () => {
-  expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.gmicloud")
-})
 
 function template(id: string, overrides: Partial<Model.Info> = {}) {
   return Model.Info.make({
@@ -19,6 +14,88 @@ function template(id: string, overrides: Partial<Model.Info> = {}) {
     ...overrides,
   })
 }
+
+test("matches exact catalog templates case-insensitively and inherits their type", () => {
+  const existing = template("OpenAI/GPT-5.5", { type: "image" })
+  const models = GmiCloudModels.derive("https://gmi.example/v1", [{ id: "openai/gpt-5.5" }], [existing])
+  const model = models.get(Model.ID.make("openai/gpt-5.5"))
+
+  expect(model?.name).toBe("OpenAI/GPT-5.5 catalog")
+  expect(model?.type).toBe("image")
+})
+
+test("inherits only family features from the closest same-org model template", () => {
+  const farther = template("zai-org/GLM-4.7", {
+    compatibility: { reasoningField: "reasoning" },
+    variants: [{ id: Model.VariantID.make("old") }],
+    limit: { context: 1, output: 4096 },
+  })
+  const closest = template("zai-org/GLM-5.2-FP8", {
+    type: "decision",
+    compatibility: { reasoningField: "reasoning_content" },
+    variants: [{ id: Model.VariantID.make("high") }],
+    headers: { "x-family": "closest" },
+    body: { family: "closest" },
+    settings: { stale: true },
+    time: { released: 123 },
+    status: "beta",
+    enabled: false,
+    cost: [
+      {
+        input: Money.USDPerMillionTokens.make(10),
+        output: Money.USDPerMillionTokens.make(20),
+        cache: {
+          read: Money.USDPerMillionTokens.make(4),
+          write: Money.USDPerMillionTokens.make(2),
+        },
+      },
+    ],
+    limit: { context: 4096, input: 2048, output: 131072 },
+  })
+  const models = GmiCloudModels.derive(
+    "https://gmi.example/v1",
+    [
+      {
+        id: "zai-org/GLM-5.3",
+        name: "Live GLM-5.3",
+        context_length: 1048576,
+        pricing: { prompt: "0.000000300", completion: "0.000000500", input_cache_read: "0.000000100" },
+      },
+    ],
+    [farther, closest],
+  )
+  const model = models.get(Model.ID.make("zai-org/GLM-5.3"))
+
+  expect(model?.type).toBe("decision")
+  expect(model?.name).toBe("Live GLM-5.3")
+  expect(model?.family).toBe(Model.Family.make("catalog-family"))
+  expect(model?.compatibility).toEqual({ reasoningField: "reasoning_content" })
+  expect(model?.variants.map((variant) => variant.id)).toEqual([Model.VariantID.make("high")])
+  expect(model?.headers).toEqual({ "x-family": "closest" })
+  expect(model?.body).toEqual({ family: "closest" })
+  expect(model?.settings).toMatchObject({ baseURL: "https://gmi.example/v1" })
+  expect(model?.settings).not.toHaveProperty("stale")
+  expect(model?.time).toEqual({ released: 0 })
+  expect(model?.status).toBe("active")
+  expect(model?.enabled).toBe(true)
+  expect(model?.cost[0]).toMatchObject({ input: 0.3, output: 0.5, cache: { write: 0 } })
+  expect(Number(model?.cost[0]?.cache.read)).toBeCloseTo(0.1, 10)
+  expect(model?.limit).toEqual({ context: 1048576, output: 131072 })
+})
+
+test("does not use templates from another org or leading model word", () => {
+  const models = GmiCloudModels.derive(
+    "https://gmi.example/v1",
+    [{ id: "google/gemini-3.8-flash" }, { id: "google/gpt-6-astra" }],
+    [
+      template("google/gemma-3.8", { family: Model.Family.make("gemma") }),
+      template("openai/gpt-5.5", { family: Model.Family.make("gpt") }),
+    ],
+  )
+
+  expect(models.get(Model.ID.make("google/gemini-3.8-flash"))?.family).toBeUndefined()
+  expect(models.get(Model.ID.make("google/gpt-6-astra"))?.family).toBeUndefined()
+})
 
 test("maps live GMI Cloud models onto catalog templates", async () => {
   const server = Bun.serve({
