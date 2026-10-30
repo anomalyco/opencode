@@ -1,3 +1,6 @@
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { afterEach, describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -12,11 +15,12 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
-import { SessionID, MessageID } from "../../src/session/schema"
+import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
+import { Database } from "@opencode-ai/core/database/database"
 import { Filesystem } from "@/util/filesystem"
 import {
   disposeAllInstances,
@@ -48,6 +52,7 @@ const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   LayerNode.compile(
     LayerNode.group([
       Agent.node,
+      Database.node,
       FSUtil.node,
       CrossSpawnSpawner.node,
       Instruction.node,
@@ -147,6 +152,157 @@ const asks = () => {
     },
   }
 }
+
+const history = (deny = false) => {
+  const messages: SessionV1.WithParts[] = []
+  const permissions = asks()
+  const read = Effect.fn("ReadToolTest.history.read")(function* (dir: string, filePath: string, offset: number) {
+    const id = MessageID.ascending()
+    const progress: { metadata?: Record<string, unknown> } = {}
+    const result = yield* exec(
+      dir,
+      { filePath, offset, limit: 200 },
+      {
+        ...permissions.next,
+        messageID: id,
+        messages,
+        ask: (request) =>
+          permissions.next
+            .ask(request)
+            .pipe(
+              Effect.andThen(
+                request.permission === "doom_loop" && deny
+                  ? Effect.die(new PermissionV1.RejectedError({}))
+                  : Effect.void,
+              ),
+            ),
+        metadata: (update) =>
+          Effect.sync(() => {
+            progress.metadata = update.metadata
+          }),
+      },
+    ).pipe(Effect.exit)
+    const info: SessionV1.Assistant = {
+      id,
+      sessionID: ctx.sessionID,
+      parentID: ctx.messageID,
+      role: "assistant",
+      mode: "build",
+      agent: "build",
+      path: { cwd: dir, root: dir },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: ModelV2.ID.make("test"),
+      providerID: ProviderV2.ID.make("test"),
+      time: { created: Date.now() },
+    }
+    const state: SessionV1.ToolPart["state"] = Exit.isSuccess(result)
+      ? {
+          status: "completed",
+          input: { filePath, offset },
+          output: result.value.output,
+          title: result.value.title,
+          metadata: result.value.metadata,
+          time: { start: 0, end: 1 },
+        }
+      : {
+          status: "error",
+          input: { filePath, offset },
+          error: String(Cause.squash(result.cause)),
+          metadata: progress.metadata,
+          time: { start: 0, end: 1 },
+        }
+    messages.push({
+      info,
+      parts: [
+        {
+          id: PartID.ascending(),
+          messageID: id,
+          sessionID: ctx.sessionID,
+          type: "tool",
+          tool: "read",
+          callID: String(messages.length),
+          state,
+        },
+      ],
+    })
+    return result
+  })
+  return { messages, permissions, read }
+}
+
+describe("tool.read repeated invalid ranges", () => {
+  it.live("gates rotating out-of-range offsets across messages despite successful rereads", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const file = path.join(dir, "lines.txt")
+      yield* put(file, Array.from({ length: 635 }, (_, n) => `line ${n + 1}`).join("\n"))
+      const trace = history()
+      for (const offset of [700, 900, 1100]) {
+        const invalid = yield* trace.read(dir, file, offset)
+        expect(Exit.isFailure(invalid)).toBe(true)
+        if (Exit.isFailure(invalid)) expect(String(Cause.squash(invalid.cause))).toContain("out of range")
+        expect(Exit.isSuccess(yield* trace.read(dir, file, 600))).toBe(true)
+      }
+      expect(trace.permissions.items.filter((item) => item.permission === "doom_loop")).toHaveLength(1)
+      // An explicit allow still permits execution and the ordinary range error is preserved.
+      expect(trace.messages.at(-2)?.parts[0]).toMatchObject({
+        state: { error: expect.stringContaining("out of range") },
+      })
+    }),
+  )
+
+  it.live("honors rejection and groups canonical file aliases while excluding other failures", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const file = path.join(dir, "lines.txt")
+      const trace = history(true)
+      yield* trace.read(dir, file, 700)
+      yield* trace.read(dir, file, 900)
+      yield* put(file, "first\nsecond")
+      yield* trace.read(dir, file, 700)
+      expect(trace.permissions.items.filter((item) => item.permission === "doom_loop")).toHaveLength(0)
+      const fs = yield* FSUtil.Service
+      const alias = path.join(dir, "alias.txt")
+      yield* fs.symlink(file, alias)
+      yield* trace.read(dir, alias, 900)
+      const result = yield* trace.read(dir, file, 1100)
+      expect(trace.permissions.items.filter((item) => item.permission === "doom_loop")).toHaveLength(1)
+      expect(Exit.isFailure(result)).toBe(true)
+      if (Exit.isFailure(result)) expect(Cause.squash(result.cause)).toBeInstanceOf(PermissionV1.RejectedError)
+    }),
+  )
+
+  it.live("resets invalid-range detection for a changed file or new user input", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const file = path.join(dir, "lines.txt")
+      yield* put(file, "first\nsecond")
+      const trace = history()
+      yield* trace.read(dir, file, 700)
+      yield* trace.read(dir, file, 900)
+      yield* put(file, "other\nsecond")
+      const fs = yield* FSUtil.Service
+      yield* fs.utimes(file, new Date(0), new Date(0))
+      yield* trace.read(dir, file, 1100)
+      expect(trace.permissions.items.filter((item) => item.permission === "doom_loop")).toHaveLength(0)
+      yield* trace.read(dir, file, 1200)
+      trace.messages.push({
+        info: {
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: ctx.sessionID,
+          agent: "build",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test") },
+          time: { created: Date.now() },
+        },
+        parts: [],
+      })
+      yield* trace.read(dir, file, 1300)
+      expect(trace.permissions.items.filter((item) => item.permission === "doom_loop")).toHaveLength(0)
+    }),
+  )
+})
 
 describe("tool.read external_directory permission", () => {
   it.live("allows reading absolute path inside project directory", () =>

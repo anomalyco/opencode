@@ -6,7 +6,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -28,6 +28,7 @@ import { Todo } from "../../src/session/todo"
 import { Session } from "@/session/session"
 import { SessionMessageTable } from "@opencode-ai/core/session/sql"
 import { LLM } from "../../src/session/llm"
+import { LLMEvent } from "@opencode-ai/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { SessionCompaction } from "../../src/session/compaction"
@@ -164,7 +165,7 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-const runtimeFlags = RuntimeFlags.layer({ experimentalEventSystem: true })
+const runtimeFlags = RuntimeFlags.layer({ experimentalEventSystem: true, experimentalNativeLlm: false })
 
 const testLLMServerNode = LayerNode.make({ service: TestLLMServer, layer: TestLLMServer.layer, deps: [] })
 
@@ -877,6 +878,456 @@ it.instance("loop continues when finish is unknown", () =>
     }
   }),
 )
+
+for (const policy of [
+  { action: "deny", continue: false, calls: 3, executions: 2 },
+  { action: "deny", continue: true, calls: 5, executions: 2 },
+  { action: "allow", continue: false, calls: 5, executions: 4 },
+  { action: "ask", continue: false, calls: 3, executions: 2 },
+  { action: "ask", continue: true, calls: 5, executions: 2 },
+  { action: "ask", continue: false, calls: 5, executions: 2, feedback: "Change your approach" },
+] as const) {
+  it.instance(
+    `repeated tool calls across messages honor doom_loop=${policy.action}, continue_loop_on_deny=${policy.continue}, feedback=${"feedback" in policy}`,
+    () =>
+      Effect.gen(function* () {
+        const { dir, llm } = yield* useServerConfig((url) => ({
+          ...providerCfg(url),
+          experimental: { continue_loop_on_deny: policy.continue },
+        }))
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const permission = yield* Permission.Service
+        const chat = yield* sessions.create({
+          title: "Repeated tool regression",
+          permission: [
+            { permission: "*", pattern: "*", action: "allow" },
+            { permission: "doom_loop", pattern: "*", action: policy.action },
+          ],
+        })
+        const file = path.join(dir, "example.txt")
+        yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "Record fixture executions" }],
+        })
+        for (let i = 0; i < 4; i++) {
+          yield* llm.tool("bash", { command: `printf 'hit\\n' >> '${file}'`, description: "Append fixture marker" })
+        }
+        yield* llm.text("unguarded continuation")
+        const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+        if (policy.action === "ask") {
+          for (let i = 0; i < (policy.calls === 3 ? 1 : 2); i++) {
+            const request = yield* pollWithTimeout(
+              permission
+                .list()
+                .pipe(Effect.map((requests) => requests.find((request) => request.permission === "doom_loop"))),
+              "doom loop permission request",
+              "10 seconds",
+            )
+            // Keep the permission open long enough to expose execution before approval.
+            yield* Effect.sleep("200 millis")
+            yield* permission.reply({
+              requestID: request.id,
+              reply: "reject",
+              ...("feedback" in policy ? { message: policy.feedback } : {}),
+            })
+          }
+        }
+        yield* Fiber.join(fiber)
+
+        const messages = yield* MessageV2.filterCompactedEffect(chat.id)
+        const calls = messages
+          .flatMap((message) => message.parts)
+          .filter((part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "bash")
+        expect(yield* llm.calls).toBe(policy.calls)
+        expect(yield* Effect.promise(() => Bun.file(file).text())).toBe("hit\n".repeat(policy.executions))
+        expect(calls).toHaveLength(policy.calls === 3 ? 3 : 4)
+        expect(calls[0].state.status).toBe("completed")
+        expect(calls[1].state.status).toBe("completed")
+        expect(calls[2].state).toMatchObject(
+          policy.action === "allow"
+            ? { status: "completed" }
+            : {
+                status: "error",
+                error: expect.stringContaining(policy.action === "deny" ? "prevents you" : "rejected permission"),
+              },
+        )
+        if (policy.action !== "allow") {
+          const denied = messages.find((message) => message.info.id === calls[2].messageID)
+          expect(denied?.info).toMatchObject({
+            role: "assistant",
+            finish: "tool-calls",
+            time: { completed: expect.any(Number) },
+          })
+          if (denied?.info.role === "assistant") expect(denied.info.error).toBeUndefined()
+        }
+      }),
+  )
+}
+
+it.instance("cancelling a pending doom loop permission removes it and prevents late tool execution", () =>
+  Effect.gen(function* () {
+    const { dir, llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const permission = yield* Permission.Service
+    const status = yield* SessionStatus.Service
+    const chat = yield* sessions.create({
+      title: "Cancelled doom loop permission",
+      permission: [
+        { permission: "*", pattern: "*", action: "allow" },
+        { permission: "doom_loop", pattern: "*", action: "ask" },
+      ],
+    })
+    const file = path.join(dir, "executions.txt")
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "Record fixture executions" }],
+    })
+    for (let i = 0; i < 3; i++) {
+      yield* llm.tool("bash", { command: `printf 'hit\\n' >> '${file}'`, description: "Append fixture marker" })
+    }
+    const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+    const request = yield* pollWithTimeout(
+      permission.list().pipe(Effect.map((requests) => requests.find((request) => request.permission === "doom_loop"))),
+      "doom loop permission request",
+      "10 seconds",
+    )
+    yield* prompt.cancel(chat.id)
+    yield* Fiber.join(fiber)
+    expect(yield* permission.list()).toEqual([])
+    expect(Exit.isFailure(yield* permission.reply({ requestID: request.id, reply: "once" }).pipe(Effect.exit))).toBe(
+      true,
+    )
+    expect(yield* Effect.promise(() => Bun.file(file).text())).toBe("hit\nhit\n")
+    expect(yield* status.get(chat.id)).toMatchObject({ type: "idle" })
+  }),
+)
+
+it.instance("cancelling a pending invalid-range permission removes it", () =>
+  Effect.gen(function* () {
+    const { dir, llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const permission = yield* Permission.Service
+    const status = yield* SessionStatus.Service
+    const chat = yield* sessions.create({
+      title: "Cancelled range permission",
+      permission: [
+        { permission: "*", pattern: "*", action: "allow" },
+        { permission: "doom_loop", pattern: "*", action: "ask" },
+      ],
+    })
+    const file = path.join(dir, "lines.txt")
+    yield* writeText(file, "one\ntwo\nthree")
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "Read fixture" }],
+    })
+    for (const offset of [10, 11, 12]) yield* llm.tool("read", { filePath: file, offset, limit: 200 })
+    const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+    const request = yield* pollWithTimeout(
+      permission.list().pipe(Effect.map((requests) => requests.find((request) => request.permission === "doom_loop"))),
+      "range permission request",
+      "10 seconds",
+    )
+    yield* prompt.cancel(chat.id)
+    yield* Fiber.join(fiber)
+    expect(yield* permission.list()).toEqual([])
+    expect(Exit.isFailure(yield* permission.reply({ requestID: request.id, reply: "once" }).pipe(Effect.exit))).toBe(
+      true,
+    )
+    expect(yield* status.get(chat.id)).toMatchObject({ type: "idle" })
+  }),
+)
+
+it.instance("a new user message resets repeated edit detection", () =>
+  Effect.gen(function* () {
+    const { dir, llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Repeated edit user boundary",
+      permission: [
+        { permission: "*", pattern: "*", action: "allow" },
+        { permission: "doom_loop", pattern: "*", action: "deny" },
+      ],
+    })
+    const file = path.join(dir, "example.txt")
+    yield* writeText(file, "actual content")
+    for (let turn = 0; turn < 2; turn++) {
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "Edit the file" }],
+      })
+      for (let i = 0; i < 2; i++) {
+        yield* llm.tool("edit", { filePath: file, oldString: "missing target", newString: "replacement" })
+      }
+      yield* llm.text("finished attempt")
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.parts).toContainEqual(expect.objectContaining({ type: "text", text: "finished attempt" }))
+    }
+    const messages = yield* MessageV2.filterCompactedEffect(chat.id)
+    const edits = messages
+      .flatMap((message) => message.parts)
+      .filter((part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "edit")
+    expect(edits).toHaveLength(4)
+    expect(
+      edits.every((part) => part.state.status === "error" && part.state.error.includes("Could not find oldString")),
+    ).toBe(true)
+    expect(yield* llm.calls).toBe(6)
+  }),
+)
+
+for (const history of ["same", "mixed", "varied"] as const) {
+  const mixed = history === "mixed"
+  const readTurnLLM = Layer.succeed(
+    LLM.Service,
+    LLM.Service.of({
+      stream: (input) =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const content = input.messages.findLast((message) => message.role === "user")?.content
+            const file = typeof content === "string" ? content : content?.find((part) => part.type === "text")?.text
+            if (!file) throw new Error("read fixture path missing")
+            const previous = input.messages
+              .filter((message) => message.role === "tool")
+              .flatMap((message) => message.content).length
+            const batch = mixed ? (previous === 0 ? [0] : [previous, previous + 1]) : [0, 1, 2]
+            const execute = input.tools.read.execute
+            if (!execute) throw new Error("read tool missing execute")
+            const calls = Stream.fromIterable(batch).pipe(
+              Stream.flatMap((index) => {
+                const id = `same-turn-${index}`
+                const args = { filePath: file, offset: history === "varied" ? 10 + index : 10, limit: 200 }
+                return Stream.make(LLMEvent.toolCall({ id, name: "read", input: args })).pipe(
+                  Stream.concat(
+                    Stream.fromEffect(
+                      Effect.tryPromise({
+                        try: () =>
+                          Promise.resolve(
+                            execute(args, { toolCallId: id, messages: [], abortSignal: new AbortController().signal }),
+                          ),
+                        catch: (error) => error,
+                      }).pipe(
+                        Effect.match({
+                          onFailure: (error) => LLMEvent.toolError({ id, name: "read", message: String(error), error }),
+                          onSuccess: (value) =>
+                            LLMEvent.toolResult({ id, name: "read", result: { type: "json", value } }),
+                        }),
+                      ),
+                    ),
+                  ),
+                )
+              }),
+            )
+            return Stream.make(LLMEvent.stepStart({ index: 0 })).pipe(
+              Stream.concat(calls),
+              Stream.concat(
+                Stream.make(LLMEvent.stepFinish({ index: 0, reason: "stop" }), LLMEvent.finish({ reason: "stop" })),
+              ),
+            )
+          }),
+        ),
+    }),
+  )
+  const readTurnIt = testEffect(
+    LayerNode.compile(promptRoot, [
+      [SessionSummary.node, summary],
+      [LSP.node, lsp],
+      [MCP.node, makeMcp()],
+      [RuntimeFlags.node, runtimeFlags],
+      [LLM.node, readTurnLLM],
+    ]),
+  )
+  readTurnIt.instance(
+    `invalid reads reach a doom-loop gate with ${history} assistant history`,
+    () =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        const file = path.join(directory, "same-turn.txt")
+        yield* writeText(file, "one\ntwo\nthree")
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({
+          permission: [
+            { permission: "*", pattern: "*", action: "allow" },
+            { permission: "doom_loop", pattern: "*", action: "deny" },
+          ],
+        })
+        yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: file }],
+        })
+        yield* prompt.loop({ sessionID: chat.id })
+        const calls = (yield* MessageV2.filterCompactedEffect(chat.id))
+          .flatMap((message) => message.parts)
+          .filter((part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "read")
+        expect(calls).toHaveLength(3)
+        expect(calls[2].state).toMatchObject({
+          status: "error",
+          error: expect.stringContaining("prevents you from using this specific tool call"),
+        })
+      }),
+    { config: cfg },
+  )
+}
+
+for (const range of [
+  { offset: 10, status: "error" },
+  { offset: 1, status: "completed" },
+] as const) {
+  it.instance(`a third identical ${range.status === "error" ? "invalid" : "valid"} read asks only once`, () =>
+    Effect.gen(function* () {
+      const { dir, llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const permission = yield* Permission.Service
+      const chat = yield* sessions.create({
+        title: "Read permission overlap",
+        permission: [
+          { permission: "*", pattern: "*", action: "allow" },
+          { permission: "doom_loop", pattern: "*", action: "ask" },
+        ],
+      })
+      const file = path.join(dir, "lines.txt")
+      yield* writeText(file, "one\ntwo\nthree")
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "Read fixture" }],
+      })
+      for (let i = 0; i < 3; i++) yield* llm.tool("read", { filePath: file, offset: range.offset, limit: 200 })
+      yield* llm.text("finished")
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      const observe = pollWithTimeout(
+        Effect.gen(function* () {
+          const request = (yield* permission.list()).find((request) => request.permission === "doom_loop")
+          if (request) return { request }
+          if ((yield* llm.calls) >= 4) return { request: undefined }
+        }),
+        "read permission or completion",
+        "10 seconds",
+      )
+      const first = yield* observe
+      if (first.request) yield* permission.reply({ requestID: first.request.id, reply: "once" })
+      const next = yield* observe
+      if (next.request) yield* permission.reply({ requestID: next.request.id, reply: "reject" })
+      yield* Fiber.join(fiber)
+      expect(first.request).toBeDefined()
+      expect(next.request).toBeUndefined()
+      expect(yield* llm.calls).toBe(4)
+      const reads = (yield* MessageV2.filterCompactedEffect(chat.id))
+        .flatMap((message) => message.parts)
+        .filter((part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "read")
+      expect(reads.map((part) => part.state.status)).toEqual([range.status, range.status, range.status])
+    }),
+  )
+}
+
+it.instance("denied doom_loop stops rotating invalid reads across provider messages with successful rereads", () =>
+  Effect.gen(function* () {
+    const { dir, llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Read range regression",
+      permission: [
+        { permission: "*", pattern: "*", action: "allow" },
+        { permission: "doom_loop", pattern: "*", action: "deny" },
+      ],
+    })
+    const file = path.join(dir, "lines.txt")
+    yield* writeText(file, Array.from({ length: 635 }, (_, n) => `line ${n + 1}`).join("\n"))
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "Read the file" }],
+    })
+    for (const offset of [700, 600, 900, 600, 1100]) {
+      yield* llm.tool("read", { filePath: file, offset, limit: 200 })
+    }
+    yield* llm.text("unguarded continuation")
+    yield* prompt.loop({ sessionID: chat.id })
+    const messages = yield* MessageV2.filterCompactedEffect(chat.id)
+    const reads = messages
+      .flatMap((message) => message.parts)
+      .filter((part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "read")
+    expect(reads[0].state).toMatchObject({ status: "error", metadata: { readRange: { totalLines: 635 } } })
+    expect(yield* llm.calls).toBe(5)
+    expect(reads.map((part) => part.state.status)).toEqual(["error", "completed", "error", "completed", "error"])
+    expect(reads.at(-1)?.state).toMatchObject({
+      status: "error",
+      error: expect.stringContaining("prevents you from using this specific tool call"),
+    })
+  }),
+)
+
+for (const policy of [
+  { permission: "read", action: "deny", continue: false, error: "prevents you from using this specific tool call" },
+  { permission: "doom_loop", action: "allow", continue: false, error: "Offset 1100 is out of range" },
+  { permission: "doom_loop", action: "deny", continue: true, error: "prevents you from using this specific tool call" },
+] as const) {
+  it.instance(
+    `read range recovery honors ${policy.permission}=${policy.action}, continue_loop_on_deny=${policy.continue}`,
+    () =>
+      Effect.gen(function* () {
+        const { dir, llm } = yield* useServerConfig((url) => ({
+          ...providerCfg(url),
+          experimental: { continue_loop_on_deny: policy.continue },
+        }))
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({
+          title: "Read policy regression",
+          permission: [
+            { permission: "*", pattern: "*", action: "allow" },
+            {
+              permission: policy.permission,
+              pattern: policy.permission === "read" ? "*lines.txt" : "*",
+              action: policy.action,
+            },
+          ],
+        })
+        const file = path.join(dir, "lines.txt")
+        yield* writeText(file, Array.from({ length: 635 }, (_, n) => `line ${n + 1}`).join("\n"))
+        yield* prompt.prompt({
+          sessionID: chat.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "Read the file" }],
+        })
+        for (const offset of [700, 600, 900, 600, 1100]) {
+          yield* llm.tool("read", { filePath: file, offset, limit: 200 })
+        }
+        yield* llm.text("Changed approach")
+        const result = yield* prompt.loop({ sessionID: chat.id })
+        expect(yield* llm.calls).toBe(6)
+        expect(result.parts.some((part) => part.type === "text" && part.text === "Changed approach")).toBe(true)
+        const messages = yield* MessageV2.filterCompactedEffect(chat.id)
+        const reads = messages
+          .flatMap((message) => message.parts)
+          .filter((part): part is SessionV1.ToolPart => part.type === "tool" && part.tool === "read")
+        expect(reads.at(-1)?.state).toMatchObject({ status: "error", error: expect.stringContaining(policy.error) })
+        const last = reads.at(-1)
+        if (policy.permission === "read" && last?.state.status === "error") {
+          expect(last.state.metadata?.readRange).toBeUndefined()
+        }
+      }),
+  )
+}
 
 it.instance("glob tool keeps instance context during prompt runs", () =>
   Effect.gen(function* () {
