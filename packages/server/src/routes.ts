@@ -37,6 +37,7 @@ import { WellKnown } from "@opencode/core/wellknown"
 import { Workspace } from "@opencode/core/workspace"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
+import { AppProcess } from "@opencode/util/process"
 import {
   ProjectOperations,
   MultiFolderWorkspace,
@@ -95,6 +96,7 @@ const applicationServiceNodes = [
   ProjectAttachments.node,
   ProjectConversations.node,
   ExtensionRegistry.node,
+  AppProcess.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 
@@ -199,6 +201,7 @@ function makeRoutes<AuthError, AuthServices>(
             ExtensionRegistry.Service,
             Global.Service,
             FSUtil.Service,
+            AppProcess.Service,
           )(context),
         ),
         ServerInfo.layer(serviceURLs, Context.get(context, Global.Service).tmp, options.app),

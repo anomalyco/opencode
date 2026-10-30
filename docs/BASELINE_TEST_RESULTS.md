@@ -60,17 +60,18 @@ The desktop test suite in `packages/desktop` was executed to establish the upstr
 A comprehensive test suite was established under `packages/core/test/` to validate the Universal Extension Engine and Workspace Management Subsystem.
 
 ### 3.1 Summary Metrics
-- **Total Test Files**: 6
-- **Total Tests**: 20
-- **Passed**: 20 (100%)
+- **Total Test Files**: 7
+- **Total Tests**: 27
+- **Passed**: 27 (100%)
 - **Failed**: 0 (0%)
-- **Expect Calls**: 94
-- **Execution Time**: 1.20s
+- **Expect Calls**: 151
+- **Execution Time**: 1.55s
 
 ### 3.2 Suite Breakdown
 
 | Test Suite | Location | Scenarios Tested | Status |
 | :--- | :--- | :--- | :--- |
+| **UECE Acceptance Suite** | `packages/core/test/extension/milestone1.test.ts` | • Multi-component package decomposition (`packageId` linking)<br>• Native-compatible imports without adapters<br>• Format conversion & foreign capability mapping<br>• Missing & unsupported capability reporting (no fabrication)<br>• Claude Desktop & Cursor config import<br>• Versioning, update check, history & rollback<br>• Security pattern & path traversal enforcement | Pass (7/7) |
 | **Extension Detector** | `packages/core/test/extension/detector.test.ts` | • CLAUDE.md detection<br>• Cursor `.cursorrules` & `.mdc` detection<br>• Claude Desktop MCP configuration detection<br>• Antigravity multi-directory skill package detection | Pass (4/4) |
 | **MCP Manager** | `packages/core/test/extension/mcp.test.ts` | • Import Claude Desktop MCP config to OpenCode format<br>• Import Cursor MCP config to OpenCode format | Pass (2/2) |
 | **Rules Adapter** | `packages/core/test/extension/rules.test.ts` | • Parse Cursor `.mdc` frontmatter globs & alwaysApply<br>• Parse `CLAUDE.md` and `AGENTS.md`<br>• Format instructions with precedence & glob matching | Pass (3/3) |

@@ -6,10 +6,42 @@ import { FSUtil } from "@opencode/util/fs-util"
 import type { Extension } from "@opencode/schema/extension"
 
 const SUSPICIOUS_PATTERNS = [
-  { code: "SEC-CMD-FORMAT", pattern: /\b(format\s+[a-z]:|mkfs|rm\s+-rf\s+[\/\\])/i, message: "Destructive filesystem operation detected", severity: "critical" as const },
-  { code: "SEC-SECRET-TOKEN", pattern: /\b(ghp_[a-zA-Z0-9]{36}|sk-[a-zA-Z0-9]{20,}|-----BEGIN\s+PRIVATE\s+KEY-----)/, message: "Hardcoded secret or private key pattern detected", severity: "error" as const },
-  { code: "SEC-REMOTE-EXEC", pattern: /\b(curl|wget)\s+[^|]+\|\s*(ba|z)?sh/i, message: "Unpinned remote execution pipe detected", severity: "warning" as const },
-  { code: "SEC-ENV-EXFIL", pattern: /\bprocess\.env\b.*\b(fetch|axios|http\.request)\b/i, message: "Potential environment variable transmission detected", severity: "warning" as const },
+  {
+    code: "SEC-CMD-FORMAT",
+    pattern: /\b(format\s+[a-z]:|mkfs|rm\s+-rf\s+[\/\\])/i,
+    message: "Destructive filesystem operation detected",
+    severity: "critical" as const,
+  },
+  {
+    code: "SEC-SECRET-TOKEN",
+    pattern: /(?:\b(ghp_[a-zA-Z0-9]{36}|sk-[a-zA-Z0-9]{20,})|-----BEGIN\s+(?:[A-Z]+\s+)?PRIVATE\s+KEY-----)/,
+    message: "Hardcoded secret or private key pattern detected",
+    severity: "error" as const,
+  },
+  {
+    code: "SEC-DANGEROUS-EVAL",
+    pattern: /\b(eval\s*\(|new\s+Function\s*\()/i,
+    message: "Dynamic code execution or eval detected",
+    severity: "error" as const,
+  },
+  {
+    code: "SEC-COMMAND-EXEC",
+    pattern: /\b(child_process|exec\s*\(|spawn\s*\(|execSync\s*\(|fork\s*\()/i,
+    message: "Process execution or spawn invocation detected",
+    severity: "warning" as const,
+  },
+  {
+    code: "SEC-REMOTE-EXEC",
+    pattern: /\b(curl|wget)\s+[^|]+\|\s*(ba|z)?sh/i,
+    message: "Unpinned remote execution pipe detected",
+    severity: "warning" as const,
+  },
+  {
+    code: "SEC-ENV-EXFIL",
+    pattern: /\bprocess\.env\b.*\b(fetch|axios|http\.request)\b/i,
+    message: "Potential environment variable transmission detected",
+    severity: "warning" as const,
+  },
 ]
 
 export function isPathSafe(relativePath: string): boolean {

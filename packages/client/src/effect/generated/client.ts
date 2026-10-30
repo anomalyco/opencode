@@ -196,10 +196,16 @@ import type {
   ProjectConversationsListInput,
   ProjectConversationsListOutput,
   ServerExtensionListOutput,
+  ServerExtensionInspectInput,
+  ServerExtensionInspectOutput,
+  ServerExtensionProposeAdapterInput,
+  ServerExtensionProposeAdapterOutput,
   ServerExtensionInstallInput,
   ServerExtensionInstallOutput,
   ServerExtensionToggleInput,
   ServerExtensionToggleOutput,
+  ServerExtensionRollbackInput,
+  ServerExtensionRollbackOutput,
   ServerExtensionRemoveInput,
   ServerExtensionRemoveOutput,
   ServerExtensionMcpTestInput,
@@ -1353,6 +1359,19 @@ const adaptGroupProject = (raw: RawClient["server.project"]) => ({
 const EndpointServerExtensionList = (raw: RawClient["server.extension"]) => () =>
   preserveEffect<ServerExtensionListOutput>()(raw["extension.list"]({}).pipe(Effect.mapError(mapClientError)))
 
+const EndpointServerExtensionInspect = (raw: RawClient["server.extension"]) => (input: ServerExtensionInspectInput) =>
+  preserveEffect<ServerExtensionInspectOutput>()(
+    raw["extension.inspect"]({
+      payload: { sourceUrlOrPath: input["sourceUrlOrPath"], subpath: input["subpath"], ref: input["ref"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointServerExtensionProposeAdapter =
+  (raw: RawClient["server.extension"]) => (input: ServerExtensionProposeAdapterInput) =>
+    preserveEffect<ServerExtensionProposeAdapterOutput>()(
+      raw["extension.proposeAdapter"]({ payload: { cir: input["cir"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const EndpointServerExtensionInstall = (raw: RawClient["server.extension"]) => (input: ServerExtensionInstallInput) =>
   preserveEffect<ServerExtensionInstallOutput>()(
     raw["extension.install"]({
@@ -1374,6 +1393,13 @@ const EndpointServerExtensionToggle = (raw: RawClient["server.extension"]) => (i
     ),
   )
 
+const EndpointServerExtensionRollback = (raw: RawClient["server.extension"]) => (input: ServerExtensionRollbackInput) =>
+  preserveEffect<ServerExtensionRollbackOutput>()(
+    raw["extension.rollback"]({ params: { id: input["id"] }, payload: { targetVersion: input["targetVersion"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const EndpointServerExtensionRemove = (raw: RawClient["server.extension"]) => (input: ServerExtensionRemoveInput) =>
   preserveEffect<ServerExtensionRemoveOutput>()(
     raw["extension.remove"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1388,8 +1414,11 @@ const EndpointServerExtensionMcpTest = (raw: RawClient["server.extension"]) => (
 
 const adaptGroupServerExtension = (raw: RawClient["server.extension"]) => ({
   list: EndpointServerExtensionList(raw),
+  inspect: EndpointServerExtensionInspect(raw),
+  proposeAdapter: EndpointServerExtensionProposeAdapter(raw),
   install: EndpointServerExtensionInstall(raw),
   toggle: EndpointServerExtensionToggle(raw),
+  rollback: EndpointServerExtensionRollback(raw),
   remove: EndpointServerExtensionRemove(raw),
   mcp: { test: EndpointServerExtensionMcpTest(raw) },
 })

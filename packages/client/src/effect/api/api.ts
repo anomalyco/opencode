@@ -2030,8 +2030,31 @@ export type ServerExtensionListOutput = ReadonlyArray<{
     readonly commands?: ReadonlyArray<string> | undefined
     readonly environment?: ReadonlyArray<string> | undefined
   }
-  readonly status: "installed" | "enabled" | "disabled" | "failed" | "needs_auth"
+  readonly status:
+    | "installed"
+    | "enabled"
+    | "disabled"
+    | "failed"
+    | "needs_auth"
+    | "adapted"
+    | "incompatible"
+    | "quarantined"
   readonly enabled: boolean
+  readonly executionMode?: ("native" | "adapted" | "shim" | "sandboxed") | undefined
+  readonly packageId?: string | undefined
+  readonly entrypoints?: ReadonlyArray<string> | undefined
+  readonly dependencies?: ReadonlyArray<string> | undefined
+  readonly requiredApis?: ReadonlyArray<string> | undefined
+  readonly hooks?: ReadonlyArray<string> | undefined
+  readonly supportingResources?: ReadonlyArray<string> | undefined
+  readonly adapterVersion?: string | undefined
+  readonly tools?:
+    | ReadonlyArray<{
+        readonly name: string
+        readonly description?: string | undefined
+        readonly parameters?: { readonly [x: string]: unknown } | undefined
+      }>
+    | undefined
   readonly security?:
     | {
         readonly safe: boolean
@@ -2051,6 +2074,198 @@ export type ServerExtensionListOutput = ReadonlyArray<{
   readonly error?: string | undefined
 }>
 export type ServerExtensionListOperation<E = never> = () => Effect.Effect<ServerExtensionListOutput, E>
+
+export type ServerExtensionInspectInput = {
+  readonly sourceUrlOrPath: string
+  readonly subpath?: string | undefined
+  readonly ref?: string | undefined
+}
+export type ServerExtensionInspectOutput = {
+  readonly source: {
+    readonly type: "git" | "local" | "archive" | "builtin"
+    readonly location: string
+    readonly subpath?: string | undefined
+    readonly ref?: string | undefined
+    readonly checksum?: string | undefined
+  }
+  readonly primaryPlatform: "opencode" | "claude" | "codex" | "antigravity" | "cursor" | "custom"
+  readonly manifest?: { readonly [x: string]: unknown } | undefined
+  readonly components: ReadonlyArray<{
+    readonly id: string
+    readonly name: string
+    readonly version: string
+    readonly category: "skill" | "mcp" | "rule" | "plugin"
+    readonly originPlatform: "opencode" | "claude" | "codex" | "antigravity" | "cursor" | "custom"
+    readonly source: {
+      readonly type: "git" | "local" | "archive" | "builtin"
+      readonly location: string
+      readonly subpath?: string | undefined
+      readonly ref?: string | undefined
+      readonly checksum?: string | undefined
+    }
+    readonly scope: "global" | "project"
+    readonly description?: string | undefined
+    readonly author?: string | undefined
+    readonly license?: string | undefined
+    readonly homepage?: string | undefined
+    readonly permissions: {
+      readonly filesystem?: ReadonlyArray<string> | undefined
+      readonly network?: ReadonlyArray<string> | undefined
+      readonly commands?: ReadonlyArray<string> | undefined
+      readonly environment?: ReadonlyArray<string> | undefined
+    }
+    readonly status:
+      | "installed"
+      | "enabled"
+      | "disabled"
+      | "failed"
+      | "needs_auth"
+      | "adapted"
+      | "incompatible"
+      | "quarantined"
+    readonly enabled: boolean
+    readonly executionMode?: ("native" | "adapted" | "shim" | "sandboxed") | undefined
+    readonly packageId?: string | undefined
+    readonly entrypoints?: ReadonlyArray<string> | undefined
+    readonly dependencies?: ReadonlyArray<string> | undefined
+    readonly requiredApis?: ReadonlyArray<string> | undefined
+    readonly hooks?: ReadonlyArray<string> | undefined
+    readonly supportingResources?: ReadonlyArray<string> | undefined
+    readonly adapterVersion?: string | undefined
+    readonly tools?:
+      | ReadonlyArray<{
+          readonly name: string
+          readonly description?: string | undefined
+          readonly parameters?: { readonly [x: string]: unknown } | undefined
+        }>
+      | undefined
+    readonly security?:
+      | {
+          readonly safe: boolean
+          readonly riskLevel: "low" | "medium" | "high" | "critical"
+          readonly findings: ReadonlyArray<{
+            readonly severity: "info" | "warning" | "error" | "critical"
+            readonly code: string
+            readonly message: string
+            readonly file?: string | undefined
+            readonly line?: number | undefined
+          }>
+          readonly scannedFiles: number
+          readonly timestamp: number
+        }
+      | undefined
+    readonly metadata: { readonly [x: string]: unknown }
+    readonly error?: string | undefined
+  }>
+  readonly security: {
+    readonly safe: boolean
+    readonly riskLevel: "low" | "medium" | "high" | "critical"
+    readonly findings: ReadonlyArray<{
+      readonly severity: "info" | "warning" | "error" | "critical"
+      readonly code: string
+      readonly message: string
+      readonly file?: string | undefined
+      readonly line?: number | undefined
+    }>
+    readonly scannedFiles: number
+    readonly timestamp: number
+  }
+}
+export type ServerExtensionInspectOperation<E = never> = (
+  input: ServerExtensionInspectInput,
+) => Effect.Effect<ServerExtensionInspectOutput, E>
+
+export type ServerExtensionProposeAdapterInput = {
+  readonly cir: {
+    readonly id: string
+    readonly name: string
+    readonly version: string
+    readonly category: "skill" | "mcp" | "rule" | "plugin"
+    readonly originPlatform: "opencode" | "claude" | "codex" | "antigravity" | "cursor" | "custom"
+    readonly source: {
+      readonly type: "git" | "local" | "archive" | "builtin"
+      readonly location: string
+      readonly subpath?: string | undefined
+      readonly ref?: string | undefined
+      readonly checksum?: string | undefined
+    }
+    readonly scope: "global" | "project"
+    readonly description?: string | undefined
+    readonly author?: string | undefined
+    readonly license?: string | undefined
+    readonly homepage?: string | undefined
+    readonly permissions: {
+      readonly filesystem?: ReadonlyArray<string> | undefined
+      readonly network?: ReadonlyArray<string> | undefined
+      readonly commands?: ReadonlyArray<string> | undefined
+      readonly environment?: ReadonlyArray<string> | undefined
+    }
+    readonly status:
+      | "installed"
+      | "enabled"
+      | "disabled"
+      | "failed"
+      | "needs_auth"
+      | "adapted"
+      | "incompatible"
+      | "quarantined"
+    readonly enabled: boolean
+    readonly executionMode?: ("native" | "adapted" | "shim" | "sandboxed") | undefined
+    readonly packageId?: string | undefined
+    readonly entrypoints?: ReadonlyArray<string> | undefined
+    readonly dependencies?: ReadonlyArray<string> | undefined
+    readonly requiredApis?: ReadonlyArray<string> | undefined
+    readonly hooks?: ReadonlyArray<string> | undefined
+    readonly supportingResources?: ReadonlyArray<string> | undefined
+    readonly adapterVersion?: string | undefined
+    readonly tools?:
+      | ReadonlyArray<{
+          readonly name: string
+          readonly description?: string | undefined
+          readonly parameters?: { readonly [x: string]: unknown } | undefined
+        }>
+      | undefined
+    readonly security?:
+      | {
+          readonly safe: boolean
+          readonly riskLevel: "low" | "medium" | "high" | "critical"
+          readonly findings: ReadonlyArray<{
+            readonly severity: "info" | "warning" | "error" | "critical"
+            readonly code: string
+            readonly message: string
+            readonly file?: string | undefined
+            readonly line?: number | undefined
+          }>
+          readonly scannedFiles: number
+          readonly timestamp: number
+        }
+      | undefined
+    readonly metadata: { readonly [x: string]: unknown }
+    readonly error?: string | undefined
+  }
+}
+export type ServerExtensionProposeAdapterOutput = {
+  readonly extensionId: string
+  readonly platform: "opencode" | "claude" | "codex" | "antigravity" | "cursor" | "custom"
+  readonly category: "skill" | "mcp" | "rule" | "plugin"
+  readonly compatible: boolean
+  readonly compatibilityScore: number
+  readonly nativeCapabilities: ReadonlyArray<string>
+  readonly mappableCapabilities: ReadonlyArray<{
+    readonly capability: string
+    readonly targetApi: string
+    readonly adapterStrategy: string
+  }>
+  readonly missingCapabilities: ReadonlyArray<string>
+  readonly generatedAdapterCode?: string | undefined
+  readonly generatedTests?: string | undefined
+  readonly validationStatus: "passed" | "failed" | "untested"
+  readonly validationErrors?: ReadonlyArray<string> | undefined
+  readonly requiresApproval: boolean
+}
+export type ServerExtensionProposeAdapterOperation<E = never> = (
+  input: ServerExtensionProposeAdapterInput,
+) => Effect.Effect<ServerExtensionProposeAdapterOutput, E>
 
 export type ServerExtensionInstallInput = {
   readonly sourceUrlOrPath: string
@@ -2084,8 +2299,31 @@ export type ServerExtensionInstallOutput = {
     readonly commands?: ReadonlyArray<string> | undefined
     readonly environment?: ReadonlyArray<string> | undefined
   }
-  readonly status: "installed" | "enabled" | "disabled" | "failed" | "needs_auth"
+  readonly status:
+    | "installed"
+    | "enabled"
+    | "disabled"
+    | "failed"
+    | "needs_auth"
+    | "adapted"
+    | "incompatible"
+    | "quarantined"
   readonly enabled: boolean
+  readonly executionMode?: ("native" | "adapted" | "shim" | "sandboxed") | undefined
+  readonly packageId?: string | undefined
+  readonly entrypoints?: ReadonlyArray<string> | undefined
+  readonly dependencies?: ReadonlyArray<string> | undefined
+  readonly requiredApis?: ReadonlyArray<string> | undefined
+  readonly hooks?: ReadonlyArray<string> | undefined
+  readonly supportingResources?: ReadonlyArray<string> | undefined
+  readonly adapterVersion?: string | undefined
+  readonly tools?:
+    | ReadonlyArray<{
+        readonly name: string
+        readonly description?: string | undefined
+        readonly parameters?: { readonly [x: string]: unknown } | undefined
+      }>
+    | undefined
   readonly security?:
     | {
         readonly safe: boolean
@@ -2134,8 +2372,31 @@ export type ServerExtensionToggleOutput =
         readonly commands?: ReadonlyArray<string> | undefined
         readonly environment?: ReadonlyArray<string> | undefined
       }
-      readonly status: "installed" | "enabled" | "disabled" | "failed" | "needs_auth"
+      readonly status:
+        | "installed"
+        | "enabled"
+        | "disabled"
+        | "failed"
+        | "needs_auth"
+        | "adapted"
+        | "incompatible"
+        | "quarantined"
       readonly enabled: boolean
+      readonly executionMode?: ("native" | "adapted" | "shim" | "sandboxed") | undefined
+      readonly packageId?: string | undefined
+      readonly entrypoints?: ReadonlyArray<string> | undefined
+      readonly dependencies?: ReadonlyArray<string> | undefined
+      readonly requiredApis?: ReadonlyArray<string> | undefined
+      readonly hooks?: ReadonlyArray<string> | undefined
+      readonly supportingResources?: ReadonlyArray<string> | undefined
+      readonly adapterVersion?: string | undefined
+      readonly tools?:
+        | ReadonlyArray<{
+            readonly name: string
+            readonly description?: string | undefined
+            readonly parameters?: { readonly [x: string]: unknown } | undefined
+          }>
+        | undefined
       readonly security?:
         | {
             readonly safe: boolean
@@ -2158,6 +2419,21 @@ export type ServerExtensionToggleOutput =
 export type ServerExtensionToggleOperation<E = never> = (
   input: ServerExtensionToggleInput,
 ) => Effect.Effect<ServerExtensionToggleOutput, E>
+
+export type ServerExtensionRollbackInput = { readonly id: string; readonly targetVersion: string }
+export type ServerExtensionRollbackOutput =
+  | {
+      readonly id: string
+      readonly extensionId: string
+      readonly previousVersion: string
+      readonly targetVersion: string
+      readonly timestamp: number
+      readonly reason: string
+    }
+  | undefined
+export type ServerExtensionRollbackOperation<E = never> = (
+  input: ServerExtensionRollbackInput,
+) => Effect.Effect<ServerExtensionRollbackOutput, E>
 
 export type ServerExtensionRemoveInput = { readonly id: string }
 export type ServerExtensionRemoveOutput = boolean
@@ -2190,8 +2466,11 @@ export type ServerExtensionMcpTestOperation<E = never> = (
 
 export interface ServerExtensionApi<E = never> {
   readonly list: ServerExtensionListOperation<E>
+  readonly inspect: ServerExtensionInspectOperation<E>
+  readonly proposeAdapter: ServerExtensionProposeAdapterOperation<E>
   readonly install: ServerExtensionInstallOperation<E>
   readonly toggle: ServerExtensionToggleOperation<E>
+  readonly rollback: ServerExtensionRollbackOperation<E>
   readonly remove: ServerExtensionRemoveOperation<E>
   readonly mcp: { readonly test: ServerExtensionMcpTestOperation<E> }
 }

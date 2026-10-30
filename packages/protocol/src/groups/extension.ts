@@ -18,6 +18,34 @@ export const ExtensionGroup = HttpApiGroup.make("server.extension")
     ),
   )
   .add(
+    HttpApiEndpoint.post("extension.inspect", `${root}/inspect`, {
+      payload: Schema.Struct({
+        sourceUrlOrPath: Schema.String,
+        subpath: Schema.optional(Schema.String),
+        ref: Schema.optional(Schema.String),
+      }),
+      success: Extension.PackageInspectionResult,
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "extension.inspect",
+        summary: "Inspect extension or package",
+        description: "Inspects a local folder, repository, or archive and decomposes it into component CIRs with security reports.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.post("extension.proposeAdapter", `${root}/adapter/propose`, {
+      payload: Schema.Struct({ cir: Extension.CIR }),
+      success: Extension.CompatibilityProposal,
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "extension.proposeAdapter",
+        summary: "Propose compatibility adapter",
+        description: "Analyzes capability gaps and generates an adapter proposal with tests and validation.",
+      }),
+    ),
+  )
+  .add(
     HttpApiEndpoint.post("extension.install", `${root}/install`, {
       payload: Extension.InstallInput,
       success: Extension.CIR,
@@ -39,6 +67,19 @@ export const ExtensionGroup = HttpApiGroup.make("server.extension")
         identifier: "extension.toggle",
         summary: "Toggle extension state",
         description: "Enables or disables an extension.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.post("extension.rollback", `${root}/:id/rollback`, {
+      params: { id: Schema.String },
+      payload: Schema.Struct({ targetVersion: Schema.String }),
+      success: Schema.optional(Extension.RollbackRecord),
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "extension.rollback",
+        summary: "Rollback extension version",
+        description: "Rolls back an installed extension to a previous version.",
       }),
     ),
   )

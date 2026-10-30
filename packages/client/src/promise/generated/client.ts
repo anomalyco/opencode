@@ -190,10 +190,16 @@ import type {
   ProjectConversationsListInput,
   ProjectConversationsListOutput,
   ServerExtensionListOutput,
+  ServerExtensionInspectInput,
+  ServerExtensionInspectOutput,
+  ServerExtensionProposeAdapterInput,
+  ServerExtensionProposeAdapterOutput,
   ServerExtensionInstallInput,
   ServerExtensionInstallOutput,
   ServerExtensionToggleInput,
   ServerExtensionToggleOutput,
+  ServerExtensionRollbackInput,
+  ServerExtensionRollbackOutput,
   ServerExtensionRemoveInput,
   ServerExtensionRemoveOutput,
   ServerExtensionMcpTestInput,
@@ -2188,6 +2194,30 @@ export function make(options: ClientOptions) {
           { method: "GET", path: `/api/extension`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
           requestOptions,
         ),
+      inspect: (input: ServerExtensionInspectInput, requestOptions?: RequestOptions) =>
+        request<ServerExtensionInspectOutput>(
+          {
+            method: "POST",
+            path: `/api/extension/inspect`,
+            body: { sourceUrlOrPath: input["sourceUrlOrPath"], subpath: input["subpath"], ref: input["ref"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      proposeAdapter: (input: ServerExtensionProposeAdapterInput, requestOptions?: RequestOptions) =>
+        request<ServerExtensionProposeAdapterOutput>(
+          {
+            method: "POST",
+            path: `/api/extension/adapter/propose`,
+            body: { cir: input["cir"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
       install: (input: ServerExtensionInstallInput, requestOptions?: RequestOptions) =>
         request<ServerExtensionInstallOutput>(
           {
@@ -2213,6 +2243,18 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/extension/${encodeURIComponent(input.id)}/toggle`,
             body: { enabled: input["enabled"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      rollback: (input: ServerExtensionRollbackInput, requestOptions?: RequestOptions) =>
+        request<ServerExtensionRollbackOutput>(
+          {
+            method: "POST",
+            path: `/api/extension/${encodeURIComponent(input.id)}/rollback`,
+            body: { targetVersion: input["targetVersion"] },
             successStatus: 200,
             declaredStatuses: [400, 401],
             empty: false,

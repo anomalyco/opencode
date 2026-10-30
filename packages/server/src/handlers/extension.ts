@@ -10,21 +10,57 @@ import { RulesAdapter } from "@opencode/core/extension/rules/adapter"
 import { PluginAdapter } from "@opencode/core/extension/plugin/adapter"
 import { ExtensionDetector } from "@opencode/core/extension/detector"
 import { ExtensionSecurity } from "@opencode/core/extension/security"
+import { AdapterGenerator } from "@opencode/core/extension/adapter-generator"
+import { ExtensionGitHub } from "@opencode/core/extension/github"
 import { Global } from "@opencode/util/global"
-import { FSUtil } from "@opencode/util/fs-util"
-import { Hash } from "@opencode/util/hash"
 
 export const ExtensionHandler = HttpApiBuilder.group(Api, "server.extension", (handlers) =>
   handlers
     .handle("extension.list", () =>
       ExtensionRegistry.Service.use((reg) => reg.list()),
     )
+    .handle("extension.inspect", (ctx) =>
+      Effect.gen(function* () {
+        const input = ctx.payload
+        const isGit =
+          input.sourceUrlOrPath.startsWith("http://") ||
+          input.sourceUrlOrPath.startsWith("https://") ||
+          input.sourceUrlOrPath.startsWith("git@")
+
+        if (isGit) {
+          const fetchResult = yield* ExtensionGitHub.fetchRepository({
+            repoUrl: input.sourceUrlOrPath,
+            subpath: input.subpath,
+            ref: input.ref,
+          })
+          const decomposed = yield* ExtensionDetector.decomposePackage(
+            fetchResult.directory,
+            fetchResult.source,
+            "project",
+          )
+          return decomposed
+        }
+
+        const source: Extension.Source = {
+          type: "local" as const,
+          location: input.sourceUrlOrPath,
+          subpath: input.subpath,
+        }
+        const effectiveDir = input.subpath
+          ? path.join(input.sourceUrlOrPath, input.subpath)
+          : input.sourceUrlOrPath
+        const decomposed = yield* ExtensionDetector.decomposePackage(effectiveDir, source, "project")
+        return decomposed
+      }).pipe(Effect.orDie),
+    )
+    .handle("extension.proposeAdapter", (ctx) =>
+      AdapterGenerator.inspectAndPropose(ctx.payload.cir).pipe(Effect.orDie),
+    )
     .handle("extension.install", (ctx) =>
       Effect.gen(function* () {
         const input = ctx.payload
         const reg = yield* ExtensionRegistry.Service
         const global = yield* Global.Service
-        const fs = yield* FSUtil.Service
 
         let workingSourcePath = input.sourceUrlOrPath
         const isGit =
@@ -32,12 +68,15 @@ export const ExtensionHandler = HttpApiBuilder.group(Api, "server.extension", (h
           input.sourceUrlOrPath.startsWith("https://") ||
           input.sourceUrlOrPath.startsWith("git@")
 
+        let sourceChecksum: string | undefined = undefined
         if (isGit) {
-          const tempCloneDir = path.join(global.tmp, `ext-clone-${Hash.fast(input.sourceUrlOrPath)}-${Date.now()}`)
-          yield* fs.ensureDir(tempCloneDir).pipe(Effect.ignore)
-          const proc = Bun.spawn(["git", "clone", "--depth", "1", input.sourceUrlOrPath, tempCloneDir])
-          yield* Effect.tryPromise(() => proc.exited)
-          workingSourcePath = input.subpath ? path.join(tempCloneDir, input.subpath) : tempCloneDir
+          const fetchResult = yield* ExtensionGitHub.fetchRepository({
+            repoUrl: input.sourceUrlOrPath,
+            subpath: input.subpath,
+            ref: input.ref,
+          })
+          workingSourcePath = fetchResult.directory
+          sourceChecksum = fetchResult.commitSha
         } else if (input.subpath) {
           workingSourcePath = path.join(input.sourceUrlOrPath, input.subpath)
         }
@@ -75,13 +114,14 @@ export const ExtensionHandler = HttpApiBuilder.group(Api, "server.extension", (h
                 type: isGit ? "git" : "local",
                 location: input.sourceUrlOrPath,
                 ref: input.ref,
+                checksum: sourceChecksum,
               },
               scope: input.targetScope,
               status: "failed",
               enabled: false,
               permissions: { filesystem: [], network: [], environment: [], commands: [] },
               metadata: {},
-              error: ("error" in installed && installed.error) ? installed.error : "Failed to install skill",
+              error: "error" in installed && installed.error ? installed.error : "Failed to install skill",
             }
           }
         } else if (category === "rule") {
@@ -107,6 +147,7 @@ export const ExtensionHandler = HttpApiBuilder.group(Api, "server.extension", (h
             source: {
               type: isGit ? "git" : "local",
               location: input.sourceUrlOrPath,
+              checksum: sourceChecksum,
             },
             scope: input.targetScope,
             status: security.safe ? "enabled" : "failed",
@@ -138,6 +179,7 @@ export const ExtensionHandler = HttpApiBuilder.group(Api, "server.extension", (h
             source: {
               type: isGit ? "git" : "local",
               location: input.sourceUrlOrPath,
+              checksum: sourceChecksum,
             },
             scope: input.targetScope,
             status: security.safe ? "enabled" : "failed",
@@ -163,6 +205,7 @@ export const ExtensionHandler = HttpApiBuilder.group(Api, "server.extension", (h
             source: {
               type: isGit ? "git" : "local",
               location: input.sourceUrlOrPath,
+              checksum: sourceChecksum,
             },
             scope: input.targetScope,
             status: "enabled",
@@ -178,6 +221,9 @@ export const ExtensionHandler = HttpApiBuilder.group(Api, "server.extension", (h
     )
     .handle("extension.toggle", (ctx) =>
       ExtensionRegistry.Service.use((reg) => reg.toggle(ctx.params.id, ctx.payload.enabled)),
+    )
+    .handle("extension.rollback", (ctx) =>
+      ExtensionRegistry.Service.use((reg) => reg.rollback(ctx.params.id, ctx.payload.targetVersion)),
     )
     .handle("extension.remove", (ctx) =>
       ExtensionRegistry.Service.use((reg) => reg.remove(ctx.params.id)),

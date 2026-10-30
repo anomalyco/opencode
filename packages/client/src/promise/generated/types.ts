@@ -305,7 +305,19 @@ export type ExtensionPermissions = {
   environment?: Array<string>
 }
 
-export type ExtensionStatus = "installed" | "enabled" | "disabled" | "failed" | "needs_auth"
+export type ExtensionStatus =
+  | "installed"
+  | "enabled"
+  | "disabled"
+  | "failed"
+  | "needs_auth"
+  | "adapted"
+  | "incompatible"
+  | "quarantined"
+
+export type ExtensionExecutionMode = "native" | "adapted" | "shim" | "sandboxed"
+
+export type ExtensionMcpToolDescriptor = { name: string; description?: string; parameters?: { [x: string]: JsonValue } }
 
 export type ExtensionSecurityFinding = {
   severity: "info" | "warning" | "error" | "critical"
@@ -315,7 +327,16 @@ export type ExtensionSecurityFinding = {
   line?: number
 }
 
-export type ExtensionMcpToolDescriptor = { name: string; description?: string; parameters?: { [x: string]: JsonValue } }
+export type ExtensionMappableCapability = { capability: string; targetApi: string; adapterStrategy: string }
+
+export type ExtensionRollbackRecord = {
+  id: string
+  extensionId: string
+  previousVersion: string
+  targetVersion: string
+  timestamp: number
+  reason: string
+}
 
 export type PermissionID = string
 
@@ -865,14 +886,6 @@ export type ExtensionSource = {
   checksum?: string
 }
 
-export type ExtensionSecurityReport = {
-  safe: boolean
-  riskLevel: "low" | "medium" | "high" | "critical"
-  findings: Array<ExtensionSecurityFinding>
-  scannedFiles: number
-  timestamp: number
-}
-
 export type ExtensionMcpDiagnosticResult = {
   server: string
   transport: "stdio" | "http" | "sse"
@@ -881,6 +894,30 @@ export type ExtensionMcpDiagnosticResult = {
   tools: Array<ExtensionMcpToolDescriptor>
   error?: string
   details: { executableFound: boolean; exitCode?: number; stderr?: string; authValid?: boolean }
+}
+
+export type ExtensionSecurityReport = {
+  safe: boolean
+  riskLevel: "low" | "medium" | "high" | "critical"
+  findings: Array<ExtensionSecurityFinding>
+  scannedFiles: number
+  timestamp: number
+}
+
+export type ExtensionCompatibilityProposal = {
+  extensionId: string
+  platform: ExtensionPlatform
+  category: ExtensionCategory
+  compatible: boolean
+  compatibilityScore: number
+  nativeCapabilities: Array<string>
+  mappableCapabilities: Array<ExtensionMappableCapability>
+  missingCapabilities: Array<string>
+  generatedAdapterCode?: string
+  generatedTests?: string
+  validationStatus: "passed" | "failed" | "untested"
+  validationErrors?: Array<string>
+  requiresApproval: boolean
 }
 
 export type PermissionRequest = {
@@ -2237,6 +2274,15 @@ export type ExtensionCIR = {
   permissions: ExtensionPermissions
   status: ExtensionStatus
   enabled: boolean
+  executionMode?: ExtensionExecutionMode
+  packageId?: string
+  entrypoints?: Array<string>
+  dependencies?: Array<string>
+  requiredApis?: Array<string>
+  hooks?: Array<string>
+  supportingResources?: Array<string>
+  adapterVersion?: string
+  tools?: Array<ExtensionMcpToolDescriptor>
   security?: ExtensionSecurityReport
   metadata: { [x: string]: JsonValue }
   error?: string
@@ -2705,6 +2751,14 @@ export type CredentialEntry = {
   label: string
   active: boolean
   value: CredentialValue
+}
+
+export type ExtensionPackageInspectionResult = {
+  source: ExtensionSource
+  primaryPlatform: ExtensionPlatform
+  manifest?: { [x: string]: JsonValue }
+  components: Array<ExtensionCIR>
+  security: ExtensionSecurityReport
 }
 
 export type FormFields1 = [FormField1, ...Array<FormField1>]
@@ -4328,6 +4382,82 @@ export type ProjectConversationsListOutput = Array<ProjectWorkspaceProjectConver
 
 export type ServerExtensionListOutput = Array<ExtensionCIR>
 
+export type ServerExtensionInspectInput = {
+  readonly sourceUrlOrPath: string
+  readonly subpath?: string | undefined
+  readonly ref?: string | undefined
+}
+
+export type ServerExtensionInspectOutput = ExtensionPackageInspectionResult
+
+export type ServerExtensionProposeAdapterInput = {
+  readonly cir: {
+    readonly id: string
+    readonly name: string
+    readonly version: string
+    readonly category: "skill" | "mcp" | "rule" | "plugin"
+    readonly originPlatform: "opencode" | "claude" | "codex" | "antigravity" | "cursor" | "custom"
+    readonly source: {
+      readonly type: "git" | "local" | "archive" | "builtin"
+      readonly location: string
+      readonly subpath?: string
+      readonly ref?: string
+      readonly checksum?: string
+    }
+    readonly scope: "global" | "project"
+    readonly description?: string
+    readonly author?: string
+    readonly license?: string
+    readonly homepage?: string
+    readonly permissions: {
+      readonly filesystem?: ReadonlyArray<string>
+      readonly network?: ReadonlyArray<string>
+      readonly commands?: ReadonlyArray<string>
+      readonly environment?: ReadonlyArray<string>
+    }
+    readonly status:
+      | "installed"
+      | "enabled"
+      | "disabled"
+      | "failed"
+      | "needs_auth"
+      | "adapted"
+      | "incompatible"
+      | "quarantined"
+    readonly enabled: boolean
+    readonly executionMode?: "native" | "adapted" | "shim" | "sandboxed"
+    readonly packageId?: string
+    readonly entrypoints?: ReadonlyArray<string>
+    readonly dependencies?: ReadonlyArray<string>
+    readonly requiredApis?: ReadonlyArray<string>
+    readonly hooks?: ReadonlyArray<string>
+    readonly supportingResources?: ReadonlyArray<string>
+    readonly adapterVersion?: string
+    readonly tools?: ReadonlyArray<{
+      readonly name: string
+      readonly description?: string
+      readonly parameters?: { readonly [x: string]: JsonValue }
+    }>
+    readonly security?: {
+      readonly safe: boolean
+      readonly riskLevel: "low" | "medium" | "high" | "critical"
+      readonly findings: ReadonlyArray<{
+        readonly severity: "info" | "warning" | "error" | "critical"
+        readonly code: string
+        readonly message: string
+        readonly file?: string
+        readonly line?: number
+      }>
+      readonly scannedFiles: number
+      readonly timestamp: number
+    }
+    readonly metadata: { readonly [x: string]: JsonValue }
+    readonly error?: string
+  }
+}
+
+export type ServerExtensionProposeAdapterOutput = ExtensionCompatibilityProposal
+
 export type ServerExtensionInstallInput = {
   readonly sourceUrlOrPath: string
   readonly subpath?: string | undefined
@@ -4342,6 +4472,10 @@ export type ServerExtensionInstallOutput = ExtensionCIR
 export type ServerExtensionToggleInput = { readonly id: string; readonly enabled: boolean }
 
 export type ServerExtensionToggleOutput = ExtensionCIR | null
+
+export type ServerExtensionRollbackInput = { readonly id: string; readonly targetVersion: string }
+
+export type ServerExtensionRollbackOutput = ExtensionRollbackRecord | undefined
 
 export type ServerExtensionRemoveInput = { readonly id: string }
 

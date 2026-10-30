@@ -55,7 +55,16 @@ export const SecurityReport = Schema.Struct({
 }).annotate({ identifier: "Extension.SecurityReport" })
 export interface SecurityReport extends Schema.Schema.Type<typeof SecurityReport> {}
 
-export const Status = Schema.Literals(["installed", "enabled", "disabled", "failed", "needs_auth"]).annotate({
+export const Status = Schema.Literals([
+  "installed",
+  "enabled",
+  "disabled",
+  "failed",
+  "needs_auth",
+  "adapted",
+  "incompatible",
+  "quarantined",
+]).annotate({
   identifier: "Extension.Status",
 })
 export type Status = typeof Status.Type
@@ -64,6 +73,18 @@ export const Scope = Schema.Literals(["global", "project"]).annotate({
   identifier: "Extension.Scope",
 })
 export type Scope = typeof Scope.Type
+
+export const ExecutionMode = Schema.Literals(["native", "adapted", "shim", "sandboxed"]).annotate({
+  identifier: "Extension.ExecutionMode",
+})
+export type ExecutionMode = typeof ExecutionMode.Type
+
+export const McpToolDescriptor = Schema.Struct({
+  name: Schema.String,
+  description: optional(Schema.String),
+  parameters: optional(Schema.Record(Schema.String, Schema.Unknown)),
+}).annotate({ identifier: "Extension.McpToolDescriptor" })
+export interface McpToolDescriptor extends Schema.Schema.Type<typeof McpToolDescriptor> {}
 
 export const CIR = Schema.Struct({
   id: Schema.String,
@@ -80,18 +101,20 @@ export const CIR = Schema.Struct({
   permissions: Permissions,
   status: Status,
   enabled: Schema.Boolean,
+  executionMode: optional(ExecutionMode),
+  packageId: optional(Schema.String),
+  entrypoints: optional(Schema.Array(Schema.String)),
+  dependencies: optional(Schema.Array(Schema.String)),
+  requiredApis: optional(Schema.Array(Schema.String)),
+  hooks: optional(Schema.Array(Schema.String)),
+  supportingResources: optional(Schema.Array(Schema.String)),
+  adapterVersion: optional(Schema.String),
+  tools: optional(Schema.Array(McpToolDescriptor)),
   security: optional(SecurityReport),
   metadata: Schema.Record(Schema.String, Schema.Unknown),
   error: optional(Schema.String),
 }).annotate({ identifier: "Extension.CIR" })
 export interface CIR extends Schema.Schema.Type<typeof CIR> {}
-
-export const McpToolDescriptor = Schema.Struct({
-  name: Schema.String,
-  description: optional(Schema.String),
-  parameters: optional(Schema.Record(Schema.String, Schema.Unknown)),
-}).annotate({ identifier: "Extension.McpToolDescriptor" })
-export interface McpToolDescriptor extends Schema.Schema.Type<typeof McpToolDescriptor> {}
 
 export const McpDiagnosticResult = Schema.Struct({
   server: Schema.String,
@@ -118,3 +141,56 @@ export const InstallInput = Schema.Struct({
   overrideName: optional(Schema.String),
 }).annotate({ identifier: "Extension.InstallInput" })
 export interface InstallInput extends Schema.Schema.Type<typeof InstallInput> {}
+
+export const MappableCapability = Schema.Struct({
+  capability: Schema.String,
+  targetApi: Schema.String,
+  adapterStrategy: Schema.String,
+}).annotate({ identifier: "Extension.MappableCapability" })
+export interface MappableCapability extends Schema.Schema.Type<typeof MappableCapability> {}
+
+export const CompatibilityProposal = Schema.Struct({
+  extensionId: Schema.String,
+  platform: Platform,
+  category: Category,
+  compatible: Schema.Boolean,
+  compatibilityScore: Schema.Finite,
+  nativeCapabilities: Schema.Array(Schema.String),
+  mappableCapabilities: Schema.Array(MappableCapability),
+  missingCapabilities: Schema.Array(Schema.String),
+  generatedAdapterCode: optional(Schema.String),
+  generatedTests: optional(Schema.String),
+  validationStatus: Schema.Literals(["passed", "failed", "untested"]),
+  validationErrors: optional(Schema.Array(Schema.String)),
+  requiresApproval: Schema.Boolean,
+}).annotate({ identifier: "Extension.CompatibilityProposal" })
+export interface CompatibilityProposal extends Schema.Schema.Type<typeof CompatibilityProposal> {}
+
+export const PackageInspectionResult = Schema.Struct({
+  source: Source,
+  primaryPlatform: Platform,
+  manifest: optional(Schema.Record(Schema.String, Schema.Unknown)),
+  components: Schema.Array(CIR),
+  security: SecurityReport,
+}).annotate({ identifier: "Extension.PackageInspectionResult" })
+export interface PackageInspectionResult extends Schema.Schema.Type<typeof PackageInspectionResult> {}
+
+export const ExtensionUpdateInfo = Schema.Struct({
+  id: Schema.String,
+  currentVersion: Schema.String,
+  latestVersion: Schema.String,
+  updateAvailable: Schema.Boolean,
+  changelog: optional(Schema.String),
+  source: Source,
+}).annotate({ identifier: "Extension.ExtensionUpdateInfo" })
+export interface ExtensionUpdateInfo extends Schema.Schema.Type<typeof ExtensionUpdateInfo> {}
+
+export const RollbackRecord = Schema.Struct({
+  id: Schema.String,
+  extensionId: Schema.String,
+  previousVersion: Schema.String,
+  targetVersion: Schema.String,
+  timestamp: Schema.Finite,
+  reason: Schema.String,
+}).annotate({ identifier: "Extension.RollbackRecord" })
+export interface RollbackRecord extends Schema.Schema.Type<typeof RollbackRecord> {}
