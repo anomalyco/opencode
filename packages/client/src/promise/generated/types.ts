@@ -366,7 +366,7 @@ export type UsageLimitsMeter = { percent: number; limited: boolean; resetsAt: nu
 
 export type McpProtocol = "legacy" | "auto" | "2026-07-28"
 
-export type ConfigCompactionPercent = `${number}${"%"}`
+export type ConfigCompactionPercent = string
 
 export type ConfigWorktree = { directory: string }
 

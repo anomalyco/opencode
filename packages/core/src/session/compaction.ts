@@ -43,7 +43,7 @@ import { SessionUsage } from "./usage.js"
 export type Settings = {
   auto: boolean
   /** Room kept free below the model's limits before compacting: a share such as "20%", or tokens. Unset keeps 15%, and at least 16k, free. */
-  buffer?: number | `${number}%`
+  buffer?: number | string
   /** Tokens of recent conversation kept verbatim beside the summary. */
   keep: number
   /** Summarize in the background as the context nears the threshold, so automatic compaction can swap it in. */
