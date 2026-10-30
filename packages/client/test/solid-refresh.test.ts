@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { createEffect, createRoot } from "solid-js"
+import { createRoot } from "solid-js"
 import { createData, settleMs, type CreateDataInput } from "../src/solid"
 import { OpenCode, type OpenCodeEvent, type SessionInfo } from "../src/promise"
 
@@ -254,7 +254,6 @@ test("invalidations that land before a queued reload starts are absorbed by it",
 test("event-driven session reads evict missing sessions without reporting an error, while explicit reads still reject", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const errors: unknown[] = []
-  const evicted = Promise.withResolvers<void>()
   const session: SessionInfo = {
     id: "ses_ephemeral",
     projectID: "project",
@@ -271,8 +270,8 @@ test("event-driven session reads evict missing sessions without reporting an err
         { status: 404 },
       ),
   })
-  const setup = createRoot((dispose) => {
-    const data = createData({
+  const setup = createRoot((dispose) => ({
+    data: createData({
       api: () => api,
       directory: "/project",
       event: {
@@ -283,12 +282,9 @@ test("event-driven session reads evict missing sessions without reporting an err
         },
       },
       onError: (error) => errors.push(error),
-    })
-    createEffect(() => {
-      if (data.session.missing(session.id)) evicted.resolve()
-    })
-    return { data, dispose }
-  })
+    }),
+    dispose,
+  }))
   const viewed: OpenCodeEvent = {
     id: "evt_ephemeral_viewed",
     created: 2,
@@ -300,7 +296,11 @@ test("event-driven session reads evict missing sessions without reporting an err
     setup.data.session.remember(session)
     expect(setup.data.session.get(session.id)).toBeDefined()
     listeners.forEach((listener) => listener({ name: viewed.type, details: viewed }))
-    await evicted.promise
+    const deadline = Date.now() + 2_000
+    while (!setup.data.session.missing(session.id)) {
+      if (Date.now() > deadline) throw new Error("Timed out waiting for missing-session eviction")
+      await Bun.sleep(5)
+    }
     expect(errors).toEqual([])
     expect(setup.data.session.get(session.id)).toBeUndefined()
     expect(setup.data.session.missing(session.id)).toBe(true)
