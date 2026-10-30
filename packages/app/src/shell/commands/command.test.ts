@@ -7,6 +7,7 @@ import {
   CommandCatalog,
   commandKeymap,
   formatKeybind,
+  keyFromKeyboardEvent,
   matchKeybind,
   parseKeybind,
   resolveKeybindOption,
@@ -120,8 +121,92 @@ describe("command keybinds", () => {
     { config: "mod+shift+[", event: { key: "Х", code: "BracketLeft", ctrlKey: true, shiftKey: true }, match: true },
     // macOS Option turns L into ¬; the physical key still matches.
     { config: "meta+alt+l", event: { key: "¬", code: "KeyL", metaKey: true, altKey: true }, match: true },
+    { config: "ctrl+f", event: { key: "а", code: "KeyF", ctrlKey: true }, match: true },
+    { config: "meta+f", event: { key: "а", code: "KeyF", metaKey: true }, match: true },
+    { config: "ctrl+shift+f", event: { key: "А", code: "KeyF", ctrlKey: true, shiftKey: true }, match: true },
+    { config: "ctrl+g", event: { key: "γ", code: "KeyG", ctrlKey: true }, match: true },
+    { config: "ctrl+e", event: { key: "ק", code: "KeyE", ctrlKey: true }, match: true },
+    { config: "ctrl+comma", event: { key: "б", code: "Comma", ctrlKey: true }, match: true },
+    { config: "ctrl+.", event: { key: "ю", code: "Period", ctrlKey: true }, match: true },
+    { config: "ctrl+;", event: { key: "ж", code: "Semicolon", ctrlKey: true }, match: true },
+    { config: "ctrl+'", event: { key: "э", code: "Quote", ctrlKey: true }, match: true },
+    { config: "ctrl+[", event: { key: "х", code: "BracketLeft", ctrlKey: true }, match: true },
+    { config: "ctrl+]", event: { key: "ъ", code: "BracketRight", ctrlKey: true }, match: true },
+    { config: "ctrl+\\", event: { key: "む", code: "Backslash", ctrlKey: true }, match: true },
+    { config: "ctrl+/", event: { key: "め", code: "Slash", ctrlKey: true }, match: true },
+    { config: "ctrl+`", event: { key: "ё", code: "Backquote", ctrlKey: true }, match: true },
+    { config: "ctrl+а", event: { key: "а", code: "KeyF", ctrlKey: true }, match: true },
+    { config: "ctrl+х", event: { key: "х", code: "BracketLeft", ctrlKey: true }, match: true },
+    { config: "а", event: { key: "а", code: "KeyF" }, match: true },
+    { config: "f", event: { key: "а", code: "KeyF" }, match: false },
+    { config: "shift+f", event: { key: "А", code: "KeyF", shiftKey: true }, match: false },
+    { config: "ctrl+a", event: { key: "a", code: "KeyQ", ctrlKey: true }, match: true },
+    { config: "ctrl+q", event: { key: "a", code: "KeyQ", ctrlKey: true }, match: false },
+    { config: "ctrl+e", event: { key: "é", code: "KeyE", ctrlKey: true }, match: false },
+    { config: "ctrl+f", event: { key: "а", code: "KeyF", metaKey: true }, match: false },
+    { config: "ctrl+f", event: { key: "а", code: "KeyF", ctrlKey: true, shiftKey: true }, match: false },
+    { config: "ctrl+f", event: { key: "а", code: "KeyF", ctrlKey: true, isComposing: true }, match: false },
+    { config: "ctrl+[", event: { key: "х", code: "BracketLeft", ctrlKey: true, isComposing: true }, match: true },
+    { config: "ctrl+f", event: { key: "Dead", code: "KeyF", ctrlKey: true }, match: false },
+    { config: "ctrl+f", event: { key: "Unidentified", code: "KeyF", ctrlKey: true }, match: false },
+    // Preserve the bracket fallback that already supports macOS Option and explicit Ctrl+Alt bindings.
+    { config: "meta+alt+[", event: { key: "“", code: "BracketLeft", metaKey: true, altKey: true }, match: true },
+    { config: "meta+alt+]", event: { key: "‘", code: "BracketRight", metaKey: true, altKey: true }, match: true },
+    { config: "ctrl+alt+[", event: { key: "х", code: "BracketLeft", ctrlKey: true, altKey: true }, match: true },
+    {
+      config: "ctrl+[",
+      event: { key: "х", code: "BracketLeft", ctrlKey: true, modifierAltGraph: true },
+      match: true,
+    },
+    // Guard only the new fallback; existing Alt/bracket normalization still applies.
+    {
+      config: "alt+f",
+      event: { key: "а", code: "KeyF", altKey: true, modifierAltGraph: true },
+      match: true,
+    },
+    {
+      config: "ctrl+alt+f",
+      event: { key: "а", code: "KeyF", ctrlKey: true, altKey: true, modifierAltGraph: true },
+      match: true,
+    },
+    {
+      config: "meta+alt+[",
+      event: { key: "“", code: "BracketLeft", metaKey: true, altKey: true, modifierAltGraph: true },
+      match: true,
+    },
+    {
+      config: "ctrl+alt+[",
+      event: { key: "х", code: "BracketLeft", ctrlKey: true, altKey: true, modifierAltGraph: true },
+      match: true,
+    },
+    {
+      config: "meta+alt+l",
+      event: { key: "¬", code: "KeyL", metaKey: true, altKey: true, isComposing: true },
+      match: true,
+    },
+    {
+      config: "ctrl+f",
+      event: { key: "а", code: "KeyF", ctrlKey: true, modifierAltGraph: true },
+      match: false,
+    },
   ])("matchKeybind $config with $event.key is $match", (row) => {
-    expect(matchKeybind(parseKeybind(row.config), new KeyboardEvent("keydown", row.event))).toBe(row.match)
+    const event = new KeyboardEvent("keydown", row.event)
+
+    // happy-dom treats every Alt key as AltGraph and ignores modifierAltGraph.
+    const getModifierState = event.getModifierState.bind(event)
+    event.getModifierState = (key) =>
+      key === "AltGraph"
+        ? "modifierAltGraph" in row.event && row.event.modifierAltGraph === true
+        : getModifierState(key)
+    expect(matchKeybind(parseKeybind(row.config), event)).toBe(row.match)
+  })
+
+  test.each([
+    { event: { key: "х", code: "BracketLeft", ctrlKey: true }, key: "[" },
+    { event: { key: "“", code: "BracketLeft", metaKey: true, altKey: true }, key: "[" },
+    { event: { key: "‘", code: "BracketRight", metaKey: true, altKey: true }, key: "]" },
+  ])("shortcut recording retains the upstream bracket key for $event.key", (row) => {
+    expect(keyFromKeyboardEvent(new KeyboardEvent("keydown", row.event))).toBe(row.key)
   })
 
   // IS_MAC is fixed when the module loads, so each assertion accepts either platform's symbols.

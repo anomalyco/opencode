@@ -69,6 +69,38 @@ export function keyFromKeyboardEvent(event: KeyboardEvent) {
   return event.code.slice(3).toLowerCase()
 }
 
+function keybindKeysFromKeyboardEvent(event: KeyboardEvent) {
+  const key = keyFromKeyboardEvent(event)
+
+  if (event.isComposing || event.getModifierState("AltGraph")) return [key]
+
+  if ((!event.ctrlKey && !event.metaKey) || event.altKey || !/^[^\p{ASCII}\p{Script=Latin}]$/u.test(event.key))
+    return [key]
+
+  // Keep literal bindings first, then try the physical position on non-Latin layouts.
+  const literal = normalizeKey(event.key)
+
+  if (/^Key[A-Z]$/.test(event.code)) return [literal, event.code.slice(3).toLowerCase()]
+
+  const punctuation = new Map([
+    ["Comma", "comma"],
+    ["Period", "."],
+    ["Semicolon", ";"],
+    ["Quote", "'"],
+    ["BracketLeft", "["],
+    ["BracketRight", "]"],
+    ["Backslash", "\\"],
+    ["Slash", "/"],
+    ["Backquote", "`"],
+    ["Minus", "-"],
+    ["Equal", "="],
+  ])
+
+  const physical = punctuation.get(event.code)
+
+  return physical ? [literal, physical] : [key]
+}
+
 // ⇧[ types { on US layouts, so ⇧⌘[ binds as written; a layout that types no ASCII there falls back to the physical key.
 function bracketKey(event: Pick<KeyboardEvent, "key" | "code">) {
   if (event.key === "{" || event.key === "}") return event.key === "{" ? "[" : "]"
@@ -84,8 +116,10 @@ function signature(key: string, ctrl: boolean, meta: boolean, shift: boolean, al
   return `${key}:${mask}`
 }
 
-function signatureFromEvent(event: KeyboardEvent) {
-  return signature(keyFromKeyboardEvent(event), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
+function signaturesFromEvent(event: KeyboardEvent) {
+  return keybindKeysFromKeyboardEvent(event).map((key) =>
+    signature(key, event.ctrlKey, event.metaKey, event.shiftKey, event.altKey),
+  )
 }
 
 type KeybindConfig = string
@@ -280,10 +314,10 @@ export function parseKeybind(config: string): Keybind[] {
 }
 
 export function matchKeybind(keybinds: Keybind[], event: KeyboardEvent): boolean {
-  const eventKey = keyFromKeyboardEvent(event)
+  const eventKeys = keybindKeysFromKeyboardEvent(event)
 
   for (const kb of keybinds) {
-    const keyMatch = kb.key === eventKey
+    const keyMatch = eventKeys.includes(kb.key)
     const ctrlMatch = kb.ctrl === (event.ctrlKey || false)
     const metaMatch = kb.meta === (event.metaKey || false)
     const shiftMatch = kb.shift === (event.shiftKey || false)
@@ -508,31 +542,34 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const handleKeyDown = (event: KeyboardEvent) => {
       if (suspended() || dialog.active) return
 
-      const sig = signatureFromEvent(event)
-      const isPalette = palette().has(sig)
-      const option = resolveKeybindOption(keymap().get(sig), event)
-      const modified = event.ctrlKey || event.metaKey || event.altKey
-      const isTab = event.key === "Tab"
+      for (const sig of signaturesFromEvent(event)) {
+        const isPalette = palette().has(sig)
+        const option = resolveKeybindOption(keymap().get(sig), event)
+        const modified = event.ctrlKey || event.metaKey || event.altKey
+        const isTab = event.key === "Tab"
 
-      if (isEditableTarget(event.target) && !isPalette && !option?.editable && !modified && !isTab) return
+        if (isEditableTarget(event.target) && !isPalette && !option?.editable && !modified && !isTab) return
 
-      if (isPalette) {
+        if (isPalette) {
+          event.preventDefault()
+          event.stopPropagation()
+          showPalette()
+
+          return
+        }
+
+        if (!option) continue
+
+        // A command that returns false declines the key, which goes on to its target.
+        const result = option.onSelect?.("keybind")
+
+        if (result === false) return
         event.preventDefault()
         event.stopPropagation()
-        showPalette()
+        void result
 
         return
       }
-
-      if (!option) return
-
-      // A command that returns false declines the key, which goes on to its target.
-      const result = option.onSelect?.("keybind")
-
-      if (result === false) return
-      event.preventDefault()
-      event.stopPropagation()
-      void result
     }
 
     onMount(() => {
