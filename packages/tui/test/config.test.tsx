@@ -95,6 +95,16 @@ test("resolves overrides without mutating input", () => {
   expect(input.keybinds).toEqual({ session_list: "ctrl+l" })
 })
 
+test("resolves transcript settings and hidden message keybinds", () => {
+  const config = resolve(
+    { transcript: { max_messages: 50, keep_first_prompt: false }, keybinds: { messages_hidden_all: "ctrl+o" } },
+    { terminalSuspend: true },
+  )
+
+  expect(config.transcript).toEqual({ max_messages: 50, keep_first_prompt: false })
+  expect(config.keybinds.get("session.hidden.all")).toMatchObject([{ key: "ctrl+o" }])
+})
+
 test("resolves a session move keybind", () => {
   const config = resolve({ keybinds: { session_move: "ctrl+o" } }, { terminalSuspend: true })
 

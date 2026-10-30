@@ -26,6 +26,9 @@ import { desc } from "drizzle-orm"
 import { eq } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
+import { gt } from "drizzle-orm"
+import { asc } from "drizzle-orm"
+import { count } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProviderError } from "@/provider/error"
@@ -67,6 +70,7 @@ const Cursor = Schema.Struct({
 type Cursor = typeof Cursor.Type
 
 const decodeCursor = Schema.decodeUnknownSync(Cursor)
+const decodeMessageID = Schema.decodeUnknownSync(MessageID)
 
 export const cursor = {
   encode(input: Cursor) {
@@ -94,6 +98,9 @@ const part = (row: typeof PartTable.$inferSelect) =>
 
 const older = (row: Cursor) =>
   or(lt(MessageTable.time_created, row.time), and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)))
+
+const newer = (row: Cursor) =>
+  or(gt(MessageTable.time_created, row.time), and(eq(MessageTable.time_created, row.time), gt(MessageTable.id, row.id)))
 
 function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$inferSelect)[]) {
   const ids = rows.map((row) => row.id)
@@ -435,21 +442,32 @@ export function toModelMessages(
   return Effect.runPromise(toModelMessagesEffect(input, model, options))
 }
 
+// Pages through a session's messages. Without an anchor the page is the newest
+// `limit` messages, or the oldest with `order: "asc"`. `before` and `after` take
+// a cursor from a previous page or a message ID, and return the messages strictly
+// older or newer than it. Items are always in chronological order; `cursor`
+// continues in the same direction.
 export const page = Effect.fn("MessageV2.page")(function* (input: {
   sessionID: SessionID
   limit: number
   before?: string
+  after?: string
+  order?: "asc" | "desc"
 }) {
   const { db } = yield* Database.Service
-  const before = input.before ? cursor.decode(input.before) : undefined
-  const where = before
-    ? and(eq(MessageTable.session_id, input.sessionID), older(before))
-    : eq(MessageTable.session_id, input.sessionID)
+  const ascending = input.after !== undefined || input.order === "asc"
+  const anchorValue = input.after ?? input.before
+  const anchor = anchorValue ? yield* resolveAnchor(db, input.sessionID, anchorValue) : undefined
+  const session = eq(MessageTable.session_id, input.sessionID)
   const rows = yield* db
     .select()
     .from(MessageTable)
-    .where(where)
-    .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+    .where(anchor ? and(session, ascending ? newer(anchor) : older(anchor)) : session)
+    .orderBy(
+      ...(ascending
+        ? [asc(MessageTable.time_created), asc(MessageTable.id)]
+        : [desc(MessageTable.time_created), desc(MessageTable.id)]),
+    )
     .limit(input.limit + 1)
     .all()
     .pipe(Effect.orDie)
@@ -461,16 +479,12 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
       .get()
       .pipe(Effect.orDie)
     if (!row) return yield* new NotFoundError({ message: `Session not found: ${input.sessionID}` })
-    return {
-      items: [] as WithParts[],
-      more: false,
-    }
   }
 
   const more = rows.length > input.limit
   const slice = more ? rows.slice(0, input.limit) : rows
   const items = yield* hydrate(db, slice)
-  items.reverse()
+  if (!ascending) items.reverse()
   const tail = slice.at(-1)
   return {
     items,
@@ -478,6 +492,32 @@ export const page = Effect.fn("MessageV2.page")(function* (input: {
     cursor: more && tail ? cursor.encode({ id: tail.id, time: tail.time_created }) : undefined,
   }
 })
+
+export const total = Effect.fn("MessageV2.total")(function* (sessionID: SessionID) {
+  const { db } = yield* Database.Service
+  const row = yield* db
+    .select({ value: count() })
+    .from(MessageTable)
+    .where(eq(MessageTable.session_id, sessionID))
+    .get()
+    .pipe(Effect.orDie)
+  return row?.value ?? 0
+})
+
+function resolveAnchor(db: Database.Interface["db"], sessionID: SessionID, value: string) {
+  return Effect.gen(function* () {
+    if (!value.startsWith("msg")) return cursor.decode(value)
+    const id = decodeMessageID(value)
+    const row = yield* db
+      .select({ time: MessageTable.time_created })
+      .from(MessageTable)
+      .where(and(eq(MessageTable.session_id, sessionID), eq(MessageTable.id, id)))
+      .get()
+      .pipe(Effect.orDie)
+    if (!row) return yield* new NotFoundError({ message: `Message not found: ${value}` })
+    return { id, time: row.time }
+  })
+}
 
 export function stream(sessionID: SessionID) {
   const size = 50

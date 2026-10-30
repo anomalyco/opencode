@@ -10,6 +10,8 @@ import { PermissionProvider } from "../../../../src/context/permission"
 import { ExitProvider } from "../../../../src/context/exit"
 import { createEventSource, createFetch, type FetchHandler, directory } from "../../../fixture/tui-sdk"
 import { TestTuiContexts } from "../../../fixture/tui-environment"
+import { createTuiResolvedConfig } from "../../../fixture/tui-runtime"
+import { TuiConfigProvider } from "../../../../src/config"
 export { createEventSource, createFetch, directory, eventSource, json, worktree } from "../../../fixture/tui-sdk"
 
 export async function wait(fn: () => boolean, timeout = 2000) {
@@ -22,7 +24,11 @@ export async function wait(fn: () => boolean, timeout = 2000) {
 
 type Ctx = { kv: ReturnType<typeof useKV>; project: ReturnType<typeof useProject>; sync: ReturnType<typeof useSync> }
 
-export async function mount(override?: FetchHandler, state?: string) {
+export async function mount(
+  override?: FetchHandler,
+  state?: string,
+  config?: Parameters<typeof createTuiResolvedConfig>[0],
+) {
   const calls = createFetch(override)
   const events = createEventSource()
   let sync!: ReturnType<typeof useSync>
@@ -52,9 +58,11 @@ export async function mount(override?: FetchHandler, state?: string) {
             <PermissionProvider>
               <ProjectProvider>
                 <ExitProvider exit={() => {}}>
-                  <SyncProvider>
-                    <Probe />
-                  </SyncProvider>
+                  <TuiConfigProvider config={createTuiResolvedConfig(config)}>
+                    <SyncProvider>
+                      <Probe />
+                    </SyncProvider>
+                  </TuiConfigProvider>
                 </ExitProvider>
               </ProjectProvider>
             </PermissionProvider>

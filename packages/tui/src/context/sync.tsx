@@ -32,11 +32,26 @@ import { batch, onMount } from "solid-js"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
+import { TuiConfig, useTuiConfig } from "../config"
 
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
   switchableOrgCount: 0,
 }
+
+export const HIDDEN_PAGE_SIZES = [50, 100] as const
+
+// Messages a session keeps unloaded. The loaded list is `head` messages (the
+// first prompt, plus any loaded right after it), a gap of `count` hidden
+// messages, then the newest messages, at most `limit` of them.
+export type HiddenMessages = {
+  head: number
+  count: number
+  limit: number
+  loading?: HiddenLoad
+}
+export type HiddenEdge = "above" | "below" | "all"
+export type HiddenLoad = { edge: HiddenEdge; size?: number }
 
 function search<T>(items: T[], target: string, key: (item: T) => string) {
   let left = 0
@@ -102,6 +117,9 @@ export const {
       part: {
         [messageID: string]: Part[]
       }
+      hidden: {
+        [sessionID: string]: HiddenMessages
+      }
       lsp: LspStatus[]
       mcp: {
         [key: string]: McpStatus
@@ -136,6 +154,7 @@ export const {
       todo: {},
       message: {},
       part: {},
+      hidden: {},
       lsp: [],
       mcp: {},
       mcp_resource: {},
@@ -146,6 +165,11 @@ export const {
     const event = useEvent()
     const project = useProject()
     const sdk = useSDK()
+    const config = useTuiConfig()
+    const maxMessages = () => config.transcript?.max_messages ?? TuiConfig.TranscriptMaxMessagesDefault
+    const keepFirstPrompt = () => config.transcript?.keep_first_prompt ?? true
+    const hiddenOf = (sessionID: string): HiddenMessages =>
+      store.hidden[sessionID] ?? { head: 0, count: 0, limit: maxMessages() }
 
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
@@ -330,22 +354,30 @@ export const {
             setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
             break
           }
+          const sessionID = event.properties.info.sessionID
+          const hidden = hiddenOf(sessionID)
+          // An update to a message inside the gap must not pull it back into view.
+          if (hidden.count > 0 && result.index === hidden.head) break
           setStore(
             "message",
-            event.properties.info.sessionID,
+            sessionID,
             produce((draft) => {
               draft.splice(result.index, 0, event.properties.info)
             }),
           )
-          const updated = store.message[event.properties.info.sessionID]
-          if (updated.length > 100) {
-            const oldest = updated[0]
+          const updated = store.message[sessionID]
+          const head =
+            hidden.count === 0 && hidden.head === 0 && keepFirstPrompt() && updated[0]?.role === "user"
+              ? 1
+              : hidden.head
+          if (updated.length - head > hidden.limit) {
+            const oldest = updated[head]
             batch(() => {
               setStore(
                 "message",
-                event.properties.info.sessionID,
+                sessionID,
                 produce((draft) => {
-                  draft.shift()
+                  draft.splice(head, 1)
                 }),
               )
               setStore(
@@ -354,6 +386,7 @@ export const {
                   delete draft[oldest.id]
                 }),
               )
+              setStore("hidden", sessionID, { head, count: hidden.count + 1, limit: hidden.limit })
             })
           }
           break
@@ -362,14 +395,23 @@ export const {
           touchMessage(event.properties.sessionID, event.properties.messageID)
           const messages = store.message[event.properties.sessionID]
           const index = messages.findIndex((message) => message.id === event.properties.messageID)
+          const hidden = store.hidden[event.properties.sessionID]
           if (index !== -1) {
-            setStore(
-              "message",
-              event.properties.sessionID,
-              produce((draft) => {
-                draft.splice(index, 1)
-              }),
-            )
+            batch(() => {
+              setStore(
+                "message",
+                event.properties.sessionID,
+                produce((draft) => {
+                  draft.splice(index, 1)
+                }),
+              )
+              if (hidden && index < hidden.head) setStore("hidden", event.properties.sessionID, "head", hidden.head - 1)
+            })
+            break
+          }
+          if (hidden && hidden.count > 0) {
+            const count = hidden.count - 1
+            setStore("hidden", event.properties.sessionID, { head: count > 0 ? hidden.head : 0, count })
           }
           break
         }
@@ -598,12 +640,26 @@ export const {
           const tracker = { messages: new Set<string>(), parts: new Set<string>() }
           hydratingSessions.set(sessionID, tracker)
           const task = (async () => {
+            const limit = maxMessages()
             const [session, messages, todo, diff] = await Promise.all([
               sdk.client.session.get({ sessionID }, { throwOnError: true }),
-              sdk.client.session.messages({ sessionID, limit: 100 }),
+              sdk.client.session.messages({ sessionID, limit }),
               sdk.client.session.todo({ sessionID }),
               sdk.client.session.diff({ sessionID }),
             ])
+            const total = Number(messages.response?.headers.get("x-total-count") ?? Number.NaN)
+            const cropped = total > (messages.data?.length ?? 0)
+            const first =
+              cropped && keepFirstPrompt()
+                ? await sdk.client.session.messages({ sessionID, limit: 1, order: "asc" })
+                : undefined
+            const oldest = first?.data?.[0]
+            const pinned =
+              oldest?.info.role === "user" &&
+              !(messages.data ?? []).some((message) => message.info.id === oldest.info.id)
+                ? oldest
+                : undefined
+            const loaded = [...(pinned ? [pinned] : []), ...(messages.data ?? [])]
             setStore(
               produce((draft) => {
                 const match = search(draft.session, sessionID, (s) => s.id)
@@ -611,7 +667,7 @@ export const {
                 if (!match.found) draft.session.splice(match.index, 0, session.data!)
                 draft.todo[sessionID] = todo.data ?? []
                 const currentMessages = draft.message[sessionID] ?? []
-                const infos = (messages.data ?? []).flatMap((message) => {
+                const infos = loaded.flatMap((message) => {
                   if (!tracker.messages.has(message.info.id)) return [message.info]
                   const current = currentMessages.find((item) => item.id === message.info.id)
                   return current ? [current] : []
@@ -622,10 +678,17 @@ export const {
                   ),
                 )
                 infos.sort(compareMessage)
-                const removed = infos.slice(0, -100)
-                const visible = infos.slice(-100)
+                const head = pinned && infos[0]?.id === pinned.info.id ? 1 : 0
+                const tail = infos.slice(head)
+                const removed = tail.slice(0, -limit)
+                const visible = [...infos.slice(0, head), ...tail.slice(-limit)]
                 const visibleIDs = new Set(visible.map((message) => message.id))
-                for (const message of messages.data ?? []) {
+                const servedIDs = new Set(loaded.map((message) => message.info.id))
+                const count = Number.isFinite(total)
+                  ? Math.max(0, total - visible.filter((message) => servedIDs.has(message.id)).length)
+                  : 0
+                draft.hidden[sessionID] = { head: count > 0 ? head : 0, count, limit }
+                for (const message of loaded) {
                   if (!visibleIDs.has(message.info.id)) {
                     delete draft.part[message.info.id]
                     continue
@@ -664,6 +727,58 @@ export const {
           })
           syncingSessions.set(sessionID, task)
           return task
+        },
+        hidden(sessionID: string) {
+          return store.hidden[sessionID]
+        },
+        // Loads hidden messages into the gap: "above" the oldest ones, right after
+        // the head; "below" the newest ones, right before the recent messages.
+        async load(sessionID: string, edge: HiddenEdge, size: number = HIDDEN_PAGE_SIZES[0]) {
+          const hidden = store.hidden[sessionID]
+          if (!hidden || hidden.count === 0 || hidden.loading) return
+          const messages = store.message[sessionID] ?? []
+          const before = messages[hidden.head]?.id
+          const after = hidden.head > 0 ? messages[hidden.head - 1]?.id : undefined
+          setStore("hidden", sessionID, "loading", edge === "all" ? { edge } : { edge, size })
+          const result = await (
+            edge === "all"
+              ? sdk.client.session.messages({ sessionID })
+              : edge === "below"
+                ? sdk.client.session.messages({ sessionID, limit: size, before })
+                : after
+                  ? sdk.client.session.messages({ sessionID, limit: size, after })
+                  : sdk.client.session.messages({ sessionID, limit: size, order: "asc" })
+          ).finally(() => setStore("hidden", sessionID, "loading", undefined))
+          if (!result.data) return
+          const total = Number(result.response?.headers.get("x-total-count") ?? Number.NaN)
+          setStore(
+            produce((draft) => {
+              const list = draft.message[sessionID] ?? []
+              const known = new Set(list.map((message) => message.id))
+              const fresh = result.data.filter((message) => !known.has(message.info.id))
+              for (const message of fresh) {
+                list.splice(search(list, messageKey(message.info), messageKey).index, 0, message.info)
+                draft.part[message.info.id] = message.parts
+              }
+              draft.message[sessionID] = list
+              const current = draft.hidden[sessionID] ?? hidden
+              const head = edge === "above" ? current.head + fresh.length : current.head
+              const count =
+                edge === "all"
+                  ? 0
+                  : Number.isFinite(total)
+                    ? Math.max(0, total - list.length)
+                    : Math.max(0, current.count - fresh.length)
+              draft.hidden[sessionID] = {
+                head: count > 0 ? head : 0,
+                count,
+                limit:
+                  edge === "all"
+                    ? Number.POSITIVE_INFINITY
+                    : Math.max(current.limit, list.length - (count > 0 ? head : 0)),
+              }
+            }),
+          )
         },
       },
       bootstrap,
