@@ -94,19 +94,6 @@ function releaseHighlights(release: NonNullable<(typeof Release.Type)[]>[number]
 return groups.flatMap(group => group.items ?? [])
 }
 
-/** The highlight sources the desktop app shows; the feed names them "Desktop", case-insensitively. */
-function namesDesktop(source: string | undefined) {
-  return source?.toLowerCase().includes("desktop") ?? false
-}
-
-function highlight(item: typeof Item.Type): Option.Option<Highlight> {
-  const title = text(item.title)
-  const description = text(item.description) ?? text(item.shortDescription)
-
-  if (!title || !description) return Option.none()
-
-  return Option.some({ title, description, media: readMedia(item.media, title) })
-}
 
 /** A section bullet shaped `- **Title**: description`; section bullets without that lead-in stay in the changelog page. */
 function sectionHighlight(item: string): Option.Option<Highlight> {
