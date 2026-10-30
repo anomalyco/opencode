@@ -10,6 +10,95 @@ import { readFile } from "node:fs/promises"
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
+test("copies the current whole review file rather than its bounded diff", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+
+  const content = {
+    text: "export const value = 'after'\n" + "// unchanged outside the hunk\n".repeat(20) + "export const last = true\n",
+  }
+
+  await openSession(page, {
+    name: "ReviewCopyContent",
+    vcsDiff: [fileDiff("src/example.ts")],
+    fileContent: () => content.text,
+  })
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  const panel = page.locator("#review-panel")
+  await openReviewLauncher(panel)
+  const copy = panel.getByRole("button", { name: "Copy file contents", exact: true })
+  await copy.focus()
+  await copy.press("Enter")
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(content.text)
+  await expect(page.getByText("File contents copied", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("textbox")).toHaveCount(0)
+
+  content.text += "// edited after the diff was loaded\n"
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined }))
+  await copy.click()
+  await expect(copy).toBeEnabled()
+  await page.evaluate(() =>
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      get: Object.getOwnPropertyDescriptor(Navigator.prototype, "clipboard")?.get,
+    }),
+  )
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(content.text)
+})
+
+test("copies a deleted review file's complete old text without reading its missing path", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+  const reads: string[] = []
+  await openSession(page, {
+    name: "ReviewCopyDeleted",
+    vcsDiff: [
+      {
+        file: "deleted.txt",
+        status: "deleted",
+        additions: 0,
+        deletions: 3,
+        patch: "diff --git a/deleted.txt b/deleted.txt\n--- a/deleted.txt\n+++ /dev/null\n@@ -1,3 +0,0 @@\n-first\n-second\n-last\n\\ No newline at end of file\n",
+      },
+    ],
+    fileContent: (path) => {
+      reads.push(path)
+
+      return ""
+    },
+  })
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  const panel = page.locator("#review-panel")
+  await openReviewLauncher(panel)
+  await panel.getByRole("button", { name: "Copy file contents", exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("first\nsecond\nlast")
+  await expect(page.getByText("File contents copied", { exact: true })).toBeVisible()
+  expect(reads).toEqual([])
+})
+
+test("does not replace the clipboard with binary or unavailable review content", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+  await openSession(page, {
+    name: "ReviewCopyUnavailable",
+    vcsDiff: [fileDiff("unknown.dat")],
+    fileContent: () => "\0binary bytes",
+  })
+  await page.evaluate(() => navigator.clipboard.writeText("keep this clipboard"))
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  const panel = page.locator("#review-panel")
+  await openReviewLauncher(panel)
+  const copy = panel.getByRole("button", { name: "Copy file contents", exact: true })
+  await copy.click()
+  await expect(page.getByText("Full text content is unavailable", { exact: true })).toBeVisible()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("keep this clipboard")
+  await page.getByRole("button", { name: "Dismiss", exact: true }).click()
+  await expect(page.getByText("Full text content is unavailable", { exact: true })).toHaveCount(0)
+
+  await page.route("**/api/fs/read/unknown.dat*", (route) => route.abort())
+  await copy.click()
+  await expect(page.getByText("Full text content is unavailable", { exact: true })).toBeVisible()
+  await expect(copy).toBeEnabled()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("keep this clipboard")
+})
+
 test("review toggle shows its tooltip with the side panel open or closed", async ({ page }) => {
   await openSession(page, {
     name: "ReviewTooltip",

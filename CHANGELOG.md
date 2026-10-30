@@ -2,6 +2,12 @@
 
 Release notes for OpenCode V2, newest first.
 
+## Unreleased
+
+### App
+
+- Copy a review file's full current text from its header without selecting diff lines or opening a comment, including on plain HTTP origins. Deleted files copy their complete old text when available; binary or unreadable files leave the clipboard unchanged.
+
 ## v2.2.2 — 2026-10-29
 
 ### Highlights

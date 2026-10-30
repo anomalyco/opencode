@@ -1,7 +1,7 @@
 import type { FileDiffInfo } from "@opencode/client/promise"
 import type { SessionReviewLineComment } from "@opencode/session-ui/session-review"
 import { previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
-import { artifactMime } from "@opencode/util/artifact"
+import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { bytesToBase64 } from "@opencode/util/base64"
 import { checksum } from "@opencode/util/encode"
 import { showToast } from "@opencode/ui/toast"
@@ -460,16 +460,27 @@ export function createReviewModel(input: {
     })
   }
 
-  // Previews read files only to show images and audio, which need the raw bytes and their MIME type.
+  // Read the current whole file, independently of the bounded diff used by the preview.
   const readFile = (path: string) =>
     view()
       .server.client.file.read({ path, location: { directory: directory() } })
-      .then((bytes) => ({
-        type: "binary" as const,
-        content: bytesToBase64(bytes),
-        encoding: "base64" as const,
-        mimeType: artifactMime(path),
-      }))
+      .then((bytes) => {
+        const kind = artifactKind(path)
+
+        if (
+          ["text", "svg", "html", "markdown", "mermaid", "table"].includes(kind) &&
+          !bytes.subarray(0, 8192).includes(0)
+        ) {
+          return { type: "text" as const, content: new TextDecoder().decode(bytes) }
+        }
+
+        return {
+          type: "binary" as const,
+          content: bytesToBase64(bytes),
+          encoding: "base64" as const,
+          mimeType: artifactMime(path),
+        }
+      })
       .catch((error) => {
         console.debug("[session-review] failed to read file", { path, error })
 
