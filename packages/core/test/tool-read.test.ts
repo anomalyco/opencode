@@ -746,6 +746,33 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("names the first missing folder and its nearest existing parent", () =>
+    Effect.gen(function* () {
+      const requested = "__missing_read_folder__/src/file.ts"
+      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), requested) })
+      directoryEntries = ["__missing_read_folder__-old", "unrelated"]
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-missing-folder", name: "read", input: { path: requested } },
+        }),
+      ).toEqual({
+        status: "error",
+        error: {
+          type: "tool.execution",
+          message: [
+            `File not found: ${requested}`,
+            `The folder ${path.join(process.cwd(), "__missing_read_folder__")} does not exist. The nearest folder that does is ${process.cwd()}.`,
+            `Did you mean one of these?\n${path.join(process.cwd(), "__missing_read_folder__-old")}`,
+          ].join("\n\n"),
+        },
+      })
+    }),
+  )
+
   it.effect("recovers a unique file whose non-breaking spaces differ", () =>
     Effect.gen(function* () {
       const requested = "Screenshot 2026-08-27 3.15 PM.png"

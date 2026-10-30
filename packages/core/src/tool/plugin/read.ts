@@ -143,20 +143,43 @@ export const Plugin = {
       return join(dirname(absolute), matches[0].name)
     })
 
-    const missing = Effect.fn("ReadTool.missing")(function* (input: string, absolute: string) {
-      const base = basename(input).toLowerCase()
-      const suggestions = yield* fs.readDirectory(dirname(absolute)).pipe(
+    const similar = (directory: string, name: string) => {
+      const base = name.toLowerCase()
+      return fs.readDirectory(directory).pipe(
         Effect.map((entries) =>
           entries
             .filter((entry) => {
               const candidate = entry.toLowerCase()
               return candidate.includes(base) || base.includes(candidate)
             })
-            .map((entry) => join(dirname(input), entry))
             .slice(0, 3),
         ),
         Effect.orElseSucceed(() => [] as string[]),
       )
+    }
+
+    // A missing folder usually means a removed worktree, a moved directory, or a relative path
+    // resolved from the wrong place, so name the first missing folder and its nearest existing parent.
+    const missingFolder = Effect.fn("ReadTool.missingFolder")(function* (input: string, folder: string) {
+      let child = folder
+      let parent = dirname(folder)
+      while (parent !== child && !(yield* fs.isDir(parent))) {
+        child = parent
+        parent = dirname(parent)
+      }
+      const suggestions = (yield* similar(parent, basename(child))).map((entry) => join(parent, entry))
+      const message = [
+        `File not found: ${input}`,
+        `The folder ${child} does not exist. The nearest folder that does is ${parent}.`,
+        ...(suggestions.length === 0 ? [] : [`Did you mean one of these?\n${suggestions.join("\n")}`]),
+      ].join("\n\n")
+      return yield* new ToolFailure({ message })
+    })
+
+    const missing = Effect.fn("ReadTool.missing")(function* (input: string, absolute: string) {
+      const folder = dirname(absolute)
+      if (!(yield* fs.isDir(folder))) return yield* missingFolder(input, folder)
+      const suggestions = (yield* similar(folder, basename(input))).map((entry) => join(dirname(input), entry))
       const message =
         suggestions.length === 0
           ? `File not found: ${input}`
