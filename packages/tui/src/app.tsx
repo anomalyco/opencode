@@ -33,6 +33,7 @@ import {
   onCleanup,
   batch,
   Show,
+  untrack,
 } from "solid-js"
 import {
   TuiLifecycleProvider,
@@ -419,6 +420,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                           source={createThemeSource(global.config)}
                                                         >
                                                           <ThemeErrorToast />
+                                                          <ConfigDiagnosticToast />
                                                           <ClientMcp />
                                                           <LocalProvider>
                                                             <PromptStashProvider>
@@ -1482,4 +1484,31 @@ function App() {
       <Toast />
     </box>
   )
+}
+
+function ConfigDiagnosticToast() {
+  const toast = useToast()
+  const config = useConfig()
+  let shown: string | undefined
+  createEffect(() => {
+    const diagnostic = config.diagnostic()
+    if (!diagnostic) {
+      untrack(() => {
+        if (
+          shown &&
+          toast.currentToast?.variant === "warning" &&
+          toast.currentToast.title === "CLI config ignored" &&
+          toast.currentToast.message === shown
+        )
+          toast.dismiss()
+      })
+      shown = undefined
+      return
+    }
+    shown = diagnostic
+    untrack(() =>
+      toast.show({ variant: "warning", title: "CLI config ignored", message: diagnostic, duration: 15_000 }),
+    )
+  })
+  return null
 }
