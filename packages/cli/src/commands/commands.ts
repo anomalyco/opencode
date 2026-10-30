@@ -418,6 +418,11 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           Flag.withDescription("Fork the session before continuing"),
           Flag.withDefault(false),
         ),
+        worktree: Flag.String("worktree").pipe(
+          Flag.withAlias("w"),
+          Flag.withDescription("Start a new session in a new git worktree with this name"),
+          Flag.optional,
+        ),
         model: Flag.String("model").pipe(
           Flag.withAlias("m"),
           Flag.withDescription("Model to use in the format provider/model#variant"),

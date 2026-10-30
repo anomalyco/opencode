@@ -19,6 +19,7 @@ export type RunCommandInput = {
   continue?: boolean
   session?: string
   fork?: boolean
+  worktree?: string
   model?: string
   agent?: string
   format: "default" | "json"
@@ -71,6 +72,9 @@ export function runNonInteractiveWithOptions(input: RunCommandInput, options: Ex
 
 async function run(input: RunCommandInput, options: ExecutionOptions) {
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
+  if (input.worktree !== undefined && (input.continue || input.session))
+    fail("--worktree starts a new session and cannot be combined with --continue or --session")
+  if (input.worktree !== undefined && !input.worktree.trim()) fail("--worktree requires a name")
   const root = options.root ?? process.env.PWD ?? process.cwd()
   const local = localDirectory(root)
   const directory = options.useServerDirectory ? undefined : (options.directory ?? local)
@@ -95,6 +99,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     continue: input.continue,
     session: input.session,
     fork: input.fork,
+    worktree: input.worktree,
     model: explicit
       ? { providerID: explicit.model.providerID, id: explicit.model.modelID, variant: explicit.variant }
       : undefined,
@@ -125,6 +130,8 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     return undefined
   })
   if (!target) return
+  if (input.worktree !== undefined)
+    UI.println(UI.Style.TEXT_DIM + "worktree " + target.location.directory + UI.Style.TEXT_NORMAL)
   const model = target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined
   const variant = target.model?.variant
   if (!target.resume && input.title !== undefined) {

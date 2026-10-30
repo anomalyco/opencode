@@ -35,6 +35,8 @@ export async function resolveSessionTarget(input: {
   continue?: boolean
   session?: string
   fork?: boolean
+  /** Name of a new git worktree to create and start the new Session in. */
+  worktree?: string
   model?: ModelRef
   agent?: string
   environment?: Readonly<Record<string, string>>
@@ -47,7 +49,7 @@ export async function resolveSessionTarget(input: {
     selection.location ??
     (await resolveLocation(
       input.client,
-      selected ? { directory: selected.location.directory } : input.location,
+      selected ? { directory: selected.location.directory } : await startLocation(input),
       input.signal,
     ))
   const prepared = await input.prepare({
@@ -129,6 +131,22 @@ async function selectSession(input: {
         })
       : selected,
   }
+}
+
+async function startLocation(input: {
+  client: OpenCodeClient
+  location?: { directory?: string }
+  worktree?: string
+  signal?: AbortSignal
+}) {
+  if (input.worktree === undefined) return input.location
+  const base = await resolveLocation(input.client, input.location, input.signal)
+  const created = await input.client.worktree
+    .create({ projectID: base.project.id, name: input.worktree }, ...requestOptions(input.signal))
+    .catch((error) => {
+      throw new SessionTargetMutationError(error)
+    })
+  return { directory: created.directory }
 }
 
 export function findSession(client: OpenCodeClient, sessionID: string, signal?: AbortSignal) {
