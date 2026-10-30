@@ -397,6 +397,68 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("lists a custom model by its configured type and an untyped one as chat", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: { chat: {}, painter: { type: "image" } },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries)
+
+      expect((yield* models.available()).map((model) => model.id)).toEqual([Model.ID.make("chat")])
+      expect((yield* models.available(["image"])).map((model) => model.id)).toEqual([Model.ID.make("painter")])
+      expect(yield* models.get(Provider.ID.make("custom"), Model.ID.make("painter"))).toBeUndefined()
+    }),
+  )
+
+  it.effect("lets config change a catalog model's type and keeps it when unset", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("custom")
+      const retypedID = Model.ID.make("retyped")
+      const keptID = Model.ID.make("kept")
+      yield* providers.transform((editor) => {
+        editor.models.update(providerID, retypedID, () => {})
+        editor.models.update(providerID, keptID, (model) => {
+          model.type = "decision"
+        })
+      })
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: { retyped: { type: "image" }, kept: { name: "Kept" } },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries)
+
+      expect(yield* models.available()).toEqual([])
+      expect((yield* models.available(["image"])).map((model) => model.id)).toEqual([retypedID])
+      expect((yield* models.available(["decision"])).map((model) => [model.id, model.name])).toEqual([
+        [keptID, "Kept"],
+      ])
+    }),
+  )
+
   it.effect("preserves catalog capabilities unless config overrides them", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
@@ -753,6 +815,57 @@ describe("ConfigProviderPlugin.Plugin", () => {
         Model.VariantID.make("xhigh"),
         Model.VariantID.make("max"),
       ])
+    }),
+  )
+
+  it.effect("preserves plugin-supplied variants on custom models when config omits variants", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      const customID = Provider.ID.make("custom")
+      const perModelID = Provider.ID.make("per-model")
+      const customTiers = ["none", "low", "medium", "xhigh"].map((id) => ({
+        id: Model.VariantID.make(id),
+        settings: { reasoningEffort: id },
+      }))
+      yield* models.transform((editor) => {
+        for (const id of ["plain", "same-package"])
+          editor.update(customID, Model.ID.make(id), (model) => {
+            model.variants = structuredClone(customTiers)
+          })
+        editor.update(perModelID, Model.ID.make("only-model-package"), (model) => {
+          model.variants = structuredClone(customTiers)
+        })
+      })
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: {
+                  plain: { name: "Plain" },
+                  "same-package": { package: "aisdk:@ai-sdk/openai-compatible" },
+                },
+              },
+              "per-model": {
+                models: {
+                  "only-model-package": { package: "aisdk:@ai-sdk/openai-compatible" },
+                },
+              },
+            },
+          }),
+        }),
+      ])
+
+      const ids = (providerID: Provider.ID, id: string) =>
+        models
+          .get(providerID, Model.ID.make(id))
+          .pipe(Effect.map((model) => required(model).variants.map((variant) => variant.id)))
+      const expected = customTiers.map((variant) => variant.id)
+      expect(yield* ids(customID, "plain")).toEqual(expected)
+      expect(yield* ids(customID, "same-package")).toEqual(expected)
+      expect(yield* ids(perModelID, "only-model-package")).toEqual(expected)
     }),
   )
 

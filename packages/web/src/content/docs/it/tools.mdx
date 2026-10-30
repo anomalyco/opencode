@@ -18,7 +18,7 @@ Usa il campo `permission` per controllare il comportamento degli strumenti. Puoi
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "edit": "deny",
-    "shell": "ask",
+    "bash": "ask",
     "webfetch": "allow"
   }
 }
@@ -45,7 +45,7 @@ Ecco tutti gli strumenti integrati disponibili in OpenCode.
 
 ---
 
-### shell
+### bash
 
 Esegui comandi di shell nel tuo ambiente di progetto.
 
@@ -53,7 +53,7 @@ Esegui comandi di shell nel tuo ambiente di progetto.
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": "allow"
+    "bash": "allow"
   }
 }
 ```

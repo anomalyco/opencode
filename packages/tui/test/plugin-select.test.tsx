@@ -50,6 +50,8 @@ async function mount(root: string) {
 async function opened(app: Awaited<ReturnType<typeof mount>>["app"], title: string) {
   await app.waitForFrame((frame) => frame.includes(title))
   await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
+  // Focus re-renders the footer actions, so wait for a frame that presents their hits.
+  await app.renderOnce()
 }
 
 function rows(frame: string, titles: string[]) {

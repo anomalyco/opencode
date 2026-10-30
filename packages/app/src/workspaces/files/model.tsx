@@ -7,9 +7,12 @@ import { useParams } from "@solidjs/router"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useExtensionAttachment } from "@/runtime/extension/host-apis"
+import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { createPathHelpers } from "./path"
-import { fileContentFromBytes } from "./artifact"
+import { artifactKind, artifactMime } from "@opencode/util/artifact"
+import { usePlatform } from "@/runtime/platform/platform"
+import { fileStreamUrl } from "@/runtime/server/api"
+import { fileContentFromBytes, streamedFileContent, streamedKinds } from "./artifact"
 import {
   approxBytes,
   evictContentLru,
@@ -20,18 +23,13 @@ import {
 } from "./content-cache"
 import { createFileViewCache } from "./view-cache"
 import { useServerSDK } from "@/runtime/server/client"
+import { useData } from "@/runtime/server/current"
 import { formatServerError } from "@/runtime/server/errors"
 import { createFileTreeStore } from "./tree-store"
 import { invalidateFromWatcher } from "./watcher"
-import {
-  selectionFromLines,
-  type FileState,
-  type FileSelection,
-  type FileViewState,
-  type SelectedLineRange,
-} from "./types"
+import { selectionFromLines, type FileState, type FileSelection, type SelectedLineRange } from "./types"
 
-export type { FileSelection, SelectedLineRange, FileViewState, FileState }
+export type { FileSelection, SelectedLineRange, FileState }
 
 export { selectionFromLines }
 
@@ -42,8 +40,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const sdk = useWorkspaceLocation()
     const params = useParams()
     const serverSDK = useServerSDK()
+    const data = useData()
+    const platform = usePlatform()
     const language = useLanguage()
-    const extensions = useExtensionAttachment()
+    const attachment = usePluginAttachment()
 
     const scope = createMemo(() => sdk().directory)
     const path = createPathHelpers(scope)
@@ -155,7 +155,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         }),
       )
 
-      if (silent || (notFound && extensions.files.opened().includes(file))) return
+      if (silent || (notFound && attachment.files.opened().includes(file))) return
 
       showToast({
         variant: "error",
@@ -163,6 +163,36 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         description: message,
       })
     }
+
+    // Media plays from the server's ranged reads, so only a HEAD runs here, for the file's size. A failed HEAD has no
+    // body; the full read that follows reports the server's error.
+    const read = (file: string, request: { path: string; location: { directory: string } }) => {
+      const download = () => serverSDK.api.file.read(request).then((data) => fileContentFromBytes(file, data))
+
+      const url = streamedKinds.has(artifactKind(file))
+        ? fileStreamUrl(serverSDK.http, { path: request.path, directory: request.location.directory })
+        : undefined
+
+      if (!url) return download()
+
+      return (platform.fetch ?? fetch)(url, { method: "HEAD" }).then((response) =>
+        response.ok ? streamedFileContent(file, url, response) : download(),
+      )
+    }
+
+    // Built-in skills register virtual `/builtin/*.md` paths whose content is inline in `/api/skill`.
+    const builtinSkill = async (file: string, directory: string) => {
+      if (data.location.skill.list({ directory }) === undefined) {
+        await data.location.skill.sync({ directory })
+      }
+
+      return (data.location.skill.list({ directory }) ?? data.location.skill.list())?.find((item) => item.path === file)
+    }
+
+    const readBuiltin = (file: string, directory: string): Promise<FileState["content"]> =>
+      builtinSkill(file, directory).then((skill) =>
+        skill ? { type: "text", content: skill.content, mimeType: artifactMime(file) } : undefined,
+      )
 
     const load = (input: string, options?: { force?: boolean; silent?: boolean }) => {
       const file = path.normalize(input)
@@ -188,22 +218,32 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       setLoading(file)
 
-      // Files outside the workspace are read from their own directory, like markdown images.
-      // The trailing separator from getDirectory keeps "/" and "C:/" valid, like readLocalImage.
-      const request = path.absolute(file)
-        ? { path: getFilename(file), location: { directory: getDirectory(file) } }
-        : { path: file, location: { directory } }
-
       const entry = {
         silent,
         promise: Promise.resolve(),
       }
 
-      entry.promise = serverSDK.api.file
-        .read(request)
-        .then((data) => {
+      // Files outside the workspace are read from their own directory, like markdown images.
+      // The trailing separator from getDirectory keeps "/" and "C:/" valid, like readLocalImage.
+      const source = file.startsWith("/builtin/")
+        ? readBuiltin(file, directory)
+        : read(
+            file,
+            path.absolute(file)
+              ? { path: getFilename(file), location: { directory: getDirectory(file) } }
+              : { path: file, location: { directory } },
+          )
+
+      entry.promise = source
+        .then((content) => {
           if (scope() !== directory) return
-          const content = fileContentFromBytes(file, data)
+
+          if (!content) {
+            setLoadError(file, file, true, entry.silent)
+
+            return
+          }
+
           setLoaded(file, content)
           touchFileContent(file, approxBytes(content))
           evictContent(new Set([file]))
@@ -231,6 +271,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       const file = path.normalize(input)
 
       if (!file) return Promise.resolve(false)
+
+      if (file.startsWith("/builtin/")) {
+        return builtinSkill(file, scope()).then(Boolean, () => false)
+      }
 
       const parent = /[\\/]/.test(file) ? getDirectory(file) : undefined
 
@@ -265,7 +309,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         invalidateFromWatcher(event, {
           normalize: path.normalize,
           hasFile: (file) => Boolean(store.file[file]),
-          isOpen: (file) => extensions.files.opened().includes(file),
+          isOpen: (file) => attachment.files.opened().includes(file),
           loadFile: (file) => {
             void load(file, { force: true, silent: true })
           },
@@ -276,6 +320,28 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           },
         })
       })
+
+      onCleanup(stop)
+    })
+
+    // The server watches a file for 24 hours from the latest request, so file tabs ask when they open or are shown,
+    // and the open tabs ask again on reconnect (a restarted server forgets its watches). Older servers lack the route.
+    const watch = (input: string) => {
+      const file = path.normalize(input)
+
+      if (!file || path.absolute(file)) return
+      void serverSDK.api.experimental.file.watch({ path: file, location: { directory: scope() } }).catch(() => {})
+    }
+
+    const unwatch = (input: string) => {
+      const file = path.normalize(input)
+
+      if (!file || path.absolute(file)) return
+      void serverSDK.api.experimental.file.unwatch({ path: file, location: { directory: scope() } }).catch(() => {})
+    }
+
+    createEffect(() => {
+      const stop = serverSDK.event.on("server.connected", () => attachment.files.opened().forEach(watch))
 
       onCleanup(stop)
     })
@@ -330,6 +396,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       get,
       notFound: (input: string) => store.file[path.normalize(input)]?.notFound ?? false,
       load,
+      watch,
+      unwatch,
       exists,
       scrollTop,
       scrollLeft,

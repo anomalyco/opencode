@@ -9,8 +9,7 @@
   justify-content: center;
 }
 
-[data-titlebar-tab] :is([data-slot="tab-unread-dot"], [data-slot="tab-avatar-unread-dot"]) {
-  position: absolute;
+[data-titlebar-tab] :is([data-slot="tab-status-dot"], [data-slot="tab-avatar-unread-dot"]) {
   width: 7px;
   height: 7px;
   border-radius: 9999px;
@@ -22,29 +21,54 @@
   position: relative;
 }
 
+[data-titlebar-tab] :is([data-mark="attention"], [data-status="attention"] [data-slot="tab-avatar-unread-dot"]) {
+  background: var(--v2-state-fg-warning);
+}
+
 [data-titlebar-tab] [data-slot="tab-avatar-unread-dot"] {
+  position: absolute;
   display: none;
   inset-inline-end: -3px;
   top: -3px;
 }
 
-[data-titlebar-tab] [data-slot="tab-unread-slot"] {
+/* Status sits where the close button appears; marks and the hover swap change instantly. */
+[data-titlebar-tab] [data-slot="tab-status"] {
   position: absolute;
   inset-block: 0;
   inset-inline-end: 0;
-  display: flex;
+  display: grid;
   margin-block: auto;
   width: 20px;
   height: 20px;
-  align-items: center;
-  justify-content: center;
+  place-items: center;
   pointer-events: none;
+}
+
+[data-titlebar-tab] [data-slot="tab-status"] > [data-mark] {
+  grid-area: 1 / 1;
+  display: none;
+}
+
+[data-titlebar-tab][data-status="busy"] [data-mark="busy"],
+[data-titlebar-tab][data-status="attention"] [data-mark="attention"],
+[data-titlebar-tab][data-status="unread"] [data-mark="unread"] {
+  display: block;
+}
+
+[data-titlebar-tab] [data-slot="tab-close"] > button {
+  transition: none;
+}
+
+/* Every row, the active one included, shows the close button only on hover or keyboard focus. */
+[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-editing="true"]) [data-slot="tab-close"] > button {
+  opacity: 1;
 }
 
 @media (hover: hover) {
   [data-titlebar-tab]:not(:where([data-slot="mobile-tabs-drawer"] *)):is(:hover, :has(:focus-visible))
-    [data-slot="tab-unread-slot"] {
-    display: none;
+    [data-slot="tab-status"] {
+    opacity: 0;
   }
 }
 
@@ -116,8 +140,7 @@
   --tab-overlay: var(--v2-overlay-simple-overlay-pressed);
 }
 
-[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-state="pressed"], [data-unread="true"])
-  [data-slot="tab-close"] {
+[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-state="pressed"], [data-status]) [data-slot="tab-close"] {
   background: linear-gradient(var(--tab-overlay), var(--tab-overlay)), var(--tab-base);
 }
 
@@ -197,9 +220,7 @@
 }
 
 [data-titlebar-tab][data-title-overflow="true"]:not([data-editing="true"]) [data-slot="tab-link"],
-[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-active="true"], [data-unread="true"]):not(
-    [data-editing="true"]
-  )
+[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-active="true"], [data-status]):not([data-editing="true"])
   [data-slot="tab-link"] {
   --tab-title-fade-offset: calc(4px + var(--tab-link-inset, 0px));
   -webkit-mask-image: linear-gradient(
@@ -219,7 +240,7 @@
 }
 
 [data-titlebar-tab][data-title-overflow="true"]:not([data-editing="true"]):dir(rtl) [data-slot="tab-link"],
-[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-active="true"], [data-unread="true"]):not(
+[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-active="true"], [data-status]):not(
     [data-editing="true"]
   ):dir(rtl)
   [data-slot="tab-link"] {
@@ -239,9 +260,7 @@
   );
 }
 
-[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-active="true"], [data-unread="true"]):not(
-    [data-editing="true"]
-  )
+[data-titlebar-tab]:is(:hover, :has(:focus-visible), [data-active="true"], [data-status]):not([data-editing="true"])
   [data-slot="tab-link"] {
   --tab-title-fade-offset: calc(24px + var(--tab-link-inset, 0px));
 }
@@ -270,7 +289,7 @@
 }
 
 @media (hover: none) {
-  [data-titlebar-tab] [data-slot="tab-unread-slot"] {
+  [data-titlebar-tab] [data-slot="tab-status"] {
     inset-inline-end: 20px;
   }
 
@@ -302,7 +321,7 @@
     --tab-title-fade-direction: to left;
   }
 
-  [data-titlebar-tab][data-unread="true"]:not([data-editing="true"]) [data-slot="tab-link"] {
+  [data-titlebar-tab][data-status]:not([data-editing="true"]) [data-slot="tab-link"] {
     --tab-title-fade-offset: calc(44px + var(--tab-link-inset, 0px));
   }
 }
@@ -312,7 +331,7 @@
       :hover,
       :has(:focus-visible),
       [data-active="true"],
-      [data-unread="true"]
+      [data-status]
     )
     [data-slot="tab-link"] {
     -webkit-mask-image: none;
@@ -323,7 +342,7 @@
       :hover,
       :has(:focus-visible),
       [data-active="true"],
-      [data-unread="true"]
+      [data-status]
     )
     [data-titlebar-tab-title] {
     visibility: hidden;
@@ -337,12 +356,13 @@
     height: 6px;
   }
 
-  [data-titlebar-tab][data-unread="true"]:not([data-orientation="vertical"]) [data-slot="project-avatar-surface"] {
+  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"]):not([data-orientation="vertical"])
+    [data-slot="project-avatar-surface"] {
     -webkit-mask-image: radial-gradient(circle 4.5px at 100% 0, transparent 4px, black 5px);
     mask-image: radial-gradient(circle 4.5px at 100% 0, transparent 4px, black 5px);
   }
 
-  [data-titlebar-tab][data-unread="true"]:not([data-orientation="vertical"]):dir(rtl)
+  [data-titlebar-tab]:is([data-status="attention"], [data-status="unread"]):not([data-orientation="vertical"]):dir(rtl)
     [data-slot="project-avatar-surface"] {
     -webkit-mask-image: radial-gradient(circle 4.5px at 0 0, transparent 4px, black 5px);
     mask-image: radial-gradient(circle 4.5px at 0 0, transparent 4px, black 5px);
@@ -364,12 +384,15 @@
     display: none;
   }
 
-  [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-active="true"]) [data-slot="tab-close"] {
+  [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-active="true"]):not([data-status="busy"])
+    [data-slot="tab-close"] {
     display: none;
   }
 
   @media (hover: hover) {
-    [data-titlebar-tab]:not([data-orientation="vertical"]):not(:hover):not(:has(:focus-visible))
+    [data-titlebar-tab]:not([data-orientation="vertical"]):not([data-status="busy"]):not(:hover):not(
+        :has(:focus-visible)
+      )
       [data-slot="tab-close"] {
       display: none;
     }
@@ -379,6 +402,22 @@
     right: auto;
     left: 50%;
     transform: translateX(-50%);
+  }
+
+  /* Icon-only tabs have no room on the right, so a busy one spins over its icon. */
+  [data-titlebar-tab][data-status="busy"]:not([data-orientation="vertical"]):not([data-active="true"])
+    [data-slot="tab-close"]
+    > button {
+    visibility: hidden;
+  }
+
+  [data-titlebar-tab][data-status="busy"]:not([data-orientation="vertical"]):not([data-active="true"])
+    [data-slot="tab-status"] {
+    opacity: 1;
+  }
+
+  [data-titlebar-tab][data-status="busy"]:not([data-orientation="vertical"]) [data-slot="project-avatar-slot"] {
+    visibility: hidden;
   }
 }
 
@@ -403,7 +442,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   [data-titlebar-tab] [data-slot="tab-prompt-pulse"] {
     animation: none;
   }

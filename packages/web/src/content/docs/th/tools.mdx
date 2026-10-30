@@ -18,7 +18,7 @@ description: จัดการเครื่องมือที่ LLM ส�
   "$schema": "https://opencode.ai/config.json",
   "permission": {
     "edit": "deny",
-    "shell": "ask",
+    "bash": "ask",
     "webfetch": "allow"
   }
 }
@@ -45,7 +45,7 @@ description: จัดการเครื่องมือที่ LLM ส�
 
 ---
 
-### shell
+### bash
 
 ดำเนินการคำสั่ง shell ในสภาพแวดล้อมโปรเจ็กต์ของคุณ
 
@@ -53,7 +53,7 @@ description: จัดการเครื่องมือที่ LLM ส�
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
-    "shell": "allow"
+    "bash": "allow"
   }
 }
 ```

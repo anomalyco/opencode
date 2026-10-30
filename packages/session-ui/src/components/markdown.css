@@ -1,3 +1,32 @@
+.markdown-session-link {
+  display: inline;
+  padding: 1px 5px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--v2-background-bg-layer-02);
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-base);
+  color: var(--v2-text-text-accent);
+  font: inherit;
+  cursor: pointer;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.markdown-session-link:hover {
+  color: var(--v2-text-text-accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-session-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.markdown-session-id {
+  font-family: var(--font-family-mono);
+}
+
 [data-component="markdown"] {
   --markdown-inline-code-path-color: var(--v2-text-text-code-path);
   --markdown-inline-code-color: var(--v2-text-text-code-accent);
@@ -66,9 +95,9 @@
   }
 
   h3 {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--v2-text-text-base);
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-bold);
     margin-top: 20px;
     margin-bottom: 8px;
     line-height: var(--line-height-large);
@@ -77,12 +106,18 @@
   h4,
   h5,
   h6 {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--v2-text-text-muted);
     font-weight: var(--font-weight-medium);
     margin-top: 20px;
     margin-bottom: 8px;
     line-height: var(--line-height-large);
+  }
+
+  /* A heading's own bottom margin sets the gap to its section, so a block's larger top margin can't push the heading away from it. */
+  :is(h1, h2, h3, h4, h5, h6) + :is(p, ul, ol, blockquote, [data-component]),
+  :is(h1, h2, h3, h4, h5, h6) + [data-component="markdown-code"] > pre {
+    margin-top: 0;
   }
 
   /* Emphasis & Strong: Neutral strong color */
@@ -99,47 +134,37 @@
 
   /* Links */
   a {
-    color: var(--text-interactive-base);
+    color: var(--v2-text-text-accent);
     text-decoration: none;
     font-weight: inherit;
   }
 
   a:hover {
+    color: var(--v2-text-text-accent-hover);
     text-decoration: underline;
     text-underline-offset: 2px;
   }
 
-  a.external-link:is(
-      [href="https://github.com" i],
-      [href^="https://github.com/" i],
-      [href="http://github.com" i],
-      [href^="http://github.com/" i]
-    ):not(:has(img))::before {
-    content: "";
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    margin-inline-end: 4px;
-    vertical-align: -0.125em;
-    background: currentColor;
-    mask: url("./markdown-github.svg") center / contain no-repeat;
-  }
-
+  /* An atomic inline such as inline-block leaves a line break opportunity before the label, so the icon stays an
+     empty inline box with out-of-flow artwork, which keeps it on the line of the label's first word. */
   .markdown-link-favicon {
     position: relative;
-    display: inline-block;
-    width: 14px;
-    height: 14px;
+    padding-inline-start: 14px;
     margin-inline-end: 4px;
-    vertical-align: -0.125em;
   }
 
   .markdown-link-favicon::before {
     content: "";
     position: absolute;
     inset: 0;
+    height: 14px;
+    margin: auto 0;
     background: currentColor;
     mask: url("./markdown-globe.svg") center / contain no-repeat;
+  }
+
+  .markdown-link-favicon[data-github]::before {
+    mask-image: url("./markdown-github.svg");
   }
 
   .markdown-link-favicon img {
@@ -148,7 +173,7 @@
     display: block;
     width: 14px;
     height: 14px;
-    margin: 0;
+    margin: auto 0;
     border-radius: 2px;
     cursor: inherit;
     opacity: 0;
@@ -160,26 +185,6 @@
 
   a[data-local-link] {
     cursor: pointer;
-  }
-
-  .markdown-session-link {
-    display: inline;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--text-interactive-base);
-    font: inherit;
-    cursor: pointer;
-  }
-
-  .markdown-session-link:hover {
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-
-  .markdown-session-link:focus-visible {
-    outline: 2px solid currentColor;
-    outline-offset: 2px;
   }
 
   &[data-local-links] :not(pre) > code[data-inline-code-kind="path"]:not(a > code) {
@@ -208,7 +213,6 @@
 
   ol {
     list-style-type: decimal;
-    padding-inline-start: 2.25rem;
   }
 
   li {
@@ -273,8 +277,9 @@
 
   .highlights {
     background: var(--color-background-stronger);
-    color: var(--text-base);
+    color: var(--v2-text-text-muted);
     font-size: 13px;
+    line-height: 20px;
     padding: 12px;
     border-radius: 6px;
     border: 0.5px solid var(--v2-border-border-base);
@@ -287,6 +292,19 @@
   }
 
   [data-component="markdown-mermaid"] {
+    --pele-bg: var(--v2-background-bg-layer-02);
+    --pele-fg: var(--v2-text-text-base);
+    --pele-muted: var(--v2-text-text-muted);
+    --pele-line: var(--v2-icon-icon-muted);
+    --pele-surface: var(--v2-background-bg-base);
+    --pele-surface-alt: var(--v2-background-bg-layer-03);
+    --pele-border: var(--v2-border-border-strong);
+    --pele-accent: var(--v2-text-text-accent);
+    --pele-critical: var(--v2-state-fg-danger);
+    --pele-error: var(--v2-state-fg-danger);
+    --pele-font: var(--font-family-sans);
+    --pele-font-mono: var(--font-family-mono);
+    --pele-radius: 6px;
     min-height: 96px;
     margin: 12px 0 24px;
     padding: 16px;
@@ -300,8 +318,7 @@
 
   [data-component="markdown-mermaid"] > svg {
     display: block;
-    width: 100%;
-    min-width: 480px;
+    max-width: 100%;
     height: auto;
     margin: 0 auto;
   }
@@ -393,29 +410,68 @@
     text-underline-offset: 2px;
   }
 
-  /* Tables */
+  /* Tables: the Console's data table, a raised body inside a muted frame that also holds the header */
+  [data-component="markdown-table"] {
+    margin: 16px 0;
+    overflow-x: auto;
+    padding: 2px;
+    border-radius: 6px;
+    background: var(--v2-background-bg-layer-01);
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
+  }
+
   table {
     width: 100%;
-    border-collapse: collapse;
-    margin: 16px 0;
-    font-size: var(--font-size-base);
-    display: block;
-    overflow-x: auto;
+    border-collapse: separate;
+    border-spacing: 0;
+    color: var(--v2-text-text-base);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 440;
+    line-height: var(--line-height-compact);
+    letter-spacing: -0.04px;
+  }
+
+  tbody {
+    border-radius: 4px;
+    background: var(--v2-background-bg-base);
+    box-shadow: var(--v2-elevation-raised);
   }
 
   th,
   td {
-    /* Minimal borders for structure, matching TUI "lines" roughly but keeping it web-clean */
-    border-bottom: 0.5px solid var(--v2-border-border-muted);
-    padding: 12px;
     text-align: start;
     vertical-align: top;
   }
 
   th {
-    color: var(--v2-text-text-base);
-    font-weight: var(--font-weight-medium);
-    border-bottom: 0.5px solid var(--v2-border-border-base);
+    padding: 8px 12px;
+    color: var(--v2-text-text-faint);
+    font-weight: 500;
+  }
+
+  td {
+    padding: 10px 12px;
+  }
+
+  tbody tr:not(:last-child) td {
+    border-bottom: 0.5px solid var(--v2-border-border-muted);
+  }
+
+  tbody tr:first-child td:first-child {
+    border-start-start-radius: 4px;
+  }
+
+  tbody tr:first-child td:last-child {
+    border-start-end-radius: 4px;
+  }
+
+  tbody tr:last-child td:first-child {
+    border-end-start-radius: 4px;
+  }
+
+  tbody tr:last-child td:last-child {
+    border-end-end-radius: 4px;
   }
 
   /* Images */
@@ -438,7 +494,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   [data-component="markdown"] :is([data-markdown-word], code)[data-markdown-enter] {
     animation: none;
   }

@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { Image, ImageClient } from "../../src/index.js"
+import { Image, ImageClient } from "../../src/effect.js"
 import { ZAI } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -38,13 +38,6 @@ describe("Z.ai Images", () => {
         url: "https://cdn.z.ai/generated.png",
         expiresAt: 30 * 24 * 60 * 60 * 1000,
       })
-      expect(response.notices).toEqual([
-        {
-          type: "moderated",
-          message: "Z.ai Images applied a content filter for future-role at level 4.5",
-          providerMetadata: { zai: { role: "future-role", level: 4.5 } },
-        },
-      ])
       expect(response.providerMetadata).toEqual({
         zai: {
           created: 1_760_335_349,

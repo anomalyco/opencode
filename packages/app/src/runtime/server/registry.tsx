@@ -1,17 +1,13 @@
 import { createSimpleContext } from "@opencode/ui/context"
+import { useLanguage } from "@/runtime/i18n/language"
 import { batch, createMemo } from "solid-js"
-import { type SetStoreFunction, type Store } from "solid-js/store"
+import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import { pathKey } from "@/workspaces/path-key"
 import { ServerScope } from "@/runtime/server/scope"
-import type { ServerEntry } from "@opencode/gui-extensions/sdk"
-import { ServerHttp, ServerHttpBase, ServerKey, serverState } from "./persistence"
+import type { ServerEntry } from "@opencode/plugin/gui"
+import { ServerHttp, ServerHttpBase, ServerKey, ServerState } from "./persistence"
 
-type ServerState = ReturnType<typeof serverState>["current"]["Type"]
-
-// Retain closed paths until reopened so settings can exclude them from the server inventory.
-// The Home page independently limits the visible recently closed entries.
-export const RECENTLY_CLOSED_DISPLAY_LIMIT = 5
+type StoredState = typeof ServerState.Type
 
 export function normalizeServerUrl(input: string) {
   const trimmed = input.trim()
@@ -30,82 +26,74 @@ export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = fals
   return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
-function isLocalHost(url: string) {
-  const host = url.replace(/^https?:\/\//, "").split(":")[0]
+/**
+ * What switchers and titles call a server: a custom name wins, then, for the server the app runs beside, its
+ * hostname or the fallback; other servers show their address.
+ */
+export function serverLabel(conn: ServerConnection.Any, current?: { hostname?: string; fallback: string }) {
+  if (conn.displayName) return conn.displayName
 
-  if (host === "localhost" || host === "127.0.0.1") return "local"
+  if (current) return current.hostname || current.fallback
+
+  return serverName(conn)
 }
 
+function loopbackOrigin(url: string) {
+  if (!URL.canParse(url)) return
+  const parsed = new URL(url)
+
+  if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1" && parsed.hostname !== "[::1]") return
+
+  return `${parsed.protocol}//127.0.0.1:${parsed.port || (parsed.protocol === "https:" ? "443" : "80")}`
+}
+
+// Project data comes from the server; this keeps which projects this client has used and the last one.
 export function createServerProjects(input: {
   scope: () => ServerScope
-  store: Store<ServerState>
-  setStore: SetStoreFunction<ServerState>
+  store: Store<StoredState>
+  setStore: SetStoreFunction<StoredState>
 }) {
-  const setStore = input.setStore
-  const current = () => input.store.projects[input.scope()] ?? []
-  const currentClosed = () => input.store.recentlyClosed?.[input.scope()] ?? []
+  const used = () => input.store.usedProjectIDs[input.scope()] ?? []
 
-  const remove = (directory: string) => {
-    setStore(
-      "projects",
-      input.scope(),
-      current().filter((project) => project.worktree !== directory),
-    )
+  const use = (projectIDs: string[]) => {
+    const current = used()
+    const next = [...new Set([...current, ...projectIDs])]
+
+    if (next.length !== current.length) input.setStore("usedProjectIDs", input.scope(), next)
   }
 
   return {
-    list: current,
-    closed: currentClosed,
-    recentlyClosed: currentClosed,
-    remove,
-    open(directory: string) {
-      const scope = input.scope()
-      const key = pathKey(directory)
-      const closed = currentClosed()
-
-      if (closed.some((worktree) => pathKey(worktree) === key)) {
-        setStore(
-          "recentlyClosed",
-          scope,
-          closed.filter((worktree) => pathKey(worktree) !== key),
-        )
-      }
-
-      if (current().some((project) => project.worktree === directory)) return
-      setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
-    },
-    // User-initiated close: removes the project and records it in recently closed.
-    // Internal, non-user removals (e.g. sandbox/worktree normalization) should use remove().
-    close(directory: string) {
-      remove(directory)
-      const key = pathKey(directory)
-      const closed = [directory, ...currentClosed().filter((worktree) => pathKey(worktree) !== key)]
-      setStore("recentlyClosed", input.scope(), closed)
-    },
-    expand(directory: string) {
-      const index = current().findIndex((project) => project.worktree === directory)
-
-      if (index !== -1) setStore("projects", input.scope(), index, "expanded", true)
-    },
-    collapse(directory: string) {
-      const index = current().findIndex((project) => project.worktree === directory)
-
-      if (index !== -1) setStore("projects", input.scope(), index, "expanded", false)
-    },
-    move(directory: string, toIndex: number) {
-      const fromIndex = current().findIndex((project) => project.worktree === directory)
-
-      if (fromIndex === -1 || fromIndex === toIndex) return
-      const next = [...current()]
-      const [item] = next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, item)
-      setStore("projects", input.scope(), next)
-    },
     last() {
-      return input.store.lastProject[input.scope()]
+      return input.store.lastProjectID[input.scope()]
     },
-    touch(directory: string) {
-      setStore("lastProject", input.scope(), directory)
+    touch(projectID: string) {
+      batch(() => {
+        input.setStore("lastProjectID", input.scope(), projectID)
+        use([projectID])
+      })
+    },
+    used,
+    use,
+    hide(projectIDs: string[]) {
+      input.setStore(
+        "usedProjectIDs",
+        input.scope(),
+        used().filter((id) => !projectIDs.includes(id)),
+      )
+    },
+    /** Directories an older build listed for this server, until `migrate` consumes them. */
+    legacy() {
+      return input.store.projects[input.scope()]?.map((project) => project.worktree)
+    },
+    migrate(projectIDs: string[]) {
+      const scope = input.scope()
+      batch(() => {
+        use(projectIDs)
+        input.setStore(
+          "projects",
+          reconcile(Object.fromEntries(Object.entries(input.store.projects).filter(([key]) => key !== scope))),
+        )
+      })
     },
   }
 }
@@ -145,6 +133,21 @@ export function canRemoveServer(input: {
   return input.stored.some((server) => server.http.url === input.key)
 }
 
+/**
+ * The servers Home lists. Home needs at least one, so when every server is flagged hidden (stored by an older
+ * build, or edited by hand) the built-in server, otherwise the first, is shown anyway.
+ */
+export function resolveVisibleServers(input: {
+  servers: Array<ServerConnection.Any>
+  hidden: StoredState["hidden"]
+}): Array<ServerConnection.Any> {
+  const visible = input.servers.filter((conn) => !input.hidden[ServerConnection.key(conn)])
+
+  if (visible.length > 0 || input.servers.length === 0) return visible
+
+  return [input.servers.find(ServerConnection.builtin) ?? input.servers[0]]
+}
+
 export namespace ServerConnection {
   type Base = { displayName?: string; label?: string }
 
@@ -161,15 +164,15 @@ export namespace ServerConnection {
     reconnect?: (signal: AbortSignal) => Promise<HttpBase>
   } & Base
 
-  // A server a GUI extension contributes (e.g. SSH or WSL), keyed `${extension}:${id}`
-  export type Extension = {
-    type: "extension"
+  // A server a GUI plugin contributes (e.g. SSH or WSL), keyed `${plugin}:${id}`
+  export type Plugin = {
+    type: "plugin"
     key: string
-    extension: string
+    plugin: string
     state: ServerEntry["state"]
     connecting: boolean
     authenticationRequired: boolean
-    /** The extension re-resolves the endpoint (e.g. a tunnel), so the connection can drop and come back. */
+    /** The plugin re-resolves the endpoint (e.g. a tunnel), so the connection can drop and come back. */
     managed: boolean
     http: HttpBase
     reconnect?: (signal: AbortSignal) => Promise<HttpBase>
@@ -180,7 +183,7 @@ export namespace ServerConnection {
   export type Any =
     | Http
     // All these are desktop-only
-    | (Sidecar | Extension)
+    | (Sidecar | Plugin)
 
   export const key = (conn: Any): Key => {
     switch (conn.type) {
@@ -188,7 +191,7 @@ export namespace ServerConnection {
         return Key.make(conn.http.url)
       case "sidecar":
         return Key.make("sidecar")
-      case "extension":
+      case "plugin":
         return Key.make(conn.key)
     }
   }
@@ -199,7 +202,7 @@ export namespace ServerConnection {
   export const builtin = (conn: Any) => conn.type === "sidecar" && conn.variant === "base"
   /** Starts sign-in for a server that asks for it; false when it does not. */
   export const authenticate = (conn: Any, onConnected?: () => void) => {
-    if (conn.type !== "extension" || !conn.authenticationRequired || !conn.connect) return false
+    if (conn.type !== "plugin" || !conn.authenticationRequired || !conn.connect) return false
     void conn.connect().then((ready) => {
       if (ready) onConnected?.()
     })
@@ -207,8 +210,18 @@ export namespace ServerConnection {
     return true
   }
 
-  export const local = (conn?: Any) =>
-    !!conn && (builtin(conn) || (conn.type === "http" && isLocalHost(conn.http.url) === "local"))
+  // The desktop sidecar, or a loopback http connection on the same port as the app's own server. Other loopback
+  // ports may belong to a WSL server, tunnel, or container with a separate filesystem.
+  export const local = (conn?: Any, ownUrl?: string) => {
+    if (!conn) return false
+
+    if (builtin(conn)) return true
+
+    if (conn.type !== "http" || !ownUrl) return false
+    const origin = loopbackOrigin(conn.http.url)
+
+    return !!origin && origin === loopbackOrigin(ownUrl)
+  }
 }
 
 export const { use: useServers, provider: ServersProvider } = createSimpleContext({
@@ -221,15 +234,26 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
         sync: true,
         previousKey: "server.v3",
       },
-      serverState(() => props.canonicalLocalServer),
-      { list: [], hidden: {}, projects: {}, lastProject: {}, recentlyClosed: {} },
+      ServerState,
+      { list: [], hidden: {}, lastProjectID: {}, usedProjectIDs: {}, hostnames: {}, projects: {} },
     )
+
+    const language = useLanguage()
 
     const allServers = createMemo((): Array<ServerConnection.Any> => {
       return resolveServerList({ stored: store.list, props: props.servers })
     })
 
-    const visibleServers = createMemo(() => allServers().filter((conn) => !store.hidden[ServerConnection.key(conn)]))
+    const visibleServers = createMemo(() => resolveVisibleServers({ servers: allServers(), hidden: store.hidden }))
+
+    // Clears the hidden flag of any server shown despite it, so the stored flags say what Home shows.
+    function unhideShown(servers: Array<ServerConnection.Any>) {
+      for (const conn of resolveVisibleServers({ servers, hidden: store.hidden })) {
+        const key = ServerConnection.key(conn)
+
+        if (store.hidden[key]) setStore("hidden", key, false)
+      }
+    }
 
     function add(input: ServerConnection.Http) {
       const url_ = normalizeServerUrl(input.http.url)
@@ -254,7 +278,16 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       const list = store.list.filter((x) => x.http.url !== key)
       batch(() => {
         setStore("list", list)
+        // Removing the only shown server must not leave the rest all hidden.
+        unhideShown(resolveServerList({ stored: list, props: props.servers }))
       })
+    }
+
+    function setHidden(key: ServerConnection.Key, hidden: boolean) {
+      // Home always lists at least one server, so hiding the only shown one does nothing.
+      if (hidden && visibleServers().every((conn) => ServerConnection.key(conn) === key)) return
+
+      setStore("hidden", key, hidden)
     }
 
     function canRemove(key: ServerConnection.Key) {
@@ -274,6 +307,21 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       return next
     }
 
+    // The desktop sidecar, or the server that served the web app.
+    const current = (conn: ServerConnection.Any) =>
+      ServerConnection.builtin(conn) || ServerConnection.key(conn) === props.canonicalLocalServer
+
+    const ownUrl = () => props.servers?.find(ServerConnection.builtin)?.http.url ?? props.canonicalLocalServer
+    const local = (conn?: ServerConnection.Any) => ServerConnection.local(conn, ownUrl())
+
+    const label = (conn: ServerConnection.Any) =>
+      serverLabel(
+        conn,
+        current(conn)
+          ? { hostname: store.hostnames[ServerConnection.key(conn)], fallback: language.t("server.thisComputer") }
+          : undefined,
+      )
+
     return {
       get list() {
         return allServers()
@@ -285,15 +333,31 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       // state wait on this, but the provider must not block first render on storage.
       hydrated,
       isHidden(key: ServerConnection.Key) {
-        return store.hidden[key] ?? false
+        return !!store.hidden[key] && !visibleServers().some((conn) => ServerConnection.key(conn) === key)
       },
-      setHidden(key: ServerConnection.Key, hidden: boolean) {
-        setStore("hidden", key, hidden)
-      },
+      setHidden,
       add,
       remove,
       canRemove,
       scope,
+      current,
+      ownUrl,
+      local,
+      /** The name switchers, menus and titles show. */
+      label,
+      /** The name a list row shows next to its item: nothing for the current server or when it is the only one. */
+      tag(conn: ServerConnection.Any) {
+        return allServers().length < 2 || current(conn) ? undefined : label(conn)
+      },
+      /** "This computer" beside the current server's name, unless the name already says it. */
+      hint(conn: ServerConnection.Any) {
+        const text = language.t("server.thisComputer")
+
+        return current(conn) && label(conn) !== text ? text : undefined
+      },
+      setHostname(key: ServerConnection.Key, hostname: string) {
+        if (store.hostnames[key] !== hostname) setStore("hostnames", key, hostname)
+      },
       projects: {
         forServer: projectsForServer,
       },

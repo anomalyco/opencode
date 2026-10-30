@@ -1,9 +1,13 @@
 import { createMiddleware } from "@solidjs/start/middleware"
+import { appleAppSiteAssociation } from "~/lib/apple-app-site-association"
 import { LOCALE_HEADER, cookie, fromPathname, strip } from "~/lib/language"
 import { sanitizeServerActionRequest } from "~/lib/server-action"
 
 export default createMiddleware({
   async onRequest(event) {
+    const association = appleAppSiteAssociation(event.request)
+    if (association) return association
+
     event.request = sanitizeServerActionRequest(event.request)
 
     const url = new URL(event.request.url)

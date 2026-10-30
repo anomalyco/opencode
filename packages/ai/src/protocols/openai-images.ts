@@ -1,4 +1,4 @@
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Schema, SchemaGetter, Stream } from "effect"
 import {
   ImageFinishEvent,
   ImageModel,
@@ -8,11 +8,13 @@ import {
   type ImageRequestFor,
 } from "../image.js"
 import { Media } from "../media.js"
+import { classifyProviderFailure } from "../provider-error.js"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type MediaUsage, type OpenString } from "../schema/index.js"
-import { ProviderShared } from "./shared.js"
+import { AIError, mergeJsonRecords, ProviderID, tokenUsage, type MediaUsage, type OpenString } from "../schema/index.js"
+import { optionalNull, ProviderShared } from "./shared.js"
+import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
 
 const route = MediaProtocol.identity({ id: "openai-images", name: "OpenAI Images", provider: "openai" })
@@ -24,8 +26,13 @@ export const EDIT_PATH = "/images/edits"
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-/** Provider-native options. Common fields (`n`, `size`, `format`, `images`, `mask`) live on the request. */
+/** Provider-native options. Common fields (`n`, `aspect`, `resolution`, `images`) live on the request. */
 export type OpenAIImageOptions = {
+  /** Exact `WIDTHxHEIGHT` or `auto`; it replaces `aspect` and `resolution`, so setting both fails. */
+  readonly size?: OpenString<"auto" | "1024x1024" | "1536x1024" | "1024x1536">
+  readonly outputFormat?: OpenString<"png" | "jpeg" | "webp">
+  /** Inpainting mask for the first input image. */
+  readonly mask?: Media.Asset
   readonly quality?: OpenString<"auto" | "low" | "medium" | "high" | "standard" | "hd">
   readonly background?: OpenString<"auto" | "opaque" | "transparent">
   readonly moderation?: OpenString<"auto" | "low">
@@ -57,7 +64,8 @@ const Settings = {
 }
 
 const OpenAIImageResponse = Schema.Struct({
-  data: Schema.Array(Schema.Struct({ b64_json: Schema.String })),
+  // GPT Image models always return `b64_json`; compatible hosts that default to `url` can return either.
+  data: Schema.Array(Schema.Struct({ b64_json: optionalNull(Schema.String), url: optionalNull(Schema.String) })),
   ...Settings,
   usage: Schema.optional(Usage),
 })
@@ -66,6 +74,22 @@ const OpenAIImageResponse = Schema.Struct({
 // 3. Streaming event schema
 // ---------------------------------------------------------------------------
 
+const EVENT_TYPES = new Set([
+  "image_generation.partial_image",
+  "image_edit.partial_image",
+  "image_generation.completed",
+  "image_edit.completed",
+  "error",
+])
+/** OpenAI may add stream event types; frames outside `EVENT_TYPES` are ignored, while a malformed known type still fails decoding. */
+const UnknownEvent = Schema.Struct({
+  type: Schema.String.check(Schema.makeFilter((type) => !EVENT_TYPES.has(type))),
+}).pipe(
+  Schema.decodeTo(Schema.Struct({ type: Schema.Literal("unknown"), rawType: Schema.String }), {
+    decode: SchemaGetter.transform((event) => ({ type: "unknown" as const, rawType: event.type })),
+    encode: SchemaGetter.forbidden(() => "Unknown OpenAI Images stream events are decode-only"),
+  }),
+)
 const StreamEvent = Schema.Union([
   Schema.Struct({
     type: Schema.Literals(["image_generation.partial_image", "image_edit.partial_image"]),
@@ -81,13 +105,18 @@ const StreamEvent = Schema.Union([
     output_format: Schema.String,
     usage: Schema.optional(Usage),
   }),
+  Schema.Struct({
+    type: Schema.Literal("error"),
+    error: Schema.optional(Schema.Struct({ message: Schema.optional(Schema.String) })),
+  }),
+  UnknownEvent,
 ])
 
 const decodeEvent = route.decodeFrame(StreamEvent)
 const decodeDocument = Schema.decodeUnknownEffect(Schema.fromJsonString(OpenAIImageResponse))
 
-/** `generate` reads the whole JSON response as one frame, with the requested format for responses that omit it. */
-type Frame = string | { readonly document: string; readonly requested: string | undefined }
+/** `generate` reads the whole JSON response as one frame. */
+type Frame = string | { readonly document: string }
 
 // ---------------------------------------------------------------------------
 // 4. Parser state
@@ -99,7 +128,7 @@ interface State {
   readonly size?: string
   readonly quality?: string
   readonly background?: string
-  readonly usage?: MediaUsage
+  readonly usage?: Schema.Schema.Type<typeof Usage>
 }
 
 // ---------------------------------------------------------------------------
@@ -111,8 +140,48 @@ const RESERVED_FORM_FIELDS = new Set(["model", "prompt", "image", "image[]", "im
 
 const nativeOptions = (options: OpenAIImageOptions | undefined) => {
   if (!options) return undefined
-  const { outputCompression, partialImages: _, ...native } = options
-  return { output_compression: outputCompression, ...native }
+  const { outputCompression, outputFormat, partialImages: _, mask: __, ...native } = options
+  // `response_format: null` drops a provider's default, for hosts that reject the field.
+  return {
+    output_compression: outputCompression,
+    output_format: outputFormat,
+    ...native,
+    response_format: native.response_format ?? undefined,
+  }
+}
+
+/**
+ * `gpt-image-1`, `chatgpt-image` and DALL·E take a fixed list, `gpt-image-2` and later any size within limits. Other
+ * models are gateway-hosted (`bfl/flux-2-pro`); the gateway passes `size` through to them as is.
+ */
+const sizes = (model: string): ImageSizing.Limits | ReadonlyArray<ImageSizing.Size> => {
+  const id = model.slice(model.lastIndexOf("/") + 1)
+  if (id.startsWith("dall-e-2")) return [256, 512, 1024].map((edge) => ({ width: edge, height: edge }))
+  if (id.startsWith("dall-e-3"))
+    return [
+      { width: 1024, height: 1024 },
+      { width: 1792, height: 1024 },
+      { width: 1024, height: 1792 },
+    ]
+  if (/^(gpt-image-1|chatgpt-image)/.test(id))
+    return [
+      { width: 1024, height: 1024 },
+      { width: 1536, height: 1024 },
+      { width: 1024, height: 1536 },
+    ]
+  if (id.startsWith("gpt-image-"))
+    return { multiple: 16, maxEdge: 3840, minPixels: 655_360, maxPixels: 8_294_400, maxRatio: 3 }
+  return { multiple: 16 }
+}
+
+/** The body fields `aspect` and `resolution` lower to; gateways that read other fields than `size` pass their own. */
+export type OpenAIImageSizing = (request: Request) => Record<string, unknown> | undefined
+
+const pixelSize: OpenAIImageSizing = (request) => {
+  if (!ImageSizing.isRequested(request)) return undefined
+  const options = sizes(request.model.id)
+  const size = "multiple" in options ? ImageSizing.fit(request, options) : ImageSizing.nearest(request, options)
+  return { size: `${size.width}x${size.height}` }
 }
 
 const streamOptions = (request: MediaProtocol.Addressed<Request>) => {
@@ -128,24 +197,71 @@ const isEdit = (request: Request) => (request.images?.length ?? 0) > 0
 
 const isInline = (asset: Media.Asset) => asset.source.type === "bytes" || asset.source.type === "base64"
 
-const reference = (asset: Media.Asset) =>
-  ProviderShared.mediaReference(asset, route.provider, route.name).pipe(
+const reference = (asset: Media.Asset, provider: ProviderID) =>
+  ProviderShared.mediaReference(asset, provider, route.name).pipe(
     Effect.map((item) => (item.type === "ref" ? { file_id: item.value } : { image_url: item.value })),
   )
 
-const fromRequest = Effect.fn("OpenAIImages.fromRequest")(function* (request: MediaProtocol.Addressed<Request>) {
+/**
+ * How input images travel. `edits` is OpenAI's `/images/edits`, uploading owned bytes as multipart; `json-edits` sends
+ * every edit there as JSON with data URLs, for hosts that reject multipart (the ChatGPT backend); `references` keeps
+ * every request on `/images/generations` and lists them as `input_references`, for gateways without an edits endpoint
+ * (OpenRouter).
+ */
+export type OpenAIImageInput = "edits" | "json-edits" | "references"
+
+type Options = { readonly sizing: OpenAIImageSizing; readonly imageInput: OpenAIImageInput }
+
+const fromRequest = Effect.fn("OpenAIImages.fromRequest")(function* (
+  request: MediaProtocol.Addressed<Request>,
+  options: Options,
+) {
   const images = request.images ?? []
-  const mask = request.mask
+  const mask = request.providerOptions?.mask
+  if (options.imageInput === "references" && mask !== undefined)
+    return yield* route.unsupported("media.mask", `${request.model.provider} image edits take no mask`)
   if (mask !== undefined && images.length === 0)
     return yield* ProviderShared.invalidRequest("An OpenAI image mask requires at least one input image")
+  if (request.providerOptions?.size !== undefined && ImageSizing.isRequested(request))
+    return yield* ProviderShared.invalidRequest(
+      "OpenAI providerOptions.size replaces aspect and resolution; set one or the other",
+    )
   const fields = mergeJsonRecords(
-    { n: request.n, size: request.size, output_format: request.format, ...(yield* streamOptions(request)) },
+    {
+      n: request.n,
+      ...options.sizing(request),
+      ...(yield* streamOptions(request)),
+    },
     nativeOptions(request.providerOptions),
     request.http?.body,
   )
 
-  // Owned bytes go through multipart edits; remote URLs and file IDs use the JSON edits body instead.
-  if (images.length > 0 && images.every(isInline) && (mask === undefined || isInline(mask))) {
+  if (options.imageInput === "references") {
+    const references = yield* Effect.forEach(images, (image) =>
+      ProviderShared.mediaReference(image, undefined, route.name),
+    )
+    return MediaProtocol.json(
+      mergeJsonRecords(
+        {
+          model: request.model.id,
+          prompt: request.prompt,
+          input_references:
+            references.length === 0
+              ? undefined
+              : references.map((item) => ({ type: "image_url", image_url: { url: item.value } })),
+        },
+        fields,
+      ) ?? {},
+    )
+  }
+
+  // Owned bytes go through multipart edits; remote URLs, file IDs and `json-edits` hosts use the JSON edits body.
+  if (
+    options.imageInput === "edits" &&
+    images.length > 0 &&
+    images.every(isInline) &&
+    (mask === undefined || isInline(mask))
+  ) {
     const form = new FormData()
     MediaInput.appendFields(
       form,
@@ -161,8 +277,8 @@ const fromRequest = Effect.fn("OpenAIImages.fromRequest")(function* (request: Me
     return MediaProtocol.multipart(form)
   }
 
-  const references = yield* Effect.forEach(images, reference)
-  const maskReference = mask === undefined ? undefined : yield* reference(mask)
+  const references = yield* Effect.forEach(images, (image) => reference(image, request.model.provider))
+  const maskReference = mask === undefined ? undefined : yield* reference(mask, request.model.provider)
   return MediaProtocol.json(
     mergeJsonRecords(
       {
@@ -180,25 +296,18 @@ const fromRequest = Effect.fn("OpenAIImages.fromRequest")(function* (request: Me
 // 6. Stream parsing
 // ---------------------------------------------------------------------------
 
-const requestedFormat = (body: MediaProtocol.Body) => {
-  if (body.type === "binary") return undefined
-  const value = body.type === "json" ? body.value.output_format : body.value.get("output_format")
-  return typeof value === "string" ? value : undefined
-}
-
-const usage = (value: Schema.Schema.Type<typeof Usage> | undefined): MediaUsage | undefined =>
+const usage = (value: Schema.Schema.Type<typeof Usage> | undefined, provider: ProviderID): MediaUsage | undefined =>
   value === undefined
     ? undefined
-    : {
-        type: "tokens",
+    : tokenUsage({
         input: value.input_tokens,
         output: value.output_tokens,
         total: value.total_tokens,
-        details: { openai: value },
-      }
+        details: { [provider]: value },
+      })
 
 /** `size` echoes the rendered `WIDTHxHEIGHT`; `auto` or any other value leaves the dimensions unknown. */
-const info = (format: string, size: string | undefined): Media.Info => {
+const info = (format: string | undefined, size: string | undefined): Media.Info => {
   const match = size?.match(/^(\d+)x(\d+)$/)
   return match ? { format, width: Number(match[1]), height: Number(match[2]) } : { format }
 }
@@ -210,6 +319,14 @@ const eventImage = (frame: string, label: string, data: string, format: string, 
 
 const onEvent = Effect.fnUntraced(function* (state: State, frame: string) {
   const event = yield* decodeEvent(frame)
+  if (event.type === "unknown") return [state, []] as const
+  if (event.type === "error")
+    return yield* new AIError({
+      reason: classifyProviderFailure({
+        message: `${route.name} stream failed: ${event.error?.message ?? "unknown error"}`,
+        rawBody: frame,
+      }),
+    })
   const format = event.output_format
   if ("partial_image_index" in event) {
     const image = yield* eventImage(frame, `${route.name} partial image`, event.b64_json, format, event.size)
@@ -223,7 +340,7 @@ const onEvent = Effect.fnUntraced(function* (state: State, frame: string) {
       size: event.size,
       quality: event.quality,
       background: event.background,
-      usage: usage(event.usage),
+      usage: event.usage,
     },
     [ImageOutputEvent.make({ index: state.completed, image })],
   ] as const
@@ -234,9 +351,11 @@ const onDocument = Effect.fnUntraced(function* (frame: Exclude<Frame, string>) {
   const decoded = yield* decodeDocument(frame.document).pipe(
     Effect.mapError((cause) => invalid(`${route.name} returned an invalid response`, cause)),
   )
-  const format = decoded.output_format ?? frame.requested ?? "png"
+  // Compatible hosts may omit `output_format` and ignore the requested one, so the bytes decide unreported types.
+  const format = decoded.output_format
+  const mediaType = format === undefined ? undefined : `image/${format}`
   const images = yield* Effect.forEach(decoded.data, (item, index) =>
-    MediaInput.decodedAsset(invalid, `${route.name} result ${index}`, item.b64_json, `image/${format}`, {
+    MediaInput.imageOutput(invalid, `${route.name} result ${index}`, item, mediaType, {
       info: info(format, decoded.size),
     }),
   )
@@ -247,20 +366,21 @@ const onDocument = Effect.fnUntraced(function* (frame: Exclude<Frame, string>) {
     size: decoded.size,
     quality: decoded.quality,
     background: decoded.background,
-    usage: usage(decoded.usage),
+    usage: decoded.usage,
   }
   return [state, images.map((image, index) => ImageOutputEvent.make({ index, image }))] as const
 })
 
 const step = (state: State, frame: Frame) => (typeof frame === "string" ? onEvent(state, frame) : onDocument(frame))
 
-const finish = (state: State) => {
+const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) => {
   if (state.completed === 0) return Effect.fail(route.incomplete())
+  const provider = context.request.model.provider
   return Effect.succeed([
     ImageFinishEvent.make({
-      usage: state.usage,
+      usage: usage(state.usage, provider),
       providerMetadata: {
-        openai: {
+        [provider]: {
           outputFormat: state.format,
           size: state.size,
           quality: state.quality,
@@ -275,27 +395,48 @@ const finish = (state: State) => {
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.stream<Request, ImageEvent, Frame, State>(route, {
-  unsupported: ["aspectRatio", "seed"],
-  body: { from: fromRequest },
-  frames: (bytes, context) =>
-    context.request.mode === "stream"
-      ? Framing.sse.frame(bytes)
-      : Framing.document
-          .frame(bytes)
-          .pipe(Stream.map((document) => ({ document, requested: requestedFormat(context.body) }))),
-  initial: () => ({ completed: 0 }),
-  step,
-  finish,
-})
+const makeProtocol = (options: Options) =>
+  MediaProtocol.stream<Request, ImageEvent, Frame, State>(route, {
+    body: { from: (request) => fromRequest(request, options) },
+    frames: (bytes, context) =>
+      context.request.mode === "stream"
+        ? Framing.sse.frame(bytes)
+        : Framing.document.frame(bytes).pipe(Stream.map((document) => ({ document }))),
+    initial: () => ({ completed: 0 }),
+    step,
+    finish,
+  })
 
-export const model = (input: MediaRoute.ModelInput) =>
-  ImageModel.fromRoute<OpenAIImageOptions, Frame, State>(
-    { protocol, baseURL: DEFAULT_BASE_URL, path: ({ request }) => (isEdit(request) ? EDIT_PATH : PATH) },
+export const protocol = makeProtocol({ sizing: pixelSize, imageInput: "edits" })
+
+/**
+ * `provider` attributes models, refs, and metadata to an OpenAI-compatible host; it defaults to `openai`. `sizing`
+ * replaces the `size` that `aspect` and `resolution` lower to, and `imageInput` how input images are sent.
+ */
+export const model = (
+  input: MediaRoute.ModelInput & {
+    readonly provider?: string
+    readonly sizing?: OpenAIImageSizing
+    readonly imageInput?: OpenAIImageInput
+  },
+) => {
+  const imageInput = input.imageInput ?? "edits"
+  const base =
+    input.sizing === undefined && imageInput === "edits"
+      ? protocol
+      : makeProtocol({ sizing: input.sizing ?? pixelSize, imageInput })
+  return ImageModel.fromRoute<OpenAIImageOptions, Frame, State>(
+    {
+      protocol: input.provider === undefined ? base : { ...base, provider: ProviderID.make(input.provider) },
+      baseURL: DEFAULT_BASE_URL,
+      path: ({ request }) => (imageInput !== "references" && isEdit(request) ? EDIT_PATH : PATH),
+    },
     input,
   )
+}
 
 export const OpenAIImages = {
   protocol,
   model,
+  pixelSize,
 } as const

@@ -282,6 +282,25 @@
     cursor: not-allowed;
   }
 
+  /* Ghost danger: a destructive action that sits beside other ghost buttons */
+  [data-component="button-v2"][data-variant="ghost-danger"] {
+    background-color: transparent;
+    color: var(--v2-state-fg-danger);
+  }
+
+  [data-component="button-v2"][data-variant="ghost-danger"]:is(:hover, [data-state="hover"]):not(:disabled) {
+    background-color: var(--v2-overlay-simple-overlay-hover);
+  }
+
+  [data-component="button-v2"][data-variant="ghost-danger"]:is(:active, [data-state="pressed"]):not(:disabled) {
+    background-color: var(--v2-overlay-simple-overlay-pressed);
+  }
+
+  [data-component="button-v2"][data-variant="ghost-danger"]:is(:disabled, [data-state="disabled"]) {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   /* Ghost faint */
   [data-component="button-v2"][data-variant="ghost-faint"] {
     background-color: transparent;

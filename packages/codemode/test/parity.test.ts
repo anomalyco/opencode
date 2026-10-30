@@ -997,8 +997,8 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`try { JSON.rawJSON("1") } catch (e) { return e.message }`)).toBe(
       "JSON.rawJSON is not a function.",
     )
-    expect(await value(`try { search({ query: "star" }).catch(() => 1) } catch (e) { return e.message }`)).toBe(
-      "search(...).catch is not a function.",
+    expect(await value(`try { search({ query: "star" }).filter(() => 1) } catch (e) { return e.message }`)).toBe(
+      "search(...).filter is not a function.",
     )
     expect(
       await value(`const foo = () => ({ bar: () => ({}) }); try { foo().bar().baz() } catch (e) { return e.message }`),
@@ -1382,7 +1382,7 @@ describe("Object.getPrototypeOf and Object.create", () => {
     expect((await error(`Object.getPrototypeOf(Symbol.iterator)`)).message).toContain("cannot convert a symbol")
   })
 
-  test("Object.create links the prototype: inherited reads, in, and own-only keys", async () => {
+  test("Object.create links the prototype: inherited reads, in, own-only keys, and inherited for...in", async () => {
     expect(
       await value(`
         const p = { greet(name) { return "hi " + name }, a: 1 }
@@ -1392,7 +1392,7 @@ describe("Object.getPrototypeOf and Object.create", () => {
         for (const key in c) seen.push(key)
         return ["greet" in c, Object.keys(c), c.hasOwnProperty("a"), c.a, c.greet(c.name), Object.getPrototypeOf(c) === p, Object.getPrototypeOf(Object.create(null)), seen]
       `),
-    ).toEqual([true, ["name"], false, 1, "hi x", true, null, ["name"]])
+    ).toEqual([true, ["name"], false, 1, "hi x", true, null, ["name", "greet", "a"]])
   })
 
   test("Object.create rejects non-object prototypes and property descriptors", async () => {

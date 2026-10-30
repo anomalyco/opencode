@@ -30,15 +30,16 @@ import { LocaleLinks } from "~/component/locale-links"
 import { SocialMeta } from "~/component/social-meta"
 
 const models = [
-  { name: "MiniMax M3.1 Flash Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "LongCat 2.5 Preview Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Kimi K3.1 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "MiniMax M3.1 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Step 5 Preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Beam Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
+  { name: "Iceman Contributor Free", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "Grok 4.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Claude Haiku 5.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
-  { name: "Gemini 4 Argon Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
+  { name: "Gemini 4 Argon", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.3-Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.2", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -61,22 +62,64 @@ const models = [
   { name: "Hy3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
 ] as const
 
+const audiences = [
+  { id: "individuals", label: "go.plans.individuals" },
+  { id: "teams", label: "go.plans.teams" },
+] as const
+
+const plans = [
+  {
+    id: "go",
+    audience: "individuals",
+    name: "Go",
+    price: "$10",
+    period: "go.plans.month",
+    cta: "go.cta.text",
+    features: ["go.plans.go.feature1", "go.plans.go.feature2", "go.plans.go.feature3"],
+    marker: "square",
+  },
+  {
+    id: "go-plus",
+    audience: "individuals",
+    name: "Go Plus",
+    price: "$40",
+    period: "go.plans.month",
+    cta: "go.plans.plus.cta",
+    features: ["go.plans.plus.feature1", "go.plans.plus.feature2", "go.plans.plus.feature3"],
+    marker: "plus",
+  },
+  {
+    id: "go-teams",
+    audience: "teams",
+    name: "Go Teams",
+    price: "$20",
+    period: "go.plans.memberMonth",
+    cta: "go.plans.teams.cta",
+    features: [
+      "go.plans.teams.feature1",
+      "go.plans.teams.feature2",
+      "go.plans.teams.feature3",
+      "go.plans.teams.feature4",
+      "go.plans.teams.feature5",
+    ],
+    marker: "plus",
+  },
+] as const
+
 export default function Home() {
   const subscribeUrl = "https://opencode.ai/console/go"
   const i18n = useI18n()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const audience = () => (searchParams.for === "teams" ? "teams" : "individuals")
+  const description = () =>
+    `${i18n.t("go.meta.description")} ${i18n.t("go.plans.plus.description")} ${i18n.t("go.plans.teams.description")}`
   return (
     <main data-page="go">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>{i18n.t("go.title")}</Title>
-      <Meta name="description" content={`${i18n.t("go.meta.description")} ${i18n.t("go.plans.plus.description")}`} />
+      <Meta name="description" content={description()} />
       <LocaleLinks path="/go" />
-      <SocialMeta
-        title={i18n.t("go.title")}
-        description={`${i18n.t("go.meta.description")} ${i18n.t("go.plans.plus.description")}`}
-        path="/go"
-        image="/social-share-black.png"
-      />
+      <SocialMeta title={i18n.t("go.title")} description={description()} path="/go" />
 
       <div data-component="container">
         <Header go hideGetStarted />
@@ -86,7 +129,7 @@ export default function Home() {
             <div data-component="desktop-app-banner">
               <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
               <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.promo.minimaxM31FlashFree")}</span>
+                <span data-slot="text">{i18n.t("go.promo.kimiK31Pro")}</span>
               </div>
             </div>
             <Show when={searchParams.ref}>
@@ -118,60 +161,74 @@ export default function Home() {
               </div>
               <p data-slot="tagline">{i18n.t("go.hero.tagline")}</p>
             </div>
-            <div data-slot="plans">
-              <For
-                each={
-                  [
-                    {
-                      name: "Go",
-                      price: "$10",
-                      cta: "go.cta.text",
-                      features: ["go.plans.go.feature1", "go.plans.go.feature2", "go.plans.go.feature3"],
-                      marker: "square",
-                    },
-                    {
-                      name: "Go Plus",
-                      price: "$40",
-                      cta: "go.plans.plus.cta",
-                      features: ["go.plans.plus.feature1", "go.plans.plus.feature2", "go.plans.plus.feature3"],
-                      marker: "plus",
-                    },
-                  ] as const
-                }
-              >
-                {(plan) => (
-                  <div data-slot="plan">
-                    <div data-slot="plan-body">
-                      <p data-slot="name">{plan.name}</p>
-                      <p data-slot="price">
-                        {plan.price} <span>{i18n.t("go.plans.month")}</span>
-                      </p>
-                      <ul>
-                        <For each={plan.features}>
-                          {(feature) => (
-                            <li>
-                              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                {plan.marker === "square" ? (
-                                  <path d="M11 5H5V11H11V5Z" fill="currentColor" />
-                                ) : (
-                                  <path d="M8 3.5V12.5M3.5 8H12.5" stroke="currentColor" />
-                                )}
-                              </svg>
-                              {i18n.t(feature)}
-                            </li>
-                          )}
-                        </For>
-                      </ul>
+            <div data-slot="plans-group">
+              <div data-slot="audience" role="group" aria-label={i18n.t("go.plans.audience")}>
+                <For each={audiences}>
+                  {(item) => (
+                    <button
+                      type="button"
+                      aria-pressed={audience() === item.id}
+                      onClick={() =>
+                        setSearchParams(
+                          { for: item.id === "teams" ? "teams" : undefined },
+                          { replace: true, scroll: false },
+                        )
+                      }
+                    >
+                      {i18n.t(item.label)}
+                    </button>
+                  )}
+                </For>
+              </div>
+              {/* Both audiences stay rendered in one grid cell so switching crossfades between them; the hidden one is
+                  inert and out of the accessibility tree. */}
+              <div data-slot="plans-stack">
+                <For each={audiences}>
+                  {(group) => (
+                    <div
+                      data-slot="plans"
+                      data-audience={group.id}
+                      aria-hidden={audience() !== group.id}
+                      inert={audience() !== group.id}
+                    >
+                      <For each={plans.filter((plan) => plan.audience === group.id)}>
+                        {(plan) => (
+                          <div data-slot="plan" data-plan={plan.id}>
+                            <div data-slot="plan-body">
+                              <p data-slot="name">{plan.name}</p>
+                              <p data-slot="price">
+                                {plan.price} <span>{i18n.t(plan.period)}</span>
+                              </p>
+                              <ul>
+                                <For each={plan.features}>
+                                  {(feature) => (
+                                    <li>
+                                      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                        {plan.marker === "square" ? (
+                                          <path d="M11 5H5V11H11V5Z" fill="currentColor" />
+                                        ) : (
+                                          <path d="M8 3.5V12.5M3.5 8H12.5" stroke="currentColor" />
+                                        )}
+                                      </svg>
+                                      {i18n.t(feature)}
+                                    </li>
+                                  )}
+                                </For>
+                              </ul>
+                            </div>
+                            <a href={subscribeUrl}>{i18n.t(plan.cta)}</a>
+                          </div>
+                        )}
+                      </For>
                     </div>
-                    <a href={subscribeUrl}>{i18n.t(plan.cta)}</a>
-                  </div>
-                )}
-              </For>
+                  )}
+                </For>
+              </div>
             </div>
           </section>
 
           <section data-component="comparison">
-            <GoPlanChart href="/v2/docs/console/go/#usage-limits" />
+            <GoPlanChart href="/v2/docs/console/go/#usage-limits" audience={audience()} />
           </section>
 
           <section data-component="problem">
@@ -214,8 +271,8 @@ export default function Home() {
                 <span>[2]</span>
                 <div>
                   <strong>{i18n.t("go.how.step2.title")}</strong> -{" "}
-                  <a href="/v2/docs/console/go/">{i18n.t("go.how.step2.link")}</a>{" "}
-                  {i18n.t("go.how.step2.afterLink")} · {i18n.t("go.plans.plus.description")}
+                  <a href="/v2/docs/console/go/">{i18n.t("go.how.step2.link")}</a> {i18n.t("go.how.step2.afterLink")} ·{" "}
+                  {i18n.t("go.plans.plus.description")} · {i18n.t("go.plans.teams.description")}
                 </div>
               </li>
               <li>
@@ -248,7 +305,7 @@ export default function Home() {
               </li>
               <li>
                 <Faq question={i18n.t("go.faq.q3")}>
-                  {i18n.t("go.faq.a3")} {i18n.t("go.plans.plus.description")}
+                  {i18n.t("go.faq.a3")} {i18n.t("go.plans.plus.description")} {i18n.t("go.plans.teams.description")}
                 </Faq>
               </li>
               <li>
@@ -256,8 +313,8 @@ export default function Home() {
                   {i18n.t("go.faq.a4.p1.beforePricing")}{" "}
                   <a href="/v2/docs/console/go/">{i18n.t("go.faq.a4.p1.pricingLink")}</a>{" "}
                   {i18n.t("go.faq.a4.p1.afterPricing")} {i18n.t("go.plans.plus.description")}{" "}
-                  {i18n.t("go.faq.a4.p2.beforeAccount")} <a href={subscribeUrl}>{i18n.t("go.faq.a4.p2.accountLink")}</a>
-                  . {i18n.t("go.faq.a4.p3")}
+                  {i18n.t("go.plans.teams.description")} {i18n.t("go.faq.a4.p2.beforeAccount")}{" "}
+                  <a href={subscribeUrl}>{i18n.t("go.faq.a4.p2.accountLink")}</a>. {i18n.t("go.faq.a4.p3")}
                 </Faq>
               </li>
               <li>
@@ -302,13 +359,7 @@ export default function Home() {
                     <p>
                       <strong>Claude Haiku 5.5:</strong> {i18n.t("go.faq.a5.retention")}:{" "}
                       {i18n.t("go.faq.a5.retention30")}.{" "}
-                      <a href="https://code.claude.com/docs/en/data-usage">
-                        {i18n.t("go.faq.a5.learnMore")}
-                      </a>
-                      .
-                    </p>
-                    <p>
-                      <strong>Gemini 4 Argon Contributor:</strong> {i18n.t("go.faq.a5.geminiRetention")}
+                      <a href="https://code.claude.com/docs/en/data-usage">{i18n.t("go.faq.a5.learnMore")}</a>.
                     </p>
                     <p>
                       <strong>Muse Spark 1.3 Contributor:</strong> {i18n.t("go.faq.a5.museRetention")}{" "}

@@ -426,6 +426,83 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("stores large opaque PNG screenshots as JPEG", () =>
+    Effect.gen(function* () {
+      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+      const width = 2000
+      const height = 1125
+      const opaquePixels = Uint8Array.from({ length: width * height * 4 }, (_, index) =>
+        index % 4 === 3 ? 255 : (index * 31 + (index >> 7)) % 256,
+      )
+      const opaqueSource = new photon.PhotonImage(opaquePixels, width, height)
+      const opaqueBase64 = Buffer.from(opaqueSource.get_bytes()).toString("base64")
+      opaqueSource.free()
+      readResult = {
+        type: "file",
+        uri: "file:///screenshot.png",
+        name: "screenshot.png",
+        content: opaqueBase64,
+        encoding: "base64",
+        mime: "image/png",
+      }
+      const registry = yield* Tool.Service
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-transcode-screenshot", name: "read", input: { path: "screenshot.png" } },
+      })
+
+      expect(result.status).toBe("completed")
+      if (result.status !== "completed") return
+      const media = result.content?.[1]
+      expect(media?.type).toBe("file")
+      if (media?.type !== "file") return
+      expect(media.mime).toBe("image/jpeg")
+      const b64 = media.uri.split(",")[1] ?? ""
+      expect(b64.length).toBeLessThan(opaqueBase64.length)
+      const resized = photon.PhotonImage.new_from_byteslice(Buffer.from(b64, "base64"))
+      expect(resized.get_width()).toBe(width)
+      expect(resized.get_height()).toBe(height)
+      resized.free()
+    }),
+  )
+
+  it.effect("keeps fitting PNGs that are small, transparent, or smaller than their JPEG", () =>
+    Effect.gen(function* () {
+      const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))
+      const png = (width: number, height: number, pixel: (x: number, y: number, channel: number) => number) => {
+        const pixels = new Uint8Array(width * height * 4)
+        for (let index = 0; index < pixels.length; index++) {
+          const offset = index >> 2
+          pixels[index] = pixel(offset % width, Math.floor(offset / width), index % 4)
+        }
+        const source = new photon.PhotonImage(pixels, width, height)
+        const content = Buffer.from(source.get_bytes()).toString("base64")
+        source.free()
+        return { uri: "file:///image.png", content, encoding: "base64" as const, mime: "image/png" }
+      }
+      let seed = 1
+      const blocks = Array.from({ length: 500 * 375 }, () => {
+        seed = (Math.imul(seed, 1103515245) + 12345) >>> 0
+        return (seed >>> 31) * 255
+      })
+      const cases = {
+        transparent: png(600, 600, (x, y, channel) =>
+          channel === 3 ? (y < 120 ? 0 : 255) : (((y * 600 + x) * 4 + channel) * 31 + x) % 256,
+        ),
+        small: png(1000, 1000, (_x, y, channel) => (channel === 3 ? 255 : y % 256)),
+        diagram: png(2000, 1500, (x, y, channel) =>
+          channel === 3 ? 255 : blocks[Math.floor(y / 4) * 500 + Math.floor(x / 4)]!,
+        ),
+      }
+      expect(cases.transparent.content.length).toBeGreaterThan(384 * 1024)
+      expect(cases.small.content.length).toBeLessThanOrEqual(384 * 1024)
+      expect(cases.diagram.content.length).toBeGreaterThan(384 * 1024)
+      const image = yield* Image.Service
+      for (const content of Object.values(cases)) expect(yield* image.normalize("image.png", content)).toEqual(content)
+    }),
+  )
+
   it.effect("accepts PNG candidates at the exact base64 limit and skips them one byte below", () =>
     Effect.gen(function* () {
       const photon = yield* Effect.promise(() => import("@silvia-odwyer/photon-node"))

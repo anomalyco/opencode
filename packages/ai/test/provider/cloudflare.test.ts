@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMEvent } from "../../src/index.js"
+import { LLM, LLMEvent } from "../../src/effect.js"
 import { CloudflareAIGateway } from "../../src/providers/cloudflare-ai-gateway.js"
 import { CloudflareWorkersAI } from "../../src/providers/cloudflare-workers-ai.js"
 import { compileRequest } from "../../src/route/client.js"

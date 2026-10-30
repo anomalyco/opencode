@@ -30,6 +30,10 @@ export const dict = {
   "legal.brand": "Brand",
   "legal.privacy": "Privacy",
   "legal.terms": "Termini",
+  "legal.status.operational": "Tutti i sistemi sono operativi",
+  "legal.status.degraded": "Prestazioni ridotte",
+  "legal.status.outage": "Interruzione del servizio",
+  "legal.status.unknown": "Stato del sistema",
 
   "email.title": "Sii il primo a sapere quando rilasciamo nuovi prodotti",
   "email.subtitle": "Iscriviti alla waitlist per l'accesso anticipato.",
@@ -69,12 +73,8 @@ export const dict = {
 
   "home.what.title": "Che cos'è OpenCode?",
   "home.what.body": "OpenCode è un agente open source che ti aiuta a scrivere codice nel terminale, IDE o desktop.",
-  "home.what.lsp.title": "LSP abilitato",
-  "home.what.lsp.body": "Carica automaticamente gli LSP giusti per il LLM",
   "home.what.multiSession.title": "Multi-session",
   "home.what.multiSession.body": "Avvia più agenti in parallelo sullo stesso progetto",
-  "home.what.shareLinks.title": "Link condivisi",
-  "home.what.shareLinks.body": "Condividi un link a qualsiasi sessione per riferimento o debug",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Accedi con GitHub per usare il tuo account Copilot",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -115,7 +115,7 @@ export const dict = {
   "home.faq.a3.p4.localLink": "modelli locali",
   "home.faq.q4": "Posso usare i miei abbonamenti IA esistenti con OpenCode?",
   "home.faq.a4.p1":
-    "Sì, OpenCode supporta gli abbonamenti dei principali provider. Puoi usare Claude Pro/Max, ChatGPT Plus/Pro o GitHub Copilot.",
+    "Sì, puoi usare i tuoi abbonamenti ChatGPT Plus/Pro o GitHub Copilot, oppure il tuo abbonamento Claude tramite Claude Code.",
   "home.faq.q5": "Posso usare OpenCode solo nel terminale?",
   "home.faq.a5.beforeDesktop": "Non più! OpenCode ora è disponibile come app per",
   "home.faq.a5.desktop": "desktop",
@@ -164,7 +164,7 @@ export const dict = {
     "Per coprire i costi, OpenCode aggiunge solo una piccola commissione di elaborazione del pagamento di $1.23 per ogni ricarica di saldo da $20.",
   "zen.faq.q5": "E per quanto riguarda dati e privacy?",
   "zen.faq.a5.beforeExceptions":
-    "Tutti i modelli Zen sono ospitati negli Stati Uniti. I provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le",
+    "Tutti i modelli Zen sono ospitati negli Stati Uniti e nell'UE. I provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le",
   "zen.faq.a5.exceptionsLink": "seguenti eccezioni",
   "zen.faq.q6": "Posso impostare limiti di spesa?",
   "zen.faq.a6": "Sì, puoi impostare limiti di spesa mensuali nel tuo account.",
@@ -197,13 +197,14 @@ export const dict = {
   "zen.how.step2.link": "paga per richiesta",
   "zen.how.step2.afterLink": "senza ricarichi",
   "zen.how.step3.title": "Ricarica automatica",
-  "zen.how.step3.body": "quando il tuo saldo raggiunge $5, aggiungeremo automaticamente $20",
+  "zen.how.step3.body":
+    "attiva la ricarica automatica opzionale e scegli la soglia del saldo e l'importo della ricarica",
   "zen.privacy.title": "La tua privacy è importante per noi",
   "zen.privacy.beforeExceptions":
-    "Tutti i modelli Zen sono ospitati negli Stati Uniti. I provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le",
+    "Tutti i modelli Zen sono ospitati negli Stati Uniti e nell'UE. I provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le",
   "zen.privacy.exceptionsLink": "seguenti eccezioni",
 
-  "go.promo.minimaxM31FlashFree": "MiniMax M3.1 Flash Free è ora disponibile in Go, gratis per un periodo limitato.",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro è ora disponibile in Go.",
   "go.title": "OpenCode Go | Modelli di coding a basso costo per tutti",
   "go.meta.description":
     "Go costa $10/mese, con limiti di utilizzo generosi e un accesso affidabile ai principali modelli di coding.",
@@ -213,15 +214,26 @@ export const dict = {
     "Go porta il coding agentico ai programmatori di tutto il mondo. Offrendo limiti generosi e un accesso affidabile ai modelli open source più capaci, in modo da poter costruire con agenti potenti senza preoccuparsi dei costi o della disponibilità.",
 
   "go.cta.text": "Abbonati a Go",
+  "go.plans.audience": "Piani Go per",
+  "go.plans.individuals": "Singoli",
+  "go.plans.teams": "Team",
   "go.plans.month": "al mese",
+  "go.plans.memberMonth": "per membro\nal mese",
   "go.plans.plus.cta": "Abbonati a Go Plus",
   "go.plans.plus.description": "Go Plus costa $40/mese e offre limiti più alti.",
+  "go.plans.teams.cta": "Abbonati a Go Teams",
+  "go.plans.teams.description": "Go Teams costa $20/membro/mese con limiti per ogni membro.",
   "go.plans.go.feature1": "Modelli selezionati e convenienti",
   "go.plans.go.feature2": "Testati per la programmazione agentica",
   "go.plans.go.feature3": "Limiti generosi e accesso affidabile",
   "go.plans.plus.feature1": "Tutto ciò che include Go",
   "go.plans.plus.feature2": "Limiti più alti per sessioni di coding più lunghe e concentrate",
   "go.plans.plus.feature3": "Per progetti più grandi e impegnativi",
+  "go.plans.teams.feature1": "Ogni membro ha i propri limiti Go",
+  "go.plans.teams.feature2": "Limiti mensili generosi per ogni modello",
+  "go.plans.teams.feature3": "Un'unica fattura per l'intero workspace",
+  "go.plans.teams.feature4": "Utilizzo extra con budget per singolo membro",
+  "go.plans.teams.feature5": "Controlli di privacy e regione per i modelli",
   "go.plans.limits": "Limiti",
   "go.plans.description": "Richieste stimate ogni 5 ore e limiti mensili per modello",
   "go.plans.legend": "Piani",
@@ -283,8 +295,6 @@ export const dict = {
     "ZDR disabilita importanti funzionalità API che dipendono dai dati archiviati, tra cui la Responses API con stato, Files and Collections e Batch API.",
   "go.faq.a5.gptRetention":
     "I log di monitoraggio degli abusi vengono generati per l'utilizzo di tutte le funzionalità API e conservati per un massimo di 30 giorni.",
-  "go.faq.a5.geminiRetention":
-    "I tuoi prompt e completamenti possono essere utilizzati per addestrare futuri modelli Google.",
   "go.faq.a5.learnMore": "Scopri di più",
   "go.faq.a5.deepseekRetention":
     "L'accordo ZDR viene rinnovato mensilmente. L'accordo attuale è valido fino al 31 ottobre 2026.",
@@ -376,7 +386,7 @@ export const dict = {
     "Inizia semplicemente con una prova interna con il tuo team. OpenCode per impostazione predefinita non archivia il tuo codice o dati di contesto, rendendo facile iniziare. Poi contattaci per discutere prezzi e opzioni di implementazione.",
   "enterprise.faq.q3": "Come funziona il prezzo enterprise?",
   "enterprise.faq.a3":
-    "Offriamo prezzi enterprise per postazione. Se hai il tuo gateway LLM, non addebitiamo per i token usati. Per ulteriori dettagli, contattaci per un preventivo personalizzato basato sulle esigenze della tua organizzazione.",
+    "Se hai il tuo gateway LLM, non addebitiamo per i token usati. Per ulteriori dettagli, contattaci per un preventivo personalizzato basato sulle esigenze della tua organizzazione.",
   "enterprise.faq.q4": "I miei dati sono sicuri con OpenCode Enterprise?",
   "enterprise.faq.a4":
     "Sì. OpenCode non archivia il tuo codice o dati di contesto. Tutto il trattamento avviene localmente o attraverso chiamate API dirette al tuo provider IA. Con configurazione centrale e integrazione SSO, i tuoi dati rimangono sicuri all'interno dell'infrastruttura della tua organizzazione.",

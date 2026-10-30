@@ -3,7 +3,7 @@ title: เครื่องมือที่กำหนดเอง
 description: สร้างเครื่องมือที่ LLM สามารถเรียกใช้ใน opencode
 ---
 
-เครื่องมือแบบกำหนดเองคือฟังก์ชันที่คุณสร้างขึ้นซึ่ง LLM สามารถเรียกใช้ระหว่างการสนทนาได้ โดยทำงานร่วมกับ [เครื่องมือในตัว](/docs/tools) ของ opencode เช่น `read`, `write` และ `shell`
+เครื่องมือแบบกำหนดเองคือฟังก์ชันที่คุณสร้างขึ้นซึ่ง LLM สามารถเรียกใช้ระหว่างการสนทนาได้ โดยทำงานร่วมกับ [เครื่องมือในตัว](/docs/tools) ของ opencode เช่น `read`, `write` และ `bash`
 
 ---
 
@@ -83,13 +83,13 @@ export const multiply = tool({
 
 เครื่องมือแบบกำหนดเองจะถูกระบุด้วยชื่อเครื่องมือ หากเครื่องมือแบบกำหนดเองใช้ชื่อเดียวกับเครื่องมือในตัว เครื่องมือแบบกำหนดเองจะมีความสำคัญเหนือกว่า
 
-ตัวอย่างเช่น ไฟล์นี้จะแทนที่เครื่องมือ `shell` ในตัว:
+ตัวอย่างเช่น ไฟล์นี้จะแทนที่เครื่องมือ `bash` ในตัว:
 
-```ts title=".opencode/tools/shell.ts"
+```ts title=".opencode/tools/bash.ts"
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-  description: "Restricted shell wrapper",
+  description: "Restricted bash wrapper",
   args: {
     command: tool.schema.string(),
   },

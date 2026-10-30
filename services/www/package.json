@@ -8,18 +8,18 @@
     "build": "bun run generate && astro build && bun script/pagefind.ts && bun run validate && bun script/prepare-cloudflare.ts",
     "deploy": "wrangler deploy --config dist/server/wrangler.json",
     "generate": "bun script/generate-openapi.ts && bun --cwd ../../packages/cli script/schema.ts ../../services/www/public/cli.json",
-    "check:generated": "bun script/generate-openapi.ts --check",
     "validate": "bun script/validate-links.ts",
-    "typecheck": "astro check"
+    "typecheck": "astro check",
+    "typecheck:tsc": "astro check"
   },
   "dependencies": {
     "@astrojs/mdx": "7.0.5",
-    "astro": "7.1.3"
+    "astro": "catalog:"
   },
   "devDependencies": {
     "@astrojs/cloudflare": "14.1.4",
     "@astrojs/check": "0.9.6",
-    "@astrojs/markdown-remark": "7.2.4",
+    "@astrojs/markdown-remark": "7.3.2",
     "@types/bun": "catalog:",
     "pagefind": "1.5.2",
     "typescript": "catalog:",

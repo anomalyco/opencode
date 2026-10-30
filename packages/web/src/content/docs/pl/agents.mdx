@@ -61,7 +61,7 @@ Dedykowany agent do analizy. Używa zestawu narzędzi tylko do odczytu, aby zmni
 Domyślnie uprawnienia są ustawione na `ask` dla:
 
 - `file edits`: Wszystkie zapisy, patche i edycje
-- `shell`: Wszystkie polecenia shell
+- `bash`: Wszystkie polecenia bash
 
 Ten agent jest zalecany, gdy chcesz, aby LLM zapoznał się z kodem, stworzył plan lub odpowiedział na pytania bez ryzyka modyfikacji bazy kodu.
 
@@ -151,12 +151,12 @@ Skonfiguruj agenta w pliku `opencode.json`:
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
         "edit": true,
-        "shell": true
+        "bash": true
       }
     },
     "plan": {
@@ -165,13 +165,13 @@ Skonfiguruj agenta w pliku `opencode.json`:
       "tools": {
         "write": false,
         "edit": false,
-        "shell": false
+        "bash": false
       }
     },
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -195,12 +195,12 @@ Możesz także definiować agentów za pomocą plików markdown. Przechowuj je w
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
   edit: false
-  shell: false
+  bash: false
 ---
 
 You are in code review mode. Focus on:
@@ -366,7 +366,7 @@ Jeśli model nie zostanie określony, agenci główni używają [modelu skonfigu
 }
 ```
 
-Identyfikator modelu jest taki sam, jak w konfiguracji OpenCode w `provider/model-id`. Na przykład, [OpenCode Zen](https://opencode.ai/v2/docs/console/), użyj `opencode/gpt-5.1-codex` dla GPT 5.1 Codex.
+Identyfikator modelu jest taki sam, jak w konfiguracji OpenCode w `provider/model-id`. Na przykład, [OpenCode Zen](https://opencode.ai/v2/docs/console/), użyj `opencode/gpt-6.1-sol` dla GPT-6.1 Sol.
 
 ---
 
@@ -379,13 +379,13 @@ Kontroluj, które narzędzia są dostępne dla tego agenta, za pomocą konfigura
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "write": true,
-    "shell": true
+    "bash": true
   },
   "agent": {
     "plan": {
       "tools": {
         "write": false,
-        "shell": false
+        "bash": false
       }
     }
   }
@@ -419,7 +419,7 @@ Możesz także używać symboli wieloznacznych (wildcards), aby kontrolować wie
 
 ### Permissions (Uprawnienia)
 
-Możesz skonfigurować uprawnienia dla potencjalnie wrażliwych działań wykonywanych przez agenta. Obecnie obsługiwane dla narzędzi `edit`, `shell` i `webfetch`:
+Możesz skonfigurować uprawnienia dla potencjalnie wrażliwych działań wykonywanych przez agenta. Obecnie obsługiwane dla narzędzi `edit`, `bash` i `webfetch`:
 
 - `"ask"` — Pytaj o zatwierdzenie przed użyciem narzędzia
 - `"allow"` — Zezwalaj na użycie bez zatwierdzenia
@@ -460,7 +460,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell:
+  bash:
     "*": ask
     "git diff": allow
     "git log*": allow
@@ -471,7 +471,7 @@ permission:
 Only analyze code and suggest changes.
 ```
 
-Możesz to skonfigurować szczegółowo dla poleceń shell.
+Możesz to skonfigurować szczegółowo dla poleceń bash.
 
 ```json title="opencode.json" {7}
 {
@@ -479,7 +479,7 @@ Możesz to skonfigurować szczegółowo dla poleceń shell.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git push": "ask",
           "grep *": "allow"
         }
@@ -497,7 +497,7 @@ Można to połączyć z globalnym symbolem wieloznacznym.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git *": "ask"
         }
       }
@@ -515,7 +515,7 @@ Najbardziej szczegółowa reguła ma pierwszeństwo, symbol wieloznaczny `*` jes
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git status *": "allow"
         }
@@ -653,7 +653,7 @@ Na przykład, używając modelu rozumowania OpenAI, możesz kontrolować wysiłe
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -673,7 +673,7 @@ Uruchom `opencode models`, aby zobaczyć dostępne modele.
 
 Aby utworzyć nowego agenta, dodaj plik markdown do `.opencode/agents/` w projekcie lub do `~/.config/opencode/agents/` globalnie. Nazwa pliku staje się nazwą agenta, a frontmatter konfiguruje jego opis, tryb, model i uprawnienia. Format pliku opisano powyżej w sekcji [Markdown](#markdown).
 
-Uruchom `opencode debug agents`, aby wyświetlić listę agentów załadowanych przez OpenCode.
+Uruchom `opencode agent list`, aby wyświetlić listę agentów załadowanych przez OpenCode.
 
 ---
 
@@ -684,7 +684,7 @@ Oto kilka typowych zastosowań różnych agentów:
 - **Agent programista**: Pełne prace programistyczne z dostępem do wszystkich narzędzi.
 - **Agent Plan**: Analiza i planowanie bez ryzyka modyfikacji kodu.
 - **Agent recenzujący**: Przegląd kodu z dostępem do odczytu plików i narzędzi dokumentacyjnych.
-- **Agent debugujący**: Koncentruje się na rozwiązywaniu problemów z dostępem do narzędzi shell i odczytu plików.
+- **Agent debugujący**: Koncentruje się na rozwiązywaniu problemów z dostępem do narzędzi bash i odczytu plików.
 - **Agent Documentation**: Tworzenie i utrzymywanie dokumentacji z dostępem do operacji na plikach, ale bez poleceń systemowych.
 
 ---
@@ -706,7 +706,7 @@ Masz agenta, którym warto się podzielić? [Prześlij PR](https://github.com/an
 description: Writes and maintains project documentation
 mode: subagent
 tools:
-  shell: false
+  bash: false
 ---
 
 You are a technical writer. Create clear, comprehensive documentation.

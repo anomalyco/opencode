@@ -102,28 +102,19 @@ const MistralTool = Schema.Struct({
 })
 type MistralTool = Schema.Schema.Type<typeof MistralTool>
 
+const ReasoningEffort = ProviderShared.knownString<"none" | "minimal" | "low" | "medium" | "high" | "xhigh">()
+export type ReasoningEffort = typeof ReasoningEffort.Type
+
 const MistralOptions = Schema.Struct({
   safePrompt: Schema.optional(Schema.Boolean),
   documentImageLimit: Schema.optional(Schema.Number),
   documentPageLimit: Schema.optional(Schema.Number),
   parallelToolCalls: Schema.optional(Schema.Boolean),
-  reasoningEffort: Schema.optional(Schema.String),
+  reasoningEffort: Schema.optional(ReasoningEffort),
   promptMode: Schema.optional(Schema.Literal("reasoning")),
   promptCacheKey: Schema.optional(Schema.String),
 })
-
-export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | (string & {})
-
-export type ProviderOptionsInput = {
-  readonly safePrompt?: boolean
-  readonly documentImageLimit?: number
-  readonly documentPageLimit?: number
-  readonly parallelToolCalls?: boolean
-  readonly reasoningEffort?: ReasoningEffort
-  readonly promptMode?: "reasoning"
-  readonly promptCacheKey?: string
-  readonly [key: string]: unknown
-}
+export type ProviderOptionsInput = typeof MistralOptions.Type & { readonly [key: string]: unknown }
 
 export const MistralBody = Schema.Struct({
   model: Schema.String,

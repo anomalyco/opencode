@@ -5,7 +5,6 @@ import { lookup } from "mime-types"
 import { Context, Effect, FileSystem, Layer, Schema } from "effect"
 import type { PlatformError } from "effect/PlatformError"
 import { Glob } from "./glob.js"
-import { serviceUse } from "./effect/service-use.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem } from "./effect/app-node-platform.js"
 import { sameDirectory } from "./path.js"
@@ -57,8 +56,6 @@ export namespace FSUtil {
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/FSUtil") {}
 
-  export const use = serviceUse(Service)
-
   // Exported so simulation can wrap this layer and override the methods that
   // bypass the injected FileSystem (readDirectoryEntries, scan, globUp).
   export const layer = Layer.effect(
@@ -107,6 +104,9 @@ export namespace FSUtil {
         const resolved = path.resolve(windowsPath(input))
         // Sandboxes deny reads outside granted paths; canonicalize what we can see.
         return yield* fs.realPath(resolved).pipe(
+          Effect.map((real) =>
+            process.platform === "win32" && real.toLowerCase() === resolved.toLowerCase() ? resolved : real,
+          ),
           Effect.catchIf(
             (error) => error.reason._tag === "NotFound" || isAccessDenied(error),
             () => Effect.succeed(resolved),
@@ -260,15 +260,6 @@ export namespace FSUtil {
     } catch {
       return resolved
     }
-  }
-
-  export function normalizePathPattern(p: string): string {
-    if (process.platform !== "win32") return p
-    if (p === "*") return p
-    const match = p.match(/^(.*)[\\/]\*$/)
-    if (!match) return normalizePath(p)
-    const dir = /^[A-Za-z]:$/.test(match[1]) ? match[1] + "\\" : match[1]
-    return join(normalizePath(dir), "*")
   }
 
   export function resolve(p: string): string {

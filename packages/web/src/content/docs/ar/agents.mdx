@@ -61,7 +61,7 @@ _الوضع_: `primary`
 افتراضيا، يتم ضبط كل ما يلي على `ask`:
 
 - `file edits`: جميع عمليات الكتابة والتصحيح (patches) والتحرير
-- `shell`: جميع أوامر shell
+- `bash`: جميع أوامر bash
 
 يفيد هذا الوكيل عندما تريد من LLM تحليل الشفرة أو اقتراح تغييرات أو إنشاء خطط بدون إجراء أي تعديلات فعلية على قاعدة الشفرة.
 
@@ -151,12 +151,12 @@ _الوضع_: `primary`
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
         "edit": true,
-        "shell": true
+        "bash": true
       }
     },
     "plan": {
@@ -165,13 +165,13 @@ _الوضع_: `primary`
       "tools": {
         "write": false,
         "edit": false,
-        "shell": false
+        "bash": false
       }
     },
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -195,12 +195,12 @@ _الوضع_: `primary`
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
   edit: false
-  shell: false
+  bash: false
 ---
 
 You are in code review mode. Focus on:
@@ -366,7 +366,7 @@ Provide constructive feedback without making direct changes.
 }
 ```
 
-يستخدم معرّف النموذج في إعدادات OpenCode الصيغة `provider/model-id`. على سبيل المثال، إذا كنت تستخدم [OpenCode Zen](https://opencode.ai/v2/docs/console/)، فستستخدم `opencode/gpt-5.1-codex` لـ GPT 5.1 Codex.
+يستخدم معرّف النموذج في إعدادات OpenCode الصيغة `provider/model-id`. على سبيل المثال، إذا كنت تستخدم [OpenCode Zen](https://opencode.ai/v2/docs/console/)، فستستخدم `opencode/gpt-6.1-sol` لـ GPT-6.1 Sol.
 
 ---
 
@@ -379,13 +379,13 @@ Provide constructive feedback without making direct changes.
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "write": true,
-    "shell": true
+    "bash": true
   },
   "agent": {
     "plan": {
       "tools": {
         "write": false,
-        "shell": false
+        "bash": false
       }
     }
   }
@@ -419,7 +419,7 @@ Provide constructive feedback without making direct changes.
 
 ### الأذونات
 
-يمكنك تهيئة الأذونات لإدارة الإجراءات التي يستطيع الوكيل تنفيذها. حاليا، يمكن تهيئة أذونات أدوات `edit` و `shell` و `webfetch` إلى:
+يمكنك تهيئة الأذونات لإدارة الإجراءات التي يستطيع الوكيل تنفيذها. حاليا، يمكن تهيئة أذونات أدوات `edit` و `bash` و `webfetch` إلى:
 
 - `"ask"` — طلب الموافقة قبل تشغيل الأداة
 - `"allow"` — السماح بكل العمليات بدون موافقة
@@ -460,7 +460,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell:
+  bash:
     "*": ask
     "git diff": allow
     "git log*": allow
@@ -471,7 +471,7 @@ permission:
 Only analyze code and suggest changes.
 ```
 
-يمكنك ضبط الأذونات لأوامر shell محددة.
+يمكنك ضبط الأذونات لأوامر bash محددة.
 
 ```json title="opencode.json" {7}
 {
@@ -479,7 +479,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git push": "ask",
           "grep *": "allow"
         }
@@ -497,7 +497,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git *": "ask"
         }
       }
@@ -515,7 +515,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git status *": "allow"
         }
@@ -653,7 +653,7 @@ Only analyze code and suggest changes.
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -673,7 +673,7 @@ Only analyze code and suggest changes.
 
 أنشئ وكيلا جديدا بإضافة ملف Markdown إلى `.opencode/agents/` للمشروع أو إلى `~/.config/opencode/agents/` على المستوى العام. يصبح اسم الملف اسم الوكيل، وتضبط الواجهة الأمامية (frontmatter) وصفه ووضعه ونموذجه وصلاحياته. راجع [Markdown](#markdown) أعلاه لمعرفة تنسيق الملف.
 
-شغّل `opencode debug agents` لعرض الوكلاء الذين حمّلهم OpenCode.
+شغّل `opencode agent list` لعرض الوكلاء الذين حمّلهم OpenCode.
 
 ---
 
@@ -684,7 +684,7 @@ Only analyze code and suggest changes.
 - **Build agent**: أعمال تطوير كاملة مع تفعيل جميع الأدوات
 - **Plan agent**: تحليل وتخطيط بدون إجراء تغييرات
 - **Review agent**: مراجعة الشفرة مع وصول للقراءة فقط بالإضافة إلى أدوات التوثيق
-- **Debug agent**: يركز على التحقيق مع تفعيل أدوات shell والقراءة
+- **Debug agent**: يركز على التحقيق مع تفعيل أدوات bash والقراءة
 - **Docs agent**: كتابة التوثيق مع عمليات الملفات بدون أوامر النظام
 
 ---
@@ -706,7 +706,7 @@ Only analyze code and suggest changes.
 description: Writes and maintains project documentation
 mode: subagent
 tools:
-  shell: false
+  bash: false
 ---
 
 You are a technical writer. Create clear, comprehensive documentation.

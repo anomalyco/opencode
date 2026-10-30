@@ -30,6 +30,10 @@ export const dict = {
   "legal.brand": "Marka",
   "legal.privacy": "Gizlilik",
   "legal.terms": "Koşullar",
+  "legal.status.operational": "Tüm sistemler çalışıyor",
+  "legal.status.degraded": "Düşük performans",
+  "legal.status.outage": "Hizmet kesintisi",
+  "legal.status.unknown": "Sistem durumu",
 
   "email.title": "Yeni ürünler yayınladığımızda ilk siz haberdar olun",
   "email.subtitle": "Erken erişim için bekleme listesine katılın.",
@@ -70,12 +74,8 @@ export const dict = {
   "home.what.title": "OpenCode nedir?",
   "home.what.body":
     "OpenCode, terminalinizde, IDE'nizde veya masaüstünde kod yazmanıza yardım eden açık kaynaklı bir ajandır.",
-  "home.what.lsp.title": "LSP etkin",
-  "home.what.lsp.body": "LLM için doğru LSP'leri otomatik olarak yükler",
   "home.what.multiSession.title": "Çoklu oturum",
   "home.what.multiSession.body": "Aynı projede birden fazla ajanı paralel çalıştırın",
-  "home.what.shareLinks.title": "Paylaşım bağlantıları",
-  "home.what.shareLinks.body": "Referans veya hata ayıklama için herhangi bir oturumu bağlantı olarak paylaşın",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Copilot hesabınızı kullanmak için GitHub ile giriş yapın",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -114,7 +114,7 @@ export const dict = {
   "home.faq.a3.p4.localLink": "yerel modellerinizi bağlayabilirsiniz",
   "home.faq.q4": "Mevcut AI aboneliklerimi OpenCode ile kullanabilir miyim?",
   "home.faq.a4.p1":
-    "Evet. OpenCode tüm büyük sağlayıcıların aboneliklerini destekler. Claude Pro/Max, ChatGPT Plus/Pro veya GitHub Copilot kullanabilirsiniz.",
+    "Evet, ChatGPT Plus/Pro veya GitHub Copilot aboneliklerinizi ya da Claude Code üzerinden Claude aboneliğinizi kullanabilirsiniz.",
   "home.faq.q5": "OpenCode'u sadece terminalde mi kullanabilirim?",
   "home.faq.a5.beforeDesktop": "Artık hayır! OpenCode artık sizin bu cihazlarınıza",
   "home.faq.a5.desktop": "masaüstü",
@@ -164,7 +164,7 @@ export const dict = {
     "Maliyetleri karşılamak için OpenCode, $20 bakiye yüklemesi başına yalnızca $1.23 tutarında küçük bir ödeme işleme ücreti ekler.",
   "zen.faq.q5": "Veri ve gizlilik ne olacak?",
   "zen.faq.a5.beforeExceptions":
-    "Tüm Zen modelleri ABD'de barındırılır. Sağlayıcılar sıfır-retention politikasını uygular ve verilerinizi model eğitimi için kullanmaz; şu",
+    "Tüm Zen modelleri ABD'de ve AB'de barındırılır. Sağlayıcılar sıfır-retention politikasını uygular ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.faq.a5.exceptionsLink": "istisnalarla",
   "zen.faq.q6": "Harcama limitleri ayarlayabilir miyim?",
   "zen.faq.a6": "Evet, hesabınızda aylık harcama limitleri ayarlayabilirsiniz.",
@@ -199,13 +199,13 @@ export const dict = {
   "zen.how.step2.link": "istek başına ödeme",
   "zen.how.step2.afterLink": "sıfır işaretlemeyle",
   "zen.how.step3.title": "Otomatik yükleme",
-  "zen.how.step3.body": "bakiyeniz 5$'a ulaştığında otomatik olarak 20$ ekleyeceğiz",
+  "zen.how.step3.body": "isteğe bağlı otomatik yüklemeyi etkinleştirin, bakiye eşiğini ve yükleme tutarını seçin",
   "zen.privacy.title": "Gizliliğiniz bizim için önemlidir",
   "zen.privacy.beforeExceptions":
-    "Tüm Zen modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
+    "Tüm Zen modelleri ABD'de ve AB'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
-  "go.promo.minimaxM31FlashFree": "MiniMax M3.1 Flash Free artık Go'da sınırlı bir süre için ücretsiz sunuluyor.",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro artık Go'da kullanılabilir.",
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
   "go.meta.description":
     "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
@@ -215,15 +215,26 @@ export const dict = {
     "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
 
   "go.cta.text": "Go'ya abone ol",
+  "go.plans.audience": "Go planları",
+  "go.plans.individuals": "Bireysel",
+  "go.plans.teams": "Ekipler",
   "go.plans.month": "aylık",
+  "go.plans.memberMonth": "üye başına\naylık",
   "go.plans.plus.cta": "Go Plus'a abone ol",
   "go.plans.plus.description": "Go Plus ayda 40$'dır ve daha yüksek limitler sunar.",
+  "go.plans.teams.cta": "Go Teams'e abone ol",
+  "go.plans.teams.description": "Go Teams üye başına ayda 20$'dır ve her üyeye kendi limitlerini sunar.",
   "go.plans.go.feature1": "Seçilmiş, uygun fiyatlı modeller",
   "go.plans.go.feature2": "Ajan destekli kodlama için test edildi",
   "go.plans.go.feature3": "Cömert limitler ve güvenilir erişim",
   "go.plans.plus.feature1": "Go'daki her şey dahil",
   "go.plans.plus.feature2": "Daha uzun, odaklı kodlama oturumları için daha yüksek limitler",
   "go.plans.plus.feature3": "Daha büyük ve zorlu projeler için",
+  "go.plans.teams.feature1": "Her üyeye kendine ait Go limitleri",
+  "go.plans.teams.feature2": "Her model için cömert aylık limitler",
+  "go.plans.teams.feature3": "Tüm çalışma alanı için tek fatura",
+  "go.plans.teams.feature4": "Üye başına bütçelerle ekstra kullanım",
+  "go.plans.teams.feature5": "Model gizliliği ve bölge kontrolleri",
   "go.plans.limits": "Limitler",
   "go.plans.description": "Model başına 5 saatlik tahmini istek ve aylık kullanım limitleri",
   "go.plans.legend": "Planlar",
@@ -285,8 +296,6 @@ export const dict = {
     "ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır.",
   "go.faq.a5.gptRetention":
     "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
-  "go.faq.a5.geminiRetention":
-    "İstemleriniz ve tamamlamalarınız gelecekteki Google modellerini eğitmek için kullanılabilir.",
   "go.faq.a5.learnMore": "Daha fazla bilgi",
   "go.faq.a5.deepseekRetention":
     "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ekim 2026 tarihine kadar geçerlidir.",
@@ -380,7 +389,7 @@ export const dict = {
     "Ekibinizle dahili bir deneme ile başlayın. OpenCode varsayılan olarak kodunuzu veya bağlam verilerinizi saklamaz, bu da başlamayı kolaylaştırır. Ardından fiyatlandırma ve uygulama seçeneklerini görüşmek için bize ulaşın.",
   "enterprise.faq.q3": "Kurumsal fiyatlandırma nasıl çalışır?",
   "enterprise.faq.a3":
-    "Kullanıcı başı (per-seat) kurumsal fiyatlandırma sunuyoruz. Kendi LLM geçidiniz varsa, kullanılan tokenlar için ücret almıyoruz. Daha fazla bilgi için, kurumunuzun ihtiyaçlarına göre özel bir teklif için bize ulaşın.",
+    "Kendi LLM geçidiniz varsa, kullanılan tokenlar için ücret almıyoruz. Daha fazla bilgi için, kurumunuzun ihtiyaçlarına göre özel bir teklif için bize ulaşın.",
   "enterprise.faq.q4": "OpenCode Enterprise ile verilerim güvende mi?",
   "enterprise.faq.a4":
     "Evet. OpenCode kodunuzu veya bağlam verilerinizi saklamaz. Tüm işleme yerel olarak ya da AI sağlayıcınıza doğrudan API çağrıları ile gerçekleştirilir. Merkezileştirilmiş konfigürasyon ve SSO entegrasyonu ile verileriniz kurumunuzun altyapısı içinde güvende kalır.",

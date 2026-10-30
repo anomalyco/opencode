@@ -157,7 +157,9 @@ function sdk(input: {
 }) {
   const client = OpenCode.make({ baseUrl: "https://opencode.test" })
   let subscription = 0
-  spyOn(client.event, "subscribe").mockImplementation(() => input.streams[subscription++]?.stream ?? feed().stream)
+  spyOn(client.event, "subscribe").mockImplementation(
+    (() => input.streams[subscription++]?.stream ?? feed().stream) as OpenCodeClient["event"]["subscribe"],
+  )
   spyOn(client.message, "list").mockImplementation((request) =>
     ok({
       data: input.messages?.[request.sessionID] ?? [
@@ -191,7 +193,7 @@ function sdk(input: {
   )
   spyOn(client.session, "active").mockImplementation(() => ok(input.active?.() ?? {}))
   spyOn(client.session.inbox, "list").mockImplementation((request) => ok(input.pending?.[request.sessionID] ?? []))
-  spyOn(client.session, "wait").mockImplementation(() => input.wait?.() ?? ok(undefined))
+  spyOn(client.experimental.session, "wait").mockImplementation(() => input.wait?.() ?? ok(undefined))
   spyOn(client.session.message, "get").mockImplementation((request) => {
     const message = input.messages?.[request.sessionID]?.find((item) => item.id === request.messageID)
     return message ? (ok(message) as never) : Promise.reject(new Error(`message not found: ${request.messageID}`))

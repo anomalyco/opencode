@@ -61,7 +61,7 @@ _模式_：`primary`
 預設情況下，以下所有項均設為 `ask`：
 
 - `file edits`：所有寫入、補丁和編輯
-- `shell`：所有 shell 命令
+- `bash`：所有 bash 命令
 
 當您希望 LLM 分析程式碼、建議變更或建立計畫，而不對程式碼庫進行任何實際修改時，此代理非常有用。
 
@@ -151,12 +151,12 @@ _模式_：`primary`
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
         "edit": true,
-        "shell": true
+        "bash": true
       }
     },
     "plan": {
@@ -165,13 +165,13 @@ _模式_：`primary`
       "tools": {
         "write": false,
         "edit": false,
-        "shell": false
+        "bash": false
       }
     },
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
         "write": false,
@@ -195,12 +195,12 @@ _模式_：`primary`
 ---
 description: Reviews code for quality and best practices
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
   edit: false
-  shell: false
+  bash: false
 ---
 
 You are in code review mode. Focus on:
@@ -366,7 +366,7 @@ Markdown 檔案名稱即為代理名稱。例如，`review.md` 會建立一個�
 }
 ```
 
-OpenCode 設定中的模型 ID 使用 `provider/model-id` 格式。例如，如果您使用 [OpenCode Zen](https://opencode.ai/v2/docs/console/)，則可以使用 `opencode/gpt-5.1-codex` 來表示 GPT 5.1 Codex。
+OpenCode 設定中的模型 ID 使用 `provider/model-id` 格式。例如，如果您使用 [OpenCode Zen](https://opencode.ai/v2/docs/console/)，則可以使用 `opencode/gpt-6.1-sol` 來表示 GPT-6.1 Sol。
 
 ---
 
@@ -379,13 +379,13 @@ OpenCode 設定中的模型 ID 使用 `provider/model-id` 格式。例如，如�
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "write": true,
-    "shell": true
+    "bash": true
   },
   "agent": {
     "plan": {
       "tools": {
         "write": false,
-        "shell": false
+        "bash": false
       }
     }
   }
@@ -419,7 +419,7 @@ OpenCode 設定中的模型 ID 使用 `provider/model-id` 格式。例如，如�
 
 ### 權限
 
-您可以設定權限來管理代理可以執行的操作。目前，`edit`、`shell` 和 `webfetch` 工具的權限可以設定為：
+您可以設定權限來管理代理可以執行的操作。目前，`edit`、`bash` 和 `webfetch` 工具的權限可以設定為：
 
 - `"ask"` — 執行工具前提示審批
 - `"allow"` — 允許所有操作，無需審批
@@ -460,7 +460,7 @@ description: Code review without edits
 mode: subagent
 permission:
   edit: deny
-  shell:
+  bash:
     "*": ask
     "git diff": allow
     "git log*": allow
@@ -471,7 +471,7 @@ permission:
 Only analyze code and suggest changes.
 ```
 
-您可以為特定的 shell 命令設定權限。
+您可以為特定的 bash 命令設定權限。
 
 ```json title="opencode.json" {7}
 {
@@ -479,7 +479,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git push": "ask",
           "grep *": "allow"
         }
@@ -497,7 +497,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git *": "ask"
         }
       }
@@ -515,7 +515,7 @@ Only analyze code and suggest changes.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git status *": "allow"
         }
@@ -653,7 +653,7 @@ Only analyze code and suggest changes.
   "agent": {
     "deep-thinker": {
       "description": "Agent that uses high reasoning effort for complex problems",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -673,7 +673,7 @@ Only analyze code and suggest changes.
 
 要建立新代理，請將 Markdown 檔案新增到專案的 `.opencode/agents/` 或全域的 `~/.config/opencode/agents/` 中。檔案名稱即為代理名稱，frontmatter 用於設定其描述、模式、模型和權限。檔案格式請參閱上文的 [Markdown](#markdown)。
 
-執行 `opencode debug agents` 可列出 OpenCode 已載入的代理。
+執行 `opencode agent list` 可列出 OpenCode 已載入的代理。
 
 ---
 
@@ -684,7 +684,7 @@ Only analyze code and suggest changes.
 - **Build 代理**：啟用所有工具的完整開發工作
 - **Plan 代理**：分析和規劃，不進行任何變更
 - **Review 代理**：具有唯讀存取權限和文件工具的程式碼審查
-- **Debug 代理**：專注於問題排查，啟用 shell 和讀取工具
+- **Debug 代理**：專注於問題排查，啟用 bash 和讀取工具
 - **Docs 代理**：文件編寫，具有檔案操作但不使用系統命令
 
 ---
@@ -706,7 +706,7 @@ Only analyze code and suggest changes.
 description: Writes and maintains project documentation
 mode: subagent
 tools:
-  shell: false
+  bash: false
 ---
 
 You are a technical writer. Create clear, comprehensive documentation.

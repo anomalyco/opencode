@@ -7,6 +7,7 @@ import { Portal } from "solid-js/web"
 import { useI18n } from "../../context/i18n"
 import "../../actions/button/button.css"
 import "./toast.css"
+import { prefersReducedMotion } from "../../motion"
 
 export interface ToastRegionProps extends ToasterProps {}
 
@@ -307,7 +308,7 @@ function pulseToast(toastId: number) {
   requestAnimationFrame(() => {
     const element = document.querySelector<HTMLElement>(`[data-testid="toast-v2-${toastId}"]`)
 
-    if (!element || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    if (!element || prefersReducedMotion()) return
     element.animate([{ scale: 1 }, { scale: 1.025 }, { scale: 1 }], { duration: 160, easing: "ease-out" })
   })
 }

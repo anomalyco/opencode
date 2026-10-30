@@ -27,7 +27,8 @@
       "files": [
         "packages/app/**",
         "packages/desktop/**",
-        "packages/gui-extensions/**",
+        "packages/gui-plugins/**",
+        "packages/plugin/src/gui/**",
         "packages/ui/**",
         "packages/session-ui/**"
       ],
@@ -54,7 +55,13 @@
       }
     },
     {
-      "files": ["packages/app/**", "packages/desktop/**", "packages/gui-extensions/**", "packages/session-ui/**"],
+      "files": [
+        "packages/app/**",
+        "packages/desktop/**",
+        "packages/gui-plugins/**",
+        "packages/plugin/src/gui/**",
+        "packages/session-ui/**"
+      ],
       "rules": {
         "anti-slop-effect/no-manual-effect-error-tag": "warn",
         "anti-slop-effect/no-manual-tag-comparison": "warn",
@@ -64,7 +71,7 @@
       }
     },
     {
-      "files": ["packages/gui-extensions/src/*.ts", "packages/gui-extensions/src/*.tsx"],
+      "files": ["packages/gui-plugins/src/*.ts", "packages/gui-plugins/src/*.tsx"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -73,7 +80,7 @@
               {
                 "name": "solid-js",
                 "importNames": ["createEffect", "createRenderEffect", "createComputed"],
-                "message": "Extension code runs side effects through the SDK: createKeyed(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
+                "message": "GUI plugin code runs side effects through the SDK: createKeyed(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
               }
             ]
           }
@@ -81,7 +88,7 @@
       }
     },
     {
-      "files": ["packages/gui-extensions/src/*/**"],
+      "files": ["packages/gui-plugins/src/*/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -90,21 +97,21 @@
               {
                 "name": "solid-js",
                 "importNames": ["createEffect", "createRenderEffect", "createComputed"],
-                "message": "Extension code runs side effects through the SDK: createKeyed(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
+                "message": "GUI plugin code runs side effects through the SDK: createKeyed(source, fn, { otherwise }) per provider generation or value, createMemo or a plain function for derived values, createLatest for async data, createVisitState for per-visit state, and the handler for logic a user action causes. An escape hatch needs an oxlint-disable comment with a reason."
               }
             ],
             "patterns": [
               {
                 "regex": "^@opencode/(app|desktop)(/|$)",
-                "message": "GUI extensions never import the app or desktop packages. Use the SDK."
+                "message": "GUI plugins never import the app or desktop packages. Use the SDK."
               },
               {
                 "regex": "^@/",
-                "message": "GUI extensions never import app internals. Use the SDK."
+                "message": "GUI plugins never import app internals. Use the SDK."
               },
               {
-                "group": ["../*/*", "!../*/contract", "!../sdk/*"],
-                "message": "Import another extension only through its contract.ts."
+                "group": ["../*/*", "!../*/contract"],
+                "message": "Import another built-in plugin only through its contract.ts."
               },
               {
                 "regex": "\\.css$",
@@ -116,7 +123,7 @@
       }
     },
     {
-      "files": ["packages/gui-extensions/src/sdk/**"],
+      "files": ["packages/plugin/src/gui/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -124,23 +131,46 @@
             "patterns": [
               {
                 "regex": "^@opencode/(app|desktop)(/|$)",
-                "message": "GUI extensions never import the app or desktop packages. Use the SDK."
+                "message": "The GUI SDK never imports the app or desktop packages; the hosts implement it."
+              },
+              {
+                "regex": "^@opencode/gui-plugins(/|$)",
+                "message": "The GUI SDK never imports the built-in plugins; they import the SDK."
               },
               {
                 "regex": "^@/",
-                "message": "GUI extensions never import app internals. Use the SDK."
-              },
-              {
-                "group": ["../*/*", "!../*/contract", "!../sdk/*"],
-                "message": "Import another extension only through its contract.ts."
-              },
-              {
-                "regex": "\\.css$",
-                "message": "Import CSS with ?inline and contribute it with ctx.add(Style, css)."
+                "message": "The GUI SDK never imports app internals."
               }
             ]
           }
         ]
+      }
+    },
+    {
+      "files": ["packages/codemode/src/interpreter/**", "packages/codemode/src/stdlib/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "effect",
+                "allowTypeImports": true,
+                "message": "The evaluator and built-ins are plain generators driven by the job queue in runner.ts. Start host work with runner.host or block on it with runner.blocking; only runner.ts, execute.ts, and extensions.ts run Effects."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/codemode/src/interpreter/runner.ts",
+        "packages/codemode/src/interpreter/execute.ts",
+        "packages/codemode/src/interpreter/extensions.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
       }
     }
   ],

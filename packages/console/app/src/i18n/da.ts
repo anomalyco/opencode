@@ -30,6 +30,10 @@ export const dict = {
   "legal.brand": "Brand",
   "legal.privacy": "Privatliv",
   "legal.terms": "Vilkår",
+  "legal.status.operational": "Alle systemer er i drift",
+  "legal.status.degraded": "Nedsat ydeevne",
+  "legal.status.outage": "Driftsforstyrrelse",
+  "legal.status.unknown": "Systemstatus",
 
   "email.title": "Få besked først, når vi lancerer nye produkter",
   "email.subtitle": "Tilmeld dig ventelisten for tidlig adgang.",
@@ -70,12 +74,8 @@ export const dict = {
   "home.what.title": "Hvad er OpenCode?",
   "home.what.body":
     "OpenCode er en open source agent, der hjælper dig med at skrive kode i din terminal, IDE eller desktop.",
-  "home.what.lsp.title": "LSP aktiveret",
-  "home.what.lsp.body": "Indlæser automatisk de rigtige LSP'er til LLM'en",
   "home.what.multiSession.title": "Multi-session",
   "home.what.multiSession.body": "Start flere agenter parallelt på det samme projekt",
-  "home.what.shareLinks.title": "Del links",
-  "home.what.shareLinks.body": "Del et link til enhver session til reference eller debugging",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Log ind med GitHub for at bruge din Copilot-konto",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -116,7 +116,7 @@ export const dict = {
   "home.faq.a3.p4.localLink": "lokale modeller",
   "home.faq.q4": "Kan jeg bruge mine eksisterende AI-abonnementer med OpenCode?",
   "home.faq.a4.p1":
-    "Ja. OpenCode understøtter abonnementer fra alle store udbydere. Du kan bruge Claude Pro/Max, ChatGPT Plus/Pro eller GitHub Copilot.",
+    "Ja, du kan bruge dine ChatGPT Plus/Pro- eller GitHub Copilot-abonnementer eller dit Claude-abonnement via Claude Code.",
   "home.faq.q5": "Kan jeg kun bruge OpenCode i terminalen?",
   "home.faq.a5.beforeDesktop": "Ikke længere! OpenCode er nu tilgængelig som en app til",
   "home.faq.a5.desktop": "desktop",
@@ -165,7 +165,7 @@ export const dict = {
     "For at dække omkostninger tilføjer OpenCode kun et lille betalingsgebyr på $1.23 per $20 saldo-opfyldning.",
   "zen.faq.q5": "Hvad med data og privatliv?",
   "zen.faq.a5.beforeExceptions":
-    "Alle Zen-modeller hostes i USA. Udbydere følger en zero-retention-policy og bruger ikke dine data til modeltræning, med de",
+    "Alle Zen-modeller hostes i USA og EU. Udbydere følger en zero-retention-policy og bruger ikke dine data til modeltræning, med de",
   "zen.faq.a5.exceptionsLink": "følgende undtagelser",
   "zen.faq.q6": "Kan jeg sætte udgiftsgrænser?",
   "zen.faq.a6": "Ja, du kan sætte månedlige udgiftsgrænser i din konto.",
@@ -198,13 +198,13 @@ export const dict = {
   "zen.how.step2.link": "betal per request",
   "zen.how.step2.afterLink": "med nul markups",
   "zen.how.step3.title": "Auto-top op",
-  "zen.how.step3.body": "når din saldo når $5, tilføjer vi automatisk $20",
+  "zen.how.step3.body": "aktivér valgfri automatisk opfyldning, og vælg din saldogrænse og opfyldningsbeløbet",
   "zen.privacy.title": "Dit privatliv er vigtigt for os",
   "zen.privacy.beforeExceptions":
-    "Alle Zen-modeller er hostet i USA. Udbydere følger en nulopbevaringspolitik og bruger ikke dine data til modeltræning med",
+    "Alle Zen-modeller er hostet i USA og EU. Udbydere følger en nulopbevaringspolitik og bruger ikke dine data til modeltræning med",
   "zen.privacy.exceptionsLink": "følgende undtagelser",
 
-  "go.promo.minimaxM31FlashFree": "MiniMax M3.1 Flash Free er nu tilgængelig i Go, gratis i en begrænset periode.",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro er nu tilgængelig i Go.",
   "go.title": "OpenCode Go | Kodningsmodeller til lav pris for alle",
   "go.meta.description":
     "Go koster $10/måned, med generøse brugsgrænser og pålidelig adgang til førende kodningsmodeller.",
@@ -214,15 +214,26 @@ export const dict = {
     "Go bringer agentisk kodning til programmører over hele verden. Med generøse grænser og pålidelig adgang til de mest kapable open source-modeller, så du kan bygge med kraftfulde agenter uden at bekymre dig om omkostninger eller tilgængelighed.",
 
   "go.cta.text": "Abonner på Go",
+  "go.plans.audience": "Go-abonnementer til",
+  "go.plans.individuals": "Enkeltpersoner",
+  "go.plans.teams": "Teams",
   "go.plans.month": "om måneden",
+  "go.plans.memberMonth": "pr. medlem\nom måneden",
   "go.plans.plus.cta": "Abonnér på Go Plus",
   "go.plans.plus.description": "Go Plus koster $40/måned og giver højere brugsgrænser.",
+  "go.plans.teams.cta": "Abonnér på Go Teams",
+  "go.plans.teams.description": "Go Teams koster $20/medlem/måned med brugsgrænser for hvert medlem.",
   "go.plans.go.feature1": "Udvalgte, prisvenlige modeller",
   "go.plans.go.feature2": "Testet til agentbaseret kodning",
   "go.plans.go.feature3": "Generøse grænser og pålidelig adgang",
   "go.plans.plus.feature1": "Alt i Go er inkluderet",
   "go.plans.plus.feature2": "Højere grænser til længere, fokuserede kodningsforløb",
   "go.plans.plus.feature3": "Til større, krævende projekter",
+  "go.plans.teams.feature1": "Hvert medlem får sine egne Go-grænser",
+  "go.plans.teams.feature2": "Generøse månedlige grænser for hver model",
+  "go.plans.teams.feature3": "Én regning for hele arbejdsområdet",
+  "go.plans.teams.feature4": "Ekstra forbrug med budgetter pr. medlem",
+  "go.plans.teams.feature5": "Styring af privatliv og regioner for modeller",
   "go.plans.limits": "Grænser",
   "go.plans.description": "Anslåede anmodninger pr. 5 timer og månedlige grænser pr. model",
   "go.plans.legend": "Abonnementer",
@@ -286,7 +297,6 @@ export const dict = {
     "Logfiler til overvågning af misbrug genereres ved al brug af API-funktioner og opbevares i op til 30 dage.",
   "go.faq.a5.museRetention":
     "Kraftigt nedsatte tokenpriser til gengæld for tilladelse til at bruge dine prompts og modelsvar til at træne fremtidige Meta-modeller.",
-  "go.faq.a5.geminiRetention": "Dine prompts og modelsvar kan blive brugt til at træne fremtidige Google-modeller.",
   "go.faq.a5.learnMore": "Læs mere",
   "go.faq.a5.deepseekRetention":
     "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 31. oktober 2026.",
@@ -376,7 +386,7 @@ export const dict = {
     "Start blot med en intern prøveperiode med dit team. OpenCode gemmer som standard ikke din kode eller kontekstdata, hvilket gør det nemt at komme i gang. Kontakt os derefter for at tale om priser og implementeringsmuligheder.",
   "enterprise.faq.q3": "Hvordan fungerer enterprise-priser?",
   "enterprise.faq.a3":
-    "Vi tilbyder enterprise-priser pr. bruger. Hvis du har din egen LLM-gateway, opkræver vi ikke for brugte tokens. Kontakt os for flere detaljer og et tilbud tilpasset din organisations behov.",
+    "Hvis du har din egen LLM-gateway, opkræver vi ikke for brugte tokens. Kontakt os for flere detaljer og et tilbud tilpasset din organisations behov.",
   "enterprise.faq.q4": "Er mine data sikre med OpenCode Enterprise?",
   "enterprise.faq.a4":
     "Ja. OpenCode gemmer ikke din kode eller kontekstdata. Al behandling sker lokalt eller via direkte API-kald til din AI-udbyder. Med central konfiguration og SSO-integration forbliver dine data sikre inden for din organisations infrastruktur.",

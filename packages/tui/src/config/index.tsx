@@ -270,7 +270,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   keybinds: TuiKeybind.BindingLookupView
   leader: { timeout: number }
   mouse: boolean
-  cursor?: {
+  cursor: {
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
@@ -319,12 +319,10 @@ export function resolve(
     }),
     leader: { timeout: input.leader?.timeout ?? 2000 },
     mouse: input.mouse ?? true,
-    cursor: input.cursor
-      ? {
-          style: input.cursor.style ?? "block",
-          blinking: input.cursor.blinking ?? true,
-        }
-      : undefined,
+    cursor: {
+      style: input.cursor?.style ?? "block",
+      blinking: input.cursor?.blinking ?? true,
+    },
     session: {
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
@@ -389,4 +387,10 @@ export function useConfig() {
 export function useNewDesigns() {
   const config = useConfig()
   return () => config.data.experimental?.["new-designs"] === true
+}
+
+/** Reactive accessor for the temporary "client-mcp" experiment. */
+export function useClientMcpExperiment() {
+  const config = useConfig()
+  return () => config.data.experimental?.["client-mcp"] === true
 }

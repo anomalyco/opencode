@@ -62,7 +62,7 @@ Um agente restrito projetado para planejamento e análise. Usamos um sistema de 
 Por padrão, todos os seguintes estão configurados para `ask`:
 
 - `file edits`: Todas as gravações, patches e edições
-- `shell`: Todos os comandos shell
+- `bash`: Todos os comandos bash
 
 Este agente é útil quando você deseja que o LLM analise código, sugira alterações ou crie planos sem fazer modificações reais em seu código.
 
@@ -152,12 +152,12 @@ Configure os agentes em seu arquivo de configuração `opencode.json`:
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "{file:./prompts/build.txt}",
       "tools": {
         "write": true,
         "edit": true,
-        "shell": true
+        "bash": true
       }
     },
     "plan": {
@@ -166,13 +166,13 @@ Configure os agentes em seu arquivo de configuração `opencode.json`:
       "tools": {
         "write": false,
         "edit": false,
-        "shell": false
+        "bash": false
       }
     },
     "code-reviewer": {
       "description": "Revisa código para melhores práticas e potenciais problemas",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "anthropic/claude-sonnet-5-5",
       "prompt": "Você é um revisor de código. Foque em segurança, performance e manutenibilidade.",
       "tools": {
         "write": false,
@@ -196,12 +196,12 @@ Você também pode definir agentes usando arquivos markdown. Coloque-os em:
 ---
 description: Revisa código para qualidade e melhores práticas
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: anthropic/claude-sonnet-5-5
 temperature: 0.1
 tools:
   write: false
   edit: false
-  shell: false
+  bash: false
 ---
 
 Você está no modo de revisão de código. Foque em:
@@ -367,7 +367,7 @@ Se você não especificar um modelo, os agentes primários usam o [modelo config
 }
 ```
 
-O ID do modelo em sua configuração do opencode usa o formato `provider/model-id`. Por exemplo, se você estiver usando [OpenCode Zen](https://opencode.ai/v2/docs/console/), você usaria `opencode/gpt-5.1-codex` para GPT 5.1 Codex.
+O ID do modelo em sua configuração do opencode usa o formato `provider/model-id`. Por exemplo, se você estiver usando [OpenCode Zen](https://opencode.ai/v2/docs/console/), você usaria `opencode/gpt-6.1-sol` para GPT-6.1 Sol.
 
 ---
 
@@ -380,13 +380,13 @@ Controle quais ferramentas estão disponíveis neste agente com a configuração
   "$schema": "https://opencode.ai/config.json",
   "tools": {
     "write": true,
-    "shell": true
+    "bash": true
   },
   "agent": {
     "plan": {
       "tools": {
         "write": false,
-        "shell": false
+        "bash": false
       }
     }
   }
@@ -420,7 +420,7 @@ Você também pode usar curingas para controlar várias ferramentas ao mesmo tem
 
 ### Permissões
 
-Você pode configurar permissões para gerenciar quais ações um agente pode realizar. Atualmente, as permissões para as ferramentas `edit`, `shell` e `webfetch` podem ser configuradas para:
+Você pode configurar permissões para gerenciar quais ações um agente pode realizar. Atualmente, as permissões para as ferramentas `edit`, `bash` e `webfetch` podem ser configuradas para:
 
 - `"ask"` — Solicitar aprovação antes de executar a ferramenta
 - `"allow"` — Permitir todas as operações sem aprovação
@@ -461,7 +461,7 @@ description: Revisão de código sem edições
 mode: subagent
 permission:
   edit: deny
-  shell:
+  bash:
     "*": ask
     "git diff": allow
     "git log*": allow
@@ -472,7 +472,7 @@ permission:
 Apenas analise o código e sugira alterações.
 ```
 
-Você pode definir permissões para comandos shell específicos.
+Você pode definir permissões para comandos bash específicos.
 
 ```json title="opencode.json" {7}
 {
@@ -480,7 +480,7 @@ Você pode definir permissões para comandos shell específicos.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git push": "ask",
           "grep *": "allow"
         }
@@ -498,7 +498,7 @@ Isso pode aceitar um padrão glob.
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "git *": "ask"
         }
       }
@@ -516,7 +516,7 @@ Como a última regra correspondente tem precedência, coloque o curinga `*` prim
   "agent": {
     "build": {
       "permission": {
-        "shell": {
+        "bash": {
           "*": "ask",
           "git status *": "allow"
         }
@@ -654,7 +654,7 @@ Por exemplo, com os modelos de raciocínio da OpenAI, você pode controlar o esf
   "agent": {
     "deep-thinker": {
       "description": "Agente que usa alto esforço de raciocínio para problemas complexos",
-      "model": "openai/gpt-5",
+      "model": "openai/gpt-6.1-sol",
       "reasoningEffort": "high",
       "textVerbosity": "low"
     }
@@ -674,7 +674,7 @@ Execute `opencode models` para ver uma lista dos modelos disponíveis.
 
 Crie um novo agente adicionando um arquivo markdown em `.opencode/agents/` para o projeto ou em `~/.config/opencode/agents/` globalmente. O nome do arquivo se torna o nome do agente, e o frontmatter configura sua descrição, modo, modelo e permissões. Consulte [Markdown](#markdown) acima para ver o formato do arquivo.
 
-Execute `opencode debug agents` para listar os agentes que o OpenCode carregou.
+Execute `opencode agent list` para listar os agentes que o OpenCode carregou.
 
 ---
 
@@ -685,7 +685,7 @@ Aqui estão alguns casos de uso comuns para diferentes agentes.
 - **Agente Build**: Trabalho de desenvolvimento completo com todas as ferramentas habilitadas
 - **Agente Plan**: Análise e planejamento sem fazer alterações
 - **Agente Review**: Revisão de código com acesso somente leitura e ferramentas de documentação
-- **Agente Debug**: Focado em investigação com ferramentas shell e de leitura habilitadas
+- **Agente Debug**: Focado em investigação com ferramentas bash e de leitura habilitadas
 - **Agente Docs**: Redação de documentação com operações de arquivo, mas sem comandos do sistema
 
 ---
@@ -707,7 +707,7 @@ Você tem um agente que gostaria de compartilhar? [Envie um PR](https://github.c
 description: Escreve e mantém a documentação do projeto
 mode: subagent
 tools:
-  shell: false
+  bash: false
 ---
 
 Você é um escritor técnico. Crie documentação clara e abrangente.

@@ -1,3 +1,11 @@
 # web + desktop packages
 packages/app/      @Hona @Brendonovich
 packages/desktop/  @Hona @Brendonovich
+
+# GUI plugin SDK
+# changes here must be meticulous - pls chat first :)
+packages/plugin/src/gui/  @Hona
+
+# CI and releases. Release jobs that hold secrets run only .github/workflows/release.yml and .github/release/,
+# which makes this path the release security boundary.
+/.github/ @anomalyco/releasers
