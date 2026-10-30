@@ -6153,7 +6153,7 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
-  scenario("lowers interrupted reasoning before continuing an incomplete stream", function* (s) {
+  scenario("drops interrupted reasoning before continuing an incomplete stream", function* (s) {
     yield* s.admit("Continue interrupted reasoning")
     yield* s.llm.push(
       TestLLM.failAfter(
@@ -6171,19 +6171,10 @@ describe("SessionRunnerLLM", () => {
     yield* TestClock.adjust("2400 millis")
     yield* Fiber.join(run)
 
-    expect(s.requests[1]?.messages.at(-2)).toMatchObject({
-      role: "assistant",
-      content: [{ type: "text", text: "Partial thought" }],
-    })
-    expect(s.requests[1]?.messages.at(-1)).toMatchObject({
-      role: "user",
-      content: [
-        {
-          type: "text",
-          text: INCOMPLETE_STREAM_CONTINUATION,
-        },
-      ],
-    })
+    expect(s.requests[1]?.messages.slice(-2)).toMatchObject([
+      { role: "user", content: [{ type: "text", text: "Continue interrupted reasoning" }] },
+      { role: "user", content: [{ type: "text", text: INCOMPLETE_STREAM_CONTINUATION }] },
+    ])
     expect(yield* s.context).toMatchObject([
       { type: "user" },
       Expected.assistant({ finish: "error" }, [Expected.reasoning("Partial thought")]),

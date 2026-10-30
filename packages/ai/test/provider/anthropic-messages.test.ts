@@ -1035,13 +1035,11 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("demotes unsigned reasoning when signatures are required", () =>
+  it.effect("drops unsigned reasoning when signatures are required", () =>
     Effect.gen(function* () {
       const prepared = yield* compileUnsignedReasoning(model)
 
-      expect(prepared.body.messages).toEqual([
-        { role: "assistant", content: [{ type: "text", text: "unsigned reasoning" }] },
-      ])
+      expect(prepared.body.messages).toEqual([])
     }),
   )
 
@@ -1061,19 +1059,19 @@ describe("Anthropic Messages route", () => {
         .model({ id: "kimi-k2.6" })
       const codingPrepared = yield* compileUnsignedReasoning(coding.model({ id: "k3" }))
       const moonshotPrepared = yield* compileUnsignedReasoning(moonshot)
+      const qwenPrepared = yield* compileUnsignedReasoning(coding.with({ provider: "opencode" }).model({ id: "qwen3.8-flash" }))
+      const minimaxPrepared = yield* compileUnsignedReasoning(
+        coding.with({ provider: "opencode-go" }).model({ id: "minimax-m3" }),
+      )
 
-      expect(codingPrepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: [{ type: "thinking", thinking: "unsigned reasoning", signature: "" }],
-        },
-      ])
-      expect(moonshotPrepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: [{ type: "thinking", thinking: "unsigned reasoning", signature: "" }],
-        },
-      ])
+      for (const prepared of [codingPrepared, moonshotPrepared, qwenPrepared, minimaxPrepared]) {
+        expect(prepared.body.messages).toEqual([
+          {
+            role: "assistant",
+            content: [{ type: "thinking", thinking: "unsigned reasoning", signature: "" }],
+          },
+        ])
+      }
     }),
   )
 
@@ -1088,9 +1086,7 @@ describe("Anthropic Messages route", () => {
         .model({ id: "k3", compatibility: { requireSignature: true } })
       const prepared = yield* compileUnsignedReasoning(compatible)
 
-      expect(prepared.body.messages).toEqual([
-        { role: "assistant", content: [{ type: "text", text: "unsigned reasoning" }] },
-      ])
+      expect(prepared.body.messages).toEqual([])
     }),
   )
 
