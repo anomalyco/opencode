@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import type { JSONRPCMessage } from "@modelcontextprotocol/client"
 import { Environment } from "@opencode/core/environment/index"
 import { McpStdio } from "@opencode/core/mcp/stdio"
-import { Effect, Layer, Sink, Stream } from "effect"
+import { Deferred, Effect, Layer, Sink, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 
@@ -41,46 +41,26 @@ test("frames CRLF, blank lines, several messages per chunk and split UTF-8", asy
   }
 })
 
-test("accepts a frame of exactly 16 MiB and rejects one byte more", async () => {
+test("accepts a frame of exactly 16 MiB", async () => {
   // Frame sizes include the newline.
-  const output = await read([...chunks(frame(16 * MiB + 1), 64 * 1024), ...chunks(frame(16 * MiB + 2), 64 * 1024)])
+  const output = await read(chunks(frame(16 * MiB + 1), 64 * 1024))
 
-  expect(output.errors).toEqual([expect.stringContaining("over 16 MiB")])
-  expect(
-    output.messages.map((message) => ("result" in message ? "result" : "error" in message ? "error" : "")),
-  ).toEqual(["result", "error"])
+  expect(output.errors).toEqual([])
+  expect(output.messages).toEqual([expect.objectContaining({ id: 1, result: expect.anything() })])
 })
 
-test("fails only the request whose response is over 16 MiB", async () => {
-  const leading = await read([...chunks(frame(17 * MiB), 64 * 1024), after])
-  // The TypeScript SDK writes the id after the result. One chunk covers a newline arriving in the
-  // chunk that crosses the cap; an odd chunk size splits the trailing id across chunks.
-  const response = frame(17 * MiB, '{"result":{"text":"', '"},"jsonrpc":"2.0","id":"call-7"}\n')
-  const trailing = await read([response, after])
-  const split = await read([...chunks(response, response.length - 20), after])
+test("closes the connection on a line one byte over 16 MiB", async () => {
+  // stdout stays open until the process is killed, so finishing at all means the transport closed
+  // itself, which is what fails the client's pending requests.
+  const output = await read([...chunks(frame(16 * MiB + 2), 64 * 1024), after], { open: true })
 
-  for (const [output, id] of [
-    [leading, 1],
-    [trailing, "call-7"],
-    [split, "call-7"],
-  ] as const) {
-    expect(output.errors).toEqual([expect.stringContaining("over 16 MiB")])
-    expect(output.messages).toEqual([
-      { jsonrpc: "2.0", id, error: { code: -32603, message: expect.stringContaining("over 16 MiB") } },
-      { jsonrpc: "2.0", method: "after" },
-    ])
-  }
-})
-
-test("closes the connection when an oversized message is not a response", async () => {
-  const request = frame(17 * MiB, '{"jsonrpc":"2.0","id":1,"method":"sampling/createMessage","params":{"text":"')
-  const output = await read([...chunks(request, 64 * 1024), after])
-
-  expect(output.errors).toEqual([expect.stringContaining("over 16 MiB")])
+  expect(output.errors).toEqual(["MCP server framing wrote more than 16 MiB to stdout without a message boundary"])
   expect(output.messages).toEqual([])
 })
 
-function frame(size: number, prefix = '{"jsonrpc":"2.0","id":1,"result":{"text":"', suffix = '"}}\n') {
+function frame(size: number) {
+  const prefix = '{"jsonrpc":"2.0","id":1,"result":{"text":"'
+  const suffix = '"}}\n'
   return encoder.encode(prefix + "x".repeat(size - prefix.length - suffix.length) + suffix)
 }
 
@@ -90,8 +70,9 @@ function chunks(bytes: Uint8Array, size: number) {
   )
 }
 
-/** Runs the transport against a process whose stdout yields `output` and then ends. */
-async function read(output: ReadonlyArray<Uint8Array>) {
+/** Runs the transport against a process whose stdout yields `output`, then ends or, with `open`, waits to be killed. */
+async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean }) {
+  const killed = Deferred.makeUnsafe<void>()
   const messages: Array<JSONRPCMessage> = []
   const errors: Array<string> = []
   const driver = Environment.makeMemoryDriver()
@@ -105,9 +86,13 @@ async function read(output: ReadonlyArray<Uint8Array>) {
             pid: ProcessId(1),
             exitCode: Effect.succeed(ExitCode(0)),
             isRunning: Effect.succeed(false),
-            kill: () => Effect.void,
+            kill: () => Deferred.succeed(killed, undefined),
             stdin: Sink.drain,
-            stdout: Stream.fromIterable(output),
+            stdout: Stream.fromIterable(output).pipe(
+              Stream.concat(
+                options?.open ? Stream.fromEffect(Deferred.await(killed)).pipe(Stream.drain) : Stream.empty,
+              ),
+            ),
             stderr: Stream.empty,
             all: Stream.empty,
             getInputFd: () => Sink.drain,

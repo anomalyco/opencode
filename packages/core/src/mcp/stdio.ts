@@ -1,12 +1,6 @@
 export * as McpStdio from "./stdio.js"
 
-import {
-  deserializeMessage,
-  ProtocolErrorCode,
-  serializeMessage,
-  type JSONRPCMessage,
-  type Transport,
-} from "@modelcontextprotocol/client"
+import { deserializeMessage, serializeMessage, type JSONRPCMessage, type Transport } from "@modelcontextprotocol/client"
 import { Cause, Duration, Effect, Fiber, Option, Queue, Result, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner"
@@ -19,13 +13,6 @@ const CLOSE_GRACE = Duration.seconds(2)
 const FORCE_KILL_AFTER = Duration.seconds(2)
 const OUTGOING_CAPACITY = 64
 const MAX_FRAME_BYTES = 16 * 1024 * 1024
-// An oversized line is answered with an error only when it is a response, read from its first and
-// last bytes: SDKs write the id either before the result or as the last key. Ids with escapes are
-// not recognised, which only means the connection closes instead.
-const RESPONSE_HEAD =
-  /^\s*\{\s*(?:"jsonrpc"\s*:\s*"2\.0"\s*,\s*)?(?:"id"\s*:\s*(-?\d+|"[^"\\\u0000-\u001f]*")\s*,\s*)?"(?:result|error)"/
-const TRAILING_ID = /,\s*"id"\s*:\s*(-?\d+|"[^"\\\u0000-\u001f]*")\s*\}\s*$/
-const EDGE_BYTES = 256
 // An unexpected exit is reported with its exit code and the end of stderr, which usually names the cause.
 const EXIT_WAIT = Duration.seconds(1)
 const STDERR_TAIL = 1_000
@@ -67,10 +54,6 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   // Bytes of the unterminated line, kept as chunk views and joined once its newline arrives.
   let pending: Array<Uint8Array> = []
   let pendingBytes = 0
-  // Set once a line passed MAX_FRAME_BYTES: its remaining bytes are dropped up to the next newline.
-  // A response whose id comes last keeps its final bytes in `tail` until then.
-  let discarding: "line" | "response" | undefined
-  let tail: Uint8Array = new Uint8Array()
   const decoder = new TextDecoder()
   let stderr = ""
 
@@ -85,23 +68,15 @@ export const make = Effect.fnUntraced(function* (options: Options) {
     (closing ??= Effect.runPromise(
       Effect.gen(function* () {
         state.phase = "closed"
+        pending = []
+        pendingBytes = 0
         Queue.endUnsafe(outgoing)
         if (startup) yield* Effect.promise(() => startup!.catch(() => undefined))
         const handle = state.handle
         if (!handle) return
         state.handle = undefined
         yield* stop(handle)
-      }).pipe(
-        Effect.ensuring(Queue.shutdown(outgoing)),
-        Effect.ensuring(
-          Effect.sync(() => {
-            pending = []
-            pendingBytes = 0
-            discarding = undefined
-            tail = new Uint8Array()
-          }),
-        ),
-      ),
+      }).pipe(Effect.ensuring(Queue.shutdown(outgoing))),
     ))
 
   const transport: Transport = {
@@ -149,23 +124,18 @@ export const make = Effect.fnUntraced(function* (options: Options) {
     while (newline !== -1 && state.phase !== "closed") {
       const line = chunk.subarray(start, newline)
       const size = pendingBytes + line.length
-      if (discarding === undefined && size > MAX_FRAME_BYTES) oversized(line)
-      if (discarding === undefined) receive(pending.length === 0 ? line : Buffer.concat([...pending, line], size))
-      if (discarding === "response") respond(TRAILING_ID.exec(decoder.decode(keepTail(line)))?.[1])
-      discarding = undefined
+      if (size > MAX_FRAME_BYTES) return oversized()
+      receive(pending.length === 0 ? line : Buffer.concat([...pending, line], size))
       pending = []
       pendingBytes = 0
       start = newline + 1
       newline = chunk.indexOf(10, start)
     }
     if (start === chunk.length || state.phase === "closed") return
-    const rest = chunk.subarray(start)
-    if (discarding === undefined && pendingBytes + rest.length > MAX_FRAME_BYTES) oversized(rest)
-    if (discarding === "response") keepTail(rest)
-    if (discarding) return
+    pendingBytes += chunk.length - start
+    if (pendingBytes > MAX_FRAME_BYTES) return oversized()
     // A view is enough: the runtime hands out a fresh buffer for every pipe read.
-    pending.push(rest)
-    pendingBytes += rest.length
+    pending.push(start === 0 ? chunk : chunk.subarray(start))
   }
 
   const receive = (line: Uint8Array) => {
@@ -179,31 +149,12 @@ export const make = Effect.fnUntraced(function* (options: Options) {
     transport.onmessage?.(message.success)
   }
 
-  const tooLarge = `MCP server ${options.server} sent a stdio message over 16 MiB`
-
-  // Drops the line `segment` belongs to. A response fails only its own request; anything else could
-  // leave a request unanswered, so the connection closes as it did before.
-  const oversized = (segment: Uint8Array) => {
-    transport.onerror?.(new Error(tooLarge))
-    const head = RESPONSE_HEAD.exec(decoder.decode(Buffer.concat([...pending, segment], EDGE_BYTES)))
-    tail = Buffer.concat(pending.slice(-EDGE_BYTES).map((part) => part.subarray(-EDGE_BYTES))).subarray(-EDGE_BYTES)
-    pending = []
-    pendingBytes = 0
-    discarding = head && head[1] === undefined ? "response" : "line"
-    if (!head) return void close()
-    if (head[1] !== undefined) respond(head[1])
-  }
-
-  const keepTail = (segment: Uint8Array) =>
-    (tail = Buffer.concat([tail, segment.subarray(-EDGE_BYTES)]).subarray(-EDGE_BYTES))
-
-  const respond = (id: string | undefined) => {
-    if (id === undefined) return void close()
-    transport.onmessage?.({
-      jsonrpc: "2.0",
-      id: JSON.parse(id),
-      error: { code: ProtocolErrorCode.InternalError, message: tooLarge },
-    })
+  // Closing fails every pending request at once rather than leaving the one this line answered waiting.
+  const oversized = () => {
+    transport.onerror?.(
+      new Error(`MCP server ${options.server} wrote more than 16 MiB to stdout without a message boundary`),
+    )
+    void close()
   }
 
   const startOutput = (handle: ChildProcessHandle) =>
