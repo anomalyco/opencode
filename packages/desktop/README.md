@@ -23,12 +23,12 @@ Both read the same environment as every other release package:
 
 | Variable           | Meaning                                                                                                         |
 | ------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `OPENCODE_CHANNEL` | `dev` (default), `beta`, or `latest`/`prod`. Picks the app identity, icons and bundled CLI.                     |
+| `OPENCODE_CHANNEL` | `dev` (download default), `beta`, or `latest`/`prod`. Picks the app identity, icons and bundled CLI.          |
 | `OPENCODE_VERSION` | Version stamped into the app and its packages.                                                                  |
 | `OPENCODE_TARGET`  | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
 
-For a prebuilt CLI, build it and Desktop with the same `OPENCODE_CHANNEL`. `latest` and `prod` use the production
-app identity but separate service registrations.
+For a prebuilt CLI, set `OPENCODE_CHANNEL` explicitly to the channel used to build it. `latest` and `prod` use
+the production app identity but separate service registrations.
 
 The CLI is placed outside `app.asar` in the application's resources directory, and packaging fails if it is missing.
 `bun run build` uses `packages/cli/dist` when that holds the target's CLI. Otherwise `dev` (and `local`, unset or unrecognized)

@@ -14,18 +14,18 @@ const cli = path.resolve(dir, "../cli/dist")
 
 const channel = resolveChannel()
 
-process.chdir(dir)
-
-await $`bun ./script/copy-icons.ts ${channel}`
-
-await $`bun ./script/copy-metainfo.ts ${channel}`
-
 const built = await exists(path.join(cli, getCurrentCli().package.replace("@opencode/", "")))
 
 if (channel === "prod" && !built)
   throw new Error(`Production desktop builds bundle the CLI from ${cli}; build it first`)
 
 const cliChannel = resolveCliChannel(built)
+
+process.chdir(dir)
+
+await $`bun ./script/copy-icons.ts ${channel}`
+
+await $`bun ./script/copy-metainfo.ts ${channel}`
 
 if (built) await copyBuiltCliToResources(cli)
 
