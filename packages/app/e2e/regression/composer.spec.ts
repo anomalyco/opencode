@@ -1013,6 +1013,7 @@ test("keeps one dropzone while a file drag crosses the composer, and none for a 
 
     return value
   })
+
   await editor.dispatchEvent("dragenter", { dataTransfer: text })
   await editor.dispatchEvent("dragover", { dataTransfer: text })
   await expect(page.locator("[data-slot='session-dropzone-blur']")).toHaveAttribute("data-visible", "false")
@@ -1024,6 +1025,7 @@ test("keeps one dropzone while a file drag crosses the composer, and none for a 
 
     return value
   })
+
   await surface.dispatchEvent("dragover", { dataTransfer: files })
   await expect(dropzone).toHaveAttribute("data-visible", "true")
   const shown = await dropzone.elementHandle()
@@ -1031,8 +1033,10 @@ test("keeps one dropzone while a file drag crosses the composer, and none for a 
   // Moving onto the editor's own text fires dragleave on the editor before the next dragover.
   await editor.evaluate((element, dataTransfer) => {
     const inner = element.firstElementChild ?? element
+
     const fire = (type: string, target: Element, relatedTarget: Element) =>
       target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, relatedTarget }))
+
     fire("dragenter", inner, element)
     fire("dragleave", element, inner)
     fire("dragover", inner, element)
