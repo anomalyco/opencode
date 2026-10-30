@@ -30,6 +30,19 @@ export const ScrollAcceleration = Schema.Struct({
 export const DiffStyle = Schema.Literals(["auto", "stacked"]).annotate({
   description: "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
 })
+export const Syntax = Schema.Struct({
+  bash: Schema.optional(Schema.Boolean).annotate({
+    description: "Color the bash tool's command as shell code (default: true)",
+  }),
+  tool_output: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
+    description:
+      "Color plugin and MCP tool output by tool name or glob ('browser', 'github_*', '*'): a language id such as 'json', 'auto' to color output recognized as JSON, or 'none'. An exact name wins over globs, the most specific glob over the rest. Unset leaves output plain (default)",
+  }),
+  file_output: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Color tool output that shows the contents of files in each file's language: bash reads and searches (cat, sed -n, head, tail, grep, rg, git show <ref>:<path>), JSON and diffs, the read and grep tools, GitHub code search snippets and docs with fenced code. A path or line number a line starts with is muted. Read and grep calls can be clicked to show what they found. Output whose language is unclear stays plain, and a tool set to 'none' in tool_output stays plain (default: false)",
+  }),
+}).annotate({ description: "Syntax highlighting in tool calls" })
 export const Cursor = Schema.Struct({
   style: Schema.optional(Schema.Literals(["block", "underline", "line", "default"])).annotate({
     description: "Cursor shape. Use 'default' to preserve the terminal setting",
@@ -70,6 +83,7 @@ export const Info = Schema.Struct({
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
+  syntax: Schema.optional(Syntax),
   cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
 })

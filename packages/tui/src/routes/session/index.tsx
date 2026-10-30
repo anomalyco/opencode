@@ -1,5 +1,6 @@
 import {
   batch,
+  children,
   createContext,
   createEffect,
   createMemo,
@@ -24,7 +25,19 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import {
+  BoxRenderable,
+  ScrollBoxRenderable,
+  addDefaultParsers,
+  TextAttributes,
+  RGBA,
+  StyledText,
+  TextRenderable,
+  treeSitterToTextChunks,
+  type SimpleHighlight,
+  type SyntaxStyle,
+  type TextChunk,
+} from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -55,6 +68,19 @@ import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
+import { highlightCached } from "../../util/highlight-cache"
+import { outputLanguage, previewHighlights, toolOutputSetting } from "../../util/tool-output"
+import {
+  bashOutputModel,
+  FILE_OUTPUT_CHUNKS,
+  genericOutputModel,
+  grepToolOutputModel,
+  previewLines,
+  readDisplay,
+  readOutputModel,
+  type FileOutputModel,
+} from "../../util/file-output"
+import { narrowBashHighlights } from "../../util/bash-highlight"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
 import { Toast, useToast } from "../../ui/toast"
@@ -1742,6 +1768,19 @@ function GenericTool(props: ToolProps) {
     if (expanded() || !collapsed().overflow) return output()
     return collapsed().output
   })
+  // Only output that is shown is sniffed or colored.
+  const language = createMemo(() =>
+    props.output && ctx.showGenericToolOutput()
+      ? outputLanguage(ctx.tui.syntax?.tool_output, props.tool, output())
+      : undefined,
+  )
+  // Output `syntax.tool_output` leaves plain, unless it is set to 'none' for the tool, may still show
+  // files: code search snippets, docs with fenced code, `path:line:` matches.
+  const fileModel = createMemo(() => {
+    if (ctx.tui.syntax?.file_output !== true || !props.output || !ctx.showGenericToolOutput() || language()) return
+    if (toolOutputSetting(ctx.tui.syntax?.tool_output, props.tool) === "none") return
+    return genericOutputModel(output())
+  })
 
   return (
     <Show
@@ -1758,13 +1797,166 @@ function GenericTool(props: ToolProps) {
         onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
       >
         <box gap={1}>
-          <text fg={theme.text}>{limited()}</text>
+          <Show when={language()} fallback={<FileOutput model={fileModel()} shown={limited()} />}>
+            {(language) => <ToolOutputText output={output()} shown={limited()} language={language()} />}
+          </Show>
           <Show when={collapsed().overflow}>
             <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
           </Show>
         </box>
       </BlockTool>
     </Show>
+  )
+}
+
+// A tool's output colored as `language`. It is drawn plain at once and takes its colors when the
+// parser worker answers, in the same non-red palette as a bash command: red means failure.
+// `shown` is the output as displayed: the whole of it, or a collapsed preview that is a prefix of it
+// plus an ellipsis. The whole output is highlighted, once and cached, because a preview cut through
+// the middle of a JSON value does not parse; the preview takes the highlights that fall inside the
+// part it shares with the output, and the ellipsis stays plain.
+function ToolOutputText(props: { output: string; shown: string; language: string }) {
+  const { theme, toolSyntax } = useTheme()
+  const [highlighted, setHighlighted] = createSignal<{
+    output: string
+    language: string
+    highlights: SimpleHighlight[]
+  }>()
+  createEffect(() => {
+    const output = props.output
+    const language = props.language
+    highlightCached(output, language)
+      .then((result) => setHighlighted({ output, language, highlights: result.highlights ?? [] }))
+      .catch(() => setHighlighted(undefined))
+  })
+  const chunks = createMemo(() => {
+    const result = highlighted()
+    if (!result || result.output !== props.output || result.language !== props.language) return
+    if (result.highlights.length === 0) return
+    return treeSitterToTextChunks(
+      props.shown,
+      previewHighlights(props.shown, result.output, result.highlights),
+      toolSyntax(),
+      { enabled: false },
+    )
+  })
+  return <StyledOutput content={props.shown} chunks={chunks()} fg={theme.text} />
+}
+
+// Output that shows the contents of files (`syntax.file_output`), colored by `model`: the prefixes
+// muted at once, and each file's code in its language when the parser worker answers. Each file's
+// lines are highlighted together, once and cached, and the colors go onto whatever part of them
+// `shown` holds: the whole output or a collapsed preview. The text itself is unchanged, so it
+// wraps exactly as it does plain.
+function FileOutputText(props: { model: FileOutputModel; shown: string }) {
+  const { theme, toolSyntax } = useTheme()
+  const [highlighted, setHighlighted] = createSignal<{
+    model: FileOutputModel
+    lines: (SimpleHighlight[] | undefined)[]
+  }>()
+  createEffect(() => {
+    const model = props.model
+    Promise.all(
+      model.chunks.slice(0, FILE_OUTPUT_CHUNKS).map((chunk) => {
+        const bodies = chunk.lines.map((index) => model.lines[index].slice(model.info[index].gutter))
+        return highlightCached(bodies.join("\n"), chunk.language).then((result) => ({
+          chunk,
+          bodies,
+          highlights: result.highlights ?? [],
+        }))
+      }),
+    )
+      .then((results) => {
+        const lines: (SimpleHighlight[] | undefined)[] = []
+        for (const result of results) {
+          let offset = 0
+          result.chunk.lines.forEach((index, position) => {
+            const end = offset + result.bodies[position].length
+            lines[index] = shiftHighlights(result.highlights, offset, end)
+            offset = end + 1
+          })
+        }
+        setHighlighted({ model, lines })
+      })
+      .catch(() => setHighlighted(undefined))
+  })
+  const chunks = createMemo(() => {
+    const found = highlighted()
+    const lines = found?.model === props.model ? found.lines : []
+    return fileOutputChunks(props.model, props.shown, lines, { text: theme.text, muted: theme.textMuted }, toolSyntax())
+  })
+  return <StyledOutput content={props.shown} chunks={chunks()} fg={theme.text} />
+}
+
+// `shown`, a whole output or a preview of it, as chunks: each line's prefix muted, its code colored by
+// `lines` (the highlights of each output line's code), and a preview's markers plain.
+export function fileOutputChunks(
+  model: FileOutputModel,
+  shown: string,
+  lines: (SimpleHighlight[] | undefined)[],
+  colors: { text: RGBA; muted: RGBA },
+  syntax: SyntaxStyle,
+) {
+  const plain = (text: string, fg = colors.text): TextChunk[] => (text ? [{ __isChunk: true, text, fg }] : [])
+  const rows = shown.split("\n")
+  const sources = previewLines(rows, model.lines)
+  return rows.flatMap((text, index): TextChunk[] => {
+    const newline = index > 0 ? plain("\n") : []
+    const at = sources[index]
+    if (!at) return [...newline, ...plain(text)]
+    const source = model.lines[at.line]
+    const gutter = model.info[at.line].gutter
+    const start = Math.max(at.from, gutter)
+    const body = source.slice(start, Math.max(start, at.to))
+    const highlights = lines[at.line] && shiftHighlights(lines[at.line]!, start - gutter, at.to - gutter)
+    return [
+      ...newline,
+      ...plain(source.slice(at.from, Math.min(at.to, gutter)), colors.muted),
+      ...(highlights?.length ? treeSitterToTextChunks(body, highlights, syntax, { enabled: false }) : plain(body)),
+      ...plain(text.slice(at.to - at.from)),
+    ]
+  })
+}
+
+// The highlights inside [start, end), moved so `start` is 0.
+function shiftHighlights(highlights: SimpleHighlight[], start: number, end: number): SimpleHighlight[] {
+  return highlights.flatMap((highlight): SimpleHighlight[] => {
+    if (highlight[1] <= start || highlight[0] >= end) return []
+    const moved: SimpleHighlight = [...highlight]
+    moved[0] = Math.max(highlight[0], start) - start
+    moved[1] = Math.min(highlight[1], end) - start
+    return [moved]
+  })
+}
+
+// `shown` colored by `model` when there is one, else plain.
+function FileOutput(props: { model: FileOutputModel | undefined; shown: string }) {
+  const { theme } = useTheme()
+  return (
+    <Show when={props.model} fallback={<text fg={theme.text}>{props.shown}</text>}>
+      {(model) => <FileOutputText model={model()} shown={props.shown} />}
+    </Show>
+  )
+}
+
+// One text renderable whose content is the plain text, or the same text as colored chunks, so the
+// colors never change how it wraps. Chunks are set on the renderable rather than drawn as one
+// span each, which keeps a large output a single renderable.
+export function StyledOutput(props: { content: string; chunks?: TextChunk[]; fg: RGBA }) {
+  let text: TextRenderable | undefined
+  const content = () => (props.chunks ? new StyledText(props.chunks) : props.content)
+  createEffect(() => {
+    const value = content()
+    if (text) text.content = value
+  })
+  return (
+    <text
+      fg={props.fg}
+      ref={(el: TextRenderable) => {
+        text = el
+        el.content = content()
+      }}
+    />
   )
 }
 
@@ -1992,6 +2184,12 @@ function Shell(props: ToolProps) {
     if (expanded() || !collapsed().overflow) return output()
     return collapsed().output
   })
+  // Worked out once the call has finished, from the whole output, never per frame or while it streams.
+  const fileModel = createMemo(() =>
+    ctx.tui.syntax?.file_output === true && !isRunning()
+      ? bashOutputModel(stringValue(props.input.command) ?? "", output())
+      : undefined,
+  )
 
   const workdirDisplay = createMemo(() => {
     const workdir = stringValue(props.input.workdir)
@@ -2016,11 +2214,18 @@ function Shell(props: ToolProps) {
           onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}</text>}>
-              <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
+            <Show
+              when={ctx.tui.syntax?.bash !== false}
+              fallback={
+                <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}</text>}>
+                  <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
+                </Show>
+              }
+            >
+              <ShellCommand command={stringValue(props.input.command) ?? ""} running={isRunning()} />
             </Show>
             <Show when={output()}>
-              <text fg={theme.text}>{limited()}</text>
+              <FileOutput model={fileModel()} shown={limited()} />
             </Show>
             <Show when={collapsed().overflow}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
@@ -2035,6 +2240,49 @@ function Shell(props: ToolProps) {
       </Match>
     </Switch>
   )
+}
+
+// The command as shell code. It is the same <text> the plain command is, so it wraps and indents
+// exactly as before, with each token a colored span. It draws plain at once and takes its colors
+// when the parser worker answers, which the shared cache makes immediate for a command already
+// seen. Colors come from toolSyntax, which never uses red: in the transcript red means failure.
+export function ShellCommand(props: { command: string; running: boolean }) {
+  const { theme, toolSyntax } = useTheme()
+  const [highlighted, setHighlighted] = createSignal<{ command: string; highlights: SimpleHighlight[] }>()
+  createEffect(() => {
+    const command = props.command
+    shellHighlights(command)
+      .then((highlights) => setHighlighted({ command, highlights }))
+      .catch(() => setHighlighted(undefined))
+  })
+  const segments = createMemo((): CommandSegment[] => {
+    const result = highlighted()
+    if (result?.command !== props.command) return [{ text: props.command, fg: theme.text }]
+    return treeSitterToTextChunks(result.command, result.highlights, toolSyntax(), { enabled: false })
+  })
+  const spans = children(() => <CommandSpans segments={segments()} />)
+  return (
+    <Show when={props.running} fallback={<text fg={theme.text}>$ {spans()}</text>}>
+      <Spinner color={theme.text}>{spans()}</Spinner>
+    </Show>
+  )
+}
+
+type CommandSegment = { text: string; fg?: RGBA; bg?: RGBA; attributes?: number }
+
+export function CommandSpans(props: { segments: CommandSegment[] }) {
+  return (
+    <For each={props.segments}>
+      {(segment) => (
+        <span style={{ fg: segment.fg, bg: segment.bg, attributes: segment.attributes }}>{segment.text}</span>
+      )}
+    </For>
+  )
+}
+
+async function shellHighlights(command: string) {
+  const result = await highlightCached(command, "bash")
+  return narrowBashHighlights(result.highlights ?? [], command)
 }
 
 function Write(props: ToolProps) {
@@ -2086,6 +2334,11 @@ function Read(props: ToolProps) {
   const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
   const isRunning = createMemo(() => props.part.state.status === "running")
+  const found = useFoundOutput(props)
+  const display = createMemo(() => (found.reachable() ? readDisplay(props.output ?? "") : ""))
+  const model = createMemo(() =>
+    display() ? readOutputModel(stringValue(props.input.filePath), display()) : undefined,
+  )
   const loaded = createMemo(() => {
     if (props.part.state.status !== "completed") return []
     if (props.part.state.time.compacted) return []
@@ -2093,16 +2346,29 @@ function Read(props: ToolProps) {
     if (!value || !Array.isArray(value)) return []
     return value.filter((p): p is string => typeof p === "string")
   })
+  const title = () =>
+    `Read ${pathFormatter.format(stringValue(props.input.filePath))} ${input(props.input, ["filePath"])}`
   return (
-    <>
+    <Show
+      when={!found.expanded()}
+      fallback={
+        <BlockTool title={`→ ${title()}`} part={props.part} onClick={found.collapse}>
+          <box gap={1}>
+            <FileOutput model={model()} shown={display()} />
+            <text fg={theme.textMuted}>Click to collapse</text>
+          </box>
+        </BlockTool>
+      }
+    >
       <InlineTool
         icon="→"
         pending="Reading file…"
         complete={stringValue(props.input.filePath)}
         spinner={isRunning()}
         part={props.part}
+        onClick={found.expand()}
       >
-        Read {pathFormatter.format(stringValue(props.input.filePath))} {input(props.input, ["filePath"])}
+        {title()}
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
@@ -2113,21 +2379,70 @@ function Read(props: ToolProps) {
           </box>
         )}
       </For>
-    </>
+    </Show>
   )
 }
 
 function Grep(props: ToolProps) {
+  const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
+  const found = useFoundOutput(props)
+  const model = createMemo(() => (found.reachable() ? grepToolOutputModel(props.output ?? "") : undefined))
+  const where = () =>
+    stringValue(props.input.path) ? ` in ${pathFormatter.format(stringValue(props.input.path))}` : ""
   return (
-    <InlineTool icon="✱" pending="Searching content…" complete={stringValue(props.input.pattern)} part={props.part}>
-      Grep "{stringValue(props.input.pattern)}"{" "}
-      <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
-      <Show when={numberValue(props.metadata.matches)}>
-        ({numberValue(props.metadata.matches)} {numberValue(props.metadata.matches) === 1 ? "match" : "matches"})
-      </Show>
-    </InlineTool>
+    <Show
+      when={!found.expanded()}
+      fallback={
+        <BlockTool
+          title={`✱ Grep "${stringValue(props.input.pattern)}"${where()}`}
+          part={props.part}
+          onClick={found.collapse}
+        >
+          <box gap={1}>
+            <FileOutput model={model()} shown={props.output?.trim() ?? ""} />
+            <text fg={theme.textMuted}>Click to collapse</text>
+          </box>
+        </BlockTool>
+      }
+    >
+      <InlineTool
+        icon="✱"
+        pending="Searching content…"
+        complete={stringValue(props.input.pattern)}
+        part={props.part}
+        onClick={found.expand()}
+      >
+        Grep "{stringValue(props.input.pattern)}"{" "}
+        <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
+        <Show when={numberValue(props.metadata.matches)}>
+          ({numberValue(props.metadata.matches)} {numberValue(props.metadata.matches) === 1 ? "match" : "matches"})
+        </Show>
+      </InlineTool>
+    </Show>
   )
+}
+
+// With `syntax.file_output`, a finished read or grep call's row can be clicked to show what it
+// found as a block, colored by file, and the block clicked to fold back into the row.
+function useFoundOutput(props: ToolProps) {
+  const ctx = use()
+  const [expanded, setExpanded] = createSignal(false)
+  const reachable = createMemo(() => {
+    const state = props.part.state
+    return (
+      ctx.tui.syntax?.file_output === true &&
+      state.status === "completed" &&
+      !state.time.compacted &&
+      Boolean(props.output?.trim())
+    )
+  })
+  return {
+    reachable,
+    expanded: () => reachable() && expanded(),
+    expand: () => (reachable() ? () => setExpanded(true) : undefined),
+    collapse: () => setExpanded(false),
+  }
 }
 
 function WebFetch(props: ToolProps) {
