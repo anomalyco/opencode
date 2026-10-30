@@ -17,6 +17,10 @@ export function make() {
     const status = message.subtype === "success" ? (message.api_error_status ?? undefined) : undefined
     const httpError = status !== undefined && status >= 400
     if (message.subtype === "success" && !message.is_error && !httpError) return
+    // Claude Code's own text tells the user to run its /login slash command, which does not exist here.
+    if (code === "authentication_failed") {
+      return new Error("Claude Code is not logged in. Run `claude auth login` in a terminal.")
+    }
     const result = message.subtype === "success" ? message.result : message.errors.join("\n")
     const failure =
       status !== undefined && status >= 500
@@ -29,8 +33,7 @@ export function make() {
       limited && !failure ? `Claude Code subscription limit reached${window ? ` (${window})` : ""}.` : failure
     const reset = limited && rejected?.resetsAt ? ` Resets at ${new Date(rejected.resetsAt * 1000).toISOString()}.` : ""
     const billing = code === "billing_error" ? " Check your Claude plan and extra-usage settings." : ""
-    const auth = code === "authentication_failed" ? " Run `claude auth login` in a terminal." : ""
-    const text = limit + reset + billing + auth
+    const text = limit + reset + billing
 
     if (text) return new Error(text)
     if (status) return new Error(`Claude Code could not finish its reply (HTTP ${status})`)
