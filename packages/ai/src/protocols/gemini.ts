@@ -32,21 +32,11 @@ import { Lifecycle } from "./utils/lifecycle.js"
 
 const ADAPTER = "gemini"
 const CONTINUATION = "CONTINUATION"
-// Google documents this sentinel for replaying Gemini 3 function calls after their original signature was lost.
+// Google documents this sentinel for replaying function calls after their original signature was lost.
 const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 // Gemini 2.5 rejects a budget under the model's minimum: 512 on Flash-Lite, the highest, and 128 on Pro.
 const MIN_THINKING_BUDGET = 512
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-
-// Gemini 3 rejects replayed function calls without a thought signature. Google's SDKs avoid that in normal chats by
-// retaining complete model responses, but OpenCode reconstructs durable history and may encounter an unsigned call
-// from an older or external session. Model IDs are open-ended, so unknown Gemini aliases inherit current behavior.
-const requiresThoughtSignatureFallback = (modelID: string) => {
-  if (!/(^|\/)gemini-/i.test(modelID)) return false
-  if (/(^|\/)gemini-(?:1|2)(?:[.-]|$)/i.test(modelID)) return false
-  if (/(^|\/)gemini-pro(?:-vision)?$/i.test(modelID)) return false
-  return !/(^|\/)gemini-robotics-er-1\.5(?:[.-]|$)/i.test(modelID)
-}
 
 // Gemini 3 accepts media nested inside function responses; matched Gemini 2.5 variants reject it,
 // so their tool-result attachments lower as a separate user turn instead.
@@ -390,11 +380,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
           const signature = lowered.thoughtSignature
           parts.push({
             ...lowered,
-            thoughtSignature:
-              signature ??
-              (requiresThoughtSignatureFallback(request.model.id) && !hasSignedToolCall
-                ? SKIP_THOUGHT_SIGNATURE_VALIDATOR
-                : undefined),
+            thoughtSignature: signature ?? (!hasSignedToolCall ? SKIP_THOUGHT_SIGNATURE_VALIDATOR : undefined),
           })
           if (signature !== undefined) hasSignedToolCall = true
           continue
