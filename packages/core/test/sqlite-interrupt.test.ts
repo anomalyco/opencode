@@ -5,9 +5,11 @@ import { sqliteLayer as bunSqliteLayer } from "@opencode/core/database/sqlite.bu
 import { sqliteLayer as workerdSqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
 
-// Sweeps the interrupt across the gap between a queued transaction taking the
-// connection's only permit and registering its release. A leaked permit makes
-// every later query wait forever.
+// The holder keeps the connection across yields, so the queued fiber parks in
+// the semaphore's waiter queue and is woken when the holder lets go. The sweep
+// moves the interrupt across that wait and the gap between the woken fiber
+// taking the connection's only permit and registering its release. A leaked
+// permit makes every later query wait forever.
 const sweep = (
   layer: () => Layer.Layer<SqlClient.SqlClient>,
   queue: (sql: SqlClient.SqlClient) => Effect.Effect<unknown, unknown>,
@@ -19,7 +21,9 @@ const sweep = (
         yield* Effect.scoped(
           Effect.gen(function* () {
             const sql = yield* SqlClient.SqlClient
-            const holder = yield* Effect.forkChild(sql`SELECT 1`)
+            const holder = yield* Effect.forkChild(
+              Effect.scoped(Effect.andThen(sql.reserve, Effect.andThen(Effect.yieldNow, Effect.yieldNow))),
+            )
             const queued = yield* queue(sql).pipe(
               Effect.provideService(References.MaxOpsBeforeYield, 3),
               Effect.forkChild,
@@ -60,6 +64,14 @@ describe("sqlite transaction interrupts", () => {
     const leaked = await sweep(
       () => workerdSqliteLayer({ storage: makeDurableObjectStorage() }),
       (sql) => Effect.scoped(Effect.andThen(sql.reserve, Effect.yieldNow)),
+    )
+    expect(leaked).toEqual([])
+  })
+
+  test("workerd client releases the connection when a queued transaction is interrupted", async () => {
+    const leaked = await sweep(
+      () => workerdSqliteLayer({ storage: makeDurableObjectStorage() }),
+      (sql) => sql.withTransaction(sql`SELECT 2`),
     )
     expect(leaked).toEqual([])
   })

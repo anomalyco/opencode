@@ -51,6 +51,28 @@ const killGroups = () =>
 const unwrap = (value: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value
 
+// Node's own NUL check throws an error that includes the value, so NUL is rejected here to keep Redacted values
+// out of errors.
+const findNulCharacter = (command: ChildProcess.StandardCommand): string | undefined => {
+  if (command.command.includes("\0")) return "The command contains a NUL character"
+  const index = command.args.findIndex((arg) => unwrap(arg).includes("\0"))
+  if (index !== -1) return `Argument ${index + 1} contains a NUL character`
+  for (const [name, value] of Object.entries(command.options.env ?? {})) {
+    if (value !== undefined && unwrap(value).includes("\0")) {
+      return `The environment variable ${name} contains a NUL character`
+    }
+  }
+  return undefined
+}
+
+// Buffered writes can fail after the sink has been interrupted and removed its error listener. Keep a fallback until
+// close, without replacing the sink listener that propagates errors while it is active.
+const handleInputErrors = (writable: NodeJS.WritableStream) => {
+  const onError = () => {}
+  writable.on("error", onError)
+  writable.once("close", () => writable.off("error", onError))
+}
+
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
 
 const toTag = (err: NodeJS.ErrnoException): PlatformError.SystemErrorTag => {
@@ -232,6 +254,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     ) {
       let sink: Sink.Sink<void, Uint8Array, never, PlatformError.PlatformError> = Sink.drain
       if (node && "write" in node) {
+        handleInputErrors(node)
         sink = NodeSink.fromWritable({
           evaluate: () => node,
           onError: (err) => toPlatformError(`fromWritable(fd${fd})`, toError(err), command),
@@ -250,12 +273,18 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       let stream: Stream.Stream<Uint8Array, PlatformError.PlatformError> = Stream.empty
       if (node && "read" in node) {
         const tap = new PassThrough()
+        // Retain errors raised before anyone reads, e.g. a failed write on a duplex fd, so they neither go uncaught
+        // nor leave later readers hanging.
+        let error: unknown = undefined
+        tap.on("error", (cause) => {
+          error ??= cause
+        })
         node.on("error", (err) => tap.destroy(toError(err)))
         node.pipe(tap)
-        stream = NodeStream.fromReadable({
-          evaluate: () => tap,
-          onError: (err) => toPlatformError(`fromReadable(fd${fd})`, toError(err), command),
-        })
+        const onError = (err: unknown) => toPlatformError(`fromReadable(fd${fd})`, toError(err), command)
+        stream = Stream.suspend(() =>
+          error === undefined ? NodeStream.fromReadable({ evaluate: () => tap, onError }) : Stream.fail(onError(error)),
+        )
       }
       if (sink) stream = Stream.transduce(stream, sink)
       outs.set(fd, stream)
@@ -293,6 +322,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     Effect.suspend(() => {
       let sink: Sink.Sink<void, unknown, never, PlatformError.PlatformError> = Sink.drain
       if (Predicate.isNotNull(proc.stdin)) {
+        handleInputErrors(proc.stdin)
         sink = NodeSink.fromWritable({
           evaluate: () => proc.stdin!,
           onError: (err) => toPlatformError("fromWritable(stdin)", toError(err), command),
@@ -500,6 +530,12 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     function* (command) {
       switch (command._tag) {
         case "StandardCommand": {
+          const nul = findNulCharacter(command)
+          if (nul !== undefined) {
+            return yield* Effect.fail(
+              PlatformError.badArgument({ module: "ChildProcess", method: "spawn", description: nul }),
+            )
+          }
           const sin = stdin(command.options)
           const sout = stdio(command.options, "stdout")
           const serr = stdio(command.options, "stderr")
