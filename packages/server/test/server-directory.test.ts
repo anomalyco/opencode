@@ -18,6 +18,23 @@ describe("ServerDirectory", () => {
     expect(String(ServerDirectory.parse("relative/repo", { kind: "posix" }))).toBe("relative/repo")
   })
 
+  test("preserves repeated POSIX leading slashes on POSIX and WSL", () => {
+    for (const target of [{ kind: "posix" }, { kind: "wsl", mountRoot: "/mnt" }] as const) {
+      for (const input of [
+        "//",
+        "//tmp",
+        "//tmp/repo",
+        "///tmp/repo",
+        "////tmp/repo",
+        "//server/share/repo",
+        "//./tmp",
+        "//?/tmp",
+      ]) {
+        expect(String(ServerDirectory.parse(input, target))).toBe(input)
+      }
+    }
+  })
+
   test("preserves POSIX paths that contain literal backslashes", () => {
     expect(String(ServerDirectory.parse("/tmp/literal\\slash", { kind: "posix" }))).toBe("/tmp/literal\\slash")
     expect(String(ServerDirectory.parse("\\relative", { kind: "posix" }))).toBe("\\relative")
@@ -27,7 +44,8 @@ describe("ServerDirectory", () => {
     expectReason("C:\\Work\\Repo", "foreign", { kind: "posix" })
     expectReason("C:/Work/Repo", "foreign", { kind: "posix" })
     expectReason("\\\\server\\share\\repo", "foreign", { kind: "posix" })
-    expectReason("//server/share/repo", "foreign", { kind: "posix" })
+    expectReason("\\\\?\\C:\\Work\\Repo", "foreign", { kind: "posix" })
+    expectReason("\\\\.\\pipe\\tool", "foreign", { kind: "posix" })
   })
 
   test("keeps WSL mount paths server-native", () => {
@@ -36,21 +54,35 @@ describe("ServerDirectory", () => {
     )
   })
 
-  test("parses Windows-native paths under the Windows profile", () => {
-    expect(String(ServerDirectory.parse("C:/Work/Repo", { kind: "win32" }))).toBe("C:\\Work\\Repo")
-    expect(String(ServerDirectory.parse("C:\\Work\\Repo", { kind: "win32" }))).toBe("C:\\Work\\Repo")
-    expect(String(ServerDirectory.parse("\\\\server\\share\\repo", { kind: "win32" }))).toBe("\\\\server\\share\\repo")
-  })
-
-  test("preserves relative paths under the Windows profile", () => {
-    for (const input of ["relative/repo", "relative\\repo", "../repo", "..\\repo", "foo/../repo"]) {
+  test("validates Windows paths without changing their spelling", () => {
+    for (const input of [
+      "C:/Work/Repo",
+      "c:/Work/../Repo/",
+      "C:\\Work\\Repo",
+      "\\\\server\\share\\repo",
+      "//server/share/repo",
+      "\\\\?\\C:\\Work\\Repo",
+      "\\\\?\\UNC\\server\\share\\repo",
+    ]) {
       expect(String(ServerDirectory.parse(input, { kind: "win32" }))).toBe(input)
     }
   })
 
-  test("rejects foreign POSIX-rooted syntax under the Windows profile", () => {
-    expectReason("/tmp/repo", "foreign", { kind: "win32" })
-    expectReason("file:///tmp/repo", "invalid", { kind: "win32" })
+  test("preserves relative paths under the Windows profile", () => {
+    for (const input of [
+      "relative/repo",
+      "relative\\repo",
+      "../repo",
+      "..\\repo",
+      "foo/../repo",
+      "/tmp/repo",
+      "\\repo",
+    ]) {
+      expect(String(ServerDirectory.parse(input, { kind: "win32" }))).toBe(input)
+    }
+  })
+
+  test("rejects Windows drive-relative hints", () => {
     expectReason("C:Work\\Repo", "drive-relative", { kind: "win32" })
   })
 

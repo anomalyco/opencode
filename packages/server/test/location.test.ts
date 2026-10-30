@@ -11,89 +11,71 @@ import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
 import { requestRef } from "../src/location"
 
-const options = {
-  app: { version: "test-version" },
-  database: { path: ":memory:" },
-  config: { project: false },
-  models: { fetch: false },
-  fs: { filewatcher: false },
-} as const
+const invalid = process.platform === "win32" ? "C:Work\\Repo" : "C:\\Work\\Repo"
 
-const foreign =
-  process.platform === "win32"
-    ? ["/tmp/repo"]
-    : ["C:\\Work\\Repo", "C:/Work/Repo", "\\\\server\\share\\repo", "//server/share/repo"]
-
-test.each(["query", "header"] as const)("requestRef decodes the %s directory once", (source) => {
-  const directory = path.join(process.cwd(), "repo%23name")
-  const url = new URL("http://opencode.local/api/location")
+function request(directory: string, source: "query" | "header", endpoint = "/api/location") {
+  const url = new URL(endpoint, "http://opencode.local")
   if (source === "query") url.searchParams.set("location[directory]", directory)
-  const request = new Request(url, {
+  return new Request(url, {
+    method: endpoint === "/api/debug/location" ? "DELETE" : "GET",
     headers: source === "header" ? { "x-opencode-directory": encodeURIComponent(directory) } : undefined,
-  })
-  expect(requestRef(HttpServerRequest.fromWeb(request))).toEqual({ directory: AbsolutePath.make(directory) })
-})
-
-test("requestRef retains malformed percent header fallback", () => {
-  const directory = path.join(process.cwd(), "repo%name")
-  expect(
-    requestRef(
-      HttpServerRequest.fromWeb(
-        new Request("http://opencode.local/api/location", {
-          headers: { "x-opencode-directory": directory },
-        }),
-      ),
-    ),
-  ).toEqual({ directory: AbsolutePath.make(directory) })
-})
-
-if (process.platform !== "win32") {
-  test("requestRef preserves POSIX literal backslashes", () => {
-    const directory = "/tmp/literal\\slash"
-    const url = new URL("http://opencode.local/api/location")
-    url.searchParams.set("location[directory]", directory)
-    expect(requestRef(HttpServerRequest.fromWeb(new Request(url)))).toEqual({ directory: AbsolutePath.make(directory) })
   })
 }
 
-test("requestRef keeps relative paths and empty query fallback", () => {
-  expect(
-    requestRef(
-      HttpServerRequest.fromWeb(new Request("http://opencode.local/api/location?location[directory]=../repo")),
-    ),
-  ).toEqual({ directory: AbsolutePath.make("../repo") })
-  expect(
-    requestRef(
-      HttpServerRequest.fromWeb(
-        new Request("http://opencode.local/api/location?location[directory]=", {
-          headers: { "x-opencode-directory": "../repo" },
-        }),
-      ),
-    ),
-  ).toEqual({ directory: AbsolutePath.make("../repo") })
-  expect(
-    requestRef(HttpServerRequest.fromWeb(new Request("http://opencode.local/api/location?location[directory]="))),
-  ).toEqual({ directory: AbsolutePath.make(process.cwd()) })
+test.each(["query", "header"] as const)("requestRef preserves %s directory spelling after one decode", (source) => {
+  const directories = [
+    path.join(process.cwd(), "repo%23name"),
+    ...(process.platform === "win32"
+      ? [
+          "C:/Work/Repo",
+          "c:\\Work\\Repo",
+          "\\\\server\\share\\repo",
+          "//server/share/repo",
+          "/Work/Repo",
+          "\\Work\\Repo",
+        ]
+      : ["//tmp", "//tmp/repo", "///tmp/repo", "//server/share/repo", "/tmp/literal\\slash"]),
+  ]
+  for (const directory of directories) {
+    expect(requestRef(HttpServerRequest.fromWeb(request(directory, source)))).toEqual({
+      directory: AbsolutePath.make(directory),
+    })
+  }
 })
 
-test.each(["query", "header"] as const)("requestRef reports the %s boundary for invalid directories", (source) => {
-  const url = new URL("http://opencode.local/api/location")
-  if (source === "query") url.searchParams.set("location[directory]", foreign[0])
-  const ref = requestRef(
-    HttpServerRequest.fromWeb(
-      new Request(url, {
-        headers: source === "header" ? { "x-opencode-directory": encodeURIComponent(foreign[0]) } : undefined,
-      }),
-    ),
-  )
-  expect(ref).toBeInstanceOf(InvalidRequestError)
-  expect(ref).toMatchObject({ kind: source === "query" ? "Query" : "Header", field: "location[directory]" })
+test("requestRef preserves query precedence, relative paths and header decoding fallbacks", () => {
+  const query = request("../repo", "query")
+  query.headers.set("x-opencode-directory", invalid)
+  expect(requestRef(HttpServerRequest.fromWeb(query))).toEqual({ directory: AbsolutePath.make("../repo") })
+  for (const directory of ["../repo", path.join(process.cwd(), "repo%name")]) {
+    const fallback = new Request("http://opencode.local/api/location?location[directory]=", {
+      headers: { "x-opencode-directory": directory },
+    })
+    expect(requestRef(HttpServerRequest.fromWeb(fallback))).toEqual({ directory: AbsolutePath.make(directory) })
+  }
+  expect(requestRef(HttpServerRequest.fromWeb(request("", "query")))).toEqual({
+    directory: AbsolutePath.make(process.cwd()),
+  })
 })
 
-it.live("rejects foreign directories before all request-based location lookups", () =>
+test.each(["query", "header"] as const)("requestRef reports invalid %s directory hints", (source) => {
+  for (const directory of [invalid, "/tmp/\0repo"]) {
+    const ref = requestRef(HttpServerRequest.fromWeb(request(directory, source)))
+    expect(ref).toBeInstanceOf(InvalidRequestError)
+    expect(ref).toMatchObject({ kind: source === "query" ? "Query" : "Header", field: "location[directory]" })
+  }
+})
+
+it.live("validates each location entry point and preserves native HTTP/SDK behavior", () =>
   Effect.gen(function* () {
-    const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-directory-boundary-")))
-    const handler = yield* ServerFetch.make({ ...options, config: { directory: config.path, project: false } })
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-directory-boundary-")))
+    const handler = yield* ServerFetch.make({
+      app: { version: "test-version" },
+      database: { path: ":memory:" },
+      config: { directory: tmp.path, project: false, content: "{}" },
+      models: { fetch: false },
+      fs: { filewatcher: false },
+    })
     for (const endpoint of [
       "/api/location",
       "/api/session/global/form",
@@ -101,80 +83,38 @@ it.live("rejects foreign directories before all request-based location lookups",
       "/api/pty/pty_missing/connect",
       "/api/experimental/client-mcp?name=boundary-test",
     ]) {
-      for (const directory of foreign) {
-        for (const source of ["query", "header"] as const) {
-          const url = new URL(endpoint, "http://opencode.local")
-          if (source === "query") url.searchParams.set("location[directory]", directory)
-          const response = yield* Effect.promise(() =>
-            handler(
-              new Request(url, {
-                method: endpoint === "/api/debug/location" ? "DELETE" : "GET",
-                headers: source === "header" ? { "x-opencode-directory": encodeURIComponent(directory) } : undefined,
-              }),
-            ),
-          )
-          expect({ endpoint, source, directory, status: response.status }).toEqual({
-            endpoint,
-            source,
-            directory,
-            status: 400,
-          })
-          expect(yield* Effect.promise(() => response.json())).toMatchObject({
-            _tag: "InvalidRequestError",
-            kind: source === "query" ? "Query" : "Header",
-            field: "location[directory]",
-          })
-        }
+      for (const source of ["query", "header"] as const) {
+        const response = yield* Effect.promise(() => handler(request(invalid, source, endpoint)))
+        expect({ endpoint, source, status: response.status }).toEqual({ endpoint, source, status: 400 })
+        expect(yield* Effect.promise(() => response.json())).toMatchObject({
+          _tag: "InvalidRequestError",
+          kind: source === "query" ? "Query" : "Header",
+          field: "location[directory]",
+        })
       }
     }
     const loaded = yield* Effect.promise(() => handler(new Request("http://opencode.local/api/debug/location")))
     expect(yield* Effect.promise(() => loaded.json())).toEqual([])
-  }),
-)
 
-it.live("preserves native directories and query precedence through the HTTP API", () =>
-  Effect.gen(function* () {
-    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-directory-transport-")))
-    const directories = [path.join(tmp.path, "repo%23name"), path.join(tmp.path, "repo%name")]
-    yield* Effect.promise(() => Promise.all(directories.map((directory) => fs.mkdir(directory))))
-    const handler = yield* ServerFetch.make({ ...options, config: { directory: tmp.path, project: false } })
-    for (const directory of directories) {
-      const sources = directory.endsWith("repo%name")
-        ? (["query", "header", "raw-header"] as const)
-        : (["query", "header"] as const)
-      for (const source of sources) {
-        const url = new URL("http://opencode.local/api/location")
-        if (source === "query") url.searchParams.set("location[directory]", directory)
-        const response = yield* Effect.promise(() =>
-          handler(
-            new Request(url, {
-              headers: {
-                "x-opencode-directory":
-                  source === "query"
-                    ? encodeURIComponent(foreign[0])
-                    : source === "header"
-                      ? encodeURIComponent(directory)
-                      : directory,
-              },
-            }),
-          ),
-        )
-        expect({ directory, source, status: response.status }).toEqual({ directory, source, status: 200 })
-        expect(yield* Effect.promise(() => response.json())).toMatchObject({ directory })
+    const directory = path.join(tmp.path, "repo%23name")
+    yield* Effect.promise(() => fs.mkdir(directory))
+    const spellings =
+      process.platform === "win32"
+        ? [
+            directory,
+            directory.replaceAll("\\", "/"),
+            process
+              .cwd()
+              .replace(/^[A-Za-z]:/, "")
+              .replaceAll("\\", "/"),
+          ]
+        : [directory, `/${directory}`, `//${directory}`]
+    for (const spelling of spellings) {
+      for (const source of ["query", "header"] as const) {
+        const response = yield* Effect.promise(() => handler(request(spelling, source)))
+        expect({ spelling, source, status: response.status }).toEqual({ spelling, source, status: 200 })
       }
     }
-    const relative = yield* Effect.promise(() =>
-      handler(new Request("http://opencode.local/api/location?location[directory]=../server")),
-    )
-    expect(relative.status).toBe(200)
-    expect(yield* Effect.promise(() => relative.json())).toMatchObject({ directory: "../server" })
-  }),
-)
-
-it.live("exposes the directory boundary error through the generated SDK", () =>
-  Effect.gen(function* () {
-    const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-directory-sdk-")))
-    const handler = yield* ServerFetch.make({ ...options, config: { directory: config.path, project: false } })
     const api = OpenCode.make({
       baseUrl: "http://opencode.local",
       fetch: Object.assign(
@@ -184,7 +124,7 @@ it.live("exposes the directory boundary error through the generated SDK", () =>
       ),
     })
     yield* Effect.promise(async () => {
-      await expect(api.location.get({ location: { directory: foreign[0] } })).rejects.toMatchObject({
+      await expect(api.location.get({ location: { directory: invalid } })).rejects.toMatchObject({
         _tag: "InvalidRequestError",
         kind: "Query",
         field: "location[directory]",

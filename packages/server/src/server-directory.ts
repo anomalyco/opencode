@@ -1,5 +1,4 @@
-import { errorCode, normalize, toWin32 } from "@romanilyin/canonicalpath/canonicalpath"
-import type { CanonicalPath } from "@romanilyin/canonicalpath/canonicalpath"
+import { errorCode, normalize } from "@romanilyin/canonicalpath/canonicalpath"
 
 export type Directory = string & { readonly _brand: "ServerDirectory" }
 
@@ -42,17 +41,22 @@ export function parse(raw: string, target: Profile = profile()): Directory {
   if (raw.length === 0) throw new ParseError("empty", "Path is empty")
   if (raw.includes("\0")) throw new ParseError("nul", "Path contains NUL")
   if (target.kind === "win32") return parseWindows(raw)
-  if (hasWindowsDriveRoot(raw) || hasWindowsUncRoot(raw)) throw foreignPathError(raw)
+  // Forward-slash roots, including //server/share, are also native POSIX paths.
+  if (hasWindowsDriveRoot(raw) || raw.startsWith("\\\\")) {
+    throw foreignPathError(raw)
+  }
   return raw as Directory
 }
 
 function parseWindows(raw: string): Directory {
-  if (hasPosixRoot(raw)) throw foreignPathError(raw)
-  if (!hasWindowsDriveRoot(raw) && !hasWindowsUncRoot(raw) && !hasWindowsDriveRelative(raw) && !hasUriScheme(raw)) {
+  // A single slash is drive-root-relative on Windows, not evidence of a foreign path.
+  if (!hasWindowsDriveRoot(raw) && !hasWindowsUncRoot(raw) && !hasWindowsDriveRelative(raw)) {
     return raw as Directory
   }
   try {
-    return toWin32(normalize(raw) as CanonicalPath) as Directory
+    // Validate syntax without introducing a new spelling for Location/session keys.
+    normalize(raw)
+    return raw as Directory
   } catch (error) {
     throw toParseError(error)
   }
@@ -68,14 +72,6 @@ function hasWindowsDriveRelative(value: string) {
 
 function hasWindowsUncRoot(value: string) {
   return /^\\\\/.test(value) || /^\/\/(?:[^/]|$)/.test(value)
-}
-
-function hasPosixRoot(value: string) {
-  return value.startsWith("/") && !hasWindowsUncRoot(value)
-}
-
-function hasUriScheme(value: string) {
-  return /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(value)
 }
 
 function foreignPathError(raw: string) {
