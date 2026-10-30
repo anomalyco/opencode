@@ -13,6 +13,7 @@ import type { LocationRef } from "@opencode/client/promise"
 import type { Config } from "../config"
 import { newSessionLocation } from "../config/new-session-location"
 import { errorMessage } from "../util/error"
+import type { CostMessage, CostSession } from "../util/session"
 import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
 import {
   resolveMiniSettings,
@@ -20,6 +21,7 @@ import {
   resolveModelInfoStrict,
   resolveRunTuiConfig,
   resolveSessionInfo,
+  type ModelInfo,
 } from "./runtime.boot"
 import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { cycleVariant, formatModelLabel, resolveVariant } from "./variant.shared"
@@ -118,6 +120,10 @@ type RuntimeState = {
   model: RunInput["model"]
   defaultModel: RunInput["model"]
   providers: RunProvider[]
+  models: ModelInfo["models"]
+  sessionInfo?: CostSession
+  /** Assistant steps observed this run, priced per call by the spend estimate. */
+  estimateMessages: CostMessage[]
   variants: string[]
   activeVariant: string | undefined
   sessionID: string
@@ -195,8 +201,10 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   const log = input.host.diagnostics.trace
   const config = input.config
   const configState: { current: MiniSettings } = { current: resolveMiniSettings() }
+  const experiment = { costEstimate: false }
   const tuiConfigTask = resolveRunTuiConfig(input.tuiConfig, input.host.platform).then((tuiConfig) => {
     configState.current = resolveMiniSettings(tuiConfig)
+    experiment.costEstimate = tuiConfig.experimental?.["cost-estimate"] === true
     return tuiConfig
   })
   const ctx = await input.boot()
@@ -214,6 +222,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     model: ctx.model ?? session.model,
     defaultModel: undefined,
     providers: [],
+    models: [],
+    estimateMessages: [],
     variants: [],
     activeVariant: resolveVariant(ctx.variant, session.variant, savedVariant, []),
     sessionID: "",
@@ -261,6 +271,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
             draft.mini[change.key] = change.value
           })
           configState.current = resolveMiniSettings(info)
+          experiment.costEstimate = info.experimental?.["cost-estimate"] === true
           return configState.current
         }
       : undefined,
@@ -478,6 +489,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         session.history = resumed.history
         session.model = resumed.model
         session.variant = resumed.variant
+        state.sessionInfo = resumed.session
+        state.estimateMessages = resumed.messages ?? []
         state.shown = !resumed.first
         state.history = [...resumed.history]
         state.model = next.model ?? resumed.model
@@ -619,6 +632,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
   ) {
     if (!currentClient(attempt)) return
     state.providers = info.providers
+    state.models = info.models
     const model = state.model ?? state.defaultModel
     state.variants = variantsFor(state.providers, model)
     state.activeVariant = boot
@@ -812,6 +826,20 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         onCatalogRefresh: requestCatalogRefresh,
         contextLimit: (model) =>
           state.providers.find((provider) => provider.id === model.providerID)?.models[model.modelID]?.limit?.context,
+        spend: {
+          enabled: experiment.costEstimate,
+          // A fresh session has no SessionInfo yet; its model still prices the estimate.
+          session:
+            state.sessionInfo ??
+            (state.model && {
+              id: state.sessionID,
+              model: { providerID: state.model.providerID, id: state.model.modelID },
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              time: { created: 0 },
+            }),
+          models: () => state.models,
+          messages: state.estimateMessages,
+        },
       })
       if (footer.isClosed) {
         await handle.close()
@@ -956,6 +984,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
               state.selectSubagent = undefined
               state.shown = false
               state.sessionID = created.sessionID
+              state.sessionInfo = undefined
+              state.estimateMessages = []
               state.sessionTitle = created.sessionTitle
               shell.setTitle(state.sessionTitle)
               state.agent = created.agent ?? state.agent

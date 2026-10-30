@@ -2250,6 +2250,51 @@ test("direct footer shows full usage metadata when room is available", async () 
   }
 })
 
+test("direct footer shows the catalog estimate when the provider reports zero", async () => {
+  const app = await renderFooter({
+    state: { usage: { tokens: 159600, percent: 16, estimate: 4.23 } },
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("159.6K (16%) · ≈ $4.23")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer marks a sub-cent estimate", async () => {
+  const app = await renderFooter({
+    state: { usage: { tokens: 1200, estimate: 0.004 } },
+  })
+
+  try {
+    await app.renderOnce()
+
+    expect(app.captureCharFrame()).toContain("≈ <$0.01")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer keeps the recorded cost over an estimate", async () => {
+  const app = await renderFooter({
+    state: { usage: { tokens: 1200, cost: 0.5, estimate: 4.23 } },
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("$0.50")
+    expect(frame).not.toContain("≈")
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("direct footer keeps model, variant, and usage before the menu and rich stop label", async () => {
   const app = await renderFooter({
     state: { phase: "running", model: "GPT-5.6 SoL", usage: { tokens: 8400, percent: 1, cost: 0.01 } },

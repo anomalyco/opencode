@@ -1,5 +1,6 @@
-import type { ModelInfo, SessionInfo, SessionMessageInfo } from "@opencode/client"
+import type { ModelInfo, SessionMessageInfo } from "@opencode/client"
 import { lastAssistantWithUsage } from "@opencode/client/solid"
+import type { TokenUsage } from "@opencode/schema/token-usage"
 import { Model } from "@opencode/schema/model"
 import { Money } from "@opencode/schema/money"
 import { Locale } from "./locale"
@@ -67,10 +68,34 @@ export function formatContextUsage(tokens: number, percent?: number) {
   return percent === undefined ? value : `${value} (${percent}%)`
 }
 
+/** The session fields pricing needs. Callers without a full `SessionInfo` can supply these. */
+export type CostSession = {
+  readonly id: string
+  readonly model?: { readonly providerID: string; readonly id: string }
+  readonly tokens: TokenUsage.Info
+  readonly cost?: number
+  readonly fork?: unknown
+  readonly time: { readonly created: number }
+}
+
+/** The model fields pricing needs. */
+export type CostModel = {
+  readonly providerID: string
+  readonly id: string
+  readonly cost: ReadonlyArray<ModelInfo["cost"][number]>
+}
+
+/** The message fields pricing needs; every client message carries them. */
+export type CostMessage = {
+  readonly type: string
+  readonly tokens?: TokenUsage.Info
+  readonly time: { readonly created: number }
+}
+
 export function costEstimate(
-  sessions: ReadonlyArray<SessionInfo>,
-  models: ReadonlyArray<ModelInfo> | undefined,
-  messages: (sessionID: string) => ReadonlyArray<SessionMessageInfo>,
+  sessions: ReadonlyArray<CostSession>,
+  models: ReadonlyArray<CostModel> | undefined,
+  messages: (sessionID: string) => ReadonlyArray<CostMessage>,
 ) {
   return sessions.reduce<Money.USD | undefined>((total, session) => {
     if (total === undefined) return

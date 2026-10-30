@@ -108,6 +108,25 @@ describe("run runtime boot", () => {
           },
         },
       ],
+      models: [
+        {
+          id: "gpt-5",
+          modelID: "gpt-5",
+          providerID: "openai",
+          name: "gpt-5",
+          capabilities: {
+            tools: true,
+            input: ["text"],
+            output: ["text"],
+          },
+          variants: [{ id: "high" }, { id: "minimal" }],
+          time: { released: 1 },
+          cost: [{ input: 0, output: 0, cache: { read: 0, write: 0 } }],
+          status: "active",
+          enabled: true,
+          limit: { context: 128_000, output: 8_192 },
+        },
+      ],
     })
     expect(providerList).toHaveBeenCalledWith({
       location: {
