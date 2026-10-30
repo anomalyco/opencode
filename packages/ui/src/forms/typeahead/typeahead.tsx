@@ -5,6 +5,7 @@ import { Icon } from "@opencode/ui/icon"
 import { abort } from "@opencode/util/abort"
 import { useI18n } from "../../context/i18n"
 import { Loader } from "../../feedback/loader/loader"
+import { MenuScroll } from "../../components/menu-scroll"
 import { createTypeahead } from "./controller"
 
 export { createTypeahead } from "./controller"
@@ -165,12 +166,12 @@ export function Typeahead<T>(props: {
             )
           }
         >
-          {/* A stable gutter keeps rows from shifting when the list overflows; the end padding gives way to it. */}
-          <div
+          <MenuScroll
             id={typeahead.listID}
             role="listbox"
-            data-scrollable
-            class="max-h-56 overflow-y-auto py-1 ps-1 pe-[max(0px,calc(4px-var(--scrollbar-size,0px)))] [scrollbar-gutter:stable] empty:hidden"
+            class="max-h-56"
+            viewportClass="p-1"
+            classList={{ hidden: results().items.length === 0 }}
           >
             <For each={results().items}>
               {(item) => (
@@ -195,7 +196,7 @@ export function Typeahead<T>(props: {
                 </div>
               )}
             </For>
-          </div>
+          </MenuScroll>
           {/* Stays mounted while a retry or a newer query is pending, so the list never collapses to nothing. */}
           <Show when={results().items.length === 0}>
             <div

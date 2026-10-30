@@ -58,7 +58,7 @@ test("the new session screen does not show session details", async ({ page }) =>
   await expect(page.getByRole("button", { name: "Session details", exact: true })).toHaveCount(0)
 })
 
-test("the location shortcut keeps cycling after hovering its icon", async ({ page }) => {
+test("the location shortcuts choose worktrees from every state and keep cycling", async ({ page }) => {
   const existing = "C:/OpenCode/LocationShortcut/.worktrees/quiet-river"
 
   const view = await openDraft(page, {
@@ -67,26 +67,218 @@ test("the location shortcut keeps cycling after hovering its icon", async ({ pag
   })
 
   const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
-  const path = page.locator('[data-slot="new-session-location-path"]')
-  const icon = page.locator('[data-slot="new-session-location-icon"]')
 
-  // The worktree trigger already says Local, so the local path has no icon of its own.
+  const path = page.locator('[data-slot="new-session-location-path"]')
+
+  const tooltip = page.getByRole("tooltip").and(page.locator("[data-expanded]"))
+
   await expect(path).toHaveText(view.directory)
-  await expect(icon).toHaveCount(0)
-  await newSessionWorktree(page).click()
+  await newSessionLocation(page).hover()
+  await expect(tooltip).toContainText("Choose project")
+  await expect(tooltip.locator('[data-component="keybind-v2"]')).toContainText("O")
+  await newSessionWorktree(page).hover()
+  await expect(tooltip).toContainText("Isolate sessions with worktrees")
+  await expect(tooltip).not.toContainText("Cycle session location")
+  await expect(tooltip.locator('[data-component="keybind-v2"]')).toHaveText([/O$/])
+  await view.editor.press(`${modifier}+Alt+KeyO`)
+
+  const search = page.getByRole("combobox", { name: "Search worktrees", exact: true })
+
+  await expect(search).toBeFocused()
+  await search.press("Escape")
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(view.editor).toBeFocused()
+  await expect(path).toHaveText(view.directory)
+  await view.editor.press(`${modifier}+Alt+KeyO`)
+  await expect(search).toBeFocused()
   await page.getByRole("option", { name: /^quiet-river / }).click()
   await expect(view.editor).toBeFocused()
   await expect(path).toHaveText(existing)
-  await icon.hover()
-  await expect(page.getByRole("tooltip")).toContainText("Toggle session location")
+  await expect(page.locator('[data-slot="new-session-location-icon"]')).toHaveCount(0)
+  await newSessionWorktree(page).hover()
+  await expect(tooltip).toContainText("Choose worktree")
+  await expect(tooltip).not.toContainText("Cycle session location")
+  await expect(tooltip.locator('[data-component="keybind-v2"]')).toHaveText([/O$/])
+  await view.editor.press(`${modifier}+Alt+KeyO`)
+  await expect(search).toBeFocused()
+  await search.press("Escape")
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(view.editor).toBeFocused()
+  await expect(path).toHaveText(existing)
   await view.editor.press(`${modifier}+Alt+KeyL`)
   await expect(newSessionWorktree(page)).toHaveText("Local")
-  await expect(icon).toHaveCount(0)
   await expect(view.editor).toBeFocused()
   await view.editor.press(`${modifier}+Alt+KeyL`)
   await expect(newSessionWorktree(page)).toContainText("New worktree")
   await expect(view.editor).toBeFocused()
+  await view.editor.press(`${modifier}+Alt+KeyO`)
+  await expect(search).toBeFocused()
+  await search.fill("quiet")
+  await search.press("Escape")
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(newSessionWorktree(page)).toContainText("New worktree")
+  await expect(view.editor).toBeFocused()
+  await view.editor.press(`${modifier}+Alt+KeyO`)
+  await expect(search).toBeFocused()
+  await page.getByRole("option", { name: /^quiet-river / }).click()
+  await expect(path).toHaveText(existing)
+  await expect(view.editor).toBeFocused()
 })
+
+for (const binding of ["custom", "none"]) {
+  test(`the picker tooltips reflect ${binding} shortcuts`, async ({ page }) => {
+    const view = await openDraft(page, {
+      name: "PickerShortcuts",
+      seed: {
+        settings: {
+          keybinds: {
+            "project.select": binding === "custom" ? "mod+alt+p" : "none",
+            "session.location.select": binding === "custom" ? "mod+alt+x" : "none",
+            "session.location.cycle": binding === "custom" ? "mod+alt+k" : "none",
+          },
+        },
+      },
+    })
+
+    const tooltip = page.getByRole("tooltip").and(page.locator("[data-expanded]"))
+
+    const keys = tooltip.locator('[data-component="keybind-v2"]')
+
+    await newSessionLocation(page).hover()
+    await expect(tooltip).toContainText("Choose project")
+
+    await expect(keys).toHaveText(binding === "custom" ? [/P$/] : [])
+    await newSessionWorktree(page).hover()
+    await expect(tooltip).toContainText("Isolate sessions with worktrees")
+
+    await expect(keys).toHaveText(binding === "custom" ? [/X$/] : [])
+
+    const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+    if (binding === "none") {
+      await view.editor.press(`${modifier}+Alt+o`)
+      await expect(page.getByRole("dialog")).toHaveCount(0)
+      await expect(newSessionWorktree(page)).toHaveText("Local")
+
+      return
+    }
+
+    await view.editor.press(`${modifier}+Alt+k`)
+    await expect(newSessionWorktree(page)).toContainText("New worktree")
+    await view.editor.press(`${modifier}+Alt+x`)
+    const search = page.getByRole("combobox", { name: "Search worktrees", exact: true })
+
+    await expect(search).toBeFocused()
+    await search.press("Escape")
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(newSessionWorktree(page)).toContainText("New worktree")
+    await expect(view.editor).toBeFocused()
+    await view.editor.press(`${modifier}+Alt+p`)
+    await expect(page.getByRole("combobox", { name: "Search projects", exact: true })).toBeFocused()
+  })
+}
+
+test("the worktree picker shortcut is disabled for non-Git projects", async ({ page }) => {
+  const view = await openDraft(page, { name: "NoWorktrees", project: { vcs: undefined } })
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+  await expect(newSessionWorktree(page)).toHaveCount(0)
+  await view.editor.press(`${modifier}+Alt+o`)
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await view.editor.fill("Keep working locally")
+  await expect(view.editor).toHaveText("Keep working locally")
+})
+
+for (const direction of ["ltr", "rtl"]) {
+  test(`picker scrollbars overlay full-width rows and support dragging in ${direction}`, async ({ page }) => {
+    const root = "C:/OpenCode/OverlayMenus"
+
+    const worktrees = Array.from({ length: 24 }, (_, index) => ({
+      directory: `${root}/worktree-${index}`,
+      strategy: "git" as const,
+    }))
+
+    await openDraft(page, {
+      name: "OverlayMenus",
+      vcs: () => ({ current: "dev", default: "main" }),
+      worktrees: () => [{ directory: root }, ...worktrees],
+      branches: () => ["dev", ...Array.from({ length: 24 }, (_, index) => `branch-${index}`)],
+    })
+    await page.evaluate((dir) => document.documentElement.setAttribute("dir", dir), direction)
+    await newSessionWorktree(page).click()
+
+    const worktreeSearch = page.getByRole("combobox", { name: "Search worktrees", exact: true })
+
+    await expect(worktreeSearch).toBeFocused()
+
+    for (const kind of ["worktree", "branch"]) {
+      const menu = page.locator('[data-component="menu-scroll"]')
+
+      const viewport = menu.locator('[data-slot="menu-scroll-viewport"]')
+
+      const thumb = menu.locator('[data-slot="menu-scroll-thumb"]')
+
+      const last = page.getByRole("option", {
+        name: kind === "worktree" ? /^worktree-23 / : "branch-23",
+        exact: kind === "branch",
+      })
+
+      await menu.hover()
+      await expect(thumb).toHaveCSS("opacity", "1")
+      await expect.poll(() => viewport.evaluate((el) => el.getBoundingClientRect().width - el.clientWidth)).toBe(0)
+
+      const track = (await menu.boundingBox())!
+
+      const handle = (await thumb.boundingBox())!
+
+      expect(direction === "rtl" ? handle.x - track.x : track.x + track.width - handle.x - handle.width).toBe(0)
+      await thumb.hover()
+      await page.mouse.down()
+      await page.mouse.move(handle.x + handle.width / 2, track.y + track.height - 4, { steps: 8 })
+      await page.mouse.up()
+      await expect.poll(() => viewport.evaluate((el) => el.scrollTop > 0)).toBe(true)
+      await expect(last).toBeInViewport()
+
+      const search =
+        kind === "worktree" ? worktreeSearch : page.getByRole("combobox", { name: "Search branches", exact: true })
+
+      await search.fill(kind === "worktree" ? "worktree-23" : "branch-23")
+      await expect(page.getByRole("option")).toHaveCount(1)
+      await expect(thumb).toHaveCount(0)
+      await expect.poll(() => viewport.evaluate((el) => el.getBoundingClientRect().width - el.clientWidth)).toBe(0)
+      await search.fill("no matching result")
+      await expect(page.getByRole("option")).toHaveCount(0)
+      await search.fill("")
+      await expect(thumb).toHaveCount(1)
+      await menu.hover()
+      await thumb.hover()
+      await page.mouse.down()
+      await expect(thumb).toHaveAttribute("data-dragging", "")
+      await search.fill(kind === "worktree" ? "worktree-23" : "branch-23")
+      await expect(thumb).toHaveCount(0)
+      await page.mouse.up()
+      await search.fill("no matching result")
+      await expect(page.getByRole("option")).toHaveCount(0)
+      await search.fill("")
+      await expect(thumb).toHaveCount(1)
+      await expect(thumb).not.toHaveAttribute("data-dragging")
+      await expect(
+        page.getByRole("option", {
+          name: kind === "worktree" ? /OverlayMenus C:\/OpenCode\/OverlayMenus$/ : "dev",
+          exact: kind === "branch",
+        }),
+      ).toHaveAttribute("aria-selected", "true")
+      await search.press("ArrowUp")
+      await expect(last).toBeInViewport()
+
+      if (kind === "branch") continue
+      await page.getByRole("option", { name: /^New worktree/ }).click()
+      await page.getByRole("button", { name: "from dev", exact: true }).click()
+      await expect(page.getByRole("combobox", { name: "Search branches", exact: true })).toBeFocused()
+    }
+  })
+}
 
 for (const row of [
   {
@@ -108,6 +300,34 @@ for (const row of [
     await expect.poll(() => path.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
     await path.hover()
     await expect(page.getByRole("tooltip")).toHaveText(row.directory)
+
+    if (row.name !== "POSIX") return
+    await path.click()
+    await path.evaluate((element) => {
+      const range = document.createRange()
+
+      range.selectNodeContents(element)
+      window.getSelection()?.removeAllRanges()
+      window.getSelection()?.addRange(range)
+    })
+    const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+    await page.keyboard.press(`${modifier}+c`)
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(row.directory)
+
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await expect(path).toHaveText(row.directory)
+    await expect(path).toHaveCSS("user-select", "text")
+    await path.click()
+    const bounds = (await path.boundingBox())!
+
+    await page.mouse.move(bounds.x, bounds.y + bounds.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(bounds.x + bounds.width, bounds.y + bounds.height / 2, { steps: 8 })
+    await page.mouse.up()
+    await expect.poll(() => page.evaluate(() => getSelection()?.toString())).toBe(row.directory)
+    await page.keyboard.press(`${modifier}+c`)
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(row.directory)
   })
 }
 
@@ -234,11 +454,7 @@ test("the worktree trigger opens the current project's worktree step", async ({ 
   await local.click()
   await expect(search).toBeFocused()
   await expect(back).toHaveText("Run session in")
-  await expect(options.locator(".command-palette-title")).toHaveText([
-    "BranchWorktrees",
-    "New worktree",
-    "quiet-river",
-  ])
+  await expect(options.locator(".command-palette-title")).toHaveText(["BranchWorktrees", "New worktree", "quiet-river"])
   await expect(options.nth(0)).toHaveAttribute("aria-selected", "true")
 
   // Stepping back lands on the projects step with the drilled project active, as after drilling in with →.
@@ -247,13 +463,26 @@ test("the worktree trigger opens the current project's worktree step", async ({ 
   await expect(projects).toBeFocused()
   await expect(back).toHaveCount(0)
   await expect(options.filter({ hasText: "BranchWorktrees" })).toHaveAttribute("aria-selected", "true")
+  await projects.press("ArrowRight")
+  await expect(search).toBeFocused()
+  await search.press("Escape")
+  await expect(projects).toBeFocused()
   await projects.press("Escape")
   await expect(dialog).toHaveCount(0)
   await expect(view.editor).toBeFocused()
 
-  // Escape also steps back first, then closes.
+  // A directly opened worktree picker closes on Escape without showing projects first.
   await local.focus()
   await page.keyboard.press("Enter")
+  await expect(search).toBeFocused()
+  await search.press("Escape")
+  await expect(dialog).toHaveCount(0)
+  await expect(view.editor).toBeFocused()
+
+  // Drilling in from the project picker still makes Escape step back.
+  await newSessionLocation(page).click()
+  await expect(projects).toBeFocused()
+  await projects.press("ArrowRight")
   await expect(search).toBeFocused()
   await search.press("Escape")
   await expect(projects).toBeFocused()
@@ -277,7 +506,7 @@ test("the branch shortcut chooses a base branch and stays inactive on Local", as
 
   const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
 
-  const shortcut = `${modifier}+Alt+Period`
+  const shortcut = `${modifier}+Alt+KeyB`
 
   const base = page.getByRole("button", { name: "from dev", exact: true })
 
@@ -285,7 +514,7 @@ test("the branch shortcut chooses a base branch and stays inactive on Local", as
 
   await base.hover()
   await expect(page.getByRole("tooltip")).toContainText("Choose base branch")
-  await expect(page.getByRole("tooltip").locator('[data-component="keybind-v2"]')).toContainText(".")
+  await expect(page.getByRole("tooltip").locator('[data-component="keybind-v2"]')).toContainText("B")
   await expect(view.editor).toBeFocused()
   await view.editor.press(shortcut)
   await expect(search).toBeFocused()
