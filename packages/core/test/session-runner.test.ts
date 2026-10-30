@@ -2187,6 +2187,15 @@ describe("SessionRunnerLLM", () => {
       fakeIdentity,
       ["Initial context", "", '<context key="deploy-target">', "production", "</context>"].join("\n"),
     ])
+    // Each source stays keyed, so a provider can leave out what its own harness already supplies.
+    // `testLLM` strips the empty Code Mode notice from the text only.
+    expect(s.requests[0]?.system.at(-1)?.metadata?.experimental).toEqual({
+      instructions: [
+        expect.objectContaining({ key: "core/codemode" }),
+        { key: "test/context", text: "Initial context" },
+        { key: "api/deploy-target", text: '<context key="deploy-target">\nproduction\n</context>' },
+      ],
+    })
 
     // Non-string JSON pretty-prints; the change narrates as a System update.
     yield* contextEntries.put({ sessionID, key: "deploy-target", value: { region: "us-east-1" } })

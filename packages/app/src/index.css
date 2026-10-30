@@ -136,13 +136,27 @@
     }
   }
 
-  ::highlight(timeline-search-hit) {
-    background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+  /* Root rules reach every element where highlights inherit; see quote-highlight.css in session-ui. */
+  @supports selector(:host-context(*)) {
+    :root::highlight(timeline-search-hit) {
+      background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+    }
+
+    :root::highlight(timeline-search-hit-active) {
+      background-color: var(--v2-icon-icon-accent);
+      color: var(--v2-background-bg-deep);
+    }
   }
 
-  ::highlight(timeline-search-hit-active) {
-    background-color: var(--v2-icon-icon-accent);
-    color: var(--v2-background-bg-deep);
+  @supports not selector(:host-context(*)) {
+    ::highlight(timeline-search-hit) {
+      background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+    }
+
+    ::highlight(timeline-search-hit-active) {
+      background-color: var(--v2-icon-icon-accent);
+      color: var(--v2-background-bg-deep);
+    }
   }
 
   [data-component="menu-v2-content"].desktop-app-menu {

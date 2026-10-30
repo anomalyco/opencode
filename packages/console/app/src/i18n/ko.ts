@@ -113,7 +113,8 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "또한",
   "home.faq.a3.p4.localLink": "로컬 모델",
   "home.faq.q4": "기존 AI 구독을 OpenCode에서 사용할 수 있나요?",
-  "home.faq.a4.p1": "네, ChatGPT Plus/Pro 또는 GitHub Copilot 구독을 사용할 수 있습니다.",
+  "home.faq.a4.p1":
+    "네, ChatGPT Plus/Pro 또는 GitHub Copilot 구독을 사용할 수 있으며, Claude Code를 통해 Claude 구독도 사용할 수 있습니다.",
   "home.faq.q5": "OpenCode는 터미널에서만 사용할 수 있나요?",
   "home.faq.a5.beforeDesktop": "이제 아닙니다! OpenCode는 이제",
   "home.faq.a5.desktop": "데스크톱",
