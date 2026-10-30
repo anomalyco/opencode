@@ -261,8 +261,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   const clientScoped = input.status === undefined || (input.status >= 400 && input.status < 500)
 
   if (
-    // Gateways can pass an upstream overflow on as a 5xx, e.g. LiteLLM's mid-stream fallback.
-    (input.status === undefined || input.status >= 400) &&
+    clientScoped &&
     (codes.includes("context_length_exceeded") ||
       codes.includes("model_context_window_exceeded") ||
       codes.includes("request_too_large") ||

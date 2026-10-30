@@ -49,20 +49,6 @@ describe("provider error classification", () => {
     )
   })
 
-  test("classifies an overflow a gateway reports as a server error as context overflow", () => {
-    // LiteLLM wraps an upstream overflow in a 503 when it falls back mid-stream.
-    expect(
-      classifyProviderFailure({
-        message:
-          "litellm.ServiceUnavailableError: litellm.MidStreamFallbackError: litellm.APIConnectionError: APIConnectionError: OpenAIException - Requested token count exceeds the model's maximum context length of 131072 tokens.",
-        status: 503,
-      }),
-    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
-    expect(classifyProviderFailure({ message: "Service temporarily unavailable", status: 503 })._tag).toBe(
-      "ProviderInternal",
-    )
-  })
-
   test("does not classify rate limits as context overflow", () => {
     const messages = [
       "Throttling error: Too many tokens, please wait before trying again.",
