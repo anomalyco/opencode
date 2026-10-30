@@ -284,13 +284,10 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     }
 
     function setHidden(key: ServerConnection.Key, hidden: boolean) {
-      batch(() => {
-        // A server shown only because every one is hidden stays shown when another is toggled.
-        unhideShown(allServers())
-        setStore("hidden", key, hidden)
-        // Hiding the only shown server is a no-op.
-        unhideShown(allServers())
-      })
+      // Home always lists at least one server, so hiding the only shown one does nothing.
+      if (hidden && visibleServers().every((conn) => ServerConnection.key(conn) === key)) return
+
+      setStore("hidden", key, hidden)
     }
 
     function canRemove(key: ServerConnection.Key) {
