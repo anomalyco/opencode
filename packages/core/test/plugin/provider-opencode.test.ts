@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { LLM } from "@opencode/ai/effect"
+import { ai } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
@@ -13,7 +13,6 @@ import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { ConfigIntegration } from "@opencode/core/config/integration"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
-import { ConfigManaged } from "@opencode/core/config/managed"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigWebSearchPlugin } from "@opencode/core/config/plugin/websearch"
 import { Credential } from "@opencode/core/credential"
@@ -1574,7 +1573,7 @@ describe("OpencodePlugin", () => {
               })
               expect(projected.settings).toBeUndefined()
               const resolved = yield* ModelResolver.resolveModel(model, Model.VariantID.make(variant.id), credential)
-              yield* LLMClient.stream(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+              yield* LLMClient.stream(ai.request({ model: resolved, prompt: "Hello" })).pipe(
                 Stream.runDrain,
                 Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer))),
               )
@@ -1901,7 +1900,7 @@ describe("OpencodePlugin with a Console config", () => {
     ),
   )
 
-  it.live("keeps Console providers out of user and project config's reach, bound to the Console connection", () =>
+  it.live("layers Console providers below user config, bound to the Console connection", () =>
     Effect.acquireUseRelease(
       Effect.sync(() =>
         Bun.serve({
@@ -1930,23 +1929,17 @@ describe("OpencodePlugin with a Console config", () => {
           const providers = yield* Provider.Service
           const models = yield* Model.Service
           const config = yield* Config.Test
-          const overlay = {
-            name: "Mine",
-            settings: { apiKey: "my-key", baseURL: "https://mine.example/v1" },
-            headers: { "x-org-id": "mine" },
-            models: { chat: { name: "My Chat" }, mine: { name: "My Model" } },
-          }
           yield* config.setEntries([
-            new ConfigManaged.Document({
-              type: "document",
-              info: Schema.decodeUnknownSync(Info)({ providers: { remote: { headers: { "x-managed": "true" } } } }),
-            }),
             new Document({
               type: "document",
               info: Schema.decodeUnknownSync(Info)({
                 providers: {
-                  remote: overlay,
-                  normal: { ...overlay, package: "aisdk:@ai-sdk/openai-compatible" },
+                  remote: {
+                    name: "Mine",
+                    settings: { apiKey: "my-key" },
+                    headers: { "x-org-id": "mine" },
+                    models: { chat: { name: "My Chat" } },
+                  },
                 },
               }),
             }),
@@ -1959,26 +1952,22 @@ describe("OpencodePlugin with a Console config", () => {
           yield* OpencodePlugin.effect(host)
           yield* ConfigProviderPlugin.Plugin.effect(host)
 
-          // Managed configuration may still shape a Console provider; a project or user file cannot.
           const provider = required(yield* providers.get(Provider.ID.make("remote")))
-          expect(provider.name).toBe("Console")
+          expect(provider.name).toBe("Mine")
           expect(provider.integrationID).toBe(Integration.ID.make("opencode"))
-          expect(provider.headers).toEqual({ "x-org-id": "console", "x-console": "true", "x-managed": "true" })
+          expect(provider.headers).toEqual({ "x-org-id": "mine", "x-console": "true" })
           expect(provider.settings).toEqual({
             baseURL: `${server.url.origin}/v1`,
             custom: "console",
+            apiKey: "my-key",
             provider: "remote",
           })
           const chat = required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("chat")))
-          expect(chat.name).toBe("Console Chat")
+          expect(chat.name).toBe("My Chat")
           expect(chat.settings).toMatchObject({ temperature: 0.1 })
-          expect(yield* models.get(Provider.ID.make("remote"), Model.ID.make("mine"))).toBeUndefined()
-
-          // Providers the Console does not supply stay overridable.
-          const normal = required(yield* providers.get(Provider.ID.make("normal")))
-          expect(normal.headers).toEqual({ "x-org-id": "mine" })
-          expect(normal.settings).toMatchObject({ baseURL: "https://mine.example/v1", apiKey: "my-key" })
-          expect(required(yield* models.get(Provider.ID.make("normal"), Model.ID.make("chat"))).name).toBe("My Chat")
+          expect(required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("other"))).name).toBe(
+            "Console Other",
+          )
         }),
       (server) => Effect.promise(() => server.stop(true)),
     ),

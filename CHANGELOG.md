@@ -10,14 +10,8 @@ Release notes for OpenCode V2, newest first.
 - **Faster Long Sessions in Desktop**: Streaming replies and long conversations now do much less rendering work. ([#60489](https://github.com/anomalyco/opencode/pull/60489), [#60521](https://github.com/anomalyco/opencode/pull/60521), [#60513](https://github.com/anomalyco/opencode/pull/60513), [#60481](https://github.com/anomalyco/opencode/pull/60481))
 - **Desktop Stability Fixes**: Fixes side-panel tabs, repeated "Session not found" toasts, and **Open file** over HTTP. ([#60430](https://github.com/anomalyco/opencode/pull/60430), [#60436](https://github.com/anomalyco/opencode/pull/60436), [#60459](https://github.com/anomalyco/opencode/pull/60459), [#60462](https://github.com/anomalyco/opencode/pull/60462))
 
+
 ### Breaking changes
-
-#### `@opencode/ai` experimental media and one `tool()`
-
-These changes affect code that imports `@opencode/ai` directly. They don't change the CLI, Desktop, or the HTTP API.
-
-- Speech, transcription, video, and their clients and types moved from `@opencode/ai/effect` to `@opencode/ai/experimental`. On the Promise client, use `ai.experimental.speech`, `ai.experimental.transcription`, and `ai.experimental.video`. `TestSpeech`, `TestTranscription`, and `TestVideo` moved to `@opencode/ai/experimental/testing`. ([#60484](https://github.com/anomalyco/opencode/pull/60484))
-- Both clients build tools with `tool(...)`, which replaces `AI.tool` and `Tool.make`, and `testing.tool` is now `testing.toolCall`. ([#60407](https://github.com/anomalyco/opencode/pull/60407))
 
 #### TUI plugins require OpenTUI 0.8
 

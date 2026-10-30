@@ -1,5 +1,5 @@
 import type { OpenCodeEvent } from "@opencode/client/promise"
-import { createClientConnection, createPtyClient, type ClientConnectionStatus } from "@opencode/client/solid"
+import { createClientConnection, type ClientConnectionStatus } from "@opencode/client/solid"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { type Accessor, createEffect, on, onCleanup } from "solid-js"
 import { createApiForServer, type ServerApi } from "@/runtime/server/api"
@@ -68,7 +68,6 @@ type ServerSDKBase = {
   http: ServerConnection.HttpBase
   api: ServerApi
   media: MediaCache
-  pty: ReturnType<typeof createPtyClient>
   connection: {
     status: Accessor<ServerConnectionStatus>
     attempt: Accessor<number>
@@ -136,9 +135,6 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
       return transport.api
     },
     media,
-    get pty() {
-      return transport.pty
-    },
     connection,
     event: events.event,
   }
@@ -163,9 +159,9 @@ function sameEndpoint(a: ServerConnection.HttpBase, b: ServerConnection.HttpBase
   return a.url === b.url && a.password === b.password
 }
 
-/** A server's HTTP and PTY clients, rebuilt when its endpoint changes. */
+/** A server's HTTP client, rebuilt when its endpoint changes. */
 export interface ServerTransport {
-  /** Rebuilds the clients for a new endpoint and returns the new API client. */
+  /** Rebuilds the client for a new endpoint and returns it. */
   update(http: ServerConnection.HttpBase): ServerApi
   /** The current base URL. */
   readonly url: string
@@ -173,8 +169,6 @@ export interface ServerTransport {
   readonly http: ServerConnection.HttpBase
   /** The current API client. */
   readonly api: ServerApi
-  /** The current PTY client. */
-  readonly pty: ReturnType<typeof createPtyClient>
 }
 
 export function createServerTransport(input: {
@@ -184,12 +178,11 @@ export function createServerTransport(input: {
   const queue = createRequestQueue({ fetch: input.fetch ?? globalThis.fetch })
 
   // Keeps the endpoint as plain values: a plugin's endpoint can be a store proxy that already reads the next password,
-  // and the clients built here keep the one they started with.
+  // and the client built here keeps the one it started with.
   const build = (input: ServerConnection.HttpBase) => {
     const http = { url: input.url, password: input.password }
-    const api = createApiForServer({ server: http, fetch: queue.fetch })
 
-    return { http, api, pty: createPtyClient(api, { url: http.url }) }
+    return { http, api: createApiForServer({ server: http, fetch: queue.fetch }) }
   }
 
   const state = { current: build(input.http) }
@@ -209,9 +202,6 @@ export function createServerTransport(input: {
     },
     get api() {
       return state.current.api
-    },
-    get pty() {
-      return state.current.pty
     },
   }
 }

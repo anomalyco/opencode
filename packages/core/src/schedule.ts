@@ -1,7 +1,8 @@
 export * as Schedule from "./schedule.js"
 
-import { and, asc, eq, gt, isNull, lte, min, or } from "drizzle-orm"
-import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schema } from "effect"
+import { randomUUID } from "node:crypto"
+import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
+import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schedule as EffectSchedule, Schema } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import {
@@ -23,6 +24,7 @@ import { Config } from "./config.js"
 import { Database } from "./database/database.js"
 import { FileSystem } from "./filesystem.js"
 import { Instance } from "./instance/service.js"
+import { KVTable } from "./kv/sql.js"
 import type { Permission } from "./permission.js"
 import { Session } from "./session.js"
 import { SessionExecution } from "./session/execution.js"
@@ -70,8 +72,9 @@ export interface Interface {
   /** Fires every schedule that is due now, at most once each. */
   readonly tick: Effect.Effect<void>
   /**
-   * Runs `tick` whenever a schedule falls due, until interrupted. All state lives in the table, so exactly one
-   * process may run this: the managed server.
+   * Runs `tick` whenever a schedule falls due, until interrupted. Elects at most one active leader per SQLite
+   * database via a lease row, so auxiliary processes (`opencode acp`, `--standalone`) sharing a data directory
+   * never double-fire alongside a managed service.
    */
   readonly run: Effect.Effect<never>
 }
@@ -90,6 +93,8 @@ const DEFAULT_UNTIL_AFTER = 24 * HOUR
 const LATE_AFTER = 60_000
 /** The loop re-reads the table at least this often, so clock jumps and missed doorbells are caught. */
 const MAX_SLEEP = 30_000
+const LEADER_KEY = "schedule:leader"
+const LEADER_TTL = 2 * MAX_SLEEP
 /** How long a due schedule waits before its location's flag is read again, while schedules are off there. */
 const DISABLED_RETRY = HOUR
 /** How long a schedule whose prompt failed waits before trying again. */
@@ -442,6 +447,7 @@ const layer = Layer.effect(
     const step = Effect.fnUntraced(function* (row: Row, now: number) {
       const due = row.next_due_at
       if (due === null || row.session_id === null) return
+      if (!(yield* claimLeader(yield* Clock.currentTimeMillis))) return
       const session = yield* sessions.get(row.session_id)
       if (!(yield* settings(session)).enabled) {
         // Reading the flag boots the Session's location, so check again in an hour rather than every tick. The row
@@ -538,18 +544,98 @@ const layer = Layer.effect(
         ),
       )
 
+    const hasActiveRows = db
+      .select({ id: ScheduleTable.id })
+      .from(ScheduleTable)
+      .where(eq(ScheduleTable.status, "active"))
+      .limit(1)
+      .get()
+      .pipe(
+        Effect.orDie,
+        Effect.map((row) => row !== undefined),
+      )
+
+    const ownerID = randomUUID()
+    let leading = false
+    let bootChecked = false
+
+    const claimLeader = Effect.fnUntraced(function* (now: number) {
+      const value = { owner: ownerID, until: now + LEADER_TTL }
+      const claimed = yield* db
+        .insert(KVTable)
+        .values({ key: LEADER_KEY, value, time_created: now, time_updated: now })
+        .onConflictDoUpdate({
+          target: KVTable.key,
+          set: { value, time_updated: now },
+          where: sql`json_extract(${KVTable.value}, '$.owner') = ${ownerID} or json_extract(${KVTable.value}, '$.until') <= ${now}`,
+        })
+        .returning({ key: KVTable.key })
+        .get()
+        .pipe(Effect.orDie)
+      return claimed !== undefined
+    })
+
+    const releaseLeader = Effect.sync(() => {
+      leading = false
+    }).pipe(
+      Effect.andThen(
+        db
+          .delete(KVTable)
+          .where(and(eq(KVTable.key, LEADER_KEY), sql`json_extract(${KVTable.value}, '$.owner') = ${ownerID}`))
+          .run()
+          .pipe(Effect.ignore),
+      ),
+    )
+
+    const heartbeat = Clock.currentTimeMillis.pipe(
+      Effect.flatMap(claimLeader),
+      Effect.ignore,
+      Effect.schedule(EffectSchedule.spaced(LEADER_TTL / 3)),
+    )
+
     const loop = Effect.gen(function* () {
       yield* doorbell.close
+      const active = yield* hasActiveRows
+      if (!active && bootChecked) {
+        if (leading) yield* releaseLeader
+        yield* doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
+        return
+      }
       const now = yield* Clock.currentTimeMillis
-      yield* tickAt(now).pipe(Effect.catchCause((cause) => Effect.logError("schedule tick failed", { cause })))
+      const isLeader = yield* claimLeader(now)
+      if (!isLeader) {
+        leading = false
+        bootChecked = true
+        yield* doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
+        return
+      }
+      if (!leading) {
+        leading = true
+        bootChecked = true
+        yield* rewake.pipe(Effect.catchCause((cause) => Effect.logError("schedule rewake failed", { cause })))
+      }
+      if (!active) {
+        yield* releaseLeader
+        yield* doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
+        return
+      }
+      yield* Effect.scoped(
+        Effect.forkScoped(heartbeat).pipe(
+          Effect.andThen(
+            tickAt(now).pipe(Effect.catchCause((cause) => Effect.logError("schedule tick failed", { cause }))),
+          ),
+        ),
+      )
+      if (!(yield* hasActiveRows)) {
+        yield* releaseLeader
+        yield* doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
+        return
+      }
       const wait = yield* nextWake(now)
       if (wait > 0) yield* doorbell.await.pipe(Effect.timeoutOption(wait))
     })
 
-    const run = rewake.pipe(
-      Effect.catchCause((cause) => Effect.logError("schedule rewake failed", { cause })),
-      Effect.andThen(Effect.forever(loop)),
-    )
+    const run = Effect.forever(loop).pipe(Effect.ensuring(releaseLeader))
 
     const resolveZone = (tz: string | undefined) => {
       if (tz === undefined) return Effect.succeed(DateTime.zoneMakeLocal())

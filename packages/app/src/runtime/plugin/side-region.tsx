@@ -255,8 +255,9 @@ export function PaneTabs(props: {
           selectionEvent.target instanceof Element &&
           selectionEvent.target.closest('[role="tab"]')
         ) {
-          props.region.newTabs(props.pane.id).forEach((entry) => props.region.dismissNewTab(entry.id))
+          // Select first: dismissing the only New tab with nothing selected lets Kobalte pick the first tab meanwhile.
           props.region.select(value)
+          props.region.newTabs(props.pane.id).forEach((entry) => props.region.dismissNewTab(entry.id))
         }
       }}
     >

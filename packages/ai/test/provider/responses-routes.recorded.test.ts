@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM, LLMEvent, toDefinitions } from "../../src/effect.js"
+import { ai, LLMEvent, toDefinitions } from "../../src/effect.js"
 import { DigitalOcean, OpenRouter, Venice } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { tool } from "../../src/tool.js"
@@ -48,7 +48,7 @@ for (const item of [
   recorded.effect.with("streams text", { tags: ["text", "usage"] }, () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({ model: item.model, prompt: "Reply exactly: OK", generation: { maxTokens: 64 } }),
+        ai.request({ model: item.model, prompt: "Reply exactly: OK", generation: { maxTokens: 64 } }),
       )
       expect(response.text.trim()).toMatch(/^OK\.?$/)
       expect(response.events.some(LLMEvent.is.textDelta)).toBe(true)
@@ -74,7 +74,7 @@ for (const item of [
   recorded.effect.with("calls a freeform text tool", { tags: ["tool", "freeform"] }, () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: item.model,
           prompt: "Use the run tool to execute exactly this code: print(1)",
           tools: run,
