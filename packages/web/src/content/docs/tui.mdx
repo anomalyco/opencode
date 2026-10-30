@@ -412,8 +412,36 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
+- `syntax` - Controls syntax highlighting in tool calls. [Learn more](#syntax-highlighting).
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Syntax highlighting
+
+Tool calls are colored by language. Each part can be turned off under `syntax`:
+
+```json title="tui.json"
+{
+  "syntax": {
+    "bash": false
+  }
+}
+```
+
+- `bash` - Color the bash tool's command as shell code. Defaults to `true`.
+- `tool_output` - Color plugin and MCP tool output, by tool name. Keys are tool names or globs (`*` matches any run of characters, `?` one); values are a language id such as `json`, `yaml` or `markdown`, `auto`, or `none`. An exact name wins over any glob, and the glob with the most literal characters wins over the others. `auto` colors output that is a JSON object or array and leaves anything else plain. Output over 100,000 characters stays plain. Unset by default, which leaves all output plain. Colored output wraps exactly as the plain text does.
+
+```json title="tui.json"
+{
+  "syntax": {
+    "tool_output": {
+      "browser": "json",
+      "todo_*": "none",
+      "*": "auto"
+    }
+  }
+}
+```
 
 ### Attention
 
