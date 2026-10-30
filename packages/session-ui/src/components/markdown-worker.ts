@@ -1,12 +1,13 @@
 import {
   applyMarkdownWorkerResponse,
+  applyProjectionBlocks,
   shouldReleaseMarkdownWorkerState,
   type MarkdownWorkerRequest,
   type MarkdownWorkerResponse,
   type MarkdownWorkerState,
 } from "./markdown-worker-protocol"
 import { createWorkerTransport } from "./markdown-worker-transport"
-import type { Projection } from "./markdown-stream"
+import type { Block, Projection } from "./markdown-stream"
 
 type HighlightPending = {
   key: string
@@ -17,6 +18,7 @@ type HighlightPending = {
 
 type ProjectPending = {
   key: string
+  text: string
   resolve: (projection: Projection) => void
   reject: (error: Error) => void
 }
@@ -37,6 +39,9 @@ const pending = new Map<number, HighlightPending>()
 const projects = new Map<number, ProjectPending>()
 
 const parses = new Map<number, ParsePending>()
+
+// The blocks of the last projection the worker sent for each key, which its next response builds on.
+const projected = new Map<string, Block[]>()
 
 const states = new Map<string, MarkdownWorkerState>()
 
@@ -91,13 +96,14 @@ export function projectMarkdown(key: string, text: string, live: boolean) {
   const id = ++nextID
 
   return new Promise<Projection>((resolve, reject) => {
-    projects.set(id, { key, resolve, reject })
+    projects.set(id, { key, text, resolve, reject })
     projectTransport.send({ type: "project", id, key, text, live })
   })
 }
 
 export function disposeMarkdownProjection(key: string) {
   projectTransport.dispose(key)
+  projected.delete(key)
   projects.forEach((request, id) => {
     if (request.key !== key) return
     projects.delete(id)
@@ -170,6 +176,7 @@ function getWorker() {
     if (event.data.type === "project") {
       const result = projects.get(event.data.id)
 
+      // Only disposal drops a sent request, and the worker forgets that key's projection too.
       if (!result) {
         projectTransport.complete(event.data.key, event.data.id)
 
@@ -177,7 +184,9 @@ function getWorker() {
       }
 
       projects.delete(event.data.id)
-      result.resolve(event.data.projection)
+      const blocks = applyProjectionBlocks(projected.get(event.data.key), event.data.from, event.data.blocks)
+      projected.set(event.data.key, blocks)
+      result.resolve({ text: result.text, blocks })
       projectTransport.complete(event.data.key, event.data.id)
 
       return
@@ -272,6 +281,7 @@ function getWorker() {
     pending.clear()
     projects.clear()
     parses.clear()
+    projected.clear()
     states.clear()
     keys.clear()
     latest.clear()

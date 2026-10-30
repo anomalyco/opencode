@@ -1,13 +1,16 @@
 import { expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { LLM, LLMClient, LLMRequest } from "../../src/effect.js"
+import { ai, LLMClient, LLMRequest } from "../../src/effect.js"
 import { Azure, OpenAI } from "../../src/providers.js"
 import { testEffect } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 const checkpoint = { type: "compaction", id: "cmp_1", encrypted_content: "opaque" }
-const request = LLM.request({ model: OpenAI.configure({ apiKey: "fixture" }).responses("fixture"), prompt: "hello" })
+const request = ai.request({
+  model: OpenAI.configure({ apiKey: "fixture" }).responses("fixture"),
+  prompt: "hello",
+})
 const trigger = { mechanism: "trigger" } as const
 
 testEffect(
@@ -61,7 +64,7 @@ testEffect(
 ).effect("trigger keeps request controls, configured deployment, and supplied subscription headers", () =>
   Effect.gen(function* () {
     const calls: string[] = []
-    const input = LLM.request({
+    const input = ai.request({
       model: request.model,
       system: "Keep the context",
       prompt: "hello",
@@ -91,7 +94,7 @@ testEffect(
       },
     })
     const original = LLMRequest.input(input)
-    const result = yield* LLMClient.compact(input, {
+    const result = yield* ai.compact(input, {
       ...trigger,
       http: (request, next) => {
         calls.push("http")
@@ -126,8 +129,8 @@ testEffect(
     }),
   ),
 ).effect("keeps explicit verbosity on a trigger checkpoint for prompt cache reuse", () =>
-  LLMClient.compact(
-    LLM.request({
+  ai.compact(
+    ai.request({
       model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
       prompt: "Hello.",
       providerOptions: { textVerbosity: "low" },
@@ -149,8 +152,8 @@ testEffect(
     }),
   ),
 ).effect("keeps the effective body-overlay verbosity and text formatting", () =>
-  LLMClient.compact(
-    LLM.request({
+  ai.compact(
+    ai.request({
       model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
       prompt: "Hello.",
       generation: { maxTokens: 20_000 },
@@ -173,14 +176,16 @@ testEffect(
   ),
 ).effect("passes configured output limits through and leaves rejection to the provider", () =>
   Effect.gen(function* () {
-    const error = yield* LLMClient.compact(
-      LLM.request({
-        model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
-        prompt: "Hello.",
-        generation: { maxTokens: 128 },
-      }),
-      trigger,
-    ).pipe(Effect.flip)
+    const error = yield* ai
+      .compact(
+        ai.request({
+          model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
+          prompt: "Hello.",
+          generation: { maxTokens: 128 },
+        }),
+        trigger,
+      )
+      .pipe(Effect.flip)
     expect(error.message).toContain("at least 20000")
   }),
 )
@@ -209,7 +214,7 @@ testEffect(
   ),
 ).effect("correlates an ID-less checkpoint across repeated events and ignores other output", () =>
   Effect.gen(function* () {
-    const result = yield* LLMClient.compact(request, trigger)
+    const result = yield* ai.compact(request, trigger)
     expect(result.checkpoint.encrypted).toBe("opaque")
     expect(result.checkpoint.id).toBeString()
     expect("message" in result).toBe(false)
@@ -240,7 +245,7 @@ for (const [name, events] of Object.entries({
     fixedResponse(sseEvents(...wire), { headers: { "content-type": "text/event-stream", "x-fixture": "preserved" } }),
   ).effect(`rejects ${name} checkpoint response and preserves original error context`, () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.compact(request, trigger).pipe(Effect.flip)
+      const error = yield* ai.compact(request, trigger).pipe(Effect.flip)
       expect(error.reason.body).toBe(JSON.stringify(wire.at(-1)))
       expect(error.reason.http).toMatchObject({ status: 200, headers: { "x-fixture": "preserved" } })
     }),
@@ -251,7 +256,7 @@ testEffect(fixedResponse(sseEvents({ type: "response.output_item.done", item: ch
   "rejects clean EOF without response.completed",
   () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.compact(request, trigger).pipe(Effect.flip)
+      const error = yield* ai.compact(request, trigger).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidProviderOutput")
     }),
 )
@@ -260,9 +265,7 @@ for (const body of [{ input: [] }, { previous_response_id: "stale" }, { stream: 
     `rejects caller-supplied ${Object.keys(body)[0]} before sending trigger`,
     () =>
       Effect.gen(function* () {
-        const error = yield* LLMClient.compact(LLMRequest.update(request, { http: { body } }), trigger).pipe(
-          Effect.flip,
-        )
+        const error = yield* ai.compact(LLMRequest.update(request, { http: { body } }), trigger).pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidRequest")
       }),
   )
@@ -273,14 +276,14 @@ testEffect(dynamicResponse(() => Effect.die("Must reject before sending"))).effe
   () =>
     Effect.gen(function* () {
       const client = yield* LLMClient.Service
-      const unsupported = LLM.request({ model: Azure.configure({ resourceName: "fixture" }).responses("fixture") })
-      expect(LLMClient.canCompact(unsupported)).toBe(true)
-      expect(LLMClient.canCompact(unsupported, trigger)).toBe(false)
+      const unsupported = ai.request({ model: Azure.configure({ resourceName: "fixture" }).responses("fixture") })
+      expect(ai.canCompact(unsupported)).toBe(true)
+      expect(ai.canCompact(unsupported, trigger)).toBe(false)
       // @ts-expect-error Exercise untyped consumers; the service must reject before sending.
       const serviceError = yield* client.compact(unsupported, trigger).pipe(Effect.flip)
       expect(serviceError.reason._tag).toBe("UnsupportedOperation")
       // @ts-expect-error Exercise an unknown mechanism supplied by JavaScript.
-      const error = yield* LLMClient.compact(request, { mechanism: "other" }).pipe(Effect.flip)
+      const error = yield* ai.compact(request, { mechanism: "other" }).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
     }),
 )
@@ -290,7 +293,7 @@ testEffect(fixedResponse("must not use HTTP")).effect(
   () =>
     Effect.gen(function* () {
       let completed = 0
-      const operation = LLMClient.compact(request, {
+      const operation = ai.compact(request, {
         mechanism: "trigger",
         webSocket: {
           execute: () =>

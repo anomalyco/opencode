@@ -1,5 +1,6 @@
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "./agent.js"
+import { Artifact } from "./artifact.js"
 import { AISDK } from "./aisdk.js"
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
@@ -63,6 +64,7 @@ const nodes = [
   Environment.node,
   Config.node,
   Agent.node,
+  Artifact.node,
   Command.node,
   Reference.node,
   Rpc.node,

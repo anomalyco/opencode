@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { Decision, DecisionClient, Image, ImageClient, type DecisionModel, type ImageModel } from "../../src/effect.js"
+import { ai, DecisionClient, type DecisionModel, ImageClient, type ImageModel } from "../../src/effect.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, observe, type Call } from "../lib/http.js"
 
@@ -13,21 +13,22 @@ const record = (calls: Array<Call>) =>
 const sentImage = (model: ImageModel) =>
   Effect.gen(function* () {
     const calls: Array<Call> = []
-    yield* Image.generate({ model, prompt: "A red circle" }).pipe(
-      Effect.exit,
-      Effect.provide(ImageClient.layer.pipe(Layer.provide(record(calls)))),
-    )
+    yield* ai.image
+      .generate({ model, prompt: "A red circle" })
+      .pipe(Effect.exit, Effect.provide(ImageClient.layer.pipe(Layer.provide(record(calls)))))
     return calls
   })
 
 const sentDecision = (model: DecisionModel) =>
   Effect.gen(function* () {
     const calls: Array<Call> = []
-    yield* Decision.generate({
-      model,
-      input: [{ type: "text", text: "The sky is red." }],
-      questions: [{ name: "red", type: "predicate", instructions: "Is the sky red?" }],
-    }).pipe(Effect.exit, Effect.provide(DecisionClient.layer.pipe(Layer.provide(record(calls)))))
+    yield* ai.decision
+      .generate({
+        model,
+        input: [{ type: "text", text: "The sky is red." }],
+        questions: [{ name: "red", type: "predicate", instructions: "Is the sky red?" }],
+      })
+      .pipe(Effect.exit, Effect.provide(DecisionClient.layer.pipe(Layer.provide(record(calls)))))
     return calls
   })
 

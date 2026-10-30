@@ -65,6 +65,7 @@ export const dict = {
   "command.usage.view": "View usage",
   "command.usage.view.description": "See your OpenCode Go allowance and Console budgets",
   "command.session.location.cycle": "Cycle session location",
+  "command.session.branch.choose": "Choose base branch",
   "session.location.toggle": "Toggle session location",
 
   "command.palette": "Search everything",
@@ -147,6 +148,7 @@ export const dict = {
   "dialog.provider.opencode.tagline": "Reliable optimized models",
   "dialog.provider.opencodeGo.tagline": "Low cost subscription for everyone",
   "dialog.provider.anthropic.note": "Direct access to Claude models via API key",
+  "dialog.provider.claudeAgent.note": "Use your Claude plan or another Claude Code login",
   "dialog.provider.copilot.note": "AI models for coding assistance via GitHub Copilot",
   "dialog.provider.openai.note": "GPT models for fast, capable general AI tasks",
   "dialog.provider.google.note": "Gemini models for fast, structured responses",
@@ -227,6 +229,16 @@ export const dict = {
   "provider.connect.remote.description":
     "Your OpenCode credentials will be stored on this server. Models will be available through this server.",
   "provider.connect.title.anthropicProMax": "Login with Anthropic",
+  "provider.connect.claudeAgent.description":
+    "Use your Claude plan or another Claude Code login. Install Claude Code and sign in first.",
+  "provider.connect.claudeAgent.learnMore": "Learn more",
+  "provider.connect.claudeAgent.install": "Install Claude Code",
+  "provider.connect.claudeAgent.signIn.command": "Sign-in command",
+  "provider.connect.claudeAgent.connect": "Connect",
+  "provider.connect.claudeAgent.checkAgain": "Check again",
+  "provider.connect.claudeAgent.checking": "Checking Claude Code…",
+  "provider.connect.claudeAgent.timeout":
+    "Couldn't confirm that Claude Code is ready. Make sure it's installed and signed in, then check again.",
   "provider.connect.command.waiting": "Waiting for command to finish…",
   "provider.connect.command.expired": "Authentication expired",
   "provider.connect.form.required": "Answer required",

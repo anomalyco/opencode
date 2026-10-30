@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
@@ -89,12 +89,76 @@ function frame(value: object) {
   return output
 }
 
-export function writeRegistration(directory: string, socket: string, instance = "test", token = "test") {
+export function writeRegistration(
+  directory: string,
+  socket: string,
+  instance = "test",
+  token = "test",
+  features?: string[],
+) {
   return writeFile(
     path.join(directory, "service.json"),
-    JSON.stringify({ instance_id: instance, pid: process.pid, protocol: 7, socket, token }),
+    JSON.stringify({ instance_id: instance, pid: process.pid, protocol: 7, socket, token, features }),
   )
 }
+
+// An in-process opencode-pty that a server adopts through a handoff, so no daemon is spawned. Without
+// features it answers like a daemon that predates the features list.
+export const fakeDaemon = Effect.fn(function* (features?: string[]) {
+  const base = yield* temporaryDirectory()
+  const root = path.join(base, "root")
+  const directory = path.join(root, "inherited")
+  const socket = path.join(base, "daemon.sock")
+  const terminals: Array<ReturnType<typeof terminal> & { user_title?: string | null }> = []
+  const failTerminate = new Set<string>()
+  const ops: string[] = []
+  let nextID = 1
+  yield* listen(socket, (connection, request) => {
+    ops.push(String(request.op))
+    if (request.op === "ping") return features ? { ...pong, features } : pong
+    if (request.op === "list") return { type: "terminals", terminals }
+    if (request.op === "create") {
+      const base = terminal(nextID++, String(request.group_id))
+      // A daemon that advertises features always serializes user_title.
+      const created = features ? { ...base, user_title: null } : base
+      terminals.push(created)
+      return { type: "created", terminal: created }
+    }
+    if (request.op === "control") return { type: "ok" }
+    if (request.op === "terminate") {
+      if (failTerminate.has(`pty_persistent_${request.id}`)) return { type: "error", message: "terminate failed" }
+      const index = terminals.findIndex((item) => item.id === request.id)
+      if (index === -1) return { type: "error", message: `terminal not found: ${String(request.id)}` }
+      terminals.splice(index, 1)
+      return { type: "ok" }
+    }
+    if (request.op === "rename" && features?.includes("rename")) {
+      const found = terminals.find((item) => item.id === request.id)
+      if (!found) return { type: "error", message: "terminal not found" }
+      found.user_title = typeof request.title === "string" && request.title !== "" ? request.title : null
+      found.title = found.user_title ?? "test"
+      return { type: "ok" }
+    }
+    // Old daemons cannot parse unknown requests and drop the connection.
+    if (request.op === "rename") {
+      connection.destroy()
+      return undefined
+    }
+    return { type: "error", message: `unexpected request: ${String(request.op)}` }
+  })
+  yield* Effect.promise(async () => {
+    await mkdir(directory, { recursive: true })
+    await writeRegistration(directory, socket, "test", "test", features)
+  })
+  return {
+    failTerminate,
+    ops,
+    options: {
+      root,
+      handoff: { directory, instanceID: "test", ticket: "ticket", expiresAt: Date.now() + 60_000 },
+    },
+  }
+})
 
 export function terminal(id: number, groupID = "ses_test") {
   return {

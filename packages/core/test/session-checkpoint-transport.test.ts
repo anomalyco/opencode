@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { LLM, LLMRequest, Message } from "@opencode/ai/effect"
+import { ai, LLMRequest, Message } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { configure } from "@opencode/ai/providers/openai"
 import { SessionModelTransport } from "../src/session/model-transport"
@@ -78,7 +78,7 @@ const fixture = (mode: "success" | "invalid" | "fallback") =>
       http,
       opens: () => server.state.opens,
       disconnect: () => disconnect?.(),
-      request: LLM.request({
+      request: ai.request({
         model: configure({
           apiKey: "fixture",
           baseURL: server.url.replace(/^ws/, "http").replace(/responses$/, ""),
@@ -97,7 +97,7 @@ it.live("trigger reuses the append baseline and clears it before the next genera
     const transport = yield* SessionModelTransport.Service
     const webSocket = transport.bind(sessionID)
     const first = yield* LLMClient.generate(server.request, { webSocket })
-    const compacted = yield* LLMClient.compact(
+    const compacted = yield* ai.compact(
       LLMRequest.update(server.request, {
         messages: [...server.request.messages, first.message],
       }),
@@ -136,7 +136,7 @@ it.live("invalid trigger output does not retry or commit a continuation checkpoi
     const webSocket = transport.bind(sessionID)
     const first = yield* LLMClient.generate(server.request, { webSocket })
     const input = LLMRequest.update(server.request, { messages: [...server.request.messages, first.message] })
-    const error = yield* LLMClient.compact(input, { mechanism: "trigger", webSocket }).pipe(Effect.flip)
+    const error = yield* ai.compact(input, { mechanism: "trigger", webSocket }).pipe(Effect.flip)
     expect(error.reason._tag).toBe("InvalidProviderOutput")
     expect(server.requests).toHaveLength(2)
     expect(server.http).toHaveLength(0)
@@ -155,7 +155,7 @@ it.live("trigger recovers over SSE with complete input after the old socket clos
     server.disconnect()
     // Let the real close event reach the connector before the next send.
     yield* Effect.sleep("20 millis")
-    const result = yield* LLMClient.compact(
+    const result = yield* ai.compact(
       LLMRequest.update(server.request, {
         messages: [...server.request.messages, first.message],
       }),

@@ -128,7 +128,6 @@ test("the project menu loads changes on demand and opens review", async ({ page 
     "main",
     /1 Changed file.*\+7.*-3/,
     "",
-    "This computer",
     "C:/OpenCode/ProjectChanges",
     "",
     "Edit project",
