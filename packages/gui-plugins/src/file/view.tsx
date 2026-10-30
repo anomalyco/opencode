@@ -507,13 +507,14 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
   )
 
   return (
-    <div class="mt-3 relative h-full min-h-0 flex flex-col">
+    <div class="relative h-full min-h-0 flex flex-col" classList={{ "mt-3": !artifact() }}>
       <Switch>
         <Match when={current()?.loaded ? current()?.content : undefined}>
           {(value) => (
             <Show when={artifact()} fallback={codeView()}>
               <ArtifactView
                 session={props.session}
+                screen={props.screen}
                 path={path() ?? ""}
                 content={value()}
                 cacheKey={cacheKey()}

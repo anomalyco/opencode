@@ -190,6 +190,76 @@ test("new tab selection and closing stay in the focused pane", async ({ page }) 
   await expect(sideTabs.nth(0)).toHaveAttribute("aria-selected", "true")
 })
 
+test("closing the last New tab closes the side region, and only a New tab lists the launchers", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await openSession(page, { name: "LastNewTab", seed: { panes: { ses_lastnewtab: { review: true } } } })
+
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const newTab = panel.getByRole("tab", { name: "New tab", exact: true })
+  const review = panel.getByRole("button", { name: /^Review/ })
+
+  // An empty side region opens on a New tab listing the launchers.
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+  await expect(review).toBeVisible()
+
+  // Closing it leaves no tab, so the region closes rather than listing the launchers without one.
+  await newTab.locator("..").getByRole("button", { name: "Close tab" }).click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+
+  await toggle.click()
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+  await expect(review).toBeVisible()
+})
+
+test("tabs in a narrow side strip shrink to keep their close buttons, and a tab's menu closes the others", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 700 })
+  const directory = "C:/OpenCode/NarrowStrip"
+  const key = `local\u0000${base64Encode(directory)}/ses_narrowstrip`
+  const files = ["a.md", "a-file-name-long-enough-to-overflow-the-side-strip-by-itself.md", "b.md"]
+
+  await openSession(page, {
+    name: "NarrowStrip",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_narrowstrip: { review: true, sessionWidth: 640 } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: { [key]: { all: files.map((file) => `file://${file}`), active: `file://${files[1]}` } },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  const add = side.getByRole("button", { name: "Add tab", exact: true })
+  await expect(side.getByRole("tab", { name: files[1], exact: true })).toHaveAttribute("aria-selected", "true")
+
+  // Every tab's close button stays left of "+", instead of the strip scrolling it away under its edge fade.
+  const end = (await add.boundingBox())!.x
+  const closes = side.locator('[data-pane-strip="side"] [data-slot="tabs-trigger-close-button"]')
+  await expect(closes).toHaveCount(files.length)
+
+  for (const close of await closes.all()) {
+    const box = (await close.boundingBox())!
+    expect(box.x + box.width).toBeLessThanOrEqual(end)
+  }
+
+  await side.getByRole("tab", { name: "b.md", exact: true }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Close other tabs", exact: true }).click()
+  await expect(side.getByRole("tab")).toHaveCount(1)
+  await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  // With nothing else to close, the menu offers only the tab itself.
+  await side.getByRole("tab", { name: "b.md", exact: true }).click({ button: "right" })
+  await expect(page.getByRole("menuitem", { name: "Close other tabs", exact: true })).toBeDisabled()
+  await page.getByRole("menuitem", { name: "Close tab", exact: true }).click()
+  await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveCount(0)
+})
+
 // A DOM mark survives only while the same node stays mounted.
 function mark(locator: Locator) {
   return locator.evaluate((element) => element.setAttribute("data-e2e-mounted", "original"))
@@ -254,10 +324,13 @@ test("the new tab view lists recently closed tabs, expands to the rest, and keep
   await panel.getByRole("button", { name: "Add tab", exact: true }).click()
   await expect(rows).toHaveCount(5)
   await expect(rows.first()).toContainText("closed-00.ts")
-  await recent.getByRole("button", { name: "Show more", exact: true }).click()
+  const more = recent.getByRole("button", { name: "Show more", exact: true })
+  await more.focus()
+  await more.press("Enter")
   await expect(rows).toHaveCount(12)
-  await recent.getByRole("button", { name: "Show less", exact: true }).click()
-  await expect(rows).toHaveCount(5)
+  await expect(rows.filter({ hasText: "closed-05.ts" })).toBeFocused()
+  await expect(recent.getByRole("button", { name: "Show more", exact: true })).toHaveCount(0)
+  await expect(recent.getByRole("button", { name: "Show less", exact: true })).toHaveCount(0)
 
   // Closing the last tab closes the region; it opens on its launchers with that tab listed first.
   const readme = panel.getByRole("tab", { name: "README.md" })

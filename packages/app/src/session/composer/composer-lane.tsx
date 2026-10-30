@@ -1,6 +1,7 @@
 import { createMemo, type ParentProps } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
+import "./composer-lane.css"
 
 /** Where the floating pills above the composer sit, in logical terms, following the background activity setting. */
 export function useComposerLaneAlignment() {
@@ -15,6 +16,11 @@ export function useComposerLaneAlignment() {
     // Left/right are physical positions; Kobalte and flex alignment use logical start/end.
     return (value === "right") === (language.direction() === "rtl") ? "start" : "end"
   })
+}
+
+/** Where a pill's popover opens: above it, from the lane's aligned edge. */
+export function composerLanePlacement(alignment: "center" | "start" | "end") {
+  return ({ center: "top", start: "top-start", end: "top-end" } as const)[alignment]
 }
 
 // The pills float out of flow in a lane the timeline reserves at its tail, so coming and going never resizes the

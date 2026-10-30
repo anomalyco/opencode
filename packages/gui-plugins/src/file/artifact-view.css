@@ -1,36 +1,94 @@
-/* The control defaults to a fixed 232px with equal segments; here it hugs its two labels. */
-[data-slot="artifact-toolbar"] [data-slot="segmented-control-v2"] {
-  width: auto;
+@import "@opencode/ui/document-surface.css";
+
+[data-slot="artifact-view"] {
+  --opencode-diffs-bg: var(--v2-background-bg-layer-01);
+  container-type: inline-size;
+  background-color: var(--v2-background-bg-layer-01);
 }
 
-[data-slot="artifact-toolbar"] [data-slot="segmented-control-v2-item"] {
-  flex: 0 0 auto;
-  padding: 0 14px;
+[data-slot="artifact-toolbar"] {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding-inline: 20px 12px;
+  background-color: var(--v2-background-bg-layer-01);
 }
 
-/* Shrink-wrapped segments round the label box down a fraction; the ellipsis overflow then clips glyph edges. */
-[data-slot="artifact-toolbar"] [data-slot="segmented-control-v2-item-label"] {
-  overflow: visible;
-  max-width: none;
+[data-slot="artifact-filename"] {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-compact);
+}
+
+[data-slot="artifact-toolbar-trailing"],
+[data-slot="artifact-toolbar-actions"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-slot="artifact-toolbar-trailing"] {
+  min-width: 0;
+  max-width: 65%;
+  gap: 12px;
+}
+
+[data-slot="artifact-toolbar-actions"] {
+  flex-shrink: 0;
+}
+
+[data-slot="artifact-metadata"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--v2-text-text-faint);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Reserve the metadata slot so revealing details never shifts the filename or actions. */
+@media (hover: hover) and (pointer: fine) {
+  [data-slot="artifact-metadata"] {
+    opacity: 0;
+  }
+
+  [data-slot="artifact-toolbar"]:hover [data-slot="artifact-metadata"],
+  [data-slot="artifact-toolbar"]:focus-within [data-slot="artifact-metadata"],
+  [data-slot="artifact-toolbar"][data-menu-open] [data-slot="artifact-metadata"] {
+    opacity: 1;
+  }
+}
+
+.artifact-actions-menu {
+  min-width: 160px;
+}
+
+@container (max-width: 600px) {
+  [data-slot="artifact-metadata"] {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) {
+  [data-slot="artifact-toolbar-actions"] [data-component="icon-button-v2"] {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 [data-slot="artifact-stage"] {
-  --artifact-check: color-mix(in oklch, var(--v2-text-text-base) 5%, transparent);
-  background-color: var(--v2-background-bg-deep);
-}
-
-[data-slot="artifact-stage"][data-checker] {
-  background-image:
-    linear-gradient(45deg, var(--artifact-check) 25%, transparent 25%),
-    linear-gradient(-45deg, var(--artifact-check) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, var(--artifact-check) 75%),
-    linear-gradient(-45deg, transparent 75%, var(--artifact-check) 75%);
-  background-size: 16px 16px;
-  background-position:
-    0 0,
-    0 8px,
-    8px -8px,
-    -8px 0;
+  background-color: var(--v2-background-bg-layer-01);
 }
 
 [data-slot="artifact-media"] {
@@ -39,6 +97,11 @@
   box-shadow:
     0 0 0 0.5px var(--v2-border-border-base),
     0 12px 32px -12px color-mix(in oklch, var(--v2-text-text-base) 25%, transparent);
+}
+
+img[data-slot="artifact-media"] {
+  border-radius: 0;
+  box-shadow: none;
 }
 
 [data-slot="artifact-media"]::-webkit-media-controls-fullscreen-button {
@@ -73,36 +136,130 @@
   border-collapse: separate;
   border-spacing: 0;
   font-variant-numeric: tabular-nums;
+  background: var(--v2-background-bg-base);
+  color: var(--v2-text-text-base);
 }
 
 [data-slot="artifact-table"] th,
 [data-slot="artifact-table"] td {
+  position: relative;
+  height: 28px;
   padding: 5px 12px;
-  border-bottom: 1px solid var(--v2-border-border-muted);
-  border-inline-end: 1px solid var(--v2-border-border-muted);
+  padding-inline-end: 36px;
+  border-bottom: 0.5px solid var(--v2-border-border-muted);
+  border-inline-end: 0.5px solid var(--v2-border-border-muted);
   white-space: pre;
   max-width: 40ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
   text-align: start;
   line-height: var(--line-height-compact);
+}
+
+[data-slot="artifact-table-cell-text"] {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: text;
+}
+
+[data-slot="artifact-table-copy"] {
+  position: absolute;
+  inset-inline-end: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+[data-slot="artifact-table-copy"]:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: hover) {
+  [data-slot="artifact-table"] :is(th, td):hover [data-slot="artifact-table-copy"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  [data-slot="artifact-table-copy"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (pointer: coarse) {
+  [data-slot="artifact-table"] :is(th, td) {
+    height: 48px;
+    padding-inline-end: 60px;
+  }
+
+  [data-slot="artifact-table-copy"] {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 [data-slot="artifact-table"] th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--v2-background-bg-layer-01);
+  background: var(--v2-background-bg-layer-02);
+  border-top: 0.5px solid var(--v2-border-border-base);
+  border-bottom-color: var(--v2-border-border-base);
+  border-inline-end-color: var(--v2-border-border-base);
   font-weight: var(--font-weight-medium);
   color: var(--v2-text-text-muted);
 }
 
-[data-slot="artifact-table"] tbody tr:hover td {
-  background: color-mix(in oklch, var(--v2-text-text-base) 3%, transparent);
+[data-slot="artifact-table"] th:last-child {
+  border-inline-end: 0;
 }
 
-[data-slot="artifact-table"] td[data-index] {
-  color: var(--v2-text-text-faint);
-  text-align: end;
-  user-select: none;
+@media (hover: hover) {
+  [data-slot="artifact-table"] tbody tr:hover td {
+    background: var(--v2-overlay-simple-overlay-hover);
+  }
+}
+
+[data-slot="artifact-table"] th:first-child,
+[data-slot="artifact-table"] td:first-child {
+  padding-inline-start: 20px;
+}
+
+[data-slot="artifact-document-stage"][data-kind="markdown"],
+[data-slot="artifact-document-stage"][data-kind="font"] {
+  padding-block-end: 20px;
+}
+
+[data-slot="artifact-markdown-page"] {
+  min-height: 100%;
+  padding: 64px clamp(24px, 12.5%, 134px);
+}
+
+[data-slot="artifact-markdown-content"] {
+  width: 100%;
+  max-width: 768px;
+  margin-inline: auto;
+}
+
+[data-slot="artifact-diagram"] {
+  min-width: 0;
+  padding: 24px 32px;
+}
+
+@container (max-width: 600px) {
+  [data-slot="artifact-document-stage"][data-kind="markdown"],
+  [data-slot="artifact-document-stage"][data-kind="font"] {
+    padding-block-end: 12px;
+  }
+
+  [data-slot="artifact-markdown-page"] {
+    padding: 32px 24px;
+  }
+
+  [data-slot="artifact-diagram"] {
+    padding: 20px 12px;
+  }
 }

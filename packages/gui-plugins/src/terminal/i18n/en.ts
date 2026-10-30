@@ -14,6 +14,7 @@ export default {
   "quote.actions": "Quote selection",
   "quote.add": "Quote",
   "quote.addWithComment": "Quote and comment",
+  "quote.addWithoutComment": "Quote without comment",
   "quote.tooLong": "Selection too long",
   "quote.label": "Terminal",
 }

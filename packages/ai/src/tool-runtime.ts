@@ -8,7 +8,7 @@ import {
   type ToolOutput as ToolOutputType,
   type ToolResultValue as ToolResultValueType,
 } from "./schema/index.js"
-import { type AnyTool, type Tools } from "./tool.js"
+import { type Tool, type Tools } from "./tool.js"
 
 export interface ToolSettlement {
   readonly result: ToolResultValueType
@@ -41,7 +41,7 @@ export const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<Dispat
   )
 }
 
-const decodeAndExecute = (tool: AnyTool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
+const decodeAndExecute = (tool: Tool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
   tool._decode(call.input).pipe(
     Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),
     Effect.flatMap((decoded) =>

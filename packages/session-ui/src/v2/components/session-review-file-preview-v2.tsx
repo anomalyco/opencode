@@ -10,6 +10,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { showToast } from "@opencode/ui/toast"
 import { mediaKindFromPath } from "../../pierre/media"
 import { cloneSelectedLineRange, previewSelectedLines } from "../../pierre/selection-bridge"
+import { writeClipboard } from "../../message/message-content"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import type { PresentationFileContent, PresentationFileDiff } from "../../file-presentation"
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
@@ -162,7 +163,12 @@ export function SessionReviewFilePreviewV2(props: SessionReviewFilePreviewV2Prop
         return
       }
 
-      await navigator.clipboard.writeText(content.content)
+      if (!(await writeClipboard(content.content))) {
+        showToast({ variant: "error", title: i18n.t("ui.sessionReviewV2.copyFailed") })
+
+        return
+      }
+
       showToast({ variant: "success", title: i18n.t("ui.sessionReviewV2.copiedFileContents") })
     } catch {
       showToast({ variant: "error", title: i18n.t("ui.sessionReviewV2.copyFailed") })

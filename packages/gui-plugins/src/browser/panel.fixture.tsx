@@ -98,6 +98,7 @@ type PaneFixtureState = {
   external: string[]
   /** Cookies the page's address can read. */
   cookies: number
+  selection: string
 }
 
 // A 16px blue square, as main reports a page icon.
@@ -155,6 +156,7 @@ export function mountBrowserPane(input: PaneHost) {
       history: { visits: [] },
       external: [],
       cookies: 3,
+      selection: "default",
     })
 
     // Each capture waits until the fixture releases it, so a spec can observe the pending state.
@@ -209,7 +211,7 @@ export function mountBrowserPane(input: PaneHost) {
     // SAFETY: the host embeds call only `embed`, `capture` and `on` on their bridge (`runtime/plugin/embeds.tsx`).
     const embeds = input.createEmbeds({
       bridge: bridge as Bridge,
-      zoom: () => 1,
+      zoom: () => (store.selection === "zoomed" ? 1.25 : 1),
       dialog: () => store.dialog,
       moving: () => store.moving,
     })
@@ -222,7 +224,7 @@ export function mountBrowserPane(input: PaneHost) {
     const base = {
       id: "browser",
       keybinds: { keybind: () => [], keys: (bind: string) => bind.split("+") },
-      desktop: { zoom: () => 1 },
+      desktop: { zoom: () => (store.selection === "zoomed" ? 1.25 : 1) },
       embeds,
       t,
       // English plural forms, as the host picks them.
@@ -413,6 +415,15 @@ export function mountBrowserPane(input: PaneHost) {
     const model = createModel(plugin)
 
     const pick = () => {
+      const selector = () => {
+        if (store.selection === "fallback") return ""
+
+        if (store.selection === "long")
+          return `main > section[data-label="إعدادات"] > ${".nested-selector".repeat(24)} > button.primary`
+
+        return "main > button.primary"
+      }
+
       setStore("picker", store.session, false)
       emit(store.session, {
         type: "inspect",
@@ -420,11 +431,11 @@ export function mountBrowserPane(input: PaneHost) {
         active: false,
         element: {
           ref: Browser.Ref.make("e7"),
-          selector: "main > button.primary",
+          selector: selector(),
           label: "button.primary",
           role: "button",
           name: "Save changes",
-          rect: { x: 48, y: 40, width: 160, height: 36 },
+          rect: { x: 48, y: store.selection === "low" ? 180 : 40, width: 160, height: 36 },
         },
       })
     }
@@ -513,6 +524,14 @@ export function mountBrowserPane(input: PaneHost) {
             </For>
             <button onClick={() => setStore("dialog", (open) => !open)}>Toggle dialog</button>
             <button onClick={pick}>Pick element</button>
+            <select
+              aria-label="Picked element scenario"
+              onChange={(event) => setStore("selection", event.currentTarget.value)}
+            >
+              <For each={["default", "long", "fallback", "low", "zoomed"]}>
+                {(value) => <option>{value}</option>}
+              </For>
+            </select>
             <button onClick={() => setStore("history", { visits })}>Seed history</button>
             <button onClick={() => emit(store.session, { type: "page", tabID: current().id, icon, zoom: store.zoom })}>
               Page icon
@@ -548,6 +567,7 @@ export function mountBrowserPane(input: PaneHost) {
               )}
             </For>
           </ul>
+          <div data-testid="fixture-comment-metadata">{JSON.stringify(store.comments)}</div>
           <Show when={store.covered}>
             {/* Floating content portals into <body> like a menu or hover card over the page. */}
             <Portal mount={document.body}>

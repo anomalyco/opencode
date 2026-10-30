@@ -13,11 +13,11 @@ import {
   LLMEvent,
   LLMRequest,
   Message,
-  Tool,
   ToolCallPart,
   ToolChoice,
   ToolDefinition,
   ToolRuntime,
+  tool,
 } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -1092,7 +1092,7 @@ describe("Bedrock Converse route", () => {
       expect(call.name).toBe("browser.tabs.open")
       const dispatched = yield* ToolRuntime.dispatch(
         {
-          browser_tabs_open: Tool.make({
+          browser_tabs_open: tool({
             description: "Open a tab",
             parameters: Schema.Struct({}),
             success: Schema.String,

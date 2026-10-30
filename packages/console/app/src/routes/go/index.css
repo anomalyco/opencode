@@ -1059,12 +1059,99 @@ body {
     }
   }
 
+  [data-slot="plans-group"] {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  [data-slot="audience"] {
+    display: flex;
+    align-self: center;
+    max-width: 100%;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--color-border-weak);
+    background: var(--color-background);
+
+    @media (max-width: 30rem) {
+      width: 100%;
+    }
+
+    button {
+      min-width: 136px;
+      height: 32px;
+      padding: 0 16px;
+      border: 0;
+      background: transparent;
+      color: var(--color-text);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      text-transform: uppercase;
+      white-space: nowrap;
+      cursor: pointer;
+
+      @media (max-width: 30rem) {
+        min-width: 0;
+        flex: 1;
+      }
+    }
+
+    button:is(:hover, :focus-visible) {
+      color: var(--color-text-strong);
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--color-text-strong);
+      outline-offset: 2px;
+    }
+
+    button[aria-pressed="true"] {
+      background: color-mix(in srgb, var(--color-text-strong) 8%, var(--color-background-weak));
+      color: var(--color-text-strong);
+    }
+  }
+
+  /* Both audiences share one grid cell, so the cards are as tall as the tallest set and switching never shifts the
+     page below. */
+  [data-slot="plans-stack"] {
+    display: grid;
+
+    > [data-slot="plans"] {
+      grid-area: 1 / 1;
+    }
+  }
+
   [data-slot="plans"] {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 24px;
     font-size: 16px;
     line-height: 1.5;
+    transition:
+      opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+      transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+
+    &[aria-hidden="true"] {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+      pointer-events: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: opacity 200ms ease;
+
+      &[aria-hidden="true"] {
+        transform: none;
+      }
+    }
+
+    /* Go Teams is one card as wide as each individual plan, centred. */
+    &[data-audience="teams"] {
+      grid-template-columns: minmax(0, calc((100% - 24px) / 2));
+      justify-content: center;
+    }
 
     [data-slot="plan"] {
       display: flex;
@@ -1085,21 +1172,26 @@ body {
     [data-slot="name"] {
       font-weight: 500;
       color: var(--color-text);
+      text-transform: uppercase;
     }
 
     [data-slot="price"] {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 12px;
       font-size: 64px;
       font-weight: 500;
       line-height: 1.25;
       color: var(--color-text-strong);
 
+      /* Set high beside the figures: the tops of its tall letters level with theirs (12px at 64px, 8px at 48px).
+         Go Teams breaks it onto two lines where the translation has a line break. */
       span {
+        margin-top: 12px;
         font-size: 16px;
         line-height: 1.5;
         color: var(--color-text);
+        white-space: pre-line;
       }
     }
 
@@ -1112,13 +1204,15 @@ body {
       color: var(--color-text);
     }
 
+    /* Markers sit on the first line of a feature that wraps: 16px icons centred in its 24px line. */
     li {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 16px;
 
       svg {
         flex: none;
+        margin-top: 4px;
         color: var(--color-icon);
       }
     }
@@ -1145,27 +1239,63 @@ body {
       background: var(--color-background-strong-hover);
     }
 
+    /* Go subscribes with an outline button, its label set like the plan's features. */
+    [data-plan="go"] a {
+      border: 1px solid var(--color-border-weak);
+      font-weight: inherit;
+      background: transparent;
+      color: var(--color-text);
+      box-shadow: none;
+    }
+
+    [data-plan="go"] a:hover {
+      background: transparent;
+      border-color: var(--color-border);
+      color: var(--color-text-strong);
+    }
+
     a:focus-visible {
       outline: 2px solid var(--color-text-strong);
       outline-offset: 2px;
     }
 
+    /* Stacked on phones the sets differ a lot in height, so the hidden one leaves the layout and the shown one fades
+       in on its own. */
     @media (max-width: 42rem) {
       grid-template-columns: 1fr;
 
+      &[aria-hidden="true"] {
+        display: none;
+      }
+
+      @starting-style {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+      }
+
+      &[data-audience="teams"] {
+        grid-template-columns: 1fr;
+      }
+
       [data-slot="price"] {
         font-size: 48px;
+
+        span {
+          margin-top: 8px;
+        }
       }
     }
   }
 
+  /* The limits band takes the plan cards' muted background rather than the chart's own lighter one. */
   [data-component="comparison"] {
+    --go-console-bg: var(--color-background-weak);
     background: var(--go-console-bg);
     border-top: 0;
   }
 
   [data-component="hero"] {
-    padding-bottom: 2rem;
+    padding-bottom: 4rem;
   }
 
   [data-slot="section-title"] {

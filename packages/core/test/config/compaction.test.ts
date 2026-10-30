@@ -170,7 +170,7 @@ const input = (tokens: number) => {
       model: resolved,
       messages,
       agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
-      initial: "",
+      initial: [],
       tools: { definitions: [], execute: () => Effect.die("unused") },
     },
   }

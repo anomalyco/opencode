@@ -27,6 +27,8 @@ const webFetchUserAgent =
   "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OpenCode-User/1.0; +https://opencode.ai"
 const requests: Array<{ readonly url: string; readonly headers: Record<string, string> }> = []
 const assertions: Permission.AssertInput[] = []
+const checks: Permission.AssertInput[] = []
+const denied = new Set<string>()
 let respond = (_request: HttpClientRequest.HttpClientRequest) =>
   Effect.succeed(new Response("hello", { headers: { "content-type": "text/plain" } }))
 
@@ -39,7 +41,19 @@ const http = Layer.succeed(
     ),
   ),
 )
-const permission = permissionLayer({ assert: (input) => Effect.sync(() => assertions.push(input)) })
+const permission = permissionLayer({
+  assert: (input) => Effect.sync(() => assertions.push(input)),
+  assertNotDenied: (input) =>
+    Effect.sync(() => checks.push(input)).pipe(
+      Effect.andThen(
+        input.resources.some((resource) => denied.has(resource))
+          ? Effect.fail(
+              new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }),
+            )
+          : Effect.void,
+      ),
+    ),
+})
 const toolLayer = (replacements: LayerNode.Replacements = []) =>
   AppNodeBuilder.build(LayerNode.group([Tool.node, webFetchToolNode]), [
     Permission.node.replace(permission),
@@ -52,6 +66,8 @@ const live = testEffect(toolLayer())
 const reset = () => {
   requests.length = 0
   assertions.length = 0
+  checks.length = 0
+  denied.clear()
   respond = () => Effect.succeed(new Response("hello", { headers: { "content-type": "text/plain" } }))
 }
 
@@ -456,7 +472,7 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
-  live.effect("follows redirects while approving only the requested URL", () => {
+  live.effect("follows redirects, checking each target against the rules without asking", () => {
     const received: Array<Record<string, string | null>> = []
     return Effect.acquireUseRelease(
       Effect.sync(() =>
@@ -488,6 +504,8 @@ describe("WebFetchTool registration", () => {
           expect(assertions).toMatchObject([
             { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text" } },
           ])
+          const target = new URL("/target", server.url).toString()
+          expect(checks).toMatchObject([{ sessionID, action: "webfetch", resources: [target] }])
           expect(received).toEqual(
             Array.from({ length: 2 }, () => ({
               accept: "text/plain;q=1.0, text/markdown;q=0.9, text/html;q=0.8, */*;q=0.1",
@@ -500,6 +518,45 @@ describe("WebFetchTool registration", () => {
       (server) => Effect.promise(() => server.stop(true)),
     )
   })
+
+  it.effect("stops at a redirect target the rules deny", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      const url = "https://example.com/start"
+      const target = "http://169.254.169.254/latest/meta-data"
+      denied.add(target)
+      respond = () => Effect.succeed(new Response("", { status: 302, headers: { location: target } }))
+
+      expect(yield* executeTool(registry, call({ url, format: "text" }))).toMatchObject({
+        status: "error",
+        error: { message: "Permission denied: webfetch" },
+      })
+      expect(checks.map((check) => check.resources)).toEqual([[target]])
+      expect(requests.map((request) => request.url)).toEqual([url])
+    }),
+  )
+
+  it.effect("rejects redirects to non-HTTP schemes and endless redirect chains", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      respond = () => Effect.succeed(new Response("", { status: 301, headers: { location: "file:///etc/passwd" } }))
+      expect(yield* executeTool(registry, call({ url: "https://example.com/a", format: "text" }))).toMatchObject({
+        status: "error",
+        error: { message: "URL must use http:// or https://" },
+      })
+      expect(checks).toEqual([])
+
+      reset()
+      respond = (request) => Effect.succeed(new Response("", { status: 307, headers: { location: `${request.url}x` } }))
+      expect(yield* executeTool(registry, call({ url: "https://example.com/a", format: "text" }))).toMatchObject({
+        status: "error",
+        error: { message: `Too many redirects (more than ${WebFetchTool.MAX_REDIRECTS})` },
+      })
+      expect(requests).toHaveLength(WebFetchTool.MAX_REDIRECTS + 1)
+    }),
+  )
 
   it.effect("rejects non-HTTP schemes before permission or transport", () =>
     Effect.gen(function* () {
