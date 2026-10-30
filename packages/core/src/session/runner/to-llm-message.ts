@@ -6,7 +6,7 @@ import {
   ToolResultPart,
   type ContentPart,
   type ProviderMetadata,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import type { Model } from "@opencode/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"

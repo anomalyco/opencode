@@ -50,6 +50,17 @@ const part = (key: string, partID: string) =>
 
 const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID })
 
+const diff = (files: string[]) =>
+  new TimelineRow.TurnDiff({ userMessageID: "user-1", messageID: "idle-1", from: "user-1", files })
+
+const spaced = (spacing?: "tool" | "content") =>
+  new TimelineRow.AssistantPart({
+    userMessageID: "user-1",
+    group: { key: "part:a", type: "part", ref: { messageID: "assistant-1", partID: "a" } },
+    previousAssistantPart: true,
+    spacing,
+  })
+
 const keys = (rows: TimelineRow.TimelineRow[]) => rows.map(TimelineRow.key)
 
 describe("Timeline.resolveContent", () => {
@@ -199,6 +210,29 @@ describe("reuseTimelineRows", () => {
       reused: [[0, 0]],
     },
     {
+      name: "reuses a row whose list field is equal",
+      previous: [diff(["a.ts", "b.ts"])],
+      rows: [diff(["a.ts", "b.ts"])],
+      expected: ["turn-diff:idle-1"],
+      reused: [[0, 0]],
+    },
+    {
+      name: "replaces a row whose list field changed",
+      previous: [diff(["a.ts"])],
+      rows: [diff(["a.ts", "b.ts"])],
+      expected: ["turn-diff:idle-1"],
+      reused: [],
+      replaced: [[0, 0]],
+    },
+    {
+      name: "replaces a row whose optional field changed",
+      previous: [spaced("tool")],
+      rows: [spaced("content")],
+      expected: ["assistant-part:part:part:a"],
+      reused: [],
+      replaced: [[0, 0]],
+    },
+    {
       name: "does not create accidental key collisions",
       previous: [context("context:a", ["a", "b", "c"])],
       rows: [context("context:b", ["b"]), context("context:a", ["a"]), context("context:c", ["c"])],
@@ -209,12 +243,13 @@ describe("reuseTimelineRows", () => {
       ],
       reused: [],
     },
-  ])("$name", ({ previous, rows, expected, reused }) => {
+  ])("$name", ({ previous, rows, expected, reused, replaced }) => {
     const result = reuseTimelineRows([...previous], [...rows])
 
     expect(keys(result)).toEqual([...expected])
     expect(new Set(keys(result)).size).toBe(result.length)
     reused.forEach(([resultIndex, previousIndex]) => expect(result[resultIndex]).toBe(previous[previousIndex]))
+    replaced?.forEach(([resultIndex, previousIndex]) => expect(result[resultIndex]).not.toBe(previous[previousIndex]))
   })
 })
 
@@ -267,6 +302,58 @@ describe("createTimelineProjection", () => {
     expect(result.messageLastRowIndex.get("user-1")).toBe(3)
     expect(result.lastAssistantGroupKey.get("user-1")).toBe("part:assistant-1:assistant-1:text:0")
     expect(result.rowByKey.get("user-message:user-1")).toBe(result.rows[2])
+  })
+
+  test("indexes the agent and model each prompt's predecessor chose, ignoring later switches in its turn", () => {
+    const first = { id: "first", providerID: "provider" } satisfies ModelRef
+    const second = { id: "second", providerID: "provider", variant: "high" } satisfies ModelRef
+
+    const messages = [
+      { id: "user-1", type: "user", text: "first", time: { created: 1 } },
+      {
+        id: "assistant-1",
+        type: "assistant",
+        agent: "build",
+        model: first,
+        content: [{ type: "text", text: "answer" }],
+        time: { created: 2, completed: 3 },
+      },
+      // A steer's selection reconfigures the running turn before the steer is delivered.
+      { id: "model", type: "model-switched", model: second, time: { created: 4 } },
+      {
+        id: "assistant-2",
+        type: "assistant",
+        agent: "build",
+        model: second,
+        content: [{ type: "text", text: "more" }],
+        time: { created: 5, completed: 6 },
+      },
+      {
+        id: "user-2",
+        type: "user",
+        text: "steer",
+        metadata: { agent: "build", model: { modelID: "second", providerID: "provider", variant: "high" } },
+        time: { created: 7 },
+      },
+      {
+        id: "user-3",
+        type: "user",
+        text: "another steer",
+        metadata: { agent: "plan", model: { modelID: "second", providerID: "provider", variant: "high" } },
+        time: { created: 8 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const result = createTimelineProjection({
+      sessionMessages: messages,
+      status: { type: "busy" },
+      reasoningMode: "full",
+    })
+
+    expect(result.previousSelectionByID.has("user-1")).toBe(false)
+    // Without metadata, the first prompt chose what its first reply ran with, not the switch a later steer made.
+    expect(result.previousSelectionByID.get("user-2")).toEqual({ agent: "build", model: first })
+    expect(result.previousSelectionByID.get("user-3")).toEqual({ agent: "build", model: second })
   })
 
   test("reuses a stable projected row array", () => {

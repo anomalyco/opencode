@@ -1,7 +1,7 @@
 import { configure } from "@opencode/ai/providers/groq"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMEvent, LLMRequest, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"

@@ -1,4 +1,4 @@
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { Mistral } from "../../src/providers.js"
 
 const selected = Mistral.provider.model("mistral-small-latest")

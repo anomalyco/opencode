@@ -8,7 +8,7 @@ import { it } from "../../core/test/lib/effect"
 import { createRoutes } from "../src/routes"
 
 it.live(
-  "provider reads stay nonblocking while authentication discovery waits for plugins",
+  "agent and provider lists wait for plugins while single provider reads stay nonblocking",
   () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped("opencode-provider-endpoints-")
@@ -32,6 +32,7 @@ it.live(
                   models: { chat: {} },
                 },
               },
+              agents: { reviewer: { description: "Reviews changes" } },
             }),
           },
         }).pipe(Layer.provide(HttpServer.layerServices)),
@@ -62,22 +63,35 @@ it.live(
             }),
           )
         })
-      // Config providers activate after SDK plugins; reads must return the current snapshot without waiting.
-      const list = yield* request("GET", "/api/provider").pipe(Effect.timeout("2 seconds"))
+      // Config providers and agents activate after SDK plugins, so the lists wait rather than answer with a partial
+      // catalog that a client would cache as loaded.
+      const providers = yield* request("GET", "/api/provider").pipe(Effect.forkScoped)
+      const agents = yield* request("GET", "/api/agent").pipe(Effect.forkScoped)
       yield* Deferred.await(started)
       const integrations = yield* request("GET", "/api/integration").pipe(Effect.forkScoped)
-      expect(list.status).toBe(200)
-      expect(yield* Effect.promise(() => list.json())).toMatchObject({
-        location: { directory: tmp.path },
-        data: expect.not.arrayContaining([expect.objectContaining({ id: "custom" })]),
-      })
       const get = yield* request("GET", "/api/provider/custom").pipe(Effect.timeout("2 seconds"))
       expect(get.status).toBe(404)
       expect(yield* Effect.promise(() => get.json())).toMatchObject({
         _tag: "ProviderNotFoundError",
         providerID: "custom",
       })
+      expect(providers.pollUnsafe()).toBeUndefined()
+      expect(agents.pollUnsafe()).toBeUndefined()
       yield* Deferred.succeed(release, undefined)
+      const list = yield* Fiber.join(providers)
+      expect(list.status).toBe(200)
+      expect(yield* Effect.promise(() => list.json())).toMatchObject({
+        location: { directory: tmp.path },
+        data: expect.arrayContaining([expect.objectContaining({ id: "custom" })]),
+      })
+      const agentList = yield* Fiber.join(agents)
+      expect(agentList.status).toBe(200)
+      expect(yield* Effect.promise(() => agentList.json())).toMatchObject({
+        data: expect.arrayContaining([
+          expect.objectContaining({ id: "build" }),
+          expect.objectContaining({ id: "reviewer" }),
+        ]),
+      })
       const discovered = yield* Fiber.join(integrations)
       expect(discovered.status).toBe(200)
       expect(yield* Effect.promise(() => discovered.json())).toMatchObject({

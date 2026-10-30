@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
-import { LLM } from "../../src/index.js"
+import { LLM } from "../../src/effect.js"
 import { MiniMax } from "../../src/providers.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"

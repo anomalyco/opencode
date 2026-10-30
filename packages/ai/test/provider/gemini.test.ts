@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { LLM, AIError, LLMEvent, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage, Media, isRetryable } from "../../src/index.js"
+import { LLM, AIError, LLMEvent, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage, Media, isRetryable } from "../../src/effect.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as Gemini from "../../src/protocols/gemini.js"
+import { Google } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents, sseRaw } from "../lib/sse.js"
@@ -556,6 +557,80 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("forwards native video URLs in user and tool input", () =>
+    Effect.gen(function* () {
+      const uri = "https://example.test/clip.mp4"
+      const messages = [
+        Message.user(Message.media(Media.url(uri, { mediaType: "video/mp4" }))),
+        Message.assistant([ToolCallPart.make({ id: "call_video", name: "read", input: {} })]),
+        Message.tool({
+          id: "call_video",
+          name: "read",
+          result: { type: "content", value: [{ type: "file", uri, mime: "video/mp4" }] },
+        }),
+      ]
+      const gemini = yield* compileRequest(LLM.request({ model: gemini3, messages }))
+      expect(gemini.body).toEqual({
+        contents: [
+          { role: "user", parts: [{ fileData: { mimeType: "video/mp4", fileUri: uri } }] },
+          {
+            role: "model",
+            parts: [
+              {
+                functionCall: { id: "call_video", name: "read", args: {} },
+                thoughtSignature: "skip_thought_signature_validator",
+              },
+            ],
+          },
+          {
+            role: "user",
+            parts: [
+              { functionResponse: { id: "call_video", name: "read", response: { name: "read", content: "" } } },
+            ],
+          },
+          {
+            role: "user",
+            parts: [
+              { text: "Attached media from tool result:" },
+              { fileData: { mimeType: "video/mp4", fileUri: uri } },
+            ],
+          },
+        ],
+      })
+
+      const interactions = yield* compileRequest(
+        LLM.request({
+          model: Google.configure({ apiKey: "test" }).interactions("gemini-3-flash-preview"),
+          messages,
+        }),
+      )
+      expect(interactions.body).toEqual({
+        model: "gemini-3-flash-preview",
+        input: [
+          { type: "user_input", content: [{ type: "video", uri, mime_type: "video/mp4" }] },
+          { type: "function_call", id: "call_video", name: "read", arguments: {} },
+          {
+            type: "function_result",
+            call_id: "call_video",
+            name: "read",
+            result: [{ type: "video", uri, mime_type: "video/mp4" }],
+          },
+        ],
+        stream: true,
+        store: false,
+        generation_config: {},
+      })
+
+      const error = yield* compileRequest(
+        LLM.request({
+          model: gemini3,
+          prompt: Message.media(Media.url("https://example.test/image.png", { mediaType: "image/png" })),
+        }),
+      ).pipe(Effect.flip)
+      expect(error.reason._tag).toBe("InvalidRequest")
+    }),
+  )
+
   it.effect("flushes pending media before system update text", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -847,6 +922,23 @@ describe("Gemini route", () => {
       )
 
       expect(prepared.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(inputSchema)
+    }),
+  )
+
+  it.effect("reports the cost the endpoint billed", () =>
+    Effect.gen(function* () {
+      const body = sseEvents({
+        candidates: [{ content: { role: "model", parts: [{ text: "Hello" }] }, finishReason: "STOP" }],
+        usageMetadata: {
+          promptTokenCount: 5,
+          candidatesTokenCount: 2,
+          cost: 0,
+          opencode: { allowance: 0.0042 },
+        },
+      })
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, cost: 0 })
     }),
   )
 

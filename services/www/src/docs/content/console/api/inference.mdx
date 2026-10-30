@@ -98,3 +98,36 @@ curl -X POST "https://opencode.ai/inference/google/v1beta/models/gemini-4-argon:
     "contents": [{ "parts": [{ "text": "Say hi" }] }]
   }'
 ```
+
+## Cost
+
+Every response reports what the request cost you, beside the usage its API already returns: in `usage` for OpenAI and
+Anthropic, and in `usageMetadata` for Gemini. Streams report it on the event that carries the final usage: the final
+usage chunk for Chat Completions with `stream_options.include_usage`, `response.completed` for Responses,
+`message_delta` for Messages, and the last chunk for Gemini.
+
+```json
+"usage": {
+  "prompt_tokens": 1200,
+  "completion_tokens": 300,
+  "cost": 0.00412,
+  "opencode": {
+    "billing_source": "balance",
+    "list_cost": 0.00412,
+    "tokens": { "input": 1200, "output": 300, "reasoning": 120, "cache_read": 8000, "cache_write_5m": 0, "cache_write_1h": 0 }
+  }
+}
+```
+
+| Field                     | Meaning                                                                                                                      |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `cost`                    | US dollars charged to your balance. `0` for free models and for [Go](/console/go) usage within its limits. With your own provider key, an estimate of what your provider charges, unless it reports its own; absent when the model has no price. |
+| `opencode.billing_source` | `free`, `balance`, `go`, `go-plus`, or `byok` (your own provider key).                                                       |
+| `opencode.list_cost`      | US dollars at the model's price, including peak hours and long-context pricing.                                              |
+| `opencode.estimated`      | `true` when `cost` is an estimate at the model's price rather than an amount OpenCode charged. Only set with your own provider key. |
+| `opencode.allowance`      | Go only: how much the request counted toward your [usage limits](/console/go#usage-limits), in dollars of the plan's monthly limit. |
+| `opencode.tokens`         | The tokens you were billed for. `input` excludes cache reads and writes; `output` includes `reasoning`.                      |
+
+Image generation reports the same fields on the response, and on each completed image of a stream with the cost so far.
+The cost is known when the response ends, before your balance or Go usage is updated. If your balance or Go limits run
+out during a request, you may be charged less than reported, never more.

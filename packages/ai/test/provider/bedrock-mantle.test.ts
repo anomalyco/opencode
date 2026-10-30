@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMEvent, LLMRequest, Message, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMEvent, LLMRequest, Message, ToolDefinition } from "../../src/effect.js"
 import { AmazonBedrockMantle } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"

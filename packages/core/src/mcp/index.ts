@@ -759,7 +759,14 @@ export const layer = (options?: Options) =>
         servers: Effect.fn("MCP.servers")(function* () {
           return Array.from(entries)
             .toSorted(([a], [b]) => a.localeCompare(b))
-            .map(([name, entry]): ServerInfo => ({ name, status: entry.status, integrationID: entry.integrationID }))
+            .map(
+              ([name, entry]): ServerInfo => ({
+                name,
+                status: entry.status,
+                title: entry.client?.title,
+                integrationID: entry.integrationID,
+              }),
+            )
         }),
         add: Effect.fn("MCP.add")(function* (server, config) {
           const name = ServerName.make(server)

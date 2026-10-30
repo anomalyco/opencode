@@ -337,7 +337,7 @@ export function make(
 
       const refresh = () => rebind().pipe(Effect.andThen(FiberHandle.run(discovery, discover())))
 
-      // The connection's resource wins for Azure itself, matching the runtime merge of credentials over settings.
+      // The connection's resource wins over configured settings for Azure itself.
       const resourceFor = (provider: Provider.Info) =>
         provider.id === Provider.ID.azure
           ? (loaded.resource ?? resolveResourceName(provider.settings))
@@ -384,9 +384,16 @@ export function make(
           )
             continue
           const resourceName = resourceFor(item.provider)
-          for (const model of models.list(item.provider.id)) {
+          if (!resourceName) continue
+          for (const model of item.models.values()) {
+            if (typeof model.settings?.baseURL !== "string") continue
+            const baseURL = expandResourceName(
+              model.settings.baseURL,
+              resolveResourceName(model.settings, resourceName) ?? resourceName,
+            )
+            if (baseURL === model.settings.baseURL) continue
             models.update(item.provider.id, model.id, (draft) => {
-              if (resourceName && typeof draft.settings?.baseURL === "string")
+              if (typeof draft.settings?.baseURL === "string")
                 draft.settings.baseURL = expandResourceName(
                   draft.settings.baseURL,
                   resolveResourceName(draft.settings, resourceName) ?? resourceName,

@@ -34,6 +34,20 @@ it.live("waits for plugin initialization before listing models", () =>
     expect(
       body["data"].some((model) => isRecord(model) && model["providerID"] === "custom" && model["id"] === "chat"),
     ).toBeTrue()
+
+    url.searchParams.set("types", "image")
+    const images = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+    expect(images.status).toBe(200)
+    const imageBody: unknown = yield* Effect.promise(() => images.json())
+    if (!isRecord(imageBody) || !Array.isArray(imageBody["data"])) throw new Error("Expected a model list response")
+    expect(imageBody["data"].some((model) => isRecord(model) && model["providerID"] === "custom")).toBeFalse()
+
+    url.searchParams.append("types", "chat")
+    const both = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+    expect(both.status).toBe(200)
+    const bothBody: unknown = yield* Effect.promise(() => both.json())
+    if (!isRecord(bothBody) || !Array.isArray(bothBody["data"])) throw new Error("Expected a model list response")
+    expect(bothBody["data"].some((model) => isRecord(model) && model["id"] === "chat")).toBeTrue()
   }),
 )
 

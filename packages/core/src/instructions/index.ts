@@ -158,14 +158,23 @@ export function diff(observed: ReadResult, previous?: Values): Effect.Effect<Adm
   return Effect.succeed({ delta, blobs })
 }
 
-export function renderInitial(value: List, values: Readonly<Record<string, Schema.Json>>) {
-  return render(
-    value.flatMap((source) => {
-      if (!Object.hasOwn(values, source.key)) return []
-      const text = source.initial(values[source.key])
-      return text === undefined ? [] : [text]
-    }),
-  )
+/** One source's rendered text, keyed so consumers can tell the sources apart. */
+export interface Rendered {
+  readonly key: Key
+  readonly text: string
+}
+
+export function renderInitial(value: List, values: Readonly<Record<string, Schema.Json>>): ReadonlyArray<Rendered> {
+  return value.flatMap((source) => {
+    if (!Object.hasOwn(values, source.key)) return []
+    const text = source.initial(values[source.key])
+    return text === undefined ? [] : [{ key: source.key, text }]
+  })
+}
+
+/** The text models see for rendered sources. */
+export function join(rendered: ReadonlyArray<Rendered>) {
+  return render(rendered.map((part) => part.text))
 }
 
 export function renderUpdate(
