@@ -1,5 +1,6 @@
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { IpcClient } from "@opencode/plugin/gui"
+import { uuid } from "@opencode/util/uuid"
 import type { BrowserPane, PaneEvent } from "./ipc"
 
 type Client = IpcClient<(typeof BrowserPane)["spec"]>
@@ -310,7 +311,7 @@ function open(
   listener: (event: PaneEvent) => void,
   failed: (cause: unknown) => void,
 ): Registration {
-  const binding = crypto.randomUUID()
+  const binding = uuid()
   const status = { closed: false }
 
   const stop = listen(binding, (event) => {
