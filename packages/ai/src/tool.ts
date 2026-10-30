@@ -130,7 +130,7 @@ export type ToolOptions<
 export const tool = <
   Parameters extends ToolSchema<any> = typeof Schema.Unknown,
   Success extends ToolSchema<any> = typeof Schema.Unknown,
-  Result extends Effect.Effect<Schema.Schema.Type<Success>, ToolFailure> = never,
+  Result extends Effect.Effect<Schema.Schema.Type<Success>, ToolFailure> | NoExecute = NoExecute,
 >(
   config: ToolOptions<
     Parameters,
@@ -139,14 +139,22 @@ export const tool = <
   >,
 ) => build(config, config.execute)
 
-/** @internal Builds a tool for both clients from its options and an Effect `execute`; no `execute` infers `never`. */
-export function build<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>, Execute>(
-  config: ToolOptions<Parameters, Success, Execute>,
-  execute: ToolExecute<Parameters, ToolSchema<unknown>> | undefined,
-): Execute extends (...args: never) => never ? Tool<Parameters, Success> : ExecutableTool<Parameters, Success>
+declare const noExecute: unique symbol
+/** @internal The inferred `execute` result when `execute` is omitted; no function can return it. */
+export type NoExecute = { readonly [noExecute]: never }
+
+/** @internal Builds a tool for both clients from its options and an Effect `execute`. */
+export function build<Parameters extends ToolSchema<any>, Success extends ToolSchema<any>, Result>(
+  config: ToolOptions<Parameters, Success, (...args: never) => Result>,
+  execute: ((params: Schema.Schema.Type<Parameters>, context?: ToolExecuteContext) => unknown) | undefined,
+): 0 extends 1 & Result // `any`
+  ? ExecutableTool<Parameters, Success>
+  : [Result, NoExecute] extends [NoExecute, Result]
+    ? Tool<Parameters, Success>
+    : ExecutableTool<Parameters, Success>
 export function build(
   config: ToolOptions<ToolSchema<any>, ToolSchema<any>, unknown>,
-  execute: ToolExecute<ToolSchema<any>, ToolSchema<any>> | undefined,
+  execute: ((params: any, context?: ToolExecuteContext) => any) | undefined,
 ): Tool {
   const shared = {
     description: config.description,
