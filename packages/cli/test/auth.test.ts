@@ -39,6 +39,7 @@ describe("auth command", () => {
   })
 
   test("lists distinct stored credential IDs without changing JSON connections", async () => {
+    const requests: string[] = []
     using server = authServer((request, url) => {
       if (url.pathname === "/api/integration") {
         return Response.json(
@@ -58,12 +59,12 @@ describe("auth command", () => {
         )
       }
       return new Response("Not found", { status: 404 })
-    })
+    }, requests)
 
-    const [result, table] = await Promise.all([
-      cli(["auth", "list", "--format", "json", "--server", server.url.toString()]),
-      cli(["auth", "list", "--server", server.url.toString()]),
-    ])
+    const result = await cli(["auth", "list", "--format", "json", "--server", server.url.toString()])
+    expect(requests).toContain("/api/model/default")
+    expect(requests.indexOf("/api/model/default")).toBeLessThan(requests.indexOf("/api/integration"))
+    const table = await cli(["auth", "list", "--server", server.url.toString()])
     expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
     expect({ exitCode: table.exitCode, stderr: table.stderr }).toEqual({ exitCode: 0, stderr: "" })
     expect(
