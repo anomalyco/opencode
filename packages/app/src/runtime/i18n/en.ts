@@ -231,7 +231,6 @@ export const dict = {
   "provider.connect.title.anthropicProMax": "Login with Anthropic",
   "provider.connect.claudeAgent.description":
     "Use your Claude plan or another Claude Code login. Install Claude Code and sign in first.",
-  "provider.connect.claudeAgent.learnMore": "Learn more",
   "provider.connect.claudeAgent.install": "Install Claude Code",
   "provider.connect.claudeAgent.signIn.command": "Sign-in command",
   "provider.connect.claudeAgent.connect": "Connect",

@@ -37,7 +37,6 @@ import { useIntegrations } from "@/providers/catalog/integrations"
 import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provider-group"
 import type { ModelSelection } from "@/providers/models/selection"
 import { decode64 } from "@/runtime/persistence/base64"
-import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"
 import { useTabs } from "@/shell/tabs/tabs"
 import { Persist, persisted } from "@/runtime/persistence/storage"
@@ -270,10 +269,8 @@ export const DialogConnectProvider: Component<{
 
 const CLAUDE_CODE_SETUP_URL = "https://code.claude.com/docs/en/setup"
 
-const CLAUDE_AGENT_DOCS_URL = "https://opencode.ai/v2/docs/providers#claude-agent"
-
-// The TUI's integration groups and order, plus Claude Agent, with connected integrations pulled up into their own group first.
-const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "claude-agent", "google"]
+// The TUI's integration groups and order, with connected integrations pulled up into their own group first.
+const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"]
 
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
   const integrations = useIntegrations(() => props.directory)
@@ -1625,10 +1622,7 @@ function ProviderConnection(props: {
         data-component="claude-agent-setup"
         class="flex flex-col items-start gap-5 px-3 pb-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
       >
-        <p>
-          {language.t("provider.connect.claudeAgent.description")}{" "}
-          <ExternalLink href={CLAUDE_AGENT_DOCS_URL}>{language.t("provider.connect.claudeAgent.learnMore")}</ExternalLink>
-        </p>
+        <p>{language.t("provider.connect.claudeAgent.description")}</p>
         <Show when={problem()}>
           {(message) => (
             <div class="flex items-start gap-2 text-v2-text-text-base">
