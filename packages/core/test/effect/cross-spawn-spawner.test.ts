@@ -437,6 +437,8 @@ describe("cross-spawn spawner", () => {
           Effect.sync(() => process.on("uncaughtException", onUncaught)),
           () => Effect.sync(() => process.off("uncaughtException", onUncaught)),
         )
+        // Under `bun test` (1.4.4) the process's first child with an extra fd never emits "spawn", so spawn one without.
+        yield* Effect.scoped(Effect.flatMap(ChildProcess.make("true"), (warmUp) => warmUp.exitCode))
 
         // The child closes fd3 before signalling readiness on stdout.
         const handle = yield* ChildProcess.make("sh", ["-c", "exec 3>&-; echo ready; exec sleep 10"], {
@@ -444,11 +446,10 @@ describe("cross-spawn spawner", () => {
         })
         yield* Stream.runDrain(Stream.take(handle.stdout, 1))
 
-        // Write before anyone reads fd3, and start reading only later.
+        // Write before anyone reads fd3, and start reading only after the write has failed.
         const writeError = yield* Effect.flip(
           Stream.run(Stream.make(new TextEncoder().encode("request")), handle.getInputFd(3)),
         )
-        yield* Effect.sleep("100 millis")
         const readError = yield* Effect.flip(Stream.runDrain(handle.getOutputFd(3)).pipe(Effect.timeout("2 seconds")))
 
         expect(writeError._tag).toBe("PlatformError")
