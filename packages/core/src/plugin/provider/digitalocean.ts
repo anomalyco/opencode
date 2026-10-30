@@ -124,7 +124,7 @@ export const DigitalOceanPlugin = define({
       initial: { routers: [] } as { readonly key?: string; readonly routers: Routers },
       active: ctx.integration.connection.active(integrationID),
       reload: ctx.provider.reload(),
-      load: Effect.fn("DigitalOceanPlugin.load")(function* (current, interval) {
+      load: Effect.fn("DigitalOceanPlugin.load")(function* (current, options) {
         const connection = yield* ctx.integration.connection.active(integrationID)
         const credential = connection
           ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
@@ -138,7 +138,7 @@ export const DigitalOceanPlugin = define({
         const routers = yield* cache
           .get({
             key,
-            interval,
+            ...options,
             load: Effect.gen(function* () {
               const latest = yield* ctx.integration.connection.resolve(connection)
               if (latest?.type !== "oauth" || latest.methodID !== methodID)

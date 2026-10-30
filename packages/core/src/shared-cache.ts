@@ -78,7 +78,7 @@ const layer = Layer.effect(
       entries.set(input.key, entry)
       entry.read = now
       // A caller refreshing less often than daily must never find its entry dropped between two of its refreshes.
-      entry.unread = Math.max(entry.unread, 2 * age)
+      if (Number.isFinite(age)) entry.unread = Math.max(entry.unread, 2 * age)
       const last = entry.last
       // The key decides the value's type, so a stored or joined result under the same key has this caller's types.
       if (!input.force && last && now - last.time < age) return yield* last.exit as Exit.Exit<A, E>

@@ -15,6 +15,7 @@ import { SharedCache } from "../../shared-cache.js"
 import { which } from "../../util/which.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
+import { ProviderRefresh } from "./refresh.js"
 
 const cognitiveScope = "https://cognitiveservices.azure.com/.default"
 const foundryScope = "https://ai.azure.com/.default"
@@ -281,7 +282,7 @@ export function make(
           }),
         )
 
-      const discover = Effect.fn("AzurePlugin.discover")(function* () {
+      const discover = Effect.fn("AzurePlugin.discover")(function* (options: ProviderRefresh.Options) {
         const connection = loaded.connection
         const settings = (yield* providers.get(Provider.ID.azure))?.settings
         const name = loaded.resource ?? resolveResourceName(settings)
@@ -312,6 +313,7 @@ export function make(
         const found = yield* cache
           .get({
             key: deploymentsKey(connection, credential, url),
+            ...options,
             load: ctx.integration.connection.resolve(connection).pipe(
               Effect.flatMap((current) =>
                 !current || current.type === "oauth" || (current.type === "external" && current.methodID !== methodID)
@@ -323,9 +325,11 @@ export function make(
             ),
           })
           .pipe(Effect.orElseSucceed(() => undefined))
-        if (!found) return
-        yield* loading.withPermit(publish(connection, found)).pipe(Effect.uninterruptible)
+        return found && { connection, found }
       })
+
+      const apply = (next: { connection: typeof loaded.connection; found: readonly Deployment[] } | undefined) =>
+        next ? loading.withPermit(publish(next.connection, next.found)).pipe(Effect.uninterruptible) : Effect.void
 
       const publish = Effect.fn("AzurePlugin.publish")(function* (
         connection: typeof loaded.connection,
@@ -353,7 +357,7 @@ export function make(
         yield* ctx.model.reload()
       })
 
-      const refresh = () => rebind().pipe(Effect.andThen(FiberHandle.run(discovery, discover())))
+      const refresh = discover({}).pipe(Effect.flatMap(apply))
 
       // The connection's resource wins over configured settings for Azure itself.
       const resourceFor = (provider: Provider.Info) =>
@@ -435,13 +439,15 @@ export function make(
       // A switch interrupts discovery for the previous connection instead of waiting for its Azure calls.
       yield* bus.subscribe(Credential.Event.Switched).pipe(
         Stream.filter((event) => event.data.integrationID === Integration.ID.make("azure")),
-        Stream.runForEach(() => refresh()),
+        Stream.runForEach(() =>
+          rebind().pipe(Effect.andThen(FiberHandle.run(discovery, ProviderRefresh.switched(discover, apply)))),
+        ),
         Effect.forkScoped({ startImmediately: true }),
       )
       // Deployments load in the background so startup never waits on Azure; the catalog serves until they arrive.
-      yield* refresh().pipe(Effect.forkScoped)
+      yield* rebind().pipe(Effect.andThen(FiberHandle.run(discovery, refresh)), Effect.forkScoped)
       yield* Effect.sleep(SharedCache.interval).pipe(
-        Effect.andThen(FiberHandle.run(discovery, discover(), { onlyIfMissing: true })),
+        Effect.andThen(FiberHandle.run(discovery, refresh, { onlyIfMissing: true })),
         Effect.forever,
         Effect.forkScoped,
       )

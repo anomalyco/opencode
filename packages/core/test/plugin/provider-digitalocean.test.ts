@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Logger, Schedule } from "effect"
+import { Deferred, Effect, Logger, Schedule } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import { Credential } from "@opencode/core/credential"
@@ -48,14 +48,20 @@ const discovery = Effect.gen(function* () {
     })
     draft.models.update(Provider.ID.openai, Model.ID.make("router:alpha"), () => {})
   })
-  const remote: { status: number; body: unknown; requests: HttpClientRequest.HttpClientRequest[] } = {
+  const remote: {
+    status: number
+    body: unknown
+    requests: HttpClientRequest.HttpClientRequest[]
+    gate?: Deferred.Deferred<void>
+  } = {
     status: 200,
     body: { model_routers: [{ name: "alpha" }, { name: "configured" }] },
     requests: [],
   }
   const http = HttpClient.make((request) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       remote.requests.push(request)
+      if (remote.gate) yield* Deferred.await(remote.gate)
       return HttpClientResponse.fromWeb(request, Response.json(remote.body, { status: remote.status }))
     }),
   )
@@ -189,14 +195,41 @@ describe("DigitalOceanPlugin", () => {
       expect(fixture.remote.requests).toHaveLength(count)
       expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeUndefined()
 
-      // The second account's failed load is kept until the next refresh interval.
-      yield* TestClock.adjust("10 minutes")
       yield* credentials.activate(second.id)
       yield* drain
       expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
       yield* credentials.remove(second.id)
       yield* drain
       expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeUndefined()
+    }),
+  )
+
+  it.effect("shows a returning account's cached routers at once and refreshes them in the background", () =>
+    Effect.gen(function* () {
+      const fixture = yield* discovery
+      const credentials = yield* Credential.Service
+      const first = yield* oauthCredential()
+      yield* fixture.install
+      yield* drain
+      fixture.remote.body = { model_routers: [{ name: "beta" }] }
+      yield* oauthCredential("other-account")
+      yield* drain
+      const router = (name: string) => fixture.models.get(providerID, Model.ID.make(`router:${name}`))
+      expect(yield* router("beta")).toBeDefined()
+
+      fixture.remote.body = { model_routers: [{ name: "gamma" }] }
+      fixture.remote.gate = yield* Deferred.make<void>()
+      const count = fixture.remote.requests.length
+      yield* credentials.activate(first.id)
+      yield* drain
+      expect(yield* router("alpha")).toBeDefined()
+      expect(fixture.remote.requests).toHaveLength(count + 1)
+
+      yield* Deferred.succeed(fixture.remote.gate, undefined)
+      yield* drain
+      expect(yield* router("alpha")).toBeUndefined()
+      expect(yield* router("gamma")).toBeDefined()
+      expect(fixture.remote.requests).toHaveLength(count + 1)
     }),
   )
 

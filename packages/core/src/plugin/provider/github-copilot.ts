@@ -175,7 +175,7 @@ export const GithubCopilotPlugin = define({
       },
       active: ctx.integration.connection.active("github-copilot"),
       reload: ctx.provider.reload(),
-      load: Effect.fn("GithubCopilotPlugin.load")(function* (_, interval) {
+      load: Effect.fn("GithubCopilotPlugin.load")(function* (_, options) {
         const connection = yield* ctx.integration.connection.active("github-copilot")
         const credential = connection
           ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
@@ -186,7 +186,7 @@ export const GithubCopilotPlugin = define({
         const models = yield* cache
           .get({
             key: modelsKey(connection, url, headers),
-            interval,
+            ...options,
             load: ctx.integration.connection.resolve(connection).pipe(
               Effect.flatMap((current) =>
                 current?.type === "oauth"
