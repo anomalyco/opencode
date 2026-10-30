@@ -2,6 +2,7 @@ export type JsonValue = null | boolean | number | string | Array<JsonValue> | { 
 
 export type ServerInfo = {
   version: string
+  apiVersion?: number | undefined
   pid: number
   hostname?: string | undefined
   urls: Array<string>
