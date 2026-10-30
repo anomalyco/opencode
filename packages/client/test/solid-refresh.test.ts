@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { createRoot } from "solid-js"
+import { createEffect, createRoot } from "solid-js"
 import { createData, settleMs, type CreateDataInput } from "../src/solid"
 import { OpenCode, type OpenCodeEvent, type SessionInfo } from "../src/promise"
 
@@ -254,7 +254,7 @@ test("invalidations that land before a queued reload starts are absorbed by it",
 test("event-driven session reads evict missing sessions without reporting an error, while explicit reads still reject", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const errors: unknown[] = []
-  const settled = Promise.withResolvers<void>()
+  const evicted = Promise.withResolvers<void>()
   const session: SessionInfo = {
     id: "ses_ephemeral",
     projectID: "project",
@@ -263,19 +263,16 @@ test("event-driven session reads evict missing sessions without reporting an err
     time: { created: 0, updated: 0, idle: 1 },
     location: { directory: "/project" },
   }
-  let calls = 0
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
-    fetch: async () => {
-      if (++calls === 1) queueMicrotask(() => settled.resolve())
-      return Response.json(
+    fetch: async () =>
+      Response.json(
         { _tag: "SessionNotFoundError", sessionID: session.id, message: `Session not found: ${session.id}` },
         { status: 404 },
-      )
-    },
+      ),
   })
-  const setup = createRoot((dispose) => ({
-    data: createData({
+  const setup = createRoot((dispose) => {
+    const data = createData({
       api: () => api,
       directory: "/project",
       event: {
@@ -286,9 +283,12 @@ test("event-driven session reads evict missing sessions without reporting an err
         },
       },
       onError: (error) => errors.push(error),
-    }),
-    dispose,
-  }))
+    })
+    createEffect(() => {
+      if (data.session.missing(session.id)) evicted.resolve()
+    })
+    return { data, dispose }
+  })
   const viewed: OpenCodeEvent = {
     id: "evt_ephemeral_viewed",
     created: 2,
@@ -300,8 +300,7 @@ test("event-driven session reads evict missing sessions without reporting an err
     setup.data.session.remember(session)
     expect(setup.data.session.get(session.id)).toBeDefined()
     listeners.forEach((listener) => listener({ name: viewed.type, details: viewed }))
-    await settled.promise
-    await Promise.resolve()
+    await evicted.promise
     expect(errors).toEqual([])
     expect(setup.data.session.get(session.id)).toBeUndefined()
     expect(setup.data.session.missing(session.id)).toBe(true)
