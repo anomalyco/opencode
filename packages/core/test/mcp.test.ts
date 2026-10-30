@@ -1619,7 +1619,6 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
         'return await tools.opencode.read_mcp_resource({ server: "resources", uri: "docs://gone" })',
       )
       expect(gone.metadata?.error).toBe(true)
-      expect(gone.output.output).toContain("Unable to read MCP resource resources:docs://gone")
       expect(gone.output.output).toContain("Resource not found")
       const missing = yield* run(
         'return await tools.opencode.read_mcp_resource({ server: "missing", uri: "docs://readme" })',

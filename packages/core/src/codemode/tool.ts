@@ -122,15 +122,9 @@ export const create = (
               executeTool: (name, tool, input) =>
                 Effect.gen(function* () {
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
+                  // The program sees the same failure text the model gets for a direct call.
                   const executed = yield* executeTool(name, tool, input, context).pipe(
-                    Effect.mapError((error) => {
-                      // Tools often wrap a rejection under their own message; show the user's feedback or the
-                      // rule's reason instead, as a direct call would.
-                      const failure = toSessionError(error)
-                      return failure.type === "permission.rejected"
-                        ? new ToolFailure({ message: failure.message })
-                        : error
-                    }),
+                    Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
                   const content = resultContent(executed)
                   const outputFileParts = outputFiles(content)
