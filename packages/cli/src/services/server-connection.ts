@@ -7,6 +7,10 @@ import { Env } from "../env"
 import { ServiceConfig } from "./service-config"
 import { Standalone } from "./standalone"
 import { errorMessage } from "../util/error"
+import { Global } from "@opencode/util/global"
+import path from "node:path"
+import { databasePath } from "../database-path"
+import { checkDatabaseOwner } from "./database-owner"
 
 export type Args = {
   readonly server?: string
@@ -50,6 +54,12 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
 
   const mismatch = args.mismatch ?? "ignore"
   const options = yield* ServiceConfig.options({ checkVersion: mismatch !== "ignore" })
+  const ready = yield* Service.discover(options)
+  if (ready) return { endpoint: ready, service: managedService(options) } satisfies Resolved
+  const global = yield* Global.Service
+  const env = { ...process.env, ...options.env }
+  const data = options.env?.XDG_DATA_HOME ? path.join(options.env.XDG_DATA_HOME, "opencode") : global.data
+  yield* Effect.tryPromise(() => checkDatabaseOwner(databasePath(data, env), options.file))
   return {
     endpoint: yield* resolveManaged({ ...options, onStart: args.onStart }, mismatch),
     service: managedService(options),

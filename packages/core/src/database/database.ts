@@ -10,6 +10,7 @@ import { chmod } from "node:fs/promises"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { acquireDatabaseOwner, releaseDatabaseOwner } from "./owner.js"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
@@ -30,22 +31,30 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/st
 // releasing a shared semaphore resumes the waiting object's fiber inside the
 // releasing object's I/O context, where its first storage call is rejected as
 // cross-object I/O.
-const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
+const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, exclusive = false) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
       const db = yield* makeDatabase
+      const semaphore = yield* lock
+
+      // Connection-local only: contenders must wait for short writes before attempting BEGIN IMMEDIATE.
+      if (supportsTuningPragmas) yield* db.run("PRAGMA busy_timeout = 5000")
+
+      const acquireOwner = Effect.acquireRelease(semaphore.withPermit(acquireDatabaseOwner(db)), (owned) =>
+        semaphore.withPermit(releaseDatabaseOwner(db, owned)).pipe(Effect.orDie),
+      )
+      // Fence fresh and existing databases before schema migration, recovery or session mutation.
+      if (exclusive) yield* acquireOwner
 
       if (supportsTuningPragmas) {
         yield* db.run("PRAGMA journal_mode = WAL")
         yield* db.run("PRAGMA synchronous = NORMAL")
-        yield* db.run("PRAGMA busy_timeout = 5000")
         yield* db.run("PRAGMA cache_size = -64000")
         yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
       }
       // Durable Object SQLite always enforces foreign keys and rejects the pragma.
       if (supportsForeignKeyToggle) yield* db.run("PRAGMA foreign_keys = ON")
-      const semaphore = yield* lock
       yield* semaphore.withPermit(DatabaseMigration.apply(db))
 
       return { db }
@@ -68,9 +77,10 @@ export function layer(options: Options = { path: ":memory:" }) {
   return Layer.unwrap(
     Effect.gen(function* () {
       const provide = (filename: string) =>
-        databaseLayer(filename === ":memory:" ? Semaphore.make(1) : Effect.succeed(lockFor(filename))).pipe(
-          Layer.provide(sqliteLayer({ filename })),
-        )
+        databaseLayer(
+          filename === ":memory:" ? Semaphore.make(1) : Effect.succeed(lockFor(filename)),
+          filename !== ":memory:",
+        ).pipe(Layer.provide(sqliteLayer({ filename })))
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:") return provide(filename)
       const file = isAbsolute(filename) ? filename : join((yield* Global.Service).data, filename)
