@@ -2,8 +2,15 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { UnauthorizedError } from "../errors.js"
 
+// HTTP API generation reported by `GET /api/info`. Bump this when the request or
+// response contract changes in a way clients must gate on, so third-party drivers
+// can reject a mismatched server in one request instead of failing later.
+export const API_VERSION = 2
+
 export const ServerInfo = Schema.Struct({
   version: Schema.String,
+  // HTTP API generation. Absent on servers that predate this field; treat as 1.
+  apiVersion: Schema.optional(Schema.Int),
   // 0 means the runtime has no OS process identity (e.g. workerd).
   pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   // The machine's name, absent where the runtime has none (e.g. workerd).
