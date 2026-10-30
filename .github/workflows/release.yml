@@ -24,7 +24,7 @@ on:
         required: false
         type: string
       release_notes:
-        description: "Reviewed V2 release notes for CHANGELOG.md and the GitHub release (optional)"
+        description: "Reviewed V2 release notes for CHANGELOG.md and the GitHub release (required with bump or version)"
         required: false
         type: string
 
@@ -72,6 +72,7 @@ jobs:
           GH_TOKEN: ${{ github.token }} # reads the triggering actor's repository role for stable releases
           INPUT_BUMP: ${{ inputs.bump }}
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_RELEASE_NOTES: ${{ inputs.release_notes }}
 
   # A versioned release builds from a commit with its versions and changelog on the dispatched dev commit,
   # tagged v<version>. Runs git only.
