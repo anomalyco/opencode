@@ -204,7 +204,15 @@ function overlayProvider(
         integrationID: provider.integrationID,
       })
     if (integrationID) provider.integrationID = integrationID
-    provider.activation = "enabled"
+    // Only providers that actually bring their own endpoint or models become available without credentials.
+    // Setting-only overrides (e.g. a timeout) keep the catalog provider's normal connection requirement.
+    if (
+      integrationID !== undefined ||
+      (item.models !== undefined && Object.keys(item.models).length > 0) ||
+      item.settings?.baseURL !== undefined
+    ) {
+      provider.activation = "enabled"
+    }
     if (item.canonical !== undefined) provider.canonical = item.canonical
     if (item.name) provider.name = item.name
     if (item.package !== undefined) provider.package = item.package
