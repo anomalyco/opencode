@@ -5,14 +5,12 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Tool } from "@opencode/schema/tool"
-import { Deferred, Effect, Schema, Scope } from "effect"
+import { Effect, Schema } from "effect"
 import { Environment } from "../../environment/index.js"
 import { Job } from "../../job.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { NonNegativeInt } from "../../schema.js"
-import { Session } from "../../session.js"
-import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
@@ -52,6 +50,9 @@ export const Input = Schema.Struct({
   timeout: Schema.optionalKey(NonNegativeInt).annotate({
     description: `Timeout in milliseconds. Set to 0 to disable the timeout. Defaults to ${DEFAULT_TIMEOUT_MS} for foreground commands. Background commands have no timeout by default.`,
   }),
+  yield_after: Schema.optionalKey(NonNegativeInt).annotate({
+    description: `Milliseconds to wait before moving a still-running command to the background and returning its output so far. Defaults to ${Job.DEFAULT_YIELD_AFTER_MS}. Set to 0 to run in the background immediately.`,
+  }),
   background: Schema.optionalKey(Schema.Boolean).annotate({
     description:
       "Run the command in the background and return immediately (useful for dev servers and long-running builds). You do not need to use '&' at the end of the command when using this parameter. You will be notified when it completes. DO NOT poll for completion.",
@@ -62,6 +63,7 @@ const StructuredOutput = Schema.Struct({
   exit: Schema.optionalKey(Schema.Number),
   signal: Schema.optionalKey(Schema.String),
   shellID: Schema.optionalKey(Schema.String),
+  jobID: Schema.optionalKey(Schema.String),
   truncated: Schema.Boolean,
   timeout: Schema.optionalKey(Schema.Boolean),
 })
@@ -87,23 +89,26 @@ const toolResult = (output: Output) => {
       status: output.status,
       ...ShellResult.metadata(output),
       ...(output.shellID !== undefined ? { shellID: output.shellID } : {}),
+      ...(output.jobID !== undefined ? { jobID: output.jobID } : {}),
     },
   }
 }
 
-const backgroundResult = (shellID: string, file: string) => ({
-  output: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${file}`,
+const backgroundResult = (shellID: string, file: string, partial?: { output: string; truncated: boolean }): Output => ({
+  output: [
+    `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${file}`,
+    ...(partial?.output ? [`Output so far:\n${partial.output}`] : []),
+  ].join("\n\n"),
   shellID,
-  truncated: false,
+  jobID: shellID,
+  truncated: partial?.truncated ?? false,
   status: "running" as const,
 })
 
 export const Plugin = {
   id: "opencode.tool.shell",
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: Context) {
-    const sessions = yield* Session.Service
     const jobs = yield* Job.Service
-    const scope = yield* Scope.Scope
     const environment = yield* Environment.Service
     const access = yield* FileAccess.Service
     const shell = yield* Shell.Service
@@ -148,40 +153,6 @@ export const Plugin = {
       return timeout
     })
 
-    const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(
-      function* (
-        sessionID: SessionSchema.ID,
-        id: string,
-        shellID: string,
-        command: string,
-        settled: Deferred.Deferred<Output>,
-      ) {
-        const info = (yield* jobs.wait({ id })).info
-        if (!info || info.status === "running") return
-        const output = info.status === "completed" ? yield* Deferred.await(settled) : undefined
-        const text = output
-          ? resultMessages(output).join("\n\n")
-          : info.status === "error"
-            ? (info.error ?? "Command failed")
-            : "Cancelled"
-        yield* sessions.synthetic({
-          ...(info.notificationID ? { id: info.notificationID } : {}),
-          sessionID,
-          description: command,
-          ...ShellResult.notification({
-            jobID: id,
-            shellID,
-            command,
-            state: info.status,
-            text,
-            output,
-          }),
-        })
-        if (info.notificationID) yield* jobs.completeBackground(info.notificationID)
-      },
-      Effect.forkIn(scope, { startImmediately: true }),
-    )
-
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
@@ -192,7 +163,8 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const timeout = input.background === true ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
+              const immediate = input.background === true || input.yield_after === 0
+              const timeout = immediate ? (input.timeout ?? 0) : (input.timeout ?? DEFAULT_TIMEOUT_MS)
               let finalTimeout = timeout
               const info = yield* shell.create(
                 {
@@ -213,26 +185,24 @@ export const Plugin = {
               )
               yield* context.progress({ shellID: info.id })
 
-              const settled = yield* Deferred.make<Output>()
               const run = Effect.gen(function* () {
                 const result = yield* shell.result(info)
                 if (!result.capture) return yield* new Shell.NotFoundError({ id: info.id })
                 const output = ShellResult.output(result)
-                return {
+                const value: Output = {
                   ...output,
                   output: output.timeout
                     ? `${output.output}\n\nCommand exceeded timeout of ${finalTimeout} ms. Retry with a larger timeout if the command is expected to take longer.`
                     : output.output,
                   status: "completed" as const,
                 }
-              }).pipe(
-                Effect.tap((output) => Deferred.succeed(settled, output)),
-                Effect.map((output) => resultMessages(output).join("\n\n")),
-                Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
-              )
-              const job = yield* jobs.start({
+                return { output: resultMessages(value).join("\n\n"), value }
+              }).pipe(Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)))
+
+              const job = yield* jobs.start<Output>({
                 // CodeMode children share a tool-call ID, but each shell must own its job.
                 id: info.id,
+                sessionID: context.sessionID,
                 type: name,
                 title: info.command,
                 metadata: { sessionID: context.sessionID, shellID: info.id },
@@ -243,27 +213,33 @@ export const Plugin = {
                   command: info.command,
                 },
                 run,
+                output: shell.snapshot(info.id).pipe(Effect.map((captured) => captured?.output || undefined)),
+                stop: shell.remove(info.id).pipe(Effect.ignore),
               })
 
-              if (input.background === true) {
+              if (immediate) {
                 yield* jobs.background(job.id)
-                yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
-                return backgroundResult(info.id, info.file)
+                const partial = input.background === true ? undefined : yield* shell.snapshot(info.id)
+                return backgroundResult(info.id, info.file, partial)
               }
 
               const result = yield* jobs
-                .block({ id: job.id, sessionID: context.sessionID })
-                .pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
+                .block<Output>({
+                  id: job.id,
+                  sessionID: context.sessionID,
+                  yield_after: input.yield_after ?? Job.DEFAULT_YIELD_AFTER_MS,
+                })
+                .pipe(Effect.onInterrupt(() => jobs.cancel(job.id, { notify: false }).pipe(Effect.ignore)))
               if (result?.type === "backgrounded") {
-                yield* shell.timeout(info.id, 0)
-                yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
-                return backgroundResult(info.id, info.file)
+                if (result.reason === "signal" || input.timeout === undefined) yield* shell.timeout(info.id, 0)
+                const partial = result.reason === "signal" ? undefined : yield* shell.snapshot(info.id)
+                return backgroundResult(info.id, info.file, partial)
               }
               if (result?.info.status === "error")
                 return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
               if (result?.info.status === "cancelled") return yield* Effect.fail(new Error("Command cancelled"))
-
-              return yield* Deferred.await(settled)
+              if (!result?.info.value) return yield* Effect.fail(new Error("Command failed"))
+              return result.info.value
             }).pipe(
               Effect.map(toolResult),
               Effect.mapError(

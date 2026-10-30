@@ -136,6 +136,59 @@ describe("Tool auto-backgrounding", () => {
     }),
   )
 
+  it.live("yields a slow shell command with partial output and still delivers after Location reload", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const bus = yield* Bus.Service
+          const database = yield* Database.Service
+          const locations = yield* LocationServiceMap.Service
+          const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
+          const session = yield* sessions.create({ location, model: sessionModel })
+
+          const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === session.id && event.data.item.type === "synthetic"),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+
+          const yielded = yield* Effect.gen(function* () {
+            yield* Plugin.Service.use((plugins) => plugins.awaitActivation)
+            const registry = yield* Tool.Service
+            return yield* executeTool(registry, {
+              sessionID: session.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-slow-shell",
+                name: "shell",
+                input: {
+                  command: "printf 'booting\\n'; sleep 0.25; printf 'ready\\n'",
+                  yield_after: 60,
+                },
+              },
+            })
+          }).pipe(Effect.provide(locations.get(location)))
+
+          expect(yielded.status).toBe("completed")
+          expect(yielded.metadata).toMatchObject({ status: "running" })
+          yield* Tool.Service.use((tools) => tools.reload()).pipe(Effect.provide(locations.get(location)))
+
+          const items = Array.from(yield* Fiber.join(admitted).pipe(Effect.timeout("5 seconds")))
+          expect(items).toHaveLength(1)
+          yield* SessionInbox.promote(database.db, bus, session.id, "steer")
+          const synthetic = (yield* sessions.context(session.id)).filter((msg) => msg.type === "synthetic")
+          expect(synthetic).toHaveLength(1)
+          expect(synthetic[0]?.text).toContain("booting")
+          expect(synthetic[0]?.text).toContain("ready")
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   it.live("auto-backgrounds custom plugin and direct tools on Ctrl+B or yield_after, while respecting background: false", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
