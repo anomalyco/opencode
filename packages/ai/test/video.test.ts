@@ -1043,15 +1043,33 @@ describe("Video / queued result", () => {
     )
   }
 
-  it.effect("rejects a status that only matches an inherited property", () =>
+  it.effect("keeps polling through unknown statuses, including inherited property names", () =>
     Effect.gen(function* () {
-      const error = yield* Video.resume(
-        XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5"),
-        { requestID: "req_1" },
-      ).pipe(Effect.flip)
-      expect(error.reason._tag).toBe("InvalidProviderOutput")
-      expect(error.message).toBe('Unknown generation status "constructor"')
-      expect(error.reason.body).toBe(JSON.stringify({ status: "constructor" }))
-    }).pipe(Effect.provide(layer((input) => Effect.succeed(json(input, { status: "constructor" }))))),
+      const calls: Array<Call> = []
+      const response = yield* settle(
+        Video.generate(
+          {
+            model: Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5"),
+            prompt: "x",
+          },
+          { poll: { interval: "1 second" } },
+        ),
+        3,
+      ).pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.gen(function* () {
+              const { call, nth } = yield* observe(calls, input)
+              if (call.method === "POST") return json(input, { id: "task_1" })
+              if (nth === 1) return json(input, { id: "task_1", status: "WARMING_UP" })
+              if (nth === 2) return json(input, { id: "task_1", status: "constructor" })
+              return json(input, { id: "task_1", status: "SUCCEEDED", output: ["https://runway.test/out.mp4"] })
+            }),
+          ),
+        ),
+      )
+      expect(response.video.source).toMatchObject({ type: "url", url: "https://runway.test/out.mp4" })
+      expect(calls.map((call) => call.method)).toEqual(["POST", "GET", "GET", "GET", "GET"])
+    }),
   )
 })

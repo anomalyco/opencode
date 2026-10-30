@@ -35,7 +35,7 @@ import {
   type TranscriptionRequest,
   type TranscriptionRequestInput,
 } from "./transcription.js"
-import { Tool, ToolFailure, type FreeformOption, type ToolExecuteContext, type ToolSchema } from "./tool.js"
+import { ToolFailure, build, type ToolExecuteContext, type ToolOptions, type ToolSchema } from "./tool.js"
 import { fileMediaType } from "./utils/media-type.js"
 import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } from "./video.js"
 
@@ -278,32 +278,32 @@ export type Client<R = never> = ReturnType<typeof make<R>>
 const fileError = (message: string, cause: unknown) =>
   new AIError({ reason: new InvalidRequestError({ message, cause }) })
 
-/**
- * Promise counterpart of `Tool.make` for `ai.llm.loop`. A throw or rejection becomes the error result the model sees, the
- * returned value is sent unvalidated (`undefined` as `null`), and `signal` aborts when the loop is interrupted.
- */
-export const tool = <Parameters extends ToolSchema<any>>(config: {
-  readonly description: string
-  readonly parameters: Parameters
-  readonly freeform?: FreeformOption<Parameters>
-  readonly execute: (
-    params: Schema.Schema.Type<Parameters>,
-    context: Partial<ToolExecuteContext> & { readonly signal: AbortSignal },
-  ) => unknown
-}) =>
-  Tool.make({
-    description: config.description,
-    parameters: config.parameters,
-    success: Schema.Unknown,
-    freeform: config.freeform,
-    execute: (params, context) =>
-      Effect.tryPromise({
-        try: async (signal) => (await config.execute(params, { ...context, signal })) ?? null,
-        catch: (error) => new ToolFailure({ message: error instanceof Error ? error.message : String(error), error }),
-      }),
-  })
+/** `tool` from `@opencode/ai/effect`, with an `execute` that returns a value or a Promise and throws to fail. */
+export const tool = <
+  Parameters extends ToolSchema<any> = typeof Schema.Unknown,
+  Success extends ToolSchema<any> = typeof Schema.Unknown,
+  Result extends Schema.Schema.Type<Success> | PromiseLike<Schema.Schema.Type<Success>> = never,
+>(
+  config: ToolOptions<
+    Parameters,
+    Success,
+    (params: Schema.Schema.Type<Parameters>, context: Partial<ToolExecuteContext> & { signal: AbortSignal }) => Result
+  >,
+) => {
+  const execute = config.execute
+  return build(
+    config,
+    execute &&
+      ((params, context) =>
+        Effect.tryPromise({
+          try: async (signal) => execute(params, { ...context, signal }),
+          catch: (error) => new ToolFailure({ message: error instanceof Error ? error.message : String(error), error }),
+        })),
+  )
+}
 
 /** Default client over `RequestExecutor.fetchLayer` for scripts; the runtime builds its layer on first use. */
 export const ai = make()
 
 export * as AI from "./index.js"
+export type { ExecutableTool, Tool, ToolOptions, Tools } from "./tool.js"
