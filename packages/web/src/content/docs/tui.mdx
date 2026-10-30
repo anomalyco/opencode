@@ -411,9 +411,49 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
+- `prompt.min_height`, `prompt.max_height`, `prompt.max_width` - How tall the prompt starts, how tall it grows before it scrolls, and how wide the home screen prompt is. See [Prompt size](#prompt-size).
+- `home.logo`, `home.tips`, `home.prompt_position`, `home.prompt_min_height`, `home.prompt_max_height` - Whether the home screen shows the logo and a tip, where its prompt sits, and how tall that prompt is. See [Home screen](#home-screen).
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Prompt size
+
+The prompt starts `prompt.min_height` rows tall, grows with what you type up to `prompt.max_height` rows, and scrolls after that. The home screen prompt uses `home.prompt_min_height` and `home.prompt_max_height` instead where they are set; see [Home screen](#home-screen). It never grows past the screen: on the home screen the logo keeps one row above it, and in a session the transcript gives up its rows. `prompt.max_width` caps the home screen prompt's width; the session prompt always spans the transcript.
+
+```json title="tui.json"
+{
+  "prompt": {
+    "min_height": 3,
+    "max_height": "80%",
+    "max_width": "60%"
+  }
+}
+```
+
+- `min_height` - Rows the prompt starts at. Defaults to `1`.
+- `max_height` - Rows the prompt grows to before it scrolls. Defaults to a third of the terminal height, and at least `6`.
+- `max_width` - Columns the home screen prompt is at most. Defaults to `75`. `"auto"` scales it with the terminal: 70% of its width, and at least `75`.
+
+Each also takes a percentage from `"1%"` to `"100%"`. A height percentage is of the rows the prompt can have once everything else on the screen has the room it always keeps: the footer, the logo and the row above it, and the prompt's own padding, agent and status rows. `"100%"` lets the prompt fill all of that. A width percentage is of the home screen's width inside its margins.
+
+### Home screen
+
+```json title="tui.json"
+{
+  "home": {
+    "logo": false,
+    "tips": false,
+    "prompt_position": "bottom",
+    "prompt_min_height": "35%"
+  }
+}
+```
+
+- `logo` - Show the OpenCode logo above the prompt. Defaults to `true`.
+- `tips` - Show a tip on the home screen. Defaults to `true`. Set here, it decides on every start, and the **Hide tips** / **Show tips** command lasts until OpenCode exits. Left unset, that command is remembered.
+- `prompt_min_height`, `prompt_max_height` - How tall the home screen prompt starts and how tall it grows, the same way `prompt.min_height` and `prompt.max_height` size the session prompt. Each defaults to its `prompt.*` counterpart, so set these to give the home screen a taller prompt than a session, such as `"prompt_min_height": "35%"`.
+- `prompt_position` - Where the prompt sits. `"middle"` (default) centers it. `"top"` puts it at the top, so it grows down as you type; `"bottom"` puts it on the footer, so it grows up. The logo stays directly above the prompt. The tip sits below the prompt, except with `"bottom"`, where it moves above the logo so nothing sits between the prompt and the footer.
 
 ### Attention
 
