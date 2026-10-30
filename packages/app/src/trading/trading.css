@@ -13,7 +13,10 @@
 }
 
 /* The chat's header row occupies the app's native header height; define it locally because
-   `--tabs-bar-height` only exists inside `[data-component="tabs"]`, which the chat is not. */
+   `--tabs-bar-height` only exists inside `[data-component="tabs"]`, which the chat is not.
+   The bar itself only mounts on desktop — the embedded screen hands `hideHeader` below
+   768px — so the rules that answer the row are desktop-scoped too: stacked, the false 48px
+   band would descend from a header that is not there at all. */
 [data-slot="trading-chat-panel"] {
   --trading-header-row: 48px;
 }
@@ -23,11 +26,46 @@
   height: var(--trading-header-row);
 }
 
-/* Align the timeline's thumb track with the dashboard's own scrollbar strip: it starts
-   below the emptied header row and reaches the card's bottom, instead of running behind
-   the header and stopping above the composer. */
-[data-slot="trading-chat-panel"] [data-slot="session-timeline-visible"] {
-  top: var(--trading-header-row);
-  /* The timeline sets `bottom` inline; trading extends the track over the composer zone. */
-  bottom: 0 !important;
+/* The chat's face is the frame the native side panels draw; the shell's bands live on the
+   trading root wrapper in every layout, so the face owns no insets of its own: the embedded
+   session screen reads its padding from the shell inset variables, and leaving those on
+   would stack a second round inside the face (1px stacked, 8px desktop). Everything the
+   card holds sits flush with the face in both layouts. */
+[data-slot="trading-chat-panel"] {
+  --shell-inline-inset: 0px;
+  --shell-top-inset: 0px;
+  --shell-bottom-inset: 0px;
+}
+
+/* Desktop only: the chat keeps the session's native header row above the timeline (stacked
+   hides it), so the thumb track starts below the empty bar there. The composer inset keeps
+   its inline value in every layout — the track stops above the composer like every session
+   screen, and that inset is the span a page-wise jump covers. */
+@media (min-width: 768px) {
+  [data-slot="trading-chat-panel"] [data-slot="session-timeline-visible"] {
+    top: var(--trading-header-row);
+  }
+
+  /* The chat's handle rides the presence (outside the clipping face), so its root anchors
+     to the presence's start edge — the seam. The session's own pill centers on its panel
+     because the session's persisted width is its carrier's; this chat's persisted width
+     trails the seam by the gap. Shift the root half a root left, so the pill floats
+     centered in the 8px gap instead of on the chat's edge. The attribute selectors keep
+     the edge/direction scoping so the embedded session screen's own handles stay
+     untouched. */
+  [data-slot="trading-chat-resizer"] > [data-component="resize-handle"][data-direction="horizontal"][data-edge="start"] {
+    inset-inline-start: -4px;
+  }
+}
+
+/* The session screens the chat embeds draw their own raised panel frames; here the chat's
+   face is that frame, so the inner ones collapse to plain boxes and the face's bg shows
+   through them — selected through the frames' own stable hooks (the panel-frame slot and
+   the review region's id), never through utility-class fragments. The bottom panel keeps
+   its own card even inside the face. */
+[data-slot="trading-chat-panel-content"] [data-slot="session-panel-frame"],
+[data-slot="trading-chat-panel-content"] #review-panel {
+  background-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }

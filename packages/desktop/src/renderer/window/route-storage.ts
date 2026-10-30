@@ -24,6 +24,10 @@ export function acceptedLastActiveUrl(value: string | null | undefined) {
 
   if (path === "/new-session") return value ?? "/"
 
+  if (path === "/trading") return value ?? "/"
+
+  if (/^\/trading\/[^/]+\/[^/]+$/.test(path ?? "")) return value ?? "/"
+
   if (/^\/server\/[^/]+\/session\/[^/]+$/.test(path ?? "")) return value ?? "/"
 
   return "/"

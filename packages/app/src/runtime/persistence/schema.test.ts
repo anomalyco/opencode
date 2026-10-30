@@ -175,6 +175,22 @@ describe("persistence schemas", () => {
     expect(Schema.encodeSync(recover)(state)).toEqual({ valid: true })
   })
 
+  test("record recovery keeps every valid entry and drops only the invalid ones", () => {
+    const schema = Persistence.recordRecover(Schema.Struct({ id: Schema.String }))
+    const decode = Schema.decodeUnknownSync(schema)
+    expect(decode(undefined)).toEqual({})
+    expect(decode([])).toEqual({})
+    expect(decode({ a: { id: "a" }, b: { id: 7 }, c: null })).toEqual({ a: { id: "a" } })
+
+    const first: typeof schema.Type = decode(undefined)
+    first.changed = { id: "changed" }
+    expect(decode(undefined)).toEqual({})
+
+    const state = Schema.decodeUnknownSync(schema)({ a: { id: "a" }, b: { id: 7 } })
+    expect(Schema.encodeSync(schema)(state)).toEqual({ a: { id: "a" } })
+    expect(decode({ a: { id: "a" }, b: { id: "b" } })).toEqual({ a: { id: "a" }, b: { id: "b" } })
+  })
+
   test("creates fresh default collections", () => {
     const schema = Schema.Struct({ items: Persistence.array(Schema.String) })
     const decode = Schema.decodeUnknownSync(schema)

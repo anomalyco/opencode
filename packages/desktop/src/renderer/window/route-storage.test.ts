@@ -11,9 +11,14 @@ describe("desktop last active route", () => {
     expect(acceptedLastActiveUrl("/server/wsl%3ADebian/session/abc?view=review#file")).toBe(
       "/server/wsl%3ADebian/session/abc?view=review#file",
     )
+    expect(acceptedLastActiveUrl("/trading")).toBe("/trading")
+    expect(acceptedLastActiveUrl("/trading/c2lkZWNhcg/ses_abc123?view=positions#chat")).toBe(
+      "/trading/c2lkZWNhcg/ses_abc123?view=positions#chat",
+    )
     expect(acceptedLastActiveUrl(undefined)).toBe("/")
     expect(acceptedLastActiveUrl("/settings/extra")).toBe("/")
     expect(acceptedLastActiveUrl("/new-session/extra")).toBe("/")
     expect(acceptedLastActiveUrl("/server/sidecar/session/abc/extra")).toBe("/")
+    expect(acceptedLastActiveUrl("/trading/sidecar/ses_abc/extra")).toBe("/")
   })
 })

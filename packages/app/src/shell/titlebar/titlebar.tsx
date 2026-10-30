@@ -32,6 +32,8 @@ import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { ActivityRing } from "@opencode/ui/activity-ring"
 import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
+import { ProductSwitcher } from "./product-switcher"
+import { TradingSidebarNav } from "@/trading/nav"
 import { useSettingsDialog } from "@/settings/command"
 import { rootSession } from "@/shell/routes/session"
 import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
@@ -440,6 +442,18 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
             const toggleTrading = () => tabs.toggleTrading({ trading: layout.route().type === "trading", current: currentTab() })
 
+            // The product switcher's asks: a move is ignored when the shell already sits on the target
+            // product, so marking the active entry never trips the toggles' swap into the other surface.
+            const goToOpenCode = () => {
+              if (layout.route().type !== "trading") return
+              toggleHome()
+            }
+
+            const goToTrading = () => {
+              if (layout.route().type === "trading") return
+              toggleTrading()
+            }
+
             const homeButton = (vertical = false) => (
               <Show
                 when={vertical}
@@ -535,56 +549,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               </Show>
             )
 
-            const tradingButton = (vertical = false) => (
-              <Show
-                when={vertical}
-                fallback={
-                  <Tooltip
-                    placement="bottom"
-                    value={
-                      <>
-                        {language.t("trading.title")}
-                        <Keybind keys={command.keybindParts("trading.toggle")} variant="neutral" />
-                      </>
-                    }
-                    class="shrink-0"
-                  >
-                    <IconButton
-                      type="button"
-                      variant="ghost-muted"
-                      size="large"
-                      class="!w-9 shrink-0"
-                      icon={<Icon name="trading-chart" />}
-                      state={layout.route().type === "trading" ? "pressed" : undefined}
-                      onClick={toggleTrading}
-                      aria-label={language.t("trading.title")}
-                      aria-pressed={layout.route().type === "trading"}
-                    />
-                  </Tooltip>
-                }
-              >
-                <button
-                  type="button"
-                  data-titlebar-tab-action
-                  data-action="vertical-tabs-trading"
-                  data-state={layout.route().type === "trading" ? "pressed" : undefined}
-                  class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
-                  onClick={toggleTrading}
-                  aria-label={language.t("trading.title")}
-                  aria-pressed={layout.route().type === "trading"}
-                >
-                  <Icon name="trading-chart" class="shrink-0" />
-                  <span class="min-w-0 truncate">{language.t("trading.title")}</span>
-                  <span
-                    class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
-                    aria-hidden="true"
-                  >
-                    <bdi dir="ltr">{command.keybind("trading.toggle")}</bdi>
-                  </span>
-                </button>
-              </Show>
-            )
-
             command.register("titlebar-home", () => [
               {
                 id: "home.toggle",
@@ -596,14 +560,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   if (layout.route().type !== "home") layout.home.searchFocus.request()
                   toggleHome()
                 },
-              },
-              {
-                id: "trading.toggle",
-                title: language.t("trading.title"),
-                category: language.t("command.category.view"),
-                keybind: windows() ? "alt+t" : "mod+alt+t",
-                hidden: true,
-                onSelect: toggleTrading,
               },
               {
                 id: "sessions.search",
@@ -719,11 +675,17 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 <Show when={windows() && props.verticalTabs}>
                   <SidebarToggle />
                 </Show>
+                <Show when={!mobile()}>
+                  <ProductSwitcher
+                    trading={layout.route().type === "trading"}
+                    aOpenCode={goToOpenCode}
+                    aTrading={goToTrading}
+                  />
+                </Show>
                 <Show when={!mobile() && !props.verticalTabs}>
                   <div class="flex shrink-0 items-center gap-0.5">
                     {homeButton()}
                     {searchButton()}
-                    {tradingButton()}
                   </div>
                 </Show>
 
@@ -820,7 +782,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               data-action="mobile-tabs-home"
                               data-state={layout.route().type === "home" ? "pressed" : undefined}
                               aria-current={layout.route().type === "home" ? "page" : undefined}
-                              class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint data-[state=pressed]:text-v2-text-text-base focus-visible:outline-none"
+                              class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-faint data-[state=pressed]:text-v2-text-text-base focus-visible:outline-none"
                               onClick={() => {
                                 if (layout.route().type !== "home") toggleHome()
                                 setMobileTabs("open", false)
@@ -828,6 +790,20 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                             >
                               <Icon name="grid-plus" />
                               {language.t("home.title")}
+                            </button>
+                            <button
+                              type="button"
+                              data-action="mobile-tabs-trading"
+                              data-state={layout.route().type === "trading" ? "pressed" : undefined}
+                              aria-current={layout.route().type === "trading" ? "page" : undefined}
+                              class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-faint data-[state=pressed]:text-v2-text-text-base focus-visible:outline-none"
+                              onClick={() => {
+                                if (layout.route().type !== "trading") goToTrading()
+                                setMobileTabs("open", false)
+                              }}
+                            >
+                              <Icon name="trading-chart" />
+                              {language.t("trading.title")}
                             </button>
                             <div class="flex items-center gap-1">
                               <button
@@ -932,41 +908,50 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 </div>
                               </div>
                             </Show>
-                            <div class="flex w-full shrink-0 flex-col gap-1">
-                              <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>
-                              {searchButton(true)}
-                              {tradingButton(true)}
-                              <RecentlyClosedTabsMenu
-                                vertical
-                                onNewTab={openNewTab}
-                                keybind={command.keybind("tab.new")}
-                              />
-                            </div>
-                            <div class="h-4 w-full shrink-0" aria-hidden="true" />
-                            <div class="flex min-h-0 flex-1 flex-col gap-1">
-                              <Show
-                                when={settings.appearance.tabLayout() === "inbox"}
-                                fallback={
-                                  <TitlebarTabStrip
-                                    orientation="vertical"
-                                    tabs={tabsStore}
-                                    currentTab={currentTab()}
-                                    onNavigate={(tab, el) => {
-                                      tabs.select(tab)
-                                      el?.scrollIntoView({ behavior: "instant", block: "nearest" })
-                                    }}
-                                    onClose={(tab) => {
-                                      const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                            <Show
+                              when={layout.route().type !== "trading"}
+                              fallback={
+                                <div class="flex w-full min-h-0 flex-1 shrink-0 flex-col gap-1">
+                                  {/* The trading product's own sidebar: one row per dashboard section. */}
+                                  <TradingSidebarNav />
+                                </div>
+                              }
+                            >
+                              <div class="flex w-full shrink-0 flex-col gap-1">
+                                <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>
+                                {searchButton(true)}
+                                <RecentlyClosedTabsMenu
+                                  vertical
+                                  onNewTab={openNewTab}
+                                  keybind={command.keybind("tab.new")}
+                                />
+                              </div>
+                              <div class="h-4 w-full shrink-0" aria-hidden="true" />
+                              <div class="flex min-h-0 flex-1 flex-col gap-1">
+                                <Show
+                                  when={settings.appearance.tabLayout() === "inbox"}
+                                  fallback={
+                                    <TitlebarTabStrip
+                                      orientation="vertical"
+                                      tabs={tabsStore}
+                                      currentTab={currentTab()}
+                                      onNavigate={(tab, el) => {
+                                        tabs.select(tab)
+                                        el?.scrollIntoView({ behavior: "instant", block: "nearest" })
+                                      }}
+                                      onClose={(tab) => {
+                                        const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
 
-                                      if (index !== -1) tabsStoreActions.closeTab(index)
-                                    }}
-                                    onReorder={(keys) => tabsStoreActions.reorder(keys)}
-                                  />
-                                }
-                              >
-                                <SidebarInbox />
-                              </Show>
-                            </div>
+                                        if (index !== -1) tabsStoreActions.closeTab(index)
+                                      }}
+                                      onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                                    />
+                                  }
+                                >
+                                  <SidebarInbox />
+                                </Show>
+                              </div>
+                            </Show>
                             <Show when={titlebarItems.ids().length > 0}>
                               <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col">
                                 <TitlebarItems items={titlebarItems} vertical />

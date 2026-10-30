@@ -180,6 +180,9 @@ export function ProjectAvatar(props: ProjectAvatarProps) {
         data-variant={split.variant ?? "gray"}
         data-has-image={split.src ? "" : undefined}
         data-generated={generated() ? "" : undefined}
+        // Decorative: the avatar's name lives on its label side (a tab, a menu item, a row),
+        // so the inner glyph never reads as a second stop.
+        aria-hidden="true"
       >
         <Show
           when={split.src}

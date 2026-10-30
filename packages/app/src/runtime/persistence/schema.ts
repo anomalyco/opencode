@@ -103,6 +103,40 @@ export function record<S extends Schema.ConstraintCodec<unknown, unknown>>(schem
   return fallback(entries, () => Schema.decodeUnknownSync(entries)({}))
 }
 
+// Like `array`: recover individual entries rather than discarding a whole map when one
+// stored value no longer parses. The typed tree is built free-form here (`withInitial`'s
+// same looseness): the per-entry filter runs untyped, then `entries` decodes it against
+// the value schema itself, so SAFETY mirrors `withInitial` — the decode chain is verified
+// by whatever schemas flow through.
+export function recordRecover<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
+  const decode = Schema.decodeUnknownOption(schema)
+  const encode = Schema.encodeSync(schema)
+  const entries = Schema.Record(Schema.String, Schema.mutableKey(schema))
+
+  return fallback(
+    Schema.Unknown.pipe(
+      Schema.decode<Schema.Unknown>({
+        decode: SchemaGetter.transform((value) =>
+          Predicate.isObject(value)
+            ? Object.fromEntries(
+                Object.entries(value).flatMap(([key, entry]) =>
+                  Option.toArray(decode(entry)).map((kept) => [key, kept] as const),
+                ),
+              )
+            : value,
+        ),
+        encode: SchemaGetter.transform((value) =>
+          Predicate.isObject(value)
+            ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, encode(entry)]))
+            : value,
+        ),
+      }),
+      Schema.decodeTo(entries),
+    ),
+    () => Schema.decodeUnknownSync(entries)({}),
+  )
+}
+
 // Recover individual entries rather than discarding a whole history or collection.
 export function array<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
   const decode = Schema.decodeUnknownOption(schema)

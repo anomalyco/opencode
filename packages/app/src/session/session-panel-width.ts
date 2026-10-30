@@ -8,6 +8,10 @@
 // its controls, macOS traffic lights included.
 export const SESSION_PANEL_WIDTH_MIN = 400
 
+/** The one gap the pane row keeps between its panels; the CSS formulas below and the
+ * consumers deriving a row width from it all read this constant. */
+export const PANE_GAP = 8
+
 const SIDE_PANE_WIDTH_MIN = 320
 
 const SESSION_PANEL_WIDTH_FIT = 450
@@ -30,7 +34,7 @@ export function sessionPanelWidthCss(input: { width: number; split: boolean; res
   const pane = input.resized ? SIDE_PANE_WIDTH_MIN : input.split ? REVIEW_PANE_WIDTH_FIT_SPLIT : REVIEW_PANE_WIDTH_FIT
 
   // The outer floor raises a width stored below the minimum, e.g. dragged before it rose.
-  return `max(${SESSION_PANEL_WIDTH_MIN}px, min(${input.width}px, max(${minimum}px, 100% - ${pane + 8}px)))`
+  return `max(${SESSION_PANEL_WIDTH_MIN}px, min(${input.width}px, max(${minimum}px, 100% - ${pane + PANE_GAP}px)))`
 }
 
 // `available` is undefined until the layout row is first measured; render the
