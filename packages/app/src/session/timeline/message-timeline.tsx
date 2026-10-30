@@ -548,7 +548,7 @@ function MessageTimelineView(
                   </Show>
                 </>
               }
-              actions={
+              actions={(fit) => (
                 <Show when={sessionID()} keyed>
                   {(_id) => (
                     <>
@@ -565,13 +565,16 @@ function MessageTimelineView(
                           get active() {
                             return props.active !== false
                           },
+                          get compact() {
+                            return fit.compact
+                          },
                         }}
                       />
                       <SessionHeaderSpacer visible={props.reserveReviewToggle} />
                     </>
                   )}
                 </Show>
-              }
+              )}
             >
               <Show when={parentID() && childTitle()}>
                 {(value) => (

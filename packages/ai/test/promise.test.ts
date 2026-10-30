@@ -5,7 +5,7 @@ import { join } from "node:path"
 import { Effect, Layer, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { AIError, LLMEvent, Media, SpeechEvent, TranscriptionEvent } from "../src/effect.js"
-import { RequestExecutor } from "../src/route.js"
+import { RequestExecutor, type StreamOptions } from "../src/route.js"
 import { AI } from "../src/index.js"
 import { AssemblyAI, OpenAI, Runway } from "../src/providers.js"
 import { handlerLayer, json } from "./lib/http.js"
@@ -200,6 +200,41 @@ describe("AI promise client", () => {
 
     expect(seen[0]).toBe("https://runway.test/v1/text_to_video")
     expect(seen.filter((url) => url.endsWith("/tasks/task_1")).length).toBeGreaterThanOrEqual(5)
+    await ai.dispose()
+  })
+
+  test("forwards per-call options to generate, stream, and loop, and checks compaction support", async () => {
+    const seen: Array<string> = []
+    const ai = AI.make({ layer: executor([]) })
+    const options: StreamOptions = {
+      http: (request, handler) => {
+        seen.push(request.url)
+        return handler(request)
+      },
+    }
+    const request = { model: openai.chat("gpt-4o-mini"), prompt: "Say hello." }
+
+    expect((await ai.llm.generate(request, options)).text).toBe("Hello world")
+    await Array.fromAsync(ai.llm.stream(request, options))
+    await Array.fromAsync(ai.llm.loop({ ...request, tools: {} }, options))
+    expect(seen).toEqual(Array(3).fill("https://openai.test/v1/chat/completions"))
+
+    const responses = ai.llm.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
+    expect(ai.llm.canCompact(responses)).toBe(true)
+    expect(ai.llm.canCompact(responses, { mechanism: "trigger" })).toBe(true)
+    expect(ai.llm.canCompact(ai.llm.request(request))).toBe(false)
+    await ai.dispose()
+  })
+
+  test("exposes a generation's snapshot and terminal state", async () => {
+    const ai = AI.make({ layer: executor([]) })
+    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+    const generation = await ai.video.start({ model, prompt: "A kite" })
+    expect(generation.snapshot).toEqual({ id: "task_1", status: "queued", progress: undefined, position: undefined })
+    expect(generation.terminal).toBe(false)
+    const refreshed = await generation.refresh()
+    expect(refreshed.terminal).toBe(false)
+    expect((await refreshed.refresh()).terminal).toBe(true)
     await ai.dispose()
   })
 
