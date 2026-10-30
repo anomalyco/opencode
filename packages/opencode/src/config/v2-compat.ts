@@ -41,6 +41,7 @@ const Server = Schema.Union([
     disabled: Schema.optional(Schema.Boolean),
     codemode: Schema.optional(Schema.Boolean),
     timeout: Schema.optional(Timeout),
+    tool_timeout: Schema.optional(Schema.Union([PositiveInt, Schema.Literal(false)])),
   }),
   Schema.Struct({
     type: Schema.Literal("remote"),
@@ -50,6 +51,7 @@ const Server = Schema.Union([
     disabled: Schema.optional(Schema.Boolean),
     codemode: Schema.optional(Schema.Boolean),
     timeout: Schema.optional(Timeout),
+    tool_timeout: Schema.optional(Schema.Union([PositiveInt, Schema.Literal(false)])),
   }),
 ])
 const Selection = Schema.Union([

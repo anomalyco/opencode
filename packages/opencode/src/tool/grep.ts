@@ -65,6 +65,7 @@ export const GrepTool = Tool.define(
             pattern: params.pattern,
             include: params.include,
             limit: 100,
+            signal: ctx.abort,
           })
           if (result.length === 0) return empty
 

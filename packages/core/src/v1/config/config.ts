@@ -146,6 +146,12 @@ export const Info = Schema.Struct({
     description:
       "Thresholds for truncating tool output. When output exceeds either limit, the full text is written to the truncation directory and a preview is returned.",
   }),
+  tool_timeout: Schema.optional(
+    Schema.Record(Schema.String, Schema.Union([PositiveInt, Schema.Literal(false)])),
+  ).annotate({
+    description:
+      "Time limits in milliseconds for tool calls, or false for no limit. A call still running past its limit is aborted and ends with an error the model sees. 'default' applies to every tool (default: 1800000, 30 minutes); any other key is a tool ID (built-in, plugin or MCP, e.g. 'bash' or 'myserver_search') and replaces every other limit for that tool. read, write, edit, grep and glob default to 600000 (10 minutes), or 'default' when that is lower. question and task have no limit unless set here.",
+  }),
   compaction: Schema.optional(
     Schema.Struct({
       auto: Schema.optional(Schema.Boolean).annotate({

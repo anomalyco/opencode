@@ -140,6 +140,9 @@ const layer = Layer.effect(
             parameters,
             jsonSchema,
             description: def.description,
+            // Plugins are untyped at runtime; anything but a positive number or `false` declares nothing.
+            timeout:
+              def.timeout === false || (typeof def.timeout === "number" && def.timeout > 0) ? def.timeout : undefined,
             execute: (args, toolCtx) =>
               Effect.gen(function* () {
                 // Bridge the host's Effect-based `ask` into a Promise-returning
@@ -333,6 +336,8 @@ const layer = Layer.effect(
             jsonSchema,
             execute: tool.execute,
             formatValidationError: tool.formatValidationError,
+            timeout: tool.timeout,
+            callTimeout: tool.callTimeout,
           }
         }),
         { concurrency: "unbounded" },

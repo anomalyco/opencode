@@ -37,6 +37,8 @@ You can also use wildcards to control multiple tools at once. For example, to re
 
 [Learn more](/docs/permissions) about configuring permissions.
 
+Every tool call also runs under a time limit, 30 minutes by default; `read`, `write`, `edit`, `grep` and `glob` have 10 minutes, and `question` and `task` have none. A call that runs past its limit ends with an error and the turn continues. Use [`tool_timeout`](/docs/config#tool-time-limits) to change it per tool.
+
 ---
 
 ## Built-in

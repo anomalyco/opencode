@@ -62,6 +62,10 @@ export interface Def<
   jsonSchema?: JSONSchema7
   execute(args: Schema.Schema.Type<Parameters>, ctx: Context): Effect.Effect<ExecuteResult<M>>
   formatValidationError?(error: unknown): string
+  /** Default time limit in ms (`false`: none) the tool declares for its calls; the user's `tool_timeout.<id>` overrides it. */
+  timeout?: number | false
+  /** The timeout this call asks for itself, which raises its time limit (see `ToolTimeout.resolve`). */
+  callTimeout?(args: Record<string, unknown>): number | undefined
 }
 export type DefWithoutID<
   Parameters extends Schema.Decoder<unknown> = Schema.Decoder<unknown>,
