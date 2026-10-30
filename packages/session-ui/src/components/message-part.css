@@ -1456,6 +1456,24 @@
     padding: 0;
   }
 
+  [data-slot="permission-input"] {
+    font-family: var(--font-family-mono);
+    font-size: 12px;
+    line-height: var(--line-height-large);
+    color: var(--v2-text-text-muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 120px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    margin: 0;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
   [data-slot="permission-patterns"] {
     display: flex;
     flex-direction: column;

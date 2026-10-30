@@ -210,6 +210,44 @@ test("shows a pending permission dock", async ({ page }) => {
   await expect(page.locator('[data-component="composer"]')).toBeVisible()
 })
 
+test("describes an unknown permission action instead of rendering a blank card", async ({ page }) => {
+  const replies: { sessionID: string; permissionID: string; body: unknown }[] = []
+  await mockServer(page, {
+    onPermissionReply: (reply) => replies.push(reply),
+    sessionPermissions: {
+      [sessionID]: [
+        {
+          id: "permission-mcp",
+          sessionID,
+          action: "github_create_issue",
+          resources: ["*"],
+          metadata: { input: { owner: "acme", repo: "api", title: "Fix login" } },
+          message: "MCP tool github_create_issue requires approval",
+        },
+      ],
+    },
+  })
+
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  await expect(permission).toBeVisible()
+  // The readable action name replaces the missing i18n description…
+  await expect(permission.getByText("github create issue")).toBeVisible()
+  // …and the server-provided message plus tool input make the ask identifiable.
+  await expect(permission.getByText("MCP tool github_create_issue requires approval")).toBeVisible()
+  await expect(permission.locator('[data-slot="permission-input"]')).toContainText('"owner": "acme"')
+
+  const reply = page.waitForResponse((response) => response.request().method() === "POST")
+  await permission.getByRole("button", { name: "Allow once" }).click()
+  await reply
+  expect(replies).toEqual([
+    { sessionID, permissionID: "permission-mcp", body: { decision: "once" } },
+  ])
+  await expect(permission).toHaveCount(0)
+})
+
 test("loads a running subagent's question without polling idle subagents on every update", async ({ page }) => {
   const runningID = "ses_request_running_subagent"
   const idleIDs = Array.from({ length: 20 }, (_, index) => `ses_request_idle_${index}`)
