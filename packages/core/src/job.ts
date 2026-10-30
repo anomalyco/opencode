@@ -140,7 +140,10 @@ export function formatNotice(
             : `Tool ${label} was cancelled.`
   return {
     description: recovery.title ?? recovery.tool,
-    text: `<tool id="${input.id}" name="${recovery.tool}" state="${state}">\n${body}\n</tool>`,
+    text:
+      recovery.tool === "execute"
+        ? `<execute id="${input.id}" state="${state}">\n${body}\n</execute>`
+        : `<tool id="${input.id}" name="${recovery.tool}" state="${state}">\n${body}\n</tool>`,
     metadata: { source: recovery.tool, jobID: input.id, state, ...recovery.metadata },
   }
 }

@@ -15,6 +15,7 @@ export const executeProgram = <R>(
   limits: ResolvedExecutionLimits,
   hooks: ToolRuntime.Hooks<R>,
   globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>,
+  targetLogs?: Array<string>,
 ): Effect.Effect<Result, never, R> => {
   if (code.trim().length === 0) {
     return Effect.succeed({
@@ -28,7 +29,7 @@ export const executeProgram = <R>(
   return Effect.suspend(() => {
     const builtins = createBuiltins()
     const tools = ToolRuntime.make(prepared, limits.maxToolCalls, hooks)
-    const logs: Array<string> = []
+    const logs: Array<string> = targetLogs ?? []
     const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
     // Set only after copy-out so timeouts cannot report invalid values as completed.
     let returned: { value: DataValue; runner: Runner<R> } | undefined

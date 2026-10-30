@@ -208,7 +208,7 @@ const layer = Layer.effect(
       }
 
       const id = `job_${Identifier.create(false)}`
-      const title = toolJobTitle(input)
+      const title = toolJobTitle(name, input)
       let caughtFailure: Tool.Error | undefined
       let caughtDefect: Cause.Cause<never> | undefined
 
@@ -257,15 +257,21 @@ const layer = Layer.effect(
 
       if (outcome?.type === "backgrounded") {
         yield* Ref.set(yielded, true)
-        const partial = formatProgress(yield* Ref.get(latestProgress))
+        const progressMeta = yield* Ref.get(latestProgress)
+        const partial = formatProgress(progressMeta)
+        const label = name === "execute" ? "Code Mode execution" : `Tool "${name}"`
         const text = [
-          `Tool "${name}" moved to the background (jobID: ${id}).`,
+          `${label} moved to the background (jobID: ${id}).`,
           ...(partial ? [`Output so far:\n${partial}`] : []),
           BACKGROUND_TOOL_INSTRUCTION,
         ].join("\n\n")
+        const toolCalls = Array.isArray(progressMeta.toolCalls) ? progressMeta.toolCalls : []
         return {
+          ...(name === "execute"
+            ? { output: { output: text, toolCalls, files: [], status: "running" as const, jobID: id } }
+            : {}),
           content: [{ type: "text" as const, text }],
-          metadata: { status: "running", jobID: id },
+          metadata: { ...(toolCalls.length > 0 ? { toolCalls } : {}), status: "running", jobID: id },
         }
       }
 
@@ -433,7 +439,7 @@ const layer = Layer.effect(
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
               if (name === "execute" && codeModeTool)
-                return yield* executeTool(codeModeTool, name, event.input, context)
+                return yield* executeTopLevel(codeModeTool, name, event.input, context)
               const tool = direct.get(name)
               if (tool) return yield* executeTopLevel(tool, name, event.input, context)
               return yield* new Tool.Error({
@@ -491,8 +497,15 @@ function requestedYieldAfter(input: unknown): number | undefined {
   return undefined
 }
 
-function toolJobTitle(input: unknown): string | undefined {
+function toolJobTitle(name: string, input: unknown): string | undefined {
   if (!isRecord(input)) return undefined
+  if (name === "execute" && typeof input.code === "string") {
+    return input.code
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.length > 0)
+      ?.slice(0, 80)
+  }
   for (const key of ["title", "description", "url", "query", "command"]) {
     const val = input[key]
     if (typeof val === "string" && val.trim().length > 0) return val.trim().slice(0, 80)

@@ -2,6 +2,7 @@ export * as CodeModeTool from "./tool.js"
 
 import { ToolFailure } from "@opencode/ai/effect"
 import { CodeMode, Namespace, Tool } from "@opencode/codemode"
+import { NonNegativeInt } from "@opencode/schema/schema"
 import type {
   Content,
   Context as ToolContext,
@@ -12,12 +13,23 @@ import type {
   Result,
 } from "@opencode/schema/tool"
 import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
+import { Job } from "../job.js"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { Permission } from "../permission.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeExecution } from "./execution.js"
 import { CodeModeFetch } from "./fetch.js"
+
+export const ExecuteInput = Schema.Struct({
+  ...CodeMode.Input.fields,
+  yield_after: Schema.optionalKey(NonNegativeInt).annotate({
+    description: `Milliseconds to wait before moving execution to the background and returning output so far. Defaults to ${Job.DEFAULT_YIELD_AFTER_MS}. Set to 0 to run in the background immediately.`,
+  }),
+  background: Schema.optionalKey(Schema.Boolean).annotate({
+    description: "Run the Code Mode script in the background and return immediately. You will be notified when it completes.",
+  }),
+})
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -38,6 +50,8 @@ const ExecuteOutput = Schema.Struct({
   toolCalls: Schema.Array(ExecuteCall),
   error: Schema.optionalKey(Schema.Literal(true)),
   files: Schema.Array(ExecuteFile),
+  status: Schema.optionalKey(Schema.Literals(["completed", "running"])),
+  jobID: Schema.optionalKey(Schema.String),
 })
 
 type CollectedFiles = {
@@ -89,10 +103,11 @@ export const create = (
   return {
     name: "execute",
     description,
-    input: CodeMode.Input,
+    input: ExecuteInput,
     output: ExecuteOutput,
     execute: ({ code }, context) =>
       Effect.gen(function* () {
+        const logs: Array<string> = []
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
@@ -105,7 +120,7 @@ export const create = (
         const publish = Effect.gen(function* () {
           yield* Ref.set(trailing, false)
           yield* Ref.set(publishedAt, yield* Clock.currentTimeMillis)
-          yield* context.progress({ toolCalls: yield* Ref.get(calls) })
+          yield* context.progress({ toolCalls: yield* Ref.get(calls), ...(logs.length > 0 ? { logs: [...logs] } : {}) })
         })
         const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
           lock.withPermit(
@@ -119,7 +134,7 @@ export const create = (
             }),
           )
         const result = yield* runtime(inventory)
-          .execute(code)
+          .execute(code, undefined, { logs })
           .pipe(
             Effect.provideService(Run, {
               executeTool: (name, tool, input) =>

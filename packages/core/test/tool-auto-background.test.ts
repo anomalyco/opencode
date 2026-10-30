@@ -189,6 +189,78 @@ describe("Tool auto-backgrounding", () => {
     ),
   )
 
+  it.live("auto-backgrounds Code Mode execute through Tool.execute while preserving nested tool return types", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const bus = yield* Bus.Service
+          const database = yield* Database.Service
+          const locations = yield* LocationServiceMap.Service
+          const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
+          const session = yield* sessions.create({ location, model: sessionModel })
+          const gate = yield* Deferred.make<void>()
+
+          const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === session.id && event.data.item.type === "synthetic"),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+
+          const yielded = yield* Effect.gen(function* () {
+            yield* Plugin.Service.use((plugins) => plugins.awaitActivation)
+            const registry = yield* Tool.Service
+            yield* registry.transform((editor) => {
+              editor.namespace({ name: "demo", description: "Demo tools" })
+              editor.add({
+                name: "slow_lookup",
+                description: "Slow lookup",
+                options: { namespace: "demo", codemode: true },
+                input: Schema.Struct({ key: Schema.String }),
+                output: Schema.Struct({ port: Schema.Number }),
+                execute: () => Deferred.await(gate).pipe(Effect.as({ output: { port: 8491 }, content: "8491" })),
+              })
+            })
+            return yield* executeTool(registry, {
+              sessionID: session.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-slow-codemode",
+                name: "execute",
+                input: {
+                  code: `console.log("starting lookup"); const res = await tools.demo.slow_lookup({ key: "api" }); return { found: res.port }`,
+                  yield_after: 40,
+                },
+              },
+            })
+          }).pipe(Effect.provide(locations.get(location)))
+
+          expect(yielded.status).toBe("completed")
+          expect(yielded.metadata).toMatchObject({ status: "running" })
+          const jobID = String(yielded.metadata?.jobID)
+          expect(jobID).toStartWith("job_")
+          const yieldedText = yielded.content?.[0]?.type === "text" ? yielded.content[0].text : ""
+          expect(yieldedText).toContain("Code Mode execution moved to the background")
+          expect(yieldedText).toContain("starting lookup")
+
+          yield* locations.invalidate(location)
+
+          yield* Deferred.succeed(gate, undefined)
+          const items = Array.from(yield* Fiber.join(admitted).pipe(Effect.timeout("3 seconds")))
+          expect(items).toHaveLength(1)
+          yield* SessionInbox.promote(database.db, bus, session.id, "steer")
+          const synthetic = (yield* sessions.context(session.id)).filter((msg) => msg.type === "synthetic")
+          expect(synthetic).toHaveLength(1)
+          expect(synthetic[0]?.text).toContain(`<execute id="${jobID}" state="completed">`)
+          expect(synthetic[0]?.text).toContain('"found": 8491')
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
   it.live("auto-backgrounds custom plugin and direct tools on Ctrl+B or yield_after, while respecting background: false", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

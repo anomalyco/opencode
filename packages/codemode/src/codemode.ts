@@ -134,7 +134,11 @@ export type Result = typeof Result.Type
 /** Reusable confined runtime over explicit tools. */
 export type Runtime<R = never> = {
   readonly catalog: ReadonlyArray<ToolDescription>
-  readonly execute: (code: string, bindings?: Readonly<Record<string, DataValue>>) => Effect.Effect<Result, never, R>
+  readonly execute: (
+    code: string,
+    bindings?: Readonly<Record<string, DataValue>>,
+    options?: { readonly logs?: Array<string> },
+  ) => Effect.Effect<Result, never, R>
 }
 
 const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, minimum: number): number | undefined => {
@@ -181,10 +185,17 @@ export const make = <
     get catalog() {
       return prepared.catalog
     },
-    execute: (code, bindings) =>
-      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => [
-        ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
-        ...extensionGlobals(ctx, extensions),
-      ]),
+    execute: (code, bindings, executeOptions) =>
+      executeProgram(
+        code,
+        prepared,
+        limits,
+        options.hooks ?? {},
+        (ctx) => [
+          ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
+          ...extensionGlobals(ctx, extensions),
+        ],
+        executeOptions?.logs,
+      ),
   }
 }
