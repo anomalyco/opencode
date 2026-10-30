@@ -151,7 +151,7 @@ export function errorToolUpdate(input: {
 function toolContent(content: ReadonlyArray<Tool.Content>): ToolCallContent[] {
   return content.flatMap((part): ToolCallContent[] => {
     if (part.type === "text") return [{ type: "content", content: { type: "text", text: part.text } }]
-    const match = /^data:([^;,]+)(?:;[^,]*)*;base64,(.*)$/.exec(part.uri)
+    const match = /^data:([^;,]+)(?:;[^;,]*)*;base64,(.*)$/.exec(part.uri)
     if (!match?.[1]?.startsWith("image/") || match[2] === undefined) return []
     return [{ type: "content", content: { type: "image", mimeType: match[1], data: match[2] } }]
   })
