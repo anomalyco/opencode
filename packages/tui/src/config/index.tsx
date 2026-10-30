@@ -56,7 +56,13 @@ export const Prompt = Schema.Struct({
   max_width: Schema.optional(Schema.Union([PromptSize, Schema.Literal("auto")])).annotate({
     description: "Home prompt max width: a positive integer for a fixed cap, or 'auto' to scale with terminal width",
   }),
-}).annotate({ description: "Prompt size settings" })
+  history_scope: Schema.optional(Schema.Literals(["global", "session"])).annotate({
+    description: [
+      "Which prompts up and down recall in a session: 'global' (default) walks the prompts submitted anywhere,",
+      "'session' only the ones submitted in that session. The home screen always walks every session's",
+    ].join(" "),
+  }),
+}).annotate({ description: "Prompt settings" })
 
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
