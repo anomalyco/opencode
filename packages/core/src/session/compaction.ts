@@ -281,11 +281,10 @@ export const layer = Layer.effect(
             .resolve({ ...context.session, model: agent.model }, catalog.available)
             .pipe(Effect.orElseSucceed(() => undefined)))) ??
         context.model
-      const ceiling = calculateCeiling(model.limit, buffer)
+      const limit = native ? model.limit : { ...model.limit, input: summaryWindow(model.limit) }
+      const ceiling = calculateCeiling(limit, buffer)
       // An unknown window never triggers auto compaction, but the compaction request still needs a size to aim for.
-      const cap = Number.isFinite(ceiling)
-        ? ceiling
-        : calculateCeiling({ ...model.limit, context: UNKNOWN_WINDOW }, buffer)
+      const cap = Number.isFinite(ceiling) ? ceiling : calculateCeiling({ ...limit, context: UNKNOWN_WINDOW }, buffer)
       return { context: model === context.model ? context : { ...context, model }, cap }
     })
 
@@ -1129,8 +1128,7 @@ export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
 
 /**
  * The largest request the model takes while leaving room for its reply: `RESERVE_SHARE` of the window, or
- * `RESERVE_MIN` when that is more. A summary request that must be shrunk is aimed at the same size. A window too small
- * to give up `RESERVE_MIN` keeps `RESERVE_SHARE`.
+ * `RESERVE_MIN` when that is more. A window too small to give up `RESERVE_MIN` keeps `RESERVE_SHARE`.
  */
 const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer: number | undefined) => {
   // Unknown limits are reported as 0. An unknown input limit falls back to the context window; with no window at
@@ -1142,12 +1140,16 @@ const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer
   return window - Math.max(Math.floor(window * RESERVE_SHARE), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
 }
 
+/** Summary input must also fit the context window used to size its reply, even when the input limit is larger. */
+const summaryWindow = (limit: SessionContext.Loaded["model"]["limit"]) =>
+  limit.context > 0 ? Math.min(limit.input || limit.context, limit.context) : limit.input || limit.context
+
 /**
  * The largest summary request that leaves `RESERVE_MIN` of the window for the summary, or less when the request
  * cannot generate that much. Zero for an unknown window.
  */
 const summaryRoom = (limit: SessionContext.Loaded["model"]["limit"], output = RESERVE_MIN) =>
-  Math.max(0, (limit.input || limit.context) - Math.min(RESERVE_MIN, output))
+  Math.max(0, summaryWindow(limit) - Math.min(RESERVE_MIN, output))
 
 /**
  * Another provider's count may describe a native window this model cannot replay. History then holds the original

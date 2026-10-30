@@ -873,6 +873,72 @@ it.effect("compaction keeps the output limit for a request that fits its target"
   }),
 )
 
+it.effect("summary compaction bounds its budget by the context window without changing the input threshold", () =>
+  Effect.gen(function* () {
+    const compaction = yield* SessionCompaction.Service
+    const bus = yield* Bus.Service
+    yield* compaction.transform((editor) => editor.configure({ buffer: 40_000 }))
+    const session = yield* insertSession(Session.ID.make("ses_compaction_context_override"))
+    const messages = [textUser("Summarize this conversation.")]
+
+    expect(
+      yield* compaction.compact({
+        reason: "auto",
+        context: {
+          ...loaded(session, messages),
+          model: { ...resolved, limit: { context: 256_000, input: 922_000, output: 128_000 } },
+        },
+        estimate: { measured: 225_000, estimated: 0 },
+      }),
+    ).toEqual({ status: "skipped" })
+
+    yield* Effect.forEach(
+      [
+        { limit: { context: 256_000, input: 922_000, output: 128_000 }, buffer: 40_000, maxTokens: 40_000 },
+        { limit: { context: 256_000, input: 922_000, output: 128_000 }, buffer: undefined, maxTokens: 38_400 },
+        { limit: { context: 256_000, output: 128_000 }, buffer: 40_000, maxTokens: 40_000 },
+        { limit: { context: 400_000, input: 272_000, output: 128_000 }, buffer: 40_000, maxTokens: 128_000 },
+        { limit: { context: 0, input: 922_000, output: 128_000 }, buffer: 40_000, maxTokens: 128_000 },
+      ],
+      (item) =>
+        Effect.gen(function* () {
+          requests = []
+          yield* compaction.transform((editor) => editor.configure({ buffer: item.buffer }))
+          const context = { ...loaded(session, messages), model: { ...resolved, limit: item.limit } }
+          const inputID = SessionMessage.ID.create()
+          yield* bus.publish(SessionEvent.Compaction.Started, { sessionID: session.id, reason: "manual", inputID })
+          expect(yield* compaction.compact({ reason: "manual", context, inputID })).toEqual({ status: "completed" })
+          expect(requests).toHaveLength(1)
+          expect(requests[0].generation?.maxTokens).toBe(item.maxTokens)
+        }),
+    )
+  }),
+)
+
+it.effect("summary compaction does not use a larger input limit to keep an oversized conversation unchanged", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* SessionCompaction.Service
+    const bus = yield* Bus.Service
+    yield* compaction.transform((editor) => editor.configure({ buffer: 40_000 }))
+    const session = yield* insertSession(Session.ID.make("ses_compaction_context_fit"))
+    // About 250k tokens: beyond the 240k left for the summary, but the older exchange fits the 216k target.
+    const messages = [textUser(`older ${"x".repeat(500_000)}`), textUser(`latest ${"x".repeat(500_000)}`)]
+    const context = {
+      ...loaded(session, messages),
+      model: { ...resolved, limit: { context: 256_000, input: 922_000, output: 128_000 } },
+    }
+
+    const inputID = SessionMessage.ID.create()
+    yield* bus.publish(SessionEvent.Compaction.Started, { sessionID: session.id, reason: "manual", inputID })
+    expect(yield* compaction.compact({ reason: "manual", context, inputID })).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(1)
+    expect(requests[0].messages).toHaveLength(2)
+    expect(requests[0].messages[0].content).toEqual([{ type: "text", text: messages[0].text }])
+    expect(requests[0].generation?.maxTokens).toBe(40_000)
+  }),
+)
+
 it.effect("compaction hooks can supply the summary instead of the model", () =>
   Effect.gen(function* () {
     requests = []
