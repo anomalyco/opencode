@@ -1,4 +1,4 @@
-import { LLM } from "@opencode/ai/effect"
+import { ai } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
@@ -71,7 +71,7 @@ const fixture = Effect.gen(function* () {
     const resolved = yield* resolver.resolve(Model.Ref.make({ providerID, id: modelID }))
     if (!resolved) throw new Error("Expected Poe model")
     expect(resolved.model.route.id).toBe("openai-compatible-chat")
-    return yield* LLMClient.stream(LLM.request({ model: resolved.model, prompt: "Hello" })).pipe(
+    return yield* LLMClient.stream(ai.request({ model: resolved.model, prompt: "Hello" })).pipe(
       Stream.runCollect,
       Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer), Layer.fresh)),
       Effect.provideService(HttpClient.HttpClient, http),

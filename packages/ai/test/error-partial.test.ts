@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LanguageModel, LLM, LLMEvent, ProviderInternalError, tool } from "../src/effect.js"
+import { ai, LanguageModel, LLMEvent, ProviderInternalError, tool } from "../src/effect.js"
 import { AI, AIError } from "../src/index.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { TestLLM } from "../src/testing.js"
@@ -28,7 +28,7 @@ describe("AIError.partial", () => {
       const client = yield* TestLLM.Test
       yield* client.push(textThenFail)
 
-      const error = yield* LLM.generate({ model, prompt: "Hello" }).pipe(Effect.flip)
+      const error = yield* ai.generate({ model, prompt: "Hello" }).pipe(Effect.flip)
 
       expect(error.reason).toBe(overloaded.reason)
       expect(error.partial?.text).toBe("Partial answer")
@@ -43,7 +43,7 @@ describe("AIError.partial", () => {
       const client = yield* TestLLM.Test
       yield* client.push(TestLLM.failAfter(overloaded, LLMEvent.stepStart({ index: 0 })))
 
-      expect(yield* LLM.generate({ model, prompt: "Hello" }).pipe(Effect.flip)).toBe(overloaded)
+      expect(yield* ai.generate({ model, prompt: "Hello" }).pipe(Effect.flip)).toBe(overloaded)
     }),
   )
 
@@ -58,11 +58,13 @@ describe("AIError.partial", () => {
         ),
       )
 
-      const error = yield* LLM.generateObject({
-        model,
-        prompt: "Answer",
-        schema: Schema.Struct({ answer: Schema.String }),
-      }).pipe(Effect.flip)
+      const error = yield* ai
+        .generateObject({
+          model,
+          prompt: "Answer",
+          schema: Schema.Struct({ answer: Schema.String }),
+        })
+        .pipe(Effect.flip)
 
       expect(error.message).toContain("token limit")
       expect(error.partial?.text).toBe("Thinking about the answer")
@@ -82,7 +84,7 @@ describe("AIError.partial", () => {
         success: Schema.String,
         execute: ({ value }) => Effect.succeed(value),
       })
-      const error = yield* LLM.loop({ model, prompt: "Echo hi.", tools: { echo } }).pipe(Stream.runDrain, Effect.flip)
+      const error = yield* ai.loop({ model, prompt: "Echo hi.", tools: { echo } }).pipe(Stream.runDrain, Effect.flip)
 
       expect(error.partial?.text).toBe("Partial answer")
       expect(error.partial?.toolCalls).toEqual([])
@@ -92,12 +94,12 @@ describe("AIError.partial", () => {
 
 describe("AIError.partial from the promise client", () => {
   test("rejects with the root-exported AIError carrying partial", async () => {
-    const ai = AI.make({ clients: TestLLM.testLayer({ fallback: textThenFail }) })
+    const client = AI.make({ clients: TestLLM.testLayer({ fallback: textThenFail }) })
 
-    const error = await ai.llm.generate({ model, prompt: "Hello" }).catch((error: unknown) => error)
+    const error = await client.generate({ model, prompt: "Hello" }).catch((error: unknown) => error)
 
     expect(error).toBeInstanceOf(AIError)
     expect(error instanceof AIError && error.partial?.text).toBe("Partial answer")
-    await ai.dispose()
+    await client.dispose()
   })
 })

@@ -1,25 +1,17 @@
 import type { Effect, Stream } from "effect"
 import type { Client, GenerationHandle } from "../src/index.js"
-import type { Decision, Generation, Image, LLM, LLMClient } from "../src/effect.js"
-import type { Speech, Transcription, Video } from "../src/experimental.js"
+import type { Generation, ai } from "../src/effect.js"
 
-// The Promise client mirrors the Effect API: same methods, same arguments, same results. The only allowed differences
+// The Promise `ai` mirrors the Effect `ai`: same namespaces, methods, arguments and results. The only allowed differences
 // are `signal` on the options bag, Promise for Effect, AsyncIterable for Stream and GenerationHandle for Generation.
 
 type Equal<A, B> = [A, B] extends [B, A] ? true : false
 type Assert<T extends Record<string, true>> = T
 
-/** The Effect operations each `ai.*` namespace mirrors. Adding an operation here, or on `LLM`, fails until `ai` has it. */
-export type Surface = {
-  readonly llm: Operations<typeof LLM> & Pick<typeof LLMClient, "compact" | "canCompact">
-  readonly image: typeof Image
-  readonly decision: typeof Decision
-  readonly speech: typeof Speech
-  readonly transcription: typeof Transcription
-  readonly video: typeof Video
-}
-
-type Operations<M> = { [K in keyof M as M[K] extends (...args: never) => unknown ? K : never]: M[K] }
+type PromiseAI = Omit<Client, "dispose">
+type EffectAI = typeof ai
+type Helpers = "run" | "bytes" | "base64" | "materialize" | "file" | "write"
+type Namespaces = "image" | "decision" | "experimental"
 
 type Signatures<F> = F extends {
   (...args: infer A1): infer R1
@@ -69,10 +61,12 @@ type Same<A, B> = [Exclude<A, B> | Exclude<B, A>] extends [never] ? true : { rea
 
 export type Checks = [
   Assert<{ handle: Same<keyof GenerationHandle<unknown>, Exclude<keyof Generation<unknown>, "route">> }>,
-  Assert<Drift<Client["llm"], Surface["llm"]>>,
-  Assert<Drift<Client["image"], Surface["image"]>>,
-  Assert<Drift<Client["decision"], Surface["decision"]>>,
-  Assert<Drift<Client["experimental"]["speech"], Surface["speech"]>>,
-  Assert<Drift<Client["experimental"]["transcription"], Surface["transcription"]>>,
-  Assert<Drift<Client["experimental"]["video"], Surface["video"]>>,
+  Assert<{ keys: Same<Exclude<keyof PromiseAI, Helpers>, keyof EffectAI> }>,
+  Assert<{ experimental: Same<keyof PromiseAI["experimental"], keyof EffectAI["experimental"]> }>,
+  Assert<Drift<Omit<PromiseAI, Helpers | Namespaces>, Omit<EffectAI, Namespaces>>>,
+  Assert<Drift<PromiseAI["image"], EffectAI["image"]>>,
+  Assert<Drift<PromiseAI["decision"], EffectAI["decision"]>>,
+  Assert<Drift<PromiseAI["experimental"]["speech"], EffectAI["experimental"]["speech"]>>,
+  Assert<Drift<PromiseAI["experimental"]["transcription"], EffectAI["experimental"]["transcription"]>>,
+  Assert<Drift<PromiseAI["experimental"]["video"], EffectAI["experimental"]["video"]>>,
 ]

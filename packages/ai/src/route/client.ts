@@ -406,9 +406,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           provider: provider ?? routeInput.provider,
           providerMetadataKey:
             providerMetadataKey ??
-            (provider !== undefined && provider !== routeInput.provider
-              ? provider
-              : routeInput.providerMetadataKey),
+            (provider !== undefined && provider !== routeInput.provider ? provider : routeInput.providerMetadataKey),
           auth: auth ?? routeInput.auth,
           endpoint: endpoint ? Endpoint.merge(routeInput.endpoint, endpoint) : routeInput.endpoint,
           transport: (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
@@ -710,8 +708,6 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
 export const Route = { make } as const
 
 export const LLMClient = {
-  canCompact,
-  compact,
   Service,
   layer,
   stream,
