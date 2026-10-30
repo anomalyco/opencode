@@ -16,6 +16,40 @@ const recorded = recordedTests({
   requires: ["AI_GATEWAY_API_KEY"],
 })
 
+const chatRecorded = recordedTests({
+  prefix: "vercel-ai-gateway-images",
+  provider: "vercel-ai-gateway",
+  protocol: "openai-chat-images",
+  requires: ["AI_GATEWAY_API_KEY"],
+})
+
+describe("Vercel AI Gateway chat images recorded", () => {
+  // Gemini image models are language models on the Gateway and only return images from `/chat/completions`.
+  chatRecorded.effect(
+    "generates a Gemini image through chat completions",
+    () =>
+      Effect.gen(function* () {
+        const model = VercelAIGateway.configure({ apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture" }).image(
+          "google/gemini-3.1-flash-image",
+        )
+        const response = yield* Image.generate({
+          model,
+          prompt: "A simple flat black circle centered on a plain white background.",
+          aspect: "16:9",
+          resolution: "0.5K",
+        })
+
+        expect(response.images).toHaveLength(1)
+        expect(response.image.mediaType).toBe("image/png")
+        expect(dimensions(yield* response.image.bytes())).toEqual({ width: 688, height: 384 })
+        expect(model.provider).toBe("vercel-ai-gateway")
+        expect(response.usage?.details).toHaveProperty("vercel-ai-gateway")
+        expect(response.providerMetadata).toHaveProperty("vercel-ai-gateway")
+      }),
+    { timeout: 120_000 },
+  )
+})
+
 describe("Vercel AI Gateway Images recorded", () => {
   recorded.effect("generates an image", () =>
     Effect.gen(function* () {
