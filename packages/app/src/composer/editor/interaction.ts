@@ -421,6 +421,21 @@ export function createComposerEditor(input: {
 
     if (handled) return true
 
+    // The suggestion lists don't page, and a page key must not move the caret out of the query or page the timeline.
+    if (
+      state.popover.type !== "closed" &&
+      (event.key === "PageUp" || event.key === "PageDown") &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.isComposing
+    ) {
+      event.preventDefault()
+
+      return true
+    }
+
     if (event.key === "Escape" && input.view.submit.queue?.editing()) {
       event.preventDefault()
       input.view.submit.queue.cancelEdit()

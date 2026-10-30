@@ -92,6 +92,8 @@ type Input = {
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setRevealPart?: (fn: (target: string) => boolean) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
+  /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
+  setPage?: (fn: (direction: 1 | -1) => void) => void
   /** A tool call the route asks this timeline to open on; `done` clears it once revealed. */
   reveal?: { target: () => string | undefined; done: () => void }
 }
@@ -602,6 +604,18 @@ export function createTimelineVirtualizer(input: Input) {
         virtualizer.scrollToOffset(Math.max(root.scrollTop, root.scrollHeight - root.clientHeight * 2))
       virtualizer.scrollToEnd({ behavior })
     })
+    input.setPage?.((direction) => {
+      const root = listRoot()
+
+      if (!active() || !root?.isConnected) return
+      prepareNavigation()
+      input.onUserScroll(root)
+
+      if (direction < 0) input.onUnpin()
+      // Like the timeline's own PageUp: 80% of a page, measured above the composer that covers its bottom. The scroll
+      // event then pins at the end or loads older history near the top, as a wheel scroll does.
+      virtualizer.scrollToOffset(root.scrollTop + direction * (visibleArea()?.clientHeight || root.clientHeight) * 0.8)
+    })
   })
 
   createEffect(
@@ -1082,6 +1096,7 @@ export function createTimelineVirtualizer(input: Input) {
       input.setRevealMessage?.(() => {})
       input.setRevealPart?.(() => false)
       input.setScrollToEnd?.(() => {})
+      input.setPage?.(() => {})
     }
   })
 

@@ -68,6 +68,8 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
   let scrollToEnd = (_behavior?: ScrollBehavior) => {}
 
+  let page = (_direction: 1 | -1) => {}
+
   let scrollMark = 0
   let messageMark = 0
   let scrollStateFrame: (() => void) | undefined
@@ -402,6 +404,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   return {
     actions: {
       navigateMessage,
+      page: (direction: 1 | -1) => page(direction),
       revealMessage: (id: string, partID?: string) => revealMessage(id, partID),
       revealPart: (target: string) => revealPart(target),
       resume,
@@ -450,6 +453,9 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       setScrollRef,
       setScrollToEnd: (scroll: (behavior?: ScrollBehavior) => void) => {
         scrollToEnd = scroll
+      },
+      setPage: (scroll: (direction: 1 | -1) => void) => {
+        page = scroll
       },
       unpin,
     },
