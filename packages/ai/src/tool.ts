@@ -74,14 +74,11 @@ export interface Definition<Parameters extends ToolSchema<any>, Success extends 
   readonly toStructuredOutput?: (output: Success["Encoded"]) => unknown
   /** @internal */
   readonly _decode: (input: unknown) => Effect.Effect<Schema.Schema.Type<Parameters>, Schema.SchemaError>
+  // Method syntax keeps these parameters bivariant, so a concrete tool stays assignable to `AnyExecutableTool`.
   /** @internal */
-  readonly _encode: (value: Schema.Schema.Type<Success>) => Effect.Effect<unknown, Schema.SchemaError>
+  _encode(value: Schema.Schema.Type<Success>): Effect.Effect<unknown, Schema.SchemaError>
   /** @internal */
-  readonly _project: (
-    parameters: Schema.Schema.Type<Parameters>,
-    id: ToolCallPart["id"],
-    output: unknown,
-  ) => ToolOutputType
+  _project(parameters: Schema.Schema.Type<Parameters>, id: ToolCallPart["id"], output: unknown): ToolOutputType
   /** @internal */
   readonly _legacyResult: boolean
   /** @internal */
