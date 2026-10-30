@@ -405,21 +405,21 @@ export function ImagePreview(props: ImagePreviewProps) {
     settle()
     showOrigin()
     giveBack()
+    document.body.removeAttribute("data-image-preview-closing")
   })
 
   createEffect(
     on(
       () => dialog.isOpen(),
       (open) => {
+        // See image-preview.css: the body takes clicks again while the closing flight holds the dialog mounted.
+        document.body.toggleAttribute("data-image-preview-closing", !open)
+
         if (!open) dismiss()
       },
       { defer: true },
     ),
   )
-
-  // See image-preview.css: the body takes clicks again while the closing flight holds the dialog mounted.
-  createEffect(() => document.body.toggleAttribute("data-image-preview-closing", !dialog.isOpen()))
-  onCleanup(() => document.body.removeAttribute("data-image-preview-closing"))
 
   // From the center of the box zoom is measured in: the window's for an image, the frame's for a video.
   const point = (event: MouseEvent) => {
