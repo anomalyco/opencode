@@ -201,6 +201,11 @@ test("saved service environment cannot move the registration's state directory",
     XDG_DATA_HOME: "/custom/data",
     A: "1",
   })
+  expect(ServiceConfig.processEnv({ HTTPS_PROXY: "http://proxy.example:8080", no_proxy: "corp.internal" })).toEqual({
+    HTTPS_PROXY: "http://proxy.example:8080",
+    NO_PROXY: "corp.internal,127.0.0.1,localhost,::1",
+    no_proxy: "corp.internal,127.0.0.1,localhost,::1",
+  })
 
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-env-state-"))
   const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })

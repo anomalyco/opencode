@@ -56,6 +56,19 @@ describe("WebSocket network policy", () => {
     ).toBeUndefined()
   })
 
+  test("bypasses proxies for IPv4, IPv6, and localhost loopback URLs", () => {
+    const environment = {
+      HTTP_PROXY: "http://proxy.test",
+      WSS_PROXY: "http://wss-proxy.test",
+      ALL_PROXY: "http://all-proxy.test",
+    }
+    expect(WebSocketConstructor.proxy("ws://127.0.0.1:49374/ws", environment)).toBeUndefined()
+    expect(WebSocketConstructor.proxy("ws://127.0.0.2:49374/ws", environment)).toBeUndefined()
+    expect(WebSocketConstructor.proxy("ws://localhost:49374/ws", environment)).toBeUndefined()
+    expect(WebSocketConstructor.proxy("wss://sub.localhost:49374/ws", environment)).toBeUndefined()
+    expect(WebSocketConstructor.proxy("ws://[::1]:49374/ws", environment)).toBeUndefined()
+  })
+
   test("rejects redirects without forwarding authorization", async () => {
     let destinationRequests = 0
     await Effect.runPromise(

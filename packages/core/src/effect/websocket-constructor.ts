@@ -33,9 +33,16 @@ const bypassesProxy = (url: URL, value: string | undefined) => {
   })
 }
 
+const ipv4Loopback = /^127(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}$/
+
+const isLoopback = (url: URL) => {
+  const host = url.hostname.toLowerCase().replace(/\.$/, "")
+  return host === "localhost" || host.endsWith(".localhost") || host === "[::1]" || ipv4Loopback.test(host)
+}
+
 const proxy = (value: string, environment: Environment = process.env) => {
   const url = new URL(value)
-  if (["127.0.0.1", "localhost", "::1"].includes(url.hostname)) return undefined
+  if (isLoopback(url)) return undefined
   if (bypassesProxy(url, environmentValue(environment, "NO_PROXY"))) return undefined
   const protocolProxy = url.protocol === "wss:" ? "WSS_PROXY" : "WS_PROXY"
   const standardProxy = url.protocol === "wss:" ? "HTTPS_PROXY" : "HTTP_PROXY"

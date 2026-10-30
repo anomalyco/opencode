@@ -22,3 +22,36 @@ test("session environment omits server credentials", () => {
   expect(environment.OPENCODE_SERVER_PASSWORD).toBeUndefined()
   expect(environment.OPENCODE_SESSION_ENV_TEST).toBe("included")
 })
+
+test.each([
+  {
+    name: "populates both spellings when unset",
+    input: {} as Record<string, string | undefined>,
+    expected: "127.0.0.1,localhost,::1",
+  },
+  {
+    name: "merges uppercase NO_PROXY into lowercase no_proxy so Bun and Node keep user hosts",
+    input: { NO_PROXY: "corp.internal, .example.internal" },
+    expected: "corp.internal,.example.internal,127.0.0.1,localhost,::1",
+  },
+  {
+    name: "merges split spellings and deduplicates case-insensitively",
+    input: { NO_PROXY: "a.internal, LOCALHOST", no_proxy: "b.internal, ::1, A.INTERNAL" },
+    expected: "a.internal,LOCALHOST,b.internal,::1,127.0.0.1",
+  },
+  {
+    name: "adds explicit 127.0.0.1 alongside Windows wildcard entries",
+    input: { NO_PROXY: "172.31.*,127.*,localhost" },
+    expected: "172.31.*,127.*,localhost,127.0.0.1,::1",
+  },
+  {
+    name: "preserves universal wildcard intact for Node EnvHttpProxyAgent",
+    input: { NO_PROXY: "corp.internal, *" },
+    expected: "*",
+  },
+])("ensureLoopbackNoProxy $name", ({ input, expected }) => {
+  const env = { ...input }
+  Env.ensureLoopbackNoProxy(env)
+  expect(env.NO_PROXY).toBe(expected)
+  expect(env.no_proxy).toBe(expected)
+})

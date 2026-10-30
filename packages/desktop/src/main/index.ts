@@ -2,6 +2,7 @@
 import { marks } from "./lifecycle/marks"
 import { app } from "electron"
 import { acquireApplicationLock, configureApplication } from "./lifecycle/configure"
+import { ensureLoopbackNoProxy } from "./lifecycle/proxy-env"
 import { startSidecarProbe } from "./service/sidecar-probe"
 import { registerStorageSnapshotHandler } from "./storage/snapshot"
 import { createEarlyWindow } from "./windows/early"
@@ -23,6 +24,7 @@ if (acquireApplicationLock()) {
     registerStorageSnapshotHandler()
     createEarlyWindow()
     marks.window = Date.now()
+    ensureLoopbackNoProxy()
     startSidecarProbe()
 
     // The window's renderer is already loading. Its HTML and preloaded chunks are served from this

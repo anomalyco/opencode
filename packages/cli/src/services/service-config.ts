@@ -5,6 +5,7 @@ import { Service } from "@opencode/client/effect/service"
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
+import { Env } from "../env"
 import { selfCommand } from "../util/process"
 import { RemoteTunnel } from "./remote-tunnel"
 
@@ -137,6 +138,7 @@ const paths = Effect.gen(function* () {
 export function processEnv(env: Info["env"]) {
   if (env === undefined) return undefined
   const { XDG_STATE_HOME: _state, ...rest } = env
+  if (rest.NO_PROXY !== undefined || rest.no_proxy !== undefined) Env.ensureLoopbackNoProxy(rest)
   return rest
 }
 

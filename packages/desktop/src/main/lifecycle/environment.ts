@@ -7,6 +7,7 @@ import { getUserShell, loadShellEnv } from "../service/shell-env"
 import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../windows"
 import { scoped } from "../native/logging"
 import { applySpellcheck, spellcheckMenuItems } from "../native/spellcheck"
+import { ensureLoopbackNoProxy } from "./proxy-env"
 
 // electron-context-menu attaches to every existing and future window, so it can load once the first
 // window is up instead of holding up startup with its dependency tree.
@@ -36,6 +37,7 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
       OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
       OPENCODE_CLIENT: "desktop",
     })
+    ensureLoopbackNoProxy()
   })
 })
 
@@ -69,19 +71,3 @@ const loadSystemCertificates = Effect.try({
   },
   catch: (error) => error,
 }).pipe(Effect.catch((error) => Effect.logWarning("failed to load system certificates", { error })))
-
-function ensureLoopbackNoProxy() {
-  const loopback = ["127.0.0.1", "localhost", "::1"]
-
-  ;["NO_PROXY", "no_proxy"].forEach((key) => {
-    const items = (process.env[key] ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean)
-
-    loopback.forEach((host) => {
-      if (!items.some((value) => value.toLowerCase() === host)) items.push(host)
-    })
-    process.env[key] = items.join(",")
-  })
-}

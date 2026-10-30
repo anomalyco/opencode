@@ -211,3 +211,62 @@ test("local config commands do not start or require a server", async () => {
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+test("CLI loopback requests bypass environment proxies", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-loopback-proxy-"))
+  const proxied: string[] = []
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
+    },
+  })
+  const proxy = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      proxied.push(request.url)
+      return new Response(null, { status: 502 })
+    },
+  })
+  const env = isolatedEnv(root, {
+    OPENCODE_PASSWORD: "fixture-password",
+    OPENCODE_SERVER_PASSWORD: undefined,
+    HTTP_PROXY: proxy.url.href,
+    http_proxy: proxy.url.href,
+    HTTPS_PROXY: proxy.url.href,
+    https_proxy: proxy.url.href,
+    ALL_PROXY: proxy.url.href,
+    all_proxy: proxy.url.href,
+    NO_PROXY: "",
+    no_proxy: "",
+  })
+  try {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "run",
+        path.join(import.meta.dir, "../src/index.ts"),
+        "api",
+        "get",
+        "/api/info",
+        "--server",
+        server.url.href,
+      ],
+      { cwd: path.join(import.meta.dir, ".."), env, stdout: "pipe", stderr: "pipe" },
+    )
+    const [, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
+    expect(stderr).toBe("")
+    expect(code).toBe(0)
+    expect(proxied).toEqual([])
+  } finally {
+    await server.stop(true)
+    await proxy.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
