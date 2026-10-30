@@ -1,7 +1,7 @@
 export * as McpStdio from "./stdio.js"
 
-import { ReadBuffer, serializeMessage, type JSONRPCMessage, type Transport } from "@modelcontextprotocol/client"
-import { Cause, Duration, Effect, Fiber, Option, Queue, Scope, Stream } from "effect"
+import { deserializeMessage, serializeMessage, type JSONRPCMessage, type Transport } from "@modelcontextprotocol/client"
+import { Cause, Duration, Effect, Fiber, Option, Queue, Result, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner"
 import { Environment } from "../environment/index.js"
@@ -48,11 +48,15 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   // Outgoing frames are queued rather than written to `handle.stdin` directly: the sink closes the
   // stream it is run with, and stdin must stay open across the whole session.
   const outgoing = yield* Queue.bounded<string, Cause.Done>(OUTGOING_CAPACITY)
-  const buffer = new ReadBuffer()
   const state: { phase: "ready" | "starting" | "open" | "closed"; handle?: ChildProcessHandle } = { phase: "ready" }
   let startup: Promise<void> | undefined
   let closing: Promise<void> | undefined
-  let trailingBytes = 0
+  // Bytes of the unterminated line, kept as chunk views and joined once its newline arrives.
+  let pending: Array<Uint8Array> = []
+  let pendingBytes = 0
+  // Set once a line passed MAX_FRAME_BYTES: its remaining bytes are dropped up to the next newline.
+  let discarding = false
+  const decoder = new TextDecoder()
   let stderr = ""
 
   const stop = Effect.fnUntraced(function* (handle: ChildProcessHandle) {
@@ -72,7 +76,16 @@ export const make = Effect.fnUntraced(function* (options: Options) {
         if (!handle) return
         state.handle = undefined
         yield* stop(handle)
-      }).pipe(Effect.ensuring(Queue.shutdown(outgoing)), Effect.ensuring(Effect.sync(() => buffer.clear()))),
+      }).pipe(
+        Effect.ensuring(Queue.shutdown(outgoing)),
+        Effect.ensuring(
+          Effect.sync(() => {
+            pending = []
+            pendingBytes = 0
+            discarding = false
+          }),
+        ),
+      ),
     ))
 
   const transport: Transport = {
@@ -114,32 +127,51 @@ export const make = Effect.fnUntraced(function* (options: Options) {
     close,
   }
 
-  const deliver = (chunk: Uint8Array) =>
-    Effect.gen(function* () {
-      for (const byte of chunk) {
-        trailingBytes = byte === 10 ? 0 : trailingBytes + 1
-        if (trailingBytes > MAX_FRAME_BYTES) return yield* Effect.fail(new Error("MCP stdio frame exceeded 16 MiB"))
+  // A line over the cap is reported and dropped rather than closing the connection, so one oversized
+  // result fails only its own request.
+  const deliver = (chunk: Uint8Array) => {
+    let start = 0
+    let newline = chunk.indexOf(10)
+    while (newline !== -1) {
+      const size = pendingBytes + newline - start
+      if (discarding) discarding = false
+      else if (size > MAX_FRAME_BYTES) oversized()
+      else {
+        const tail = chunk.subarray(start, newline)
+        const line = pending.length === 0 ? tail : Buffer.concat([...pending, tail], size)
+        receive(line.at(-1) === 13 ? line.subarray(0, -1) : line)
       }
-      buffer.append(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength))
-      while (true) {
-        // `undefined` means the frame failed to parse: the buffer has already advanced past it, so
-        // keep draining. `null` means the buffer holds no complete frame yet.
-        const message = yield* Effect.try({
-          try: () => buffer.readMessage(),
-          catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-        }).pipe(
-          Effect.catch((error) =>
-            Effect.sync(() => {
-              transport.onerror?.(error)
-              return undefined
-            }),
-          ),
-        )
-        if (message === undefined) continue
-        if (message === null) return
-        transport.onmessage?.(message)
-      }
+      pending = []
+      pendingBytes = 0
+      start = newline + 1
+      newline = chunk.indexOf(10, start)
+    }
+    if (start === chunk.length || discarding) return
+    pendingBytes += chunk.length - start
+    if (pendingBytes > MAX_FRAME_BYTES) {
+      oversized()
+      discarding = true
+      pending = []
+      pendingBytes = 0
+      return
+    }
+    // A view is enough: the runtime hands out a fresh buffer for every pipe read.
+    pending.push(start === 0 ? chunk : chunk.subarray(start))
+  }
+
+  const receive = (line: Uint8Array) => {
+    const text = decoder.decode(line)
+    if (text.trim() === "") return
+    const message = Result.try({
+      try: () => deserializeMessage(text),
+      catch: (cause) => new Error(`Invalid MCP stdio message from ${options.server}`, { cause }),
     })
+    if (Result.isFailure(message)) return transport.onerror?.(message.failure)
+    transport.onmessage?.(message.success)
+  }
+
+  const oversized = () =>
+    transport.onerror?.(new Error(`MCP server ${options.server} sent a stdio message over 16 MiB; it was dropped`))
 
   const startOutput = (handle: ChildProcessHandle) =>
     Effect.gen(function* () {
@@ -158,7 +190,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
       )
 
       yield* Effect.forkScoped(
-        Stream.runForEach(handle.stdout, deliver).pipe(
+        Stream.runForEach(handle.stdout, (chunk) => Effect.sync(() => deliver(chunk))).pipe(
           Effect.tapCause((cause) =>
             Effect.sync(() => {
               const error = Cause.squash(cause)
