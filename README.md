@@ -97,6 +97,32 @@ This is used internally and can be invoked using `@general` in messages.
 
 Learn more about [agents](https://opencode.ai/v2/docs/agents).
 
+### Universal Agent Ecosystem
+
+OpenCode Enhanced includes a universal agent-customization and workspace management engine that bridges ecosystems across OpenAI Codex, Claude Code, Google Antigravity, Cursor, and OpenCode.
+
+#### 1. Universal Agent Extension Compatibility Engine
+- **Skills Compatibility**: Import and run skills from local paths, git repositories, and subdirectories. Preserves `SKILL.md`, supporting scripts, references, and dependencies with automatic invocation wrappers and provenance tracking.
+- **MCP Server Management**: Native support for Stdio, HTTP, and SSE Model Context Protocol servers. Includes preflight diagnostics (transport verification, binary presence, auth checks, and live tool discovery) and import from Claude Desktop / Cursor configurations.
+- **Unified Rules & Instructions**: Import and evaluate `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, and `.cursor/rules/*.mdc` with glob matching, precedence ranking, and scope resolution.
+- **Plugin Compatibility & Security Sandbox**: Static AST security analyzer detects command injection (`eval`, `child_process`), credential exfiltration, and path traversal prior to installation. Generates compatibility wrappers for non-native plugins.
+
+#### 2. Advanced Multi-Folder Workspaces & Attachments
+- **Dynamic Multi-Folder Workspaces**: Attach multiple independent directories or repositories across different drives to a single project. Switch the primary project root, relink moved paths, and explore unified workspace trees without duplicating storage.
+- **Persistent Project Attachments**: Attach, categorize, and search project-level assets (source files, Markdown, PDFs, spreadsheets, archives) in `.opencode/attachments/`.
+- **Native Agent Context Tools**: Built-in agent tools give the model direct visibility into the extended workspace:
+  - `workspace_folder`: List and inspect all attached folders in the active workspace.
+  - `project_attachment`: Search, list, and read attached documents and specifications.
+  - `universal_extension`: Inspect installed cross-platform extensions, tools, and configurations.
+- **Safe Non-Destructive Operations**: Removing a folder or deleting a project never deletes source files from disk unless physical purging is explicitly requested.
+
+Detailed specifications and guides:
+- [Architecture Specification](ARCHITECTURE.md)
+- [Compatibility Matrix](COMPATIBILITY_MATRIX.md)
+- [Security Architecture](SECURITY.md)
+- [Testing & Quality Assurance](TESTING.md)
+- [Implementation Plan](IMPLEMENTATION_PLAN.md)
+
 ### Documentation
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/v2/docs).
