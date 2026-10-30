@@ -38,6 +38,32 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`automation\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text,
+          \`name\` text,
+          \`action\` text NOT NULL,
+          \`check\` text,
+          \`when\` text NOT NULL,
+          \`tz\` text NOT NULL,
+          \`status\` text DEFAULT 'active' NOT NULL,
+          \`next_due_at\` integer,
+          \`ends_at\` integer,
+          \`remaining_runs\` integer,
+          \`run_count\` integer DEFAULT 0 NOT NULL,
+          \`checks\` integer DEFAULT 0 NOT NULL,
+          \`failures\` integer DEFAULT 0 NOT NULL,
+          \`last_fired_at\` integer,
+          \`last_message_id\` text,
+          \`last_outcome\` text,
+          \`retry_at\` integer,
+          \`state\` text,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL,
+          CONSTRAINT \`fk_automation_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`credential\` (
           \`id\` text PRIMARY KEY,
           \`integration_id\` text,
@@ -130,32 +156,6 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`time_archived\` integer,
           \`sandboxes\` text NOT NULL,
           \`commands\` text
-        );
-      `)
-      yield* tx.run(`
-        CREATE TABLE \`schedule\` (
-          \`id\` text PRIMARY KEY,
-          \`session_id\` text,
-          \`name\` text,
-          \`action\` text NOT NULL,
-          \`check\` text,
-          \`when\` text NOT NULL,
-          \`tz\` text NOT NULL,
-          \`status\` text DEFAULT 'active' NOT NULL,
-          \`next_due_at\` integer,
-          \`ends_at\` integer,
-          \`remaining_runs\` integer,
-          \`run_count\` integer DEFAULT 0 NOT NULL,
-          \`checks\` integer DEFAULT 0 NOT NULL,
-          \`failures\` integer DEFAULT 0 NOT NULL,
-          \`last_fired_at\` integer,
-          \`last_message_id\` text,
-          \`last_outcome\` text,
-          \`retry_at\` integer,
-          \`state\` text,
-          \`time_created\` integer NOT NULL,
-          \`time_updated\` integer NOT NULL,
-          CONSTRAINT \`fk_schedule_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`
@@ -308,6 +308,10 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           CONSTRAINT \`fk_worktree_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
         );
       `)
+      yield* tx.run(`CREATE INDEX \`automation_session_idx\` ON \`automation\` (\`session_id\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`automation_due_idx\` ON \`automation\` (\`next_due_at\`) WHERE "automation"."status" = 'active' and "automation"."next_due_at" is not null;`,
+      )
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`job_session_idx\` ON \`job\` (\`session_id\`);`)
@@ -315,10 +319,6 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(`CREATE INDEX \`job_id_idx\` ON \`job\` (\`id\`);`)
       yield* tx.run(
         `CREATE UNIQUE INDEX \`permission_project_action_resource_idx\` ON \`permission\` (\`project_id\`,\`action\`,\`resource\`);`,
-      )
-      yield* tx.run(`CREATE INDEX \`schedule_session_idx\` ON \`schedule\` (\`session_id\`);`)
-      yield* tx.run(
-        `CREATE INDEX \`schedule_due_idx\` ON \`schedule\` (\`next_due_at\`) WHERE "schedule"."status" = 'active' and "schedule"."next_due_at" is not null;`,
       )
       yield* tx.run(`CREATE INDEX \`blob_ref_hash_idx\` ON \`blob_ref\` (\`hash\`);`)
       yield* tx.run(`CREATE INDEX \`blob_ref_session_seq_idx\` ON \`blob_ref\` (\`session_id\`,\`seq\`);`)

@@ -37,7 +37,7 @@ import type { FileSystem } from "@opencode/schema/filesystem"
 import type { Command } from "@opencode/schema/command"
 import type { OpenCodeEvent } from "@opencode/protocol/groups/event"
 import type { Pty } from "@opencode/schema/pty"
-import type { Schedule } from "@opencode/schema/schedule"
+import type { Automation } from "@opencode/schema/automation"
 import type { Artifact } from "@opencode/schema/artifact"
 import type { Reference } from "@opencode/schema/reference"
 import type { Worktree } from "@opencode/schema/worktree"
@@ -2380,49 +2380,49 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
   input: ExperimentalPersistentPtyConnectTokenInput,
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
-export type ExperimentalScheduleCreateInput = {
+export type ExperimentalAutomationCreateInput = {
   readonly sessionID: Session.ID
   readonly name?: string | undefined
-  readonly when?: Schedule.WhenInput | undefined
-  readonly if?: Schedule.ConditionInput | undefined
-  readonly until?: Schedule.ConditionInput | undefined
-  readonly ends?: Schedule.Ends | undefined
+  readonly when?: Automation.WhenInput | undefined
+  readonly if?: Automation.ConditionInput | undefined
+  readonly until?: Automation.ConditionInput | undefined
+  readonly ends?: Automation.Ends | undefined
   readonly prompt: string
 }
-export type ExperimentalScheduleCreateOutput = Schedule.Info
-export type ExperimentalScheduleCreateOperation<E = never> = (
-  input: ExperimentalScheduleCreateInput,
-) => Effect.Effect<ExperimentalScheduleCreateOutput, E>
+export type ExperimentalAutomationCreateOutput = Automation.Info
+export type ExperimentalAutomationCreateOperation<E = never> = (
+  input: ExperimentalAutomationCreateInput,
+) => Effect.Effect<ExperimentalAutomationCreateOutput, E>
 
-export type ExperimentalScheduleListInput = { readonly sessionID: Session.ID }
-export type ExperimentalScheduleListOutput = ReadonlyArray<Schedule.Info>
-export type ExperimentalScheduleListOperation<E = never> = (
-  input: ExperimentalScheduleListInput,
-) => Effect.Effect<ExperimentalScheduleListOutput, E>
+export type ExperimentalAutomationListInput = { readonly sessionID?: Session.ID | undefined }
+export type ExperimentalAutomationListOutput = ReadonlyArray<Automation.Info>
+export type ExperimentalAutomationListOperation<E = never> = (
+  input?: ExperimentalAutomationListInput,
+) => Effect.Effect<ExperimentalAutomationListOutput, E>
 
-export type ExperimentalScheduleGetInput = { readonly scheduleID: Schedule.ID }
-export type ExperimentalScheduleGetOutput = Schedule.Info
-export type ExperimentalScheduleGetOperation<E = never> = (
-  input: ExperimentalScheduleGetInput,
-) => Effect.Effect<ExperimentalScheduleGetOutput, E>
+export type ExperimentalAutomationGetInput = { readonly automationID: Automation.ID }
+export type ExperimentalAutomationGetOutput = Automation.Info
+export type ExperimentalAutomationGetOperation<E = never> = (
+  input: ExperimentalAutomationGetInput,
+) => Effect.Effect<ExperimentalAutomationGetOutput, E>
 
-export type ExperimentalSchedulePauseInput = { readonly scheduleID: Schedule.ID }
-export type ExperimentalSchedulePauseOutput = Schedule.Info
-export type ExperimentalSchedulePauseOperation<E = never> = (
-  input: ExperimentalSchedulePauseInput,
-) => Effect.Effect<ExperimentalSchedulePauseOutput, E>
+export type ExperimentalAutomationPauseInput = { readonly automationID: Automation.ID }
+export type ExperimentalAutomationPauseOutput = Automation.Info
+export type ExperimentalAutomationPauseOperation<E = never> = (
+  input: ExperimentalAutomationPauseInput,
+) => Effect.Effect<ExperimentalAutomationPauseOutput, E>
 
-export type ExperimentalScheduleResumeInput = { readonly scheduleID: Schedule.ID }
-export type ExperimentalScheduleResumeOutput = Schedule.Info
-export type ExperimentalScheduleResumeOperation<E = never> = (
-  input: ExperimentalScheduleResumeInput,
-) => Effect.Effect<ExperimentalScheduleResumeOutput, E>
+export type ExperimentalAutomationResumeInput = { readonly automationID: Automation.ID }
+export type ExperimentalAutomationResumeOutput = Automation.Info
+export type ExperimentalAutomationResumeOperation<E = never> = (
+  input: ExperimentalAutomationResumeInput,
+) => Effect.Effect<ExperimentalAutomationResumeOutput, E>
 
-export type ExperimentalScheduleDeleteInput = { readonly scheduleID: Schedule.ID }
-export type ExperimentalScheduleDeleteOutput = void
-export type ExperimentalScheduleDeleteOperation<E = never> = (
-  input: ExperimentalScheduleDeleteInput,
-) => Effect.Effect<ExperimentalScheduleDeleteOutput, E>
+export type ExperimentalAutomationDeleteInput = { readonly automationID: Automation.ID }
+export type ExperimentalAutomationDeleteOutput = void
+export type ExperimentalAutomationDeleteOperation<E = never> = (
+  input: ExperimentalAutomationDeleteInput,
+) => Effect.Effect<ExperimentalAutomationDeleteOutput, E>
 
 export type ExperimentalArtifactsProvidersInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
@@ -2505,13 +2505,13 @@ export interface ExperimentalApi<E = never> {
     readonly remove: ExperimentalPersistentPtyRemoveOperation<E>
     readonly connectToken: ExperimentalPersistentPtyConnectTokenOperation<E>
   }
-  readonly schedule: {
-    readonly create: ExperimentalScheduleCreateOperation<E>
-    readonly list: ExperimentalScheduleListOperation<E>
-    readonly get: ExperimentalScheduleGetOperation<E>
-    readonly pause: ExperimentalSchedulePauseOperation<E>
-    readonly resume: ExperimentalScheduleResumeOperation<E>
-    readonly delete: ExperimentalScheduleDeleteOperation<E>
+  readonly automation: {
+    readonly create: ExperimentalAutomationCreateOperation<E>
+    readonly list: ExperimentalAutomationListOperation<E>
+    readonly get: ExperimentalAutomationGetOperation<E>
+    readonly pause: ExperimentalAutomationPauseOperation<E>
+    readonly resume: ExperimentalAutomationResumeOperation<E>
+    readonly delete: ExperimentalAutomationDeleteOperation<E>
   }
   readonly artifacts: {
     readonly providers: ExperimentalArtifactsProvidersOperation<E>

@@ -21,8 +21,8 @@ import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
-import { Schedule } from "@opencode/core/schedule"
-import { ScheduleTable } from "@opencode/core/schedule/sql"
+import { Automation } from "@opencode/core/automation"
+import { AutomationTable } from "@opencode/core/automation/sql"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
@@ -76,7 +76,7 @@ const enabledEntries = [
     type: "document",
     info: new Info({
       timezone: "America/New_York",
-      experimental: new ConfigExperimental.Info({ schedules: true }),
+      experimental: new ConfigExperimental.Info({ automations: true }),
     }),
   }),
 ]
@@ -84,7 +84,7 @@ const disabledEntries = [
   new Document({
     type: "document",
     info: new Info({
-      experimental: new ConfigExperimental.Info({ schedules: false }),
+      experimental: new ConfigExperimental.Info({ automations: false }),
     }),
   }),
 ]
@@ -288,7 +288,7 @@ const it = testEffect(
       SessionProjector.node,
       SessionStore.node,
       Session.node,
-      Schedule.node,
+      Automation.node,
       Instance.node,
       LocationServiceMap.node,
     ]),
@@ -332,7 +332,7 @@ const setup = (directory = enabledDirectory) =>
     slack.failing = false
     agentRules = [{ action: "*", resource: "*", effect: "allow" }]
     activationGate = Effect.void
-    return yield* Schedule.Service
+    return yield* Automation.Service
   })
 
 const setTime = (iso: string) => TestClock.setTime(Date.parse(iso))
@@ -351,7 +351,7 @@ const deliver = Effect.gen(function* () {
   const { db } = yield* Database.Service
   yield* SessionInbox.promote(db, yield* Bus.Service, sessionID, "steer")
 })
-const messageID = (schedule: Schedule.Info, run: number) => SessionMessage.ID.make(`msg_${schedule.id}_${run}`)
+const messageID = (schedule: Automation.Info, run: number) => SessionMessage.ID.make(`msg_${schedule.id}_${run}`)
 const iso = (time: DateTime.Utc | undefined) => time && DateTime.formatIso(time)
 
 describe("Schedule", () => {
@@ -410,7 +410,7 @@ describe("Schedule", () => {
             action: { type: "prompt", prompt: "too late" },
           }),
         ),
-      ).toMatchObject({ _tag: "Schedule.InvalidError" })
+      ).toMatchObject({ _tag: "Automation.InvalidError" })
 
       yield* setTime("2026-11-02T08:30:00Z")
       yield* schedules.tick
@@ -490,7 +490,7 @@ describe("Schedule", () => {
       expect(yield* pending).toEqual([messageID(schedule, 1)])
       const { db } = yield* Database.Service
       expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
-        payload: { metadata: { schedule: { id: schedule.id, run: 1, late: true } } },
+        payload: { metadata: { automation: { id: schedule.id, run: 1, late: true } } },
       })
       expect(yield* schedules.get(schedule.id)).toMatchObject({ runCount: 1, lastOutcome: "late" })
       expect(iso((yield* schedules.get(schedule.id)).nextDueAt)).toBe("2026-10-26T13:10:00.000Z")
@@ -566,13 +566,13 @@ describe("Schedule", () => {
             action: { type: "prompt", prompt: "poll" },
           }),
         ),
-      ).toMatchObject({ _tag: "Schedule.DisabledError" })
+      ).toMatchObject({ _tag: "Automation.DisabledError" })
 
       const { db } = yield* Database.Service
       yield* db
-        .insert(ScheduleTable)
+        .insert(AutomationTable)
         .values({
-          id: Schedule.ID.create(),
+          id: Automation.ID.create(),
           session_id: sessionID,
           action: { type: "prompt", prompt: "poll" },
           when: { type: "in", in: "1 minute" },
@@ -594,9 +594,9 @@ describe("Schedule", () => {
     Effect.gen(function* () {
       const schedules = yield* setup(toggleDirectory)
       const { db } = yield* Database.Service
-      const id = Schedule.ID.create()
+      const id = Automation.ID.create()
       yield* db
-        .insert(ScheduleTable)
+        .insert(AutomationTable)
         .values({
           id,
           session_id: sessionID,
@@ -657,7 +657,7 @@ describe("Schedule", () => {
       expect(resumed.status).toBe("active")
       expect(iso(resumed.nextDueAt)).toBe(new Date(180_000).toISOString())
       yield* schedules.remove(schedule.id)
-      expect(yield* Effect.flip(schedules.get(schedule.id))).toMatchObject({ _tag: "Schedule.NotFoundError" })
+      expect(yield* Effect.flip(schedules.get(schedule.id))).toMatchObject({ _tag: "Automation.NotFoundError" })
     }),
   )
 
@@ -720,7 +720,7 @@ describe("Schedule", () => {
   )
 
   // On 2026-11-01 New York falls back at 06:00Z, so 1:00-1:59 runs twice: 05:00Z EDT, then 06:00Z EST.
-  const cron = (schedules: Schedule.Interface, expression: string) =>
+  const cron = (schedules: Automation.Interface, expression: string) =>
     schedules.create({
       sessionID,
       when: { type: "cron", cron: expression, tz: "America/New_York" },
@@ -779,7 +779,7 @@ describe("Schedule", () => {
           action: { type: "prompt", prompt: "never" },
         }),
       )
-      expect(error).toMatchObject({ _tag: "Schedule.InvalidError" })
+      expect(error).toMatchObject({ _tag: "Automation.InvalidError" })
     }),
   )
 
@@ -877,14 +877,14 @@ describe("Schedule", () => {
   it.effect("rejects a zero duration or ends.times below 1", () =>
     Effect.gen(function* () {
       const schedules = yield* setup()
-      const create = (input: Omit<Schedule.CreateInput, "sessionID" | "action">) =>
+      const create = (input: Omit<Automation.CreateInput, "sessionID" | "action">) =>
         Effect.flip(schedules.create({ sessionID, action: { type: "prompt", prompt: "x" }, ...input }))
       expect(yield* create({ when: { type: "in", in: "0 seconds" } })).toMatchObject({
-        _tag: "Schedule.InvalidError",
+        _tag: "Automation.InvalidError",
         reason: "Duration must be positive: 0 seconds",
       })
       expect(yield* create({ when: { type: "every", every: "1 hour" }, ends: { times: 0 } })).toMatchObject({
-        _tag: "Schedule.InvalidError",
+        _tag: "Automation.InvalidError",
         reason: "ends.times must be at least 1",
       })
       expect(yield* schedules.list({ sessionID })).toEqual([])
@@ -950,7 +950,7 @@ describe("Schedule", () => {
         expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
           payload: {
             text: "CI passed.\n\n20 pass",
-            metadata: { schedule: { id: schedule.id, run: 1, check: { message: "20 pass" } } },
+            metadata: { automation: { id: schedule.id, run: 1, check: { message: "20 pass" } } },
           },
         })
         expect(yield* schedules.get(schedule.id)).toMatchObject({
@@ -985,8 +985,8 @@ describe("Schedule", () => {
         const { db } = yield* Database.Service
         expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
           payload: {
-            text: expect.stringContaining("[Schedule timed out without matching: curl -sf http://localhost:3000]"),
-            metadata: { schedule: { id: schedule.id, run: 1, check: { expired: true } } },
+            text: expect.stringContaining("[Automation timed out without matching: curl -sf http://localhost:3000]"),
+            metadata: { automation: { id: schedule.id, run: 1, check: { expired: true } } },
           },
         })
         expect(yield* schedules.get(schedule.id)).toMatchObject({
@@ -1158,7 +1158,7 @@ describe("Schedule", () => {
         expect(yield* pending).toEqual([messageID(schedule, 1)])
         const { db } = yield* Database.Service
         expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
-          payload: { text: expect.stringContaining("[Schedule paused after 3 failed checks:") },
+          payload: { text: expect.stringContaining("[Automation paused after 3 failed checks:") },
         })
       }),
     )
@@ -1201,7 +1201,7 @@ describe("Schedule", () => {
     it.effect("validates check combinations, intervals, and regexes at creation", () =>
       Effect.gen(function* () {
         const schedules = yield* setup()
-        const bad = (input: Omit<Schedule.CreateInput, "sessionID" | "action">) =>
+        const bad = (input: Omit<Automation.CreateInput, "sessionID" | "action">) =>
           Effect.flip(schedules.create({ sessionID, action: { type: "prompt", prompt: "x" }, ...input }))
 
         expect(yield* bad({})).toMatchObject({ reason: "when is required unless until is set" })
@@ -1226,7 +1226,7 @@ describe("Schedule", () => {
           yield* bad({
             until: { type: "shell", run: "echo hi", matches: "[unclosed" },
           }),
-        ).toMatchObject({ _tag: "Schedule.InvalidError" })
+        ).toMatchObject({ _tag: "Automation.InvalidError" })
       }),
     )
   })
@@ -1279,7 +1279,7 @@ describe("Schedule", () => {
         expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
           payload: {
             text: "New thread activity.\n\n4 replies",
-            metadata: { schedule: { id: schedule.id, run: 1, check: { message: "4 replies" } } },
+            metadata: { automation: { id: schedule.id, run: 1, check: { message: "4 replies" } } },
           },
         })
         expect(yield* schedules.get(schedule.id)).toMatchObject({
@@ -1368,7 +1368,7 @@ describe("Schedule", () => {
         expect(asked[0]).toMatchObject({
           action: "slack_read_thread",
           metadata: {
-            schedule: "thread",
+            automation: "thread",
             mode: "if",
             when: { type: "every", every: "1 minute" },
             unattended: true,
@@ -1402,7 +1402,7 @@ describe("Schedule", () => {
         )
         yield* Fiber.interrupt(answerExport)
         expect(slack.exports).toBe(0)
-        expect(exportFailure).toMatchObject({ _tag: "Schedule.InvalidError" })
+        expect(exportFailure).toMatchObject({ _tag: "Automation.InvalidError" })
       }),
     )
 
@@ -1418,16 +1418,16 @@ describe("Schedule", () => {
             }),
           )
 
-        expect(yield* bad("const x = {")).toMatchObject({ _tag: "Schedule.InvalidError" })
-        expect(yield* bad("return await tools.slack[name]({})")).toMatchObject({ _tag: "Schedule.InvalidError" })
+        expect(yield* bad("const x = {")).toMatchObject({ _tag: "Automation.InvalidError" })
+        expect(yield* bad("return await tools.slack[name]({})")).toMatchObject({ _tag: "Automation.InvalidError" })
         expect(yield* bad("return await tools.slack.missing({})")).toMatchObject({
           reason: "Unknown Code Mode tool: slack.missing",
         })
         expect(yield* bad("return await tools.slack.dangerous_edit({})")).toMatchObject({
-          reason: "Tool slack.dangerous_edit cannot be used inside a schedule check",
+          reason: "Tool slack.dangerous_edit cannot be used inside an automation check",
         })
-        expect(yield* bad("return await tools.opencode.schedule_create({})")).toMatchObject({
-          reason: "Tool opencode.schedule_create cannot be used inside a schedule check",
+        expect(yield* bad("return await tools.opencode.automation_create({})")).toMatchObject({
+          reason: "Tool opencode.automation_create cannot be used inside an automation check",
         })
 
         agentRules = [{ action: "execute", resource: "*", effect: "deny" }]
@@ -1449,7 +1449,7 @@ describe("Schedule", () => {
             action: { type: "prompt", prompt: "Morning check." },
           }),
         )
-        expect(thrown).toMatchObject({ _tag: "Schedule.InvalidError" })
+        expect(thrown).toMatchObject({ _tag: "Automation.InvalidError" })
 
         // First run (state === null) returns valid { wake: false, state: { ok: true } };
         // first scheduled tick (state !== null) returns an invalid string, pausing immediately on strike 1.
@@ -1471,7 +1471,7 @@ describe("Schedule", () => {
         })
         const { db } = yield* Database.Service
         expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
-          payload: { text: expect.stringContaining("[Schedule paused after invalid check:") },
+          payload: { text: expect.stringContaining("[Automation paused after invalid check:") },
         })
       }),
     )
@@ -1486,9 +1486,9 @@ describe("Schedule", () => {
         // Insert directly into SQLite (bypassing primary.create so primary's in-memory doorbell is never opened)
         // to simulate a short-lived `opencode serve` / `--standalone` writing a schedule and exiting.
         const now = yield* Clock.currentTimeMillis
-        const externalID = Schedule.ID.create()
+        const externalID = Automation.ID.create()
         yield* db
-          .insert(ScheduleTable)
+          .insert(AutomationTable)
           .values({
             id: externalID,
             session_id: sessionID,

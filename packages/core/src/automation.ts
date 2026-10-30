@@ -1,4 +1,4 @@
-export * as Schedule from "./schedule.js"
+export * as Automation from "./automation.js"
 
 import { randomUUID } from "node:crypto"
 import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
@@ -19,7 +19,7 @@ import {
   type StoredCheck,
   toCreateInput,
   When,
-} from "@opencode/schema/schedule"
+} from "@opencode/schema/automation"
 import { Config } from "./config.js"
 import { Database } from "./database/database.js"
 import { FileSystem } from "./filesystem.js"
@@ -31,20 +31,20 @@ import { SessionExecution } from "./session/execution.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { SessionInboxTable } from "./session/sql.js"
-import { ScheduleCheck } from "./schedule/check.js"
-import { ScheduleTable } from "./schedule/sql.js"
+import { AutomationCheck } from "./automation/check.js"
+import { AutomationTable } from "./automation/sql.js"
 
 export { ID, Info, CreateInput, Request, Condition, ConditionInput, When, Status, Outcome, toCreateInput }
 
-export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Schedule.NotFoundError", {
-  scheduleID: ID,
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Automation.NotFoundError", {
+  automationID: ID,
 }) {
   override get message() {
-    return `Schedule not found: ${this.scheduleID}`
+    return `Automation not found: ${this.automationID}`
   }
 }
 
-export class InvalidError extends Schema.TaggedError<InvalidError>()("Schedule.InvalidError", {
+export class InvalidError extends Schema.TaggedError<InvalidError>()("Automation.InvalidError", {
   reason: Schema.String,
 }) {
   override get message() {
@@ -52,9 +52,9 @@ export class InvalidError extends Schema.TaggedError<InvalidError>()("Schedule.I
   }
 }
 
-export class DisabledError extends Schema.TaggedError<DisabledError>()("Schedule.DisabledError", {}) {
+export class DisabledError extends Schema.TaggedError<DisabledError>()("Automation.DisabledError", {}) {
   override get message() {
-    return "Scheduled tasks are disabled; set experimental.schedules in config"
+    return "Automations are disabled; set experimental.automations in config"
   }
 }
 
@@ -67,21 +67,21 @@ export interface Interface {
   readonly pause: (id: ID) => Effect.Effect<Info, NotFoundError>
   readonly resume: (id: ID) => Effect.Effect<Info, NotFoundError>
   readonly remove: (id: ID) => Effect.Effect<void, NotFoundError>
-  /** Whether experimental.schedules is on in the config where the Session lives. */
+  /** Whether experimental.automations is on in the config where the Session lives. */
   readonly enabled: (sessionID: SessionSchema.ID) => Effect.Effect<boolean, Session.NotFoundError>
-  /** Fires every schedule that is due now, at most once each. */
+  /** Fires every automation that is due now, at most once each. */
   readonly tick: Effect.Effect<void>
   /**
-   * Runs `tick` whenever a schedule falls due, until interrupted. Elects at most one active leader per SQLite
+   * Runs `tick` whenever an automation falls due, until interrupted. Elects at most one active leader per SQLite
    * database via a lease row, so auxiliary processes (`opencode acp`, `--standalone`) sharing a data directory
    * never double-fire alongside a managed service.
    */
   readonly run: Effect.Effect<never>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/Schedule") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/Automation") {}
 
-type Row = typeof ScheduleTable.$inferSelect
+type Row = typeof AutomationTable.$inferSelect
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -93,7 +93,7 @@ const DEFAULT_UNTIL_AFTER = 24 * HOUR
 const LATE_AFTER = 60_000
 /** The loop re-reads the table at least this often, so clock jumps and missed doorbells are caught. */
 const MAX_SLEEP = 30_000
-const LEADER_KEY = "schedule:leader"
+const LEADER_KEY = "automation:leader"
 const LEADER_TTL = 2 * MAX_SLEEP
 /** How long a due schedule waits before its location's flag is read again, while schedules are off there. */
 const DISABLED_RETRY = HOUR
@@ -177,7 +177,7 @@ const resolveStoredCheck = (input: CreateInput): Effect.Effect<StoredCheck | und
         ? { mode: "until", condition: input.until }
         : undefined
   if (check === undefined) return Effect.succeed(undefined)
-  const validated = ScheduleCheck.validate(check.condition)
+  const validated = AutomationCheck.validate(check.condition)
   if (Result.isFailure(validated)) return Effect.fail(new InvalidError({ reason: validated.failure }))
   return Effect.succeed(check)
 }
@@ -219,7 +219,7 @@ const layer = Layer.effect(
         if (Option.isNone(config)) return { enabled: false, timezone: undefined }
         const entries = yield* config.value.entries()
         return {
-          enabled: Config.latest(entries, "experimental")?.schedules === true,
+          enabled: Config.latest(entries, "experimental")?.automations === true,
           timezone: Config.latest(entries, "timezone"),
         }
       }).pipe(instances.provide(session))
@@ -227,19 +227,19 @@ const layer = Layer.effect(
     const find = (id: ID) =>
       db
         .select()
-        .from(ScheduleTable)
-        .where(eq(ScheduleTable.id, id))
+        .from(AutomationTable)
+        .where(eq(AutomationTable.id, id))
         .get()
         .pipe(
           Effect.orDie,
-          Effect.flatMap((row) => (row ? Effect.succeed(row) : Effect.fail(new NotFoundError({ scheduleID: id })))),
+          Effect.flatMap((row) => (row ? Effect.succeed(row) : Effect.fail(new NotFoundError({ automationID: id })))),
         )
 
     const update = (row: Row, values: Partial<Row>) =>
       db
-        .update(ScheduleTable)
+        .update(AutomationTable)
         .set(values)
-        .where(and(eq(ScheduleTable.id, row.id), eq(ScheduleTable.status, "active")))
+        .where(and(eq(AutomationTable.id, row.id), eq(AutomationTable.status, "active")))
         .run()
         .pipe(Effect.orDie)
 
@@ -271,7 +271,7 @@ const layer = Layer.effect(
         text,
         delivery: "steer",
         metadata: {
-          schedule: {
+          automation: {
             id: row.id,
             name: row.name ?? undefined,
             run,
@@ -291,7 +291,7 @@ const layer = Layer.effect(
       if (row.check !== null) {
         const check = row.check
         const checkMessageID = SessionMessage.ID.make(`msg_${row.id}_check_${row.checks + 1}`)
-        const outcome = yield* ScheduleCheck.evaluate(session, check, row.state ?? null, {
+        const outcome = yield* AutomationCheck.evaluate(session, check, row.state ?? null, {
           messageID: checkMessageID,
           now,
           checks: row.checks,
@@ -310,8 +310,8 @@ const layer = Layer.effect(
           }
           const run = row.run_count + 1
           const note = outcome.invalid
-            ? `[Schedule paused after invalid check: ${outcome.error}]`
-            : `[Schedule paused after ${strikes} failed checks: ${outcome.error}]`
+            ? `[Automation paused after invalid check: ${outcome.error}]`
+            : `[Automation paused after ${strikes} failed checks: ${outcome.error}]`
           const id = yield* admitWake(
             row,
             session.id,
@@ -322,7 +322,7 @@ const layer = Layer.effect(
             { error: outcome.error, failures: strikes },
           )
           yield* db
-            .update(ScheduleTable)
+            .update(AutomationTable)
             .set({
               status: "paused",
               failures: strikes,
@@ -333,7 +333,7 @@ const layer = Layer.effect(
               retry_at: null,
               time_updated: now,
             })
-            .where(eq(ScheduleTable.id, row.id))
+            .where(eq(AutomationTable.id, row.id))
             .run()
             .pipe(Effect.orDie)
           return
@@ -350,11 +350,11 @@ const layer = Layer.effect(
               run,
               due,
               late,
-              `${row.action.prompt}\n\n[Schedule timed out without matching: ${ScheduleCheck.describe(check.condition)}]`,
+              `${row.action.prompt}\n\n[Automation timed out without matching: ${AutomationCheck.describe(check.condition)}]`,
               { expired: true },
             )
             yield* db
-              .update(ScheduleTable)
+              .update(AutomationTable)
               .set({
                 status: "done",
                 checks,
@@ -369,7 +369,7 @@ const layer = Layer.effect(
                 retry_at: null,
                 time_updated: now,
               })
-              .where(eq(ScheduleTable.id, row.id))
+              .where(eq(AutomationTable.id, row.id))
               .run()
               .pipe(Effect.orDie)
             return
@@ -401,7 +401,7 @@ const layer = Layer.effect(
         const done = check.mode === "until" || finished(row, next, remaining)
         // Record the run even if a pause landed during the prompt, or the next firing would reuse this message id.
         yield* db
-          .update(ScheduleTable)
+          .update(AutomationTable)
           .set({
             run_count: run,
             checks: row.checks + 1,
@@ -416,7 +416,7 @@ const layer = Layer.effect(
             next_due_at: done ? null : next,
             time_updated: now,
           })
-          .where(eq(ScheduleTable.id, row.id))
+          .where(eq(AutomationTable.id, row.id))
           .run()
           .pipe(Effect.orDie)
         return
@@ -427,7 +427,7 @@ const layer = Layer.effect(
       const remaining = row.remaining_runs === null ? null : row.remaining_runs - 1
       const done = finished(row, next, remaining)
       yield* db
-        .update(ScheduleTable)
+        .update(AutomationTable)
         .set({
           run_count: run,
           last_message_id: id,
@@ -439,7 +439,7 @@ const layer = Layer.effect(
           next_due_at: done ? null : next,
           time_updated: now,
         })
-        .where(eq(ScheduleTable.id, row.id))
+        .where(eq(AutomationTable.id, row.id))
         .run()
         .pipe(Effect.orDie)
     })
@@ -475,15 +475,15 @@ const layer = Layer.effect(
     const tickAt = Effect.fnUntraced(function* (now: number) {
       const due = yield* db
         .select()
-        .from(ScheduleTable)
+        .from(AutomationTable)
         .where(
           and(
-            eq(ScheduleTable.status, "active"),
-            lte(ScheduleTable.next_due_at, now),
-            or(isNull(ScheduleTable.retry_at), lte(ScheduleTable.retry_at, now)),
+            eq(AutomationTable.status, "active"),
+            lte(AutomationTable.next_due_at, now),
+            or(isNull(AutomationTable.retry_at), lte(AutomationTable.retry_at, now)),
           ),
         )
-        .orderBy(asc(ScheduleTable.next_due_at))
+        .orderBy(asc(AutomationTable.next_due_at))
         .all()
         .pipe(Effect.orDie)
       yield* Effect.forEach(
@@ -502,7 +502,7 @@ const layer = Layer.effect(
                 })
               }
               // Back off rather than retrying a failing prompt on every tick.
-              return Effect.logWarning("schedule failed to fire", { scheduleID: row.id, cause }).pipe(
+              return Effect.logWarning("automation failed to fire", { automationID: row.id, cause }).pipe(
                 Effect.andThen(
                   update(row, { last_outcome: "failed", retry_at: now + FAILED_RETRY, time_updated: now }),
                 ),
@@ -511,7 +511,7 @@ const layer = Layer.effect(
           ),
         { discard: true, concurrency: due.length > 1 ? TICK_CONCURRENCY : 1 },
       )
-    }, Effect.withSpan("Schedule.tick"))
+    }, Effect.withSpan("Automation.tick"))
 
     const tick = Effect.flatMap(Clock.currentTimeMillis, tickAt)
 
@@ -519,9 +519,9 @@ const layer = Layer.effect(
     // MAX_SLEEP, not in a spin.
     const nextWake = Effect.fnUntraced(function* (from: number) {
       const row = yield* db
-        .select({ at: min(ScheduleTable.next_due_at) })
-        .from(ScheduleTable)
-        .where(and(eq(ScheduleTable.status, "active"), gt(ScheduleTable.next_due_at, from)))
+        .select({ at: min(AutomationTable.next_due_at) })
+        .from(AutomationTable)
+        .where(and(eq(AutomationTable.status, "active"), gt(AutomationTable.next_due_at, from)))
         .get()
         .pipe(Effect.orDie)
       if (row?.at == null) return MAX_SLEEP
@@ -531,9 +531,9 @@ const layer = Layer.effect(
     // A crash between admitting a prompt and its Session claiming the work leaves the prompt unclaimed and the
     // Session asleep, so wake every Session whose last scheduled prompt is still pending.
     const rewake = db
-      .selectDistinct({ sessionID: ScheduleTable.session_id })
-      .from(ScheduleTable)
-      .innerJoin(SessionInboxTable, eq(SessionInboxTable.id, ScheduleTable.last_message_id))
+      .selectDistinct({ sessionID: AutomationTable.session_id })
+      .from(AutomationTable)
+      .innerJoin(SessionInboxTable, eq(SessionInboxTable.id, AutomationTable.last_message_id))
       .all()
       .pipe(
         Effect.orDie,
@@ -545,9 +545,9 @@ const layer = Layer.effect(
       )
 
     const hasActiveRows = db
-      .select({ id: ScheduleTable.id })
-      .from(ScheduleTable)
-      .where(eq(ScheduleTable.status, "active"))
+      .select({ id: AutomationTable.id })
+      .from(AutomationTable)
+      .where(eq(AutomationTable.status, "active"))
       .limit(1)
       .get()
       .pipe(
@@ -612,7 +612,7 @@ const layer = Layer.effect(
       if (!leading) {
         leading = true
         bootChecked = true
-        yield* rewake.pipe(Effect.catchCause((cause) => Effect.logError("schedule rewake failed", { cause })))
+        yield* rewake.pipe(Effect.catchCause((cause) => Effect.logError("automation rewake failed", { cause })))
       }
       if (!active) {
         yield* releaseLeader
@@ -622,7 +622,7 @@ const layer = Layer.effect(
       yield* Effect.scoped(
         Effect.forkScoped(heartbeat).pipe(
           Effect.andThen(
-            tickAt(now).pipe(Effect.catchCause((cause) => Effect.logError("schedule tick failed", { cause }))),
+            tickAt(now).pipe(Effect.catchCause((cause) => Effect.logError("automation tick failed", { cause }))),
           ),
         ),
       )
@@ -699,7 +699,7 @@ const layer = Layer.effect(
     })
 
     return Service.of({
-      create: Effect.fn("Schedule.create")(function* (input) {
+      create: Effect.fn("Automation.create")(function* (input) {
         const session = yield* sessions.get(input.sessionID)
         const config = yield* settings(session).pipe(
           Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
@@ -718,14 +718,14 @@ const layer = Layer.effect(
           return yield* new InvalidError({ reason: "ends.times must be at least 1" })
         const ends = yield* endsAt(input.ends, check?.mode === "until", zone, now)
         if (ends !== null && due > ends)
-          return yield* new InvalidError({ reason: "The schedule ends before it first fires" })
+          return yield* new InvalidError({ reason: "The automation ends before it first fires" })
 
-        const scheduleID = ID.create()
+        const automationID = ID.create()
         const seeded =
           check === undefined
             ? { matched: false as const, state: null as Schema.Json, checks: 0 }
             : yield* Effect.gen(function* () {
-                yield* ScheduleCheck.authorize(session, input.name, when, check).pipe(
+                yield* AutomationCheck.authorize(session, input.name, when, check).pipe(
                   instances.provide(session),
                   Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
                   Effect.catchTag("FileSystem.DirectoryNotFoundError", () =>
@@ -739,8 +739,8 @@ const layer = Layer.effect(
                   check.condition.type === "code" ||
                   (check.condition.type === "shell" && check.condition.changes === true)
                 if (!shouldSeed) return { matched: false as const, state: null as Schema.Json, checks: 0 }
-                const init = yield* ScheduleCheck.evaluate(session, check, null, {
-                  messageID: SessionMessage.ID.make(`msg_${scheduleID}_check_0`),
+                const init = yield* AutomationCheck.evaluate(session, check, null, {
+                  messageID: SessionMessage.ID.make(`msg_${automationID}_check_0`),
                   now,
                   checks: 0,
                 }).pipe(
@@ -763,9 +763,9 @@ const layer = Layer.effect(
 
         if (seeded.matched) {
           const row = yield* db
-            .insert(ScheduleTable)
+            .insert(AutomationTable)
             .values({
-              id: scheduleID,
+              id: automationID,
               session_id: session.id,
               name: input.name ?? null,
               check: check ?? null,
@@ -792,9 +792,9 @@ const layer = Layer.effect(
 
         const remaining = check?.mode === "until" ? 1 : (input.ends?.times ?? null)
         const row = yield* db
-          .insert(ScheduleTable)
+          .insert(AutomationTable)
           .values({
-            id: scheduleID,
+            id: automationID,
             session_id: session.id,
             name: input.name ?? null,
             check: check ?? null,
@@ -815,36 +815,36 @@ const layer = Layer.effect(
         yield* doorbell.open
         return toInfo(row)
       }),
-      list: Effect.fn("Schedule.list")(function* (input) {
+      list: Effect.fn("Automation.list")(function* (input) {
         const rows = yield* db
           .select()
-          .from(ScheduleTable)
-          .where(input?.sessionID === undefined ? undefined : eq(ScheduleTable.session_id, input.sessionID))
-          .orderBy(asc(ScheduleTable.time_created), asc(ScheduleTable.id))
+          .from(AutomationTable)
+          .where(input?.sessionID === undefined ? undefined : eq(AutomationTable.session_id, input.sessionID))
+          .orderBy(asc(AutomationTable.time_created), asc(AutomationTable.id))
           .all()
           .pipe(Effect.orDie)
         return rows.map((row) => toInfo(row))
       }),
-      get: Effect.fn("Schedule.get")(function* (id) {
+      get: Effect.fn("Automation.get")(function* (id) {
         return toInfo(yield* find(id))
       }),
-      pause: Effect.fn("Schedule.pause")(function* (id) {
+      pause: Effect.fn("Automation.pause")(function* (id) {
         const row = yield* find(id)
         if (row.status !== "active") return toInfo(row)
         const now = yield* Clock.currentTimeMillis
         yield* update(row, { status: "paused", time_updated: now })
         return toInfo(yield* find(id))
       }),
-      resume: Effect.fn("Schedule.resume")(function* (id) {
+      resume: Effect.fn("Automation.resume")(function* (id) {
         const row = yield* find(id)
         if (row.status !== "paused") return toInfo(row)
         const now = yield* Clock.currentTimeMillis
-        // A one-shot that fell due while paused fires once, late; a repeating schedule resumes at its next slot.
+        // A one-shot that fell due while paused fires once, late; a repeating automation resumes at its next slot.
         const next =
           row.next_due_at === null || row.next_due_at > now ? row.next_due_at : (following(row, now) ?? row.next_due_at)
         const done = next === null || finished(row, next, row.remaining_runs)
         yield* db
-          .update(ScheduleTable)
+          .update(AutomationTable)
           .set({
             status: done ? "done" : "active",
             next_due_at: done ? null : next,
@@ -852,17 +852,17 @@ const layer = Layer.effect(
             retry_at: null,
             time_updated: now,
           })
-          .where(and(eq(ScheduleTable.id, id), eq(ScheduleTable.status, "paused")))
+          .where(and(eq(AutomationTable.id, id), eq(AutomationTable.status, "paused")))
           .run()
           .pipe(Effect.orDie)
         yield* doorbell.open
         return toInfo(yield* find(id))
       }),
-      remove: Effect.fn("Schedule.remove")(function* (id) {
+      remove: Effect.fn("Automation.remove")(function* (id) {
         yield* find(id)
-        yield* db.delete(ScheduleTable).where(eq(ScheduleTable.id, id)).run().pipe(Effect.orDie)
+        yield* db.delete(AutomationTable).where(eq(AutomationTable.id, id)).run().pipe(Effect.orDie)
       }),
-      enabled: Effect.fn("Schedule.enabled")(function* (sessionID) {
+      enabled: Effect.fn("Automation.enabled")(function* (sessionID) {
         const session = yield* sessions.get(sessionID)
         return yield* settings(session).pipe(
           Effect.map((value) => value.enabled),

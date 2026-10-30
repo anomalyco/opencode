@@ -12657,10 +12657,10 @@
         "summary": "Read media blob"
       }
     },
-    "/api/experimental/schedule": {
+    "/api/experimental/automation": {
       "post": {
         "tags": ["experimental"],
-        "operationId": "experimental.schedule.create",
+        "operationId": "experimental.automation.create",
         "parameters": [],
         "security": [],
         "responses": {
@@ -12672,7 +12672,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Schedule.Info"
+                      "$ref": "#/components/schemas/Automation.Info"
                     }
                   },
                   "required": ["data"],
@@ -12722,13 +12722,13 @@
             }
           }
         },
-        "description": "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Create schedule",
+        "description": "Create an automation that wakes the Session once after a delay, at a time, every interval, on a cron, or on a check. Experimental: needs experimental.automations in the Session's config and may change without notice.",
+        "summary": "Create automation",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Schedule.CreatePayload"
+                "$ref": "#/components/schemas/Automation.CreatePayload"
               }
             }
           },
@@ -12737,15 +12737,22 @@
       },
       "get": {
         "tags": ["experimental"],
-        "operationId": "experimental.schedule.list",
+        "operationId": "experimental.automation.list",
         "parameters": [
           {
             "name": "sessionID",
             "in": "query",
             "schema": {
-              "$ref": "#/components/schemas/Session.ID"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Session.ID"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
-            "required": true
+            "required": false
           }
         ],
         "security": [],
@@ -12760,7 +12767,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/Schedule.Info"
+                        "$ref": "#/components/schemas/Automation.Info"
                       }
                     }
                   },
@@ -12811,20 +12818,20 @@
             }
           }
         },
-        "description": "List a Session's schedules, oldest first. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "List schedules"
+        "description": "List automations for a Session, or across all enabled Sessions when sessionID is omitted, oldest first. Experimental: needs experimental.automations in the Session's config and may change without notice.",
+        "summary": "List automations"
       }
     },
-    "/api/experimental/schedule/{scheduleID}": {
+    "/api/experimental/automation/{automationID}": {
       "get": {
         "tags": ["experimental"],
-        "operationId": "experimental.schedule.get",
+        "operationId": "experimental.automation.get",
         "parameters": [
           {
-            "name": "scheduleID",
+            "name": "automationID",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/Schedule.ID"
+              "$ref": "#/components/schemas/Automation.ID"
             },
             "required": true
           }
@@ -12839,7 +12846,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Schedule.Info"
+                      "$ref": "#/components/schemas/Automation.Info"
                     }
                   },
                   "required": ["data"],
@@ -12879,28 +12886,28 @@
             }
           },
           "404": {
-            "description": "ScheduleNotFoundError",
+            "description": "AutomationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                  "$ref": "#/components/schemas/AutomationNotFoundErrorEncoded"
                 }
               }
             }
           }
         },
-        "description": "Read one schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Get schedule"
+        "description": "Read one automation. Experimental: needs experimental.automations in the Session's config and may change without notice.",
+        "summary": "Get automation"
       },
       "delete": {
         "tags": ["experimental"],
-        "operationId": "experimental.schedule.delete",
+        "operationId": "experimental.automation.delete",
         "parameters": [
           {
-            "name": "scheduleID",
+            "name": "automationID",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/Schedule.ID"
+              "$ref": "#/components/schemas/Automation.ID"
             },
             "required": true
           }
@@ -12941,30 +12948,30 @@
             }
           },
           "404": {
-            "description": "ScheduleNotFoundError",
+            "description": "AutomationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                  "$ref": "#/components/schemas/AutomationNotFoundErrorEncoded"
                 }
               }
             }
           }
         },
-        "description": "Delete a schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Delete schedule"
+        "description": "Delete an automation. Experimental: needs experimental.automations in the Session's config and may change without notice.",
+        "summary": "Delete automation"
       }
     },
-    "/api/experimental/schedule/{scheduleID}/pause": {
+    "/api/experimental/automation/{automationID}/pause": {
       "post": {
         "tags": ["experimental"],
-        "operationId": "experimental.schedule.pause",
+        "operationId": "experimental.automation.pause",
         "parameters": [
           {
-            "name": "scheduleID",
+            "name": "automationID",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/Schedule.ID"
+              "$ref": "#/components/schemas/Automation.ID"
             },
             "required": true
           }
@@ -12979,7 +12986,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Schedule.Info"
+                      "$ref": "#/components/schemas/Automation.Info"
                     }
                   },
                   "required": ["data"],
@@ -13019,30 +13026,30 @@
             }
           },
           "404": {
-            "description": "ScheduleNotFoundError",
+            "description": "AutomationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                  "$ref": "#/components/schemas/AutomationNotFoundErrorEncoded"
                 }
               }
             }
           }
         },
-        "description": "Stop a schedule from firing until it is resumed. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Pause schedule"
+        "description": "Stop an automation from firing until it is resumed. Experimental: needs experimental.automations in the Session's config and may change without notice.",
+        "summary": "Pause automation"
       }
     },
-    "/api/experimental/schedule/{scheduleID}/resume": {
+    "/api/experimental/automation/{automationID}/resume": {
       "post": {
         "tags": ["experimental"],
-        "operationId": "experimental.schedule.resume",
+        "operationId": "experimental.automation.resume",
         "parameters": [
           {
-            "name": "scheduleID",
+            "name": "automationID",
             "in": "path",
             "schema": {
-              "$ref": "#/components/schemas/Schedule.ID"
+              "$ref": "#/components/schemas/Automation.ID"
             },
             "required": true
           }
@@ -13057,7 +13064,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/Schedule.Info"
+                      "$ref": "#/components/schemas/Automation.Info"
                     }
                   },
                   "required": ["data"],
@@ -13097,18 +13104,18 @@
             }
           },
           "404": {
-            "description": "ScheduleNotFoundError",
+            "description": "AutomationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                  "$ref": "#/components/schemas/AutomationNotFoundErrorEncoded"
                 }
               }
             }
           }
         },
-        "description": "Resume a paused schedule. A one-shot that fell due while paused fires once; a repeating schedule resumes at its next slot. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
-        "summary": "Resume schedule"
+        "description": "Resume a paused automation. A one-shot that fell due while paused fires once; a repeating automation resumes at its next slot. Experimental: needs experimental.automations in the Session's config and may change without notice.",
+        "summary": "Resume automation"
       }
     },
     "/api/experimental/artifacts/providers": {
@@ -16714,6 +16721,454 @@
         "required": ["_tag", "artifactID", "message"],
         "additionalProperties": false
       },
+      "Automation.Action": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Automation.Action.Prompt"
+          }
+        ]
+      },
+      "Automation.Action.Prompt": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["prompt"]
+          },
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "prompt"],
+        "additionalProperties": false
+      },
+      "Automation.Condition": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Automation.Condition.Shell"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.Condition.Code"
+          }
+        ]
+      },
+      "Automation.Condition.Code": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["code"]
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "code"],
+        "additionalProperties": false
+      },
+      "Automation.Condition.Shell": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "run": {
+            "type": "string"
+          },
+          "is": {
+            "type": "string"
+          },
+          "matches": {
+            "type": "string"
+          },
+          "changes": {
+            "type": "boolean"
+          }
+        },
+        "required": ["type", "run"],
+        "additionalProperties": false
+      },
+      "Automation.ConditionInput": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "run": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Shell command to run in the Session's directory. Alone, exit 0 wakes and stdout is appended."
+              },
+              "is": {
+                "type": "string"
+              },
+              "matches": {
+                "type": "string"
+              },
+              "changes": {
+                "type": "boolean"
+              },
+              "code": {
+                "not": {}
+              }
+            },
+            "required": ["run"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Code Mode JavaScript check (no fetch; 30s, 20 tool calls, 32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. Runs once at creation with state = null (if baselines state without waking; until matches immediately if true), with globals state, now (epoch ms) and runs. Return a boolean or { wake, state?, message? } (message is appended to prompt on wake), e.g.: const t = await tools.slack.read_thread({ id }); return { wake: state !== null && t.count > state.count, state: { count: t.count }, message: \"New reply\" }"
+              },
+              "run": {
+                "not": {}
+              },
+              "is": {
+                "not": {}
+              },
+              "matches": {
+                "not": {}
+              },
+              "changes": {
+                "not": {}
+              }
+            },
+            "required": ["code"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Automation.CreatePayload": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/components/schemas/Automation.WhenInput"
+          },
+          "if": {
+            "$ref": "#/components/schemas/Automation.ConditionInput"
+          },
+          "until": {
+            "$ref": "#/components/schemas/Automation.ConditionInput"
+          },
+          "ends": {
+            "$ref": "#/components/schemas/Automation.Ends"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The message the Session receives when the automation wakes."
+          }
+        },
+        "required": ["sessionID", "prompt"],
+        "additionalProperties": false
+      },
+      "Automation.Duration": {
+        "type": "string",
+        "description": "A duration such as \"90 seconds\", \"5 minutes\" or \"2 hours\"."
+      },
+      "Automation.Ends": {
+        "type": "object",
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/Automation.Duration"
+          },
+          "at": {
+            "type": "string"
+          },
+          "times": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "exclusiveMinimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "Automation.ID": {
+        "type": "string",
+        "pattern": "^aut_"
+      },
+      "Automation.Info": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Automation.ID"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/components/schemas/Automation.When"
+          },
+          "tz": {
+            "type": "string"
+          },
+          "if": {
+            "$ref": "#/components/schemas/Automation.Condition"
+          },
+          "until": {
+            "$ref": "#/components/schemas/Automation.Condition"
+          },
+          "action": {
+            "$ref": "#/components/schemas/Automation.Action"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Automation.Status"
+          },
+          "nextDueAt": {
+            "type": "number"
+          },
+          "endsAt": {
+            "type": "number"
+          },
+          "remainingRuns": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "runCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "lastFiredAt": {
+            "type": "number"
+          },
+          "lastOutcome": {
+            "$ref": "#/components/schemas/Automation.Outcome"
+          },
+          "lastOutput": {
+            "type": "string"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "updated": {
+                "type": "number"
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "when", "tz", "action", "status", "runCount", "time"],
+        "additionalProperties": false
+      },
+      "Automation.Outcome": {
+        "type": "string",
+        "enum": ["fired", "late", "checked", "expired", "skipped", "disabled", "failed"]
+      },
+      "Automation.Status": {
+        "type": "string",
+        "enum": ["active", "paused", "done"]
+      },
+      "Automation.When": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Automation.When.In"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.When.At"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.When.Every"
+          },
+          {
+            "$ref": "#/components/schemas/Automation.When.Cron"
+          }
+        ]
+      },
+      "Automation.When.At": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["at"]
+          },
+          "at": {
+            "type": "string"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "at"],
+        "additionalProperties": false
+      },
+      "Automation.When.Cron": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["cron"]
+          },
+          "cron": {
+            "type": "string"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "cron"],
+        "additionalProperties": false
+      },
+      "Automation.When.Every": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["every"]
+          },
+          "every": {
+            "$ref": "#/components/schemas/Automation.Duration"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "every"],
+        "additionalProperties": false
+      },
+      "Automation.When.In": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["in"]
+          },
+          "in": {
+            "$ref": "#/components/schemas/Automation.Duration"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "in"],
+        "additionalProperties": false
+      },
+      "Automation.WhenInput": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "in": {
+                "$ref": "#/components/schemas/Automation.Duration"
+              },
+              "at": {
+                "not": {}
+              },
+              "every": {
+                "not": {}
+              },
+              "cron": {
+                "not": {}
+              },
+              "tz": {
+                "type": "string"
+              }
+            },
+            "required": ["in"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "in": {
+                "not": {}
+              },
+              "every": {
+                "not": {}
+              },
+              "cron": {
+                "not": {}
+              },
+              "tz": {
+                "type": "string"
+              }
+            },
+            "required": ["at"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "every": {
+                "$ref": "#/components/schemas/Automation.Duration"
+              },
+              "in": {
+                "not": {}
+              },
+              "at": {
+                "not": {}
+              },
+              "cron": {
+                "not": {}
+              },
+              "tz": {
+                "type": "string"
+              }
+            },
+            "required": ["every"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "cron": {
+                "type": "string"
+              },
+              "in": {
+                "not": {}
+              },
+              "at": {
+                "not": {}
+              },
+              "every": {
+                "not": {}
+              },
+              "tz": {
+                "type": "string"
+              }
+            },
+            "required": ["cron"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "AutomationNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["AutomationNotFoundError"]
+          },
+          "automationID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "automationID", "message"],
+        "additionalProperties": false
+      },
       "Command.Info": {
         "type": "object",
         "properties": {
@@ -17354,7 +17809,7 @@
                   }
                 ]
               },
-              "schedules": {
+              "automations": {
                 "type": "boolean"
               },
               "artifacts": {
@@ -22272,454 +22727,6 @@
           }
         },
         "required": ["_tag", "type", "message"],
-        "additionalProperties": false
-      },
-      "Schedule.Action": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Schedule.Action.Prompt"
-          }
-        ]
-      },
-      "Schedule.Action.Prompt": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["prompt"]
-          },
-          "prompt": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "prompt"],
-        "additionalProperties": false
-      },
-      "Schedule.Condition": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Schedule.Condition.Shell"
-          },
-          {
-            "$ref": "#/components/schemas/Schedule.Condition.Code"
-          }
-        ]
-      },
-      "Schedule.Condition.Code": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["code"]
-          },
-          "code": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "code"],
-        "additionalProperties": false
-      },
-      "Schedule.Condition.Shell": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["shell"]
-          },
-          "run": {
-            "type": "string"
-          },
-          "is": {
-            "type": "string"
-          },
-          "matches": {
-            "type": "string"
-          },
-          "changes": {
-            "type": "boolean"
-          }
-        },
-        "required": ["type", "run"],
-        "additionalProperties": false
-      },
-      "Schedule.ConditionInput": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "run": {
-                "type": "string",
-                "minLength": 1,
-                "description": "Shell command to run in the Session's directory. Alone, exit 0 wakes and stdout is appended."
-              },
-              "is": {
-                "type": "string"
-              },
-              "matches": {
-                "type": "string"
-              },
-              "changes": {
-                "type": "boolean"
-              },
-              "code": {
-                "not": {}
-              }
-            },
-            "required": ["run"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "code": {
-                "type": "string",
-                "minLength": 1,
-                "description": "Code Mode JavaScript check (no fetch; 30s, 20 tool calls, 32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. Runs once at creation with state = null (if baselines state without waking; until matches immediately if true), with globals state, now (epoch ms) and runs. Return a boolean or { wake, state?, message? } (message is appended to prompt on wake), e.g.: const t = await tools.slack.read_thread({ id }); return { wake: state !== null && t.count > state.count, state: { count: t.count }, message: \"New reply\" }"
-              },
-              "run": {
-                "not": {}
-              },
-              "is": {
-                "not": {}
-              },
-              "matches": {
-                "not": {}
-              },
-              "changes": {
-                "not": {}
-              }
-            },
-            "required": ["code"],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "Schedule.CreatePayload": {
-        "type": "object",
-        "properties": {
-          "sessionID": {
-            "$ref": "#/components/schemas/Session.ID"
-          },
-          "name": {
-            "type": "string"
-          },
-          "when": {
-            "$ref": "#/components/schemas/Schedule.WhenInput"
-          },
-          "if": {
-            "$ref": "#/components/schemas/Schedule.ConditionInput"
-          },
-          "until": {
-            "$ref": "#/components/schemas/Schedule.ConditionInput"
-          },
-          "ends": {
-            "$ref": "#/components/schemas/Schedule.Ends"
-          },
-          "prompt": {
-            "type": "string",
-            "minLength": 1,
-            "description": "The message the Session receives when the schedule wakes."
-          }
-        },
-        "required": ["sessionID", "prompt"],
-        "additionalProperties": false
-      },
-      "Schedule.Duration": {
-        "type": "string",
-        "description": "A duration such as \"90 seconds\", \"5 minutes\" or \"2 hours\"."
-      },
-      "Schedule.Ends": {
-        "type": "object",
-        "properties": {
-          "after": {
-            "$ref": "#/components/schemas/Schedule.Duration"
-          },
-          "at": {
-            "type": "string"
-          },
-          "times": {
-            "type": "integer",
-            "maximum": 9007199254740991,
-            "exclusiveMinimum": 0
-          }
-        },
-        "additionalProperties": false
-      },
-      "Schedule.ID": {
-        "type": "string",
-        "pattern": "^sch_"
-      },
-      "Schedule.Info": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/Schedule.ID"
-          },
-          "sessionID": {
-            "$ref": "#/components/schemas/Session.ID"
-          },
-          "name": {
-            "type": "string"
-          },
-          "when": {
-            "$ref": "#/components/schemas/Schedule.When"
-          },
-          "tz": {
-            "type": "string"
-          },
-          "if": {
-            "$ref": "#/components/schemas/Schedule.Condition"
-          },
-          "until": {
-            "$ref": "#/components/schemas/Schedule.Condition"
-          },
-          "action": {
-            "$ref": "#/components/schemas/Schedule.Action"
-          },
-          "status": {
-            "$ref": "#/components/schemas/Schedule.Status"
-          },
-          "nextDueAt": {
-            "type": "number"
-          },
-          "endsAt": {
-            "type": "number"
-          },
-          "remainingRuns": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
-          },
-          "runCount": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 9007199254740991
-          },
-          "lastFiredAt": {
-            "type": "number"
-          },
-          "lastOutcome": {
-            "$ref": "#/components/schemas/Schedule.Outcome"
-          },
-          "lastOutput": {
-            "type": "string"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "type": "number"
-              },
-              "updated": {
-                "type": "number"
-              }
-            },
-            "required": ["created", "updated"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "when", "tz", "action", "status", "runCount", "time"],
-        "additionalProperties": false
-      },
-      "Schedule.Outcome": {
-        "type": "string",
-        "enum": ["fired", "late", "checked", "expired", "skipped", "disabled", "failed"]
-      },
-      "Schedule.Status": {
-        "type": "string",
-        "enum": ["active", "paused", "done"]
-      },
-      "Schedule.When": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/Schedule.When.In"
-          },
-          {
-            "$ref": "#/components/schemas/Schedule.When.At"
-          },
-          {
-            "$ref": "#/components/schemas/Schedule.When.Every"
-          },
-          {
-            "$ref": "#/components/schemas/Schedule.When.Cron"
-          }
-        ]
-      },
-      "Schedule.When.At": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["at"]
-          },
-          "at": {
-            "type": "string"
-          },
-          "tz": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "at"],
-        "additionalProperties": false
-      },
-      "Schedule.When.Cron": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["cron"]
-          },
-          "cron": {
-            "type": "string"
-          },
-          "tz": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "cron"],
-        "additionalProperties": false
-      },
-      "Schedule.When.Every": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["every"]
-          },
-          "every": {
-            "$ref": "#/components/schemas/Schedule.Duration"
-          },
-          "tz": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "every"],
-        "additionalProperties": false
-      },
-      "Schedule.When.In": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["in"]
-          },
-          "in": {
-            "$ref": "#/components/schemas/Schedule.Duration"
-          },
-          "tz": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "in"],
-        "additionalProperties": false
-      },
-      "Schedule.WhenInput": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "in": {
-                "$ref": "#/components/schemas/Schedule.Duration"
-              },
-              "at": {
-                "not": {}
-              },
-              "every": {
-                "not": {}
-              },
-              "cron": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["in"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "at": {
-                "type": "string"
-              },
-              "in": {
-                "not": {}
-              },
-              "every": {
-                "not": {}
-              },
-              "cron": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["at"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "every": {
-                "$ref": "#/components/schemas/Schedule.Duration"
-              },
-              "in": {
-                "not": {}
-              },
-              "at": {
-                "not": {}
-              },
-              "cron": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["every"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "cron": {
-                "type": "string"
-              },
-              "in": {
-                "not": {}
-              },
-              "at": {
-                "not": {}
-              },
-              "every": {
-                "not": {}
-              },
-              "tz": {
-                "type": "string"
-              }
-            },
-            "required": ["cron"],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "ScheduleNotFoundErrorEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["ScheduleNotFoundError"]
-          },
-          "scheduleID": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "scheduleID", "message"],
         "additionalProperties": false
       },
       "ServerInfo": {

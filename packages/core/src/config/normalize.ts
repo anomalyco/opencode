@@ -506,12 +506,21 @@ function normalizeExperimental(
       }
       if (own(experimental, "schedules")) {
         const value = decodeEncoded(
-          ConfigExperimental.Info.fields.schedules,
+          ConfigExperimental.Info.fields.automations,
           experimental.schedules,
           ["experimental", "schedules"],
           diagnostics,
         )
-        if (value !== undefined) result.schedules = value
+        if (value !== undefined) result.automations = value
+      }
+      if (own(experimental, "automations")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.automations,
+          experimental.automations,
+          ["experimental", "automations"],
+          diagnostics,
+        )
+        if (value !== undefined) result.automations = value
       }
       if (own(experimental, "artifacts")) {
         const value = decodeEncoded(

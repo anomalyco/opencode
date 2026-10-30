@@ -22,6 +22,7 @@ import sessionInboxMigration from "@opencode/core/database/migration/20260812181
 import sessionViewedStateMigration from "@opencode/core/database/migration/20260819222447_session_viewed_state"
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
 import dropSessionPendingMigration from "@opencode/core/database/migration/20261025154125_drop_session_pending"
+import automationRenameMigration from "@opencode/core/database/migration/20261030154322_automation"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -654,6 +655,26 @@ describe("DatabaseMigration", () => {
         yield* db.run(sql`UPDATE __drizzle_migrations SET name = 'ignored'`)
         yield* DatabaseMigration.applyOnly(db, [])
         expect(yield* db.all(sql`SELECT id FROM migration ORDER BY id`)).toEqual([{ id: "existing" }, { id: "legacy" }])
+      }),
+    )
+  })
+
+  test("renames the schedule table to automation and rewrites sch_ row ids to aut_", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        const beforeRename = migrations.filter((item) => item.id < automationRenameMigration.id)
+        yield* DatabaseMigration.applyOnly(db, beforeRename)
+
+        yield* db.run(sql`
+          INSERT INTO schedule (id, name, action, "when", tz, status, time_created, time_updated)
+          VALUES ('sch_existing_123', 'daily', '{"type":"prompt","prompt":"ping"}', '{"type":"every","every":"1 hour"}', 'UTC', 'active', 1, 1)
+        `)
+        yield* DatabaseMigration.applyOnly(db, [automationRenameMigration])
+
+        expect(yield* db.all(sql`SELECT id, name, status FROM automation`)).toEqual([
+          { id: "aut_existing_123", name: "daily", status: "active" },
+        ])
       }),
     )
   })

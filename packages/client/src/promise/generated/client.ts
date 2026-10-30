@@ -243,18 +243,18 @@ import type {
   ExperimentalPersistentPtyConnectTokenOutput,
   ExperimentalMediaGetInput,
   ExperimentalMediaGetOutput,
-  ExperimentalScheduleCreateInput,
-  ExperimentalScheduleCreateOutput,
-  ExperimentalScheduleListInput,
-  ExperimentalScheduleListOutput,
-  ExperimentalScheduleGetInput,
-  ExperimentalScheduleGetOutput,
-  ExperimentalSchedulePauseInput,
-  ExperimentalSchedulePauseOutput,
-  ExperimentalScheduleResumeInput,
-  ExperimentalScheduleResumeOutput,
-  ExperimentalScheduleDeleteInput,
-  ExperimentalScheduleDeleteOutput,
+  ExperimentalAutomationCreateInput,
+  ExperimentalAutomationCreateOutput,
+  ExperimentalAutomationListInput,
+  ExperimentalAutomationListOutput,
+  ExperimentalAutomationGetInput,
+  ExperimentalAutomationGetOutput,
+  ExperimentalAutomationPauseInput,
+  ExperimentalAutomationPauseOutput,
+  ExperimentalAutomationResumeInput,
+  ExperimentalAutomationResumeOutput,
+  ExperimentalAutomationDeleteInput,
+  ExperimentalAutomationDeleteOutput,
   ExperimentalArtifactsProvidersInput,
   ExperimentalArtifactsProvidersOutput,
   ExperimentalArtifactsListInput,
@@ -1503,12 +1503,12 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
-      schedule: {
-        create: (input: ExperimentalScheduleCreateInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalScheduleCreateOutput }>(
+      automation: {
+        create: (input: ExperimentalAutomationCreateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationCreateOutput }>(
             {
               method: "POST",
-              path: `/api/experimental/schedule`,
+              path: `/api/experimental/automation`,
               body: {
                 sessionID: input["sessionID"],
                 name: input["name"],
@@ -1524,56 +1524,56 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
-        list: (input: ExperimentalScheduleListInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalScheduleListOutput }>(
+        list: (input?: ExperimentalAutomationListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationListOutput }>(
             {
               method: "GET",
-              path: `/api/experimental/schedule`,
-              query: { sessionID: input["sessionID"] },
+              path: `/api/experimental/automation`,
+              query: { sessionID: input?.["sessionID"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],
               empty: false,
             },
             requestOptions,
           ).then((value) => value.data),
-        get: (input: ExperimentalScheduleGetInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalScheduleGetOutput }>(
+        get: (input: ExperimentalAutomationGetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationGetOutput }>(
             {
               method: "GET",
-              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}`,
+              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}`,
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],
               empty: false,
             },
             requestOptions,
           ).then((value) => value.data),
-        pause: (input: ExperimentalSchedulePauseInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalSchedulePauseOutput }>(
+        pause: (input: ExperimentalAutomationPauseInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationPauseOutput }>(
             {
               method: "POST",
-              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}/pause`,
+              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}/pause`,
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],
               empty: false,
             },
             requestOptions,
           ).then((value) => value.data),
-        resume: (input: ExperimentalScheduleResumeInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalScheduleResumeOutput }>(
+        resume: (input: ExperimentalAutomationResumeInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationResumeOutput }>(
             {
               method: "POST",
-              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}/resume`,
+              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}/resume`,
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],
               empty: false,
             },
             requestOptions,
           ).then((value) => value.data),
-        delete: (input: ExperimentalScheduleDeleteInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalScheduleDeleteOutput>(
+        delete: (input: ExperimentalAutomationDeleteInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalAutomationDeleteOutput>(
             {
               method: "DELETE",
-              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}`,
+              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}`,
               successStatus: 204,
               declaredStatuses: [400, 401, 403, 404],
               empty: true,

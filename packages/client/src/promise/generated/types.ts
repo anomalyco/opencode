@@ -319,23 +319,23 @@ export type SessionStatus =
 
 export type PersistentPtyHandoff = { directory: string; instanceID: string; ticket: string; expiresAt: number }
 
-export type ScheduleID = string
+export type AutomationID = string
 
-export type ScheduleDuration = string
+export type AutomationDuration = string
 
-export type ScheduleWhenAt = { type: "at"; at: string; tz?: string }
+export type AutomationWhenAt = { type: "at"; at: string; tz?: string }
 
-export type ScheduleWhenCron = { type: "cron"; cron: string; tz?: string }
+export type AutomationWhenCron = { type: "cron"; cron: string; tz?: string }
 
-export type ScheduleConditionShell = { type: "shell"; run: string; is?: string; matches?: string; changes?: boolean }
+export type AutomationConditionShell = { type: "shell"; run: string; is?: string; matches?: string; changes?: boolean }
 
-export type ScheduleConditionCode = { type: "code"; code: string }
+export type AutomationConditionCode = { type: "code"; code: string }
 
-export type ScheduleActionPrompt = { type: "prompt"; prompt: string }
+export type AutomationActionPrompt = { type: "prompt"; prompt: string }
 
-export type ScheduleStatus = "active" | "paused" | "done"
+export type AutomationStatus = "active" | "paused" | "done"
 
-export type ScheduleOutcome = "fired" | "late" | "checked" | "expired" | "skipped" | "disabled" | "failed"
+export type AutomationOutcome = "fired" | "late" | "checked" | "expired" | "skipped" | "disabled" | "failed"
 
 export type ArtifactCapability = "static" | "server-code" | "sqlite" | "durable-objects"
 
@@ -912,13 +912,13 @@ export type FormMultiselectField1 = {
 
 export type FormAnswer1 = { [x: string]: FormValue1 }
 
-export type ScheduleWhenIn = { type: "in"; in: ScheduleDuration; tz?: string }
+export type AutomationWhenIn = { type: "in"; in: AutomationDuration; tz?: string }
 
-export type ScheduleWhenEvery = { type: "every"; every: ScheduleDuration; tz?: string }
+export type AutomationWhenEvery = { type: "every"; every: AutomationDuration; tz?: string }
 
-export type ScheduleCondition = ScheduleConditionShell | ScheduleConditionCode
+export type AutomationCondition = AutomationConditionShell | AutomationConditionCode
 
-export type ScheduleAction = ScheduleActionPrompt
+export type AutomationAction = AutomationActionPrompt
 
 export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
 
@@ -2185,7 +2185,7 @@ export type FormReplied = {
   data: { id: FormID; sessionID: string; answer: FormAnswer1 }
 }
 
-export type ScheduleWhen = ScheduleWhenIn | ScheduleWhenAt | ScheduleWhenEvery | ScheduleWhenCron
+export type AutomationWhen = AutomationWhenIn | AutomationWhenAt | AutomationWhenEvery | AutomationWhenCron
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
@@ -2501,7 +2501,7 @@ export type ConfigEntry =
           background_compaction?: boolean
           media_blob?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
-          schedules?: boolean
+          automations?: boolean
           artifacts?: boolean
           subagent_depth?: number
           location_idle_timeout?: string | false
@@ -2592,22 +2592,22 @@ export type CredentialEntry = {
 
 export type FormFields1 = [FormField1, ...Array<FormField1>]
 
-export type ScheduleInfo = {
-  id: ScheduleID
+export type AutomationInfo = {
+  id: AutomationID
   sessionID?: SessionID
   name?: string
-  when: ScheduleWhen
+  when: AutomationWhen
   tz: string
-  if?: ScheduleCondition
-  until?: ScheduleCondition
-  action: ScheduleAction
-  status: ScheduleStatus
+  if?: AutomationCondition
+  until?: AutomationCondition
+  action: AutomationAction
+  status: AutomationStatus
   nextDueAt?: number
   endsAt?: number
   remainingRuns?: number
   runCount: number
   lastFiredAt?: number
-  lastOutcome?: ScheduleOutcome
+  lastOutcome?: AutomationOutcome
   lastOutput?: string
   time: { created: number; updated: number }
 }
@@ -3172,13 +3172,13 @@ export type PtyFeatureUnsupportedError = {
 export const isPtyFeatureUnsupportedError = (value: unknown): value is PtyFeatureUnsupportedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyFeatureUnsupportedError"
 
-export type ScheduleNotFoundError = {
-  readonly _tag: "ScheduleNotFoundError"
-  readonly scheduleID: string
+export type AutomationNotFoundError = {
+  readonly _tag: "AutomationNotFoundError"
+  readonly automationID: string
   readonly message: string
 }
-export const isScheduleNotFoundError = (value: unknown): value is ScheduleNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ScheduleNotFoundError"
+export const isAutomationNotFoundError = (value: unknown): value is AutomationNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "AutomationNotFoundError"
 
 export type ArtifactNotFoundError = {
   readonly _tag: "ArtifactNotFoundError"
@@ -4486,7 +4486,7 @@ export type ExperimentalMediaGetInput = { readonly hash: string }
 
 export type ExperimentalMediaGetOutput = globalThis.Uint8Array
 
-export type ExperimentalScheduleCreateInput = {
+export type ExperimentalAutomationCreateInput = {
   readonly sessionID: string
   readonly name?: string | undefined
   readonly when?:
@@ -4561,27 +4561,27 @@ export type ExperimentalScheduleCreateInput = {
   readonly prompt: string
 }
 
-export type ExperimentalScheduleCreateOutput = { data: ScheduleInfo }["data"]
+export type ExperimentalAutomationCreateOutput = { data: AutomationInfo }["data"]
 
-export type ExperimentalScheduleListInput = { readonly sessionID: string }
+export type ExperimentalAutomationListInput = { readonly sessionID?: string | undefined }
 
-export type ExperimentalScheduleListOutput = { data: Array<ScheduleInfo> }["data"]
+export type ExperimentalAutomationListOutput = { data: Array<AutomationInfo> }["data"]
 
-export type ExperimentalScheduleGetInput = { readonly scheduleID: string }
+export type ExperimentalAutomationGetInput = { readonly automationID: string }
 
-export type ExperimentalScheduleGetOutput = { data: ScheduleInfo }["data"]
+export type ExperimentalAutomationGetOutput = { data: AutomationInfo }["data"]
 
-export type ExperimentalSchedulePauseInput = { readonly scheduleID: string }
+export type ExperimentalAutomationPauseInput = { readonly automationID: string }
 
-export type ExperimentalSchedulePauseOutput = { data: ScheduleInfo }["data"]
+export type ExperimentalAutomationPauseOutput = { data: AutomationInfo }["data"]
 
-export type ExperimentalScheduleResumeInput = { readonly scheduleID: string }
+export type ExperimentalAutomationResumeInput = { readonly automationID: string }
 
-export type ExperimentalScheduleResumeOutput = { data: ScheduleInfo }["data"]
+export type ExperimentalAutomationResumeOutput = { data: AutomationInfo }["data"]
 
-export type ExperimentalScheduleDeleteInput = { readonly scheduleID: string }
+export type ExperimentalAutomationDeleteInput = { readonly automationID: string }
 
-export type ExperimentalScheduleDeleteOutput = void
+export type ExperimentalAutomationDeleteOutput = void
 
 export type ExperimentalArtifactsProvidersInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined

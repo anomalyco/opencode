@@ -1,9 +1,9 @@
-export * as ScheduleCheck from "./check.js"
+export * as AutomationCheck from "./check.js"
 
 import { CodeMode } from "@opencode/codemode"
 import { isRecord } from "@opencode/util/record"
 import { collectStream } from "@opencode/util/process"
-import type { Schedule as ScheduleSchema } from "@opencode/schema/schedule"
+import type { Automation as AutomationSchema } from "@opencode/schema/automation"
 import { Array, Duration, Effect, Option, Result, Schema } from "effect"
 import { ChildProcess } from "effect/process"
 import { Agent } from "../agent.js"
@@ -29,10 +29,10 @@ const CODE_LIMITS: CodeMode.ExecutionLimits = {
 }
 
 const FORBIDDEN_CODE_TOOLS = new Set([
-  "opencode.schedule_create",
-  "opencode.schedule_pause",
-  "opencode.schedule_resume",
-  "opencode.schedule_delete",
+  "opencode.automation_create",
+  "opencode.automation_pause",
+  "opencode.automation_resume",
+  "opencode.automation_delete",
   "opencode.session_move",
   "opencode.session_rename",
   "opencode.worktree_create",
@@ -67,7 +67,7 @@ export type Outcome =
     }
 
 /** Validates condition syntax synchronously before asking for permissions or spawning anything. */
-export function validate(condition: ScheduleSchema.Condition): Result.Result<void, string> {
+export function validate(condition: AutomationSchema.Condition): Result.Result<void, string> {
   switch (condition.type) {
     case "shell": {
       if (condition.run.trim() === "") return Result.fail("A shell check needs a command")
@@ -91,7 +91,7 @@ export function validate(condition: ScheduleSchema.Condition): Result.Result<voi
       if (Result.isFailure(scanned)) return Result.fail(scanned.failure.message)
       for (const path of scanned.success) {
         if (FORBIDDEN_CODE_TOOLS.has(path)) {
-          return Result.fail(`Tool ${path} cannot be used inside a schedule check`)
+          return Result.fail(`Tool ${path} cannot be used inside an automation check`)
         }
       }
       return Result.succeed(undefined)
@@ -99,7 +99,7 @@ export function validate(condition: ScheduleSchema.Condition): Result.Result<voi
   }
 }
 
-export function describe(condition: ScheduleSchema.Condition): string {
+export function describe(condition: AutomationSchema.Condition): string {
   switch (condition.type) {
     case "shell":
       return condition.run
@@ -117,8 +117,8 @@ export function describe(condition: ScheduleSchema.Condition): string {
 export const authorize = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
   name: string | undefined,
-  when: ScheduleSchema.When,
-  check: ScheduleSchema.StoredCheck,
+  when: AutomationSchema.When,
+  check: AutomationSchema.StoredCheck,
 ) {
   const plugins = yield* Plugin.Service
   yield* plugins.awaitActivation
@@ -133,7 +133,7 @@ export const authorize = Effect.fnUntraced(function* (
 /** Runs one check in the Session's Location under narrow unattended permissions and a 30s wall-clock cap. */
 export const evaluate = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
-  check: ScheduleSchema.StoredCheck,
+  check: AutomationSchema.StoredCheck,
   prevState: Schema.Json,
   context: RunContext,
 ) {
@@ -166,14 +166,14 @@ const resolveCodeTools = Effect.fnUntraced(function* (paths: ReadonlyArray<strin
   const resolved: Array<(typeof registered)[number]> = []
   for (const path of paths) {
     if (FORBIDDEN_CODE_TOOLS.has(path)) {
-      return yield* Effect.fail(`Tool ${path} cannot be used inside a schedule check`)
+      return yield* Effect.fail(`Tool ${path} cannot be used inside an automation check`)
     }
     const found = registered.find(
       (item) => item.options?.codemode !== false && CodeModeTool.qualifiedName(item) === path,
     )
     if (!found) return yield* Effect.fail(`Unknown Code Mode tool: ${path}`)
     if (found.options?.permission === "edit") {
-      return yield* Effect.fail(`Tool ${path} cannot be used inside a schedule check`)
+      return yield* Effect.fail(`Tool ${path} cannot be used inside an automation check`)
     }
     resolved.push(found)
   }
@@ -183,9 +183,9 @@ const resolveCodeTools = Effect.fnUntraced(function* (paths: ReadonlyArray<strin
 const authorizeCode = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
   name: string | undefined,
-  when: ScheduleSchema.When,
-  mode: ScheduleSchema.CheckMode,
-  condition: ScheduleSchema.CodeCondition,
+  when: AutomationSchema.When,
+  mode: AutomationSchema.CheckMode,
+  condition: AutomationSchema.CodeCondition,
 ) {
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
@@ -208,7 +208,7 @@ const authorizeCode = Effect.fnUntraced(function* (
     yield* permission.assert({
       action: "execute",
       resources: ["*"],
-      metadata: { schedule: name, mode, when, unattended: true, code: condition.code, tools: [] },
+      metadata: { automation: name, mode, when, unattended: true, code: condition.code, tools: [] },
       sessionID: session.id,
       agent: agent.id,
     })
@@ -235,7 +235,7 @@ const authorizeCode = Effect.fnUntraced(function* (
         action,
         resources: ["*"],
         // No `save`: "always" would save a project-wide allow, while scheduled ticks run via Unattended.
-        metadata: { schedule: name, mode, when, unattended: true, code: condition.code, tools: [...paths] },
+        metadata: { automation: name, mode, when, unattended: true, code: condition.code, tools: [...paths] },
         sessionID: session.id,
         agent: agent.id,
       }),
@@ -245,7 +245,7 @@ const authorizeCode = Effect.fnUntraced(function* (
 
 const runCode = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
-  condition: ScheduleSchema.CodeCondition,
+  condition: AutomationSchema.CodeCondition,
   prevState: Schema.Json,
   context: RunContext,
 ) {
@@ -390,13 +390,13 @@ const assertShellPermissions = Effect.fnUntraced(function* (
 const authorizeShell = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
   name: string | undefined,
-  when: ScheduleSchema.When,
-  mode: ScheduleSchema.CheckMode,
-  condition: ScheduleSchema.ShellCondition,
+  when: AutomationSchema.When,
+  mode: AutomationSchema.CheckMode,
+  condition: AutomationSchema.ShellCondition,
 ) {
   const scanned = yield* scanShell(condition.run)
   yield* assertShellPermissions(session, scanned, {
-    schedule: name,
+    automation: name,
     mode,
     when,
     unattended: true,
@@ -406,7 +406,7 @@ const authorizeShell = Effect.fnUntraced(function* (
 
 const runShell = Effect.fnUntraced(function* (
   session: SessionSchema.Info,
-  condition: ScheduleSchema.ShellCondition,
+  condition: AutomationSchema.ShellCondition,
   prevState: Schema.Json,
 ) {
   const environment = yield* Environment.Service

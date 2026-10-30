@@ -1,15 +1,15 @@
-export * as Schedule from "./schedule.js"
+export * as Automation from "./automation.js"
 
 import { Duration, Option, Schema } from "effect"
 import { ascending } from "./identifier.js"
 import { DateTimeUtcFromMillis, NonNegativeInt, PositiveInt, optional, statics } from "./schema.js"
 import { SessionID } from "./session-id.js"
 
-export const ID = Schema.String.check(Schema.isStartingWith("sch_")).pipe(
-  Schema.brand("Schedule.ID"),
-  Schema.annotate({ identifier: "Schedule.ID" }),
+export const ID = Schema.String.check(Schema.isStartingWith("aut_")).pipe(
+  Schema.brand("Automation.ID"),
+  Schema.annotate({ identifier: "Automation.ID" }),
   statics((schema) => ({
-    create: () => schema.make("sch_" + ascending()),
+    create: () => schema.make("aut_" + ascending()),
   })),
 )
 export type ID = typeof ID.Type
@@ -21,7 +21,7 @@ export const durationMillis = (value: string) => decodeDuration(value).pipe(Opti
 
 /** A duration such as "90 seconds", "5 minutes" or "2 hours". The service validates it, since clients cannot run a custom check. */
 export const DurationString = Schema.String.annotate({
-  identifier: "Schedule.Duration",
+  identifier: "Automation.Duration",
   description: 'A duration such as "90 seconds", "5 minutes" or "2 hours".',
 })
 
@@ -32,40 +32,40 @@ const zone = {
 }
 
 export const In = Schema.Struct({ type: Schema.tag("in"), in: DurationString, ...zone }).annotate({
-  identifier: "Schedule.When.In",
+  identifier: "Automation.When.In",
 })
 /** An instant with an offset, or a wall-clock time in `tz`, e.g. "2026-10-27T09:00". */
 export const At = Schema.Struct({ type: Schema.tag("at"), at: Schema.String, ...zone }).annotate({
-  identifier: "Schedule.When.At",
+  identifier: "Automation.When.At",
 })
 export const Every = Schema.Struct({ type: Schema.tag("every"), every: DurationString, ...zone }).annotate({
-  identifier: "Schedule.When.Every",
+  identifier: "Automation.When.Every",
 })
 export const Cron = Schema.Struct({ type: Schema.tag("cron"), cron: Schema.String, ...zone }).annotate({
-  identifier: "Schedule.When.Cron",
+  identifier: "Automation.When.Cron",
 })
 
 export const When = Schema.Union([In, At, Every, Cron]).pipe(
   Schema.toTaggedUnion("type"),
-  Schema.annotate({ identifier: "Schedule.When" }),
+  Schema.annotate({ identifier: "Automation.When" }),
 )
 export type When = typeof When.Type
 
-/** Stops a repeating schedule at whichever limit comes first. */
+/** Stops a repeating automation at whichever limit comes first. */
 export const Ends = Schema.Struct({
   after: DurationString.pipe(optional),
   at: Schema.String.pipe(optional),
   times: PositiveInt.pipe(optional),
-}).annotate({ identifier: "Schedule.Ends" })
+}).annotate({ identifier: "Automation.Ends" })
 export type Ends = typeof Ends.Type
 
 export const PromptAction = Schema.Struct({ type: Schema.tag("prompt"), prompt: Schema.String }).annotate({
-  identifier: "Schedule.Action.Prompt",
+  identifier: "Automation.Action.Prompt",
 })
 
 export const Action = Schema.Union([PromptAction]).pipe(
   Schema.toTaggedUnion("type"),
-  Schema.annotate({ identifier: "Schedule.Action" }),
+  Schema.annotate({ identifier: "Automation.Action" }),
 )
 export type Action = typeof Action.Type
 
@@ -81,7 +81,7 @@ export const ShellCondition = Schema.Struct({
   is: Schema.String.pipe(optional),
   matches: Schema.String.pipe(optional),
   changes: Schema.Boolean.pipe(optional),
-}).annotate({ identifier: "Schedule.Condition.Shell" })
+}).annotate({ identifier: "Automation.Condition.Shell" })
 export type ShellCondition = typeof ShellCondition.Type
 
 /**
@@ -92,26 +92,26 @@ export type ShellCondition = typeof ShellCondition.Type
 export const CodeCondition = Schema.Struct({
   type: Schema.tag("code"),
   code: Schema.String,
-}).annotate({ identifier: "Schedule.Condition.Code" })
+}).annotate({ identifier: "Automation.Condition.Code" })
 export type CodeCondition = typeof CodeCondition.Type
 
-/** Checked before firing; the schedule wakes the Session only when the condition passes. */
+/** Checked before firing; the automation wakes the Session only when the condition passes. */
 export const Condition = Schema.Union([ShellCondition, CodeCondition]).pipe(
   Schema.toTaggedUnion("type"),
-  Schema.annotate({ identifier: "Schedule.Condition" }),
+  Schema.annotate({ identifier: "Automation.Condition" }),
 )
 export type Condition = typeof Condition.Type
 
-export const CheckMode = Schema.Literals(["if", "until"]).annotate({ identifier: "Schedule.CheckMode" })
+export const CheckMode = Schema.Literals(["if", "until"]).annotate({ identifier: "Automation.CheckMode" })
 export type CheckMode = typeof CheckMode.Type
 
 export const StoredCheck = Schema.Struct({
   mode: CheckMode,
   condition: Condition,
-}).annotate({ identifier: "Schedule.StoredCheck" })
+}).annotate({ identifier: "Automation.StoredCheck" })
 export type StoredCheck = typeof StoredCheck.Type
 
-export const Status = Schema.Literals(["active", "paused", "done"]).annotate({ identifier: "Schedule.Status" })
+export const Status = Schema.Literals(["active", "paused", "done"]).annotate({ identifier: "Automation.Status" })
 export type Status = typeof Status.Type
 
 export const Outcome = Schema.Literals([
@@ -123,7 +123,7 @@ export const Outcome = Schema.Literals([
   "disabled",
   "failed",
 ]).annotate({
-  identifier: "Schedule.Outcome",
+  identifier: "Automation.Outcome",
 })
 export type Outcome = typeof Outcome.Type
 
@@ -145,7 +145,7 @@ export const Info = Schema.Struct({
   lastOutcome: Outcome.pipe(optional),
   lastOutput: Schema.String.pipe(optional),
   time: Schema.Struct({ created: DateTimeUtcFromMillis, updated: DateTimeUtcFromMillis }),
-}).annotate({ identifier: "Schedule.Info" })
+}).annotate({ identifier: "Automation.Info" })
 export type Info = typeof Info.Type
 
 export const CreateInput = Schema.Struct({
@@ -156,7 +156,7 @@ export const CreateInput = Schema.Struct({
   until: Condition.pipe(optional),
   ends: Ends.pipe(optional),
   action: Action,
-}).annotate({ identifier: "Schedule.CreateInput" })
+}).annotate({ identifier: "Automation.CreateInput" })
 export type CreateInput = typeof CreateInput.Type
 
 /** Declares a variant field absent, so `{ in, every }` or `{ run, code }` fails instead of silently dropping one. */
@@ -168,7 +168,7 @@ export const WhenInput = Schema.Union([
   Schema.Struct({ at: At.fields.at, in: absent, every: absent, cron: absent, ...zone }),
   Schema.Struct({ every: Every.fields.every, in: absent, at: absent, cron: absent, ...zone }),
   Schema.Struct({ cron: Cron.fields.cron, in: absent, at: absent, every: absent, ...zone }),
-]).annotate({ identifier: "Schedule.WhenInput" })
+]).annotate({ identifier: "Automation.WhenInput" })
 export type WhenInput = typeof WhenInput.Type
 
 export const ShellConditionInput = Schema.Struct({
@@ -184,7 +184,7 @@ export const ShellConditionInput = Schema.Struct({
   changes: Schema.Boolean.pipe(optional).annotate({
     description: "Wake when exit is 0 and stdout differs from the previous check.",
   }),
-}).annotate({ identifier: "Schedule.ShellConditionInput" })
+}).annotate({ identifier: "Automation.ShellConditionInput" })
 
 export const CodeConditionInput = Schema.Struct({
   code: Schema.String.check(Schema.isMinLength(1)).annotate({
@@ -196,7 +196,7 @@ export const CodeConditionInput = Schema.Struct({
       'const t = await tools.slack.read_thread({ id }); return { wake: state !== null && t.count > state.count, state: { count: t.count }, message: "New reply" }',
     ].join(" "),
   }),
-}).annotate({ identifier: "Schedule.CodeConditionInput" })
+}).annotate({ identifier: "Automation.CodeConditionInput" })
 
 export const ConditionInput = Schema.Union([
   Schema.Struct({ ...ShellConditionInput.fields, code: absent }),
@@ -207,12 +207,12 @@ export const ConditionInput = Schema.Union([
     matches: absent,
     changes: absent,
   }),
-]).annotate({ identifier: "Schedule.ConditionInput" })
+]).annotate({ identifier: "Automation.ConditionInput" })
 export type ConditionInput = typeof ConditionInput.Type
 
-/** A schedule as callers describe it: when it fires, optional condition, when it stops, and the prompt it sends. */
+/** An automation as callers describe it: when it fires, optional condition, when it stops, and the prompt it sends. */
 export const Request = Schema.Struct({
-  name: Schema.String.pipe(optional).annotate({ description: "A short label for the schedule." }),
+  name: Schema.String.pipe(optional).annotate({ description: "A short label for the automation." }),
   when: WhenInput.pipe(optional).annotate({
     description:
       'When it fires: { in: "20 minutes" }, { at: "2026-10-27T09:00" }, { every: "1 hour" } or { cron: "0 9 * * 1-5" }. Optional with `until` (defaults to { every: "30 seconds" }).',
@@ -226,12 +226,12 @@ export const Request = Schema.Struct({
       'One-shot gate ({ run } shell command or { code } Code Mode script): poll with no model call, wake once when it passes, and stop. Defaults ends.after to "24 hours".',
   }),
   ends: Ends.pipe(optional).annotate({
-    description: 'Stops a repeating schedule at the first limit reached: { after: "8 hours" }, { at }, { times: 3 }.',
+    description: 'Stops a repeating automation at the first limit reached: { after: "8 hours" }, { at }, { times: 3 }.',
   }),
   prompt: Schema.String.check(Schema.isMinLength(1)).annotate({
-    description: "The message the Session receives when the schedule wakes.",
+    description: "The message the Session receives when the automation wakes.",
   }),
-}).annotate({ identifier: "Schedule.Request" })
+}).annotate({ identifier: "Automation.Request" })
 export type Request = typeof Request.Type
 
 export const toCreateInput = (sessionID: SessionID, request: Request): CreateInput => ({

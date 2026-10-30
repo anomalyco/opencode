@@ -34,8 +34,8 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
       description:
         "Settings for the experimental_image_generate tool, which is offered while a connected provider has an image model.",
     }),
-  schedules: Schema.Boolean.pipe(optional).annotate({
-    description: "Enable experimental scheduled tasks that wake a session with a prompt. Defaults to false.",
+  automations: Schema.Boolean.pipe(optional).annotate({
+    description: "Enable experimental automations that wake a session with a prompt on a timer, cron, or check. Defaults to false.",
   }),
   artifacts: Schema.Boolean.pipe(optional).annotate({
     description: "Enable experimental artifacts backed by pluggable providers. Defaults to false.",
