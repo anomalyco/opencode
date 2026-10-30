@@ -12,11 +12,14 @@ import {
   MockBadRequest,
   MockInternal,
   MockNotFound,
+  MockPtyFeatureUnsupported,
   MockPtyNotFound,
+  MockServiceUnavailable,
   MockShellNotFound,
   MockUnauthorized,
   MockUnsupported,
 } from "./mock-api"
+import { createPersistentPty, type MockPersistentPtyConfig, type MockServerEvent } from "./persistent-pty"
 import { installSseTransport } from "./sse-transport"
 
 type Resolvable<T> = T | (() => T)
@@ -147,6 +150,9 @@ export interface MockServerConfig {
   // Serves `/api/pty*` and mock PTY WebSockets. Created IDs are the first unused `${prefix}<n>` (prefix must start with "pty").
   // `directory` is the owning workspace (Location); `cwd` is the reported working directory (default: `directory`).
   pty?: { prefix?: string; initial?: { id: string; title: string; directory?: string; cwd?: string }[] }
+  // Serves the session-scoped persistent PTY routes and their connect WebSockets (`e2e/utils/persistent-pty.ts`).
+  // Without it, those routes answer 503 like a server whose opencode-pty daemon cannot run.
+  persistentPty?: MockPersistentPtyConfig
   // Answers 500 InvalidDirectory when a request names a directory this server does not own.
   strictDirectory?: boolean
   // Answers 401 UnauthorizedError unless a request carries this password; a function may change it mid-test.
@@ -305,7 +311,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
 
   // Delivers events on this server's mock stream; buffered until the app connects.
   // An origin served by an SSE transport receives the events as one burst on its active connection.
-  const push = (payloads: readonly OpenCodeEvent[]) =>
+  const push = (payloads: readonly MockServerEvent[]) =>
     page.evaluate<void, { server: string; payloads: readonly unknown[] }>(
       ({ server, payloads }) => {
         // SAFETY: only the init script, `installSseTransport`, and benchmarks write these globals, in the declared shapes.
@@ -322,7 +328,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     )
 
   // Server-side events the mock publishes itself; delivery failures other than a missing document fail the test.
-  const emit = (events: OpenCodeEvent[]) =>
+  const emit = (events: MockServerEvent[]) =>
     void push(events).catch((cause: unknown) => {
       if (page.isClosed() || retryableDelivery(cause)) return
       throw cause
@@ -482,7 +488,15 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     )
   }
 
-  return { server, pty: transport.pty, push }
+  if (config.persistentPty) {
+    const host = new URL(server).host
+    await page.routeWebSocket(
+      (url) => url.host === host && /^\/api\/experimental\/persistent-pty\/[^/]+\/connect$/.test(url.pathname),
+      (ws) => transport.persistentPty.connect(ws),
+    )
+  }
+
+  return { server, pty: transport.pty, persistentPty: transport.persistentPty, push }
 }
 
 // Answers every Location-scoped request for `directory` as the server does once that folder is deleted.
@@ -535,15 +549,19 @@ export async function mockServers(page: Page, servers: Record<string, Omit<MockS
 
         const mock = await mockOpenCodeServer(page, { ...config, server: origin })
 
-        return [origin, { transport, pty: mock.pty }] as const
+        return [origin, { transport, pty: mock.pty, persistentPty: mock.persistentPty }] as const
       }),
     ),
   )
 }
 
 // `emit` publishes the events a real server sends after a mutation (without a page, nothing is published).
-export function createMockServerHandler(config: MockServerConfig, emit: (events: OpenCodeEvent[]) => void = () => {}) {
+export function createMockServerHandler(
+  config: MockServerConfig,
+  emit: (events: MockServerEvent[]) => void = () => {},
+) {
   const pty = createPty(config)
+  const persistentPty = createPersistentPty({ config: config.persistentPty, directory: config.directory }, emit)
 
   const web = HttpRouter.toWebHandler(
     HttpApiBuilder.layer(MockApi).pipe(
@@ -553,6 +571,7 @@ export function createMockServerHandler(config: MockServerConfig, emit: (events:
           nextCursor: 0,
           sessionCreates: 0,
           pty,
+          persistentPty,
           emit,
           mcp: new Map<string, MockMcpStatus>(),
           attempts: new Map<string, number>(),
@@ -563,7 +582,7 @@ export function createMockServerHandler(config: MockServerConfig, emit: (events:
     { disableLogger: true },
   )
 
-  return { ...web, pty }
+  return { ...web, pty, persistentPty }
 }
 
 const corsHeaders = {
@@ -736,7 +755,8 @@ function mockHandlers(
     nextCursor: number
     sessionCreates: number
     pty: ReturnType<typeof createPty>
-    emit: (events: OpenCodeEvent[]) => void
+    persistentPty: ReturnType<typeof createPersistentPty>
+    emit: (events: MockServerEvent[]) => void
     // MCP status overrides by `<directory>\n<server>`, and OAuth attempt creation times by attempt ID.
     mcp: Map<string, MockMcpStatus>
     attempts: Map<string, number>
@@ -761,6 +781,25 @@ function mockHandlers(
           return found
             ? Effect.succeed(found)
             : Effect.fail(new MockPtyNotFound({ ptyID: id, message: `PTY not found: ${id}` }))
+        }),
+      ),
+    )
+
+  const persistentPtyEnabled = Effect.suspend(() =>
+    config.persistentPty && state.persistentPty.capability !== false
+      ? Effect.void
+      : Effect.fail(new MockServiceUnavailable({ message: "opencode-pty is not available", service: "opencode-pty" })),
+  )
+
+  const findPersistentPty = (id: string) =>
+    persistentPtyEnabled.pipe(
+      Effect.andThen(() =>
+        Effect.suspend(() => {
+          const found = state.persistentPty.find(id)
+
+          return found
+            ? Effect.succeed(found)
+            : Effect.fail(new MockPtyNotFound({ ptyID: id, message: `PTY session not found: ${id}` }))
         }),
       ),
     )
@@ -880,6 +919,10 @@ function mockHandlers(
             hostname: config.hostname,
             urls: config.server ? [config.server] : [],
             paths: { tmp: "/tmp/opencode" },
+            capabilities:
+              state.persistentPty.capability === undefined
+                ? undefined
+                : { persistentPty: state.persistentPty.capability },
           }),
         config: () => Effect.succeed(configEntries),
         reference: () => Effect.succeed({ location: location(config), data: [] }),
@@ -1240,6 +1283,57 @@ function mockHandlers(
 
               return { location: location(config, directory), data: { ticket, expires_in: 60 } }
             }),
+          ),
+        persistentPtyList: (ctx) =>
+          persistentPtyEnabled.pipe(Effect.map(() => ({ data: state.persistentPty.list(ctx.params.sessionID) }))),
+        persistentPtyCreate: (ctx) =>
+          persistentPtyEnabled.pipe(
+            Effect.map(() => {
+              const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
+              const directory = session ? currentSession(session, config.directory).location.directory : undefined
+
+              return {
+                data: state.persistentPty.create(ctx.params.sessionID, {
+                  ...ctx.payload,
+                  cwd: ctx.payload.cwd ?? directory,
+                }),
+              }
+            }),
+          ),
+        persistentPtyGet: (ctx) => findPersistentPty(ctx.params.ptyID).pipe(Effect.map((data) => ({ data }))),
+        persistentPtyUpdate: (ctx) =>
+          findPersistentPty(ctx.params.ptyID).pipe(
+            Effect.flatMap((found) =>
+              ctx.payload.title !== undefined && !state.persistentPty.renameSupported
+                ? Effect.fail(
+                    new MockPtyFeatureUnsupported({
+                      feature: "rename",
+                      message: "Terminal renaming will be available after OpenCode's terminal service restarts",
+                    }),
+                  )
+                : Effect.sync(() => ({ data: state.persistentPty.update(found.id, ctx.payload) })),
+            ),
+          ),
+        persistentPtyRemove: (ctx) =>
+          findPersistentPty(ctx.params.ptyID).pipe(
+            Effect.map((found) => {
+              state.persistentPty.remove(found.id)
+
+              return HttpApiSchema.NoContent.make()
+            }),
+          ),
+        persistentPtySnapshot: (ctx) =>
+          findPersistentPty(ctx.params.ptyID).pipe(
+            Effect.map((found) => ({ data: state.persistentPty.snapshot(found.id) })),
+          ),
+        persistentPtyConnectToken: (ctx) =>
+          findPersistentPty(ctx.params.ptyID).pipe(
+            Effect.map((found) => ({
+              data: {
+                ticket: state.persistentPty.issue(found.id, Object.fromEntries(Object.entries(ctx.request.headers))),
+                expires_in: 60,
+              },
+            })),
           ),
         sessionList: (ctx) => {
           const sessions = config.sessions
