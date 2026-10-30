@@ -6,6 +6,7 @@ import {
   openPaletteWorkspace,
   paletteSession,
 } from "../utils/command-palette"
+import { mockWorkspace } from "../utils/workspace"
 
 test.use({ serviceWorkers: "block", permissions: ["clipboard-read", "clipboard-write"] })
 
@@ -128,6 +129,29 @@ test("titlebar search lists recent sessions and opens the typed match", async ({
   await input.press("Enter")
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
+})
+
+test("a working session keeps its project avatar in Search sessions and shows its activity ring in place of its age", async ({
+  page,
+}) => {
+  const working = { id: "ses_palette_working", title: "Working session" }
+  const idle = { id: "ses_palette_idle", title: "Idle session" }
+  await mockWorkspace(page, {
+    name: "PaletteActivity",
+    sessions: [working, idle],
+    sessionStatus: { [working.id]: { type: "running" } },
+  })
+  await page.goto("/")
+  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  const workingRow = dialog.getByRole("option", { name: /Working session/ })
+  const idleRow = dialog.getByRole("option", { name: /Idle session/ })
+  await expect(workingRow.locator('[data-component="activity-ring"]')).toBeVisible()
+  await expect(workingRow.locator('[data-component="project-avatar-v2"]')).toBeVisible()
+  await expect(workingRow.locator(".command-palette-meta")).toHaveText("Working")
+  await expect(idleRow.locator('[data-component="activity-ring"]')).toHaveCount(0)
+  await expect(idleRow.locator('[data-component="project-avatar-v2"]')).toBeVisible()
+  await expect(idleRow.locator(".command-palette-meta")).not.toHaveText("Working")
 })
 
 test("Search commands lists only commands and runs the chosen one", async ({ page }) => {

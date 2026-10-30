@@ -52,7 +52,7 @@ export const OpenResponsesInputImage = Schema.Struct({
 })
 export const OpenResponsesInputFile = Schema.Struct({
   type: Schema.tag("input_file"),
-  filename: Schema.String,
+  filename: Schema.optional(Schema.String),
   detail: Schema.optional(Schema.String),
   file_data: Schema.optional(Schema.String),
   file_url: Schema.optional(Schema.String),
@@ -590,11 +590,12 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMReq
   const location = url ?? (yield* ProviderShared.requireInlineMedia(adapter.name, part.media)).dataUrl
   if (part.media.kind !== "image") {
     if (part.media.kind === "video") return { type: "input_video" as const, video_url: location }
+    if (url) return { type: "input_file" as const, file_url: url, detail }
     return {
       type: "input_file" as const,
       filename: part.filename ?? (mime === "application/pdf" ? "document.pdf" : "file"),
       detail,
-      ...(url ? { file_url: url } : { file_data: location }),
+      file_data: location,
     }
   }
   return {

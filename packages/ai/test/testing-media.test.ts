@@ -1,23 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
+import { AIError, Decision, DecisionResponse, Image, ImageResponse, Media, RateLimitError } from "../src/effect.js"
 import {
-  AIError,
-  Decision,
-  DecisionResponse,
-  Image,
-  ImageResponse,
-  Media,
-  RateLimitError,
   Speech,
   SpeechResponse,
   Transcription,
   TranscriptionResponse,
   Video,
   VideoResponse,
-} from "../src/effect.js"
+} from "../src/experimental.js"
 import { AI } from "../src/index.js"
 import { OpenAI, Runway } from "../src/providers.js"
-import { TestDecision, TestImage, TestSpeech, TestTranscription, TestVideo } from "../src/testing.js"
+import { TestDecision, TestImage } from "../src/testing.js"
+import { TestSpeech, TestTranscription, TestVideo } from "../src/experimental/testing.js"
 import { testEffect } from "./lib/effect.js"
 
 const openai = OpenAI.configure({ apiKey: "test" })
@@ -113,13 +108,17 @@ describe("media test clients", () => {
     )
 
     expect((await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })).image).toBe(png)
-    const generation = await ai.video.start({ model: runway, prompt: "A kite" })
-    expect((await ai.video.resume(runway, generation.token).then((resumed) => resumed.await())).video).toBe(mp4)
+    const generation = await ai.experimental.video.start({ model: runway, prompt: "A kite" })
     expect(
-      await ai.bytes((await ai.speech.generate({ model: openai.speech("gpt-4o-mini-tts"), text: "Hi" })).audio),
+      (await ai.experimental.video.resume(runway, generation.token).then((resumed) => resumed.await())).video,
+    ).toBe(mp4)
+    expect(
+      await ai.bytes(
+        (await ai.experimental.speech.generate({ model: openai.speech("gpt-4o-mini-tts"), text: "Hi" })).audio,
+      ),
     ).toEqual(Uint8Array.from([4, 5, 6]))
     const deltas = await Array.fromAsync(
-      ai.transcription.stream({ model: openai.transcription("gpt-4o-mini-transcribe"), audio }),
+      ai.experimental.transcription.stream({ model: openai.transcription("gpt-4o-mini-transcribe"), audio }),
     )
     expect(deltas.map((event) => event.type)).toEqual(["finish"])
     const decided = await ai.decision.generate({

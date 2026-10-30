@@ -743,6 +743,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "Տվյալների տեղափոխում՝ {{current}}/{{total}}",
   "home.workspaceTip": "Սկսել հաջորդ նստաշրջանը նոր աշխատանքային տարածքում՝ փոփոխությունները մեկուսացնելու համար",
   "session.tab.add": "Ավելացնել ներդիր",
+  "session.tab.closeOthers": "Փակել մյուս ներդիրները",
   "session.queue.attachments.one": "Ավելացնել {{count}} կցում",
   "session.queue.attachments.other": "Ավելացնել {{count}} կցումներ",
   "settings.backToSettings": "Հետ երթ դեպի կարգավորումներ",

@@ -33,9 +33,9 @@ import { holdLandingWidth } from "@/shell/panel-motion"
 
 const fallbackItemSize = 60
 
-// Reserved below the last row: a 36px lane for the live status row and its background hint, an 8px gap, then a 28px
+// Reserved below the last row: a 36px lane for the live status row and its background hint, an 8px gap, then a 32px
 // activity pill and its 10px composer gap. Both come and go inside it, so neither moves the rows above.
-const tailSize = 82
+const tailSize = 86
 
 const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 
@@ -75,7 +75,8 @@ type Input = {
   scroll: Accessor<{ overflow: boolean; jump: boolean }>
   onResumeScroll: (behavior?: ScrollBehavior) => void
   setScrollRef: (element: HTMLDivElement | undefined) => void
-  setContentRef: (element: HTMLDivElement) => void
+  /** The rows' content changed height. */
+  onContentResize: () => void
   /** Height of the composer region floating over the timeline's bottom edge, where the timeline fades out. */
   bottomInset?: Accessor<number>
   setVisibleRef?: (element: HTMLDivElement | undefined) => void
@@ -92,6 +93,8 @@ type Input = {
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setRevealPart?: (fn: (target: string) => boolean) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
+  /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
+  setPage?: (fn: (direction: 1 | -1) => void) => void
   /** A tool call the route asks this timeline to open on; `done` clears it once revealed. */
   reveal?: { target: () => string | undefined; done: () => void }
 }
@@ -552,8 +555,6 @@ export function createTimelineVirtualizer(input: Input) {
     const root = listRoot()
 
     if (root) input.setScrollRef(root)
-
-    if (virtualContent) input.setContentRef(virtualContent)
     input.setVisibleRef?.(visibleArea())
     queueMicrotask(() => {
       if (!active() || !root?.isConnected) return
@@ -602,6 +603,18 @@ export function createTimelineVirtualizer(input: Input) {
         virtualizer.scrollToOffset(Math.max(root.scrollTop, root.scrollHeight - root.clientHeight * 2))
       virtualizer.scrollToEnd({ behavior })
     })
+    input.setPage?.((direction) => {
+      const root = listRoot()
+
+      if (!active() || !root?.isConnected) return
+      prepareNavigation()
+      input.onUserScroll(root)
+
+      if (direction < 0) input.onUnpin()
+      // Like the timeline's own PageUp: 80% of a page, measured above the composer that covers its bottom. The scroll
+      // event then pins at the end or loads older history near the top, as a wheel scroll does.
+      virtualizer.scrollToOffset(root.scrollTop + direction * (visibleArea()?.clientHeight || root.clientHeight) * 0.8)
+    })
   })
 
   createEffect(
@@ -615,6 +628,20 @@ export function createTimelineVirtualizer(input: Input) {
       { defer: true },
     ),
   )
+
+  // The content is as tall as the rows the virtualizer sizes, so it reports that height rather than the session
+  // observing the element. A ResizeObserver there sees the height a row's own observer commits during its delivery, and
+  // Chrome reports every such frame as "ResizeObserver loop completed with undelivered notifications."
+  createEffect(
+    on([active, () => virtualizer.getTotalSize() - rendering.scrollAdjustment], () => {
+      if (active()) input.onContentResize()
+    }),
+  )
+
+  // Only the viewport carries the inset as a variable, for its fade and scroll padding. The variable does not inherit
+  // (see index.css): the inset changes on every frame while the composer region grows, and an inherited variable would
+  // restyle every rendered row each time.
+  createEffect(() => listRoot()?.style.setProperty("--session-timeline-inset", `${bottomInset()}px`))
 
   let coldPending = coldBottomMount
   let settleQueued = false
@@ -960,21 +987,16 @@ export function createTimelineVirtualizer(input: Input) {
     }
 
     return (
-      <div
-        ref={setViewRoot}
-        class="relative w-full h-full min-w-0"
-        style={{
-          "--session-timeline-inset": `${bottomInset()}px`,
-        }}
-      >
+      <div ref={setViewRoot} class="relative w-full h-full min-w-0">
         <div
-          class="absolute bottom-[calc(var(--session-timeline-inset)+32px)] left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-[opacity,translate]"
+          class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-[opacity,translate]"
           classList={{
             "opacity-100 translate-y-0 duration-150 ease-[cubic-bezier(.2,.8,.2,1)]":
               input.scroll().overflow && input.scroll().jump,
             "opacity-0 translate-y-1 motion-reduce:translate-y-0 duration-[110ms] ease-[cubic-bezier(.4,0,1,1)]":
               !input.scroll().overflow || !input.scroll().jump,
           }}
+          style={{ bottom: `${bottomInset() + 32}px` }}
           inert={!input.scroll().overflow || !input.scroll().jump}
         >
           <button
@@ -1016,11 +1038,7 @@ export function createTimelineVirtualizer(input: Input) {
           </Show>
           <div
             data-timeline-virtual-content
-            ref={(element) => {
-              virtualContent = element
-
-              if (active()) input.setContentRef(element)
-            }}
+            ref={virtualContent}
             style={{
               height: `${virtualizer.getTotalSize() - rendering.scrollAdjustment}px`,
               position: "relative",
@@ -1051,12 +1069,13 @@ export function createTimelineVirtualizer(input: Input) {
               {props.bottomSpacer}
             </div>
           </div>
-          <div aria-hidden="true" data-timeline-inset class="h-[var(--session-timeline-inset)] shrink-0" />
+          <div aria-hidden="true" data-timeline-inset class="shrink-0" style={{ height: `${bottomInset()}px` }} />
         </ScrollView>
         <div
           ref={setVisibleArea}
           data-slot="session-timeline-visible"
-          class="pointer-events-none absolute inset-x-0 top-0 bottom-[var(--session-timeline-inset)]"
+          class="pointer-events-none absolute inset-x-0 top-0"
+          style={{ bottom: `${bottomInset()}px` }}
         />
       </div>
     )
@@ -1081,6 +1100,7 @@ export function createTimelineVirtualizer(input: Input) {
       input.setRevealMessage?.(() => {})
       input.setRevealPart?.(() => false)
       input.setScrollToEnd?.(() => {})
+      input.setPage?.(() => {})
     }
   })
 

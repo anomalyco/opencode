@@ -11,6 +11,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Keybind } from "@opencode/ui/keybind"
+import { uuid } from "@opencode/util/uuid"
 import { createKeyed, usePlugin, usePanel, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
 import type { TerminalModel, TerminalWorkspace } from "./model"
 import { terminalTab, type LocalPTY } from "./state"
@@ -62,7 +63,7 @@ export default function TerminalPanel(props: {
     available: () => opened() && props.screen.composer.quotable(),
     add(text, anchor) {
       const composer = props.screen.composer
-      const commentID = crypto.randomUUID()
+      const commentID = uuid()
 
       composer.attach({
         type: "quote",

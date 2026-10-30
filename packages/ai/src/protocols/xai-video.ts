@@ -132,7 +132,7 @@ const decodeStatus = Effect.fn("XAIVideo.decodeStatus")(function* (
   context: MediaProtocol.PollContext<Token>,
 ) {
   const output = yield* decodeVideoStatus(response)
-  const status = yield* MediaProtocol.status(STATUS, output.value.status, output)
+  const status = MediaProtocol.status(STATUS, output.value.status)
   return { id: context.token.requestID, status, progress: fraction(output.value.progress) }
 })
 
@@ -142,7 +142,7 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
 ) {
   const output = yield* decodeVideoStatus(response)
   const decoded = output.value
-  const status = yield* MediaProtocol.status(STATUS, decoded.status, output)
+  const status = MediaProtocol.status(STATUS, decoded.status)
   if (status === "running") return yield* output.pending(context.token.requestID)
   if (status === "failed") {
     const code = decoded.error?.code ?? undefined

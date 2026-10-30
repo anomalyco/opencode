@@ -179,7 +179,7 @@ export function SettingsScreen() {
         if (!root || event.ctrlKey || !event.deltaY || !(event.target instanceof Element)) return
 
         // The page scrolls inside its panel, so a wheel over the gutters or sidebar would otherwise do nothing.
-        if (event.target.closest(".settings-content") || scrollsNatively(event.target, root, event.deltaY)) return
+        if (event.target.closest(".settings-content") || insideScroller(event.target, root)) return
         const panel = root.querySelector<HTMLElement>(".settings-content > .settings-panel")
 
         if (!panel) return
@@ -210,11 +210,12 @@ export function SettingsScreen() {
   )
 }
 
-function scrollsNatively(target: Element, root: Element, deltaY: number) {
+// An overflowing scroller owns the wheel even at its edges, so reaching the end of the nav list does not scroll the page.
+function insideScroller(target: Element, root: Element) {
   for (let node: Element | null = target; node && node !== root; node = node.parentElement) {
     if (!/auto|scroll/.test(getComputedStyle(node).overflowY)) continue
 
-    if (deltaY < 0 ? node.scrollTop > 0 : node.scrollHeight - node.clientHeight - node.scrollTop > 1) return true
+    if (node.scrollHeight - node.clientHeight > 1) return true
   }
 
   return false

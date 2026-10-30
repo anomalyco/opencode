@@ -1,6 +1,6 @@
 {
   "name": "@opencode/pty",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Persistent PTY service for OpenCode",
   "type": "module",
   "license": "MIT",
@@ -25,14 +25,14 @@
     "index.js"
   ],
   "optionalDependencies": {
-    "@opencode/pty-darwin-arm64": "0.3.2",
-    "@opencode/pty-darwin-x64": "0.3.2",
-    "@opencode/pty-linux-arm64-gnu": "0.3.2",
-    "@opencode/pty-linux-arm64-musl": "0.3.2",
-    "@opencode/pty-linux-x64-gnu": "0.3.2",
-    "@opencode/pty-linux-x64-musl": "0.3.2",
-    "@opencode/pty-win32-arm64": "0.3.2",
-    "@opencode/pty-win32-x64": "0.3.2"
+    "@opencode/pty-darwin-arm64": "0.4.0",
+    "@opencode/pty-darwin-x64": "0.4.0",
+    "@opencode/pty-linux-arm64-gnu": "0.4.0",
+    "@opencode/pty-linux-arm64-musl": "0.4.0",
+    "@opencode/pty-linux-x64-gnu": "0.4.0",
+    "@opencode/pty-linux-x64-musl": "0.4.0",
+    "@opencode/pty-win32-arm64": "0.4.0",
+    "@opencode/pty-win32-x64": "0.4.0"
   },
   "publishConfig": {
     "access": "public"

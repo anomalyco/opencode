@@ -18,7 +18,7 @@ import { createStore } from "solid-js/store"
 import { useGlobal } from "@/runtime/server/runtime"
 import { inferHomeDirectory } from "@/runtime/server/global-sync/bootstrap"
 import { useLanguage } from "@/runtime/i18n/language"
-import { ServerConnection, serverName } from "@/runtime/server/registry"
+import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
 import { pathKey } from "@/workspaces/path-key"
 import type { LocationRef } from "@opencode/client/promise"
 import {
@@ -61,6 +61,7 @@ interface DirectoryPickerDialogProps {
 
 export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   const global = useGlobal()
+  const servers = useServers()
   const serverCtx = global.ensureServerCtx(props.server)
   const sync = serverCtx.sync
   const sdk = serverCtx.sdk
@@ -121,7 +122,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       sync.data.path.home || inferHomeDirectory(props.location?.directory ?? ""),
   )
 
-  const subtitle = createMemo(() => (ServerConnection.local(props.server) ? undefined : serverName(props.server)))
+  const subtitle = createMemo(() => (servers.local(props.server) ? undefined : serverName(props.server)))
 
   const location = createMemo(() => {
     const current = props.location ?? fallbackPath.latest

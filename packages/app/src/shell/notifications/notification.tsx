@@ -1,12 +1,12 @@
 import { createEffect, createMemo, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Schema } from "effect"
-import type { SessionInfo } from "@opencode/client/promise"
+import { isSessionNotFoundError, type SessionInfo } from "@opencode/client/promise"
 import type { ServerSDK } from "@/runtime/server/client"
 import type { Data } from "@opencode/client/solid"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useSettings } from "@/settings/model"
+import { projectSettingsKey, useSettings } from "@/settings/model"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { playSoundById } from "@/shell/notifications/sound"
@@ -16,6 +16,13 @@ import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { useServer } from "@/runtime/server/current"
 
 type NotificationTabs = Pick<ReturnType<typeof useTabs>, "addSessionTab" | "rememberSessionRoute" | "select">
+
+const requestTitles = {
+  permission: "notification.permission.title",
+  question: "notification.question.title",
+  "mcp-elicitation": "notification.elicitation.title",
+  "websearch.provider": "notification.permission.title",
+} as const
 
 export function openNotificationSession(tabs: NotificationTabs, server: ServerConnection.Key, sessionID: string) {
   const tab = tabs.addSessionTab({ server, sessionId: sessionID })
@@ -201,7 +208,14 @@ export function createServerNotificationState(input: {
         viewRetryTimer = undefined
         viewRetryAttempt = 0
       },
-      () => {
+      (error) => {
+        if (isSessionNotFoundError(error)) {
+          acknowledged.delete(root)
+          input.data.session.forget(root)
+
+          return
+        }
+
         if (acknowledged.get(root) !== idle) return
         acknowledged.delete(root)
 
@@ -280,7 +294,67 @@ export function createServerNotificationState(input: {
     })
   }
 
+  const handleRequest = async (kind: keyof typeof requestTitles, sessionID: string, requestID: string) => {
+    const session = await lookup(sessionID)
+
+    if (!session || disposed.value) return
+
+    const target = sessionIDHasOpenTab(tabs.store, input.key, sessionID)
+      ? sessionID
+      : input.data.session.root(sessionID)
+
+    if (!sessionIDHasOpenTab(tabs.store, input.key, target)) return
+
+    const category = kind === "question" || kind === "mcp-elicitation" ? "questions" : "permissions"
+
+    const pending = () => {
+      if (disposed.value) return false
+
+      if (kind !== "permission") return input.data.session.form.list(sessionID)?.some((form) => form.id === requestID)
+
+      if (settings.permissions.autoApproves(projectSettingsKey(input.sdk.scope, session.projectID))) return false
+
+      return input.data.session.permission.list(sessionID)?.some((request) => request.id === requestID)
+    }
+
+    if (!pending()) return
+
+    const key = `${input.key}\0${kind}:${requestID}`
+
+    if (settings.sounds[`${category}Enabled`]()) {
+      void input.coordinator.sound(key, () => {
+        if (pending()) return playSoundById(settings.sounds[category]())
+      })
+    }
+
+    if (!settings.notifications[category]()) return
+
+    void input.coordinator.system(key, () => {
+      if (!pending()) return
+
+      return platform.notify(language.t(requestTitles[kind]), session.title ?? sessionID, () =>
+        openNotificationSession(tabs, input.key, target),
+      )
+    })
+  }
+
   const unsub = input.sdk.event.listen((event) => {
+    if (event.type === "permission.asked") {
+      void handleRequest("permission", event.data.sessionID, event.data.id)
+
+      return
+    }
+
+    if (event.type === "form.created") {
+      const kind = event.data.form.metadata?.kind
+
+      if (kind === "question" || kind === "mcp-elicitation" || kind === "websearch.provider") {
+        void handleRequest(kind, event.data.form.sessionID, event.data.form.id)
+      }
+
+      return
+    }
+
     if (event.type === "session.execution.failed") {
       handleSessionError(event.data.sessionID, event.id)
 

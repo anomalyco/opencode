@@ -327,11 +327,15 @@ export type ScheduleWhenAt = { type: "at"; at: string; tz?: string }
 
 export type ScheduleWhenCron = { type: "cron"; cron: string; tz?: string }
 
+export type ScheduleConditionShell = { type: "shell"; run: string; is?: string; matches?: string; changes?: boolean }
+
+export type ScheduleConditionCode = { type: "code"; code: string }
+
 export type ScheduleActionPrompt = { type: "prompt"; prompt: string }
 
 export type ScheduleStatus = "active" | "paused" | "done"
 
-export type ScheduleOutcome = "fired" | "late" | "skipped" | "disabled" | "failed"
+export type ScheduleOutcome = "fired" | "late" | "checked" | "expired" | "skipped" | "disabled" | "failed"
 
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
@@ -904,6 +908,8 @@ export type FormAnswer1 = { [x: string]: FormValue1 }
 export type ScheduleWhenIn = { type: "in"; in: ScheduleDuration; tz?: string }
 
 export type ScheduleWhenEvery = { type: "every"; every: ScheduleDuration; tz?: string }
+
+export type ScheduleCondition = ScheduleConditionShell | ScheduleConditionCode
 
 export type ScheduleAction = ScheduleActionPrompt
 
@@ -2290,7 +2296,14 @@ export type ConfigEntry =
         timezone?: string
         permissions?: PermissionRuleset
         policies?: Array<{
-          action: "provider.use" | "tool.use" | "integration.use"
+          action:
+            | "provider.use"
+            | "tool.use"
+            | "integration.connect"
+            | "integration.use"
+            | "mcp.use"
+            | "skill.use"
+            | "plugin.use"
           resource: string
           effect: "allow" | "deny"
         }>
@@ -2453,7 +2466,14 @@ export type ConfigEntry =
           subagent_depth?: number
           location_idle_timeout?: string | false
           policies?: Array<{
-            action: "provider.use" | "tool.use" | "integration.use"
+            action:
+              | "provider.use"
+              | "tool.use"
+              | "integration.connect"
+              | "integration.use"
+              | "mcp.use"
+              | "skill.use"
+              | "plugin.use"
             resource: string
             effect: "allow" | "deny"
           }>
@@ -2538,6 +2558,8 @@ export type ScheduleInfo = {
   name?: string
   when: ScheduleWhen
   tz: string
+  if?: ScheduleCondition
+  until?: ScheduleCondition
   action: ScheduleAction
   status: ScheduleStatus
   nextDueAt?: number
@@ -2546,6 +2568,7 @@ export type ScheduleInfo = {
   runCount: number
   lastFiredAt?: number
   lastOutcome?: ScheduleOutcome
+  lastOutput?: string
   time: { created: number; updated: number }
 }
 
@@ -3259,6 +3282,7 @@ export type SessionPromptInput = {
   readonly files?:
     | ReadonlyArray<{
         readonly uri: string
+        readonly source?: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
         readonly name?: string
         readonly description?: string
         readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
@@ -3290,6 +3314,7 @@ export type SessionCommandInput = {
   readonly files?:
     | ReadonlyArray<{
         readonly uri: string
+        readonly source?: { readonly type: "inline" } | { readonly type: "uri"; readonly uri: string }
         readonly name?: string
         readonly description?: string
         readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
@@ -4403,11 +4428,74 @@ export type ExperimentalMediaGetOutput = globalThis.Uint8Array
 export type ExperimentalScheduleCreateInput = {
   readonly sessionID: string
   readonly name?: string | undefined
-  readonly when:
-    | { readonly in: string; readonly at?: never; readonly every?: never; readonly cron?: never; readonly tz?: string }
-    | { readonly at: string; readonly in?: never; readonly every?: never; readonly cron?: never; readonly tz?: string }
-    | { readonly every: string; readonly in?: never; readonly at?: never; readonly cron?: never; readonly tz?: string }
-    | { readonly cron: string; readonly in?: never; readonly at?: never; readonly every?: never; readonly tz?: string }
+  readonly when?:
+    | (
+        | {
+            readonly in: string
+            readonly at?: never
+            readonly every?: never
+            readonly cron?: never
+            readonly tz?: string
+          }
+        | {
+            readonly at: string
+            readonly in?: never
+            readonly every?: never
+            readonly cron?: never
+            readonly tz?: string
+          }
+        | {
+            readonly every: string
+            readonly in?: never
+            readonly at?: never
+            readonly cron?: never
+            readonly tz?: string
+          }
+        | {
+            readonly cron: string
+            readonly in?: never
+            readonly at?: never
+            readonly every?: never
+            readonly tz?: string
+          }
+      )
+    | undefined
+  readonly if?:
+    | (
+        | {
+            readonly run: string
+            readonly is?: string
+            readonly matches?: string
+            readonly changes?: boolean
+            readonly code?: never
+          }
+        | {
+            readonly code: string
+            readonly run?: never
+            readonly is?: never
+            readonly matches?: never
+            readonly changes?: never
+          }
+      )
+    | undefined
+  readonly until?:
+    | (
+        | {
+            readonly run: string
+            readonly is?: string
+            readonly matches?: string
+            readonly changes?: boolean
+            readonly code?: never
+          }
+        | {
+            readonly code: string
+            readonly run?: never
+            readonly is?: never
+            readonly matches?: never
+            readonly changes?: never
+          }
+      )
+    | undefined
   readonly ends?: { readonly after?: string; readonly at?: string; readonly times?: number } | undefined
   readonly prompt: string
 }
