@@ -16,7 +16,7 @@ const Options = Schema.Struct({
   clearThinking: Schema.optional(Schema.Boolean),
   thinking: Schema.optional(
     Schema.Struct({
-      type: Schema.declare<"adaptive" | "disabled" | (string & {})>(Schema.is(Schema.String)),
+      type: ProviderShared.knownString<"adaptive" | "disabled">(),
     }),
   ),
   toolStream: Schema.optional(Schema.Boolean),
@@ -24,7 +24,7 @@ const Options = Schema.Struct({
   repetitionPenalty: Schema.optional(Schema.Number),
   responseFormat: Schema.optional(
     Schema.Struct({
-      type: Schema.declare<"text" | "json_object" | "json_schema" | (string & {})>(Schema.is(Schema.String)),
+      type: ProviderShared.knownString<"text" | "json_object" | "json_schema">(),
       json_schema: Schema.optional(JsonObject),
     }),
   ),
@@ -32,9 +32,7 @@ const Options = Schema.Struct({
   searchOptions: Schema.optional(
     Schema.Struct({
       forced_search: Schema.optional(Schema.Boolean),
-      search_strategy: Schema.optional(
-        Schema.declare<"turbo" | "max" | "agent" | "agent_max" | (string & {})>(Schema.is(Schema.String)),
-      ),
+      search_strategy: Schema.optional(ProviderShared.knownString<"turbo" | "max" | "agent" | "agent_max">()),
       enable_search_extension: Schema.optional(Schema.Boolean),
     }),
   ),

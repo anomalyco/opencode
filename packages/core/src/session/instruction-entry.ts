@@ -4,7 +4,7 @@ import { and, asc, eq, isNotNull, isNull, ne, or } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Database } from "../database/database.js"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Instructions } from "../instructions/index.js"
 import { SessionSchema } from "./schema.js"
 import { InstructionEntryTable } from "./sql.js"
@@ -178,4 +178,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Database.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })

@@ -32,6 +32,7 @@ import { effortUpdate } from "../effort-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
+import { OpenAIFreeform } from "./openai-freeform.js"
 
 const ADAPTER = "open-responses"
 const NAME = "Open Responses"
@@ -51,7 +52,7 @@ export const OpenResponsesInputImage = Schema.Struct({
 })
 export const OpenResponsesInputFile = Schema.Struct({
   type: Schema.tag("input_file"),
-  filename: Schema.String,
+  filename: Schema.optional(Schema.String),
   detail: Schema.optional(Schema.String),
   file_data: Schema.optional(Schema.String),
   file_url: Schema.optional(Schema.String),
@@ -60,7 +61,7 @@ const OpenResponsesInputVideo = Schema.Struct({
   type: Schema.tag("input_video"),
   video_url: Schema.String,
 })
-const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile])
+const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile, OpenResponsesInputVideo])
 export type MediaInput = Schema.Schema.Type<typeof MediaInput>
 const OpenResponsesInputContent = Schema.Union([OpenResponsesInputText, MediaInput])
 
@@ -217,9 +218,16 @@ export const InputItem = Schema.Union([
     arguments: Schema.String,
   }),
   Schema.Struct({
-    type: Schema.tag("function_call_output"),
+    type: Schema.Literals(["function_call_output", "custom_tool_call_output"]),
     call_id: Schema.String,
     output: OpenResponsesFunctionCallOutput,
+  }),
+  Schema.Struct({
+    type: Schema.tag("custom_tool_call"),
+    id: Schema.optionalKey(Schema.String),
+    call_id: Schema.String,
+    name: Schema.String,
+    input: Schema.String,
   }),
   HostedToolItem,
   HostedToolReplay,
@@ -242,6 +250,20 @@ export const Tool = Schema.Struct({
   strict: Schema.optional(Schema.Boolean),
 })
 
+export const CustomTool = Schema.Struct({
+  type: Schema.tag("custom"),
+  name: Schema.String,
+  description: Schema.String,
+  format: Schema.Union([
+    Schema.Struct({ type: Schema.tag("text") }),
+    Schema.Struct({
+      type: Schema.tag("grammar"),
+      syntax: Schema.Literals(["lark", "regex"]),
+      definition: Schema.String,
+    }),
+  ]),
+})
+
 export const HostedTool = Schema.StructWithRest(
   Schema.Struct({
     type: Schema.String,
@@ -250,13 +272,15 @@ export const HostedTool = Schema.StructWithRest(
 )
 export type HostedTool = Schema.Schema.Type<typeof HostedTool>
 
+const NamedTool = Schema.Struct({ type: Schema.Literals(["function", "custom"]), name: Schema.String })
+
 export const ToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
-  Schema.Struct({ type: Schema.tag("function"), name: Schema.String }),
+  NamedTool,
   Schema.Struct({
     type: Schema.tag("allowed_tools"),
     mode: Schema.Literals(["auto", "none", "required"]),
-    tools: Schema.Array(Schema.Struct({ type: Schema.tag("function"), name: Schema.String })),
+    tools: Schema.Array(NamedTool),
   }),
 ])
 
@@ -268,7 +292,7 @@ export const coreFields = {
   model: Schema.String,
   input: Schema.Array(InputItem),
   instructions: Schema.optional(Schema.String),
-  tools: optionalArray(Schema.Union([Tool, HostedTool])),
+  tools: optionalArray(Schema.Union([Tool, CustomTool, HostedTool])),
   tool_choice: Schema.optional(ToolChoice),
   store: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -420,6 +444,7 @@ export interface ParserState {
   readonly name: string
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<string>
+  readonly custom: ReadonlyMap<string, OpenAIFreeform.Custom>
   readonly hasFunctionCall: boolean
   readonly lifecycle: Lifecycle.State
   readonly outputItems: Readonly<Record<number, string>>
@@ -457,32 +482,73 @@ export const lowerTool = Effect.fnUntraced(function* (protocolName: string, tool
   }
 })
 
-export const lowerTools = (tools: ReadonlyArray<ToolDefinition>, adapter: ProviderAdapter) =>
+export const lowerCustomTool = (tool: ToolDefinition, custom: OpenAIFreeform.Custom) => {
+  const grammar = OpenAIFreeform.grammar(custom.format)
+  return {
+    type: "custom" as const,
+    name: tool.name,
+    description: tool.description,
+    format: grammar ? { type: "grammar" as const, ...grammar } : { type: "text" as const },
+  }
+}
+
+export const lowerTools = (
+  tools: ReadonlyArray<ToolDefinition>,
+  adapter: ProviderAdapter,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) =>
   Effect.forEach(
     tools,
-    (tool): Effect.Effect<Schema.Schema.Type<typeof Tool> | HostedTool, AIError> =>
-      tool.native !== undefined && adapter.nativeTool ? adapter.nativeTool(tool.native) : lowerTool(adapter.name, tool),
+    (tool): Effect.Effect<Schema.Schema.Type<typeof Tool | typeof CustomTool> | HostedTool, AIError> => {
+      if (tool.native !== undefined && adapter.nativeTool) return adapter.nativeTool(tool.native)
+      const definition = custom.get(tool.name)
+      return definition ? Effect.succeed(lowerCustomTool(tool, definition)) : lowerTool(adapter.name, tool)
+    },
   )
 
-export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
+export const namedTool = (name: string, custom: ReadonlyMap<string, OpenAIFreeform.Custom>) => ({
+  type: custom.has(name) ? ("custom" as const) : ("function" as const),
+  name,
+})
+
+export const lowerToolChoice = (
+  protocolName: string,
+  toolChoice: NonNullable<LLMRequest["toolChoice"]>,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) =>
   ProviderShared.matchToolChoice(protocolName, toolChoice, {
     auto: () => "auto" as const,
     none: () => "none" as const,
     required: () => "required" as const,
-    tool: (toolName) => ({ type: "function" as const, name: toolName }),
+    tool: (toolName) => namedTool(toolName, custom),
   })
 
 // Server-issued item ids need a nonempty prefix and suffix, but the prefix is
 // provider-defined and does not necessarily identify the item's semantic type.
 const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadataKey: string) => {
   const metadata = providerMetadata?.[providerMetadataKey]
-  if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string") return undefined
+  if (!metadata || typeof metadata.itemId !== "string") return undefined
   const separator = metadata.itemId.indexOf("_")
   return separator > 0 && separator < metadata.itemId.length - 1 ? metadata.itemId : undefined
 }
 
-const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenResponsesInputItem => {
-  const id = itemID(part.providerMetadata, providerMetadataKey)
+// A call replays as the type its tool is declared with now; the item id only survives when that type is unchanged.
+const lowerToolCall = (
+  part: ToolCallPart,
+  providerMetadataKey: string,
+  custom: OpenAIFreeform.Custom | undefined,
+): OpenResponsesInputItem => {
+  const id = OpenAIFreeform.keepsItemID(part.providerMetadata, providerMetadataKey, custom !== undefined)
+    ? itemID(part.providerMetadata, providerMetadataKey)
+    : undefined
+  if (custom)
+    return {
+      type: "custom_tool_call",
+      ...(id === undefined ? {} : { id }),
+      call_id: part.id,
+      name: part.name,
+      input: OpenAIFreeform.toRaw(custom, part.input),
+    }
   return {
     type: "function_call",
     ...(id === undefined ? {} : { id }),
@@ -495,7 +561,7 @@ const lowerToolCall = (part: ToolCallPart, providerMetadataKey: string): OpenRes
 
 const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenResponsesReasoningInput | undefined => {
   const metadata = part.providerMetadata?.[providerMetadataKey]
-  if (!ProviderShared.isRecord(metadata)) return undefined
+  if (!metadata) return undefined
   const id = itemID(part.providerMetadata, providerMetadataKey)
   const encryptedContent =
     typeof metadata.reasoningEncryptedContent === "string" || metadata.reasoningEncryptedContent === null
@@ -513,12 +579,7 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
 const decodeImageDetail = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))
 const decodeMessageMetadata = ProviderShared.validateWith(Schema.decodeUnknownEffect(MessageMetadata))
 
-const lowerMedia = Effect.fnUntraced(function* (
-  part: MediaPart,
-  request: LLMRequest,
-  adapter: ProviderAdapter,
-  target: "message" | "tool-result",
-) {
+const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
   const media = part.media.inline()
   const providerMedia = adapter.lowerMedia?.({ part, media, request })
   if (providerMedia) return providerMedia
@@ -528,13 +589,13 @@ const lowerMedia = Effect.fnUntraced(function* (
   const url = ProviderShared.mediaUrl(part.media)
   const location = url ?? (yield* ProviderShared.requireInlineMedia(adapter.name, part.media)).dataUrl
   if (part.media.kind !== "image") {
-    if (target === "tool-result" && part.media.kind === "video")
-      return { type: "input_video" as const, video_url: location }
+    if (part.media.kind === "video") return { type: "input_video" as const, video_url: location }
+    if (url) return { type: "input_file" as const, file_url: url, detail }
     return {
       type: "input_file" as const,
       filename: part.filename ?? (mime === "application/pdf" ? "document.pdf" : "file"),
       detail,
-      ...(url ? { file_url: url } : { file_data: location }),
+      file_data: location,
     }
   }
   return {
@@ -550,15 +611,8 @@ const lowerUserContent = Effect.fnUntraced(function* (
   adapter: ProviderAdapter,
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
-  if (part.type === "media") return yield* lowerMessageMedia(part, request, adapter)
+  if (part.type === "media") return yield* lowerMedia(part, request, adapter)
   return yield* ProviderShared.unsupportedContent(adapter.name, "user", ["text", "media"])
-})
-
-const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
-  const lowered = yield* lowerMedia(part, request, adapter, "message")
-  if (lowered.type === "input_video")
-    return yield* ProviderShared.invalidRequest(`${adapter.name} user messages do not support input_video`)
-  return lowered
 })
 
 // Tool results may carry structured text, images, and files. Keep media as provider-native
@@ -569,16 +623,7 @@ const lowerToolResultContentItem = Effect.fnUntraced(function* (
   adapter: ProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  return yield* lowerMedia(ProviderShared.toolFileMedia(item), request, adapter, "tool-result")
-})
-
-const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
-  item: Content,
-  request: LLMRequest,
-  adapter: ProviderAdapter,
-) {
-  if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  return yield* lowerMessageMedia(ProviderShared.toolFileMedia(item), request, adapter)
+  return yield* lowerMedia(ProviderShared.toolFileMedia(item), request, adapter)
 })
 
 const lowerToolResultOutput = Effect.fnUntraced(function* (
@@ -602,6 +647,9 @@ const lowerMessages = Effect.fnUntraced(function* (
 ) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
+  const custom = OpenAIFreeform.tools(request)
+  const customTool = (part: ToolCallPart | ToolResultPart) =>
+    part.namespace === undefined ? custom.get(part.name) : undefined
 
   for (const message of request.messages) {
     const rawMetadata = message.providerMetadata?.[providerMetadataKey]
@@ -693,7 +741,7 @@ const lowerMessages = Effect.fnUntraced(function* (
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part, providerMetadataKey))
+          input.push(lowerToolCall(part, providerMetadataKey, customTool(part)))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
@@ -719,7 +767,7 @@ const lowerMessages = Effect.fnUntraced(function* (
           input.push({
             type: "message",
             role: "user",
-            content: yield* Effect.forEach(content, (item) => lowerHostedToolResultContentItem(item, request, adapter)),
+            content: yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter)),
           })
           continue
         }
@@ -729,7 +777,7 @@ const lowerMessages = Effect.fnUntraced(function* (
           input.push({
             type: "message",
             role: "user",
-            content: [yield* lowerMessageMedia(part, request, adapter)],
+            content: [yield* lowerMedia(part, request, adapter)],
           })
           continue
         }
@@ -749,7 +797,7 @@ const lowerMessages = Effect.fnUntraced(function* (
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent(adapter.name, "tool", ["tool-result"])
       input.push({
-        type: "function_call_output",
+        type: customTool(part) ? "custom_tool_call_output" : "function_call_output",
         call_id: part.id,
         output: yield* lowerToolResultOutput(part, request, adapter),
       })
@@ -774,7 +822,7 @@ export const lowerConversation = Effect.fnUntraced(function* (
 export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
   const generation = request.generation
   const cacheKey = ProviderShared.promptCacheKey(request)
-  const parallelToolCalls = resolveParallelToolCalls(request)
+  const parallelToolCalls = resolveParallelToolCalls(request, options)
   return {
     stream: true as const,
     max_output_tokens: generation?.maxTokens,
@@ -802,20 +850,23 @@ export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOpti
   }
 }
 
-export const resolveParallelToolCalls = (request: LLMRequest) => {
-  const configured = OpenResponsesOptions.resolve(request).parallelToolCalls
+export const resolveParallelToolCalls = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
+  const configured = options.parallelToolCalls
   if (configured !== undefined) return configured
   const disabled = request.toolChoice?.disableParallelToolUse
   return disabled === undefined ? undefined : !disabled
 }
 
-export const allowedToolChoice = (request: LLMRequest) => {
-  const allowed = OpenResponsesOptions.resolve(request).allowedTools
+export const allowedToolChoice = (
+  options: OpenResponsesOptions.Resolved,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) => {
+  const allowed = options.allowedTools
   if (!allowed) return undefined
   return {
     type: "allowed_tools" as const,
     mode: allowed.mode,
-    tools: allowed.toolNames.map((name) => ({ type: "function" as const, name })),
+    tools: allowed.toolNames.map((name) => namedTool(name, custom)),
   }
 }
 
@@ -824,13 +875,15 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   adapter: ProviderAdapter,
 ) {
   const projected = ProviderShared.flattenToolRequest(request)
+  const options = OpenResponsesOptions.resolve(request)
+  const custom = OpenAIFreeform.tools(request)
   return {
     ...(yield* lowerConversation(projected.request, adapter)),
-    ...lowerGeneration(request),
-    tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter),
+    ...lowerGeneration(request, options),
+    tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter, custom),
     tool_choice:
-      allowedToolChoice(request) ??
-      (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice) : undefined),
+      allowedToolChoice(options, custom) ??
+      (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice, custom) : undefined),
   }
 })
 
@@ -857,6 +910,7 @@ export const mapUsage = (usage: OpenResponsesUsage | null | undefined, providerM
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(usage.input_tokens, usage.output_tokens, usage.total_tokens),
+    ...ProviderShared.reportedBilling(usage),
     providerMetadata: { [providerMetadataKey]: usage },
   })
 }
@@ -929,6 +983,7 @@ const ITEM_ID_PREFIX: Readonly<Record<string, string>> = {
   message: "msg",
   reasoning: "rs",
   function_call: "fc",
+  custom_tool_call: "ctc",
   compaction: "cmp",
 }
 
@@ -1021,7 +1076,7 @@ export const onReasoningDelta = (state: ParserState, event: Event, itemID: strin
 // as a single delta unless that summary index already streamed one.
 export const onReasoningDone = (state: ParserState, event: Event, itemID: string): StepResult => {
   const item = state.reasoningItems[itemID]
-  if (!item || typeof event.text !== "string") return [state, NO_EVENTS]
+  if (!item || event.text === undefined) return [state, NO_EVENTS]
   const index = event.summary_index ?? 0
   if (item.deltaIndexes.has(index)) return [state, NO_EVENTS]
   return onReasoningDelta(state, { ...event, delta: event.text }, itemID)
@@ -1089,23 +1144,24 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
       events,
     ]
   }
-  if (item.type !== "function_call" || !item.call_id) return [state, NO_EVENTS]
+  if ((item.type !== "function_call" && item.type !== "custom_tool_call") || !item.call_id) return [state, NO_EVENTS]
   if (state.tools[item.id] !== undefined) return [state, NO_EVENTS]
-  const metadata = providerMetadata(state, { itemId: item.id })
+  const custom = item.type === "custom_tool_call"
+  const metadata = providerMetadata(state, OpenAIFreeform.metadata(item.id, custom))
   const events: LLMEvent[] = []
   const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+  const tools = ToolStream.start(state.tools, item.id, {
+    id: item.call_id,
+    name: item.name ?? "",
+    namespace: item.namespace,
+    input: custom ? "" : (item.arguments ?? ""),
+    providerMetadata: metadata,
+  })
+  const opened = custom
+    ? ToolStream.append(tools, item.id, OpenAIFreeform.streamStart(state.custom.get(item.name ?? ""), rawInput(item)))
+    : undefined
   return [
-    {
-      ...state,
-      lifecycle,
-      tools: ToolStream.start(state.tools, item.id, {
-        id: item.call_id,
-        name: item.name ?? "",
-        namespace: item.namespace,
-        input: item.arguments ?? "",
-        providerMetadata: metadata,
-      }),
-    },
+    { ...state, lifecycle, tools: opened?.tools ?? tools },
     [
       ...events,
       LLMEvent.toolInputStart({
@@ -1114,9 +1170,12 @@ const onOutputItemAdded = (state: ParserState, event: NormalizedEvent): StepResu
         namespace: item.namespace,
         providerMetadata: metadata,
       }),
+      ...(opened?.events ?? []),
     ],
   ]
 }
+
+const rawInput = (item: OutputItem) => (typeof item.input === "string" ? item.input : "")
 
 const onReasoningSummaryPartAdded = (state: ParserState, event: Event): StepResult => {
   if (event.item_id === undefined || event.summary_index === undefined) return [state, NO_EVENTS]
@@ -1227,12 +1286,16 @@ const onOutputItemDone = Effect.fnUntraced(function* (
     ] satisfies StepResult
   }
 
-  if (item.type === "function_call") {
+  if (item.type === "function_call" || item.type === "custom_tool_call") {
     if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
-    const metadata = providerMetadata(state, { itemId: item.id })
+    const custom = item.type === "custom_tool_call"
+    const metadata = providerMetadata(state, OpenAIFreeform.metadata(item.id, custom))
+    const final = { custom: state.custom.get(item.name), raw: rawInput(item) }
+    const input = custom ? OpenAIFreeform.fromRaw(final.custom, final.raw) : item.arguments
     const registered = state.tools[item.id] !== undefined
+    const closed = custom ? OpenAIFreeform.close(state.tools, [item.id], final) : undefined
     const tools = registered
-      ? state.tools
+      ? (closed?.tools ?? state.tools)
       : ToolStream.start(state.tools, item.id, {
           id: item.call_id,
           name: item.name,
@@ -1240,11 +1303,11 @@ const onOutputItemDone = Effect.fnUntraced(function* (
           providerMetadata: metadata,
         })
     const result =
-      item.arguments === undefined
+      input === undefined
         ? yield* ToolStream.finish(state.id, tools, item.id)
-        : yield* ToolStream.finishWithInput(state.id, tools, item.id, item.arguments)
+        : yield* ToolStream.finishWithInput(state.id, tools, item.id, input)
     const events: LLMEvent[] = []
-    const finished = result.events ?? []
+    const finished = [...(closed?.events ?? []), ...(result.events ?? [])]
     // A done-only call never streamed a start event, so open its lifecycle here.
     const resultEvents =
       registered || finished.length === 0
@@ -1326,7 +1389,8 @@ const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event:
           "Cannot recover a compaction checkpoint after output has been emitted",
         )
       const recoverable =
-        item.type === "compaction" || (item.type === "function_call" && current.tools[item.id] !== undefined)
+        item.type === "compaction" ||
+        ((item.type === "function_call" || item.type === "custom_tool_call") && current.tools[item.id] !== undefined)
       if (!recoverable) continue
       const [next, emitted] = yield* onOutputItemDone(current, item)
       current = next
@@ -1454,6 +1518,14 @@ export const step = (state: ParserState, event: NormalizedEvent) => {
     return event.item_id !== undefined
       ? onFunctionCallArgumentsDelta(state, event)
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
+  if (event.type === "response.custom_tool_call_input.delta")
+    return event.item_id !== undefined
+      ? onFunctionCallArgumentsDelta(state, {
+          ...event,
+          type: "response.function_call_arguments.delta",
+          delta: OpenAIFreeform.streamDelta(event.delta ?? ""),
+        })
+      : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.done") return onOutputItemDone(state, event.item)
   if (event.type === "response.completed" || event.type === "response.incomplete") return onResponseFinish(state, event)
   if (event.type === "response.failed") return providerFailure(event, `${state.name} response failed`)
@@ -1476,6 +1548,7 @@ export const initial = (request: LLMRequest, adapter: ProviderAdapter = BASE_ADA
   providerMetadataKey: metadataKey(request.model),
   hasFunctionCall: false,
   tools: ToolStream.empty<string>(),
+  custom: OpenAIFreeform.tools(request),
   lifecycle: Lifecycle.initial(),
   outputItems: {},
   message: undefined,

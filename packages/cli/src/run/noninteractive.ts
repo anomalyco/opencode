@@ -54,7 +54,7 @@ type ToolState = StartedPart & {
   input: Record<string, JsonValue>
   raw?: string
   provider?: unknown
-  providerState?: SessionMessageAssistantTool["providerState"]
+  native?: SessionMessageAssistantTool["native"]
   metadata: Record<string, JsonValue>
   content: ToolContent[]
 }
@@ -85,6 +85,9 @@ export async function runNonInteractivePrompt(input: Input) {
   const renderedText = new Map<string, string>()
   const renderedReasoning = new Map<string, string>()
   const renderedTools = new Set<string>()
+  // Live step events stop being read once the session goes idle, and the last step usually ends after
+  // that. Reconcile uses this to emit only the step_start/step_finish lines the live stream missed.
+  const steps = new Map<string, "started" | "ended">()
   let submitted = false
   let promoted = false
   let emittedError = false
@@ -280,6 +283,7 @@ export async function runNonInteractivePrompt(input: Input) {
           }
           continue
         }
+        steps.set(event.data.assistantMessageID, "started")
         if (!emit("step_start", time, { part }) && input.format !== "json") {
           UI.empty()
           UI.println(`> ${event.data.agent} · ${event.data.model.id}`)
@@ -331,7 +335,7 @@ export async function runNonInteractivePrompt(input: Input) {
           messageID: event.data.assistantMessageID,
           type: "reasoning",
           text: event.data.text,
-          metadata: event.data.state,
+          metadata: event.data.native,
           time: { start: started?.timestamp ?? time, end: time },
         }
         renderedReasoning.set(key, event.data.text)
@@ -373,8 +377,8 @@ export async function runNonInteractivePrompt(input: Input) {
           tool: current?.tool ?? "tool",
           input: event.data.input,
           raw: current?.raw,
-          provider: { executed: event.data.executed, state: event.data.state },
-          providerState: event.data.state,
+          provider: { executed: event.data.executed, state: event.data.native },
+          native: event.data.native,
           metadata: {},
           content: [],
         })
@@ -395,8 +399,7 @@ export async function runNonInteractivePrompt(input: Input) {
           id: event.data.id,
           name: current.tool,
           executed: event.data.executed,
-          providerState: current.providerState,
-          providerResultState: event.data.resultState,
+          native: event.data.native ? { ...current.native, ...event.data.native } : current.native,
           state: {
             status: "completed",
             input: current.input,
@@ -421,7 +424,7 @@ export async function runNonInteractivePrompt(input: Input) {
               metadata: event.data.metadata,
               content: event.data.content,
               providerCall: current.provider,
-              providerResult: { executed: event.data.executed, state: event.data.resultState },
+              providerResult: { executed: event.data.executed, state: event.data.native },
               rawInput: current.raw,
             },
             time: { start: current.timestamp, end: time },
@@ -443,8 +446,7 @@ export async function runNonInteractivePrompt(input: Input) {
           id: event.data.id,
           name: current.tool,
           executed: event.data.executed,
-          providerState: current.providerState,
-          providerResultState: event.data.resultState,
+          native: event.data.native ? { ...current.native, ...event.data.native } : current.native,
           state: {
             status: "error",
             input: current.input,
@@ -467,7 +469,7 @@ export async function runNonInteractivePrompt(input: Input) {
             error,
             metadata: {
               providerCall: current.provider,
-              providerResult: { executed: event.data.executed, state: event.data.resultState },
+              providerResult: { executed: event.data.executed, state: event.data.native },
               rawInput: current.raw,
             },
             time: { start: current.timestamp, end: time },
@@ -495,6 +497,7 @@ export async function runNonInteractivePrompt(input: Input) {
 
       if (event.type === "session.step.ended") {
         flushStep()
+        steps.set(event.data.assistantMessageID, "ended")
         const part = {
           id: partID(event.id),
           sessionID: input.sessionID,
@@ -570,6 +573,18 @@ export async function runNonInteractivePrompt(input: Input) {
     for (const message of projected.messages) {
       if (message.type !== "assistant") continue
       const timestamp = message.time.completed ?? message.time.created
+      const step = steps.get(message.id)
+      if (!step) {
+        emit("step_start", message.time.created, {
+          part: {
+            id: projectedPartID(message.id, "step-start"),
+            sessionID: input.sessionID,
+            messageID: message.id,
+            type: "step-start",
+            snapshot: message.snapshot?.start,
+          },
+        })
+      }
       let textOrdinal = 0
       let reasoningOrdinal = 0
       for (const item of message.content) {
@@ -606,7 +621,7 @@ export async function runNonInteractivePrompt(input: Input) {
             messageID: message.id,
             type: "reasoning",
             text,
-            metadata: item.state,
+            metadata: item.native,
             time: { start: message.time.created, end: timestamp },
           }
           renderedReasoning.set(key, item.text)
@@ -660,6 +675,21 @@ export async function runNonInteractivePrompt(input: Input) {
         }
         await input.renderToolError(item)
         UI.error(item.state.error.message)
+      }
+
+      if (step !== "ended" && message.finish && message.tokens) {
+        emit("step_finish", timestamp, {
+          part: {
+            id: projectedPartID(message.id, "step-finish"),
+            sessionID: input.sessionID,
+            messageID: message.id,
+            type: "step-finish",
+            reason: message.finish,
+            snapshot: message.snapshot?.end,
+            cost: message.cost ?? 0,
+            tokens: message.tokens,
+          },
+        })
       }
 
       // A declined tool call ends its step with an interrupted-step error that is
@@ -760,7 +790,7 @@ export async function runNonInteractivePrompt(input: Input) {
       return
     }
 
-    const waiting = input.client.session.wait({ sessionID: input.sessionID })
+    const waiting = input.client.experimental.session.wait({ sessionID: input.sessionID })
     await Promise.race([waiting, completed.then(() => waiting)])
     finalizing = true
     const projected = await reconcile()

@@ -8,14 +8,7 @@ import {
   type HttpContext,
   type TransportOperation,
 } from "../../schema/index.js"
-import * as HttpTransport from "./http.js"
-import type { Transport } from "./index.js"
-import type {
-  ChannelObservation,
-  WebSocketChannelDriver,
-  WebSocketChannelExchange,
-  WebSocketChannelExecutor,
-} from "./websocket-channel.js"
+import type { ChannelObservation, WebSocketChannelExecutor } from "./websocket-channel.js"
 
 export interface WebSocketRequest {
   readonly url: string
@@ -432,81 +425,7 @@ export const direct: Effect.Effect<WebSocketChannelExecutor, never, Socket.WebSo
   },
 )
 
-export interface JsonPrepared {
-  readonly url: string
-  readonly headers: Headers.Headers
-  readonly message: string
-}
-
-export interface JsonInput<Body, Message> {
-  readonly toMessage: (body: Body | Record<string, unknown>) => Effect.Effect<Message, AIError>
-  readonly encodeMessage: (message: Message) => string
-}
-
-export type JsonPatch<Body, Message> = Partial<JsonInput<Body, Message>>
-
-export interface JsonTransport<Body, Message> extends Transport<Body, JsonPrepared, string> {
-  readonly with: (patch: JsonPatch<Body, Message>) => JsonTransport<Body, Message>
-}
-
-export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransport<Body, Message> => ({
-  id: "websocket-json",
-  with: (patch) => json({ ...input, ...patch }),
-  prepare: (prepareInput) =>
-    Effect.gen(function* () {
-      const parts = yield* HttpTransport.jsonRequestParts({
-        ...prepareInput,
-      })
-      return {
-        url: yield* toWebSocketUrl(parts.url),
-        headers: parts.headers,
-        message: input.encodeMessage(yield* input.toMessage(parts.jsonBody)),
-      }
-    }),
-  execute: (prepared, request, _runtime, options) => {
-    const webSocket = options?.webSocket
-    if (!webSocket) {
-      return Effect.fail(
-        transportError("WebSocket JSON transport requires StreamOptions.webSocket", {
-          url: prepared.url,
-          operation: "request",
-          code: "unavailable",
-          phase: "prepare",
-          delivery: "not-sent",
-        }),
-      )
-    }
-    const driver: WebSocketChannelDriver = {
-      create: () => Effect.succeed({ message: prepared.message, mode: "full" }),
-      observe: (_create, frame) => Effect.succeed({ type: "frame", frame }),
-    }
-    const exchange: WebSocketChannelExchange = {
-      id: request.id ?? "request",
-      connect: { url: prepared.url, headers: prepared.headers },
-      fallback: () =>
-        Stream.fail(
-          transportError("WebSocket JSON transport does not provide HTTP fallback", {
-            url: prepared.url,
-            operation: "request",
-            code: "websocket",
-            phase: "fallback",
-            delivery: "not-sent",
-          }),
-        ),
-      driver,
-    }
-    return webSocket.execute(exchange)
-  },
-})
-
-export const jsonTransport = {
-  id: "websocket-json",
-  with: json,
-} as const
-
 export const WebSocketTransport = {
-  json,
-  jsonTransport,
   direct,
   makeDirect,
   open,

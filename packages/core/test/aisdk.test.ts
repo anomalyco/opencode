@@ -20,9 +20,9 @@ import {
   TransportError,
   UnknownProviderError,
   isContextOverflowFailure,
-} from "@opencode/ai"
+} from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
-import { compileRequest } from "@opencode/ai/route/client"
+import { compileRequest } from "@opencode/ai/testing"
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
@@ -170,6 +170,9 @@ it.effect("projects request settings, headers, and body overlays", () =>
       apiKey: "secret",
       thinkingConfig: { thinkingBudget: 1024 },
       compaction: { type: "native" },
+      cache: { ttl: "1h" },
+      encoding: "gzip",
+      timeout: 600_000,
       transport: "websocket",
     })
     const resolved = yield* aisdk.model({
@@ -193,8 +196,8 @@ it.effect("projects request settings, headers, and body overlays", () =>
     })
     expect(prepared.body.headers).toEqual({ "x-test": "header" })
     expect(body).toEqual({ safety_setting: "strict" })
-    expect(options).not.toHaveProperty("compaction")
-    expect(options).not.toHaveProperty("transport")
+    for (const key of ["compaction", "cache", "encoding", "timeout", "transport"])
+      expect(options).not.toHaveProperty(key)
   }),
 )
 
@@ -204,7 +207,9 @@ it.effect("uses only the provider timeout signal when the request signal is null
     let wrappedFetch: typeof fetch | undefined
     let requestSignal: AbortSignal | null | undefined
     yield* aisdk.hook.sdk((event) => {
-      wrappedFetch = event.options.fetch
+      if (typeof event.options.fetch === "function") {
+        wrappedFetch = event.options.fetch as typeof fetch
+      }
       event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
     })
 

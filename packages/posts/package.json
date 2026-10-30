@@ -7,12 +7,13 @@
     "dev": "astro dev",
     "build": "astro build && bun script/prepare-cloudflare.ts",
     "deploy": "wrangler deploy --config dist/server/wrangler.json",
-    "typecheck": "astro check"
+    "typecheck": "astro check",
+    "typecheck:tsc": "astro check"
   },
   "dependencies": {
     "@astrojs/mdx": "7.0.5",
     "@fontsource/commit-mono": "5.3.0",
-    "astro": "7.1.3"
+    "astro": "catalog:"
   },
   "devDependencies": {
     "@astrojs/cloudflare": "14.1.4",

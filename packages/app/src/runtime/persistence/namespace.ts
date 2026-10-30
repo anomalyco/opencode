@@ -15,7 +15,7 @@ export type NamespaceStorage = AsyncStorage & {
   accept(insert: Record<string, string>, remove: string[], revision: number): void
 }
 
-export const namespaceFlushDelay = 100
+const namespaceFlushDelay = 100
 
 // In-memory truth for a namespace. Reads load the namespace once and are Map lookups from then
 // on; writes update the cache immediately and are batched into one driver call per flush window,

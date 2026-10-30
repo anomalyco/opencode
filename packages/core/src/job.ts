@@ -23,6 +23,12 @@ const Background = Schema.Struct({
       agent: Schema.String,
       description: Schema.String,
     }),
+    Schema.Struct({
+      kind: Schema.Literal("image"),
+      sessionID: SessionSchema.ID,
+      path: Schema.String,
+      model: Schema.String,
+    }),
   ]),
   status: Schema.Literals(["running", "completed", "error", "cancelled"]),
   output: Schema.optionalKey(Schema.String),
@@ -133,6 +139,7 @@ export interface Interface {
   readonly backgroundAll: (input: BackgroundAllInput) => Effect.Effect<Info[]>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
   readonly pendingBackground: Effect.Effect<readonly Background[]>
+  readonly runningBackground: Effect.Effect<readonly Recovery[]>
   readonly completeBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
 }
 
@@ -449,6 +456,15 @@ export const make = Effect.gen(function* () {
     return recovered
   }).pipe(Effect.withSpan("Job.pendingBackground"))
 
+  const runningBackground: Interface["runningBackground"] = SynchronizedRef.get(state.jobs).pipe(
+    Effect.map((jobs) =>
+      [...jobs.values()].flatMap((job) =>
+        job.isBackgrounded && job.info.status === "running" && job.recovery ? [job.recovery] : [],
+      ),
+    ),
+    Effect.withSpan("Job.runningBackground"),
+  )
+
   const completeBackground: Interface["completeBackground"] = Effect.fn("Job.completeBackground")((notificationID) =>
     SynchronizedRef.updateEffect(state.jobs, (jobs) =>
       Effect.gen(function* () {
@@ -471,6 +487,7 @@ export const make = Effect.gen(function* () {
     backgroundAll,
     cancel,
     pendingBackground,
+    runningBackground,
     completeBackground,
   })
 })

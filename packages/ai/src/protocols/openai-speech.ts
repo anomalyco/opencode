@@ -1,8 +1,8 @@
-import { Effect, Schema } from "effect"
+import { Effect, Schema, SchemaGetter } from "effect"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type MediaUsage } from "../schema/index.js"
+import { mergeJsonRecords, tokenUsage, type MediaUsage } from "../schema/index.js"
 import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
@@ -28,6 +28,16 @@ export type Request = SpeechRequestFor<OpenAISpeechOptions>
 // 3. Streaming event schema
 // ---------------------------------------------------------------------------
 
+const EVENT_TYPES = new Set(["speech.audio.delta", "speech.audio.done"])
+/** OpenAI may add stream event types; frames outside `EVENT_TYPES` are ignored, while a malformed known type still fails decoding. */
+const UnknownEvent = Schema.Struct({
+  type: Schema.String.check(Schema.makeFilter((type) => !EVENT_TYPES.has(type))),
+}).pipe(
+  Schema.decodeTo(Schema.Struct({ type: Schema.Literal("unknown"), rawType: Schema.String }), {
+    decode: SchemaGetter.transform((event) => ({ type: "unknown" as const, rawType: event.type })),
+    encode: SchemaGetter.forbidden(() => "Unknown OpenAI Speech stream events are decode-only"),
+  }),
+)
 const SpeechStreamEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("speech.audio.delta"), audio: Schema.Uint8ArrayFromBase64 }),
   Schema.Struct({
@@ -40,6 +50,7 @@ const SpeechStreamEvent = Schema.Union([
       }),
     ),
   }),
+  UnknownEvent,
 ])
 
 const decodeEvent = route.decodeFrame(SpeechStreamEvent)
@@ -96,6 +107,7 @@ const isSse = (body: MediaProtocol.Body) => body.type === "json" && body.value.s
 
 const onEvent = Effect.fnUntraced(function* (state: State, frame: string) {
   const event = yield* decodeEvent(frame)
+  if (event.type === "unknown") return [state, []] as const
   if (event.type === "speech.audio.delta") return SpeechStream.delta(state, event.audio)
   const usage = event.usage
   return [
@@ -105,13 +117,12 @@ const onEvent = Effect.fnUntraced(function* (state: State, frame: string) {
       usage:
         usage === undefined
           ? undefined
-          : {
-              type: "tokens" as const,
+          : tokenUsage({
               input: usage.input_tokens,
               output: usage.output_tokens,
               total: usage.total_tokens,
               details: { openai: usage },
-            },
+            }),
     },
     [],
   ] as const

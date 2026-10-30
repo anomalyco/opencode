@@ -31,6 +31,10 @@ export const dict = {
   "legal.brand": "Brand",
   "legal.privacy": "Privacy",
   "legal.terms": "Terms",
+  "legal.status.operational": "All systems operational",
+  "legal.status.degraded": "Degraded performance",
+  "legal.status.outage": "Service disruption",
+  "legal.status.unknown": "System status",
 
   "email.title": "Be the first to know when we release new products",
   "email.subtitle": "Join the waitlist for early access.",
@@ -70,12 +74,8 @@ export const dict = {
 
   "home.what.title": "What is OpenCode?",
   "home.what.body": "OpenCode is an open source agent that helps you write code in your terminal, IDE, or desktop.",
-  "home.what.lsp.title": "LSP enabled",
-  "home.what.lsp.body": "Automatically loads the right LSPs for the LLM",
   "home.what.multiSession.title": "Multi-session",
   "home.what.multiSession.body": "Start multiple agents in parallel on the same project",
-  "home.what.shareLinks.title": "Share links",
-  "home.what.shareLinks.body": "Share a link to any session for reference or to debug",
   "home.what.copilot.title": "GitHub Copilot",
   "home.what.copilot.body": "Log in with GitHub to use your Copilot account",
   "home.what.chatgptPlus.title": "ChatGPT Plus/Pro",
@@ -116,7 +116,7 @@ export const dict = {
   "home.faq.a3.p4.localLink": "local models",
   "home.faq.q4": "Can I use my existing AI subscriptions with OpenCode?",
   "home.faq.a4.p1":
-    "Yes, OpenCode supports subscription plans from all major providers. You can use your Claude Pro/Max, ChatGPT Plus/Pro, or GitHub Copilot subscriptions.",
+    "Yes, you can use your ChatGPT Plus/Pro or GitHub Copilot subscriptions, or your Claude subscription through Claude Code.",
   "home.faq.q5": "Can I only use OpenCode in the terminal?",
   "home.faq.a5.beforeDesktop": "Not anymore! OpenCode is now available as an app for your",
   "home.faq.a5.desktop": "desktop",
@@ -164,7 +164,7 @@ export const dict = {
   "zen.faq.a4.p3": "To cover costs, OpenCode adds only a small payment processing fee of $1.23 per $20 balance top-up.",
   "zen.faq.q5": "What about data and privacy?",
   "zen.faq.a5.beforeExceptions":
-    "All Zen models are hosted in the US. Providers follow a zero-retention policy and do not use your data for model training, with the",
+    "All Zen models are hosted in the US and EU. Providers follow a zero-retention policy and do not use your data for model training, with the",
   "zen.faq.a5.exceptionsLink": "following exceptions",
   "zen.faq.q6": "Can I set spend limits?",
   "zen.faq.a6": "Yes, you can set monthly spending limits in your account.",
@@ -197,13 +197,13 @@ export const dict = {
   "zen.how.step2.link": "pay per request",
   "zen.how.step2.afterLink": "with zero markups",
   "zen.how.step3.title": "Auto-top up",
-  "zen.how.step3.body": "when your balance reaches $5, we'll automatically add $20",
+  "zen.how.step3.body": "optional; choose your balance threshold and top-up amount",
   "zen.privacy.title": "Your privacy is important to us",
   "zen.privacy.beforeExceptions":
-    "All Zen models are hosted in the US. Providers follow a zero-retention policy and do not use your data for model training, with the",
+    "All Zen models are hosted in the US and EU. Providers follow a zero-retention policy and do not use your data for model training, with the",
   "zen.privacy.exceptionsLink": "following exceptions",
 
-  "go.promo.minimaxM31FlashFree": "MiniMax M3.1 Flash Free is now available in Go, free for a limited time.",
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro is now available in Go.",
   "go.title": "OpenCode Go | Low cost coding models for everyone",
   "go.meta.description": "Go costs $10/month, with generous usage limits and reliable access to leading coding models.",
   "go.hero.title": "Low cost coding models for everyone",
@@ -212,15 +212,26 @@ export const dict = {
     "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable coding models, so you can build with powerful agents without worrying about cost or availability.",
 
   "go.cta.text": "Subscribe to Go",
+  "go.plans.audience": "Go plans for",
+  "go.plans.individuals": "Individuals",
+  "go.plans.teams": "Teams",
   "go.plans.month": "per month",
+  "go.plans.memberMonth": "per member\nper month",
   "go.plans.plus.cta": "Subscribe to Go Plus",
   "go.plans.plus.description": "Go Plus costs $40/month with higher limits.",
+  "go.plans.teams.cta": "Subscribe to Go Teams",
+  "go.plans.teams.description": "Go Teams costs $20/member/month with limits for every member.",
   "go.plans.go.feature1": "Curated, affordable models",
   "go.plans.go.feature2": "Tested for agentic coding",
   "go.plans.go.feature3": "Generous limits and reliable access",
   "go.plans.plus.feature1": "Everything included in Go",
   "go.plans.plus.feature2": "Higher limits and fewer interruptions",
   "go.plans.plus.feature3": "Built for larger, demanding projects",
+  "go.plans.teams.feature1": "Every member gets their own Go limits",
+  "go.plans.teams.feature2": "Generous monthly limits for each model",
+  "go.plans.teams.feature3": "One bill for the whole workspace",
+  "go.plans.teams.feature4": "Extra usage with per-member budgets",
+  "go.plans.teams.feature5": "Model privacy and region controls",
   "go.plans.limits": "Limits",
   "go.plans.description": "Estimated requests per 5 hours and monthly usage limits by model",
   "go.plans.legend": "Plans",
@@ -286,7 +297,6 @@ export const dict = {
     "Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models.",
   "go.faq.a5.deepseekRetention":
     "ZDR agreement is renewed monthly. The current agreement is valid through October 31, 2026.",
-  "go.faq.a5.geminiRetention": "Your prompts and completions may be used to train future Google models.",
   "go.faq.a5.learnMore": "Learn more",
 
   "go.faq.q6": "Can I top up credit?",
@@ -298,7 +308,7 @@ export const dict = {
 
   "go.faq.q9": "What is the difference between free models and Go?",
   "go.faq.a9":
-    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go offers a curated model lineup with higher request quotas enforced across rolling windows: 20% of the monthly allowance per 5 hours, 50% per week, and 100% per month. Model-specific allowances may differ (actual request counts vary by model and usage).",
+    "Free models include Big Pickle plus promotional models available at the time. Go offers a curated model lineup with higher request quotas enforced across rolling windows: 20% of the monthly allowance per 5 hours, 50% per week, and 100% per month. Model-specific allowances may differ (actual request counts vary by model and usage).",
   "go.faq.q10": "Can I get a refund?",
   "go.faq.a10":
     "You may qualify for a refund if the charge was made within the last 14 days and you have not used your Go allowance during that billing period. {{contact}} to request a refund.",
@@ -364,6 +374,7 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "Invalid email format.",
   "enterprise.form.error.invalidInferenceSpend": "Select a valid inference spend range.",
   "enterprise.form.error.internalServer": "Internal server error.",
+  "enterprise.form.error.captcha": "Captcha verification failed. Please try again.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "What is OpenCode Enterprise?",
   "enterprise.faq.a1":
@@ -373,7 +384,7 @@ export const dict = {
     "Simply start with an internal trial with your team. OpenCode by default does not store your code or context data, making it easy to get started. Then contact us to discuss pricing and implementation options.",
   "enterprise.faq.q3": "How does enterprise pricing work?",
   "enterprise.faq.a3":
-    "We offer per-seat enterprise pricing. If you have your own LLM gateway, we do not charge for tokens used. For further details, contact us for a custom quote based on your organization's needs.",
+    "If you have your own LLM gateway, we do not charge for tokens used. For further details, contact us for a custom quote based on your organization's needs.",
   "enterprise.faq.q4": "Is my data secure with OpenCode Enterprise?",
   "enterprise.faq.a4":
     "Yes. OpenCode does not store your code or context data. All processing happens locally or through direct API calls to your AI provider. With central config and SSO integration, your data remains secure within your organization's infrastructure.",

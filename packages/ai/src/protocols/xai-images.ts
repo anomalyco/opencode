@@ -5,7 +5,8 @@ import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { ProviderShared, optionalNull } from "./shared.js"
+import { JsonObject, ProviderShared, lenient, optionalNull } from "./shared.js"
+import { ImageSizing } from "./utils/image-sizing.js"
 import { MediaInput } from "./utils/media-input.js"
 
 const route = MediaProtocol.identity({ id: "xai-images", name: "xAI Images", provider: "xai" })
@@ -17,9 +18,9 @@ export const EDIT_PATH = "/images/edits"
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-/** Provider-native options. Common fields (`n`, `aspectRatio`, `images`) live on the request. */
+/** Provider-native options. Common fields (`n`, `aspect`, `resolution`, `images`) live on the request. */
 export type XAIImageOptions = {
-  readonly resolution?: OpenString<"1k" | "2k">
+  /** Defaults to `b64_json`; `url` returns a short-lived hosted URL instead. */
   readonly responseFormat?: OpenString<"url" | "b64_json">
   readonly response_format?: OpenString<"url" | "b64_json">
 } & Record<string, unknown>
@@ -39,7 +40,7 @@ const XAIImageResponse = Schema.Struct({
       mime_type: optionalNull(Schema.String),
     }),
   ),
-  usage: Schema.optional(Schema.Unknown),
+  usage: lenient(JsonObject),
 })
 
 // ---------------------------------------------------------------------------
@@ -47,9 +48,14 @@ const XAIImageResponse = Schema.Struct({
 // ---------------------------------------------------------------------------
 
 const nativeOptions = (options: XAIImageOptions | undefined) => {
-  if (!options) return undefined
-  const { responseFormat, ...native } = options
-  return { response_format: responseFormat, ...native }
+  const { responseFormat, ...native } = options ?? {}
+  return { response_format: responseFormat ?? "b64_json", ...native }
+}
+
+/** xAI renders `1k` or `2k`; other tiers use the nearest one. */
+export const resolution = (request: { readonly resolution?: string }) => {
+  if (request.resolution === undefined) return undefined
+  return (ImageSizing.tier(request.resolution) ?? 1) < 1.5 ? "1k" : "2k"
 }
 
 const isEdit = (request: Request) => (request.images?.length ?? 0) > 0
@@ -72,7 +78,8 @@ const fromRequest = Effect.fn("XAIImages.fromRequest")(function* (request: Reque
         image: references.length === 1 ? references[0] : undefined,
         images: references.length > 1 ? references : undefined,
         n: request.n,
-        aspect_ratio: request.aspectRatio,
+        aspect_ratio: request.aspect,
+        resolution: resolution(request),
       },
       nativeOptions(request.providerOptions),
       request.http?.body,
@@ -100,12 +107,11 @@ const decodeResponse = Effect.fn("XAIImages.decodeResponse")(function* (
     }),
   )
   if (images.length === 0) return yield* output.invalid(`${route.name} returned no images`)
-  const usage = ProviderShared.isRecord(decoded.usage) ? decoded.usage : undefined
   // xAI reports a USD cost (`cost_in_usd_ticks`) rather than tokens, seconds, or credits; the raw record stays in
   // provider metadata.
   return new ImageResponse({
     images,
-    providerMetadata: usage === undefined ? undefined : { xai: { usage } },
+    providerMetadata: decoded.usage === undefined ? undefined : { xai: { usage: decoded.usage } },
   })
 })
 
@@ -114,7 +120,6 @@ const decodeResponse = Effect.fn("XAIImages.decodeResponse")(function* (
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
-  unsupported: ["mask", "size", "seed", "format"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })
@@ -128,4 +133,5 @@ export const model = (input: MediaRoute.ModelInput) =>
 export const XAIImages = {
   protocol,
   model,
+  resolution,
 } as const

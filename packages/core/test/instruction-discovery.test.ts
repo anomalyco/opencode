@@ -302,18 +302,23 @@ describe("ConfigInstructionPlugin.Plugin", () => {
         const second = path.join(project, "rules", "b.md")
         const absolute = path.join(tmp.path, "absolute.md")
         const homeFile = path.join(tmp.path, "home.md")
+        const noteTop = path.join(tmp.path, "notes", "guide.md")
+        const noteNested = path.join(tmp.path, "notes", "projects", "memory.md")
         const remote = "https://example.test/instructions.md"
         const requests: string[] = []
         return Effect.gen(function* () {
           yield* Effect.promise(async () => {
             await fs.mkdir(path.dirname(first), { recursive: true })
             await fs.mkdir(directory, { recursive: true })
+            await fs.mkdir(path.dirname(noteNested), { recursive: true })
             await Promise.all([
               fs.writeFile(agents, "agents"),
               fs.writeFile(first, "first"),
               fs.writeFile(second, "second"),
               fs.writeFile(absolute, "absolute"),
               fs.writeFile(homeFile, "home"),
+              fs.writeFile(noteTop, "note top"),
+              fs.writeFile(noteNested, "note nested"),
             ])
           })
 
@@ -327,6 +332,8 @@ describe("ConfigInstructionPlugin.Plugin", () => {
               `Instructions from: ${second}\nsecond`,
               `Instructions from: ${absolute}\nabsolute`,
               `Instructions from: ${homeFile}\nhome`,
+              `Instructions from: ${noteTop}\nnote top`,
+              `Instructions from: ${noteNested}\nnote nested`,
               `Instructions from: ${remote}\nremote`,
             ].join("\n\n"),
           )
@@ -347,6 +354,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
                 "rules/*.md",
                 absolute,
                 "~/home.md",
+                "~/notes/**/*.md",
                 remote,
                 "missing.md",
                 "https://example.test/missing.md",

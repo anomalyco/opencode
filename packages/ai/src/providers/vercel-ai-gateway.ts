@@ -1,37 +1,26 @@
 import { Effect, Schema } from "effect"
-import { Headers, HttpClientRequest } from "effect/http"
-import {
-  EvaluationAnswer,
-  EvaluationInput,
-  EvaluationModel,
-  EvaluationQuestion,
-  EvaluationResponse,
-  EvaluationRounding,
-} from "../experimental/evaluation.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
-import { optionalNull, ProviderShared } from "../protocols/shared.js"
+import { OpenAIDecisions } from "../protocols/openai-decisions.js"
+import { OpenAIImages, type OpenAIImageSizing } from "../protocols/openai-images.js"
+import { XAIImages } from "../protocols/xai-images.js"
+import { ProviderShared } from "../protocols/shared.js"
 import { gatewayProtocol } from "../protocols/utils/gateway-protocol.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { Auth } from "../route/auth.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
+import { MediaRoute } from "../route/media.js"
 import type { Protocol } from "../route/protocol.js"
 import {
-  AIError,
-  HttpContext,
-  HttpOptions,
-  InvalidProviderOutputError,
-  InvalidRequestError,
   LLMRequest,
   ModelID,
   ProviderID,
   ProviderMetadata,
   ReasoningEffort,
-  Usage,
+  type ProviderOptions,
 } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
@@ -49,7 +38,7 @@ export interface GatewayOptions {
   readonly order?: ReadonlyArray<string>
   /** Sort candidate providers by cost (`"cost"`), throughput (`"tps"`), or time-to-first-token (`"ttft"`). */
   readonly sort?: "cost" | "tps" | "ttft" | (string & {})
-  /** Fallback models to try in order, or a conditional `{ model, when }` entry on evaluation requests. */
+  /** Fallback models to try in order. */
   readonly models?: ReadonlyArray<string | Readonly<Record<string, unknown>>>
   /** Restrict routing to providers with zero data retention agreements. */
   readonly zeroDataRetention?: boolean
@@ -110,12 +99,7 @@ export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
     readonly cacheAnchorItems?: number
   }
 
-export interface EvaluationOptions {
-  readonly [key: string]: unknown
-  readonly gateway?: GatewayOptions
-}
-
-export type Options = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptionsInput
@@ -125,7 +109,7 @@ export type Settings = ProviderPackage.Settings & ProviderOptionsInput & { reado
 
 const GatewayOptionsSchema = Schema.Struct({
   gateway: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  upstream: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))),
+  upstream: Schema.optional(ProviderMetadata),
   reasoningEffort: Schema.optional(ReasoningEffort),
   thinking: Schema.optional(
     Schema.Struct({
@@ -228,29 +212,15 @@ const chatRoute = route({
 
 export const routes = [messagesRoute, responsesRoute, chatRoute]
 
-const Request = Schema.StructWithRest(
-  Schema.Struct({
-    model: Schema.String,
-    state: EvaluationInput,
-    questions: Schema.Record(Schema.String, EvaluationQuestion),
-    providerOptions: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  }),
-  [Schema.Record(Schema.String, Schema.Any)],
-)
-const Response = Schema.Struct({
-  model: optionalNull(Schema.String),
-  answers: Schema.Record(Schema.String, EvaluationAnswer),
-  usage: optionalNull(
-    Schema.Struct({
-      inputTokens: optionalNull(Schema.Number),
-      outputTokens: optionalNull(Schema.Number),
-    }),
-  ),
-  rounding: optionalNull(EvaluationRounding),
-  providerMetadata: optionalNull(ProviderMetadata),
-})
+// The Gateway passes `size` through to most image models, but Grok ignores it and renders 1024x1024; it only reads
+// sizing from `providerOptions.xai`.
+const imageSizing: OpenAIImageSizing = (request) => {
+  if (!/^(spacexai|xai)\//.test(request.model.id)) return OpenAIImages.pixelSize(request)
+  if (request.aspect === undefined && request.resolution === undefined) return undefined
+  return { providerOptions: { xai: { aspect_ratio: request.aspect, resolution: XAIImages.resolution(request) } } }
+}
 
-export const configure = (input: Options = {}) => {
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const configured = {
     ...defaults,
@@ -275,108 +245,53 @@ export const configure = (input: Options = {}) => {
     if (modelID.startsWith("meta/muse-")) return chat(modelID)
     return messages(modelID)
   }
-  const evaluation = (modelID: string | ModelID) =>
-    EvaluationModel.make<EvaluationOptions>({
-      id: modelID,
-      provider: id,
-      http: HttpOptions.make(input.http),
-      route: {
-        id: "vercel-evaluation",
-        evaluate: (req, send) =>
-          Effect.gen(function* () {
-            const url = new URL(`${(input.baseURL ?? baseURL).replace(/\/$/, "")}/evaluate`)
-            Object.entries(req.http?.query ?? {}).forEach(([key, value]) => url.searchParams.set(key, value))
-            const body = yield* Schema.encodeUnknownEffect(Schema.fromJsonString(Request))({
-              ...req.http?.body,
-              model: req.model.id,
-              state: req.state,
-              questions: req.questions,
-              providerOptions: req.options,
-            }).pipe(
-              Effect.mapError(
-                (cause) => new AIError({ reason: new InvalidRequestError({ message: cause.message, cause }) }),
-              ),
-            )
-            const headers = yield* Auth.toEffect(configured.auth)({
-              request: req,
-              method: "POST",
-              url: url.toString(),
-              body,
-              headers: Headers.fromInput({ ...input.headers, ...req.http?.headers }),
-            })
-            const res = yield* send(
-              HttpClientRequest.post(url).pipe(
-                HttpClientRequest.setHeaders(headers),
-                HttpClientRequest.bodyText(body, "application/json"),
-              ),
-            )
-            const http = new HttpContext({ url: res.request.url, status: res.status, headers: res.headers })
-            const fail = (message: string, cause: unknown, body?: string) =>
-              new AIError({
-                reason: new InvalidProviderOutputError({
-                  route: "vercel-evaluation",
-                  message,
-                  body,
-                  http,
-                  cause,
-                }),
-              })
-            const text = yield* res.text.pipe(
-              Effect.mapError((cause) => fail("Failed to read the Vercel AI Gateway evaluation response", cause)),
-            )
-            const data = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Response))(text).pipe(
-              Effect.mapError((cause) =>
-                fail("Vercel AI Gateway returned an invalid evaluation response", cause, text),
-              ),
-            )
-            const inputTokens = data.usage?.inputTokens ?? undefined
-            const outputTokens = data.usage?.outputTokens ?? undefined
-            const usage = data.usage
-              ? new Usage({
-                  inputTokens,
-                  outputTokens,
-                  totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
-                  providerMetadata: { gateway: data.usage },
-                })
-              : undefined
-            return new EvaluationResponse({
-              model: ModelID.make(data.model ?? req.model.id),
-              answers: data.answers,
-              usage,
-              rounding: data.rounding ?? undefined,
-              providerMetadata: data.providerMetadata ?? undefined,
-            })
-          }),
-      },
-    })
-  return { id, model, messages, responses, chat, experimental: { evaluation }, configure }
+  const media = MediaRoute.deployment({ ...input, baseURL: configured.endpoint.baseURL }, configured.auth)
+  const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions, sizing: imageSizing })
+  const decisionRoute = OpenAIDecisions.route.with({
+    provider: id,
+    endpoint: { baseURL: configured.endpoint.baseURL },
+    auth: configured.auth,
+    headers: input.headers,
+    http: input.http,
+  })
+  const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    decisionRoute.model({ id: modelID, providerOptions })
+  return { id, model, messages, responses, chat, image, decision, configure }
 }
 
 export const provider = configure()
-export const experimental = provider.experimental
+export const decision = provider.decision
 export const messages = provider.messages
 export const responses = provider.responses
 export const chat = provider.chat
+export const image = provider.image
 
-export const model: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
-  fromSettings(settings).model(modelID)
-export const messagesModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
-  fromSettings(settings).messages(modelID)
-export const responsesModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => fromSettings(settings).responses(modelID)
-export const chatModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
-  fromSettings(settings).chat(modelID)
+export const model: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).model(modelID)
+export const messagesModel: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).messages(modelID)
+export const responsesModel: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).responses(modelID)
+export const chatModel: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).chat(modelID)
+export const imageModel = (modelID: string, settings?: Settings) => {
+  const input = config(settings)
+  return configure(input).image(modelID, input.providerOptions)
+}
+export const decisionModel = (modelID: string, settings?: Settings) => {
+  const input = config(settings)
+  return configure(input).decision(modelID, input.providerOptions)
+}
 
-function fromSettings({ apiKey, baseURL, headers, body, ...providerOptions }: Settings) {
-  return configure({
+function config({ apiKey, baseURL, headers, body, ...providerOptions }: Settings = {}) {
+  return {
     apiKey,
     baseURL,
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  })
+  }
 }
 
 export * as VercelAIGateway from "./vercel-ai-gateway.js"

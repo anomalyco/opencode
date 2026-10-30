@@ -2,8 +2,8 @@ import { Effect } from "effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
 import { Provider } from "../../provider.js"
-import { iife } from "../../util/iife.js"
 import { configuredSettings } from "./configured.js"
+import { credentialSettings, metadataSettings } from "./credential-settings.js"
 
 const providerID = Provider.ID.make("cloudflare-workers-ai")
 
@@ -11,18 +11,18 @@ export const CloudflareWorkersAIPlugin = define({
   id: "opencode.provider.cloudflare.workers.ai",
   effect: Effect.fn(function* (ctx) {
     const configured = yield* configuredSettings(providerID)
-    const form = iife(() => {
-      if (typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})) return
-      return Form.Fields.make([
-        {
-          type: "string",
-          key: "accountId",
-          title: "Enter your Cloudflare Account ID",
-          placeholder: "e.g. 1234567890abcdef1234567890abcdef",
-          required: true,
-        },
-      ])
-    })
+    const form =
+      typeof configured?.baseURL === "string" || resolveAccountId(configured ?? {})
+        ? undefined
+        : Form.Fields.make([
+            {
+              type: "string",
+              key: "accountId",
+              title: "Enter your Cloudflare Account ID",
+              placeholder: "e.g. 1234567890abcdef1234567890abcdef",
+              required: true,
+            },
+          ])
     yield* ctx.integration.transform((editor) => {
       editor.method.update({
         integrationID: providerID,
@@ -37,12 +37,16 @@ export const CloudflareWorkersAIPlugin = define({
         },
       })
     })
+    // The key method's form answer is stored as credential metadata.
+    const login = yield* credentialSettings(ctx, providerID, (value) =>
+      value.type === "key" ? metadataSettings(value.metadata, ["accountId"]) : {},
+    )
     yield* ctx.provider.transform((evt) => {
       const item = evt.get(providerID)
       if (!item) return
       evt.update(item.provider.id, (provider) => {
         if (typeof provider.settings?.baseURL === "string") return
-        const accountId = resolveAccountId(provider.settings ?? {})
+        const accountId = resolveAccountId({ ...provider.settings, ...login.settings })
         if (!accountId) return
         provider.settings =
           provider.package === "@opencode/ai/providers/cloudflare-workers-ai"

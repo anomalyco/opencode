@@ -8,6 +8,7 @@ import { ServerConfig } from "@opencode/schema/mcp"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
+import { Artifact } from "../artifact.js"
 import { AISDK } from "../aisdk.js"
 import { Command } from "../command.js"
 import { Credential } from "../credential.js"
@@ -19,6 +20,7 @@ import { LocationServiceMap } from "../location-service-map.js"
 import { Model } from "../model.js"
 import { Mcp } from "../mcp/index.js"
 import { Session } from "../session.js"
+import { InstructionEntry } from "../session/instruction-entry.js"
 import { PersistentPty } from "../persistent-pty.js"
 import { Provider } from "../provider.js"
 import { Reference } from "../reference.js"
@@ -43,13 +45,17 @@ type RpcEvent = Event.Payload & {
   readonly location: Location.Ref
   readonly data: Readonly<Record<string, unknown>>
 }
-const isRpcEvent = (event: Event.Payload): event is RpcEvent => event.type.startsWith("rpc.")
+const isRpcType = (type: string): type is RpcEvent["type"] => type.startsWith("rpc.")
+const isRpcEvent = (event: Event.Payload): event is RpcEvent => isRpcType(event.type)
+const isPublicEvent = (event: Event.Payload): event is EventManifest.ServerEvent | RpcEvent =>
+  EventManifest.isServer(event) || isRpcEvent(event)
 export const make = Effect.fn("PluginHost.make")(function* (
   plugin: Pick<Interface, "list">,
   pluginID: string = "test",
 ) {
   const app = yield* App.Metadata
   const agents = yield* Agent.Service
+  const artifacts = yield* Artifact.Service
   const aisdk = yield* AISDK.Service
   const providers = yield* Provider.Service
   const models = yield* Model.Service
@@ -66,9 +72,11 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const vcs = yield* Vcs.Service
   const websearch = yield* WebSearch.Service
   const generate = yield* Generate.Service
+  const generateText = (input: Generate.TextInput) => generate.text(input).pipe(Effect.map((text) => ({ text })))
   const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
   const sessions = yield* Session.Service
+  const instructionEntries = yield* InstructionEntry.Service
   const persistentPty = yield* PersistentPty.Service
   const locations = yield* LocationServiceMap.Service
   const worktrees = yield* Worktree.Service
@@ -146,8 +154,8 @@ export const make = Effect.fn("PluginHost.make")(function* (
       transform: (callback) =>
         agents.transform((editor) => {
           callback({
-            list: () => mutable(editor.list()),
-            get: (id) => mutable(editor.get(Agent.ID.make(id))),
+            list: editor.list,
+            get: (id) => editor.get(Agent.ID.make(id)),
             default: (id) => editor.default(id === undefined ? undefined : Agent.ID.make(id)),
             update: (id, update) => editor.update(Agent.ID.make(id), update),
             remove: (id) => editor.remove(Agent.ID.make(id)),
@@ -225,7 +233,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
         }),
     },
     model: {
-      list: () => response(models.available()),
+      list: (input) => response(models.available(input?.types)),
       default: () => response(models.default()),
       reload: models.reload,
       transform: (callback) =>
@@ -256,23 +264,60 @@ export const make = Effect.fn("PluginHost.make")(function* (
       activate: (input) => integration.connection.activate(input.credentialID),
     },
     event: {
-      subscribe: () =>
-        bus
-          .subscribe()
-          .pipe(
-            Stream.filter(
-              (event): event is EventManifest.ServerEvent | RpcEvent =>
-                EventManifest.isServer(event) || isRpcEvent(event),
-            ),
-          ),
+      // The bus only delivers the requested types, which TypeScript cannot follow through the generic signature.
+      subscribe: ((input?: { readonly types?: ReadonlyArray<string> }) => {
+        if (!input?.types?.length) return bus.subscribe().pipe(Stream.filter(isPublicEvent))
+        const unknown = new Array<string>()
+        const [first, ...rest] = input.types.flatMap((type) => {
+          if (isRpcType(type)) return [Rpc.eventDefinition(type)]
+          const definition = EventManifest.Server.get(type)
+          if (!definition) unknown.push(type)
+          return definition ? [definition] : []
+        })
+        const events = first ? bus.subscribe([first, ...rest]) : Stream.never
+        if (unknown.length === 0) return events
+        return Stream.unwrap(
+          Effect.logWarning("ignoring unknown event types", { pluginID, types: unknown }).pipe(Effect.as(events)),
+        )
+      }) as Plugin.Context["event"]["subscribe"],
     },
     experimental: {
       terminal: {
         read: (input) => persistentPty.read(input.sessionID, input.lines),
       },
+      generate: {
+        text: generateText,
+        image: generate.image,
+        decisions: generate.decisions,
+      },
+      artifact: {
+        reload: artifacts.reload,
+        transform: (callback) =>
+          artifacts.transform((editor) => {
+            callback({
+              add: (definition) =>
+                editor.add({
+                  id: Artifact.ProviderID.make(definition.id),
+                  name: definition.name,
+                  capabilities: definition.capabilities,
+                  prompt: definition.prompt,
+                  create: definition.create,
+                  read: definition.read,
+                  update: definition.update,
+                  delete: definition.delete,
+                }),
+              remove: (id) => editor.remove(Artifact.ProviderID.make(id)),
+              default: {
+                get: () => editor.default.get(),
+                set: (providerID) =>
+                  editor.default.set(providerID === undefined ? undefined : Artifact.ProviderID.make(providerID)),
+              },
+            })
+          }),
+      },
     },
     generate: {
-      text: (input) => generate.text(input).pipe(Effect.map((text) => ({ text }))),
+      text: generateText,
     },
     integration: {
       list: () => response(integration.list()),
@@ -368,8 +413,8 @@ export const make = Effect.fn("PluginHost.make")(function* (
       transform: (callback) =>
         integration.transform((editor) => {
           callback({
-            list: () => mutable(editor.list()),
-            get: (id) => mutable(editor.get(Integration.ID.make(id))),
+            list: editor.list,
+            get: (id) => editor.get(Integration.ID.make(id)),
             update: (id, update) => editor.update(Integration.ID.make(id), update),
             remove: (id) => editor.remove(Integration.ID.make(id)),
             method: {
@@ -587,6 +632,24 @@ export const make = Effect.fn("PluginHost.make")(function* (
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => sessions.wait(input.sessionID),
       context: (input) => sessions.context(input.sessionID),
+      instructions: {
+        entry: {
+          list: Effect.fn(function* (input) {
+            yield* sessions.get(input.sessionID)
+            return yield* instructionEntries.list(input.sessionID)
+          }),
+          put: Effect.fn(function* (input) {
+            const key = yield* Schema.decodeUnknownEffect(InstructionEntry.Key)(input.key)
+            yield* sessions.get(input.sessionID)
+            yield* instructionEntries.put({ ...input, key })
+          }),
+          remove: Effect.fn(function* (input) {
+            const key = yield* Schema.decodeUnknownEffect(InstructionEntry.Key)(input.key)
+            yield* sessions.get(input.sessionID)
+            yield* instructionEntries.remove({ ...input, key })
+          }),
+        },
+      },
     },
   }
   return context
@@ -595,6 +658,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
 export const requirements = LayerNode.group([
   App.node,
   Agent.node,
+  Artifact.node,
   AISDK.node,
   Provider.node,
   Model.node,
@@ -616,6 +680,7 @@ export const requirements = LayerNode.group([
   Permission.node,
   PluginHooks.node,
   Session.node,
+  InstructionEntry.node,
   PersistentPty.node,
   LocationServiceMap.node,
 ])

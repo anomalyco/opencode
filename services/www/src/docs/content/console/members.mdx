@@ -3,12 +3,11 @@ title: "Members"
 description: "Invite people to an OpenCode Console workspace, manage their roles, and remove them."
 ---
 
-Owners and admins manage people from the **Members** page. Each row shows the member's role, join date, monthly
-usage, and budget limit.
+Owners and admins manage people from **Settings › Members**. Open a member to see their usage and budget policies.
 
 ## Invite members
 
-1. Open **Members** and click **Invite Members**.
+1. Open **Settings › Members** and click **Invite Members**.
 2. Add one or more email addresses. Separate them with spaces, commas, or semicolons, or paste a list.
 3. Click **Send invitations**.
 
@@ -17,8 +16,9 @@ Each person receives an email titled **Join Acme Inc. on OpenCode** with a **Joi
 Invitations expire after 7 days. Everyone joins as **Member**; [change their role](#change-a-role) after they join.
 
 <Callout>
-  Workspaces with an [OpenCode Go](/console/go) subscription cannot invite members. Create a separate workspace for your
-  team.
+  [OpenCode Go](/console/go) and Go Plus are for a single member. To invite teammates, upgrade to Go Teams ($20 per
+  member per month). On Go Teams, every member you invite or provision gets their own Go limits, charged $20 a month
+  from when they join.
 </Callout>
 
 Members can also join automatically:
@@ -58,8 +58,8 @@ You can only grant roles up to your own, and the workspace always keeps at least
 
 Access is revoked immediately, and you can invite them again later. Their past usage stays in the workspace's reports.
 
-Service accounts and their API keys belong to the workspace, so removing the member who created them does not revoke
-them. Revoke keys from **Keys** if needed. See [Service accounts](/console/api#service-accounts).
+Removing a member also revokes the API keys they created in the workspace, including service account keys. Service
+accounts themselves stay, and keys other people created keep working. See [Revocation](/console/api#revocation).
 
 ## Member details
 

@@ -26,10 +26,11 @@ Generated clients follow the assembled public `HttpApi`. GitHub issues own activ
 
 ## Decision Records
 
-| Document                                       | Status                   | Job                                                                                                       |
-| ---------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------- |
-| [Event stream](./event-stream-architecture.md) | Accepted and implemented | Record why public events use one encoded feed with independent queues.                                    |
-| [Provider policy](./provider-policy.md)        | Accepted and implemented | Allow or deny provider use and permission checks, with Console-managed statements having final authority. |
+| Document                                            | Status                   | Job                                                                                                       |
+| --------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| [Event stream](./event-stream-architecture.md)      | Accepted and implemented | Record why public events use one encoded feed with independent queues.                                    |
+| [Provider policy](./provider-policy.md)             | Accepted and implemented | Allow or deny provider use and permission checks, with Console-managed statements having final authority. |
+| [Claude Agent provider](./claude-agent-provider.md) | Draft                    | Record the design decisions behind the Claude Agent provider.                                             |
 
 ## Historical Context
 

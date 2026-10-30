@@ -1,10 +1,20 @@
-// Generated session IDs have a 26-character alphanumeric suffix. Require a complete token
-// so a partially streamed ID, an identifier suffix, or a path does not become a link.
-const sessionID = /(?<![A-Za-z0-9_])ses_[A-Za-z0-9]{26}(?![A-Za-z0-9_])/g
+import { parseSessionMention, sessionMentions, type SessionMention } from "@opencode/util/session-mention"
 
-const exactSessionID = /^ses_[A-Za-z0-9]{26}$/
+export type SessionTitle = (id: string) => string | undefined
 
-export function markSessionLinks(root: HTMLElement) {
+export function markSessionLinks(root: HTMLElement, title: SessionTitle) {
+  // Already-rendered references retain their source so renames, discovery and deletion are reactive.
+  root.querySelectorAll<HTMLElement>("[data-session-reference]").forEach((element) => {
+    const source = element.dataset.sessionReference!
+    const mention = parseSessionMention(source)
+
+    if (!mention) return
+    const label = title(mention.id)
+
+    if (element.textContent === (label ?? source) && (element.tagName === "BUTTON") === (label !== undefined)) return
+    element.replaceWith(sessionReference(mention, source, label))
+  })
+
   if (!root.textContent?.includes("ses_")) return
 
   // The worker's escaped-raw fallback has no markdown elements; linking its text
@@ -12,44 +22,60 @@ export function markSessionLinks(root: HTMLElement) {
   if (!root.querySelector("p, li, blockquote, td, th, h1, h2, h3, h4, h5, h6")) return
 
   root.querySelectorAll("code").forEach((code) => {
-    if (code.closest("pre, a, button") || !exactSessionID.test(code.textContent ?? "")) return
-    const link = sessionButton(code.textContent!)
-    code.replaceWith(link)
-    link.replaceChildren(code)
+    if (code.closest("pre, a, button, [data-session-reference]")) return
+    const source = code.textContent ?? ""
+    const mention = parseSessionMention(source)
+
+    if (mention) code.replaceWith(sessionReference(mention, source, title(mention.id)))
   })
 
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
   const nodes: Text[] = []
 
   while (walker.nextNode()) {
+    // SAFETY: SHOW_TEXT restricts this walk to Text nodes.
     const node = walker.currentNode as Text
 
-    if (node.parentElement?.closest("a, button, code, pre")) continue
+    if (node.parentElement?.closest("a, button, code, pre, [data-session-reference]")) continue
 
     if (node.data.includes("ses_")) nodes.push(node)
   }
 
   nodes.forEach((node) => {
-    const matches = [...node.data.matchAll(sessionID)]
-
-    if (!matches.length) return
-    const fragment = document.createDocumentFragment()
-    let start = 0
-    matches.forEach((match) => {
-      fragment.append(node.data.slice(start, match.index), sessionButton(match[0]))
-      start = match.index + match[0].length
-    })
-    fragment.append(node.data.slice(start))
-    node.replaceWith(fragment)
+    node.replaceWith(sessionReferenceText(node.data, title))
   })
 }
 
-function sessionButton(id: string) {
+/** Shared by plain user text and rendered assistant markdown. */
+export function sessionReferenceText(text: string, title: SessionTitle) {
+  const fragment = document.createDocumentFragment()
+  let start = 0
+  sessionMentions(text).forEach((mention) => {
+    fragment.append(text.slice(start, mention.start), sessionReference(mention, mention.text, title(mention.id)))
+    start = mention.end
+  })
+  fragment.append(text.slice(start))
+
+  return fragment
+}
+
+function sessionReference(mention: SessionMention, source: string, title: string | undefined) {
+  if (title === undefined) {
+    const code = document.createElement("code")
+    code.className = "markdown-session-id"
+    code.dataset.sessionReference = source
+    code.textContent = source
+
+    return code
+  }
+
   const button = document.createElement("button")
   button.type = "button"
   button.className = "markdown-session-link"
-  button.dataset.sessionId = id
-  button.textContent = id
+  button.dataset.sessionId = mention.id
+  button.dataset.sessionReference = source
+  button.title = mention.id
+  button.textContent = title
 
   return button
 }

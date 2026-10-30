@@ -2,8 +2,9 @@ import { Keymap } from "../context/keymap"
 import { useNewDesigns } from "../config"
 import { useTheme } from "../context/theme"
 import { DialogHeader, DialogLayout, type DialogContext } from "./dialog"
+import { DialogSelect, DialogSelectChoice } from "./dialog-select"
 import { createStore } from "solid-js/store"
-import { For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 
 export type ExportFormat = "markdown" | "json"
 
@@ -22,8 +23,110 @@ export type DialogExportOptionsProps = {
 type Active = ExportFormat | "thinking" | "tools" | "sanitize" | "copy" | "export"
 
 export function DialogExportOptions(props: DialogExportOptionsProps) {
-  const theme = useTheme().surface("dialog")
   const newDesigns = useNewDesigns()
+  return (
+    <Show when={newDesigns()} fallback={<LegacyDialogExportOptions {...props} />}>
+      <DialogExportOptionsList {...props} />
+    </Show>
+  )
+}
+
+type Row = "format" | "thinking" | "tools" | "sanitize"
+
+/** Export options as a list of values, under the "new-designs" experiment: ↑/↓ moves, ←/→ or space changes. */
+function DialogExportOptionsList(props: DialogExportOptionsProps) {
+  const [store, setStore] = createStore({
+    format: "markdown" as ExportFormat,
+    thinking: props.defaultThinking,
+    tools: true,
+    sanitize: false,
+  })
+  const [selected, setSelected] = createSignal<Row>("format")
+
+  const confirm = (action: "copy" | "export") =>
+    props.onConfirm?.({
+      action,
+      format: store.format,
+      thinking: store.thinking,
+      tools: store.tools,
+      sanitize: store.sanitize,
+    })
+
+  const change = (row: Row) => {
+    if (row === "format") return setStore("format", store.format === "markdown" ? "json" : "markdown")
+    setStore(row, !store[row])
+  }
+
+  const include = (value: boolean) => (value ? "include" : "exclude")
+  const options = createMemo(() => [
+    {
+      title: "Format",
+      value: "format" as Row,
+      onSelect: () => change("format"),
+      footerOverhang: 2,
+      footer: <DialogSelectChoice value={store.format} active={selected() === "format"} />,
+    },
+    ...(store.format === "markdown"
+      ? [
+          {
+            title: "Thinking",
+            value: "thinking" as Row,
+            onSelect: () => change("thinking"),
+            category: "Options",
+            footerOverhang: 2,
+            footer: <DialogSelectChoice value={include(store.thinking)} active={selected() === "thinking"} />,
+          },
+          {
+            title: "Tools",
+            value: "tools" as Row,
+            onSelect: () => change("tools"),
+            category: "Options",
+            footerOverhang: 2,
+            footer: <DialogSelectChoice value={include(store.tools)} active={selected() === "tools"} />,
+          },
+        ]
+      : [
+          {
+            title: "Sanitize",
+            value: "sanitize" as Row,
+            onSelect: () => change("sanitize"),
+            category: "Options",
+            footerOverhang: 2,
+            footer: <DialogSelectChoice value={store.sanitize ? "on" : "off"} active={selected() === "sanitize"} />,
+          },
+        ]),
+  ])
+
+  return (
+    <DialogSelect
+      title="Export session"
+      renderFilter={false}
+      footerGap={2}
+      options={options()}
+      onMove={(option) => setSelected(option.value)}
+      actions={[
+        {
+          command: "dialog.export.copy",
+          title: "copy",
+          bind: "c",
+          selection: "none",
+          group: "primary",
+          onTrigger: () => confirm("copy"),
+        },
+      ]}
+      footerHints={[{ title: "save to file", label: "enter", group: "primary" }]}
+      bindings={[
+        { bind: "left", title: "Previous value", group: "Dialog", run: () => change(selected()) },
+        { bind: "right", title: "Next value", group: "Dialog", run: () => change(selected()) },
+        { bind: "space", title: "Change export option", group: "Dialog", run: () => change(selected()) },
+        { bind: "return", title: "Save to file", group: "Dialog", run: () => confirm("export") },
+      ]}
+    />
+  )
+}
+
+function LegacyDialogExportOptions(props: DialogExportOptionsProps) {
+  const theme = useTheme().surface("dialog")
   // Same field styling as the question form: only the focused row is highlighted, and the
   // mark alone shows what's checked.
   const markColor = (active: boolean, checked: boolean) =>
@@ -60,7 +163,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   const move = (offset: number) => {
     const options: Active[] =
       store.format === "markdown" ? ["markdown", "json", "thinking", "tools"] : ["markdown", "json", "sanitize"]
-    const order: Active[] = newDesigns() ? options : [...options, "copy", "export"]
+    const order: Active[] = [...options, "copy", "export"]
     setStore("active", order[(order.indexOf(store.active) + offset + order.length) % order.length])
   }
 
@@ -69,21 +172,12 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
     commands: [
       { bind: "tab", title: "Next export option", group: "Dialog", run: () => move(1) },
       { bind: "shift+tab", title: "Previous export option", group: "Dialog", run: () => move(-1) },
-      ...(newDesigns()
-        ? [
-            // The footer owns enter (save) and c (copy), so space toggles the focused option instead.
-            { bind: "return", title: "Save to file", group: "Dialog", run: () => confirm("export") },
-            { bind: "c", title: "Copy export", group: "Dialog", run: () => confirm("copy") },
-            { bind: "space", title: "Toggle export option", group: "Dialog", run: activate },
-          ]
-        : [
-            {
-              bind: "return",
-              title: "Select export option",
-              group: "Dialog",
-              run: activate,
-            },
-          ]),
+      {
+        bind: "return",
+        title: "Select export option",
+        group: "Dialog",
+        run: activate,
+      },
     ],
   }))
 
@@ -95,14 +189,6 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   return (
     <DialogLayout
       header={<DialogHeader title="Export session" />}
-      footer={{
-        actions: {
-          primary: [
-            { title: "copy", key: "c", onTrigger: () => confirm("copy") },
-            { title: "save to file", key: "enter", onTrigger: () => confirm("export") },
-          ],
-        },
-      }}
       legacyFooter={
         <box flexDirection="row" justifyContent="flex-end" gap={1}>
           <box

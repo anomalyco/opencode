@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM, LLMRequest, Message, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMRequest, Message, ToolDefinition } from "../../src/effect.js"
 import { LLMClient, Route } from "../../src/route/client.js"
 import { Auth } from "../../src/route/auth.js"
 import { Endpoint } from "../../src/route/endpoint.js"
@@ -198,7 +198,7 @@ const retainedItems = [
     content: [
       { type: "input_image", image_url: "https://example.com/image.png" },
       { type: "input_file", filename: "report.pdf", file_data: "data:application/pdf;base64,cGRm", detail: "high" },
-      { type: "input_file", filename: "other.pdf", file_url: "https://example.com/report.pdf", detail: "low" },
+      { type: "input_file", file_url: "https://example.com/report.pdf", detail: "low" },
     ],
   },
   checkpoint,

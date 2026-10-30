@@ -101,7 +101,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"],
   [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
     transition-duration: 0ms;
