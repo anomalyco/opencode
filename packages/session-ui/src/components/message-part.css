@@ -1456,6 +1456,19 @@
     padding: 0;
   }
 
+  [data-slot="permission-input"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+
+    code {
+      font-family: var(--v2-font-family-code);
+      font-size: 13px;
+      line-height: var(--line-height-base);
+    }
+  }
+
   [data-slot="permission-patterns"] {
     display: flex;
     flex-direction: column;

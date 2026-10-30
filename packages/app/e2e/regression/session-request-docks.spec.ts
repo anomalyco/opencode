@@ -230,11 +230,13 @@ test("names the MCP tool and its input in the permission dock", async ({ page })
   await expectSessionTitle(page, title)
 
   const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const input = permission.locator('[data-slot="permission-input"]')
   await expect(permission.getByText("linear_save_comment")).toBeVisible()
-  await expect(permission.getByText("issueId: ENG-1")).toBeVisible()
-  await expect(permission.getByText('labels: ["bug"]')).toBeVisible()
-  await expect(permission.getByText(`body: ${"x".repeat(194)}…`)).toBeVisible()
-  await expect(permission.getByText("*", { exact: true })).toHaveCount(0)
+  await expect(input.getByText("issueId: ENG-1")).toBeVisible()
+  await expect(input.getByText('labels: ["bug"]')).toBeVisible()
+  await expect(input.getByText(`body: ${"x".repeat(194)}…`)).toBeVisible()
+  // "Allow always" saves the wildcard, so its scope stays visible next to this call's input
+  await expect(permission.locator('[data-slot="permission-patterns"]').getByText("*", { exact: true })).toBeVisible()
 })
 
 test("loads a running subagent's question without polling idle subagents on every update", async ({ page }) => {
