@@ -3,12 +3,12 @@ import { Effect, Schema } from "effect"
 import { LLM, LLMEvent, toDefinitions } from "../../src/effect.js"
 import { DigitalOcean, OpenRouter, Venice } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
-import { Tool } from "../../src/tool.js"
+import { tool } from "../../src/tool.js"
 import { expectWeatherToolLoop, runWeatherToolLoop, weatherToolLoopRequest } from "../recorded-scenarios.js"
 import { recordedTests } from "../recorded-test.js"
 
 const run = toDefinitions({
-  run: Tool.make({
+  run: tool({
     description: "Run a Python snippet.",
     parameters: Schema.Struct({ code: Schema.String }),
     success: Schema.String,

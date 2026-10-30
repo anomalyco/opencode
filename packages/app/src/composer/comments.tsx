@@ -7,7 +7,7 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { useServerSDK } from "@/runtime/server/client"
 import type { ServerScope } from "@/runtime/server/scope"
 import { createScopedCache } from "@/runtime/server/scoped-cache"
-import { uuid } from "@/runtime/persistence/uuid"
+import { uuid } from "@opencode/util/uuid"
 import type { SelectedLineRange } from "@/workspaces/files/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { CommentStore, type LineComment } from "./schema"
@@ -80,9 +80,12 @@ function group(comments: LineComment[]) {
 }
 
 function createCommentSessionState(store: Store<CommentStore>, setStore: SetStoreFunction<CommentStore>) {
-  const [state, setState] = createStore({
-    focus: null as CommentFocus | null,
-    active: null as CommentFocus | null,
+  const [state, setState] = createStore<{
+    focus: CommentFocus | null
+    active: CommentFocus | null
+  }>({
+    focus: null,
+    active: null,
   })
 
   // Reuse the previous array when contents are unchanged so consumers keep a stable

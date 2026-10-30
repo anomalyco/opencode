@@ -85,7 +85,52 @@
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   min-height: 0;
+}
+
+@property --settings-nav-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --settings-nav-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* Each edge fades in once content is hidden behind it. A list that does not overflow has no scroll timeline, so it keeps both lengths at 0. */
+@supports (animation-timeline: scroll()) {
+  .settings-nav-groups {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--settings-nav-fade-start),
+      #000 calc(100% - var(--settings-nav-fade-end)),
+      transparent
+    );
+    animation:
+      settings-nav-fade-start linear both,
+      settings-nav-fade-end linear both;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range:
+      0 24px,
+      calc(100% - 24px) 100%;
+  }
+}
+
+@keyframes settings-nav-fade-start {
+  to {
+    --settings-nav-fade-start: 24px;
+  }
+}
+
+@keyframes settings-nav-fade-end {
+  from {
+    --settings-nav-fade-end: 24px;
+  }
 }
 
 .settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"] {
@@ -230,6 +275,55 @@
 
 .settings-about-intro {
   gap: 14px;
+}
+
+.settings-about-version-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-about-version {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  margin-block: -2px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.settings-about-version::before {
+  position: absolute;
+  z-index: -1;
+  inset-block: 0;
+  inset-inline: -6px;
+  border-radius: 4px;
+  background: transparent;
+  content: "";
+  transition: background-color 120ms ease;
+}
+
+.settings-about-version:hover,
+.settings-about-version:focus-visible {
+  color: var(--v2-text-text-base);
+  outline: none;
+}
+
+.settings-about-version:hover::before,
+.settings-about-version:focus-visible::before {
+  background: var(--v2-background-bg-layer-02);
+}
+
+.settings-about-version:disabled {
+  cursor: default;
 }
 
 .settings-about-credits,
@@ -752,7 +846,10 @@
   justify-content: flex-end;
 }
 
-[data-slot="settings-row-control"] > div:has([data-component="switch"]),
+/* The :has() belongs on the control, not on its div. Chromium checks a div:has() subject against every div in the
+   document and flags each one, then restyles a flagged div whenever an element is inserted anywhere beneath it, which
+   is every ancestor of a streaming answer. */
+[data-slot="settings-row-control"]:has(> div [data-component="switch"]) > div,
 [data-slot="settings-row-control"] > [data-component="switch"] {
   display: inline-flex;
   align-items: center;
@@ -760,8 +857,11 @@
 }
 
 [data-component="settings-list"][data-variant="catalog"]
+  [data-slot="settings-row-control"]:has(> div [data-component="switch"])
+  > div,
+[data-component="settings-list"][data-variant="catalog"]
   [data-slot="settings-row-control"]
-  > :is(div:has([data-component="switch"]), [data-component="switch"]) {
+  > [data-component="switch"] {
   padding: 0;
 }
 

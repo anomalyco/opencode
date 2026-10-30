@@ -1,7 +1,7 @@
 import { createEffect, createMemo, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Schema } from "effect"
-import type { SessionInfo } from "@opencode/client/promise"
+import { isSessionNotFoundError, type SessionInfo } from "@opencode/client/promise"
 import type { ServerSDK } from "@/runtime/server/client"
 import type { Data } from "@opencode/client/solid"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -208,7 +208,14 @@ export function createServerNotificationState(input: {
         viewRetryTimer = undefined
         viewRetryAttempt = 0
       },
-      () => {
+      (error) => {
+        if (isSessionNotFoundError(error)) {
+          acknowledged.delete(root)
+          input.data.session.forget(root)
+
+          return
+        }
+
         if (acknowledged.get(root) !== idle) return
         acknowledged.delete(root)
 

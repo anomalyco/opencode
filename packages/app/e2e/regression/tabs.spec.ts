@@ -579,8 +579,19 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   await resize(-380, "260px")
 
   const scroll = sidebar.locator('[data-slot="vertical-tabs-scroll"]')
+
+  // The list feathers only the edges with more rows past them.
+  const feather = () =>
+    scroll.evaluate((element) => {
+      const style = getComputedStyle(element)
+
+      return [style.getPropertyValue("--vertical-tabs-fade-top"), style.getPropertyValue("--vertical-tabs-fade-bottom")]
+    })
+
+  await expect.poll(feather).toEqual(["0px", "16px"])
   await scroll.evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await expect(tabB).toBeInViewport({ ratio: 1 })
+  await expect.poll(feather).toEqual(["16px", "0px"])
 
   await page.locator("html").evaluate((element) => element.setAttribute("dir", "rtl"))
   const home = sidebar.locator('[data-action="vertical-tabs-home"]')
@@ -1235,6 +1246,43 @@ test("⌘W closes the session tab again once the window loses focus after the si
   await expect(sessions.alphaTab).toHaveCount(0)
 })
 
+test("⌘W in the side panel closes its last New tab with the panel, and only then the session tab", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const alpha = { id: "ses_side_new_alpha", title: "Side new alpha" }
+  const beta = { id: "ses_side_new_beta", title: "Side new beta" }
+  await openSession(page, { name: "SideCloseNewTab", sessions: [alpha, beta] })
+
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const newTab = panel.getByRole("tab", { name: "New tab", exact: true })
+  const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
+  const alphaTab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(alpha.id)}"])`)
+
+  await composer.click()
+  await page.keyboard.press("ControlOrMeta+Shift+R")
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+  await expect.poll(() => panel.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+  // A launcher row in the New tab view holds focus as ⌘W removes it.
+  await panel.getByRole("button", { name: /^Open file/ }).focus()
+
+  // The New tab was the panel's last tab, so closing it closes the panel too, and focus goes back.
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(newTab).toHaveCount(0)
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(composer).toBeFocused()
+
+  // One press too many closes nothing rather than the session.
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(alphaTab).toHaveCount(1)
+  await expectPath(page, sessionHref(alpha.id))
+
+  // With no panel open, ⌘W from the composer closes the session tab.
+  await composer.click()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expectPath(page, sessionHref(beta.id))
+  await expect(alphaTab).toHaveCount(0)
+})
+
 // Windows has no native menu bar: the titlebar menu owns Paste, which only the desktop edit action can perform.
 test("the Windows titlebar menu pastes through the desktop edit action", async ({ page }) => {
   await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
@@ -1322,6 +1370,27 @@ test("loads a tab's transcript while the pointer rests on it, and not when it pa
   await tab(b.id).click()
   await expect(message(b.id)).toBeVisible()
   expect(requested.filter((id) => id === b.id)).toHaveLength(1)
+})
+
+test("⌘W in a focused Context tab closes it, then the panel, and keeps the session tab", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const alpha = { id: "ses_side_context_alpha", title: "Side context alpha" }
+  const beta = { id: "ses_side_context_beta", title: "Side context beta" }
+  await openSession(page, { name: "SideCloseContext", sessions: [alpha, beta] })
+
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const context = panel.getByRole("tab", { name: "Context", exact: true })
+  const alphaTab = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(alpha.id)}"])`)
+
+  await page.getByRole("button", { name: "Toggle session context" }).click()
+  await expect(context).toHaveAttribute("aria-selected", "true")
+  await panel.click({ position: { x: 100, y: 300 } })
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(context).toHaveCount(0)
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(alphaTab).toHaveCount(1)
+  await expectPath(page, sessionHref(alpha.id))
 })
 
 // Closes Alpha's side tabs with ⌘W until the side panel empties and collapses, as an overshooting hand would.

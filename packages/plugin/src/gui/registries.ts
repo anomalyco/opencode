@@ -685,6 +685,12 @@ export interface SlotMap {
     readonly session: MountedSession
     /** The timeline is the one on screen. */
     readonly active: boolean
+    /**
+     * The title does not fit beside the actions, even with the location collapsed. Show the compact form of what you
+     * render, without its details (for example an icon that opens them in a menu), so the title keeps the room. The
+     * header returns to false once the title fits beside your expanded content again.
+     */
+    readonly compact: boolean
   }
   /** Items in the project/location menu, after its location details. Omitted on loading headers without a screen. */
   readonly "session.location.menu": {

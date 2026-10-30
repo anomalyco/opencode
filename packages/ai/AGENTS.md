@@ -7,6 +7,7 @@
 - **One canonical model.** The Schema classes in `src/schema/` are the data model. Do not add a parallel shape or a second construction path.
 - **Independent of Session.** Auth, permissions, plugins, and orchestration belong in Core. `LLM.stream`/`LLM.generate` run exactly one model call.
 - **Reuse protocols.** Providers compose existing protocols with `Route.make(...)` instead of cloning them.
+- **One API, two runtimes.** Every `LLM`, `Image` and `Decision` operation has an `ai.*` twin with the same name, overloads, input and options (plus `signal`); keep `test/promise-parity.types.ts` passing.
 
 ## Code style
 

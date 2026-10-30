@@ -90,6 +90,7 @@ const replacements: Partial<Record<IconName, { name: NewIconName; rotate?: numbe
   "select-element": { name: "annotate" },
   download: { name: "download" },
   "post-skill": { name: "skill" },
+  "graduation-cap": { name: "skill" },
   eye: { name: "eye-open" },
   "outline-eye": { name: "eye-open" },
   "outline-eye-slash": { name: "eye-closed" },
@@ -131,7 +132,7 @@ const replacements: Partial<Record<IconName, { name: NewIconName; rotate?: numbe
 // Status:   circle-xmark (10) / circle-x (1), outline-hexagonal-warning (7) / warning (6), status / status-active (4),
 //           help (3), info (2)
 // Features: terminal (6), mcp (5), branch (5, held back), console / outline-console (2), stop, models,
-//           link, share, brain / outline-brain, shield, graduation-cap
+//           link, share, brain / outline-brain, shield
 // Arrows:   arrow-up-right (5) / outline-arrow-up-right (3), arrow-down-to-line (2), arrow-undo-down
 // Layout:   layout-left / layout-left-full (4), layout-right / layout-right-full (2), chevron-grabber-vertical (4),
 //           fill-triangle-down (3), menu (2), expand / collapse, split / unified, dot-grid

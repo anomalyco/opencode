@@ -9,7 +9,7 @@ payload=$(jq -n --arg tag "$tag" --arg notes "${OPENCODE_RELEASE_NOTES:-}" \
   ($notes | if length > 4000 then .[:4000] + "\n\n[Full release notes](\($url))" else . end) as $description |
   {
     allowed_mentions: {parse: []},
-    embeds: [{title: "OpenCode V2 \($tag)", url: $url, color: 2829099} + if $description == "" then {} else {description: $description} end]
+    embeds: [{title: "OpenCode V2 \($tag)", url: $url, description: $description, color: 2829099}]
   }')
 echo "$payload" | jq .
 if dry_run; then exit 0; fi

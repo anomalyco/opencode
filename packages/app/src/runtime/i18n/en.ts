@@ -65,6 +65,7 @@ export const dict = {
   "command.usage.view": "View usage",
   "command.usage.view.description": "See your OpenCode Go allowance and Console budgets",
   "command.session.location.cycle": "Cycle session location",
+  "command.session.branch.choose": "Choose base branch",
   "session.location.toggle": "Toggle session location",
 
   "command.palette": "Search everything",
@@ -147,6 +148,7 @@ export const dict = {
   "dialog.provider.opencode.tagline": "Reliable optimized models",
   "dialog.provider.opencodeGo.tagline": "Low cost subscription for everyone",
   "dialog.provider.anthropic.note": "Direct access to Claude models via API key",
+  "dialog.provider.claudeAgent.note": "Use your Claude plan or another Claude Code login",
   "dialog.provider.copilot.note": "AI models for coding assistance via GitHub Copilot",
   "dialog.provider.openai.note": "GPT models for fast, capable general AI tasks",
   "dialog.provider.google.note": "Gemini models for fast, structured responses",
@@ -227,6 +229,16 @@ export const dict = {
   "provider.connect.remote.description":
     "Your OpenCode credentials will be stored on this server. Models will be available through this server.",
   "provider.connect.title.anthropicProMax": "Login with Anthropic",
+  "provider.connect.claudeAgent.description":
+    "Use your Claude plan or another Claude Code login. Install Claude Code and sign in first.",
+  "provider.connect.claudeAgent.learnMore": "Learn more",
+  "provider.connect.claudeAgent.install": "Install Claude Code",
+  "provider.connect.claudeAgent.signIn.command": "Sign-in command",
+  "provider.connect.claudeAgent.connect": "Connect",
+  "provider.connect.claudeAgent.checkAgain": "Check again",
+  "provider.connect.claudeAgent.checking": "Checking Claude Code…",
+  "provider.connect.claudeAgent.timeout":
+    "Couldn't confirm that Claude Code is ready. Make sure it's installed and signed in, then check again.",
   "provider.connect.command.waiting": "Waiting for command to finish…",
   "provider.connect.command.expired": "Authentication expired",
   "provider.connect.form.required": "Answer required",
@@ -667,6 +679,7 @@ export const dict = {
   "session.new.project.new": "New project",
   "session.new.project.search": "Search projects",
   "session.new.project.add": "Add project",
+  "session.new.project.trigger.tooltip": "Choose project",
   "session.new.worktree.creating": "Creating worktree",
   "session.new.workspace.runIn": "Run session in",
   "session.new.workspace.triggerLocal": "Local",
@@ -811,6 +824,7 @@ export const dict = {
   "settings.tab.about": "About",
   "settings.about.version": "Version {{version}}",
   "settings.about.devVersion": "development",
+  "settings.about.copyVersionFailed": "Failed to copy version",
   "settings.about.license": "Released under the MIT License",
   "settings.about.writtenByNames": "Written by {{names}}",
   "settings.about.illustratedByNames": "Illustrated by {{names}}",
@@ -1005,6 +1019,8 @@ export const dict = {
   "settings.general.row.followUpBehavior.steer": "Steer",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
+  "settings.general.row.spellcheck.title": "Spellcheck",
+  "settings.general.row.spellcheck.description": "Underline misspelled words while typing",
 
   "sound.option.none": "None",
   "sound.option.alert01": "Alert 01",

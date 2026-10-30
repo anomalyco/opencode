@@ -209,7 +209,7 @@ it.live(
       expect(boots).toEqual([first.id, second.id])
 
       for (const config of configs) {
-        yield* llm.push(TestLLM.tool(`call_${config.tool}`, config.tool, {}), TestLLM.text(config.id, config.tool))
+        yield* llm.push(TestLLM.toolCall(`call_${config.tool}`, config.tool, {}), TestLLM.text(config.id, config.tool))
         yield* sessions.resume(config.id)
       }
       expect(executed).toEqual([first.id, second.id])

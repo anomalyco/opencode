@@ -2,6 +2,118 @@
 
 Release notes for OpenCode V2, newest first.
 
+## v2.2.3 — 2026-10-30
+
+### Highlights
+
+- **Use Claude Code in OpenCode**: Install Claude Code, run `claude auth login`, then select **Claude Agent** in `/connect` to use your Claude Code login and models. ([#58782](https://github.com/anomalyco/opencode/pull/58782))
+- **Faster Long Sessions in Desktop**: Streaming replies and long conversations now do much less rendering work. ([#60489](https://github.com/anomalyco/opencode/pull/60489), [#60521](https://github.com/anomalyco/opencode/pull/60521), [#60513](https://github.com/anomalyco/opencode/pull/60513), [#60481](https://github.com/anomalyco/opencode/pull/60481))
+- **Desktop Stability Fixes**: Fixes side-panel tabs, repeated "Session not found" toasts, and **Open file** over HTTP. ([#60430](https://github.com/anomalyco/opencode/pull/60430), [#60436](https://github.com/anomalyco/opencode/pull/60436), [#60459](https://github.com/anomalyco/opencode/pull/60459), [#60462](https://github.com/anomalyco/opencode/pull/60462))
+
+### Breaking changes
+
+#### `@opencode/ai` experimental media and one `tool()`
+
+These changes affect code that imports `@opencode/ai` directly. They don't change the CLI, Desktop, or the HTTP API.
+
+- Speech, transcription, video, and their clients and types moved from `@opencode/ai/effect` to `@opencode/ai/experimental`. On the Promise client, use `ai.experimental.speech`, `ai.experimental.transcription`, and `ai.experimental.video`. `TestSpeech`, `TestTranscription`, and `TestVideo` moved to `@opencode/ai/experimental/testing`. ([#60484](https://github.com/anomalyco/opencode/pull/60484))
+- Both clients build tools with `tool(...)`, which replaces `AI.tool` and `Tool.make`, and `testing.tool` is now `testing.toolCall`. ([#60407](https://github.com/anomalyco/opencode/pull/60407))
+
+#### TUI plugins require OpenTUI 0.8
+
+`@opencode/plugin` now requires `@opentui/core` and `@opentui/solid` 0.8.0 or later. In OpenTUI 0.8, a ScrollBox's `wrapper`, `viewport`, `content`, and scrollbars are facade objects instead of renderables, and a custom `RenderContext` must implement `clock` and `onAnimationTick`. See the [OpenTUI 0.8.0 release notes](https://opentui.com/docs/releases/0.8.0). ([#60385](https://github.com/anomalyco/opencode/pull/60385))
+
+#### Managed policy: `integration.use` covers integrations only
+
+`integration.use` now controls which integration accounts can be used, and the new `mcp.use`, `skill.use`, and `plugin.use` actions control MCP servers, skills, and plugins. Rules with the old `mcp:`, `skill:`, and `plugin:` resource prefixes are converted automatically, but a bare `integration.use` rule no longer applies to MCP servers, skills, or plugins. ([#60315](https://github.com/anomalyco/opencode/pull/60315))
+
+### Core
+
+#### Improvements
+
+- Added the built-in **Claude Agent** provider. Install Claude Code, run `claude auth login`, and select **Claude Agent** in `/connect`; `OPENCODE_CLAUDE_PATH` can override the Claude executable. Thanks [@Tarquinen](https://github.com/Tarquinen). ([#58782](https://github.com/anomalyco/opencode/pull/58782))
+- Added Code Mode JavaScript checks to experimental schedules, including statically authorized tool calls, persistent state, and custom wake messages. ([#60140](https://github.com/anomalyco/opencode/pull/60140))
+- Added separate managed-policy actions for connecting to integrations and using integrations, MCP servers, skills, and plugins. ([#60315](https://github.com/anomalyco/opencode/pull/60315))
+
+#### Bug fixes
+
+- Preserved plugin-provided model variants and delayed dynamic provider fallback until external SDK hooks have run. ([#60097](https://github.com/anomalyco/opencode/pull/60097), [#60380](https://github.com/anomalyco/opencode/pull/60380))
+- Preserved permission reasons and feedback in MCP failures, and made Code Mode failures match direct tool-call failures. ([#60102](https://github.com/anomalyco/opencode/pull/60102), [#60109](https://github.com/anomalyco/opencode/pull/60109))
+- Fixed invalid Code Mode schedule checks so creation fails immediately and existing invalid checks pause without repeated execution. ([#60349](https://github.com/anomalyco/opencode/pull/60349))
+- Removed a session’s persistent terminals when the session is deleted. ([#60322](https://github.com/anomalyco/opencode/pull/60322))
+- Kept nested tool progress from replacing the parent `execute` call rows. ([#60480](https://github.com/anomalyco/opencode/pull/60480))
+
+### TUI
+
+#### Improvements
+
+- Added lazy loading for stored image references when `experimental.media_blob` is enabled. Images are downloaded only for previews, while undo, revert, fork, and prompt recall restore referenced attachments safely. ([#60116](https://github.com/anomalyco/opencode/pull/60116))
+- Added a distinct marker for the selected composer suggestion in the new designs. ([#60393](https://github.com/anomalyco/opencode/pull/60393))
+
+#### Bug fixes
+
+- Fixed PHP syntax highlighting for code blocks without an opening `<?php` tag. ([#60359](https://github.com/anomalyco/opencode/pull/60359))
+- Preserved `#` in file-search paths unless it introduces a valid line range. ([#60336](https://github.com/anomalyco/opencode/pull/60336))
+- Kept the configured default cursor style after config reloads. ([#60302](https://github.com/anomalyco/opencode/pull/60302))
+- Matched the search cursor to the highlighted row when a selection dialog has no query. ([#60310](https://github.com/anomalyco/opencode/pull/60310))
+
+### Desktop
+
+#### Improvements
+
+- Added a Desktop spellcheck toggle under **Settings → General** and system-language dictionary selection on Windows and Linux. ([#59129](https://github.com/anomalyco/opencode/pull/59129))
+- Added `PageUp` and `PageDown` timeline paging from the composer without moving the draft cursor or focus. ([#59426](https://github.com/anomalyco/opencode/pull/59426))
+- Added independently configurable question notifications and sounds under **Settings → Notifications → Questions**. Thanks [@YuriNek0](https://github.com/YuriNek0). ([#60358](https://github.com/anomalyco/opencode/pull/60358))
+- Added separate project and worktree actions to the new-session control. ([#60486](https://github.com/anomalyco/opencode/pull/60486))
+- Added one-click version copying in **Settings → About**. ([#52356](https://github.com/anomalyco/opencode/pull/52356))
+- Grouped added projects in workspace settings. ([#60221](https://github.com/anomalyco/opencode/pull/60221))
+- Made question-answer text selectable. ([#60372](https://github.com/anomalyco/opencode/pull/60372))
+- Adapted the session header to narrow timeline widths. ([#59512](https://github.com/anomalyco/opencode/pull/59512))
+
+#### Bug fixes
+
+- Side-panel tabs close again and New tab launchers respond to clicks, fixing a 2.2.2 regression. ([#60430](https://github.com/anomalyco/opencode/pull/60430), [#60436](https://github.com/anomalyco/opencode/pull/60436))
+- **Open file** in the side panel works again in the web app over HTTP. ([#60462](https://github.com/anomalyco/opencode/pull/60462))
+- Kept question options and submit controls reachable on mobile. ([#60335](https://github.com/anomalyco/opencode/pull/60335))
+- Preserved simultaneous request notifications and inbox scroll position when opening sessions. ([#60378](https://github.com/anomalyco/opencode/pull/60378), [#60356](https://github.com/anomalyco/opencode/pull/60356))
+- Fixed consecutive dropped files so every file mention is inserted into the composer. ([#60463](https://github.com/anomalyco/opencode/pull/60463))
+- Kept the current `@` and command-menu selection stable while results update under a stationary pointer. ([#59434](https://github.com/anomalyco/opencode/pull/59434), [#60368](https://github.com/anomalyco/opencode/pull/60368))
+- Fixed `⌘W` side-panel closing and focus restoration when no closable tabs remain. ([#59002](https://github.com/anomalyco/opencode/pull/59002), [#60435](https://github.com/anomalyco/opencode/pull/60435))
+- Kept the mobile session drawer open while a session loads. ([#59427](https://github.com/anomalyco/opencode/pull/59427))
+- Restored maximized windows on their saved display and retained renderer permissions across shared-session windows. ([#60482](https://github.com/anomalyco/opencode/pull/60482), [#60458](https://github.com/anomalyco/opencode/pull/60458))
+- Fixed timeline growth, zoom-end scrolling, highlighting, and DOM-observer performance issues in long sessions. ([#60489](https://github.com/anomalyco/opencode/pull/60489), [#60481](https://github.com/anomalyco/opencode/pull/60481), [#60488](https://github.com/anomalyco/opencode/pull/60488), [#60513](https://github.com/anomalyco/opencode/pull/60513), [#60521](https://github.com/anomalyco/opencode/pull/60521))
+- Kept models with unknown release dates visible. Thanks [@joe-ieta](https://github.com/joe-ieta). ([#60496](https://github.com/anomalyco/opencode/pull/60496))
+- Fixed reasoning-capability detection for models that expose reasoning through variants or compatibility metadata. ([#60457](https://github.com/anomalyco/opencode/pull/60457))
+- Evicted deleted sessions after a `404` instead of retrying or showing repeated errors. ([#60459](https://github.com/anomalyco/opencode/pull/60459))
+- Fixed the macOS application icon and added the required folder-access description to the app bundle. ([#60020](https://github.com/anomalyco/opencode/pull/60020), [#60503](https://github.com/anomalyco/opencode/pull/60503))
+
+### SDK
+
+#### Improvements
+
+- Preserved partial `LLMResponse` output on `AIError.partial` when generation, object generation, or a tool loop fails. ([#60477](https://github.com/anomalyco/opencode/pull/60477))
+- Unified Effect and Promise tool declarations around `tool(...)`, with optional output schemas and executable or declaration-only tools. ([#60407](https://github.com/anomalyco/opencode/pull/60407))
+- Added typed OpenRouter `debug`, `models`, `plugins`, `provider`, and `user` options to the Responses route. ([#60044](https://github.com/anomalyco/opencode/pull/60044))
+- Added `withMediaRefs`, `mediaHashFromUri`, and `MediaRequestOptions` to the Promise client for experimental stored-media references. ([#60116](https://github.com/anomalyco/opencode/pull/60116))
+
+#### Bug fixes
+
+- Matched the Promise AI client more closely to the Effect API and accepted typed tools in loops. ([#60465](https://github.com/anomalyco/opencode/pull/60465), [#60390](https://github.com/anomalyco/opencode/pull/60390))
+- Kept tools whose `execute` handler can throw available to the AI client. ([#60431](https://github.com/anomalyco/opencode/pull/60431))
+- Continued polling queued media generations when providers return unknown intermediate statuses. ([#59988](https://github.com/anomalyco/opencode/pull/59988))
+- Stopped sending an incompatible `filename` alongside `file_url` on OpenAI Responses requests. ([#60382](https://github.com/anomalyco/opencode/pull/60382))
+
+### Extensions
+
+#### Improvements
+
+- Added persistent-terminal renaming to the process daemon, including capability discovery and user titles that override shell-provided titles until cleared. ([#60324](https://github.com/anomalyco/opencode/pull/60324))
+
+#### Bug fixes
+
+- Preserved `null` values in Code Mode text encoding. Thanks [@xiajiahang](https://github.com/xiajiahang). ([#57639](https://github.com/anomalyco/opencode/pull/57639))
+- Tidied nested Extensions menus. ([#59468](https://github.com/anomalyco/opencode/pull/59468))
+
 ## v2.2.2 — 2026-10-29
 
 ### Highlights

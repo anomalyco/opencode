@@ -4,7 +4,15 @@ import { stat } from "node:fs/promises"
 import path from "node:path"
 import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { Added, Handoff, PersistentPty, ReadLines, Removed, type ReadResult } from "@opencode/schema/persistent-pty"
+import {
+  Added,
+  Handoff,
+  PersistentPty,
+  ReadLines,
+  Removed,
+  Updated,
+  type ReadResult,
+} from "@opencode/schema/persistent-pty"
 import { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { Bus } from "../bus.js"
@@ -64,6 +72,10 @@ export class InvalidCwdError extends Schema.TaggedError<InvalidCwdError>()("Pers
   message: Schema.String,
 }) {}
 
+export class UnsupportedError extends Schema.TaggedError<UnsupportedError>()("PersistentPty.UnsupportedError", {
+  feature: Schema.String,
+}) {}
+
 export interface Interface {
   readonly list: (sessionID?: Session.ID) => Effect.Effect<Info[], UnavailableError>
   readonly get: (id: Pty.ID) => Effect.Effect<Info, NotFoundError | UnavailableError>
@@ -103,6 +115,10 @@ export interface Interface {
     rows: number,
     data: Uint8Array,
   ) => Effect.Effect<void, NotFoundError | UnavailableError>
+  readonly rename: (
+    id: Pty.ID,
+    title: string | null,
+  ) => Effect.Effect<Info, NotFoundError | UnsupportedError | UnavailableError>
   readonly snapshot: (id: Pty.ID) => Effect.Effect<Snapshot, NotFoundError | UnavailableError>
   readonly read: (sessionID: Session.ID, lines?: number) => Effect.Effect<ReadResult | null, UnavailableError>
   readonly remove: (id: Pty.ID) => Effect.Effect<void, NotFoundError | UnavailableError>
@@ -266,6 +282,18 @@ const makeLayer = (options: Options = {}) =>
         return undefined
       })
 
+      const rename = Effect.fn("PersistentPty.rename")(function* (id: Pty.ID, title: string | null) {
+        const terminal = yield* get(id)
+        // Daemons without the feature drop the connection on unknown requests.
+        if (!(yield* daemon.supports("rename").pipe(Effect.mapError(unavailable))))
+          return yield* new UnsupportedError({ feature: "rename" })
+        const response = yield* request(daemon, { op: "rename", id: fromID(id), title })
+        if (response.type !== "ok") return yield* unexpected(response)
+        const renamed = yield* get(id)
+        yield* bus.publish(Updated, { sessionID: terminal.sessionID, terminal: renamed })
+        return renamed
+      })
+
       const snapshot = Effect.fn("PersistentPty.snapshot")(function* (id: Pty.ID) {
         yield* get(id)
         const response = yield* request(daemon, { op: "snapshot", id: fromID(id) })
@@ -404,6 +432,7 @@ const makeLayer = (options: Options = {}) =>
         resize,
         control,
         input,
+        rename,
         snapshot,
         read,
         remove,
@@ -449,6 +478,7 @@ function toInfo(value: WireTerminal): Info {
       ...(status === "exited" ? { exitCode: value.lifecycle.exit_code ?? undefined } : {}),
     }),
     sessionID: value.group_id,
+    userTitle: value.user_title ?? null,
     foregroundProcess: value.foreground_process,
     size: { cols: value.cols, rows: value.rows },
     output: { head: value.output_head, tail: value.output_tail },

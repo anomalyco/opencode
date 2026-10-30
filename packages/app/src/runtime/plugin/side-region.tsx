@@ -30,11 +30,12 @@ import {
 import { useCommand } from "@/shell/commands/command"
 import { guardClosingFocus } from "@/shell/panel-motion"
 import { useLanguage } from "@/runtime/i18n/language"
+import { same } from "@/runtime/persistence/equality"
 import { useLayout } from "@/shell/state/layout"
 import { useSessionLayout } from "@/session/session-layout"
 import type { Sizing } from "@/session/helpers"
 import { PanelTrigger } from "./panel-trigger"
-import { createSessionPanelMenu } from "./panel-menu"
+import { createSessionPanelMenuEntries, type SessionPanelMenuEntry } from "./panel-menu"
 import { RegionContent, type Region, type RegionPane } from "./panels"
 import { PluginSlot } from "./render"
 import { createTabStripScroll } from "./tab-strip-scroll"
@@ -201,9 +202,9 @@ export function PaneTabs(props: {
 }) {
   const language = useLanguage()
   const { tabs } = useSessionLayout()
-  const menu = createSessionPanelMenu()
-  const primary = createMemo(() => menu().find((item) => item.primary))
-  const launchers = createMemo(() => menu().filter((item) => !item.primary && !item.opened))
+  const menu = createSessionPanelMenuEntries()
+  const primary = createMemo(() => menu().find((entry) => entry.item.primary)?.item)
+  const launchers = createMemo(() => menu().filter((entry) => !entry.item.primary && !entry.item.opened))
 
   // The next tab this pane's "+" menu opens lands in this pane.
   const target = () => tabs().target(props.pane.id)
@@ -331,7 +332,7 @@ export function PaneTabs(props: {
           </For>
           <div class="h-full shrink-0 sticky end-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
             <Show
-              when={primary() ?? (launchers().length === 0 && menu().length === 1 ? menu()[0] : undefined)}
+              when={primary() ?? (launchers().length === 0 && menu().length === 1 ? menu()[0]?.item : undefined)}
               fallback={
                 <Show
                   when={launchers().length > 0}
@@ -495,9 +496,11 @@ function AddButton(props: { item: SessionPanelMenuItem; onChoose: () => void }):
   )
 }
 
-function AddMenu(props: { items: readonly SessionPanelMenuItem[]; onChoose: () => void }): JSX.Element {
+function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () => void }): JSX.Element {
   const language = useLanguage()
   const command = useCommand()
+  const keys = createMemo(() => props.items.map((entry) => entry.key), [], { equals: same })
+  const byKey = createMemo(() => new Map(props.items.map((entry) => [entry.key, entry.item])))
   // A chosen item runs once the closing menu has returned focus to "+", and the tab strip has passed it on to the
   // selected tab. Releasing that focus first lets the item move it where its tab needs it, e.g. into a new terminal,
   // without the strip taking it back for the tab it remembers.
@@ -530,27 +533,35 @@ function AddMenu(props: { items: readonly SessionPanelMenuItem[]; onChoose: () =
               })
             }}
           >
-            <For each={props.items}>
-              {(item) => {
-                const keybind = createMemo(() => (item.keybind ? command.keybindParts(item.keybind) : []))
+            <For each={keys()}>
+              {(key) => (
+                <Show when={byKey().get(key)}>
+                  {(item) => {
+                    const keybind = createMemo(() => {
+                      const bind = item().keybind
 
-                return (
-                  <Menu.Item
-                    class="!gap-6"
-                    onSelect={() => (chosen = item)}
-                    shortcut={
-                      <Show when={keybind().length > 0}>
-                        <Keybind keys={keybind()} variant="neutral" />
-                      </Show>
-                    }
-                  >
-                    <div class="flex items-center gap-2">
-                      <Show when={item.icon}>{(icon) => <Icon name={icon()} size="small" />}</Show>
-                      <span>{item.title}</span>
-                    </div>
-                  </Menu.Item>
-                )
-              }}
+                      return bind ? command.keybindParts(bind) : []
+                    })
+
+                    return (
+                      <Menu.Item
+                        class="!gap-6"
+                        onSelect={() => (chosen = item())}
+                        shortcut={
+                          <Show when={keybind().length > 0}>
+                            <Keybind keys={keybind()} variant="neutral" />
+                          </Show>
+                        }
+                      >
+                        <div class="flex items-center gap-2">
+                          <Show when={item().icon}>{(icon) => <Icon name={icon()} size="small" />}</Show>
+                          <span>{item().title}</span>
+                        </div>
+                      </Menu.Item>
+                    )
+                  }}
+                </Show>
+              )}
             </For>
           </Menu.Content>
         </Menu.Portal>
@@ -561,14 +572,21 @@ function AddMenu(props: { items: readonly SessionPanelMenuItem[]; onChoose: () =
 
 /** The + menu items as rows, then the session's recently closed tabs, in the new tab view. */
 function Launchers(props: {
-  items: readonly SessionPanelMenuItem[]
+  items: readonly SessionPanelMenuEntry[]
   onChoose: () => void
   closed: { entries: readonly ClosedSideTab[]; onReopen: (key: string) => void }
 }): JSX.Element {
+  const keys = createMemo(() => props.items.map((entry) => entry.key), [], { equals: same })
+  const byKey = createMemo(() => new Map(props.items.map((entry) => [entry.key, entry.item])))
+
   return (
     <div class="flex-1 min-h-0 overflow-y-auto px-6">
       <div class="mx-auto flex max-w-[560px] flex-col gap-3 pt-12 pb-10">
-        <For each={props.items}>{(item) => <LauncherRow item={item} onChoose={props.onChoose} />}</For>
+        <For each={keys()}>
+          {(key) => (
+            <Show when={byKey().get(key)}>{(item) => <LauncherRow item={item()} onChoose={props.onChoose} />}</Show>
+          )}
+        </For>
         <ClosedTabsSection entries={props.closed.entries} onReopen={props.closed.onReopen} />
       </div>
     </div>

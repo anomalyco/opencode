@@ -71,9 +71,49 @@ const unsafeCSS = `
   --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, var(--diffs-bg-selection));
 }
 
-[data-diff] ::selection,
-[data-file] ::selection {
-  background-color: var(--timeline-quote-background);
+/* Each diff token is an element, so highlight rules match one ancestor where Blink inherits them; see quote-highlight.css. */
+@supports selector(:host-context(*)) {
+  [data-diff]::selection,
+  [data-file]::selection {
+    background-color: var(--timeline-quote-background);
+  }
+
+  :host::highlight(opencode-find) {
+    background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+  }
+
+  [data-diff]::highlight(timeline-quote-source),
+  [data-file]::highlight(timeline-quote-source),
+  [data-diff]::highlight(timeline-quote-source-active),
+  [data-file]::highlight(timeline-quote-source-active) {
+    background-color: var(--timeline-quote-background);
+  }
+
+  :host::highlight(opencode-find-current) {
+    background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+  }
+}
+
+@supports not selector(:host-context(*)) {
+  [data-diff] ::selection,
+  [data-file] ::selection {
+    background-color: var(--timeline-quote-background);
+  }
+
+  ::highlight(opencode-find) {
+    background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+  }
+
+  [data-diff] ::highlight(timeline-quote-source),
+  [data-file] ::highlight(timeline-quote-source),
+  [data-diff] ::highlight(timeline-quote-source-active),
+  [data-file] ::highlight(timeline-quote-source-active) {
+    background-color: var(--timeline-quote-background);
+  }
+
+  ::highlight(opencode-find-current) {
+    background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+  }
 }
 
 [data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before,
@@ -135,21 +175,6 @@ const unsafeCSS = `
 [data-content-buffer] {
   background-image: none;
   background-color: var(--diffs-bg-context-gutter);
-}
-
-::highlight(opencode-find) {
-  background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
-}
-
-[data-diff] ::highlight(timeline-quote-source),
-[data-file] ::highlight(timeline-quote-source),
-[data-diff] ::highlight(timeline-quote-source-active),
-[data-file] ::highlight(timeline-quote-source-active) {
-  background-color: var(--timeline-quote-background);
-}
-
-::highlight(opencode-find-current) {
-  background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
 }
 
 [data-diff] [data-line][data-comment-selected]:not([data-selected-line]) {

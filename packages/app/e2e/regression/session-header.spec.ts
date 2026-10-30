@@ -214,7 +214,9 @@ test.describe("location", () => {
     sessions: [{ id: "ses_location", title: "Location session", directory: worktree }],
   }
 
-  test("collapses the worktree name before the project and only then truncates the title", async ({ page }) => {
+  test("collapses the worktree name, then the project, then the usage details, and only then truncates the title", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.clock.install()
     await openSession(page, {
@@ -228,22 +230,27 @@ test.describe("location", () => {
     const row = header.locator(".session-header-layout")
     const review = page.getByRole("button", { name: "Toggle review", exact: true })
     const tooltip = page.getByRole("tooltip")
+    const usage = header.getByRole("button", { name: "Toggle session context", exact: true })
+    const usageMenu = header.getByRole("button", { name: "View context usage", exact: true })
     await expect(header.getByRole("button", { name: "More options", exact: true })).toBeVisible()
     await expect(project).toHaveText("Location")
     await expect(worktreeName).toHaveText("quiet-falcon")
 
     // Keep the viewport fixed: a pane can narrow a session independently of the window.
     for (const state of [
-      { width: 1000, project: true, worktree: true, truncated: false },
-      { width: 680, project: true, worktree: false, truncated: false },
-      { width: 600, project: false, worktree: false, truncated: false },
-      { width: 490, project: false, worktree: false, truncated: true },
-      { width: 680, project: true, worktree: false, truncated: false },
-      { width: 1000, project: true, worktree: true, truncated: false },
+      { width: 1000, project: true, worktree: true, usage: true, truncated: false },
+      { width: 680, project: true, worktree: false, usage: true, truncated: false },
+      { width: 600, project: false, worktree: false, usage: true, truncated: false },
+      { width: 550, project: false, worktree: false, usage: false, truncated: false },
+      { width: 490, project: false, worktree: false, usage: false, truncated: true },
+      { width: 680, project: true, worktree: false, usage: true, truncated: false },
+      { width: 1000, project: true, worktree: true, usage: true, truncated: false },
     ]) {
       await row.evaluate((element, width) => (element.style.inlineSize = `${width}px`), state.width)
       await expect(project).toBeVisible({ visible: state.project })
       await expect(worktreeName).toBeVisible({ visible: state.worktree })
+      await expect(usage).toBeVisible({ visible: state.usage })
+      await expect(usageMenu).toBeVisible({ visible: !state.usage })
       await expect(header.locator(".session-location-worktree-icon")).toBeVisible()
       await expect
         .poll(() => header.getByRole("heading").evaluate((element) => element.scrollWidth > element.clientWidth))
@@ -307,6 +314,20 @@ test.describe("location", () => {
     await location.click()
     await expect(page.locator('[data-slot="session-location-card"]')).toBeVisible()
     await expect(tooltip).toBeHidden()
+    await page.keyboard.press("Escape")
+    await expect(page.locator('[data-slot="session-location-card"]')).toBeHidden()
+
+    // The compact usage opens its details in a menu, which also opens the context panel.
+    await row.evaluate((element) => (element.style.inlineSize = "490px"))
+    await usageMenu.click()
+    const details = page.getByRole("menu", { name: "View context usage", exact: true })
+    await expect(details).toContainText("Tokens0")
+    await expect(details).toContainText("Cost$0.00")
+    await expect(details).toContainText("Context0%")
+    await page.screenshot({ path: test.info().outputPath("usage-menu.png") })
+    await details.getByRole("menuitem", { name: "View context usage", exact: true }).click()
+    await expect(details).toBeHidden()
+    await expect(page.getByRole("tab", { name: "Context", exact: true })).toHaveAttribute("aria-selected", "true")
   })
 
   test("collapses to the project avatar when there is no worktree", async ({ page }) => {

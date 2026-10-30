@@ -1,20 +1,12 @@
 import { Show, createMemo, type ComponentProps, type JSX } from "solid-js"
 import { ProgressCircle } from "@opencode/ui/progress-circle"
 import { Button } from "@opencode/ui/button"
+import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { lastAssistantWithUsage } from "@opencode/client/solid"
 import { usePlugin, type MountedSession } from "@opencode/plugin/gui"
 import { catalogModel, syncCatalog } from "./catalog"
-
-function ContextTooltipRow(props: { name: JSX.Element; value: JSX.Element }) {
-  return (
-    <div class="flex min-w-0 items-center gap-4">
-      <span class="shrink-0 text-v2-text-text-muted">{props.name}</span>
-      <span class="ml-auto min-w-0 truncate text-right text-v2-text-text-base">{props.value}</span>
-    </div>
-  )
-}
 
 export function SessionContextUsage(props: {
   session: MountedSession
@@ -22,6 +14,8 @@ export function SessionContextUsage(props: {
   active?: boolean
   variant?: "button" | "indicator"
   placement?: ComponentProps<typeof Tooltip>["placement"]
+  /** The button shows only its ring and opens the usage in a menu, so a narrow header keeps room for the title. */
+  compact?: boolean
 }) {
   const ctx = usePlugin()
   const layout = ctx.layout
@@ -96,6 +90,11 @@ export function SessionContextUsage(props: {
     layout.toggle(`${ctx.id}:main`, props.session)
   }
 
+  const viewContext = () => {
+    if (!props.session.id) return
+    layout.open(`${ctx.id}:main`, props.session)
+  }
+
   const circle = () => (
     <div class="flex items-center justify-center">
       <ProgressCircle
@@ -118,50 +117,72 @@ export function SessionContextUsage(props: {
     </div>
   )
 
-  const tooltipValue = () => (
-    <div class="flex w-[120px] flex-col gap-2">
-      <Show when={showCost()}>
-        <ContextTooltipRow name={ctx.t("usage.cost")} value={cost()} />
-      </Show>
-      <ContextTooltipRow name={ctx.t("usage.usage")} value={`${context()?.usage ?? 0}%`} />
-      <ContextTooltipRow name={ctx.t("usage.tokens")} value={context()?.total.toLocaleString(i18n.locale()) ?? "0"} />
+  const menuRow = (name: JSX.Element, value: JSX.Element) => (
+    <div class="flex h-7 min-w-0 items-center gap-4 px-3 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
+      <span class="shrink-0 text-v2-text-text-muted">{name}</span>
+      <span class="ml-auto min-w-0 truncate text-right tabular-nums text-v2-text-text-base">{value}</span>
     </div>
+  )
+
+  const usageMenu = () => (
+    <Menu placement="bottom-end" gutter={4} modal={false}>
+      <Tooltip value={ctx.t("usage.view")} placement={props.placement ?? "top"}>
+        <Menu.Trigger
+          as={Button}
+          type="button"
+          variant="ghost-muted"
+          class="group shrink-0"
+          style={{ padding: "0 6px", color: "var(--v2-text-text-faint)" }}
+          aria-label={ctx.t("usage.view")}
+        >
+          {compactCircle()}
+        </Menu.Trigger>
+      </Tooltip>
+      <Menu.Portal>
+        <Menu.Content class="w-[200px] max-w-[calc(100vw-16px)]" aria-label={ctx.t("usage.view")}>
+          {menuRow(ctx.t("usage.tokens"), context()?.total.toLocaleString(i18n.locale()) ?? "0")}
+          <Show when={showCost()}>{menuRow(ctx.t("usage.cost"), cost())}</Show>
+          {menuRow(ctx.t("usage.usage"), `${context()?.usage ?? 0}%`)}
+          <Menu.Separator />
+          <Menu.Item onSelect={viewContext}>{ctx.t("usage.view")}</Menu.Item>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
   )
 
   return (
     <Show when={props.session.id}>
-      <Tooltip
-        value={variant() === "indicator" ? tooltipValue() : ctx.t("usage.toggle")}
-        placement={props.placement ?? "top"}
-      >
+      <Show when={!props.compact} fallback={usageMenu()}>
         <Show
           when={variant() === "indicator"}
           fallback={
-            <Button
-              type="button"
-              variant="ghost-muted"
-              class="group shrink-0"
-              style={{ padding: "0 6px", color: "var(--v2-text-text-faint)" }}
-              onClick={openContext}
-              aria-expanded={layout.state(`${ctx.id}:main`, props.session) === "visible"}
-              aria-label={ctx.t("usage.toggle")}
-            >
-              <span class="flex items-center gap-2 whitespace-nowrap group-active:text-v2-text-text-muted">
-                {compactCircle()}
-                <span>{tokens()}</span>
-                <Show when={showCost()}>
-                  <span aria-hidden="true" class="flex w-1.5 shrink-0 items-center justify-center">
-                    ·
-                  </span>
-                  <span>{cost()}</span>
-                </Show>
-              </span>
-            </Button>
+            <Tooltip value={ctx.t("usage.toggle")} placement={props.placement ?? "top"}>
+              <Button
+                type="button"
+                variant="ghost-muted"
+                class="group shrink-0"
+                style={{ padding: "0 6px", color: "var(--v2-text-text-faint)" }}
+                onClick={openContext}
+                aria-expanded={layout.state(`${ctx.id}:main`, props.session) === "visible"}
+                aria-label={ctx.t("usage.toggle")}
+              >
+                <span class="flex items-center gap-2 whitespace-nowrap group-active:text-v2-text-text-muted">
+                  {compactCircle()}
+                  <span>{tokens()}</span>
+                  <Show when={showCost()}>
+                    <span aria-hidden="true" class="flex w-1.5 shrink-0 items-center justify-center">
+                      ·
+                    </span>
+                    <span>{cost()}</span>
+                  </Show>
+                </span>
+              </Button>
+            </Tooltip>
           }
         >
           {circle()}
         </Show>
-      </Tooltip>
+      </Show>
     </Show>
   )
 }
