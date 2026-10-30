@@ -10,7 +10,7 @@ pub const PROTOCOL_VERSION: u32 = 7;
 /// Additive capabilities of this daemon. Breaking changes bump `PROTOCOL_VERSION`.
 /// `pipe` (non-PTY processes) is Unix-only for now.
 #[cfg(unix)]
-pub const FEATURES: &[&str] = &["rename", "pipe"];
+pub const FEATURES: &[&str] = &["rename", "pipe", "output_path"];
 #[cfg(not(unix))]
 pub const FEATURES: &[&str] = &["rename"];
 
@@ -59,6 +59,10 @@ pub enum Request {
         rows: u16,
         #[serde(default, skip_serializing_if = "ProcessMode::is_pty")]
         mode: ProcessMode,
+        /// Pipe only: an absolute path the daemon appends every output byte
+        /// to. Send it only to a daemon that lists the `output_path` feature.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output_path: Option<PathBuf>,
     },
     /// Without `mode`, lists PTYs only, so older servers never see pipe processes.
     /// `mode` is left out of the JSON when unset: older daemons reject a `list`
@@ -183,6 +187,10 @@ pub enum Response {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         signal: Option<String>,
         final_offset: u64,
+        /// Same as `TerminalInfo.output_error`, so a live subscriber learns the
+        /// output file is incomplete without another request.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output_error: Option<String>,
     },
     ControllerChanged {
         attachment_id: Option<String>,
@@ -407,12 +415,23 @@ mod tests {
                 ..
             }
         ));
+        assert!(matches!(
+            serde_json::from_str::<Request>(
+                r#"{"op":"create","program":"sh","args":[],"cwd":"/","group_id":"g","env":{},"mode":"pipe","output_path":"/tmp/out"}"#
+            )
+            .unwrap(),
+            Request::Create {
+                output_path: Some(path),
+                ..
+            } if path == std::path::Path::new("/tmp/out")
+        ));
         // Exits without a signal look exactly as before.
         assert_eq!(
             serde_json::to_value(Response::Exited {
                 exit_code: Some(1),
                 signal: None,
                 final_offset: 2,
+                output_error: None,
             })
             .unwrap(),
             serde_json::json!({"type": "exited", "exit_code": 1, "final_offset": 2})

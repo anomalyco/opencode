@@ -166,6 +166,7 @@ impl TerminalClient {
             cols: request.cols,
             rows: request.rows,
             mode: request.mode,
+            output_path: request.output_path,
         })? {
             Response::Created { terminal } => Ok(terminal),
             response => unexpected(response),
@@ -595,6 +596,7 @@ fn play(directory: &Path) -> Result<()> {
                         cols: 100,
                         rows: 30,
                         mode: ProcessMode::Pty,
+                        output_path: None,
                     }
                 };
                 let info = client.create(request)?;
@@ -673,6 +675,7 @@ fn play(directory: &Path) -> Result<()> {
                     cols: 100,
                     rows: 30,
                     mode: ProcessMode::Pty,
+                    output_path: None,
                 })?;
                 active = Some(info.id);
                 thread::sleep(Duration::from_millis(200));

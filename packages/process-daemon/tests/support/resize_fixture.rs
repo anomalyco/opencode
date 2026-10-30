@@ -44,6 +44,7 @@ impl ResizeFixture {
                 cols: 80,
                 rows: 24,
                 mode: Default::default(),
+                output_path: None,
             })
             .unwrap();
 

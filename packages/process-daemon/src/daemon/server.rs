@@ -505,10 +505,12 @@ fn stream_subscription(
                 exit_code,
                 signal,
                 final_offset,
+                output_error,
             } => Response::Exited {
                 exit_code,
                 signal,
                 final_offset,
+                output_error,
             },
             StreamEvent::ControllerChanged {
                 attachment_id,
@@ -559,6 +561,7 @@ fn dispatch(
             cols,
             rows,
             mode,
+            output_path,
         } => Response::Created {
             terminal: service.create(CreateTerminal {
                 program,
@@ -570,6 +573,7 @@ fn dispatch(
                 cols,
                 rows,
                 mode,
+                output_path,
             })?,
         },
         Request::List { mode } => Response::Terminals {

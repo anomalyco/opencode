@@ -87,6 +87,10 @@ pub struct TerminalInfo {
     pub lifecycle: TerminalLifecycle,
     pub output_head: u64,
     pub output_tail: u64,
+    /// Set when writing a pipe process's `output_path` failed; the file then
+    /// lacks everything from that point on. Omitted when there is no error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_error: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -132,6 +136,7 @@ pub enum StreamEvent {
         exit_code: Option<u32>,
         signal: Option<String>,
         final_offset: u64,
+        output_error: Option<String>,
     },
     ControllerChanged {
         attachment_id: Option<String>,
@@ -179,6 +184,8 @@ pub struct CreateTerminal {
     pub cols: u16,
     pub rows: u16,
     pub mode: ProcessMode,
+    /// Pipe only: an absolute path to append every output byte to.
+    pub output_path: Option<PathBuf>,
 }
 
 impl CreateTerminal {
@@ -199,6 +206,7 @@ impl CreateTerminal {
             cols: DEFAULT_COLS,
             rows: DEFAULT_ROWS,
             mode: ProcessMode::Pty,
+            output_path: None,
         })
     }
 }
@@ -225,6 +233,14 @@ impl TerminalService {
     }
 
     pub fn create(&self, request: CreateTerminal) -> Result<TerminalInfo> {
+        if let Some(path) = &request.output_path {
+            if request.mode.is_pty() {
+                bail!("output_path is only supported for pipe processes");
+            }
+            if !path.is_absolute() {
+                bail!("output_path must be absolute");
+            }
+        }
         match request.mode {
             ProcessMode::Pty => validate_size(request.cols, request.rows)?,
             #[cfg(not(unix))]
@@ -821,6 +837,7 @@ fn new_info(
         lifecycle: TerminalLifecycle::Running,
         output_head: 0,
         output_tail: 0,
+        output_error: None,
     }))
 }
 
@@ -848,6 +865,9 @@ enum ActorMessage {
     /// A pipe process ended by a signal; the value is the signal's name.
     #[cfg(unix)]
     ChildKilled(String),
+    /// Writing the `output_path` file failed; it stops at this point.
+    #[cfg(unix)]
+    OutputFileFailed(String),
     #[cfg(not(windows))]
     RefreshForegroundProcess {
         reply: Reply<Result<()>>,
@@ -1341,6 +1361,12 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                 }
             }
             #[cfg(unix)]
+            Ok(ActorMessage::OutputFileFailed(message)) => {
+                if let Ok(mut value) = info.write() {
+                    value.output_error = Some(message);
+                }
+            }
+            #[cfg(unix)]
             Ok(ActorMessage::ChildKilled(signal)) => {
                 child_exit = Some(Ok((None, Some(signal))));
             }
@@ -1374,16 +1400,19 @@ fn run_actor(config: ActorConfig) -> Result<()> {
             && let Some(result) = child_exit.take()
         {
             let (exit_code, signal) = result.clone().unwrap_or_default();
+            let mut output_error = None;
             if let Ok(mut value) = info.write() {
                 value.lifecycle = match result {
                     Ok((exit_code, signal)) => TerminalLifecycle::Exited { exit_code, signal },
                     Err(message) => TerminalLifecycle::Failed { message },
                 };
+                output_error = value.output_error.clone();
             }
             let event = StreamEvent::Exited {
                 exit_code,
                 signal,
                 final_offset: replay.tail,
+                output_error,
             };
             broadcast(
                 &shutdown,
@@ -1934,6 +1963,7 @@ mod tests {
             lifecycle: TerminalLifecycle::Running,
             output_head: 0,
             output_tail: 0,
+            output_error: None,
         }
     }
 
@@ -2118,7 +2148,8 @@ mod tests {
                 [StreamEvent::Exited {
                     exit_code: Some(23),
                     signal: None,
-                    final_offset: 5
+                    final_offset: 5,
+                    output_error: None,
                 }]
             ));
         }
