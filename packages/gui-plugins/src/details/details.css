@@ -71,9 +71,14 @@
 .session-summary-row:focus-visible,
 .session-service-config:focus-visible,
 button.session-service-row:focus-visible,
-.session-mcp-row:focus-within {
+:is(.session-service-row, .session-mcp-row):has(:focus-visible) {
   outline: none;
   background: var(--v2-overlay-simple-overlay-hover);
+}
+
+/* A name that reveals its full text on focus shows that focus on its row, never as a ring of its own. */
+:is(.session-service-pane, .session-service-drawer) [data-component="tooltip-v2-trigger"]:focus-visible {
+  outline: none;
 }
 
 @media (hover: hover) {
@@ -141,16 +146,10 @@ button.session-service-row:focus-visible,
   max-width: calc(100vw - 32px);
   pointer-events: none;
   visibility: hidden;
-  transition:
-    transform 0.3s var(--spring-snap),
-    visibility 0s linear 0.11s;
 
   &[data-open] {
     pointer-events: auto;
     visibility: visible;
-    transition:
-      transform 0.3s var(--spring-snap),
-      visibility 0s;
   }
 }
 
@@ -162,10 +161,6 @@ button.session-service-row:focus-visible,
   scale: 0.96;
   translate: 4px 0;
   transform-origin: right top;
-  transition:
-    opacity 0.11s cubic-bezier(0.4, 0, 1, 1),
-    scale 0.11s cubic-bezier(0.4, 0, 1, 1),
-    translate 0.11s cubic-bezier(0.4, 0, 1, 1);
 
   &:dir(rtl) {
     translate: -4px 0;
@@ -176,10 +171,6 @@ button.session-service-row:focus-visible,
     opacity: 1;
     scale: 1;
     translate: 0 0;
-    transition:
-      opacity 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
-      scale 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
-      translate 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 }
 
@@ -198,39 +189,141 @@ button.session-service-row:focus-visible,
   font-weight: 440;
   line-height: var(--line-height-compact);
   clip-path: inset(0 0 calc(100% - var(--flyout-height)) 0 round 6px);
-  transition: clip-path 0.3s var(--spring-snap);
+}
+
+/* Motion is off unless the "Extensions submenu motion" knob sets data-motion. */
+.session-service-flyout[data-motion] {
+  transition:
+    transform 0.3s var(--spring-snap),
+    visibility 0s linear 0.11s;
+
+  &[data-open] {
+    transition:
+      transform 0.3s var(--spring-snap),
+      visibility 0s;
+  }
+
+  .session-service-flyout-body {
+    transition:
+      opacity 0.11s cubic-bezier(0.4, 0, 1, 1),
+      scale 0.11s cubic-bezier(0.4, 0, 1, 1),
+      translate 0.11s cubic-bezier(0.4, 0, 1, 1);
+  }
+
+  &[data-open] .session-service-flyout-body {
+    transition:
+      opacity 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+      scale 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+      translate 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .session-service-flyout-surface {
+    transition: clip-path 0.3s var(--spring-snap);
+  }
 }
 
 .session-service-pane {
   grid-area: 1 / 1;
   align-self: start;
   max-height: min(480px, calc(100dvh - 36px));
+  /* Only vertical: long names truncate rather than scroll sideways. */
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   outline: none;
+  --session-service-scrollbar: 0px;
 
   /* Lists swap at once; only the box glides and resizes, so two lists never show together. */
   &:not([data-active]) {
     visibility: hidden;
     pointer-events: none;
   }
+}
 
-  /* A list taller than the viewport scrolls under soft edges. */
-  &[data-overflow] {
-    mask-image: linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 16px), transparent);
+/* A long list keeps the menu's 2px inset at both ends, and fades only at an edge with rows scrolled past it. The
+   scrollbar's strip stays unmasked, so the thumb never fades. */
+@property --session-service-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
 
-    > .session-service-pane-content {
-      padding-block: 12px 16px;
+@property --session-service-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes session-service-fade-start {
+  from {
+    --session-service-fade-start: 0px;
+  }
+  to {
+    --session-service-fade-start: 16px;
+  }
+}
+
+@keyframes session-service-fade-end {
+  from {
+    --session-service-fade-end: 16px;
+  }
+  to {
+    --session-service-fade-end: 0px;
+  }
+}
+
+@supports (animation-timeline: scroll()) {
+  .session-service-pane[data-overflow] {
+    mask-image:
+      linear-gradient(#000, #000),
+      linear-gradient(
+        to bottom,
+        transparent,
+        #000 var(--session-service-fade-start),
+        #000 calc(100% - var(--session-service-fade-end)),
+        transparent
+      );
+    mask-size:
+      var(--session-service-scrollbar) 100%,
+      100% 100%;
+    mask-position:
+      right top,
+      left top;
+    mask-repeat: no-repeat;
+    animation:
+      session-service-fade-start linear both,
+      session-service-fade-end linear both;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range:
+      0 16px,
+      calc(100% - 16px) 100%;
+
+    &:dir(rtl) {
+      mask-position:
+        left top,
+        left top;
     }
   }
 }
 
-.session-service-pane [data-slot="truncated-text-label"] {
-  text-overflow: clip;
-  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+/* The thumb sits 6px inside the menu's edge and clear of its corners, rather than against the border. */
+@media (hover: hover) and (pointer: fine) {
+  @supports selector(::-webkit-scrollbar) {
+    .session-service-pane {
+      --session-service-scrollbar: 12px;
+    }
 
-  &:dir(rtl) {
-    mask-image: linear-gradient(to left, #000 calc(100% - 20px), transparent);
+    .session-service-pane::-webkit-scrollbar {
+      width: 12px;
+    }
+
+    .session-service-pane::-webkit-scrollbar-track:vertical {
+      margin: 6px 0;
+    }
+
+    .session-service-pane::-webkit-scrollbar-thumb {
+      border-width: 2px 4px;
+    }
   }
 }
 
@@ -307,6 +400,12 @@ button.session-service-row:focus-visible,
   margin: 2px -2px;
   background: var(--v2-border-border-muted);
 }
+
+/* Inside a submenu's scroll box, a full-bleed separator would overflow it sideways. */
+.session-service-pane .session-service-config-separator {
+  width: auto;
+  margin-inline: 0;
+}
 .session-service-config {
   display: inline-flex;
   align-items: center;
@@ -316,12 +415,6 @@ button.session-service-row:focus-visible,
   text-align: start;
   text-decoration: none;
   cursor: pointer;
-
-  &:focus-visible {
-    outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 2px;
-    border-radius: 2px;
-  }
 }
 .session-service-dot {
   display: grid;
@@ -420,10 +513,6 @@ button.session-service-dot {
   letter-spacing: 0.05px;
 }
 
-div.session-mcp-row {
-  cursor: pointer;
-}
-
 @media (max-width: 639px), (hover: none) {
   .session-mcp-row {
     min-height: 44px;
@@ -483,25 +572,5 @@ div.session-mcp-row {
   .session-summary-popover,
   .session-service-dot::before {
     animation: none;
-  }
-
-  /* No travel: the flyout and its lists only fade. */
-  .session-service-flyout {
-    transition: visibility 0s linear 0.15s;
-  }
-
-  .session-service-flyout[data-open] {
-    transition: visibility 0s;
-  }
-
-  .session-service-flyout-surface {
-    transition: none;
-  }
-
-  .session-service-flyout-body,
-  .session-service-flyout[data-open] .session-service-flyout-body {
-    scale: none;
-    translate: none;
-    transition: opacity 0.15s ease-out;
   }
 }
