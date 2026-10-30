@@ -161,6 +161,9 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         }),
       ],
     }),
+    Spec.make("doctor", {
+      description: "Report data directory health and diagnose common problems",
+    }),
     Spec.make("auth", {
       description: "manage integrations and credentials",
       globalFlags: ServerFlags,
