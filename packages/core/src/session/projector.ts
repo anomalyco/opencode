@@ -12,7 +12,9 @@ import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
 import { InstructionState } from "./instruction-state.js"
-import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
+import { SessionBlob } from "./blob.js"
+import { SessionInboxTable, SessionMessageTable, SessionPartTable, SessionTable, type SessionPartData } from "./sql.js"
+import { SessionStored } from "./stored.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { Slug } from "../util/slug.js"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -32,6 +34,7 @@ type MessageEvent = Exclude<
 >
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
+const encodeStoredUser = Schema.encodeSync(SessionStored.User)
 
 export class SessionAlreadyProjected extends Error {}
 
@@ -184,8 +187,11 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     yield* InstructionEntry.initialize(db, event.data.sessionID, event.data.instructionEntries, event.created)
 
   const forkedID = (seq: number) => SessionMessage.ID.make(`${SessionMessage.ID.fromEvent(event.id)}_${seq}`)
+  // The child stores the parent's inline media as blobs; the parent's rows are never rewritten.
+  const media = yield* SessionBlob.ForkMedia
   let cursor = -1
   while (copiedSeq !== undefined) {
+    // A parent message whose parts live in session_part is copied with them inline, so the fork reads the same.
     const rows = yield* db
       .select()
       .from(SessionMessageTable)
@@ -203,7 +209,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       .orderBy(asc(SessionMessageTable.seq))
       .limit(ForkBatchSize)
       .all()
-      .pipe(Effect.orDie)
+      .pipe(Effect.orDie, Effect.flatMap((rows) => SessionHistory.withParts(db, rows)))
     if (rows.length === 0) break
 
     const values = yield* Effect.forEach(rows, (row) =>
@@ -215,7 +221,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
           seq: row.seq,
           time_created: row.time_created,
           time_updated: row.time_updated,
-          data: row.data,
+          data: media ? yield* SessionBlob.externalizeRow(db, row.data) : row.data,
         }
         // A summary references the first message it kept, which the fork copied under a new ID.
         const keepID = row.type === "compaction" ? row.data.metadata?.keepID : undefined
@@ -234,6 +240,16 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       }),
     )
     yield* db.insert(SessionMessageTable).values(values).run().pipe(Effect.orDie)
+    yield* Effect.forEach(
+      values,
+      (value) =>
+        SessionBlob.recordRefs(
+          db,
+          { sessionID: event.data.sessionID, messageID: value.id, seq: value.seq },
+          value.data,
+        ),
+      { discard: true },
+    )
 
     cursor = rows.at(-1)!.seq
   }
@@ -244,21 +260,82 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
 
 function run(db: DatabaseService, event: MessageEvent) {
   return Effect.gen(function* () {
-    const updateMessage = (message: SessionMessage.Info) => {
-      const encoded = encodeMessage(message)
-      const { id: _, type, ...data } = encoded
-      return db
-        .update(SessionMessageTable)
-        .set({ type, time_created: DateTime.toEpochMillis(message.time.created), data })
-        .where(
-          and(
-            eq(SessionMessageTable.id, message.id),
-            eq(SessionMessageTable.session_id, event.data.sessionID),
-          ),
-        )
-        .run()
+    const partRows = (messageID: SessionMessage.ID) =>
+      db
+        .select()
+        .from(SessionPartTable)
+        .where(eq(SessionPartTable.message_id, messageID))
+        .orderBy(asc(SessionPartTable.ordinal))
+        .all()
         .pipe(Effect.orDie)
-    }
+    // Writes `content` over a message's existing part rows, touching only the rows that changed.
+    const writeParts = Effect.fnUntraced(function* (
+      messageID: SessionMessage.ID,
+      existing: ReadonlyArray<typeof SessionPartTable.$inferSelect>,
+      content: ReadonlyArray<SessionPartData>,
+    ) {
+      let next = (existing.at(-1)?.ordinal ?? -1) + 1
+      for (const [index, part] of content.entries()) {
+        const current = existing[index]
+        const columns = { type: part.type, call_id: part.type === "tool" ? part.id : null, data: part }
+        if (current === undefined)
+          yield* db
+            .insert(SessionPartTable)
+            .values({
+              ...columns,
+              message_id: messageID,
+              session_id: event.data.sessionID,
+              ordinal: next++,
+              time_created: event.created,
+              time_updated: event.created,
+            })
+            .run()
+            .pipe(Effect.orDie)
+        else if (JSON.stringify(current.data) !== JSON.stringify(part))
+          yield* db
+            .update(SessionPartTable)
+            .set({ ...columns, time_updated: event.created })
+            .where(and(eq(SessionPartTable.message_id, messageID), eq(SessionPartTable.ordinal, current.ordinal)))
+            .run()
+            .pipe(Effect.orDie)
+      }
+      const stale = existing.slice(content.length).map((part) => part.ordinal)
+      if (stale.length > 0)
+        yield* db
+          .delete(SessionPartTable)
+          .where(and(eq(SessionPartTable.message_id, messageID), inArray(SessionPartTable.ordinal, stale)))
+          .run()
+          .pipe(Effect.orDie)
+    })
+    const decodeAssistantRow = Effect.fnUntraced(function* (row: typeof SessionMessageTable.$inferSelect) {
+      const [withParts = row] = yield* SessionHistory.withParts(db, [row])
+      return SessionHistory.decodeMessageRowSync(withParts)
+    })
+    const updateMessage = Effect.fnUntraced(function* (message: SessionMessage.Info) {
+      const stored = yield* SessionBlob.externalize(db, message)
+      const { id: _, type, ...data } = encodeStored(stored)
+      // A newer release may have moved this message's parts to session_part. Reads prefer those rows, so updates
+      // go there too and the row keeps an empty envelope; messages without part rows are written inline as before.
+      const parts = message.type === "assistant" && "content" in data ? yield* partRows(message.id) : []
+      const updated = yield* db
+        .update(SessionMessageTable)
+        .set({
+          type,
+          time_created: DateTime.toEpochMillis(message.time.created),
+          data: parts.length > 0 && "content" in data ? { ...data, content: [] } : data,
+        })
+        .where(and(eq(SessionMessageTable.id, message.id), eq(SessionMessageTable.session_id, event.data.sessionID)))
+        .returning({ seq: SessionMessageTable.seq })
+        .get()
+        .pipe(Effect.orDie)
+      if (!updated) return
+      if (parts.length > 0 && "content" in data) yield* writeParts(message.id, parts, data.content)
+      const owner = { sessionID: event.data.sessionID, messageID: message.id, seq: updated.seq }
+      // Most updates only carry existing refs forward; a content rewrite may also drop some. `externalize` returns
+      // the same message when it extracted nothing, so streaming updates skip the ref tables entirely.
+      if (event.type === SessionEvent.MessageContentUpdated.type) yield* SessionBlob.syncRefs(db, owner, data)
+      else if (stored !== message) yield* SessionBlob.recordRefs(db, owner, data)
+    })
     const appendMessage = (message: SessionMessage.Info) => insertMessage(db, event, message)
     const adapter: SessionMessageUpdater.Adapter = {
       getAgent() {
@@ -324,7 +401,7 @@ function run(db: DatabaseService, event: MessageEvent) {
             .get()
             .pipe(Effect.orDie)
           if (!row) return
-          const message = SessionHistory.decodeMessageRowSync(row)
+          const message = yield* decodeAssistantRow(row)
           return message.type === "assistant" && !message.time.completed ? message : undefined
         })
       },
@@ -343,7 +420,7 @@ function run(db: DatabaseService, event: MessageEvent) {
             .get()
             .pipe(Effect.orDie)
           if (!row) return
-          const message = SessionHistory.decodeMessageRowSync(row)
+          const message = yield* decodeAssistantRow(row)
           return message.type === "assistant" ? message : undefined
         })
       },
@@ -398,10 +475,16 @@ function run(db: DatabaseService, event: MessageEvent) {
   })
 }
 
-function insertMessage(db: DatabaseService, event: SessionEvent.DurableEvent, message: SessionMessage.Info) {
-  const encoded = encodeMessage(message)
-  const { id: _, type, ...data } = encoded
-  return db
+const encodeStored = (message: SessionMessage.Info | SessionStored.User) =>
+  message.type === "user" ? encodeStoredUser(message) : encodeMessage(message)
+
+const insertMessage = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  event: SessionEvent.DurableEvent,
+  message: SessionMessage.Info | SessionStored.User,
+) {
+  const { id: _, type, ...data } = encodeStored(yield* SessionBlob.externalize(db, message))
+  yield* db
     .insert(SessionMessageTable)
     .values({
       id: message.id,
@@ -413,7 +496,12 @@ function insertMessage(db: DatabaseService, event: SessionEvent.DurableEvent, me
     })
     .run()
     .pipe(Effect.orDie)
-}
+  yield* SessionBlob.recordRefs(
+    db,
+    { sessionID: event.data.sessionID, messageID: message.id, seq: event.durable.seq },
+    data,
+  )
+})
 
 function projectIdle(
   db: DatabaseService,
@@ -556,7 +644,10 @@ const layer = Layer.effectDiscard(
       }),
     )
     yield* bus.project(SessionEvent.Deleted, (event) =>
-      db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie),
+      Effect.gen(function* () {
+        yield* SessionBlob.releaseSession(db, event.data.sessionID)
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie)
+      }),
     )
     yield* bus.project(SessionEvent.AgentSelected, (event) =>
       Effect.gen(function* () {
@@ -643,30 +734,27 @@ const layer = Layer.effectDiscard(
           id: event.data.inboxID,
           sessionID: event.data.sessionID,
         })
-        if (input.type === "compaction" || input.type === "move") return
-        yield* insertMessage(
-          db,
-          event,
-          input.type === "user"
-            ? {
-                id: input.id,
-                type: "user",
-                metadata: input.payload.metadata,
-                text: input.payload.text,
-                files: input.payload.files,
-                agents: input.payload.agents,
-                skills: input.payload.skills,
-                time: { created: DateTime.makeUnsafe(event.created) },
-              }
-            : {
-                id: input.id,
-                type: "synthetic",
-                text: input.payload.text,
-                description: input.payload.description,
-                metadata: input.payload.metadata,
-                time: { created: DateTime.makeUnsafe(event.created) },
-              },
-        )
+        const time = { created: DateTime.makeUnsafe(event.created) }
+        if (input.type === "user")
+          yield* insertMessage(db, event, {
+            id: input.id,
+            type: "user",
+            metadata: input.payload.metadata,
+            text: input.payload.text,
+            files: input.payload.files,
+            agents: input.payload.agents,
+            skills: input.payload.skills,
+            time,
+          })
+        if (input.type === "synthetic")
+          yield* insertMessage(db, event, {
+            id: input.id,
+            type: "synthetic",
+            text: input.payload.text,
+            description: input.payload.description,
+            metadata: input.payload.metadata,
+            time,
+          })
       }),
     )
     yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
@@ -698,6 +786,14 @@ const layer = Layer.effectDiscard(
         sessionID: event.data.sessionID,
         delivery: event.data.delivery,
       }),
+    )
+    yield* bus.project(SessionEvent.Execution.Started, (event) =>
+      db
+        .update(SessionTable)
+        .set({ time_busy: event.created, time_updated: sql`${SessionTable.time_updated}` })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie),
     )
     yield* bus.project(SessionEvent.Execution.Succeeded, (event) => projectIdle(db, event))
     yield* bus.project(SessionEvent.Execution.Failed, (event) => projectIdle(db, event))
@@ -813,6 +909,7 @@ const layer = Layer.effectDiscard(
           .run()
           .pipe(Effect.orDie)
         yield* InstructionState.rewind(db, event.data.sessionID, boundary.seq)
+        yield* SessionBlob.releaseFrom(db, event.data.sessionID, boundary.seq)
       }),
     )
     yield* bus.subscribe([SessionEvent.Step.Ended, SessionEvent.Step.Failed, SessionEvent.UsageRecorded]).pipe(

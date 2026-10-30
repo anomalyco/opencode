@@ -22,7 +22,6 @@ export const ImageClient = {
       ...response.images.map((image, index) => ImageOutputEvent.make({ index, image })),
       ImageFinishEvent.make({
         usage: response.usage,
-        notices: response.notices,
         providerMetadata: response.providerMetadata,
       }),
     ],

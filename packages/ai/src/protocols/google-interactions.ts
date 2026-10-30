@@ -19,6 +19,7 @@ import { encodeJson } from "../utils/json.js"
 import { JsonObject, knownString, lenient, optionalNull, ProviderShared } from "./shared.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { MediaInput } from "./utils/media-input.js"
+import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "google-interactions"
@@ -154,6 +155,9 @@ const Interaction = Schema.StructWithRest(
     id: Schema.optional(Schema.String),
     status: Schema.String,
     usage: Schema.optional(RawUsage),
+    errors: Schema.optional(
+      Schema.Array(Schema.Struct({ code: Schema.optional(Schema.String), message: Schema.optional(Schema.String) })),
+    ),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
@@ -223,7 +227,10 @@ const mediaContent = Effect.fnUntraced(function* (asset: Media.Asset) {
     )
   const type: (typeof MediaContent.Type)["type"] =
     asset.kind === "image" || asset.kind === "audio" || asset.kind === "video" ? asset.kind : "document"
-  const uri = MediaInput.refID(asset, ProviderID.make("google"))
+  const uri =
+    asset.kind === "video" && asset.source.type === "url" && /^https?:\/\//i.test(asset.source.url)
+      ? asset.source.url
+      : MediaInput.refID(asset, ProviderID.make("google"))
   if (uri !== undefined) return { type, uri, mime_type: asset.mediaType }
   const inline = yield* ProviderShared.requireInlineMedia("Google Interactions", asset)
   return { type, data: inline.base64, mime_type: inline.mime }
@@ -307,7 +314,7 @@ const lowerToolResult = Effect.fnUntraced(function* (part: ToolResultPart) {
 
   return yield* Effect.forEach(part.result.value, (item): Effect.Effect<typeof Content.Type, AIError> => {
     if (item.type === "text") return Effect.succeed({ type: "text", text: item.text })
-    return mediaContent(ProviderShared.toolFileMedia(item).media)
+    return mediaContent(GeminiGenerateContent.toolMedia(item))
   })
 })
 
@@ -517,14 +524,17 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
       })
     case "interaction.completed": {
       const interaction = event.interaction
-      if (interaction.status === "failed" || interaction.status === "cancelled")
+      if (interaction.status === "failed" || interaction.status === "cancelled") {
+        const messages = (interaction.errors ?? []).flatMap((error) => (error.message?.trim() ? [error.message] : []))
         return yield* new AIError({
           reason: classifyProviderFailure({
-            message: `Google Interactions ${interaction.status}`,
-            data: interaction,
+            message: messages.length > 0 ? messages.join("\n") : `Google Interactions ${interaction.status}`,
+            // The first coded error decides the classification; every message stays visible.
+            data: interaction.errors?.find((error) => error.code) ?? interaction,
             rawBody: encodeJson(event),
           }),
         })
+      }
       if (!["completed", "requires_action", "incomplete"].includes(interaction.status))
         return yield* ProviderShared.eventError(
           ADAPTER,

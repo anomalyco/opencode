@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, LLM, LLMEvent, LLMRequest, Media, Message } from "../../src/index.js"
+import { Image, LLM, LLMEvent, LLMRequest, Media, Message } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -29,8 +29,7 @@ recorded.effect.with(
         model: meta.image(modelID),
         prompt: "A flat black square centered on a plain white background. No text.",
         n: 1,
-        size: "256x256",
-        providerOptions: controls,
+        providerOptions: { ...controls, size: "256x256" },
       })
       expect(response.images).toHaveLength(1)
       expect(response.image.mediaType).toBe("image/webp")
@@ -57,9 +56,7 @@ recorded.effect.with(
           ),
         ],
         n: 1,
-        size: "256x256",
-        format: "png",
-        providerOptions: controls,
+        providerOptions: { ...controls, size: "256x256", outputFormat: "png" },
       })
       expect(response.image.mediaType).toBe("image/png")
       expect(Array.from((yield* response.image.bytes()).slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10])

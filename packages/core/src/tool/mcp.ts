@@ -1,6 +1,6 @@
 export * as McpTool from "./mcp.js"
 
-import { ToolFailure } from "@opencode/ai"
+import { ToolFailure } from "@opencode/ai/effect"
 import { McpEvent } from "@opencode/schema/mcp-event"
 import { Context, Effect, Fiber, type JsonSchema, Layer, Option, PubSub, Schema, Semaphore, Stream } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -105,11 +105,14 @@ export const layer = Layer.effect(
                       ...(content.length === 0 ? {} : { content }),
                     }
                   }).pipe(
-                    Effect.mapError((error) =>
-                      error instanceof ToolFailure
-                        ? error
-                        : new ToolFailure({ message: `Unable to execute ${name(tool.server, tool.name)}` }),
-                    ),
+                    Effect.mapError((error) => {
+                      if (error instanceof ToolFailure) return error
+                      if (error instanceof Permission.BlockedError)
+                        return new ToolFailure({ message: error.message, error })
+                      if (error instanceof Permission.CorrectedError)
+                        return new ToolFailure({ message: error.feedback, error })
+                      return new ToolFailure({ message: `Unable to execute ${name(tool.server, tool.name)}`, error })
+                    }),
                   ),
               })
             }

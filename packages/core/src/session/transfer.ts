@@ -11,12 +11,14 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
+import { Instance } from "../instance/service.js"
 import { Location } from "../location.js"
 import { Project } from "../project.js"
 import { upsertProject } from "../project/sql.js"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import { Session } from "../session.js"
 import { Slug } from "../util/slug.js"
+import { SessionBlob } from "./blob.js"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionProjector } from "./projector.js"
@@ -49,6 +51,7 @@ const layer = Layer.effect(
     const app = yield* App.Metadata
     const bus = yield* Bus.Service
     const { db } = yield* Database.Service
+    const instances = yield* Instance.Service
     const projects = yield* Project.Service
     const sessions = yield* Session.Service
     const encodeMessage = Schema.encodeSync(SessionMessage.Info)
@@ -74,6 +77,9 @@ const layer = Layer.effect(
         const project = yield* projects.resolve(input.location.directory)
         yield* upsertProject(db, project).pipe(Effect.orDie)
         const importedAt = yield* Clock.currentTimeMillis
+        const subpath = RelativePath.make(
+          path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
+        )
         const messages = input.data.messages.filter(isSettled).map((message, index) => {
           const encoded = encodeMessage(message)
           const { id: _, type, ...data } = encoded
@@ -86,6 +92,17 @@ const layer = Layer.effect(
             data,
           }
         })
+        // Only inline media the import carries becomes blobs, and only its blobs get refs: refs it carried in
+        // could otherwise keep or expose blobs it never held. The destination's config is loaded only when needed.
+        const split = messages.map((message) => SessionBlob.split(message.data))
+        const media =
+          split.some((row) => row.moved) &&
+          (yield* SessionBlob.enabledFor(instances, {
+            ...input.data.info,
+            projectID: project.id,
+            location: input.location,
+            subpath,
+          }))
         yield* bus
           .publish(
             SessionEvent.Created,
@@ -96,9 +113,7 @@ const layer = Layer.effect(
               version: app.version,
               projectID: project.id,
               location: input.location,
-              subpath: RelativePath.make(
-                path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
-              ),
+              subpath,
               title: input.data.info.title,
               agent: input.data.info.agent,
               model: input.data.info.model,
@@ -110,7 +125,22 @@ const layer = Layer.effect(
               commit: (seq) =>
                 Effect.gen(function* () {
                   if (messages.length > 0) {
-                    yield* db.insert(SessionMessageTable).values(messages).run().pipe(Effect.orDie)
+                    if (media) yield* Effect.forEach(split, (row) => SessionBlob.save(db, row.blobs), { discard: true })
+                    const stored = media
+                      ? messages.map((message, i) => ({ ...message, data: split[i]!.data }))
+                      : messages
+                    yield* db.insert(SessionMessageTable).values(stored).run().pipe(Effect.orDie)
+                    if (media)
+                      yield* Effect.forEach(
+                        stored,
+                        (message, i) =>
+                          SessionBlob.recordHashes(
+                            db,
+                            { sessionID, messageID: message.id, seq: message.seq },
+                            new Set(split[i]!.blobs.map((blob) => blob.hash)),
+                          ),
+                        { discard: true },
+                      )
                     yield* Bus.reserveSequence(db, sessionID, seq + messages.length)
                   }
                   yield* db
@@ -124,6 +154,13 @@ const layer = Layer.effect(
                       tokens_cache_write: input.data.info.tokens.cache.write,
                       time_created: DateTime.toEpochMillis(input.data.info.time.created),
                       time_updated: importedAt,
+                      time_busy:
+                        input.data.info.time.idle && input.data.info.time.busy
+                          ? Math.min(
+                              DateTime.toEpochMillis(input.data.info.time.idle),
+                              DateTime.toEpochMillis(input.data.info.time.busy),
+                            )
+                          : null,
                       time_idle: input.data.info.time.idle ? DateTime.toEpochMillis(input.data.info.time.idle) : null,
                       time_viewed:
                         input.data.info.time.idle && input.data.info.time.viewed
@@ -159,7 +196,7 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [App.node, Bus.node, Database.node, Project.node, Session.node],
+  deps: [App.node, Bus.node, Database.node, Instance.node, Project.node, Session.node],
 })
 
 function isSettled(message: SessionMessage.Info) {

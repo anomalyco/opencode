@@ -1,13 +1,20 @@
 import { onCleanup } from "solid-js"
+import { Predicate } from "effect"
+
+type FocusLock = { pending: boolean; release?: VoidFunction }
 
 const FOCUS_LOCK = "opencode:notification-focus"
+
+const DELIVERY_LOCK = "opencode:notification-delivery"
 
 const MAX_CLAIMED = 500
 
 export function createNotificationCoordinator() {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks
+
   const claimed = new Set<string>()
-  const focus = { pending: false, release: undefined as (() => void) | undefined }
+
+  const focus: FocusLock = { pending: false }
 
   const updateFocus = () => {
     if (typeof document === "undefined" || !document.hasFocus()) {
@@ -47,7 +54,7 @@ export function createNotificationCoordinator() {
     })
   }
 
-  const once = async (kind: "sound" | "system", eventID: string, run: () => Promise<unknown> | void) => {
+  const once = async <T>(kind: "sound" | "system", eventID: string, run: () => Promise<T> | void) => {
     const key = `${kind}:${eventID}`
 
     const execute = async () => {
@@ -60,18 +67,21 @@ export function createNotificationCoordinator() {
   }
 
   return {
-    sound(eventID: string, run: () => Promise<unknown> | void) {
+    sound<T>(eventID: string, run: () => Promise<T> | void) {
       return once("sound", eventID, run)
     },
-    system(eventID: string, run: () => Promise<unknown> | void) {
+    system<T>(eventID: string, run: () => Promise<T> | void) {
       return once("system", eventID, async () => {
         if (typeof document !== "undefined" && document.hasFocus()) return
 
         if (!locks) return run()
-        await locks.request(FOCUS_LOCK, { mode: "exclusive", ifAvailable: true }, async (lock) => {
-          if (!lock) return
-          await run()
-        })
+        // Another alert holding the focus lock must not look like a focused app window.
+        await locks.request(DELIVERY_LOCK, () =>
+          locks.request(FOCUS_LOCK, { mode: "exclusive", ifAvailable: true }, async (lock) => {
+            if (!lock) return
+            await run()
+          }),
+        )
       })
     },
   }
@@ -84,7 +94,7 @@ function claim(kind: "sound" | "system", eventID: string, claimed: Set<string>) 
     try {
       const storageKey = `opencode:notification-${kind}`
       const value: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "[]")
-      const events = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
+      const events = Array.isArray(value) ? value.filter(Predicate.isString) : []
 
       if (events.includes(eventID)) {
         claimed.add(eventID)

@@ -30,6 +30,10 @@ export const dict = {
   "legal.brand": "Merkevare",
   "legal.privacy": "Personvern",
   "legal.terms": "Vilkår",
+  "legal.status.operational": "Alle systemer er operative",
+  "legal.status.degraded": "Redusert ytelse",
+  "legal.status.outage": "Driftsforstyrrelse",
+  "legal.status.unknown": "Systemstatus",
 
   "email.title": "Få beskjed først når vi lanserer nye produkter",
   "email.subtitle": "Meld deg på ventelisten for tidlig tilgang.",
@@ -199,6 +203,7 @@ export const dict = {
     "Alle Zen-modeller hostes i USA og EU. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",
   "zen.privacy.exceptionsLink": "følgende unntak",
 
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro er nå tilgjengelig i Go.",
   "go.title": "OpenCode Go | Rimelige kodemodeller for alle",
   "go.meta.description":
     "Go koster $10/måned, med sjenerøse bruksgrenser og pålitelig tilgang til ledende kodemodeller.",
@@ -208,15 +213,26 @@ export const dict = {
     "Go bringer agent-koding til programmerere over hele verden. Med rause grenser og pålitelig tilgang til de mest kapable åpen kildekode-modellene, kan du bygge med kraftige agenter uten å bekymre deg for kostnader eller tilgjengelighet.",
 
   "go.cta.text": "Abonner på Go",
+  "go.plans.audience": "Go-abonnementer for",
+  "go.plans.individuals": "Enkeltpersoner",
+  "go.plans.teams": "Team",
   "go.plans.month": "per måned",
+  "go.plans.memberMonth": "per medlem\nper måned",
   "go.plans.plus.cta": "Abonner på Go Plus",
   "go.plans.plus.description": "Go Plus koster $40/måned og gir høyere bruksgrenser.",
+  "go.plans.teams.cta": "Abonner på Go Teams",
+  "go.plans.teams.description": "Go Teams koster $20/medlem/måned med bruksgrenser for hvert medlem.",
   "go.plans.go.feature1": "Utvalgte, rimelige modeller",
   "go.plans.go.feature2": "Testet for agentbasert koding",
   "go.plans.go.feature3": "Romslige grenser og pålitelig tilgang",
   "go.plans.plus.feature1": "Alt i Go er inkludert",
   "go.plans.plus.feature2": "Høyere grenser for lengre, fokuserte kodeøkter",
   "go.plans.plus.feature3": "For større, krevende prosjekter",
+  "go.plans.teams.feature1": "Hvert medlem får sine egne Go-grenser",
+  "go.plans.teams.feature2": "Romslige månedlige grenser for hver modell",
+  "go.plans.teams.feature3": "Én regning for hele arbeidsområdet",
+  "go.plans.teams.feature4": "Ekstra bruk med budsjetter per medlem",
+  "go.plans.teams.feature5": "Personvern- og regionkontroller for modeller",
   "go.plans.limits": "Grenser",
   "go.plans.description": "Anslåtte forespørsler per 5 timer og månedlige grenser per modell",
   "go.plans.legend": "Abonnementer",
@@ -278,7 +294,6 @@ export const dict = {
     "ZDR deaktiverer viktige API-funksjoner som er avhengige av lagrede data, inkludert den tilstandsbaserte Responses API, Files and Collections og Batch API.",
   "go.faq.a5.gptRetention":
     "Logger for overvåking av misbruk genereres for all bruk av API-funksjoner og oppbevares i opptil 30 dager.",
-  "go.faq.a5.geminiRetention": "Ledetekstene og fullføringene dine kan brukes til å trene fremtidige Google-modeller.",
   "go.faq.a5.learnMore": "Les mer",
   "go.faq.a5.deepseekRetention":
     "ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 31. oktober 2026.",

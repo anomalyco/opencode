@@ -9,9 +9,9 @@ import {
   type VideoModelOptions,
   type VideoOptions,
   type VideoRequestFor,
-} from "../src/index.js"
+} from "../src/effect.js"
 import type { Service } from "../src/video-client.js"
-import { Anthropic, Fal, Google, OpenAI, Runway, XAI } from "../src/providers.js"
+import { Anthropic, Google, OpenAI, Runway, XAI } from "../src/providers.js"
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
 type Success<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never
@@ -37,7 +37,7 @@ Video.generate(
     },
     references: [Media.bytes(Uint8Array.from([1]), "image/png")],
     durationSeconds: 8,
-    aspectRatio: "16:9",
+    aspect: "16:9",
     resolution: "1080p",
     audio: true,
     seed: 7,
@@ -63,17 +63,11 @@ Video.start({
 // @ts-expect-error xAI modes are a closed set because the route selects an endpoint from them.
 Video.start({ model: xai, prompt: "Waves", providerOptions: { mode: "remix" } })
 
-const fal = Fal.configure({ apiKey: "test" }).video("fal-ai/veo3.1")
-Video.start({ model: fal, prompt: "Interview", providerOptions: { duration: "8s", safety_tolerance: "4" } })
-Video.start({ model: fal, prompt: "Interview", providerOptions: { duration: "future-duration" } })
-// @ts-expect-error Known fal string options retain their value kind.
-Video.start({ model: fal, prompt: "Interview", providerOptions: { duration: 8 } })
-
 const runway = Runway.configure({ apiKey: "test" }).video("gen4.5")
 Video.start({
   model: runway,
   prompt: "Kite",
-  aspectRatio: "1280:720",
+  aspect: "1280:720",
   providerOptions: { contentModeration: { publicFigureThreshold: "low" }, outputFormat: "future-format" },
 })
 // @ts-expect-error Known Runway nested options retain their value kind.
@@ -90,7 +84,7 @@ Video.generate({ model: OpenAI.configure({ apiKey: "test" }).image("gpt-image-2"
 // @ts-expect-error Frames are media assets, not strings.
 Video.generate({ model: google, prompt: "A kitten", frames: { first: "https://example.com/first.png" } })
 // @ts-expect-error Aspect ratios are `${w}:${h}` strings.
-Video.generate({ model: google, prompt: "A kitten", aspectRatio: "wide" })
+Video.generate({ model: google, prompt: "A kitten", aspect: "wide" })
 // @ts-expect-error Durations are numbers of seconds.
 Video.generate({ model: google, prompt: "A kitten", durationSeconds: "8s" })
 // @ts-expect-error Provider-native controls live under `providerOptions`.

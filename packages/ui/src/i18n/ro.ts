@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "Modificări sesiune",
   "ui.sessionReview.title.git": "Modificări Git",
   "ui.sessionReview.title.branch": "Modificări ramură",
@@ -72,10 +72,6 @@ export const dict: Record<string, string> = {
   "dialog.usageExceeded.freeTier.description":
     "Abonează-te la OpenCode Go pentru 10$/lună și obține acces fiabil la cele mai bune modele open-source.",
   "dialog.usageExceeded.freeTier.actionLabel": "Abonează-te",
-  "dialog.usageExceeded.accountRateLimit.title": "Limită Go atinsă",
-  "dialog.usageExceeded.accountRateLimit.description":
-    "Ai atins limita de utilizare. Pentru a continua să folosești acest model acum, activează utilizarea din soldul disponibil",
-  "dialog.usageExceeded.accountRateLimit.actionLabel": "Deschide setările",
   "ui.sessionTurn.status.delegating": "Se deleagă sarcina",
   "ui.sessionTurn.status.planning": "Se planifică următorii pași",
   "ui.sessionTurn.status.gatheringContext": "Se explorează",
@@ -198,7 +194,6 @@ export const dict: Record<string, string> = {
   "ui.question.answer.none": "(niciun răspuns)",
   "ui.question.review.notAnswered": "(fără răspuns)",
   "ui.question.multiHint": "Selectează toate răspunsurile corecte",
-  "ui.question.singleHint": "Selectează un răspuns",
   "ui.question.custom.placeholder": "Scrie răspunsul…",
   "ui.tool.loadedFile": "{{path}} a fost încărcat",
   "ui.tool.loadedSkill": "Abilitatea {{name}} a fost încărcată",

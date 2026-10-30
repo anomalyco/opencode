@@ -1,5 +1,6 @@
 import { createEffect, For, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import { prefersReducedMotion } from "@opencode/ui/motion"
 
 const target = ["o", "p", "e", "n", "c", "o", "d", "e"] as const
 
@@ -16,7 +17,7 @@ export function AnimatedWordmark(props: { active: boolean }) {
         timers.forEach(clearTimeout)
         timers.clear()
 
-        if (!active || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        if (!active || prefersReducedMotion()) {
           setState("letters", [...target])
 
           return

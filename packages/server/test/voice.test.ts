@@ -16,14 +16,7 @@ const voice = makeLocationNode({
       models: () =>
         Effect.succeed({
           models: [
-            {
-              model: "gpt-live-1",
-              provider: "openai",
-              transports: ["webrtc"],
-              available: true,
-              integration: "opencode",
-              workspace: "Anomaly",
-            },
+            { model: "gpt-live-1", provider: "openai", transports: ["webrtc"], available: true },
             { model: "gpt-realtime-2.1", provider: "openai", transports: ["webrtc", "websocket"], available: true },
             { model: "grok-voice-3.0", provider: "xai", transports: ["websocket"], available: false },
             { model: "gemini-3.8-live", provider: "google", transports: ["websocket"], available: false },
@@ -37,22 +30,15 @@ const voice = makeLocationNode({
           return Effect.fail(new Voice.UnavailableError({ message: "OpenAI API key is required", service: "openai" }))
         return Effect.succeed(
           input.transport.type === "webrtc"
-            ? { transport: { type: "webrtc" as const, sdp: `answer:${input.model}:${input.transport.sdp}` }, id: "sess_1" }
+            ? { type: "webrtc" as const, sdp: `answer:${input.model}:${input.transport.sdp}` }
             : {
-                transport: {
-                  type: "websocket" as const,
-                  url: `wss://api.x.ai/v1/realtime?model=${input.model}`,
-                  token: "ek_test",
-                  expiresAt: 1760000000,
-                },
+                type: "websocket" as const,
+                url: `wss://api.x.ai/v1/realtime?model=${input.model}`,
+                token: "ek_test",
+                expiresAt: 1760000000,
               },
         )
       },
-      instruct: (input) =>
-        input.id === "sess_1"
-          ? Effect.void
-          : Effect.fail(new Voice.InvalidRequestError({ message: "Only hosted voice sessions take instructions" })),
-      host: () => Effect.void,
     }),
   ),
   deps: [],
@@ -79,14 +65,7 @@ it.live("routes experimental voice models and session endpoints", () =>
     expect(yield* Effect.promise(() => modelsRes.json())).toEqual({
       data: {
         models: [
-          {
-            model: "gpt-live-1",
-            provider: "openai",
-            transports: ["webrtc"],
-            available: true,
-            integration: "opencode",
-            workspace: "Anomaly",
-          },
+          { model: "gpt-live-1", provider: "openai", transports: ["webrtc"], available: true },
           { model: "gpt-realtime-2.1", provider: "openai", transports: ["webrtc", "websocket"], available: true },
           { model: "grok-voice-3.0", provider: "xai", transports: ["websocket"], available: false },
           { model: "gemini-3.8-live", provider: "google", transports: ["websocket"], available: false },
@@ -113,7 +92,7 @@ it.live("routes experimental voice models and session endpoints", () =>
     })
     expect(rtcRes.status).toBe(200)
     expect(yield* Effect.promise(() => rtcRes.json())).toEqual({
-      data: { transport: { type: "webrtc", sdp: "answer:gpt-live-1:v=0" }, session: { id: "sess_1" } },
+      data: { transport: { type: "webrtc", sdp: "answer:gpt-live-1:v=0" } },
     })
 
     const wsRes = yield* post({ model: "grok-voice-3.0", transport: { type: "websocket" } })
@@ -131,18 +110,5 @@ it.live("routes experimental voice models and session endpoints", () =>
 
     expect((yield* post({ model: "invalid", transport: { type: "websocket" } })).status).toBe(400)
     expect((yield* post({ model: "unavailable", transport: { type: "websocket" } })).status).toBe(503)
-
-    const instruct = (id: string) =>
-      Effect.promise(() =>
-        handler(
-          new Request(`http://opencode.local/api/experimental/voice/session/${id}/instructions`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ instructions: "The screen shows ses_1." }),
-          }),
-        ),
-      )
-    expect((yield* instruct("sess_1")).status).toBe(204)
-    expect((yield* instruct("sess_unknown")).status).toBe(400)
   }),
 )

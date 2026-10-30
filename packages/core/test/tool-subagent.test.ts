@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
-import { LanguageModel } from "@opencode/ai"
+import { LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import path from "path"
@@ -184,6 +184,12 @@ const withSubagent = (location: Location.Ref) =>
           model.variants = [{ id: Model.VariantID.make("fast") }]
         })
         editor.models.update(Provider.ID.make("test"), Model.ID.make("plain"), () => {})
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("painter"), (model) => {
+          model.type = "image"
+        })
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("classifier"), (model) => {
+          model.type = "decision"
+        })
       }),
     ).pipe(Effect.provide(locations.get(location)))
     yield* Agent.Service.use((agents) =>
@@ -573,6 +579,66 @@ describe("SubagentTool", () => {
     ),
   )
 
+  it.live("follow-ups to a running background child return immediately and notify once", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          const child = yield* sessions.create({
+            parentID: parent.id,
+            title: "review",
+            agent: Agent.ID.make("reviewer"),
+            model: childModel,
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const bus = yield* Bus.Service
+          const gate = yield* Deferred.make<void>()
+          yield* jobs.start({
+            id: child.id,
+            type: SubagentTool.name,
+            run: Deferred.await(gate).pipe(Effect.as("done")),
+          })
+          const notified = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === parent.id && event.data.item.type === "synthetic"),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const followUp = (id: string, input: { background?: boolean }) =>
+            executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id,
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "follow up", prompt: id, sessionID: child.id, ...input },
+              },
+            }).pipe(Effect.timeout("2 seconds"))
+
+          const launched = yield* followUp("call-launch", { background: true })
+          const steered = yield* followUp("call-steer", { background: true })
+          const unflagged = yield* followUp("call-steer-foreground", {})
+          ;[launched, steered, unflagged].forEach((result) =>
+            expect(result).toMatchObject({ metadata: { sessionID: child.id, status: "running" } }),
+          )
+
+          yield* Deferred.succeed(gate, undefined)
+          yield* Fiber.join(notified).pipe(Effect.timeout("2 seconds"))
+          expect((yield* sessions.inbox(parent.id)).filter((item) => item.type === "synthetic")).toHaveLength(1)
+        }),
+      ),
+    ),
+  )
+
   it.live("rejects unrelated children and switches agents on continuation", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -714,6 +780,14 @@ describe("SubagentTool", () => {
             ["test/missing", 'Model "test/missing" is not available. Use the models tool to see what is available.'],
             ["test/override#slow", 'Variant "slow" is not available for "test/override". Available: fast.'],
             ["test/plain#high", 'Model "test/plain" has no variants. Omit the variant.'],
+            [
+              "test/painter",
+              'Model "test/painter" is an image model; subagents need a chat model. Use the models tool to find one.',
+            ],
+            [
+              "test/classifier",
+              'Model "test/classifier" is a decision model; subagents need a chat model. Use the models tool to find one.',
+            ],
           ] as const
           for (const [model, message] of failures) {
             expect(yield* call(`call-${model}`, { model })).toEqual({

@@ -2,7 +2,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import type { Entry } from "@opencode/schema/config"
 import { Duration, Effect, Option, Schedule, type Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
-import { shellParserWasm } from "#shell-parser-wasm"
+import photonWasm from "#photon-wasm"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
 import { EnvironmentUnavailable } from "../../environment/unavailable.js"
@@ -45,7 +45,7 @@ export function createLocalProviderPlugin<Discovered>(input: {
         const location = yield* Effect.serviceOption(Location.Service)
         const defaultOrigin =
           origin ??
-          (shellParserWasm.bash === "" ||
+          (photonWasm === "" ||
           (Option.isSome(location) && location.value.workspaceID !== undefined) ||
           (Option.isSome(environment) && environment.value.spawner === EnvironmentUnavailable.spawner)
             ? undefined
@@ -142,11 +142,9 @@ export function createLocalProviderPlugin<Discovered>(input: {
           yield* ctx.provider.reload()
           yield* refresh().pipe(Effect.ignore)
         })
-        yield* ctx.event.subscribe().pipe(
-          Stream.filter((event) => event.type === "config.updated"),
-          Stream.runForEach(reload),
-          Effect.forkScoped({ startImmediately: true }),
-        )
+        yield* ctx.event
+          .subscribe({ types: ["config.updated"] })
+          .pipe(Stream.runForEach(reload), Effect.forkScoped({ startImmediately: true }))
       }),
     } satisfies PluginInternal.InternalPlugin)
   }

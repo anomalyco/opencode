@@ -10,11 +10,23 @@
 
 [data-slot="vertical-tabs-sidebar"] [data-slot="vertical-tabs-scroll"] {
   min-height: 0;
-  /* Leave enough space to scroll the final tab clear of the fade above Settings. */
   padding-block-end: 16px;
-  scroll-padding-block-end: 16px;
-  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 16px), transparent);
-  mask-image: linear-gradient(to bottom, black calc(100% - 16px), transparent);
+  /* Keyboard navigation scrolls a tab clear of the feathered edges, which TitlebarTabStrip sizes from the scroll. */
+  scroll-padding-block: 16px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black var(--vertical-tabs-fade-top, 0px),
+    black calc(100% - var(--vertical-tabs-fade-bottom, 0px)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black var(--vertical-tabs-fade-top, 0px),
+    black calc(100% - var(--vertical-tabs-fade-bottom, 0px)),
+    transparent
+  );
 }
 
 [data-slot="mobile-tabs-trigger"][aria-expanded="true"] {
@@ -70,7 +82,7 @@
   opacity: 1;
 }
 
-[data-slot="mobile-tabs-drawer"] [data-titlebar-tab] [data-slot="tab-unread-slot"] {
+[data-slot="mobile-tabs-drawer"] [data-titlebar-tab] [data-slot="tab-status"] {
   inset-inline-end: 44px;
 }
 
@@ -80,7 +92,7 @@
   mask-image: none;
 }
 
-[data-slot="mobile-tabs-drawer"] [data-titlebar-tab][data-unread="true"] [data-slot="tab-link"] {
+[data-slot="mobile-tabs-drawer"] [data-titlebar-tab][data-status] [data-slot="tab-link"] {
   padding-inline-end: 58px;
 }
 
@@ -98,7 +110,12 @@
   outline: none;
 }
 
-[data-slot="titlebar-v2"]
+:is(
+    [data-slot="titlebar-v2"],
+    [data-slot="collapsed-sidebar-toggle"],
+    [data-slot="session-review-toggle"],
+    [data-session-title]
+  )
   [data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:focus-visible, [data-state="focus"]):not(
     :disabled
   ) {

@@ -51,9 +51,8 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         )
 
       const unsubscribe = yield* bus.listen((event) => {
-        if (!isSessionEvent(event)) return Effect.void
-        const location = event.location
-        if (!location) return Effect.void
+        if (!isSessionEvent(event) || !event.location) return Effect.void
+        const location = LocationServiceMap.canonical(event.location)
         return RcMap.has(locations.rcMap, location).pipe(
           Effect.flatMap((active) => (active ? touch(location) : Effect.void)),
         )
@@ -78,7 +77,7 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         const owners = [
           ...(yield* execution.active),
           ...(yield* jobs.runningBackground).flatMap((recovery) =>
-            recovery.kind === "shell" ? [recovery.sessionID] : [recovery.childSessionID, recovery.parentSessionID],
+            recovery.kind === "subagent" ? [recovery.childSessionID, recovery.parentSessionID] : [recovery.sessionID],
           ),
         ]
         const occupied = new Set(

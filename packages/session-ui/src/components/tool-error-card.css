@@ -109,6 +109,11 @@
     overflow-wrap: anywhere;
   }
 
+  &[data-tool="shell"] [data-slot="basic-tool-tool-subtitle"],
+  &[data-tool="shell"] [data-slot="tool-error-card-subtitle"] {
+    font-family: var(--v2-font-family-code);
+  }
+
   [data-slot="tool-error-card-subtitle"] {
     max-height: 240px;
     overflow-y: auto;
@@ -143,7 +148,13 @@
     pointer-events: auto;
   }
 
-  [data-slot="tool-error-card-content"] :where(*)::selection {
+  [data-slot="tool-error-card-content"] {
+    --timeline-quote-background: var(--v2-state-bg-danger);
+  }
+
+  [data-slot="tool-error-card-content"] :where(*)::selection,
+  [data-slot="tool-error-card-content"] :where(*)::highlight(timeline-quote-source),
+  [data-slot="tool-error-card-content"] :where(*)::highlight(timeline-quote-source-active) {
     background: var(--v2-state-bg-danger);
     color: var(--v2-text-text-base);
   }
