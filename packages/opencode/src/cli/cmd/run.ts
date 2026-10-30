@@ -70,16 +70,26 @@ type SessionInfo = {
   directory?: string
 }
 
-function inline(info: Inline) {
-  const suffix = info.description ? UI.Style.TEXT_DIM + ` ${info.description}` + UI.Style.TEXT_NORMAL : ""
-  UI.println(UI.Style.TEXT_NORMAL + info.icon, UI.Style.TEXT_NORMAL + info.title + suffix)
+// Prefix every line of a multi-line string. Used to indent sub-agent output so a
+// reader of a headless log can tell it apart from the parent session's.
+function withPrefix(text: string, prefix: string) {
+  if (!prefix) return text
+  return text
+    .split("\n")
+    .map((line) => prefix + line)
+    .join("\n")
 }
 
-function block(info: Inline, output?: string) {
+function inline(info: Inline, prefix = "") {
+  const suffix = info.description ? UI.Style.TEXT_DIM + ` ${info.description}` + UI.Style.TEXT_NORMAL : ""
+  UI.println(prefix + UI.Style.TEXT_NORMAL + info.icon, UI.Style.TEXT_NORMAL + info.title + suffix)
+}
+
+function block(info: Inline, output?: string, prefix = "") {
   UI.empty()
-  inline(info)
+  inline(info, prefix)
   if (!output?.trim()) return
-  UI.println(output)
+  UI.println(withPrefix(output, prefix))
   UI.empty()
 }
 
@@ -87,39 +97,48 @@ function formatRunError(error: unknown) {
   return FormatError(error) ?? FormatUnknownError(error)
 }
 
-async function tool(part: ToolPart) {
+async function tool(part: ToolPart, prefix = "") {
   try {
     const { toolInlineInfo } = await import("./run/tool")
     const next = toolInlineInfo(part)
     if (next.mode === "block") {
-      block(next, next.body)
+      block(next, next.body, prefix)
       return
     }
 
-    inline(next)
+    inline(next, prefix)
   } catch {
-    inline({
-      icon: "\u2699",
-      title: part.tool,
-    })
+    inline(
+      {
+        icon: "\u2699",
+        title: part.tool,
+      },
+      prefix,
+    )
   }
 }
 
-async function toolError(part: ToolPart) {
+async function toolError(part: ToolPart, prefix = "") {
   try {
     const { toolInlineInfo } = await import("./run/tool")
     const next = toolInlineInfo(part)
-    inline({
-      icon: "✗",
-      title: `${next.title} failed`,
-      ...(next.description && { description: next.description }),
-    })
+    inline(
+      {
+        icon: "✗",
+        title: `${next.title} failed`,
+        ...(next.description && { description: next.description }),
+      },
+      prefix,
+    )
     return
   } catch {
-    inline({
-      icon: "✗",
-      title: `${part.tool} failed`,
-    })
+    inline(
+      {
+        icon: "✗",
+        title: `${part.tool} failed`,
+      },
+      prefix,
+    )
   }
 }
 
@@ -686,39 +705,51 @@ export const RunCommand = effectCmd({
         // created, and replies issued from inside the loop must use that client.
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
-          const sessions = new Set([sessionID])
+          // The root session and every sub-agent session spawned beneath it (task
+          // tool children, and their children), mapped to nesting depth. Before
+          // this map existed only the root's parts were mirrored, so everything a
+          // sub-agent did was invisible in a headless run's output. Depth drives
+          // the indent so a reader can still tell whose output is whose.
+          const sessions = new Map<string, number>([[sessionID, 0]])
+          const indent = (id: string) => {
+            const depth = sessions.get(id) ?? 0
+            return depth === 0 ? "" : "  ".repeat(depth - 1) + "↳ "
+          }
           let error: string | undefined
 
           for await (const event of events.stream) {
             if (event.type === "session.created" && event.properties.info.parentID) {
-              if (sessions.has(event.properties.info.parentID)) sessions.add(event.properties.info.id)
+              const depth = sessions.get(event.properties.info.parentID)
+              if (depth !== undefined) sessions.set(event.properties.info.id, depth + 1)
             }
 
             if (
               event.type === "message.updated" &&
-              event.properties.sessionID === sessionID &&
+              sessions.has(event.properties.sessionID) &&
               event.properties.info.role === "assistant" &&
               args.format !== "json" &&
-              toggles.get("start") !== true
+              toggles.get("start:" + event.properties.sessionID) !== true
             ) {
+              const prefix = indent(event.properties.sessionID)
               UI.empty()
-              UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
+              UI.println(`${prefix || "> "}${event.properties.info.agent} · ${event.properties.info.modelID}`)
               UI.empty()
-              toggles.set("start", true)
+              toggles.set("start:" + event.properties.sessionID, true)
             }
 
             if (event.type === "message.part.updated") {
               const part = event.properties.part
-              if (part.sessionID !== sessionID) continue
+              if (!sessions.has(part.sessionID)) continue
+              const prefix = indent(part.sessionID)
 
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
                 if (emit("tool_use", { part })) continue
                 if (part.state.status === "completed") {
-                  await tool(part)
+                  await tool(part, prefix)
                   continue
                 }
-                await toolError(part)
-                UI.error(part.state.error)
+                await toolError(part, prefix)
+                UI.error(withPrefix(part.state.error, prefix))
               }
 
               if (
@@ -728,7 +759,7 @@ export const RunCommand = effectCmd({
                 args.format !== "json"
               ) {
                 if (toggles.get(part.id) === true) continue
-                await tool(part)
+                await tool(part, prefix)
                 toggles.set(part.id, true)
               }
 
@@ -742,8 +773,8 @@ export const RunCommand = effectCmd({
 
               if (part.type === "text" && part.time?.end) {
                 if (emit("text", { part })) continue
-                const text = part.text.trim()
-                if (!text) continue
+                const text = withPrefix(part.text.trim(), prefix)
+                if (!text.trim()) continue
                 if (!process.stdout.isTTY) {
                   process.stdout.write(text + EOL)
                   continue
@@ -757,7 +788,7 @@ export const RunCommand = effectCmd({
                 if (emit("reasoning", { part })) continue
                 const text = part.text.trim()
                 if (!text) continue
-                const line = `Thinking: ${text}`
+                const line = withPrefix(`Thinking: ${text}`, prefix)
                 if (process.stdout.isTTY) {
                   UI.empty()
                   UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
@@ -770,14 +801,17 @@ export const RunCommand = effectCmd({
 
             if (event.type === "session.error") {
               const props = event.properties
-              if (props.sessionID !== sessionID || !props.error) continue
+              const errSession = props.sessionID
+              if (!errSession || !sessions.has(errSession) || !props.error) continue
               let err = String(props.error.name)
               if ("data" in props.error && props.error.data && "message" in props.error.data) {
                 err = String(props.error.data.message)
               }
-              error = error ? error + EOL + err : err
+              // Only the root session's error decides the run's outcome; a
+              // sub-agent failure the parent recovers from is reported, not fatal.
+              if (errSession === sessionID) error = error ? error + EOL + err : err
               if (emit("error", { error: props.error })) continue
-              UI.error(err)
+              UI.error(withPrefix(err, indent(errSession)))
             }
 
             if (
