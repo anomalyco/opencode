@@ -358,6 +358,20 @@ describe("ConfigNormalize", () => {
     expect(result.diagnostics).toEqual([])
   })
 
+  test("rejects the plugin tuple shapes that v1 rejects", () => {
+    const result = normalized({
+      plugin: [["pkg"], ["pkg", {}, "extra"]],
+      plugins: [["pkg"], ["pkg", {}, "extra"]],
+    })
+    expect(result.encoded.plugins).toEqual([])
+    expect(result.diagnostics).toEqual([
+      { kind: "invalid", path: ["plugin", "0"], message: "skipped malformed recognized value" },
+      { kind: "invalid", path: ["plugin", "1"], message: "skipped malformed recognized value" },
+      { kind: "invalid", path: ["plugins", "0"], message: "skipped malformed recognized value" },
+      { kind: "invalid", path: ["plugins", "1"], message: "skipped malformed recognized value" },
+    ])
+  })
+
   test("keeps the plugin entry shapes that already decoded", () => {
     const result = normalized({
       plugins: ["plain", ["pkg", { a: 1 }], { package: "obj", options: { b: 2 } }, 42],
