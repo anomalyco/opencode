@@ -3,6 +3,8 @@ import context from "./context"
 import contextRenderer from "./context/renderer"
 import btw from "./btw"
 import btwRenderer from "./btw/renderer"
+import sideChat from "./side-chat"
+import sideChatRenderer from "./side-chat/renderer"
 import debug from "./debug"
 import debugRenderer from "./debug/renderer"
 import terminal from "./terminal"
@@ -39,6 +41,7 @@ const eager = (setup: Awaited<ReturnType<NonNullable<Entry["windowEntry"]>>>["de
 export const builtins = compose({
   context: { ...context, windowEntry: eager(contextRenderer) },
   btw: { ...btw, windowEntry: eager(btwRenderer) },
+  "side-chat": { ...sideChat, windowEntry: eager(sideChatRenderer) },
   debug: { ...debug, windowEntry: eager(debugRenderer) },
   terminal: { ...terminal, windowEntry: eager(terminalRenderer) },
   file: { ...file, windowEntry: eager(fileRenderer) },

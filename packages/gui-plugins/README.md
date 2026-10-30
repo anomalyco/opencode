@@ -692,6 +692,7 @@ export default setup
 export const builtins = compose({
   context,
   btw,
+  "side-chat": sideChat,
   debug: { ...debug, mainEntry: () => import("./debug/main") },
   terminal,
   file,
@@ -717,6 +718,7 @@ The window list adds each window entry, loaded with the app:
 export const builtins = compose({
   context: { ...context, windowEntry: eager(contextRenderer) },
   btw: { ...btw, windowEntry: eager(btwRenderer) },
+  "side-chat": { ...sideChat, windowEntry: eager(sideChatRenderer) },
   debug: { ...debug, windowEntry: eager(debugRenderer) },
   terminal: { ...terminal, windowEntry: eager(terminalRenderer) },
   file: { ...file, windowEntry: eager(fileRenderer) },

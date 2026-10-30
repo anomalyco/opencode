@@ -397,6 +397,14 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.post("sessionFork", "/api/session/:sessionID/fork", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: Json,
+      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("sessionView", "/api/session/:sessionID/view", {
       params: SessionParams,
       success: NoContent,

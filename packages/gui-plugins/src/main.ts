@@ -1,6 +1,7 @@
 import { compose } from "@opencode/plugin/gui/host"
 import context from "./context"
 import btw from "./btw"
+import sideChat from "./side-chat"
 import debug from "./debug"
 import terminal from "./terminal"
 import file from "./file"
@@ -19,6 +20,7 @@ import goal from "./goal"
 export const builtins = compose({
   context,
   btw,
+  "side-chat": sideChat,
   debug: { ...debug, mainEntry: () => import("./debug/main") },
   terminal,
   file,
