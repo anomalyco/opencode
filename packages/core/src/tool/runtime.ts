@@ -2,8 +2,20 @@ import { emptyInputJsonSchema, type ToolDefinition } from "@opencode/ai/effect"
 import { isRecord } from "@opencode/util/record"
 import { Tool } from "@opencode/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
-import { Cache, Effect, JsonPointer, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"
+import {
+  Cache,
+  Cause,
+  Effect,
+  JsonPointer,
+  JsonSchema,
+  Result,
+  Schema,
+  SchemaIssue,
+  SchemaRepresentation,
+} from "effect"
 import { $ZodType, toJSONSchema } from "zod/v4/core"
+import { Permission } from "../permission.js"
+import { QuestionTool } from "./plugin/question.js"
 
 const formatEffectIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
@@ -59,6 +71,17 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
       ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
     }
   })
+
+/** Finds a user decline in a tool call's cause, including one a wrapper attached to a Tool.Error. */
+export const findDecline = (cause: Cause.Cause<Tool.Error>) => {
+  const decline = cause.reasons
+    .map((r) => (Cause.isDieReason(r) ? r.defect : Cause.isFailReason(r) ? r.error.error : undefined))
+    .find(
+      (value): value is Permission.DeclinedError | QuestionTool.CancelledError =>
+        value instanceof Permission.DeclinedError || value instanceof QuestionTool.CancelledError,
+    )
+  return decline ? Result.succeed(decline) : Result.fail(cause)
+}
 
 const decodeInput = (tool: Tool.Info<any, any>, value: unknown) =>
   Effect.gen(function* () {

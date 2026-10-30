@@ -12,8 +12,10 @@ import type {
   Result,
 } from "@opencode/schema/tool"
 import { Clock, Context, Effect, Ref, Schema, Semaphore } from "effect"
+import type { Permission } from "../permission.js"
 import { toSessionError } from "../session/to-session-error.js"
-import { definition, normalizedName } from "../tool/runtime.js"
+import type { QuestionTool } from "../tool/plugin/question.js"
+import { definition, findDecline, normalizedName } from "../tool/runtime.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeWeb } from "./web.js"
 
@@ -93,6 +95,7 @@ export const create = (
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
+        const declined = yield* Ref.make<Permission.DeclinedError | QuestionTool.CancelledError | undefined>(undefined)
         const lock = Semaphore.makeUnsafe(1)
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
         // A success drops a pending one when the scope closes, since the result carries the final rows.
@@ -115,7 +118,7 @@ export const create = (
               yield* Effect.sleep(wait).pipe(Effect.andThen(lock.withPermit(publish)), Effect.forkIn(scope))
             }),
           )
-        const result = yield* runtime(inventory)
+        const exit = yield* runtime(inventory)
           .execute(code)
           .pipe(
             Effect.provideService(Run, {
@@ -124,6 +127,10 @@ export const create = (
                   const index = yield* Ref.getAndUpdate(callIndex, (index) => index + 1)
                   // The program sees the same failure text the model gets for a direct call.
                   const executed = yield* executeTool(name, tool, input, context).pipe(
+                    // A program must not catch a decline: interrupting ends the execution, and it resurfaces below.
+                    Effect.catchCauseFilter(findDecline, (decline) =>
+                      Ref.set(declined, decline).pipe(Effect.andThen(Effect.interrupt)),
+                    ),
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
                   const content = resultContent(executed)
@@ -138,7 +145,11 @@ export const create = (
             Effect.onError(() =>
               lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
             ),
+            Effect.exit,
           )
+        const decline = yield* Ref.get(declined)
+        if (decline) return yield* Effect.die(decline)
+        const result = yield* exit
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)

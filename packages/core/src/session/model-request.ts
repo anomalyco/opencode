@@ -23,7 +23,7 @@ import type {
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { Content } from "@opencode/schema/tool"
-import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
+import { Context, Effect, Layer, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
@@ -31,6 +31,7 @@ import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { Tool } from "../tool.js"
+import { findDecline } from "../tool/runtime.js"
 import { SessionAffinity } from "./affinity.js"
 import { SessionModelTransport } from "./model-transport.js"
 import { SessionRunnerModel } from "./runner/model.js"
@@ -397,20 +398,9 @@ export const layer = Layer.effect(
         // including declines a tool rethrew and its wrapper attached to a Tool.Error, as Promise
         // plugin tools do.
         executeTool: (call: Parameters<Prepared["executeTool"]>[0]) =>
-          tools.execute({ ...call, definitions: hooked }).pipe(
-            Effect.catchCauseFilter(
-              (cause) => {
-                const decline = cause.reasons
-                  .map((r) => (Cause.isDieReason(r) ? r.defect : Cause.isFailReason(r) ? r.error.error : undefined))
-                  .find(
-                    (value): value is Permission.DeclinedError | QuestionTool.CancelledError =>
-                      value instanceof Permission.DeclinedError || value instanceof QuestionTool.CancelledError,
-                  )
-                return decline ? Result.succeed(decline) : Result.fail(cause)
-              },
-              (decline) => Effect.fail(decline),
-            ),
-          ),
+          tools
+            .execute({ ...call, definitions: hooked })
+            .pipe(Effect.catchCauseFilter(findDecline, (decline) => Effect.fail(decline))),
       }
     })
 
