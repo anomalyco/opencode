@@ -739,6 +739,7 @@ export const dict = {
   "dialog.server.menu.remove": "Noņemt",
   "home.workspaceTip": "Sāciet nākamo sesiju jaunā darbvietā, lai izmaiņas būtu izolētas",
   "session.tab.add": "Pievienot cilni",
+  "session.tab.closeOthers": "Aizvērt citas cilnes",
   "session.queue.attachments.one": "Plus {{count}} stiprinājums",
   "session.queue.attachments.other": "Plus {{count}} stiprinājumi",
   "settings.backToSettings": "Atpakaļ uz iestatījumiem",

@@ -122,4 +122,17 @@ describe("prompt attachments", () => {
     ]
     expect(deduplicateVisibleImages([file, ...distinct])).toEqual([file, ...distinct])
   })
+
+  test("deduplicates visible image cards the server sent as media refs by their ref", () => {
+    const file = {
+      uri: `media:${"a".repeat(64)}`,
+      mime: "image/png",
+      source: { type: "inline" },
+      name: "clipboard",
+      mention: { text: "[Image 1]" },
+    }
+    const other = { ...file, uri: `media:${"b".repeat(64)}` }
+
+    expect(deduplicateVisibleImages([file, { ...file }, other])).toEqual([file, other])
+  })
 })

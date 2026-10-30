@@ -59,7 +59,7 @@ export function createServerShellController(server: Accessor<ServerConnection.An
       const previous = state.latest
       actions.mutate({ ...previous, shell: value || undefined })
       void serverCtx()
-        .sdk.api.config.update({ shell: value || null })
+        .sdk.api.experimental.config.update({ shell: value || null })
         .catch((error) => {
           actions.mutate(previous)
           showToast({
@@ -176,6 +176,12 @@ export function createSoundSettingsController() {
       settings.sounds.permissions,
       (value) => settings.sounds.setPermissionsEnabled(value),
       (id) => settings.sounds.setPermissions(id),
+    ),
+    questions: channel(
+      settings.sounds.questionsEnabled,
+      settings.sounds.questions,
+      (value) => settings.sounds.setQuestionsEnabled(value),
+      (id) => settings.sounds.setQuestions(id),
     ),
     errors: channel(
       settings.sounds.errorsEnabled,

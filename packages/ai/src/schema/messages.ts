@@ -284,11 +284,23 @@ export namespace Message {
     make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })
 }
 
+/**
+ * Raw-text wire encoding for a tool with exactly one required string parameter. Models that accept the format
+ * write that parameter's value directly instead of JSON arguments; calls still decode to the normal object input.
+ */
+export const Freeform = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("text") }),
+  Schema.Struct({ type: Schema.Literal("regex"), pattern: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("lark"), grammar: Schema.String }),
+]).annotate({ identifier: "LLM.Freeform" })
+export type Freeform = Schema.Schema.Type<typeof Freeform>
+
 const toolDefinitionFields = {
   name: Schema.String,
   description: Schema.String,
   inputSchema: JsonSchema,
   outputSchema: Schema.optional(JsonSchema),
+  freeform: Schema.optional(Freeform),
   cache: Schema.optional(CacheHint),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
@@ -310,6 +322,15 @@ export namespace ToolDefinition {
 
   /** Normalize tool definition input into the canonical `ToolDefinition` class. */
   export const make = (input: Input) => (input instanceof ToolDefinition ? input : new ToolDefinition(input))
+
+  /** The parameter a freeform call fills: the input schema's only property, when it is a required string. */
+  export const freeformField = (schema: JsonSchema) => {
+    const properties = Object.entries(Schema.is(JsonSchema)(schema.properties) ? schema.properties : {})
+    if (properties.length !== 1) return undefined
+    const [name, property] = properties[0]
+    if (!Schema.is(JsonSchema)(property) || property.type !== "string") return undefined
+    return Array.isArray(schema.required) && schema.required.includes(name) ? name : undefined
+  }
 }
 
 export type ToolNamespace = {

@@ -1,22 +1,23 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import {
-  Media,
-  LLM,
-  LLMEvent,
-  LLMRequest,
-  LLMResponse,
-  Message,
-  ToolRuntime,
-  ToolChoice,
-  ToolDefinition,
-  toDefinitions,
+  ai,
   type ContentPart,
   type FinishReason,
   type LanguageModel,
+  type LLM,
+  LLMEvent,
+  LLMRequest,
+  LLMResponse,
+  Media,
+  Message,
+  toDefinitions,
+  ToolChoice,
+  ToolDefinition,
+  ToolRuntime,
 } from "../src/effect.js"
 import { LLMClient } from "../src/route.js"
-import { Tool } from "../src/tool.js"
+import { tool } from "../src/tool.js"
 
 export const weatherToolName = "get_weather"
 
@@ -43,7 +44,7 @@ export const weatherTool = ToolDefinition.make({
   },
 })
 
-export const weatherRuntimeTool = Tool.make({
+export const weatherRuntimeTool = tool({
   description: weatherTool.description,
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
@@ -60,7 +61,7 @@ export const weatherToolLoopRequest = (input: {
   readonly maxTokens?: number
   readonly temperature?: number | false
 }) =>
-  LLM.request({
+  ai.request({
     id: input.id,
     model: input.model,
     system: input.system ?? "Use the get_weather tool, then answer in one short sentence.",
@@ -273,7 +274,7 @@ const runGeneratedConversation = (context: GoldenScenarioContext, steps: Readonl
 
       generated += 1
       const response = yield* generate(
-        LLM.request({
+        ai.request({
           id: step.id ? `${context.id}_${step.id}` : `${context.id}_${generated}`,
           model: context.model,
           system: step.system,
@@ -344,7 +345,7 @@ const runImageToolResultScenario = (context: GoldenScenarioContext) =>
   Effect.gen(function* () {
     const image = yield* restroomImage()
     const response = yield* generate(
-      LLM.request({
+      ai.request({
         id: `${context.id}_image_tool_result`,
         model: context.model,
         system: "Read images carefully. Reply only with the visible text, lowercase, no punctuation.",

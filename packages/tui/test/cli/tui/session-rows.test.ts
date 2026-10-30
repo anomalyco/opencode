@@ -3,7 +3,13 @@ import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/clie
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import { SessionTurn } from "@opencode/util/session-turn"
-import { cacheReuseDrop, messageBoundaryIDs, reduceSessionRows, sessionRowID } from "../../../src/routes/session/rows"
+import {
+  cacheReuseDrop,
+  messageBoundaryIDs,
+  reduceSessionRows,
+  sessionRowID,
+  type SessionRow,
+} from "../../../src/routes/session/rows"
 
 test("indexed tail footer calculations do not subscribe to an unrelated history prefix", () => {
   createRoot((dispose) => {
@@ -504,6 +510,92 @@ test("places a running compaction barrier before every queued user message", () 
     { type: "message", messageID: "user-after" },
   ])
 })
+
+test("shows an execution failure that happened before any step", () => {
+  const unavailable = { type: "provider.no-route", message: "Model unavailable: opencode/gpt-5.5" }
+
+  expect(
+    reduceSessionRows([
+      { type: "user", id: "user", text: "Are you there?", time: { created: 1 } },
+      failed("idle", unavailable),
+      { type: "user", id: "next", text: "Try again", time: { created: 3 } },
+      failed("idle-next", unavailable),
+    ]),
+  ).toEqual([
+    { type: "message", messageID: "user" },
+    { type: "message", messageID: "idle" },
+    { type: "message", messageID: "next" },
+    { type: "message", messageID: "idle-next" },
+  ])
+})
+
+test("shows an execution failure once when its last step already shows the error", () => {
+  const quota = { type: "provider.quota", message: "Insufficient account funds" }
+  const step = { ...assistant("assistant", []), error: quota }
+  const compaction: SessionMessageInfo = {
+    type: "compaction",
+    id: "compaction",
+    status: "failed",
+    reason: "auto",
+    error: quota,
+    time: { created: 2 },
+  }
+
+  expect(reduceSessionRows([step, failed("idle", quota)])).toEqual([
+    { type: "assistant-footer", messageID: "assistant" },
+  ])
+  expect(reduceSessionRows([compaction, failed("idle", quota)])).toEqual([{ type: "message", messageID: "compaction" }])
+})
+
+test("shows an execution failure that differs from the last step's error", () => {
+  const interrupted = { ...assistant("assistant", []), error: { type: "aborted", message: "Step interrupted" } }
+  const compaction: SessionMessageInfo = {
+    type: "compaction",
+    id: "compaction",
+    status: "failed",
+    reason: "manual",
+    error: { type: "provider.timeout", message: "Compaction timed out" },
+    time: { created: 2 },
+  }
+  const blocked = { type: "unknown", message: "Instructions could not be loaded" }
+
+  expect(reduceSessionRows([interrupted, failed("idle", { type: "tool.execution", message: "Tool crashed" })])).toEqual(
+    [
+      { type: "assistant-footer", messageID: "assistant" },
+      { type: "message", messageID: "idle" },
+    ],
+  )
+  expect(reduceSessionRows([compaction, failed("idle", blocked)])).toEqual([
+    { type: "message", messageID: "compaction" },
+    { type: "message", messageID: "idle" },
+  ])
+})
+
+test("keeps an execution failure in place ahead of the prompt it left pending", () => {
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "stranded", text: "Go", time: { created: 1 } },
+    failed("idle", { type: "unknown", message: "Instructions could not be loaded" }),
+    {
+      type: "model-switched",
+      id: "model",
+      model: { id: "other", providerID: "provider" },
+      time: { created: 3 },
+    },
+  ]
+  const rows: SessionRow[] = [
+    { type: "message", messageID: "idle" },
+    { type: "message", messageID: "model" },
+    { type: "message", messageID: "stranded" },
+  ]
+
+  expect(reduceSessionRows(messages, new Set(["stranded"]))).toEqual(rows)
+  // A resync loads projected messages before pending input.
+  expect(reduceSessionRows([...messages.slice(1), messages[0]], new Set(["stranded"]))).toEqual(rows)
+})
+
+function failed(id: string, error: SessionMessageAssistant["error"]): SessionMessageInfo {
+  return { type: "idle", id, outcome: "failed", error, time: { created: 2 } }
+}
 
 function assistant(id: string, content: SessionMessageAssistant["content"]): SessionMessageAssistant {
   return {

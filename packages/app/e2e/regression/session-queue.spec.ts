@@ -667,6 +667,14 @@ test("editing drops a file whose mention was deleted and keeps unmentioned conte
 test("editing a comment-only prompt keeps its notes once", async ({ page }) => {
   const note = "The user made the following comment regarding line 2 of /repo/app.ts: check the guard"
   const mock = createQueueMock([note])
+  mock.rows[0].payload.files = [
+    {
+      data: "aGk=",
+      mime: "text/plain",
+      source: { type: "uri", uri: "file:///repo/app.ts?start=2&end=2" },
+      name: "app.ts",
+    },
+  ]
   mock.rows[0].payload.metadata = {
     displayText: "",
     comments: [
@@ -679,8 +687,8 @@ test("editing a comment-only prompt keeps its notes once", async ({ page }) => {
     ],
   }
   const view = await openQueue(page, mock)
-  // With no display text, the editor shows the note itself, so the edit owns it as text.
-  await view.rows.getByText(note, { exact: true }).click()
+  // The queue counts the context file; the existing editor still loads its model-visible note as text.
+  await view.rows.getByRole("button", { name: "1 attachment", exact: true }).click()
   await expect(view.input).toHaveText(note)
   await view.input.press("End")
   await view.input.pressSequentially(", please")
@@ -1171,10 +1179,8 @@ for (const delivery of ["steer", "queue"] as const) {
       await expect(bubble).toHaveCSS("color", colors.pending.text)
       await expect(bubble).toHaveCSS("transition-duration", "0s")
       await expect(pending.locator('[data-slot="user-message-copy-wrapper"]')).toHaveCSS("opacity", "1")
-      // Pending stands in for the time of a steer that has not been sent.
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending\s*·\s*Queue Model$/, {
-        useInnerText: true,
-      })
+      // The steer keeps U1's agent and model, so Pending is all its meta line says.
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending$/, { useInnerText: true })
       await bubble.evaluate((element) => (element.dataset.deliveryMarker = "pending"))
     }
 
@@ -1256,7 +1262,7 @@ for (const delivery of ["steer", "queue"] as const) {
 
     if (colors) {
       await expect(bubble).toHaveAttribute("data-delivery-marker", "pending")
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Queue Model\s*·\s*Just now$/, {
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Queue Model$/, {
         useInnerText: true,
       })
       await expect(bubble).toHaveCSS("background-color", colors.delivered.background)

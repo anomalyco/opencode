@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM, LLMEvent, LLMRequest, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, LLMRequest, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { Venice } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -38,7 +38,7 @@ for (const item of [
     },
     () =>
       Effect.gen(function* () {
-        const request = LLM.request({
+        const request = ai.request({
           model: Venice.configure({ apiKey }).chat(item.model),
           system:
             "Use the provided tool for private data. After receiving the result, give only the requested number; do not call the tool again.",
@@ -133,7 +133,7 @@ recorded.effect.with(
   { tags: ["tool", "parallel", "signature"] },
   () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.request({
         model: Venice.configure({ apiKey }).chat("gemini-3-8-flash"),
         prompt:
           "Look up private rates for both ZEBRA and MOOSE using two calls to lookup_rate. Then add the rates and multiply by 7. Use parallel calls if possible.",
@@ -205,7 +205,7 @@ recorded.effect.with(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: Venice.configure({ apiKey }).chat("qwen3-6-27b"),
           prompt: "What is 23 multiplied by 17 plus 9? Reply with just the number.",
           providerOptions: { reasoning: { enabled: false } },
@@ -221,7 +221,7 @@ recorded.effect.with(
 recorded.effect.with("surfaces Venice model errors", { tags: ["error"] }, () =>
   Effect.gen(function* () {
     const result = yield* LLMClient.generate(
-      LLM.request({ model: Venice.configure({ apiKey }).chat("no-such-model-xyz"), prompt: "Hello" }),
+      ai.request({ model: Venice.configure({ apiKey }).chat("no-such-model-xyz"), prompt: "Hello" }),
     ).pipe(Effect.result)
     expect(result._tag).toBe("Failure")
     if (result._tag === "Failure") {

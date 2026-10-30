@@ -1,6 +1,8 @@
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
-import { createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { Popover } from "@kobalte/core/popover"
+import { createMemo, For, Match, Show, Switch, untrack, type Accessor, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import {
   ComposerPill,
   type ComposerPillProps,
@@ -12,10 +14,8 @@ import {
 } from "@opencode/plugin/gui"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { Contribution } from "@/runtime/plugin/render"
-import type { useComposerLaneAlignment } from "./composer-lane"
+import { composerLanePlacement, type useComposerLaneAlignment } from "./composer-lane"
 
-const capsule =
-  "pointer-events-auto flex h-7 min-w-0 max-w-full items-center gap-2 rounded-[12px] border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-base ps-2.5 pe-2.5 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] whitespace-nowrap text-v2-text-text-base shadow-[var(--v2-elevation-raised)] outline-none"
 
 type Alignment = ReturnType<ReturnType<typeof useComposerLaneAlignment>>
 
@@ -25,7 +25,8 @@ const tones: Record<ComposerPillTone, string> = {
   danger: "text-v2-state-fg-danger",
 }
 
-// Plugin pills in the composer lane, after the app's own: on the side away from the lane's aligned edge.
+// Plugin pills in the composer lane, after the app's own: on the side away from the lane's aligned edge. A pill with
+// nothing to show renders no element, so the row hides while it is empty and takes no gap in the lane.
 export function SessionPluginPills(props: {
   session: MountedSession
   screen: SessionScreen
@@ -52,7 +53,7 @@ export function SessionPluginPills(props: {
     <Show when={items().length > 0}>
       <div
         data-component="session-plugin-pills"
-        class="flex min-w-0 shrink items-center gap-2"
+        class="flex min-w-0 shrink items-center gap-2 [&:not(:has(*))]:hidden"
         classList={{ "-order-2": alignment() === "end", "order-2": alignment() !== "end" }}
       >
         <For each={items()}>
@@ -70,61 +71,112 @@ export function SessionPluginPills(props: {
 function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; alignment: Accessor<Alignment> }) {
   const alignment = props.alignment
   const view = createMemo(() => props.pill.show(props.input))
-  const placement = () => (({ center: "top", start: "top-start", end: "top-end" }) as const)[alignment()]
+  const [state, setState] = createStore({ open: false })
 
   return (
     <Show when={view()}>
       {(current) => (
-        <Show
-          when={current().rows}
+        <Switch
           fallback={
             <button
               type="button"
               data-slot="session-plugin-pill"
               aria-label={current().title}
-              class={capsule}
+              data-composer-pill
               onClick={() => current().run?.()}
             >
               <Content view={current()} />
             </button>
           }
         >
-          {(rows) => (
-            <Menu gutter={8} placement={placement()}>
-              <Menu.Trigger
-                as="button"
-                type="button"
-                data-slot="session-plugin-pill"
-                aria-label={current().title}
-                class={capsule}
+          <Match when={props.pill.menu}>
+            {(menu) => (
+              <Popover
+                open={state.open}
+                onOpenChange={(open) => setState("open", open)}
+                placement={composerLanePlacement(alignment())}
+                gutter={8}
               >
-                <Content view={current()} />
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Content data-slot="session-plugin-pill-menu" aria-label={current().title ?? current().label}>
-                  <Menu.Group>
-                    <Menu.GroupLabel>{current().title ?? current().label}</Menu.GroupLabel>
-                    <For each={rows()}>
-                      {(row) => (
-                        <Menu.Item
-                          data-slot="session-plugin-pill-row"
-                          disabled={!row.run}
-                          onSelect={() => row.run?.()}
-                          badge={row.detail}
-                        >
-                          <PillIcon name={row.icon} tone={row.tone} />
-                          <span dir="auto" class="min-w-0 flex-1 truncate">
-                            {row.label}
-                          </span>
-                        </Menu.Item>
-                      )}
-                    </For>
-                  </Menu.Group>
-                </Menu.Content>
-              </Menu.Portal>
-            </Menu>
-          )}
-        </Show>
+                <Popover.Trigger
+                  as="button"
+                  type="button"
+                  data-slot="session-plugin-pill"
+                  aria-label={current().title}
+                  data-composer-pill
+                >
+                  <Content view={current()} />
+                </Popover.Trigger>
+                <Popover.Portal>
+                  <Popover.Content
+                    data-slot="session-plugin-pill-popover"
+                    aria-label={current().title ?? current().label}
+                    data-composer-pill-panel
+                    class="w-80 p-1"
+                  >
+                    <div class="px-2 pt-1 pb-1.5 text-[11px] font-[530] tracking-[0.05px] leading-[var(--line-height-tight)] text-v2-text-text-faint">
+                      <span dir="auto" class="line-clamp-3 break-words">
+                        {current().title ?? current().label}
+                      </span>
+                    </div>
+                    {/* Untracked: the content renders once per open; its own reactivity updates it in place. */}
+                    {untrack(() =>
+                      menu()({
+                        get session() {
+                          return props.input.session
+                        },
+                        get screen() {
+                          return props.input.screen
+                        },
+                        close: () => setState("open", false),
+                      }),
+                    )}
+                  </Popover.Content>
+                </Popover.Portal>
+              </Popover>
+            )}
+          </Match>
+          <Match when={current().rows}>
+            {(rows) => (
+              <Menu gutter={8} placement={composerLanePlacement(alignment())}>
+                <Menu.Trigger
+                  as="button"
+                  type="button"
+                  data-slot="session-plugin-pill"
+                  aria-label={current().title}
+                  data-composer-pill
+                >
+                  <Content view={current()} />
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Content data-slot="session-plugin-pill-menu" aria-label={current().title ?? current().label}>
+                    <Menu.Group>
+                      <Menu.GroupLabel class="!h-auto max-w-80 !py-1.5">
+                        <span dir="auto" class="line-clamp-3 break-words">
+                          {current().title ?? current().label}
+                        </span>
+                      </Menu.GroupLabel>
+                      <For each={rows()}>
+                        {(row) => (
+                          <Menu.Item
+                            data-slot="session-plugin-pill-row"
+                            disabled={!row.run}
+                            onSelect={() => row.run?.()}
+                            badge={row.detail}
+                          >
+                            <PillIcon name={row.icon} tone={row.tone} />
+                            <span dir="auto" class="min-w-0 flex-1 truncate">
+                              {row.label}
+                            </span>
+                          </Menu.Item>
+                        )}
+                      </For>
+                    </Menu.Group>
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu>
+            )}
+          </Match>
+        </Switch>
       )}
     </Show>
   )
