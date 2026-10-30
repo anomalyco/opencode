@@ -65,6 +65,7 @@ export const dict = {
   "command.usage.view": "View usage",
   "command.usage.view.description": "See your OpenCode Go allowance and Console budgets",
   "command.session.location.cycle": "Cycle session location",
+  "command.session.branch.choose": "Choose base branch",
   "session.location.toggle": "Toggle session location",
 
   "command.palette": "Search everything",
