@@ -23,7 +23,7 @@ import {
   type ComposerInteractionEvent,
 } from "../suggestions/machine"
 import { clonePrompt, isAttachment, promptLength } from "../prompt-parts"
-import type { ComposerQueue } from "../adapter"
+import type { ComposerDelivery, ComposerQueue } from "../adapter"
 import { isCommentItem } from "../state"
 import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 
@@ -49,6 +49,11 @@ export type ComposerEditorView = {
     held?: Accessor<boolean>
     working?: Accessor<boolean>
     queue?: ComposerQueue
+    quote?: {
+      available: Accessor<boolean>
+      delivery: Accessor<ComposerDelivery | undefined>
+      onSubmit: (key: string, comment: string) => Promise<boolean>
+    }
     onSubmit: (options?: { alternate?: boolean }) => void
     onStop: () => void
   }

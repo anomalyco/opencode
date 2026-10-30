@@ -239,6 +239,82 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
 
   return {
     submit,
+    async submitQuote(key: string, comment: string) {
+      if (input.adapter.kind !== "active-session" || held() || submitting.has(input.adapter.state)) return false
+      const target = input.adapter.state
+
+      const quote = target.context.items().find((item) => item.key === key)
+
+      if (quote?.type !== "quote") return false
+      const selection = currentSelection(input)
+
+      if (!selection) {
+        input.notify.missingSelection()
+
+        return false
+      }
+
+      const session = input.adapter.session()
+
+      const value: ComposerSubmission = {
+        id: SessionMessage.ID.create(),
+        mode: "normal",
+        prompt: [],
+        context: [{ ...quote, comment, source: quote.source ? { ...quote.source } : undefined }],
+        text: "",
+        images: [],
+        selection,
+        delivery: input.delivery?.(true) ?? "steer",
+      }
+
+      const optimisticBusy = !input.adapter.working()
+
+      const background = value.delivery === "steer" && !optimisticBusy ? session.background?.() : undefined
+
+      submitting.add(input.adapter.state)
+
+      try {
+        if (value.delivery === "steer")
+          session.handoff.set({
+            message: handoffMessage(value),
+            selection: {
+              agent: selection.agent,
+              model: {
+                id: selection.model.modelID,
+                providerID: selection.model.providerID,
+                variant: selection.variant,
+              },
+            },
+          })
+
+        if (optimisticBusy) session.data.session.setStatus(session.id, "running")
+
+        const sent = await sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
+          () => true,
+          (error) => {
+            if (session.admitted(value.id)) return true
+            session.handoff.clear(value.id)
+
+            if (optimisticBusy) session.data.session.setStatus(session.id, "idle")
+            target.context.updateComment(quote.commentID, { comment })
+            input.notify.failed("prompt", error)
+
+            return false
+          },
+        )
+
+        if (!sent) return false
+        void background?.move()
+        target.context.remove(key)
+
+        if (target.quoteComment.key() === key) target.quoteComment.set()
+        input.adapter.submitted()
+
+        return true
+      } finally {
+        submitting.delete(input.adapter.state)
+      }
+    },
     held,
     stop: () => {
       // Stopping a held send cancels it and leaves the prompt in the composer.
