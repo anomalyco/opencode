@@ -20,11 +20,11 @@ export type SettingsPluginTab = string & { readonly [pluginTab]: true }
 /** Root pages that show one server's settings: the selected server, or the default one. */
 export type SettingsServerTab = "projects" | "workspaces" | "providers" | "models" | "extensions"
 
-export type SettingsProjectTab = "general" | "workspaces" | "extensions"
+export type SettingsProjectTab = "general" | "folders" | "attachments" | "workspaces" | "extensions"
 
 type SettingsViewState = {
   target?: string
-  subtab?: "mcps" | "plugins" | "skills" | "lsps"
+  subtab?: "mcps" | "plugins" | "skills" | "rules" | "lsps"
   searchActivation?: number
 }
 
@@ -60,6 +60,8 @@ const rootTabs: Record<SettingsRootTab, true> = {
 
 const projectTabs: Record<SettingsProjectTab, true> = {
   general: true,
+  folders: true,
+  attachments: true,
   workspaces: true,
   extensions: true,
 }
@@ -68,6 +70,7 @@ const subtabs: Record<NonNullable<SettingsView["subtab"]>, true> = {
   mcps: true,
   plugins: true,
   skills: true,
+  rules: true,
   lsps: true,
 }
 

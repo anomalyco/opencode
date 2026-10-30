@@ -29,6 +29,8 @@ import { SettingsServerDataScope } from "./server-scope"
 import { SettingsNavigation, type SettingsNavGroup } from "./navigation"
 import { SettingsProjectGeneral } from "./workspaces/project"
 import { ProjectSettingsExtensions } from "./workspaces/project-extensions"
+import { ProjectSettingsFolders } from "./workspaces/project-folders"
+import { ProjectSettingsAttachments } from "./workspaces/project-attachments"
 import { useSettingsSurface } from "./surface"
 import { settingsViewRedirect } from "./route"
 import { pageIcons, pageLabels } from "./pages"
@@ -68,6 +70,8 @@ const aboutTab = [{ value: "about", icon: pageIcons.about, label: "settings.tab.
 
 const nestedProjectTabs = [
   { value: "general", icon: pageIcons.projects, label: "settings.general.section.general" },
+  { value: "folders", icon: "folder" as const, label: "Folders" },
+  { value: "attachments", icon: "file-document" as const, label: "Attachments" },
   { value: "workspaces", icon: pageIcons.workspaces, label: "settings.tab.workspaces" },
   { value: "extensions", icon: pageIcons.extensions, label: "settings.tab.extensions" },
 ] as const
@@ -371,7 +375,7 @@ function RootSettings() {
                 directory={activeDirectory()}
                 subtab={surface.view().subtab}
                 headerAction={<SettingsServerSwitcher />}
-                onSubtab={(value) => surface.subtab(value)}
+                onSubtab={(value) => surface.subtab(value as any)}
               />
             </Tabs.Content>
             <Tabs.Content value="projects" class="settings-panel">
@@ -452,6 +456,12 @@ function ProjectSettings(props: { server: ServerConnection.Any; project: LocalPr
               project={props.project}
               onOpenServer={() => surface.openServers(ServerConnection.key(props.server))}
             />
+          </Tabs.Content>
+          <Tabs.Content value="folders" class="settings-panel">
+            <ProjectSettingsFolders projectID={props.project.id} canonicalDirectory={props.project.worktree} />
+          </Tabs.Content>
+          <Tabs.Content value="attachments" class="settings-panel">
+            <ProjectSettingsAttachments projectID={props.project.id} />
           </Tabs.Content>
           <Tabs.Content value="workspaces" class="settings-panel">
             <SettingsWorkspaces projectID={props.project.id} activeDirectory={activeDirectory()} />

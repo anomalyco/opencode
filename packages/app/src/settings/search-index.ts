@@ -31,7 +31,7 @@ export function settingsSearchIndex(input: {
   const multiple = input.servers.length > 1
 
   const add = (
-    entry: (typeof clientSettings)[number],
+    entry: (typeof clientSettings)[number] | (typeof projectSettings)[number],
     view: SettingsHostView,
     owner: string,
     server?: string,
@@ -47,7 +47,7 @@ export function settingsSearchIndex(input: {
                 ? "settings.general.section.general"
                 : view.tab === "servers" && multiple
                   ? "settings.tab.servers"
-                  : pageLabels[view.tab]),
+                  : (view.tab in pageLabels ? pageLabels[view.tab as keyof typeof pageLabels] : (view.tab as any))),
           )
 
     items.push({
@@ -61,7 +61,7 @@ export function settingsSearchIndex(input: {
       project,
       projectName,
       topLevel: !view.target && !view.subtab && !project,
-      icon: pageIcons[view.tab],
+      icon: (pageIcons as any)[view.tab] ?? "folder",
       view,
     })
   }
