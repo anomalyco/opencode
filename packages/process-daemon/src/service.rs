@@ -179,6 +179,8 @@ pub struct CreateTerminal {
     pub cols: u16,
     pub rows: u16,
     pub mode: ProcessMode,
+    /// Pipe only: an absolute path to append every output byte to.
+    pub output_path: Option<PathBuf>,
 }
 
 impl CreateTerminal {
@@ -199,6 +201,7 @@ impl CreateTerminal {
             cols: DEFAULT_COLS,
             rows: DEFAULT_ROWS,
             mode: ProcessMode::Pty,
+            output_path: None,
         })
     }
 }
@@ -225,6 +228,14 @@ impl TerminalService {
     }
 
     pub fn create(&self, request: CreateTerminal) -> Result<TerminalInfo> {
+        if let Some(path) = &request.output_path {
+            if request.mode.is_pty() {
+                bail!("output_path is only supported for pipe processes");
+            }
+            if !path.is_absolute() {
+                bail!("output_path must be absolute");
+            }
+        }
         match request.mode {
             ProcessMode::Pty => validate_size(request.cols, request.rows)?,
             #[cfg(not(unix))]

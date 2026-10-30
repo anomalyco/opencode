@@ -111,6 +111,7 @@ impl Daemon {
             cols: 80,
             rows: 24,
             mode: Default::default(),
+            output_path: None,
         }) {
             Response::Created { terminal } => terminal,
             response => panic!("create: {response:?}"),
@@ -315,10 +316,13 @@ fn rename_is_advertised_and_served() {
     use opencode_pty::protocol::{SubscriptionEvent, read_subscription_event};
 
     let mut daemon = Daemon::start();
-    assert_eq!(daemon.registration.features, ["rename", "pipe"]);
+    assert_eq!(
+        daemon.registration.features,
+        ["rename", "pipe", "output_path"]
+    );
     assert!(matches!(
         daemon.request(Request::Ping),
-        Response::Pong { features, .. } if features == ["rename", "pipe"]
+        Response::Pong { features, .. } if features == ["rename", "pipe", "output_path"]
     ));
     let (owner, response) = daemon.own(None);
     assert!(matches!(response, Response::Owned));
@@ -588,6 +592,7 @@ fn pipe_processes_survive_handoff_and_stay_out_of_default_lists() {
     let (owner, response) = daemon.own(None);
     assert!(matches!(response, Response::Owned));
     let terminal = daemon.terminal("exec cat");
+    let output_file = daemon.root.join("pipe.out");
     let Response::Created { terminal: process } = daemon.request(Request::Create {
         program: "/bin/sh".into(),
         args: vec![
@@ -601,6 +606,7 @@ fn pipe_processes_survive_handoff_and_stay_out_of_default_lists() {
         cols: 0,
         rows: 0,
         mode: ProcessMode::Pipe,
+        output_path: Some(output_file.clone()),
     }) else {
         panic!("create pipe");
     };
@@ -657,6 +663,10 @@ fn pipe_processes_survive_handoff_and_stay_out_of_default_lists() {
     };
     assert_eq!(exit, Some(4));
     assert_eq!(String::from_utf8(output).unwrap(), "before\nafter\n");
+    assert_eq!(
+        std::fs::read_to_string(&output_file).unwrap(),
+        "before\nafter\n"
+    );
     assert!(matches!(
         daemon.request(Request::Terminate { id: process.id }),
         Response::Ok
@@ -685,6 +695,7 @@ fn pipe_processes_do_not_inherit_the_daemons_blocked_signals() {
             cols: 0,
             rows: 0,
             mode: ProcessMode::Pipe,
+            output_path: None,
         }) else {
             panic!("create pipe");
         };

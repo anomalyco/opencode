@@ -19,6 +19,7 @@ fn pipe(script: &str) -> CreateTerminal {
         cols: 0,
         rows: 0,
         mode: ProcessMode::Pipe,
+        output_path: None,
     }
 }
 
@@ -299,4 +300,116 @@ fn pipe_processes_need_no_terminal_size() {
     );
     let info = service.create(pipe("true")).unwrap();
     service.terminate(info.id).unwrap();
+}
+
+fn temp_path(name: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "opencode-pty-pipe-{name}-{:032x}",
+        rand::random::<u128>()
+    ))
+}
+
+fn wait_exited(service: &TerminalService, id: TerminalId) -> TerminalLifecycle {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let lifecycle = service
+            .list_mode(ProcessMode::Pipe)
+            .unwrap()
+            .into_iter()
+            .find(|info| info.id == id)
+            .unwrap()
+            .lifecycle;
+        if lifecycle != TerminalLifecycle::Running {
+            return lifecycle;
+        }
+        assert!(Instant::now() < deadline, "pipe process did not exit");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+fn output_path_keeps_everything_beyond_the_replay_window_without_a_subscriber() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // A replay window far smaller than the output.
+    let service = TerminalService::new(1024);
+    let path = temp_path("full");
+    let info = service
+        .create(CreateTerminal {
+            output_path: Some(path.clone()),
+            ..pipe("seq 1 20000; echo done >&2")
+        })
+        .unwrap();
+    assert_eq!(
+        wait_exited(&service, info.id),
+        TerminalLifecycle::Exited {
+            exit_code: Some(0),
+            signal: None
+        }
+    );
+    let expected = (1..=20000).map(|n| format!("{n}\n")).collect::<String>() + "done\n";
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), expected);
+    assert_eq!(
+        std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    let replay = service.replay(info.id, 0).unwrap();
+    assert!(replay.truncated);
+    assert_eq!(replay.end_offset, expected.len() as u64);
+    service.terminate(info.id).unwrap();
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn output_path_appends_to_an_existing_file() {
+    let service = TerminalService::default();
+    let path = temp_path("append");
+    std::fs::write(&path, "earlier\n").unwrap();
+    let info = service
+        .create(CreateTerminal {
+            output_path: Some(path.clone()),
+            ..pipe("echo later")
+        })
+        .unwrap();
+    wait_exited(&service, info.id);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "earlier\nlater\n");
+    service.terminate(info.id).unwrap();
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn output_path_must_be_an_absolute_file_for_a_pipe_process() {
+    let service = TerminalService::default();
+    let missing = temp_path("missing-directory").join("out");
+    for (request, error) in [
+        (
+            CreateTerminal {
+                output_path: Some("relative.out".into()),
+                ..pipe("true")
+            },
+            "must be absolute",
+        ),
+        (
+            CreateTerminal {
+                output_path: Some(temp_path("pty")),
+                cols: 80,
+                rows: 24,
+                mode: ProcessMode::Pty,
+                ..pipe("true")
+            },
+            "only supported for pipe processes",
+        ),
+        (
+            CreateTerminal {
+                output_path: Some(missing),
+                ..pipe("touch should-not-run")
+            },
+            "failed to open output file",
+        ),
+    ] {
+        let message = format!("{:#}", service.create(request).unwrap_err());
+        assert!(message.contains(error), "{message}");
+    }
+    assert!(service.list_mode(ProcessMode::Pipe).unwrap().is_empty());
+    assert!(!std::path::Path::new("should-not-run").exists());
 }

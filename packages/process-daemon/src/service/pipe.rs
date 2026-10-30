@@ -11,11 +11,16 @@
 //! - A descendant can keep the pipe open after the child exits (`cmd &`, build
 //!   servers). The reader stops [`DRAIN_AFTER_EXIT`] after the exit instead of
 //!   waiting for an EOF that may never come.
+//! - With `output_path`, the reader appends every byte to that file before
+//!   handing it to the actor, so output survives the 2 MiB replay window,
+//!   arrives before any subscriber, and stays complete across a handoff.
 //! - The reader polls a cancel pipe too, so shutdown never waits on a pipe that
 //!   a descendant which left the process group still holds open.
 
-use std::io::{self, PipeReader, PipeWriter, Read};
+use std::fs::{File, OpenOptions};
+use std::io::{self, PipeReader, PipeWriter, Read, Write};
 use std::os::fd::AsFd;
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
@@ -90,6 +95,19 @@ impl TerminalHandle {
             exited,
             exited_writer,
         } = Pipes::new()?;
+        // Before spawning, so a bad path fails the request with nothing to clean up.
+        let sink = request
+            .output_path
+            .as_deref()
+            .map(|path| {
+                OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .mode(0o600)
+                    .open(path)
+                    .with_context(|| format!("failed to open output file {}", path.display()))
+            })
+            .transpose()?;
         let mut command = Command::new(&request.program);
         command
             .args(&request.args)
@@ -143,7 +161,7 @@ impl TerminalHandle {
         let reader_actor_tx = actor.actor_tx.clone();
         let started = thread::Builder::new()
             .name(format!("opencode-pty-reader-{id}"))
-            .spawn(move || read_output(output, cancel, exited, reader_actor_tx))
+            .spawn(move || read_output(output, sink, cancel, exited, reader_actor_tx))
             .context("failed to spawn terminal reader")
             .and_then(|reader| {
                 joins.push(reader);
@@ -348,6 +366,7 @@ fn signal_name(signal: i32) -> String {
 /// deadline.
 fn read_output(
     output: PipeReader,
+    mut sink: Option<File>,
     cancel: PipeReader,
     exited: PipeReader,
     actor: Sender<ActorMessage>,
@@ -426,6 +445,14 @@ fn read_output(
                     return;
                 }
                 Ok(length) => {
+                    // The file first, so it always holds at least what
+                    // subscribers have seen, even if the actor is backpressured.
+                    if let Some(file) = &mut sink
+                        && let Err(error) = file.write_all(&buffer[..length])
+                    {
+                        eprintln!("opencode-pty stopped writing output file: {error}");
+                        sink = None;
+                    }
                     if actor
                         .send(ActorMessage::Output(buffer[..length].to_vec()))
                         .is_err()

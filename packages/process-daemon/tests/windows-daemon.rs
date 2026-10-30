@@ -94,6 +94,7 @@ impl Daemon {
             cols,
             rows,
             mode,
+            output_path,
         } = request;
         match self.request(Request::Create {
             program,
@@ -105,6 +106,7 @@ impl Daemon {
             cols,
             rows,
             mode,
+            output_path,
         }) {
             Response::Created { terminal } => terminal,
             response => panic!("create: {response:?}"),

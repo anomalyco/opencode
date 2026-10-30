@@ -141,6 +141,16 @@ a PTY instead, so clients check `features` first.
   `terminate` sends SIGKILL to the group and to the child, reaps it, and never
   waits on a descendant that left the group and still holds the pipe.
 
+`Create` also takes `output_path` for pipe processes (feature `output_path`):
+an absolute path the daemon opens before spawning (created with mode `0600`
+if missing, otherwise appended to) and writes every output byte to, before
+the byte reaches the replay buffer or any subscriber. The file therefore keeps
+all output, including what falls out of the 2 MiB replay window or arrives
+while no server is attached during a handoff. A path that cannot be opened
+fails `create` without starting the process; a later write error stops the
+file and is logged, and the process keeps running. `output_path` is rejected
+for PTYs.
+
 `List` takes `mode` too. Without it, `list` returns PTYs only, so servers that
 predate pipe processes never see them. Clients leave `mode` out of the request
 when it is unset: older daemons reject a `list` with any extra field.
@@ -169,7 +179,7 @@ subscriptions, title updates, rename, controller takeover, terminate, and destru
 shutdown, ownership acquisition, and restart handoff preparation.
 
 `Pong` and the registration carry `features`, the daemon's additive
-capabilities (currently `["rename", "pipe"]` on Unix and `["rename"]` on Windows). Additive changes, such as a new request
+capabilities (currently `["rename", "pipe", "output_path"]` on Unix and `["rename"]` on Windows). Additive changes, such as a new request
 or field older clients can ignore, extend `features` and keep the protocol
 version; clients check `features` before sending a new request, since a daemon
 that cannot parse one drops the connection. Only breaking changes bump
