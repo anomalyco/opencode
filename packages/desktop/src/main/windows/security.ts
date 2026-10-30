@@ -1,104 +1,17 @@
-import type {
-  BeforeSendResponse,
-  HeadersReceivedResponse,
-  OnBeforeSendHeadersListenerDetails,
-  OnHeadersReceivedListenerDetails,
-  Session,
-  WebContents,
-  WebRequestFilter,
-} from "electron"
+import type { BrowserWindow, Session } from "electron"
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import { addRendererHeaders, hasHeader, upsertHeader } from "./headers"
 import { isRendererUrl } from "./scheme"
 
 const rendererPermissions = new Set(["clipboard-sanitized-write", "notifications"])
 
-type PermissionRequestHandler = NonNullable<Parameters<Session["setPermissionRequestHandler"]>[0]>
+const allowedBySession = new WeakMap<Session, Set<number>>()
 
-type PermissionCheckHandler = NonNullable<Parameters<Session["setPermissionCheckHandler"]>[0]>
-
-type PermissionName = Parameters<PermissionRequestHandler>[1]
-
-type PermissionRequestDetails = Parameters<PermissionRequestHandler>[3]
-
-type PermissionCheckDetails = Parameters<PermissionCheckHandler>[3]
-
-type PermissionSession = {
-  setPermissionRequestHandler(
-    handler:
-      | ((
-          webContents: Pick<WebContents, "id">,
-          permission: PermissionName,
-          callback: (permissionGranted: boolean) => void,
-          details: PermissionRequestDetails,
-        ) => void)
-      | null,
-  ): void
-  setPermissionCheckHandler(
-    handler:
-      | ((
-          webContents: Pick<WebContents, "id"> | null,
-          permission: PermissionName,
-          requestingOrigin: string,
-          details: PermissionCheckDetails,
-        ) => boolean)
-      | null,
-  ): void
-}
-
-type PermissionWindow = {
-  isDestroyed(): boolean
-  once(event: "closed", listener: () => void): void
-  readonly webContents: {
-    readonly id: number
-    readonly session: PermissionSession
-    isDestroyed(): boolean
-    once(event: "destroyed", listener: () => void): void
-  }
-}
-
-type RequestFrame = {
-  readonly url: string
-  readonly parent: { readonly url: string } | null
-}
-
-type HeaderRequestDetails = Pick<OnBeforeSendHeadersListenerDetails, "url" | "requestHeaders"> & {
-  readonly frame?: RequestFrame | null
-}
-
-type HeaderResponseDetails = Pick<OnHeadersReceivedListenerDetails, "url" | "responseHeaders">
-
-type HeaderSession = {
-  readonly webRequest: {
-    onBeforeSendHeaders(
-      filter: WebRequestFilter,
-      listener: ((details: HeaderRequestDetails, callback: (response: BeforeSendResponse) => void) => void) | null,
-    ): void
-    onHeadersReceived(
-      listener:
-        | ((details: HeaderResponseDetails, callback: (response: HeadersReceivedResponse) => void) => void)
-        | null,
-    ): void
-  }
-}
-
-type HeaderWindow = {
-  readonly webContents: {
-    readonly session: HeaderSession
-  }
-}
-
-type NavigationWindow = {
-  readonly webContents: Pick<WebContents, "setWindowOpenHandler" | "on">
-}
-
-const allowedBySession = new WeakMap<PermissionSession, Set<number>>()
-
-const wiredHeaderSessions = new WeakSet<HeaderSession>()
+const wiredHeaderSessions = new WeakSet<Session>()
 
 // App windows share Electron's default session, where setPermission*Handler replaces the previous
 // handler. One pair of handlers per session evaluates against the live renderer WebContents set.
-export function allowRendererPermissions(win: PermissionWindow) {
+export function allowRendererPermissions(win: BrowserWindow) {
   if (win.isDestroyed() || win.webContents.isDestroyed()) return
   const webContents = win.webContents
   const session = webContents.session
@@ -116,7 +29,7 @@ export function allowRendererPermissions(win: PermissionWindow) {
   win.once("closed", remove)
 }
 
-function registerPermissionHandlers(session: PermissionSession) {
+function registerPermissionHandlers(session: Session) {
   const allowed = new Set<number>()
   allowedBySession.set(session, allowed)
 
@@ -158,7 +71,7 @@ function registerPermissionHandlers(session: PermissionSession) {
   return allowed
 }
 
-export function wireNavigationPolicy(win: NavigationWindow, openExternalURL: (url: string) => void) {
+export function wireNavigationPolicy(win: BrowserWindow, openExternalURL: (url: string) => void) {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (!isRendererUrl(url)) openExternalURL(url)
 
@@ -171,7 +84,7 @@ export function wireNavigationPolicy(win: NavigationWindow, openExternalURL: (ur
   })
 }
 
-export function wireRendererHeaders(win: HeaderWindow) {
+export function wireRendererHeaders(win: BrowserWindow) {
   const session = win.webContents.session
 
   if (wiredHeaderSessions.has(session)) return
