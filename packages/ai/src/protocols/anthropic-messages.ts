@@ -843,6 +843,7 @@ const requireThinkingSignature = (request: LLMRequest) => {
   )
     return false
   if (provider.includes("xiaomi") || model.includes("mimo") || baseURL.includes("xiaomimimo.com")) return false
+  if (model.startsWith("qwen") || model.startsWith("minimax-")) return false
   return true
 }
 
@@ -971,19 +972,9 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
             continue
           }
           if (!signature || signature.trim().length === 0) {
-            if (part.text.trim().length === 0) continue
-            if (!requireThinkingSignature(request)) {
+            if (part.text.trim().length > 0 && !requireThinkingSignature(request)) {
               content.push({ type: "thinking", thinking: part.text, signature: "" })
-              continue
             }
-            // Without a signature this cannot be a valid thinking block per
-            // the SDK ThinkingBlockParam:3217 — demote to text so the
-            // conversation remains sendable.
-            content.push({
-              type: "text",
-              text: part.text,
-              cache_control: cacheControl(breakpoints, part.cache),
-            })
             continue
           }
           content.push({ type: "thinking", thinking: part.text, signature })

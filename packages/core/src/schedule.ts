@@ -54,7 +54,7 @@ export class InvalidError extends Schema.TaggedError<InvalidError>()("Schedule.I
 
 export class DisabledError extends Schema.TaggedError<DisabledError>()("Schedule.DisabledError", {}) {
   override get message() {
-    return "Scheduled tasks are disabled by experimental.schedules: false in config"
+    return "Scheduled tasks are disabled; set experimental.schedules in config"
   }
 }
 
@@ -216,10 +216,10 @@ const layer = Layer.effect(
     const settings = (session: SessionSchema.Info) =>
       Effect.gen(function* () {
         const config = yield* Effect.serviceOption(Config.Service)
-        if (Option.isNone(config)) return { enabled: true, timezone: undefined }
+        if (Option.isNone(config)) return { enabled: false, timezone: undefined }
         const entries = yield* config.value.entries()
         return {
-          enabled: Config.latest(entries, "experimental")?.schedules !== false,
+          enabled: Config.latest(entries, "experimental")?.schedules === true,
           timezone: Config.latest(entries, "timezone"),
         }
       }).pipe(instances.provide(session))

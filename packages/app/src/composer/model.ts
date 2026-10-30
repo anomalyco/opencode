@@ -536,6 +536,15 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         held: submission.held,
         working: adapter.working,
         queue: options?.queue,
+        quote:
+          adapter.kind === "active-session"
+            ? {
+                available: () =>
+                  available() && !adapter.controls().model.loading && !submission.held() && !options?.queue?.undoing(),
+                delivery: () => (adapter.working() ? (options?.queue?.alternate() ?? "steer") : undefined),
+                onSubmit: submission.submitQuote,
+              }
+            : undefined,
         onSubmit: (submitOptions) => {
           if (!available()) return
           const queue = options?.queue

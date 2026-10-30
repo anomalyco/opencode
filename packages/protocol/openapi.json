@@ -12962,7 +12962,7 @@
             }
           }
         },
-        "description": "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron. Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false).",
+        "description": "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
         "summary": "Create schedule",
         "requestBody": {
           "content": {
@@ -13051,7 +13051,7 @@
             }
           }
         },
-        "description": "List a Session's schedules, oldest first. Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false).",
+        "description": "List a Session's schedules, oldest first. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
         "summary": "List schedules"
       }
     },
@@ -13129,7 +13129,7 @@
             }
           }
         },
-        "description": "Read one schedule. Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false).",
+        "description": "Read one schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
         "summary": "Get schedule"
       },
       "delete": {
@@ -13191,7 +13191,7 @@
             }
           }
         },
-        "description": "Delete a schedule. Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false).",
+        "description": "Delete a schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
         "summary": "Delete schedule"
       }
     },
@@ -13269,7 +13269,7 @@
             }
           }
         },
-        "description": "Stop a schedule from firing until it is resumed. Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false).",
+        "description": "Stop a schedule from firing until it is resumed. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
         "summary": "Pause schedule"
       }
     },
@@ -13347,7 +13347,7 @@
             }
           }
         },
-        "description": "Resume a paused schedule. A one-shot that fell due while paused fires once; a repeating schedule resumes at its next slot. Experimental: internal OpenCode schedule API; wire shape may change without notice (disable with experimental.schedules: false).",
+        "description": "Resume a paused schedule. A one-shot that fell due while paused fires once; a repeating schedule resumes at its next slot. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
         "summary": "Resume schedule"
       }
     },
@@ -17127,6 +17127,10 @@
         "required": ["template"],
         "additionalProperties": false
       },
+      "Config.Compaction.Percent": {
+        "type": "string",
+        "pattern": "^([1-9]\\d?(\\.\\d+)?)%$"
+      },
       "Config.DirectoryEncoded": {
         "type": "object",
         "properties": {
@@ -17455,9 +17459,16 @@
                 "additionalProperties": false
               },
               "buffer": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 9007199254740991
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Config.Compaction.Percent"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                ]
               }
             },
             "additionalProperties": false

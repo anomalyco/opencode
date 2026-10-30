@@ -288,6 +288,9 @@ V2 groups the retained-context token budget under `keep` and gives the reserve a
 }
 ```
 
+The V1 token count carries over as is. V2 also accepts a percentage of the model's window, such as `"buffer": "15%"`,
+which fits models with different window sizes.
+
 `auto` keeps its name. V2 has no native `tail_turns` or `prune` field; both legacy fields are ignored with a warning. Recent
 context is retained by token budget instead. See [Compaction](/compaction).
 
