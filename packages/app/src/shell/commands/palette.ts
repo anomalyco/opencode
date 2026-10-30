@@ -10,6 +10,7 @@ import { commandPaletteOptions, useCommand, type CommandOption } from "@/shell/c
 import { useFile } from "@/workspaces/files/model"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
+import { isTradingSession } from "@/trading/session"
 import type { LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useServerSDK } from "@/runtime/server/client"
@@ -276,7 +277,8 @@ export function createServerSessionEntries(props: {
     const category = search ? props.category() : props.recentCategory()
 
     return sessions.flatMap((session) => {
-      if (session.time.archived) return []
+      // The trading dashboard's chat is its own dedicated session, not a searchable chat.
+      if (session.time.archived || isTradingSession(session)) return []
 
       const project = projectForSession(session, projects)
 

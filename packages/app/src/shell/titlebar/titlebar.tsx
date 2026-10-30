@@ -388,6 +388,26 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   return true
                 }
 
+                case "trading": {
+                  // The trading section runs on its own server, so "New session" drafts there: the
+                  // project is the last one used on that server (the same rule the Home branch follows).
+                  const conn =
+                    (route.server && global.servers.list().find((item) => ServerConnection.key(item) === route.server)) ??
+                    global.servers.list()[0]
+
+                  const projects = conn ? global.ensureServerCtx(conn).projects : undefined
+
+                  const project = projects?.last() ?? projects?.list()[0]
+
+                  if (conn && project) {
+                    void tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+
+                    return true
+                  }
+
+                  return false
+                }
+
                 case "settings":
                 case "connect":
                 case "components":
@@ -417,6 +437,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             }
 
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
+
+            const toggleTrading = () => tabs.toggleTrading({ trading: layout.route().type === "trading", current: currentTab() })
 
             const homeButton = (vertical = false) => (
               <Show
@@ -513,6 +535,56 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               </Show>
             )
 
+            const tradingButton = (vertical = false) => (
+              <Show
+                when={vertical}
+                fallback={
+                  <Tooltip
+                    placement="bottom"
+                    value={
+                      <>
+                        {language.t("trading.title")}
+                        <Keybind keys={command.keybindParts("trading.toggle")} variant="neutral" />
+                      </>
+                    }
+                    class="shrink-0"
+                  >
+                    <IconButton
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="!w-9 shrink-0"
+                      icon={<Icon name="trading-chart" />}
+                      state={layout.route().type === "trading" ? "pressed" : undefined}
+                      onClick={toggleTrading}
+                      aria-label={language.t("trading.title")}
+                      aria-pressed={layout.route().type === "trading"}
+                    />
+                  </Tooltip>
+                }
+              >
+                <button
+                  type="button"
+                  data-titlebar-tab-action
+                  data-action="vertical-tabs-trading"
+                  data-state={layout.route().type === "trading" ? "pressed" : undefined}
+                  class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
+                  onClick={toggleTrading}
+                  aria-label={language.t("trading.title")}
+                  aria-pressed={layout.route().type === "trading"}
+                >
+                  <Icon name="trading-chart" class="shrink-0" />
+                  <span class="min-w-0 truncate">{language.t("trading.title")}</span>
+                  <span
+                    class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
+                    aria-hidden="true"
+                  >
+                    <bdi dir="ltr">{command.keybind("trading.toggle")}</bdi>
+                  </span>
+                </button>
+              </Show>
+            )
+
             command.register("titlebar-home", () => [
               {
                 id: "home.toggle",
@@ -524,6 +596,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   if (layout.route().type !== "home") layout.home.searchFocus.request()
                   toggleHome()
                 },
+              },
+              {
+                id: "trading.toggle",
+                title: language.t("trading.title"),
+                category: language.t("command.category.view"),
+                keybind: windows() ? "alt+t" : "mod+alt+t",
+                hidden: true,
+                onSelect: toggleTrading,
               },
               {
                 id: "sessions.search",
@@ -643,6 +723,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   <div class="flex shrink-0 items-center gap-0.5">
                     {homeButton()}
                     {searchButton()}
+                    {tradingButton()}
                   </div>
                 </Show>
 
@@ -854,6 +935,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                             <div class="flex w-full shrink-0 flex-col gap-1">
                               <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>
                               {searchButton(true)}
+                              {tradingButton(true)}
                               <RecentlyClosedTabsMenu
                                 vertical
                                 onNewTab={openNewTab}

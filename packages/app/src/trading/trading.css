@@ -1,0 +1,33 @@
+/* Trading chat pane.
+
+   The chat card reuses the session screen, whose native sticky title bar would
+   show the project/title/cost header content. Trading keeps that native bar —
+   the same surface as the side panel's tabs bar, whose corner spacer hosts the
+   floating chat buttons (prompt editor and toggle) — and hides only its inner
+   header content, plus the session review toggle which has no meaning here. */
+[data-slot="trading-chat-panel"] [data-slot="session-review-toggle"],
+[data-slot="trading-chat-panel"] .session-header-location,
+[data-slot="trading-chat-panel"] .session-header-title,
+[data-slot="trading-chat-panel"] [data-session-title] .session-header-actions > *:not(:last-child) {
+  display: none;
+}
+
+/* The chat's header row occupies the app's native header height; define it locally because
+   `--tabs-bar-height` only exists inside `[data-component="tabs"]`, which the chat is not. */
+[data-slot="trading-chat-panel"] {
+  --trading-header-row: 48px;
+}
+
+/* Keep the bar's height while its content stays hidden. */
+[data-slot="trading-chat-panel"] [data-session-title] > div:first-child {
+  height: var(--trading-header-row);
+}
+
+/* Align the timeline's thumb track with the dashboard's own scrollbar strip: it starts
+   below the emptied header row and reaches the card's bottom, instead of running behind
+   the header and stopping above the composer. */
+[data-slot="trading-chat-panel"] [data-slot="session-timeline-visible"] {
+  top: var(--trading-header-row);
+  /* The timeline sets `bottom` inline; trading extends the track over the composer zone. */
+  bottom: 0 !important;
+}

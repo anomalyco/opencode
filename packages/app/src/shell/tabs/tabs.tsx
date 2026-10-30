@@ -591,6 +591,21 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         navigate("/")
       },
+      // Same return-and-remember flow as toggleHome, for the trading dashboard. The dashboard's chat is
+      // its own dedicated session, so toggling from a chat just remembers the tab for the way back.
+      toggleTrading(input: { trading: boolean; current?: Tab }) {
+        if (input.trading) {
+          const tab = store.find((tab) => tabKey(tab) === recentKey())
+
+          if (tab) navigateTab(tab)
+
+          return
+        }
+
+        if (input.current) setRecentKey(tabKey(input.current))
+
+        navigate("/trading")
+      },
       state<T>(tab: Tab, name: string, init: () => T) {
         return memory.ensure(tabKey(tab), name, init)
       },

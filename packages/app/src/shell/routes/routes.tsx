@@ -34,12 +34,20 @@ const TargetSessionRouteContent = lazy(() =>
   loadSessionRoute().then((module) => ({ default: module.TargetSessionRouteContent })),
 )
 
+const TradingRouter = lazy(() => import("@/trading/route").then((module) => ({ default: module.TradingRouter })))
+
+const TradingWithSession = lazy(() => import("@/trading/route").then((module) => ({ default: module.TradingWithSession })))
+
 export function preloadRoute(url: string) {
   const pathname = url.split(/[?#]/, 1)[0]
 
   if (pathname === "/new-session") return DraftRoute.preload().then(() => undefined)
 
   if (pathname === "/settings") return SettingsScreen.preload().then(() => undefined)
+
+  if (pathname === "/trading") return TradingRouter.preload().then(() => undefined)
+
+  if (/^\/trading\/[^/]+\/[^/]+$/.test(pathname)) return TradingWithSession.preload().then(() => undefined)
 
   if (/^\/server\/[^/]+\/session\/[^/]+$/.test(pathname))
     return TargetSessionRouteContent.preload().then(() => undefined)
@@ -51,6 +59,16 @@ export function AppRoutes() {
   return (
     <Route component={AppLayout}>
       <Route path="/" component={Home} />
+      {/* `/trading` redirects itself to `/trading/<server>/new`: the dedicated chat starts there. */}
+      <Route path="/trading" component={TradingRouter} />
+      <Route
+        path="/trading/:serverKey/:id"
+        component={() => (
+          <TargetServerRoute>
+            <TradingWithSession />
+          </TargetServerRoute>
+        )}
+      />
       <Route path="/settings" component={SettingsScreen} />
       <Route
         path="/server/:serverKey/session/:id"
