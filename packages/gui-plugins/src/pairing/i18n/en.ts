@@ -24,5 +24,5 @@ export default {
   "copy.error": "Could not copy pairing details. Try again.",
   error: "Could not update pairing details. Try again.",
   expires: "Expires in {{time}}",
-  refresh: "New code",
+  refresh: "Refresh code",
 }

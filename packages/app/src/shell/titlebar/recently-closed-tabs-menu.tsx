@@ -234,7 +234,7 @@ function RecentlyClosedTabItem(props: { entry: Pick<ClosedTab, "tab" | "info">; 
   return (
     <Menu.Item class="max-w-56" onSelect={props.onSelect}>
       <span class="flex size-4 shrink-0 items-center justify-center">
-        <SessionTabAvatarView project={project()} directory={directory()} unread={false} loading={false} />
+        <SessionTabAvatarView project={project()} directory={directory()} unread={false} />
       </span>
       <Tooltip
         placement={placement}

@@ -16,8 +16,44 @@ const error = async (code: string) => {
 }
 
 describe("source syntax", () => {
+  test("reports a syntax error with its location and what code must look like", async () => {
+    expect(await error(`const = 1`)).toEqual({
+      kind: "ParseError",
+      message:
+        "SyntaxError: Unexpected token. Code must be plain JavaScript written as a program body. (line 1, col 7)",
+      location: { line: 1, column: 7 },
+    })
+  })
+
+  test("explains that imports and exports aren't available", async () => {
+    expect(await error(`import x from "y"`)).toEqual({
+      kind: "ParseError",
+      message:
+        "SyntaxError: Imports and exports aren't available. Call tools through `tools` and use the built-in globals. (line 1, col 1)",
+      location: { line: 1, column: 1 },
+    })
+    expect((await error(`export const x = 1`)).message).toStartWith(
+      "SyntaxError: Imports and exports aren't available.",
+    )
+  })
+
   test("rejects TypeScript-only syntax", async () => {
-    expect((await error(`const value: number = 1; return value`)).kind).toBe("ParseError")
+    const failure = await error(`const value: number = 1; return value`)
+    expect(failure.kind).toBe("ParseError")
+    expect(failure.message).toEndWith("Code must be plain JavaScript written as a program body. (line 1, col 12)")
+    expect(failure.location).toEqual({ line: 1, column: 12 })
+  })
+
+  test("locates a syntax error on a later line", async () => {
+    const failure = await error("const a = 1\nconst b = 2\nreturn a +* b")
+    expect(failure.message).toBe(
+      "SyntaxError: Unexpected token. Code must be plain JavaScript written as a program body. (line 3, col 11)",
+    )
+    expect(failure.location).toEqual({ line: 3, column: 11 })
+  })
+
+  test("rejects empty code", async () => {
+    expect(await error(" \n\t")).toEqual({ kind: "ParseError", message: "Code cannot be empty." })
   })
 })
 
@@ -115,11 +151,11 @@ describe("source locations", () => {
   test("names a missing method on a call instead of the previous line", async () => {
     const failure = await error(`// Try search with different namespaces
 for (const ns of ["github", "tools.github", "tools", ""]) {
-  const s = await search({query: "star", namespace: ns, limit: 100}).catch(e=>({items:[],error:String(e)}));
+  const s = await search({query: "star", namespace: ns, limit: 100}).filter((item) => item.path);
   return s
 }`)
     expect(failure.location).toEqual({ line: 3, column: 19 })
-    expect(failure.message).toBe("TypeError: search(...).catch is not a function. (line 3, col 19)")
+    expect(failure.message).toBe("TypeError: search(...).filter is not a function. (line 3, col 19)")
   })
 })
 

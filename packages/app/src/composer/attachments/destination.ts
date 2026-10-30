@@ -2,7 +2,7 @@ import type { Accessor } from "solid-js"
 import { useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { authTokenFromCredentials } from "@/runtime/server/api"
-import { uuid } from "@/runtime/persistence/uuid"
+import { uuid } from "@opencode/util/uuid"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import type { ComposerControls } from "../adapter"
 

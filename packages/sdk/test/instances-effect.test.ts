@@ -120,13 +120,13 @@ it.live(
       // Closing the host interrupts active execution while preserving its durable recovery claim.
       yield* Scope.close(firstScope, Exit.void)
       expect(closed).toEqual([1])
-      yield* llm.push(TestLLM.tool("recovered-tool", "thread_echo", {}), TestLLM.text("Recovered", "answer"))
+      yield* llm.push(TestLLM.toolCall("recovered-tool", "thread_echo", {}), TestLLM.text("Recovered", "answer"))
       const second = yield* OpenCode.create(options, embed).pipe(Scope.provide(secondScope))
       yield* Deferred.await(started).pipe(Effect.timeout("5 seconds"))
       expect((yield* llm.requests()).length).toBe(1)
       yield* Deferred.succeed(release, undefined)
       yield* llm.wait(3).pipe(Effect.timeout("5 seconds"))
-      yield* second.sessions.wait({ sessionID: session.id })
+      yield* second.experimental.session.wait({ sessionID: session.id })
 
       expect(configured).toEqual(["thread-recovery", "thread-recovery"])
       expect(executed).toEqual([2])
@@ -215,7 +215,7 @@ it.live(
       for (const session of [first, second]) {
         const admitted = yield* opencode.sessions.prompt({ sessionID: session.id, text: "Hello" })
         expect(admitted.payload.text).toBe(`Hello:${session.location.workspaceID}`)
-        yield* opencode.sessions.wait({ sessionID: session.id })
+        yield* opencode.experimental.session.wait({ sessionID: session.id })
       }
       expect(configured).toEqual(["same-thread", "same-thread"])
       expect(placements.map((location) => location.workspaceID)).toEqual([firstWorkspace, secondWorkspace])
@@ -225,7 +225,7 @@ it.live(
         directory: AbsolutePath.make(directory.path),
         workspaceID: secondWorkspace,
       })
-      yield* opencode.sessions.wait({ sessionID: first.id })
+      yield* opencode.experimental.session.wait({ sessionID: first.id })
       const moved = yield* opencode.sessions.get({ sessionID: first.id })
       expect(moved.location.workspaceID).toBe(secondWorkspace)
       const admitted = yield* opencode.sessions.prompt({ sessionID: first.id, text: "Moved", resume: false })

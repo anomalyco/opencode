@@ -50,13 +50,7 @@ export const make = Effect.fn("PluginModule.make")(function* () {
         const version = operation.target.lastIndexOf("@")
         const target =
           path.isAbsolute(operation.target) || version <= 0 ? operation.target : operation.target.slice(0, version)
-        if (
-          ManagedPolicy.decision(
-            ManagedPolicy.statements(yield* config.entries()),
-            "integration.use",
-            `plugin:${target}`,
-          ) === "deny"
-        )
+        if (ManagedPolicy.decision(ManagedPolicy.statements(yield* config.entries()), "plugin.use", target) === "deny")
           return { blocked: true as const }
         return yield* load(operation, sources, watch, options)
       }),

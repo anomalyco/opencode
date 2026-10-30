@@ -47,7 +47,9 @@ describe("Instructions", () => {
         delta: { "core/date": hash },
         blobs: { [hash]: "2026-07-09" },
       })
-      expect(Instructions.renderInitial(instructions, { "core/date": "2026-07-09" })).toBe("Today's date: 2026-07-09")
+      expect(Instructions.join(Instructions.renderInitial(instructions, { "core/date": "2026-07-09" }))).toBe(
+        "Today's date: 2026-07-09",
+      )
     }),
   )
 
@@ -189,9 +191,9 @@ describe("Instructions", () => {
       source({ key: "core/location", value: "location" }),
     ])
 
-    expect(Instructions.renderInitial(instructions, { "core/date": "date", "core/location": "location" })).toBe(
-      "date\n\nlocation",
-    )
+    expect(
+      Instructions.join(Instructions.renderInitial(instructions, { "core/date": "date", "core/location": "location" })),
+    ).toBe("date\n\nlocation")
   })
 
   test("rejects duplicate source keys", () => {
