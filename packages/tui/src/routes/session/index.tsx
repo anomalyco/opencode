@@ -1,5 +1,6 @@
 import {
   batch,
+  children,
   createContext,
   createEffect,
   createMemo,
@@ -24,7 +25,18 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import {
+  BoxRenderable,
+  ScrollBoxRenderable,
+  addDefaultParsers,
+  TextAttributes,
+  RGBA,
+  StyledText,
+  TextRenderable,
+  treeSitterToTextChunks,
+  type SimpleHighlight,
+  type TextChunk,
+} from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -55,6 +67,10 @@ import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
+import { highlightCached } from "../../util/highlight-cache"
+import { forgivingMarkdown, USER_MARKDOWN_LIMIT } from "../../util/user-markdown"
+import { outputLanguage, previewHighlights } from "../../util/tool-output"
+import { narrowBashHighlights } from "../../util/bash-highlight"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
 import { Toast, useToast } from "../../ui/toast"
@@ -1351,7 +1367,7 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <text fg={theme.text}>{text()}</text>
+            <UserText text={text()} />
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
@@ -1742,6 +1758,12 @@ function GenericTool(props: ToolProps) {
     if (expanded() || !collapsed().overflow) return output()
     return collapsed().output
   })
+  // Only output that is shown is sniffed or colored.
+  const language = createMemo(() =>
+    props.output && ctx.showGenericToolOutput()
+      ? outputLanguage(ctx.tui.syntax?.tool_output, props.tool, output())
+      : undefined,
+  )
 
   return (
     <Show
@@ -1758,13 +1780,92 @@ function GenericTool(props: ToolProps) {
         onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
       >
         <box gap={1}>
-          <text fg={theme.text}>{limited()}</text>
+          <Show when={language()} fallback={<text fg={theme.text}>{limited()}</text>}>
+            {(language) => <ToolOutputText output={output()} shown={limited()} language={language()} />}
+          </Show>
           <Show when={collapsed().overflow}>
             <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
           </Show>
         </box>
       </BlockTool>
     </Show>
+  )
+}
+
+// A tool's output colored as `language`. It is drawn plain at once and takes its colors when the
+// parser worker answers, in the same non-red palette as a bash command: red means failure.
+// `shown` is the output as displayed: the whole of it, or a collapsed preview that is a prefix of it
+// plus an ellipsis. The whole output is highlighted, once and cached, because a preview cut through
+// the middle of a JSON value does not parse; the preview takes the highlights that fall inside the
+// part it shares with the output, and the ellipsis stays plain.
+function ToolOutputText(props: { output: string; shown: string; language: string }) {
+  const { theme, toolSyntax } = useTheme()
+  const [highlighted, setHighlighted] = createSignal<{
+    output: string
+    language: string
+    highlights: SimpleHighlight[]
+  }>()
+  createEffect(() => {
+    const output = props.output
+    const language = props.language
+    highlightCached(output, language)
+      .then((result) => setHighlighted({ output, language, highlights: result.highlights ?? [] }))
+      .catch(() => setHighlighted(undefined))
+  })
+  const chunks = createMemo(() => {
+    const result = highlighted()
+    if (!result || result.output !== props.output || result.language !== props.language) return
+    if (result.highlights.length === 0) return
+    return treeSitterToTextChunks(
+      props.shown,
+      previewHighlights(props.shown, result.output, result.highlights),
+      toolSyntax(),
+      { enabled: false },
+    )
+  })
+  return <StyledOutput content={props.shown} chunks={chunks()} fg={theme.text} />
+}
+
+// What the user wrote, with `syntax.user_messages` colored as markdown in the same non-red palette
+// as tool code. The colors land on the typed characters, so the text wraps as it does plain.
+function UserText(props: { text: string }) {
+  const ctx = use()
+  const { theme, toolSyntax } = useTheme()
+  const enabled = createMemo(() => ctx.tui.syntax?.user_messages === true && props.text.length <= USER_MARKDOWN_LIMIT)
+  const [highlighted, setHighlighted] = createSignal<{ text: string; highlights: SimpleHighlight[] }>()
+  createEffect(() => {
+    const text = props.text
+    if (!enabled()) return
+    highlightCached(text, "markdown")
+      .then((result) => setHighlighted({ text, highlights: forgivingMarkdown(text, result.highlights ?? []) }))
+      .catch(() => setHighlighted(undefined))
+  })
+  const chunks = createMemo(() => {
+    const result = highlighted()
+    if (!enabled() || !result || result.text !== props.text || result.highlights.length === 0) return
+    return treeSitterToTextChunks(props.text, result.highlights, toolSyntax(), { enabled: false })
+  })
+  return <StyledOutput content={props.text} chunks={chunks()} fg={theme.text} />
+}
+
+// One text renderable whose content is the plain text, or the same text as colored chunks, so the
+// colors never change how it wraps. Chunks are set on the renderable rather than drawn as one
+// span each, which keeps a large output a single renderable.
+export function StyledOutput(props: { content: string; chunks?: TextChunk[]; fg: RGBA }) {
+  let text: TextRenderable | undefined
+  const content = () => (props.chunks ? new StyledText(props.chunks) : props.content)
+  createEffect(() => {
+    const value = content()
+    if (text) text.content = value
+  })
+  return (
+    <text
+      fg={props.fg}
+      ref={(el: TextRenderable) => {
+        text = el
+        el.content = content()
+      }}
+    />
   )
 }
 
@@ -2016,8 +2117,15 @@ function Shell(props: ToolProps) {
           onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}</text>}>
-              <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
+            <Show
+              when={ctx.tui.syntax?.bash !== false}
+              fallback={
+                <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}</text>}>
+                  <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
+                </Show>
+              }
+            >
+              <ShellCommand command={stringValue(props.input.command) ?? ""} running={isRunning()} />
             </Show>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
@@ -2035,6 +2143,49 @@ function Shell(props: ToolProps) {
       </Match>
     </Switch>
   )
+}
+
+// The command as shell code. It is the same <text> the plain command is, so it wraps and indents
+// exactly as before, with each token a colored span. It draws plain at once and takes its colors
+// when the parser worker answers, which the shared cache makes immediate for a command already
+// seen. Colors come from toolSyntax, which never uses red: in the transcript red means failure.
+export function ShellCommand(props: { command: string; running: boolean }) {
+  const { theme, toolSyntax } = useTheme()
+  const [highlighted, setHighlighted] = createSignal<{ command: string; highlights: SimpleHighlight[] }>()
+  createEffect(() => {
+    const command = props.command
+    shellHighlights(command)
+      .then((highlights) => setHighlighted({ command, highlights }))
+      .catch(() => setHighlighted(undefined))
+  })
+  const segments = createMemo((): CommandSegment[] => {
+    const result = highlighted()
+    if (result?.command !== props.command) return [{ text: props.command, fg: theme.text }]
+    return treeSitterToTextChunks(result.command, result.highlights, toolSyntax(), { enabled: false })
+  })
+  const spans = children(() => <CommandSpans segments={segments()} />)
+  return (
+    <Show when={props.running} fallback={<text fg={theme.text}>$ {spans()}</text>}>
+      <Spinner color={theme.text}>{spans()}</Spinner>
+    </Show>
+  )
+}
+
+type CommandSegment = { text: string; fg?: RGBA; bg?: RGBA; attributes?: number }
+
+export function CommandSpans(props: { segments: CommandSegment[] }) {
+  return (
+    <For each={props.segments}>
+      {(segment) => (
+        <span style={{ fg: segment.fg, bg: segment.bg, attributes: segment.attributes }}>{segment.text}</span>
+      )}
+    </For>
+  )
+}
+
+async function shellHighlights(command: string) {
+  const result = await highlightCached(command, "bash")
+  return narrowBashHighlights(result.highlights ?? [], command)
 }
 
 function Write(props: ToolProps) {
