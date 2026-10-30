@@ -110,15 +110,17 @@ story("leaves a reader who scrolled up in place after a scroll to the zoomed end
 
   await root.getByRole("button", { name: "Scroll to end", exact: true }).click()
   await frames()
-  await viewport.dispatchEvent("wheel", { deltaY: -1 })
-  await expect(root.getByTestId("timeline-controls")).toHaveAttribute("data-pinned", "false")
+  // The wheel and the scroll it causes arrive together. A wheel alone would leave an earlier arrival at the end free to
+  // pin again once that scroll settles.
   await viewport.evaluate(
     (element) =>
       new Promise((resolve) => {
         element.addEventListener("scroll", resolve, { once: true })
+        element.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }))
         element.scrollTop -= 40
       }),
   )
+  await expect(root.getByTestId("timeline-controls")).toHaveAttribute("data-pinned", "false")
   const height = await viewport.evaluate((element) => element.scrollHeight)
   await root.getByRole("button", { name: "Grow last row", exact: true }).click()
   await expect.poll(() => viewport.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height + 30)
