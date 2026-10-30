@@ -116,15 +116,17 @@ a PTY instead, so clients check `features` first.
 
 - `title`, `cols` and `rows` are optional for pipe processes; the title
   defaults to the program's file name and the size is reported as `0x0`.
-- The child gets its own process group, stdin on `/dev/null`, and one pipe for
+- The child gets its own process group, an empty signal mask with default
+  actions (the daemon blocks SIGTERM and SIGINT, and std keeps the mask across
+  exec), stdin on `/dev/null`, and one pipe for
   both stdout and stderr, so their bytes stay in order. No `TERM` or
   `COLORTERM` is added, and nothing parses the output: there is no emulator,
   no terminal replies, no OSC title and no foreground process.
 - Output goes through the same raw replay and subscriptions as a PTY, with the
   same absolute offsets. A pipe has no controller or observer distinction for
   writing, since it accepts no input.
-- `write`, `resize`, `control`, input frames, `snapshot`, `read_rows` and
-  `rename` fail for pipe processes. `replay`, `subscribe` and `terminate`
+- `write`, `resize`, `control`, `input`, `snapshot`, `read_rows` and `rename`
+  fail for pipe processes. `replay`, `subscribe` and `terminate`
   work.
 - Exit is published once both the exit status and the end of output are
   known. A descendant that keeps the pipe open (`cmd &`) delays that by at
@@ -136,7 +138,7 @@ a PTY instead, so clients check `features` first.
 - An exited pipe process stays listed, as a zombie, until `terminate`. The
   zombie keeps its PID and process group ID reserved, so `terminate` can kill
   any descendants left in the group without reaching an unrelated process.
-  `terminate` kills the whole group with SIGKILL, reaps the child, and never
+  `terminate` sends SIGKILL to the group and to the child, reaps it, and never
   waits on a descendant that left the group and still holds the pipe.
 
 `List` takes `mode` too. Without it, `list` returns PTYs only, so servers that

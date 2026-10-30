@@ -167,12 +167,22 @@ fn a_descendant_holding_the_pipe_delays_the_exit_by_at_most_the_drain() {
     wait_dead(sleeper);
 }
 
+/// Kills a test descendant even when an assertion fails first.
+struct KillOnDrop(i32);
+
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        // SAFETY: the PID belongs to this test's own descendant.
+        unsafe { libc::kill(self.0, libc::SIGKILL) };
+    }
+}
+
 #[test]
 fn terminate_does_not_wait_for_a_descendant_that_left_the_group() {
     let service = TerminalService::default();
     let info = service
         .create(pipe(
-            "perl -e 'use POSIX; POSIX::setsid(); print \"$$\\n\"; $| = 1; sleep 30' & wait",
+            "perl -e 'use POSIX; POSIX::setsid(); $| = 1; print \"$$\\n\"; sleep 30' & wait",
         ))
         .unwrap();
     let attachment = service
@@ -188,15 +198,13 @@ fn terminate_does_not_wait_for_a_descendant_that_left_the_group() {
             output.extend(bytes);
         }
     }
-    let escaped: i32 = String::from_utf8(output).unwrap().trim().parse().unwrap();
+    let escaped = KillOnDrop(String::from_utf8(output).unwrap().trim().parse().unwrap());
     drop(attachment);
     let started = Instant::now();
     service.terminate(info.id).unwrap();
     assert!(started.elapsed() < Duration::from_secs(2));
-    // It left the group, so it survives; clean it up here.
-    assert!(alive(escaped));
-    // SAFETY: the PID belongs to this test's own descendant.
-    unsafe { libc::kill(escaped, libc::SIGKILL) };
+    // It left the group, so it survives until `escaped` drops.
+    assert!(alive(escaped.0));
 }
 
 #[test]

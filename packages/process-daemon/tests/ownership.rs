@@ -666,3 +666,63 @@ fn pipe_processes_survive_handoff_and_stay_out_of_default_lists() {
     daemon.wait();
     assert_terminal_stopped(&terminal);
 }
+
+#[test]
+fn pipe_processes_do_not_inherit_the_daemons_blocked_signals() {
+    use opencode_pty::service::{ProcessMode, TerminalLifecycle};
+
+    let mut daemon = Daemon::start();
+    let (_owner, response) = daemon.own(None);
+    assert!(matches!(response, Response::Owned));
+    for (signal, name) in [(libc::SIGTERM, "SIGTERM"), (libc::SIGINT, "SIGINT")] {
+        let Response::Created { terminal: process } = daemon.request(Request::Create {
+            program: "/bin/sh".into(),
+            args: vec!["-c".into(), "exec sleep 1000".into()],
+            cwd: daemon.directory.clone(),
+            title: String::new(),
+            group_id: "ownership".into(),
+            env: Default::default(),
+            cols: 0,
+            rows: 0,
+            mode: ProcessMode::Pipe,
+        }) else {
+            panic!("create pipe");
+        };
+        // SAFETY: the PID belongs to this test's pipe process.
+        assert_eq!(
+            unsafe { libc::kill(process.pid.unwrap() as i32, signal) },
+            0
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let Response::Terminals { terminals } = daemon.request(Request::List {
+                mode: Some(ProcessMode::Pipe),
+            }) else {
+                panic!("list failed");
+            };
+            let lifecycle = terminals
+                .into_iter()
+                .find(|value| value.id == process.id)
+                .unwrap()
+                .lifecycle;
+            if lifecycle != TerminalLifecycle::Running {
+                assert_eq!(
+                    lifecycle,
+                    TerminalLifecycle::Exited {
+                        exit_code: None,
+                        signal: Some(name.into()),
+                    }
+                );
+                break;
+            }
+            assert!(Instant::now() < deadline, "pipe process ignored {name}");
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(matches!(
+            daemon.request(Request::Terminate { id: process.id }),
+            Response::Ok
+        ));
+    }
+    assert!(matches!(daemon.request(Request::Shutdown), Response::Ok));
+    daemon.wait();
+}

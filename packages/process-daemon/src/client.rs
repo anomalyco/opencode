@@ -525,8 +525,13 @@ fn watch(directory: &Path, id: TerminalId) -> Result<()> {
                 io::stdout().flush()?;
             }
             SubscriptionEvent::Response(response) => match *response {
-                Response::Exited { exit_code, .. } => {
-                    eprintln!("\nterminal exited: {exit_code:?}");
+                Response::Exited {
+                    exit_code, signal, ..
+                } => {
+                    match signal {
+                        Some(signal) => eprintln!("\nterminal killed by {signal}"),
+                        None => eprintln!("\nterminal exited: {exit_code:?}"),
+                    }
                     return Ok(());
                 }
                 Response::Resized { cols, rows, .. } => {

@@ -320,8 +320,9 @@ impl TerminalService {
         cols: u16,
         rows: u16,
     ) -> Result<()> {
+        let terminal = self.pty(id)?;
         validate_size(cols, rows)?;
-        self.pty(id)?.request(|reply| ActorMessage::Resize {
+        terminal.request(|reply| ActorMessage::Resize {
             attachment_id,
             cols,
             rows,
@@ -336,8 +337,9 @@ impl TerminalService {
         cols: u16,
         rows: u16,
     ) -> Result<()> {
+        let terminal = self.pty(id)?;
         validate_size(cols, rows)?;
-        self.pty(id)?.request(|reply| ActorMessage::Control {
+        terminal.request(|reply| ActorMessage::Control {
             attachment_id,
             cols,
             rows,
@@ -354,11 +356,12 @@ impl TerminalService {
         rows: u16,
         bytes: Vec<u8>,
     ) -> Result<()> {
+        let terminal = self.pty(id)?;
         validate_size(cols, rows)?;
         if bytes.len() > MAX_INPUT_BYTES {
             bail!("input exceeds {MAX_INPUT_BYTES} byte limit");
         }
-        self.pty(id)?.request(|reply| ActorMessage::Control {
+        terminal.request(|reply| ActorMessage::Control {
             attachment_id,
             cols,
             rows,
@@ -546,9 +549,10 @@ fn start_actor(
             }
         })
         .context("failed to spawn terminal actor")?;
-    match init_rx
-        .recv()
-        .context("terminal actor stopped during initialization")?
+    let initialized = init_rx.recv();
+    match initialized
+        .map_err(|_| anyhow!("terminal actor stopped during initialization"))
+        .and_then(|result| result.map_err(|error| anyhow!(error)))
     {
         Ok(()) => Ok(ActorStart {
             actor_tx,
@@ -560,7 +564,7 @@ fn start_actor(
         Err(error) => {
             drop(shutdown_tx);
             let _ = thread.join();
-            bail!(error);
+            Err(error)
         }
     }
 }
@@ -811,8 +815,9 @@ fn new_info(
             .chain(request.args.iter().cloned())
             .collect(),
         cwd: request.cwd.clone(),
-        cols: request.cols,
-        rows: request.rows,
+        // Pipe processes have no terminal size.
+        cols: if mode.is_pty() { request.cols } else { 0 },
+        rows: if mode.is_pty() { request.rows } else { 0 },
         lifecycle: TerminalLifecycle::Running,
         output_head: 0,
         output_tail: 0,

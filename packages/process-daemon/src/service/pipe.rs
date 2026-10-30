@@ -14,11 +14,11 @@
 //! - The reader polls a cancel pipe too, so shutdown never waits on a pipe that
 //!   a descendant which left the process group still holds open.
 
-use std::io::{self, PipeReader, Read};
+use std::io::{self, PipeReader, PipeWriter, Read};
 use std::os::fd::AsFd;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -36,6 +36,44 @@ use super::{
 /// How long output is still read after the child exits.
 const DRAIN_AFTER_EXIT: Duration = Duration::from_secs(1);
 
+/// Serializes pipe creation against `spawn`. macOS has no `pipe2`, so std
+/// creates a pipe and then marks it close-on-exec; a fork in between would
+/// leak the pipe into another child, where it could hold output or cancel
+/// pipes open. Pipes are created under the read lock, children spawned under
+/// the write lock.
+static SPAWN_LOCK: RwLock<()> = RwLock::new(());
+
+struct Pipes {
+    output: PipeReader,
+    output_writer: PipeWriter,
+    stderr: PipeWriter,
+    cancel: PipeReader,
+    cancel_writer: PipeWriter,
+    exited: PipeReader,
+    exited_writer: PipeWriter,
+}
+
+impl Pipes {
+    fn new() -> Result<Self> {
+        let _guard = SPAWN_LOCK.read().unwrap_or_else(PoisonError::into_inner);
+        let (output, output_writer) = io::pipe().context("failed to create output pipe")?;
+        let stderr = output_writer
+            .try_clone()
+            .context("failed to share output pipe")?;
+        let (cancel, cancel_writer) = io::pipe().context("failed to create cancel pipe")?;
+        let (exited, exited_writer) = io::pipe().context("failed to create exit pipe")?;
+        Ok(Self {
+            output,
+            output_writer,
+            stderr,
+            cancel,
+            cancel_writer,
+            exited,
+            exited_writer,
+        })
+    }
+}
+
 impl TerminalHandle {
     pub(super) fn spawn_pipe(
         id: TerminalId,
@@ -43,10 +81,15 @@ impl TerminalHandle {
         request: CreateTerminal,
         replay_capacity: usize,
     ) -> Result<Self> {
-        let (output, output_writer) = io::pipe().context("failed to create output pipe")?;
-        let stderr = output_writer
-            .try_clone()
-            .context("failed to share output pipe")?;
+        let Pipes {
+            output,
+            output_writer,
+            stderr,
+            cancel,
+            cancel_writer,
+            exited,
+            exited_writer,
+        } = Pipes::new()?;
         let mut command = Command::new(&request.program);
         command
             .args(&request.args)
@@ -56,9 +99,16 @@ impl TerminalHandle {
             .stdout(output_writer)
             .stderr(stderr)
             .process_group(0);
-        let child = command
-            .spawn()
-            .with_context(|| format!("failed to spawn {}", request.program))?;
+        // SAFETY: only async-signal-safe calls run between fork and exec.
+        unsafe {
+            command.pre_exec(reset_signals);
+        }
+        let child = {
+            let _guard = SPAWN_LOCK.write().unwrap_or_else(PoisonError::into_inner);
+            command
+                .spawn()
+                .with_context(|| format!("failed to spawn {}", request.program))?
+        };
         // Close the daemon's copies of the write end, or EOF never arrives.
         drop(command);
         let process = Arc::new(Process {
@@ -68,89 +118,108 @@ impl TerminalHandle {
         // Dropping `Child` neither waits nor kills; `Process` reaps it.
         drop(child);
 
-        match Self::start_pipe(id, order, &request, replay_capacity, &process, output) {
-            Ok(handle) => Ok(handle),
-            Err(error) => {
-                process.kill();
-                process.reap();
-                Err(error)
-            }
-        }
-    }
-
-    fn start_pipe(
-        id: TerminalId,
-        order: u64,
-        request: &CreateTerminal,
-        replay_capacity: usize,
-        process: &Arc<Process>,
-        output: PipeReader,
-    ) -> Result<Self> {
-        let info = new_info(id, ProcessMode::Pipe, Some(process.pid), request);
+        let info = new_info(id, ProcessMode::Pipe, Some(process.pid), &request);
         // Nothing is ever written to a pipe process; a disconnected queue
         // turns any stray write into an error.
         let (writes, _) = bounded(1);
-        let actor = start_actor(
+        let actor = match start_actor(
             id,
             ProcessMode::Pipe,
             ActorMaster { pty: None },
             writes,
             &info,
             replay_capacity,
-            (request.cols, request.rows),
-        )?;
-        let (cancel, cancel_writer) = io::pipe().context("failed to create cancel pipe")?;
-        let (exited, exited_writer) = io::pipe().context("failed to create exit pipe")?;
-
-        let reader_actor_tx = actor.actor_tx.clone();
-        let reader = thread::Builder::new()
-            .name(format!("opencode-pty-reader-{id}"))
-            .spawn(move || read_output(output, cancel, exited, reader_actor_tx));
-        let wait_actor_tx = actor.actor_tx.clone();
-        let pid = process.pid;
-        let waiter = thread::Builder::new()
-            .name(format!("opencode-pty-wait-{id}"))
-            .spawn(move || {
-                let message = match wait_exit(pid) {
-                    Ok(Exit::Code(code)) => ActorMessage::ChildExited(Ok(Some(code))),
-                    Ok(Exit::Signal(name)) => ActorMessage::ChildKilled(name),
-                    Err(error) => ActorMessage::ChildExited(Err(error.to_string())),
-                };
-                let _ = wait_actor_tx.send(message);
-                // Starts the reader's drain deadline.
-                drop(exited_writer);
-            });
-        let mut joins = vec![actor.thread];
-        let started = (|| -> Result<()> {
-            joins.push(reader.context("failed to spawn terminal reader")?);
-            joins.push(waiter.context("failed to spawn terminal child waiter")?);
-            Ok(())
-        })();
-        if let Err(error) = started {
-            // Stop what did start: the actor through its shutdown channel, the
-            // reader through its cancel pipe. The caller kills and reaps.
-            drop(actor.shutdown_tx);
-            drop(cancel_writer);
-            for join in joins {
-                let _ = join.join();
+            (0, 0),
+        ) {
+            Ok(actor) => actor,
+            Err(error) => {
+                process.kill();
+                process.reap();
+                return Err(error);
             }
-            return Err(error);
+        };
+
+        let mut joins = vec![actor.thread];
+        let reader_actor_tx = actor.actor_tx.clone();
+        let started = thread::Builder::new()
+            .name(format!("opencode-pty-reader-{id}"))
+            .spawn(move || read_output(output, cancel, exited, reader_actor_tx))
+            .context("failed to spawn terminal reader")
+            .and_then(|reader| {
+                joins.push(reader);
+                let wait_actor_tx = actor.actor_tx.clone();
+                let pid = process.pid;
+                // Spawned last: the waiter must be joined before `reap`.
+                thread::Builder::new()
+                    .name(format!("opencode-pty-wait-{id}"))
+                    .spawn(move || {
+                        let message = match wait_exit(pid) {
+                            Ok(Exit::Code(code)) => ActorMessage::ChildExited(Ok(Some(code))),
+                            Ok(Exit::Signal(name)) => ActorMessage::ChildKilled(name),
+                            Err(error) => ActorMessage::ChildExited(Err(error.to_string())),
+                        };
+                        let _ = wait_actor_tx.send(message);
+                        // Starts the reader's drain deadline.
+                        drop(exited_writer);
+                    })
+                    .context("failed to spawn terminal child waiter")
+            });
+        match started {
+            Ok(waiter) => joins.push(waiter),
+            Err(error) => {
+                // Stop what did start, kill the child before any join can wait
+                // on it, and reap only after every thread is gone.
+                drop(actor.shutdown_tx);
+                drop(cancel_writer);
+                process.kill();
+                for join in joins {
+                    let _ = join.join();
+                }
+                process.reap();
+                return Err(error);
+            }
         }
 
-        let reap = Arc::clone(process);
+        let reap = Arc::clone(&process);
         Ok(Self {
             order,
             mode: ProcessMode::Pipe,
             actor_tx: actor.actor_tx,
             actor_done: actor.actor_done,
             shutdown_tx: Mutex::new(Some(actor.shutdown_tx)),
-            killer: Mutex::new(Box::new(GroupKiller(Arc::clone(process)))),
+            killer: Mutex::new(Box::new(GroupKiller(Arc::clone(&process)))),
             cancel: Mutex::new(Some(Box::new(cancel_writer))),
             reap: Mutex::new(Some(Box::new(move || reap.reap()))),
             info,
             joins: Mutex::new(Some(joins)),
         })
     }
+}
+
+/// Runs in the child between fork and exec. The daemon blocks SIGTERM and
+/// SIGINT on all its threads, and std keeps the signal mask across exec, so
+/// clear it, and give every signal portable-pty also resets its default action.
+fn reset_signals() -> io::Result<()> {
+    // SAFETY: sigemptyset, sigprocmask and signal are async-signal-safe.
+    unsafe {
+        let mut empty: libc::sigset_t = std::mem::zeroed();
+        if libc::sigemptyset(&mut empty) != 0
+            || libc::sigprocmask(libc::SIG_SETMASK, &empty, std::ptr::null_mut()) != 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        for signal in [
+            libc::SIGCHLD,
+            libc::SIGHUP,
+            libc::SIGINT,
+            libc::SIGQUIT,
+            libc::SIGTERM,
+            libc::SIGALRM,
+        ] {
+            libc::signal(signal, libc::SIG_DFL);
+        }
+    }
+    Ok(())
 }
 
 /// A pipe child that stays a zombie after it exits, until `reap`.
@@ -166,8 +235,12 @@ impl Process {
     fn kill(&self) {
         let reaped = self.reaped.lock().unwrap_or_else(PoisonError::into_inner);
         if !*reaped && let Ok(pid) = i32::try_from(self.pid) {
-            // SAFETY: the unreaped child keeps this process group ID reserved.
-            unsafe { libc::killpg(pid, libc::SIGKILL) };
+            // SAFETY: the unreaped child keeps its PID and group ID reserved.
+            // Signal the child directly too, in case it moved to another group.
+            unsafe {
+                libc::killpg(pid, libc::SIGKILL);
+                libc::kill(pid, libc::SIGKILL);
+            }
         }
     }
 
@@ -242,13 +315,36 @@ fn wait_exit(pid: u32) -> io::Result<Exit> {
 }
 
 fn signal_name(signal: i32) -> String {
-    nix::sys::signal::Signal::try_from(signal)
-        .map(|signal| signal.as_str().to_string())
-        .unwrap_or_else(|_| format!("SIG{signal}"))
+    let name = match signal {
+        libc::SIGHUP => "SIGHUP",
+        libc::SIGINT => "SIGINT",
+        libc::SIGQUIT => "SIGQUIT",
+        libc::SIGILL => "SIGILL",
+        libc::SIGTRAP => "SIGTRAP",
+        libc::SIGABRT => "SIGABRT",
+        libc::SIGBUS => "SIGBUS",
+        libc::SIGFPE => "SIGFPE",
+        libc::SIGKILL => "SIGKILL",
+        libc::SIGUSR1 => "SIGUSR1",
+        libc::SIGSEGV => "SIGSEGV",
+        libc::SIGUSR2 => "SIGUSR2",
+        libc::SIGPIPE => "SIGPIPE",
+        libc::SIGALRM => "SIGALRM",
+        libc::SIGTERM => "SIGTERM",
+        libc::SIGXCPU => "SIGXCPU",
+        libc::SIGXFSZ => "SIGXFSZ",
+        libc::SIGVTALRM => "SIGVTALRM",
+        libc::SIGPROF => "SIGPROF",
+        libc::SIGSYS => "SIGSYS",
+        _ => return format!("SIG{signal}"),
+    };
+    name.to_string()
 }
 
 /// Forwards output until EOF, until [`DRAIN_AFTER_EXIT`] after `exited`
-/// closes, or until `cancel` closes.
+/// closes, or until `cancel` closes. Once every writer has closed the output
+/// pipe, what is left is finite, so it is read to the end regardless of the
+/// deadline.
 fn read_output(
     output: PipeReader,
     cancel: PipeReader,
@@ -258,19 +354,32 @@ fn read_output(
     let mut output = output;
     let mut buffer = [0_u8; 8192];
     let mut deadline = None::<Instant>;
+    let mut writers_closed = false;
     loop {
         let timeout = match deadline {
-            None => PollTimeout::NONE,
-            Some(deadline) => {
+            Some(deadline) if !writers_closed => {
                 let left = deadline.saturating_duration_since(Instant::now());
                 if left.is_zero() {
-                    let _ = actor.send(ActorMessage::ReaderEof);
-                    return;
+                    // The reader may have been stalled past the deadline; take
+                    // one last look before giving up on a held-open pipe.
+                    let mut fds = [PollFd::new(output.as_fd(), PollFlags::POLLIN)];
+                    let hung_up = poll(&mut fds, PollTimeout::ZERO).is_ok_and(|count| count > 0)
+                        && fds[0]
+                            .revents()
+                            .is_some_and(|events| events.contains(PollFlags::POLLHUP));
+                    if !hung_up {
+                        let _ = actor.send(ActorMessage::ReaderEof);
+                        return;
+                    }
+                    writers_closed = true;
+                    PollTimeout::NONE
+                } else {
+                    // Round up: a sub-millisecond remainder must not become a busy 0.
+                    let millis = left.as_nanos().div_ceil(1_000_000).min(i32::MAX as u128);
+                    PollTimeout::try_from(millis).unwrap_or(PollTimeout::MAX)
                 }
-                // Round up: a sub-millisecond remainder must not become a busy 0.
-                let millis = left.as_nanos().div_ceil(1_000_000).min(i32::MAX as u128);
-                PollTimeout::try_from(millis).unwrap_or(PollTimeout::MAX)
             }
+            _ => PollTimeout::NONE,
         };
         let mut fds = [
             PollFd::new(output.as_fd(), PollFlags::POLLIN),
@@ -289,7 +398,12 @@ fn read_output(
         }
         let ready = |fd: &PollFd| {
             fd.revents().is_none_or(|events| {
-                events.intersects(PollFlags::POLLIN | PollFlags::POLLHUP | PollFlags::POLLERR)
+                events.intersects(
+                    PollFlags::POLLIN
+                        | PollFlags::POLLHUP
+                        | PollFlags::POLLERR
+                        | PollFlags::POLLNVAL,
+                )
             })
         };
         if ready(&fds[1]) {
@@ -297,6 +411,12 @@ fn read_output(
         }
         if count == 3 && ready(&fds[2]) {
             deadline = Some(Instant::now() + DRAIN_AFTER_EXIT);
+        }
+        if fds[0]
+            .revents()
+            .is_some_and(|events| events.contains(PollFlags::POLLHUP))
+        {
+            writers_closed = true;
         }
         if ready(&fds[0]) {
             match output.read(&mut buffer) {
