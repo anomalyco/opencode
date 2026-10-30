@@ -1,15 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import {
+  ai,
   AIClient,
   AIError,
-  Decision,
   DecisionClient,
   Generation,
-  Image,
   ImageClient,
   LanguageModel,
-  LLM,
   LLMClient,
   Media,
 } from "@opencode/ai/effect"
@@ -66,13 +64,13 @@ describe("public exports", () => {
   })
 
   test("root exposes app-facing runtime APIs", () => {
-    expect(LLM.request).toBeFunction()
+    expect(ai.text.request).toBeFunction()
     expect(LLMClient.Service).toBeFunction()
     expect(LLMClient.layer).toBeDefined()
     expect(AIError).toBeFunction()
     expect(LanguageModel.make).toBeFunction()
     expect(Media.bytes).toBeFunction()
-    expect(Image.generate).toBeFunction()
+    expect(ai.image.generate).toBeFunction()
     expect(Video.start).toBeFunction()
     expect(Video.resume).toBeFunction()
     expect(VideoClient.layer).toBeDefined()
@@ -83,7 +81,7 @@ describe("public exports", () => {
     expect(Generation).toBeFunction()
     expect(TestLLM.testLayer).toBeFunction()
     expect(TestLLM.Test.of).toBeFunction()
-    expect(Decision.generate).toBeFunction()
+    expect(ai.decision.generate).toBeFunction()
     expect(DecisionClient.layer).toBeDefined()
     expect(DecisionClient.fetchLayer).toBeDefined()
   })

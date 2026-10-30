@@ -1,3 +1,32 @@
+import { Decision } from "./decision.js"
+import { Image } from "./image.js"
+import { LLM } from "./llm.js"
+import { LLMClient } from "./route/client.js"
+import { Speech } from "./speech.js"
+import { Transcription } from "./transcription.js"
+import { Video } from "./video.js"
+
+/** The Effect API: the same namespaces and operations as `ai` from `@opencode/ai`, returning `Effect` and `Stream`. */
+export const ai = {
+  text: {
+    request: LLM.request,
+    generate: LLM.generate,
+    stream: LLM.stream,
+    loop: LLM.loop,
+    generateObject: LLM.generateObject,
+    compact: LLMClient.compact,
+    canCompact: LLMClient.canCompact,
+  },
+  image: Image,
+  decision: Decision,
+  /** Experimental: may change without compatibility guarantees. */
+  experimental: {
+    speech: Speech,
+    transcription: Transcription,
+    video: Video,
+  },
+} as const
+
 export { AIClient } from "./ai-client.js"
 export { LLMClient } from "./route/client.js"
 export { ImageClient } from "./image-client.js"
@@ -115,7 +144,6 @@ export type {
   ImageResolution,
   ImageRoute,
 } from "./image.js"
-export { Image } from "./image.js"
 export { DecisionClient } from "./decision-client.js"
 export {
   ChoiceAnswer,
@@ -152,7 +180,6 @@ export type {
   DecisionResponseFor,
   DecisionModelRoute,
 } from "./decision.js"
-export { Decision } from "./decision.js"
 export { DecisionRoute } from "./route/decision.js"
 export { Media } from "./media.js"
 export { Generation } from "./generation.js"
@@ -178,7 +205,7 @@ export type {
   ToolSchema,
   ToolToModelOutput,
 } from "./tool.js"
-export * as LLM from "./llm.js"
+export type { LLM } from "./llm.js"
 export type {
   Definition as ProviderPackageDefinition,
   Settings as ProviderPackageSettings,

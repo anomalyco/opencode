@@ -1,13 +1,16 @@
 import { expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { LLM, LLMClient, LLMRequest } from "../../src/effect.js"
+import { ai, LLMClient, LLMRequest } from "../../src/effect.js"
 import { Azure, OpenAI } from "../../src/providers.js"
 import { testEffect } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 const checkpoint = { type: "compaction", id: "cmp_1", encrypted_content: "opaque" }
-const request = LLM.request({ model: OpenAI.configure({ apiKey: "fixture" }).responses("fixture"), prompt: "hello" })
+const request = ai.text.request({
+  model: OpenAI.configure({ apiKey: "fixture" }).responses("fixture"),
+  prompt: "hello",
+})
 const trigger = { mechanism: "trigger" } as const
 
 testEffect(
@@ -61,7 +64,7 @@ testEffect(
 ).effect("trigger keeps request controls, configured deployment, and supplied subscription headers", () =>
   Effect.gen(function* () {
     const calls: string[] = []
-    const input = LLM.request({
+    const input = ai.text.request({
       model: request.model,
       system: "Keep the context",
       prompt: "hello",
@@ -127,7 +130,7 @@ testEffect(
   ),
 ).effect("keeps explicit verbosity on a trigger checkpoint for prompt cache reuse", () =>
   LLMClient.compact(
-    LLM.request({
+    ai.text.request({
       model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
       prompt: "Hello.",
       providerOptions: { textVerbosity: "low" },
@@ -150,7 +153,7 @@ testEffect(
   ),
 ).effect("keeps the effective body-overlay verbosity and text formatting", () =>
   LLMClient.compact(
-    LLM.request({
+    ai.text.request({
       model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
       prompt: "Hello.",
       generation: { maxTokens: 20_000 },
@@ -174,7 +177,7 @@ testEffect(
 ).effect("passes configured output limits through and leaves rejection to the provider", () =>
   Effect.gen(function* () {
     const error = yield* LLMClient.compact(
-      LLM.request({
+      ai.text.request({
         model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
         prompt: "Hello.",
         generation: { maxTokens: 128 },
@@ -273,7 +276,7 @@ testEffect(dynamicResponse(() => Effect.die("Must reject before sending"))).effe
   () =>
     Effect.gen(function* () {
       const client = yield* LLMClient.Service
-      const unsupported = LLM.request({ model: Azure.configure({ resourceName: "fixture" }).responses("fixture") })
+      const unsupported = ai.text.request({ model: Azure.configure({ resourceName: "fixture" }).responses("fixture") })
       expect(LLMClient.canCompact(unsupported)).toBe(true)
       expect(LLMClient.canCompact(unsupported, trigger)).toBe(false)
       // @ts-expect-error Exercise untyped consumers; the service must reject before sending.

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { model } from "@opencode/ai/providers/openai"
-import { LLM } from "../src/effect.js"
+import { ai } from "../src/effect.js"
 import { Endpoint } from "../src/route/endpoint.js"
 
 const configuration = (provider: string, message: string) =>
@@ -306,7 +306,7 @@ describe("provider package entrypoints", () => {
       baseURL: "https://messages.example.test/v1",
     })
     expect(
-      Endpoint.render(selected.route.endpoint, { request: LLM.request({ model: selected }), body: {} }).toString(),
+      Endpoint.render(selected.route.endpoint, { request: ai.text.request({ model: selected }), body: {} }).toString(),
     ).toBe("https://messages.example.test/v1/messages")
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ metadata: { user_id: "user_1" } })

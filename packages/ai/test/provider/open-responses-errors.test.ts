@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LLM, LLMClient } from "../../src/effect.js"
+import { ai, LLMClient } from "../../src/effect.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { Azure, Meta, OpenAI, XAI } from "../../src/providers/index.js"
 import { WebSocketTransport } from "../../src/route.js"
@@ -100,7 +100,7 @@ for (const model of [
         open: () => Effect.succeed({ sendText: () => Effect.void, messages: Stream.make(raw), close: Effect.void }),
       })
       for (const options of [{ webSocket }, {}]) {
-        const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Hello" }), options).pipe(
+        const error = yield* LLMClient.generate(ai.text.request({ model, prompt: "Hello" }), options).pipe(
           Effect.provide(fixedResponse(sseEvents(raw))),
           Effect.flip,
         )
@@ -128,7 +128,7 @@ it.effect("retains classification and original error bodies through Meta and gen
         "example-model",
       ),
     ]) {
-      const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Hello" })).pipe(
+      const error = yield* LLMClient.generate(ai.text.request({ model, prompt: "Hello" })).pipe(
         Effect.provide(fixedResponse(sseEvents(raw.replaceAll("\n", "\ndata: ")))),
         Effect.flip,
       )

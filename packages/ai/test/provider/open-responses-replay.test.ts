@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, Message } from "../../src/effect.js"
+import { ai, LLMEvent, Message } from "../../src/effect.js"
 import { OpenAI } from "../../src/providers.js"
 import { configure } from "../../src/providers/openai-compatible-responses.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"
@@ -18,7 +18,7 @@ for (const model of [
     it.effect("marks assistant text completed regardless of stored status", () =>
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
-          LLM.request({
+          ai.text.request({
             model,
             messages: [
               ...[undefined, "in_progress", "incomplete", "completed"].map((status, index) =>
@@ -73,7 +73,7 @@ for (const model of [
 
     it.effect("replays truncated text as completed while retaining the response finish reason", () =>
       Effect.gen(function* () {
-        const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Respond" })).pipe(
+        const response = yield* LLMClient.generate(ai.text.request({ model, prompt: "Respond" })).pipe(
           Effect.provide(
             fixedResponse(
               sseEvents(
@@ -102,7 +102,7 @@ for (const model of [
         expect(response.finishReason.normalized).toBe("length")
         expect(response.events.filter(LLMEvent.is.textEnd)).toHaveLength(1)
         const prepared = yield* compileRequest(
-          LLM.request({ model, messages: [response.message, Message.user("Continue")] }),
+          ai.text.request({ model, messages: [response.message, Message.user("Continue")] }),
         )
         expect(prepared.body.input).toEqual([
           {

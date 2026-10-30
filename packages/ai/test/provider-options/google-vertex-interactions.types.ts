@@ -1,17 +1,17 @@
-import { LLM } from "../../src/effect.js"
+import { ai } from "../../src/effect.js"
 import { GoogleVertexInteractions } from "../../src/providers.js"
 import { Auth } from "../../src/route/auth.js"
 import { model } from "../../src/providers/google-vertex/interactions.js"
 
 const selected = GoogleVertexInteractions.configure({ project: "project" }).model("gemini-3.8-flash")
 
-LLM.request({
+ai.text.request({
   model: selected,
   prompt: "Hello",
   providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto", serviceTier: "flex", store: false },
 })
 
-LLM.request({
+ai.text.request({
   model: selected,
   prompt: "Hello",
   // @ts-expect-error Interactions store must be boolean.

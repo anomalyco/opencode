@@ -2,15 +2,15 @@ import { describe, expect, test } from "bun:test"
 import { Content } from "@opencode/schema/tool"
 import { Effect, Schema, Stream } from "effect"
 import {
+  ai,
   GenerationOptions,
-  LLM,
   LLMEvent,
   LLMRequest,
   LLMResponse,
+  toDefinitions,
   ToolCallPart,
   ToolChoice,
   ToolOutput,
-  toDefinitions,
 } from "../src/effect.js"
 import { Auth, LLMClient } from "../src/route.js"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
@@ -30,7 +30,7 @@ const model = OpenAIChat.route
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 
-const baseRequest = LLM.request({
+const baseRequest = ai.text.request({
   id: "req_1",
   model,
   prompt: "Use the tool.",
@@ -679,7 +679,7 @@ describe("LLMClient tools", () => {
       )
 
       yield* TestToolRuntime.runTools({
-        request: LLM.request({
+        request: ai.text.request({
           model: OpenAIResponses.route
             .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
             .model({ id: "gpt-5.5" }),

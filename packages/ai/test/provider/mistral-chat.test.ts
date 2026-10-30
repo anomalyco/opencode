@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LanguageModel, LLM, LLMEvent, Message, SystemPart, ToolDefinition, Media } from "../../src/effect.js"
+import { ai, LanguageModel, LLMEvent, Media, Message, SystemPart, ToolDefinition } from "../../src/effect.js"
 import { Mistral } from "../../src/providers/index.js"
 import { MistralChat } from "../../src/protocols/index.js"
 import { LLMClient } from "../../src/route.js"
@@ -11,7 +11,7 @@ import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 const model = Mistral.configure({ apiKey: "fixture" }).model("mistral-large-latest")
-const request = LLM.request({ model, prompt: "Hello" })
+const request = ai.text.request({ model, prompt: "Hello" })
 const chunk = (delta: object, finishReason: string | null = null, usage?: object) => ({
   choices: [{ delta, finish_reason: finishReason }],
   usage,
@@ -39,7 +39,7 @@ describe("Mistral Chat", () => {
   it.effect("lowers native messages, media, tool choice, options, and replay IDs", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           system: [SystemPart.make("Initial\nKeep this newline."), SystemPart.make("Second instructions.")],
           messages: [
@@ -144,7 +144,7 @@ describe("Mistral Chat", () => {
   it.effect("preserves valid replay IDs", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           messages: [
             Message.assistant({ type: "tool-call", id: "Ab12Cd34E", name: "lookup", input: {} }),
@@ -162,7 +162,7 @@ describe("Mistral Chat", () => {
   it.effect("applies trailing prefix, cache, and reasoning options without changing earlier assistants", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           promptCacheKey: "common-key",
           messages: [Message.assistant("Earlier"), Message.user("Continue"), Message.assistant("Prefix")],
@@ -178,7 +178,7 @@ describe("Mistral Chat", () => {
       ])
 
       const uncached = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           prompt: "Hello",
           promptCacheKey: "common-key",
@@ -189,7 +189,7 @@ describe("Mistral Chat", () => {
       expect(uncached.body.prompt_cache_key).toBeUndefined()
 
       const unsupported = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model: LanguageModel.update(model, { compatibility: { supportsPromptCacheKey: false } }),
           prompt: "Hello",
           promptCacheKey: "common-key",
@@ -200,7 +200,7 @@ describe("Mistral Chat", () => {
 
       const longKey = "cache-key-".repeat(10)
       const unbounded = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           prompt: "Hello",
           promptCacheKey: longKey,
@@ -209,7 +209,7 @@ describe("Mistral Chat", () => {
       expect(unbounded.body.prompt_cache_key).toBe(longKey)
 
       const conflict = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           prompt: "Hello",
           providerOptions: { reasoningEffort: "high", promptMode: "reasoning" },
@@ -222,7 +222,7 @@ describe("Mistral Chat", () => {
   it.effect("omits empty assistant history unless it carries a tool call", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           messages: [
             Message.assistant(" \n "),
@@ -242,7 +242,7 @@ describe("Mistral Chat", () => {
   it.effect("preserves remote media URLs and structured tool-result media", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           messages: [
             Message.user({
@@ -284,7 +284,7 @@ describe("Mistral Chat", () => {
   it.effect("concatenates text-only user and tool content without separators", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           messages: [
             Message.user([
@@ -356,7 +356,7 @@ describe("Mistral Chat", () => {
         { type: "text", text: "Answer" },
       ])
 
-      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
         {
           role: "assistant",
@@ -399,7 +399,7 @@ describe("Mistral Chat", () => {
         },
       ])
 
-      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      const replay = yield* compileRequest(ai.text.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
         {
           role: "assistant",
@@ -715,7 +715,7 @@ describe("Mistral Chat", () => {
 
   it.effect("uses environment bearer auth and custom package settings", () =>
     LLMClient.generate(
-      LLM.request({
+      ai.text.request({
         model: Mistral.model("fixture-model", {
           baseURL: "https://mistral.test/v1",
           headers: { "x-app": "test" },

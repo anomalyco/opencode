@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import {
+  ai,
   CompactionPart,
   LanguageModel,
-  LLM,
   LLMClient,
   LLMEvent,
   LLMRequest,
@@ -15,7 +15,7 @@ const openai = OpenAI.configure({
   apiKey: "test",
   providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },
 }).responses("gpt-5.3-codex")
-LLMClient.compact(LLM.request({ model: openai, prompt: "hello" }))
+LLMClient.compact(ai.text.request({ model: openai, prompt: "hello" }))
 
 for (const model of [
   OpenAI.configure().responses("fixture"),
@@ -28,15 +28,15 @@ for (const model of [
   LanguageModel.update(openai, { defaults: { generation: { maxTokens: 100 } } }),
   LanguageModel.make(LanguageModel.input(openai)),
 ]) {
-  LLMClient.compact(LLM.request({ model, prompt: "hello" }))
+  LLMClient.compact(ai.text.request({ model, prompt: "hello" }))
 }
 
 const unsupported = {
-  anthropic: LLM.request({ model: Anthropic.configure().model("fixture") }),
-  openaiChat: LLM.request({ model: OpenAI.configure().chat("fixture") }),
-  azureChat: LLM.request({ model: Azure.configure({ resourceName: "test" }).chat("fixture") }),
-  xaiChat: LLM.request({ model: XAI.configure().chat("fixture") }),
-  compatible: LLM.request({
+  anthropic: ai.text.request({ model: Anthropic.configure().model("fixture") }),
+  openaiChat: ai.text.request({ model: OpenAI.configure().chat("fixture") }),
+  azureChat: ai.text.request({ model: Azure.configure({ resourceName: "test" }).chat("fixture") }),
+  xaiChat: ai.text.request({ model: XAI.configure().chat("fixture") }),
+  compatible: ai.text.request({
     model: OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
   }),
 }
@@ -55,7 +55,7 @@ LLMClient.Service.use((client) => {
   return client.compact(unsupported.anthropic)
 })
 
-const request = LLM.request({ model: openai, prompt: "hello" })
+const request = ai.text.request({ model: openai, prompt: "hello" })
 LLMClient.compact(LLMRequest.update(request, { messages: [Message.user("continue")] }))
 LLMClient.compact(new LLMRequest(LLMRequest.input(request)))
 const switched = LLMRequest.update(request, { model: Anthropic.configure().model("fixture") })
@@ -64,12 +64,12 @@ LLMClient.compact(switched)
 LLMClient.compact(LLMRequest.update(switched, { model: openai }))
 LLMClient.compact(
   // @ts-expect-error Replacing the route also replaces compaction capability.
-  LLM.request({ model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }) }),
+  ai.text.request({ model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }) }),
 )
 
 declare const dynamicModel: LanguageModel
 declare const dynamicPatch: Partial<LLMRequest.Input>
-const dynamicRequest = LLM.request({ model: dynamicModel, prompt: "hello" })
+const dynamicRequest = ai.text.request({ model: dynamicModel, prompt: "hello" })
 // @ts-expect-error A dynamically selected model must be narrowed first.
 LLMClient.compact(dynamicRequest)
 if (LLMClient.canCompact(dynamicRequest)) LLMClient.compact(dynamicRequest)
@@ -99,7 +99,7 @@ if (checkpoint.text !== undefined) {
 checkpoint.encrypted
 // @ts-expect-error Compaction parts do not contain a generic provider payload.
 checkpoint.value
-LLMClient.compact(LLM.request({ model: openai, prompt: "hello" })).pipe(
+LLMClient.compact(ai.text.request({ model: openai, prompt: "hello" })).pipe(
   Effect.map((result) => {
     result.replacement satisfies ReadonlyArray<Message>
     // @ts-expect-error The replacement window is named explicitly; the old field is not an alias.
@@ -108,7 +108,7 @@ LLMClient.compact(LLM.request({ model: openai, prompt: "hello" })).pipe(
     result.message
   }),
 )
-LLM.request({
+ai.text.request({
   model: openai,
   providerOptions: {
     // @ts-expect-error A token threshold is numeric.
@@ -116,7 +116,7 @@ LLM.request({
   },
 })
 const anthropic = Anthropic.configure().model("claude-opus-4-6")
-LLM.request({
+ai.text.request({
   model: anthropic,
   providerOptions: {
     contextManagement: {
@@ -124,7 +124,7 @@ LLM.request({
     },
   },
 })
-LLM.request({
+ai.text.request({
   model: anthropic,
   providerOptions: {
     // @ts-expect-error A pause setting is boolean.

@@ -242,3 +242,5 @@ export function generateObject(options: GenerateObjectOptions<ToolSchema<any>> |
   const { jsonSchema, ...rest } = options
   return runGenerateObject(rest, tool({ description: GENERATE_OBJECT_TOOL_DESCRIPTION, jsonSchema }))
 }
+
+export * as LLM from "./llm.js"

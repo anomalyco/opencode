@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMRequest, Message } from "../../src/effect.js"
+import { ai, LLMRequest, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
@@ -26,7 +26,7 @@ const model = (blockBinding?: { readonly prefix_mismatch_behavior: string }) =>
 
 const question = "How many positive integers below 5000 have exactly 12 positive divisors? Reply with the number only."
 
-const first = LLM.request({
+const first = ai.text.request({
   id: "recorded_bedrock_thinking_binding_first",
   model: model(),
   system: "You are a concise assistant.",
@@ -46,7 +46,7 @@ describe("Bedrock Converse thinking binding recorded", () => {
   recorded.effect.with("accepts the default binding with no thinking configured", { tags: ["reasoning"] }, () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           id: "recorded_bedrock_thinking_binding_default",
           model: AmazonBedrock.model(modelID, {
             apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",

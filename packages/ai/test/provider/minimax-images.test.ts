@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { Image, ImageClient, Media } from "../../src/effect.js"
+import { ai, ImageClient, Media } from "../../src/effect.js"
 import type { ImageRequestInput } from "../../src/image.js"
 import { MiniMax } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
@@ -17,7 +17,7 @@ const sent = (
 ) =>
   Effect.gen(function* () {
     let body: unknown
-    yield* Image.generate({ model: minimax.image(model), prompt: "test", ...request }).pipe(
+    yield* ai.image.generate({ model: minimax.image(model), prompt: "test", ...request }).pipe(
       Effect.provide(
         ImageClient.layer.pipe(
           Layer.provide(
@@ -37,19 +37,21 @@ const failure = (
   model = "image-01",
   response = imageResponse,
 ) =>
-  Image.generate({ model: minimax.image(model), prompt: "test", ...request }).pipe(
-    Effect.provide(
-      ImageClient.layer.pipe(
-        Layer.provide(fixedResponse(response, { headers: { "content-type": "application/json" } })),
+  ai.image
+    .generate({ model: minimax.image(model), prompt: "test", ...request })
+    .pipe(
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(fixedResponse(response, { headers: { "content-type": "application/json" } })),
+        ),
       ),
-    ),
-    Effect.flip,
-  )
+      Effect.flip,
+    )
 
 describe("MiniMax Images", () => {
   it.effect("generates through the MiniMax image API", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model: MiniMax.configure({
           apiKey: "test",
           baseURL: "https://api.minimax.test/v1",

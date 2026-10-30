@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { LLM, LLMRequest, Message } from "@opencode/ai/effect"
+import { ai, LLMRequest, Message } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { configure } from "@opencode/ai/providers/openai"
 import { SessionModelTransport } from "../src/session/model-transport"
@@ -78,7 +78,7 @@ const fixture = (mode: "success" | "invalid" | "fallback") =>
       http,
       opens: () => server.state.opens,
       disconnect: () => disconnect?.(),
-      request: LLM.request({
+      request: ai.text.request({
         model: configure({
           apiKey: "fixture",
           baseURL: server.url.replace(/^ws/, "http").replace(/responses$/, ""),

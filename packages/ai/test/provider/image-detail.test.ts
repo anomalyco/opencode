@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM, Media, Message } from "../../src/effect.js"
+import { ai, Media, Message } from "../../src/effect.js"
 import { OpenAI, Azure, XAI } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -23,7 +23,7 @@ for (const model of [
       )
       const codec = Schema.fromJsonString(Message)
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           messages: [Schema.decodeSync(codec)(Schema.encodeSync(codec)(message))],
         }),
@@ -42,7 +42,7 @@ for (const model of [
 it.effect("rejects malformed image detail instead of silently discarding it", () =>
   Effect.gen(function* () {
     const error = yield* compileRequest(
-      LLM.request({
+      ai.text.request({
         model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
         messages: [
           Message.user({

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Redacted } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, Message, ToolCallPart } from "../../src/effect.js"
+import { ai, Message, ToolCallPart } from "../../src/effect.js"
 import { GoogleVertexInteractions } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { Auth } from "../../src/route/auth.js"
@@ -14,7 +14,7 @@ describe("Google Vertex Interactions", () => {
   it.effect("streams through the global project endpoint with OAuth and Vertex service tiers", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           model: GoogleVertexInteractions.configure({
             accessToken: "vertex-token",
             location: "global",
@@ -80,7 +80,7 @@ describe("Google Vertex Interactions", () => {
   it.effect("uses the project-free Express endpoint with API-key auth", () =>
     Effect.gen(function* () {
       yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           model: GoogleVertexInteractions.configure({ apiKey: "vertex-key" }).model("gemini-3.8-flash"),
           prompt: "Say hello.",
         }),
@@ -113,7 +113,9 @@ describe("Google Vertex Interactions", () => {
         auth: Auth.effect(Effect.sync(() => Redacted.make(tokens.shift() ?? "unexpected-token"))).bearer(),
       }).model("gemini-3.8-flash")
       const headers: string[] = []
-      yield* Effect.forEach(["First.", "Second."], (prompt) => LLMClient.generate(LLM.request({ model, prompt }))).pipe(
+      yield* Effect.forEach(["First.", "Second."], (prompt) =>
+        LLMClient.generate(ai.text.request({ model, prompt })),
+      ).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Effect.sync(() => {
@@ -167,7 +169,7 @@ describe("Google Vertex Interactions", () => {
     Effect.gen(function* () {
       const model = GoogleVertexInteractions.configure({ apiKey: "vertex-key" }).model("gemini-3.8-flash")
       const generate = (...events: ReadonlyArray<unknown>) =>
-        LLMClient.generate(LLM.request({ model, prompt: "Hi" })).pipe(
+        LLMClient.generate(ai.text.request({ model, prompt: "Hi" })).pipe(
           Effect.provide(fixedResponse(sseEvents(...events))),
         )
       const response = yield* generate(
@@ -205,7 +207,7 @@ describe("Google Vertex Interactions", () => {
       ]
       for (const item of cases) {
         const event = { event_type: "interaction.completed", interaction: { status: "failed", errors: item.errors } }
-        const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Hi" })).pipe(
+        const error = yield* LLMClient.generate(ai.text.request({ model, prompt: "Hi" })).pipe(
           Effect.provide(fixedResponse(sseEvents(event))),
           Effect.flip,
         )
@@ -224,7 +226,7 @@ describe("Google Vertex Interactions", () => {
         accessToken: "vertex-token",
         project: "vertex-project",
       }).model("gemini-3.8-flash")
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Check the weather." })).pipe(
+      const response = yield* LLMClient.generate(ai.text.request({ model, prompt: "Check the weather." })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -243,7 +245,7 @@ describe("Google Vertex Interactions", () => {
       const call = response.toolCalls[0]
       expect(call.providerMetadata).toEqual({ vertex: { interactionSignature: "tool_sig" } })
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           messages: [
             Message.assistant([ToolCallPart.make(call)]),

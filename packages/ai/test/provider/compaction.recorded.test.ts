@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMRequest, Message } from "../../src/effect.js"
+import { ai, LLMRequest, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route/client.js"
 import { OpenAI, XAI, Anthropic } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
@@ -28,7 +28,7 @@ for (const provider of [
     "compacts and continues with the provider checkpoint",
     () =>
       Effect.gen(function* () {
-        const request = LLM.request({ model: provider.model, messages: history, generation: { maxTokens: 1024 } })
+        const request = ai.text.request({ model: provider.model, messages: history, generation: { maxTokens: 1024 } })
         const compacted = yield* LLMClient.compact(request)
         const result = yield* LLMClient.generate(
           LLMRequest.update(request, {
@@ -56,7 +56,7 @@ recordedTests({
       const model = Anthropic.configure({ apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture" }).model(
         "claude-sonnet-4-6",
       )
-      const request = LLM.request({
+      const request = ai.text.request({
         model,
         messages: [
           Message.user(

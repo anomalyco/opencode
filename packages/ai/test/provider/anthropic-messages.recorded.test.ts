@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, AIError, Message, ToolCallPart } from "../../src/effect.js"
+import { ai, AIError, Message, ToolCallPart } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import * as Anthropic from "../../src/providers/anthropic.js"
 import { weatherToolName } from "../recorded-scenarios.js"
@@ -10,7 +10,7 @@ const model = Anthropic.configure({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
 }).model("claude-haiku-4-5-20251001")
 
-const malformedToolOrderRequest = LLM.request({
+const malformedToolOrderRequest = ai.text.request({
   id: "recorded_anthropic_malformed_tool_order",
   model,
   messages: [

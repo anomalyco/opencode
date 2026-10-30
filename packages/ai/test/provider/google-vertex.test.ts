@@ -4,7 +4,7 @@ import { HttpClientRequest } from "effect/http"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { LanguageModel, LLM, Message, ToolCallPart } from "../../src/effect.js"
+import { ai, LanguageModel, Message, ToolCallPart } from "../../src/effect.js"
 import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -68,7 +68,7 @@ describe("Google Vertex providers", () => {
   it.effect("sends Gemini requests to the global Vertex endpoint", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           model: GoogleVertex.configure({
             accessToken: "vertex-token",
             location: "global",
@@ -111,7 +111,7 @@ describe("Google Vertex providers", () => {
   it.effect("adds billing labels to Vertex Gemini requests", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model: GoogleVertex.configure({
             accessToken: "vertex-token",
             project: "vertex-project",
@@ -132,7 +132,7 @@ describe("Google Vertex providers", () => {
   it.effect("maps service tiers to the Vertex shared PayGo header", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           model: GoogleVertex.configure({
             accessToken: "vertex-token",
             location: "global",
@@ -171,7 +171,7 @@ describe("Google Vertex providers", () => {
   it.effect("preserves function call ids in lowered Vertex bodies", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model: GoogleVertex.configure({
             accessToken: "vertex-token",
             project: "vertex-project",
@@ -220,7 +220,7 @@ describe("Google Vertex providers", () => {
         accessToken: "vertex-token",
         project: "vertex-project",
       }).model("gemini-3.5-flash")
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Check the weather." })).pipe(
+      const response = yield* LLMClient.generate(ai.text.request({ model, prompt: "Check the weather." })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents({
@@ -264,7 +264,7 @@ describe("Google Vertex providers", () => {
       })
 
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           messages: [
             Message.assistant([
@@ -318,7 +318,7 @@ describe("Google Vertex providers", () => {
         project: "vertex-project",
       }).model("claude-sonnet-4-6")
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           model,
           prompt: "Say hello.",
         }),
@@ -363,7 +363,7 @@ describe("Google Vertex providers", () => {
   it.effect("sends MaaS requests through Vertex Chat Completions", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           model: GoogleVertexChat.configure({
             accessToken: "vertex-token",
             location: "global",
@@ -402,7 +402,7 @@ describe("Google Vertex providers", () => {
   it.effect("ignores keepalives sent as data while a partner model reasons", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           model: GoogleVertexChat.configure({
             accessToken: "vertex-token",
             location: "global",
@@ -429,7 +429,7 @@ describe("Google Vertex providers", () => {
   it.effect("sends Grok requests through Vertex Responses", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           model: GoogleVertexResponses.configure({
             accessToken: "vertex-token",
             location: "global",
@@ -473,9 +473,9 @@ describe("Google Vertex providers", () => {
     Effect.gen(function* () {
       const vertex = { accessToken: "vertex-token", location: "us-central1", project: "vertex-project" }
       const inputSchema = { type: "object", required: ["query", "missing"], properties: { query: { type: "string" } } }
-      const request = (model: Parameters<typeof LLM.request>[0]["model"]) =>
+      const request = (model: Parameters<typeof ai.text.request>[0]["model"]) =>
         compileRequest(
-          LLM.request({
+          ai.text.request({
             model,
             prompt: "Use the tool.",
             tools: [{ name: "lookup", description: "Lookup.", inputSchema }],
@@ -503,7 +503,7 @@ describe("Google Vertex providers", () => {
   it.effect("routes tuned Gemini models through their deployed endpoint", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           model: GoogleVertex.configure({
             accessToken: "vertex-token",
             location: "us-central1",
@@ -555,7 +555,7 @@ describe("Google Vertex providers", () => {
         sseEvents({ candidates: [{ content: { role: "model", parts: [{ text: "lo." }] }, finishReason: "STOP" }] }),
       ]
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           model: GoogleVertex.configure({
             accessToken: "vertex-token",
             project: "vertex-project",

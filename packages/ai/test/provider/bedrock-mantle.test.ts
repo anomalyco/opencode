@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { LLM, LLMEvent, LLMRequest, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, LLMRequest, Message, ToolDefinition } from "../../src/effect.js"
 import { AmazonBedrockMantle } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"
@@ -22,12 +22,12 @@ describe("Amazon Bedrock Mantle provider", () => {
     Effect.gen(function* () {
       const provider = AmazonBedrockMantle.configure({ credentials })
       expect(provider.model("openai.gpt-oss-120b").route.transport).toBe(OpenResponses.httpTransport)
-      const chat = yield* compileRequest(LLM.request({ model: provider.chat("openai.gpt-oss-120b"), prompt: "Hi" }))
+      const chat = yield* compileRequest(ai.text.request({ model: provider.chat("openai.gpt-oss-120b"), prompt: "Hi" }))
       const messages = yield* compileRequest(
-        LLM.request({ model: provider.messages("anthropic.claude-opus-4-8"), prompt: "Hi", cache: "none" }),
+        ai.text.request({ model: provider.messages("anthropic.claude-opus-4-8"), prompt: "Hi", cache: "none" }),
       )
       const responses = yield* compileRequest(
-        LLM.request({ model: provider.model("openai.gpt-oss-120b"), prompt: "Hi" }),
+        ai.text.request({ model: provider.model("openai.gpt-oss-120b"), prompt: "Hi" }),
       )
 
       expect(chat).toMatchObject({
@@ -55,13 +55,19 @@ describe("Amazon Bedrock Mantle provider", () => {
     Effect.gen(function* () {
       const settings = { apiKey: "test-key", topP: 0.8 }
       const chat = yield* compileRequest(
-        LLM.request({ model: AmazonBedrockMantle.chatModel("openai.gpt-oss-safeguard-20b", settings), prompt: "Hi" }),
+        ai.text.request({
+          model: AmazonBedrockMantle.chatModel("openai.gpt-oss-safeguard-20b", settings),
+          prompt: "Hi",
+        }),
       )
       const messages = yield* compileRequest(
-        LLM.request({ model: AmazonBedrockMantle.messagesModel("anthropic.claude-opus-4-8", settings), prompt: "Hi" }),
+        ai.text.request({
+          model: AmazonBedrockMantle.messagesModel("anthropic.claude-opus-4-8", settings),
+          prompt: "Hi",
+        }),
       )
       const responses = yield* compileRequest(
-        LLM.request({ model: AmazonBedrockMantle.responsesModel("openai.gpt-oss-120b", settings), prompt: "Hi" }),
+        ai.text.request({ model: AmazonBedrockMantle.responsesModel("openai.gpt-oss-120b", settings), prompt: "Hi" }),
       )
 
       expect(chat.body.top_p).toBe(0.8)
@@ -78,7 +84,7 @@ describe("Amazon Bedrock Mantle provider", () => {
         configured.responses("openai.gpt-oss-120b"),
         configured.messages("anthropic.claude-opus-4-8"),
       ]) {
-        yield* LLMClient.generate(LLM.request({ model: selected, prompt: "Hi" })).pipe(
+        yield* LLMClient.generate(ai.text.request({ model: selected, prompt: "Hi" })).pipe(
           Effect.provide(
             dynamicResponse((input) =>
               Effect.gen(function* () {
@@ -104,7 +110,7 @@ describe("Amazon Bedrock Mantle provider", () => {
     Effect.gen(function* () {
       const model = AmazonBedrockMantle.configure({ apiKey: "test-key" }).messages("anthropic.claude-opus-4-8")
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           system: "You are concise.",
           messages: [Message.user("Hello")],
@@ -125,7 +131,7 @@ describe("Amazon Bedrock Mantle provider", () => {
     Effect.gen(function* () {
       const seen: Array<string | undefined> = []
       const model = AmazonBedrockMantle.configure({ region: "us-west-1" }).responses("openai.gpt-oss-120b")
-      yield* LLMClient.generate(LLM.request({ model, prompt: "Hi" })).pipe(
+      yield* LLMClient.generate(ai.text.request({ model, prompt: "Hi" })).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Effect.gen(function* () {
@@ -158,7 +164,7 @@ describe("Amazon Bedrock Mantle provider", () => {
         apiKey: "test-key",
         baseURL: "https://mantle.test/v1",
       }).chat("openai.gpt-oss-safeguard-20b")
-      yield* LLMClient.generate(LLM.request({ model, prompt: "Hi" })).pipe(
+      yield* LLMClient.generate(ai.text.request({ model, prompt: "Hi" })).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Effect.gen(function* () {
@@ -180,7 +186,7 @@ describe("Amazon Bedrock Mantle provider", () => {
     Effect.gen(function* () {
       const model = AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses("openai.gpt-oss-120b")
       const item = { type: "reasoning", id: "msg_95d4d0af4350432a", encrypted_content: "mantle-state" }
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Think." })).pipe(
+      const response = yield* LLMClient.generate(ai.text.request({ model, prompt: "Think." })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -194,7 +200,7 @@ describe("Amazon Bedrock Mantle provider", () => {
       )
 
       const prepared = yield* compileRequest(
-        LLM.request({ model, messages: [response.message, Message.user("Continue.")] }),
+        ai.text.request({ model, messages: [response.message, Message.user("Continue.")] }),
       )
 
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
@@ -225,7 +231,7 @@ describe("Amazon Bedrock Mantle recorded", () => {
   recorded.effect("streams text", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           model: AmazonBedrockMantle.configure({
             apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
             region: "us-east-1",
@@ -272,7 +278,7 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
     () =>
       Effect.gen(function* () {
         const model = mantleMessages("anthropic.claude-opus-4-8")
-        const initial = LLM.request({
+        const initial = ai.text.request({
           model,
           system: "You are a concise assistant.",
           prompt:
@@ -330,7 +336,7 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
     { tags: ["reasoning", "system-update"], metadata: { model: "anthropic.claude-haiku-4-5" } },
     () =>
       Effect.gen(function* () {
-        const request = LLM.request({
+        const request = ai.text.request({
           model: mantleMessages("anthropic.claude-haiku-4-5"),
           messages: [Message.user("What is 19 multiplied by 23?"), Message.system("Reply with only the integer.")],
           providerOptions: {
@@ -356,7 +362,7 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
     () =>
       Effect.gen(function* () {
         const model = mantleMessages("anthropic.claude-opus-5-5")
-        const firstRequest = LLM.request({
+        const firstRequest = ai.text.request({
           model,
           prompt: "Compute 37 * 43 step by step, then reply with only the integer.",
           providerOptions: {
@@ -377,7 +383,7 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
         expect(first.reasoning.length).toBeGreaterThan(0)
         expect(first.text.replaceAll(",", "")).toContain("1591")
 
-        const secondRequest = LLM.request({
+        const secondRequest = ai.text.request({
           model,
           messages: [
             ...firstRequest.messages,
@@ -409,7 +415,7 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
     { tags: ["reasoning", "effort-update"], metadata: { model: "anthropic.claude-opus-5" } },
     () =>
       Effect.gen(function* () {
-        const request = LLM.request({
+        const request = ai.text.request({
           model: mantleMessages("anthropic.claude-opus-5"),
           messages: [
             Message.user("What is 12 + 30?"),

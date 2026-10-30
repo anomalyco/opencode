@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { LLM } from "../src/effect.js"
+import { ai } from "../src/effect.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { Endpoint } from "../src/route.js"
 import { LanguageModel } from "../src/schema/index.js"
 
 const request = () =>
-  LLM.request({
+  ai.text.request({
     model: LanguageModel.make({
       id: "model-1",
       provider: "test",

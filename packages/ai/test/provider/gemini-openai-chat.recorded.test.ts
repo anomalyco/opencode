@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, Message, ToolRuntime, toDefinitions } from "../../src/effect.js"
+import { ai, LLMEvent, LLMRequest, Message, toDefinitions, ToolRuntime } from "../../src/effect.js"
 import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -29,7 +29,7 @@ describe("Gemini OpenAI-compatible Chat recorded", () => {
     () =>
       Effect.gen(function* () {
         const tools = { [weatherToolName]: weatherRuntimeTool }
-        const request = LLM.request({
+        const request = ai.text.request({
           model,
           system: "Call get_weather for every requested city in parallel, then answer in one short sentence.",
           prompt: "What is the weather in Paris and in Tokyo?",

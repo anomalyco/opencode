@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, LLM, Message } from "@opencode/ai/effect"
+import { ai, AIError, Message } from "@opencode/ai/effect"
 import {
   LLMClient,
   RequestExecutor,
@@ -123,12 +123,12 @@ describe("SessionModelTransport local WebSocket server", () => {
           )
 
           const first = yield* client
-            .use((llm) => llm.generate(LLM.request({ model, prompt: "First" }), { webSocket: executor }))
+            .use((llm) => llm.generate(ai.text.request({ model, prompt: "First" }), { webSocket: executor }))
             .pipe(Effect.provide(layer))
           const second = yield* client
             .use((llm) =>
               llm.generate(
-                LLM.request({
+                ai.text.request({
                   model,
                   messages: [Message.user("First"), first.message, Message.user("Be brief")],
                 }),
@@ -200,13 +200,13 @@ describe("SessionModelTransport local WebSocket server", () => {
               ),
             ),
           )
-          const request = LLM.request({
+          const request = ai.text.request({
             model,
             messages: [Message.user("First"), Message.assistant("Hello"), Message.user("Continue")],
           })
 
           yield* LLMClient.Service.use((llm) =>
-            llm.generate(LLM.request({ model, prompt: "First" }), { webSocket: executor }),
+            llm.generate(ai.text.request({ model, prompt: "First" }), { webSocket: executor }),
           ).pipe(Effect.provide(layer))
           const rejected = yield* LLMClient.Service.use((llm) => llm.generate(request, { webSocket: executor })).pipe(
             Effect.provide(layer),

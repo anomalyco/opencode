@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { LLM } from "../src/effect.js"
+import { ai } from "../src/effect.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { Auth } from "../src/route.js"
 import { toDefinitions, tool } from "../src/tool.js"
@@ -63,7 +63,7 @@ describe("tool (dynamic JSON Schema)", () => {
   )
 })
 
-describe("LLM.generateObject", () => {
+describe("ai.text.generateObject", () => {
   it.effect("forces a synthetic tool call and decodes the input", () =>
     Effect.gen(function* () {
       const bodies: OpenAIChatBody[] = []
@@ -80,11 +80,13 @@ describe("LLM.generateObject", () => {
         }),
       )
 
-      const response = yield* LLM.generateObject({
-        model,
-        prompt: "Return a structured weather report.",
-        schema: Schema.Struct({ city: Schema.String, temp: Schema.Number }),
-      }).pipe(Effect.provide(layer))
+      const response = yield* ai.text
+        .generateObject({
+          model,
+          prompt: "Return a structured weather report.",
+          schema: Schema.Struct({ city: Schema.String, temp: Schema.Number }),
+        })
+        .pipe(Effect.provide(layer))
 
       expect(response.object).toEqual({ city: "Paris", temp: 22 })
       expect(response.response.toolCalls).toHaveLength(1)
@@ -121,15 +123,17 @@ describe("LLM.generateObject", () => {
         }),
       )
 
-      const response = yield* LLM.generateObject({
-        model,
-        prompt: "Extract the user.",
-        jsonSchema: {
-          type: "object",
-          properties: { name: { type: "string" }, age: { type: "number" } },
-          required: ["name", "age"],
-        },
-      }).pipe(Effect.provide(layer))
+      const response = yield* ai.text
+        .generateObject({
+          model,
+          prompt: "Extract the user.",
+          jsonSchema: {
+            type: "object",
+            properties: { name: { type: "string" }, age: { type: "number" } },
+            required: ["name", "age"],
+          },
+        })
+        .pipe(Effect.provide(layer))
 
       expect(response.object).toEqual({ name: "Ada", age: 30 })
       expect(bodies[0].tools?.[0]?.function.parameters).toEqual({
@@ -150,11 +154,13 @@ describe("LLM.generateObject", () => {
         ),
       )
 
-      const exit = yield* LLM.generateObject({
-        model,
-        prompt: "Return a structured value.",
-        schema: Schema.Struct({ value: Schema.Number }),
-      }).pipe(Effect.provide(layer), Effect.exit)
+      const exit = yield* ai.text
+        .generateObject({
+          model,
+          prompt: "Return a structured value.",
+          schema: Schema.Struct({ value: Schema.Number }),
+        })
+        .pipe(Effect.provide(layer), Effect.exit)
 
       expect(exit._tag).toBe("Failure")
     }),
@@ -174,11 +180,13 @@ describe("LLM.generateObject", () => {
         ),
       )
 
-      const exit = yield* LLM.generateObject({
-        model,
-        prompt: "Return a structured value.",
-        schema: Schema.Struct({ value: Schema.Number }),
-      }).pipe(Effect.provide(layer), Effect.exit)
+      const exit = yield* ai.text
+        .generateObject({
+          model,
+          prompt: "Return a structured value.",
+          schema: Schema.Struct({ value: Schema.Number }),
+        })
+        .pipe(Effect.provide(layer), Effect.exit)
 
       expect(exit._tag).toBe("Failure")
     }),

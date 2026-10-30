@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
-import { Auth, LLM, LLMClient } from "../../src/effect.js"
+import { ai, Auth, LLMClient } from "../../src/effect.js"
 import { Meta } from "../../src/providers/index.js"
 import { OpenAIChat } from "../../src/protocols/openai-chat.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
@@ -27,7 +27,7 @@ it.effect("Meta composes baseline protocols with provider-owned endpoints and de
     }
     expect(responses.route.endpoint.path).toBe("/responses")
     expect(chat.route.endpoint.path).toBe("/chat/completions")
-    const compiled = yield* compileRequest(LLM.request({ model: responses, prompt: "Hello" }))
+    const compiled = yield* compileRequest(ai.text.request({ model: responses, prompt: "Hello" }))
     expect(compiled.protocol).toBe("meta-responses")
     expect(compiled.body).toMatchObject({ store: false, include: ["reasoning.encrypted_content"] })
     expect(compiled.body.reasoning).toBeUndefined()
@@ -38,7 +38,7 @@ it.effect("Meta Responses stays on HTTP when a WebSocket executor is supplied", 
   Effect.gen(function* () {
     for (const baseURL of ["https://api.meta.ai/v1", "https://gateway.example/v1"]) {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.text.request({
           model: Meta.configure({ apiKey: "fixture", baseURL }).responses("muse-spark-1.3"),
           prompt: "Hello",
         }),
@@ -93,7 +93,7 @@ it.effect("Meta package selectors preserve overrides and Chat token policy on cu
       expect(model.route.defaults.headers).toEqual({ "x-client": "test" })
       expect(model.route.defaults.http?.body).toEqual({ custom: "value" })
       const compiled = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model,
           prompt: "Hello",
           generation: { maxTokens: 64 },
@@ -127,7 +127,7 @@ it.effect("Meta resolves environment credentials and accepts explicit auth overr
       ]) {
         const model = scenario.provider[api]("muse-spark-1.3")
         const headers = yield* model.route.auth.apply({
-          request: LLM.request({ model, prompt: "Hello" }),
+          request: ai.text.request({ model, prompt: "Hello" }),
           method: "POST",
           url: "https://api.meta.ai/v1/responses",
           body: "{}",

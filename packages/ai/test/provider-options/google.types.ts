@@ -1,15 +1,15 @@
-import { LLM } from "../../src/effect.js"
+import { ai } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 
 const model = Google.provider.model("gemini-2.5-pro")
 
-LLM.request({
+ai.text.request({
   model,
   prompt: "Hello",
   providerOptions: { thinkingConfig: { thinkingBudget: 1024 } },
 })
 
-LLM.request({
+ai.text.request({
   model,
   prompt: "Hello",
   providerOptions: {
@@ -18,7 +18,7 @@ LLM.request({
   },
 })
 
-LLM.request({
+ai.text.request({
   model,
   prompt: "Hello",
   providerOptions: {
@@ -29,14 +29,14 @@ LLM.request({
   },
 })
 
-LLM.request({
+ai.text.request({
   model,
   prompt: "Hello",
   // @ts-expect-error Gemini thinking budgets must be numeric.
   providerOptions: { thinkingConfig: { thinkingBudget: "large" } },
 })
 
-LLM.request({
+ai.text.request({
   model,
   prompt: "Hello",
   providerOptions: { thinkingConfig: { thinkingLevel: "maximum" } },

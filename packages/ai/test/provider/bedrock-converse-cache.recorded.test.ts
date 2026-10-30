@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM } from "../../src/effect.js"
+import { ai, CacheHint } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
@@ -17,7 +17,7 @@ const model = AmazonBedrock.configure({
   region: RECORDING_REGION,
 }).model(process.env.BEDROCK_CACHE_MODEL_ID ?? "us.anthropic.claude-haiku-4-5-20251001-v1:0")
 
-const cacheRequest = LLM.request({
+const cacheRequest = ai.text.request({
   id: "recorded_bedrock_cache",
   model,
   system: [{ type: "text", text: LARGE_CACHEABLE_SYSTEM, cache: new CacheHint({ type: "ephemeral" }) }],

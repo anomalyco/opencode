@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CompactionPart, CompactionResponse, LLMEvent, LLMResponse, Message, ProviderID } from "../src/schema/index.js"
-import { LLM, LLMClient, LLMRequest, LanguageModel } from "../src/effect.js"
+import { ai, LanguageModel, LLMClient, LLMRequest } from "../src/effect.js"
 import { OpenAI, Anthropic } from "../src/providers.js"
 import { testEffect } from "./lib/effect.js"
 import { fixedResponse } from "./lib/http.js"
@@ -9,14 +9,16 @@ import { fixedResponse } from "./lib/http.js"
 test("runtime capability checks follow model and route updates", () => {
   const supported = OpenAI.configure({ apiKey: "test" }).responses("fixture")
   const unsupported = Anthropic.configure({ apiKey: "test" }).model("fixture")
-  const request = LLM.request({ model: supported, prompt: "hello" })
+  const request = ai.text.request({ model: supported, prompt: "hello" })
   expect(LLMClient.canCompact(request)).toBe(true)
   expect(LLMClient.canCompact(LLMRequest.update(request, { messages: [] }))).toBe(true)
   expect(LLMClient.canCompact(LLMRequest.update(request, { model: unsupported }))).toBe(false)
   expect(
-    LLMClient.canCompact(LLM.request({ model: LanguageModel.update(supported, { route: unsupported.route }) })),
+    LLMClient.canCompact(ai.text.request({ model: LanguageModel.update(supported, { route: unsupported.route }) })),
   ).toBe(false)
-  expect(LLMClient.canCompact(LLM.request({ model: LanguageModel.update(supported, { route: undefined }) }))).toBe(true)
+  expect(LLMClient.canCompact(ai.text.request({ model: LanguageModel.update(supported, { route: undefined }) }))).toBe(
+    true,
+  )
 })
 
 test("explicit compaction serializes a replacement window without a messages alias", () => {
@@ -82,7 +84,7 @@ testEffect(fixedResponse("")).effect(
   "explicit compaction on a route without a compact endpoint fails with UnsupportedOperation",
   () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.text.request({
         model: Anthropic.configure({ apiKey: "test" }).model("fixture"),
         prompt: "hello",
       })

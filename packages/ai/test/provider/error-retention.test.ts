@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src/effect.js"
+import { ai } from "../../src/effect.js"
 import { Anthropic, Google, OpenAI } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { it } from "../lib/effect.js"
@@ -43,7 +43,7 @@ describe("provider error retention", () => {
     it.effect(`retains the complete ${entry.name} event and HTTP context`, () =>
       Effect.gen(function* () {
         const body = JSON.stringify({ ...entry.event, trace: { opaque: "outer" } })
-        const error = yield* LLMClient.generate(LLM.request({ model: entry.model, prompt: "hello" })).pipe(
+        const error = yield* LLMClient.generate(ai.text.request({ model: entry.model, prompt: "hello" })).pipe(
           Effect.provide(
             fixedResponse(sseEvents(body), {
               headers: { "content-type": "text/event-stream", "x-provider-trace": "trace-1" },
@@ -69,7 +69,7 @@ describe("provider error retention", () => {
         trace: { opaque: "outer" },
       })
       const error = yield* LLMClient.generate(
-        LLM.request({ model: Google.configure(options).model("gemini"), prompt: "hello" }),
+        ai.text.request({ model: Google.configure(options).model("gemini"), prompt: "hello" }),
       ).pipe(
         Effect.provide(
           fixedResponse(sseEvents(body), {
@@ -91,7 +91,7 @@ describe("provider error retention", () => {
     Effect.gen(function* () {
       const body = JSON.stringify({ error: "RESOURCE_EXHAUSTED", trace: { opaque: "outer" } })
       const error = yield* LLMClient.generate(
-        LLM.request({ model: Google.configure(options).model("gemini"), prompt: "hello" }),
+        ai.text.request({ model: Google.configure(options).model("gemini"), prompt: "hello" }),
       ).pipe(Effect.provide(fixedResponse(sseEvents(body))), Effect.flip)
 
       expect(error.reason._tag).toBe("InvalidProviderOutput")
@@ -105,7 +105,7 @@ describe("provider error retention", () => {
     Effect.gen(function* () {
       const body = JSON.stringify({ error: null, trace: { opaque: "outer" } })
       const error = yield* LLMClient.generate(
-        LLM.request({ model: Google.configure(options).model("gemini"), prompt: "hello" }),
+        ai.text.request({ model: Google.configure(options).model("gemini"), prompt: "hello" }),
       ).pipe(
         Effect.provide(fixedResponse(sseEvents(body), { headers: { "x-provider-trace": "trace-null" } })),
         Effect.flip,
@@ -122,7 +122,7 @@ describe("provider error retention", () => {
     Effect.gen(function* () {
       const body = '{"type":"error","error":{"message":42,"opaque":{"nested":true}},"trace":"outer"}'
       const error = yield* LLMClient.generate(
-        LLM.request({ model: Anthropic.configure(options).model("claude"), prompt: "hello" }),
+        ai.text.request({ model: Anthropic.configure(options).model("claude"), prompt: "hello" }),
       ).pipe(Effect.provide(fixedResponse(sseEvents(body))), Effect.flip)
       expect(error.reason._tag).toBe("InvalidProviderOutput")
       expect(error.reason.body).toBe(body)
@@ -135,7 +135,7 @@ describe("provider error retention", () => {
     Effect.gen(function* () {
       const body = '{"type":"error","error":{"code":"rate_limit_exceeded","message":"Slow down","extra":42}}'
       const error = yield* LLMClient.generate(
-        LLM.request({ model: OpenAI.configure(options).responses("gpt"), prompt: "hello" }),
+        ai.text.request({ model: OpenAI.configure(options).responses("gpt"), prompt: "hello" }),
         {
           webSocket: {
             execute: (exchange) => Effect.succeed({ frames: exchange.fallback(), complete: Effect.void }),

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LanguageModel, LLM, LLMEvent, ToolFailure, tool } from "../src/effect.js"
+import { ai, LanguageModel, type LLM, LLMEvent, tool, ToolFailure } from "../src/effect.js"
 import { AI } from "../src/index.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { TestLLM } from "../src/testing.js"
@@ -18,12 +18,12 @@ const read_file = tool({
 })
 
 const collect = (until?: LLM.LoopInput["until"]) =>
-  LLM.loop({ model, prompt: "Read the file.", tools: { read_file }, until }).pipe(
+  ai.text.loop({ model, prompt: "Read the file.", tools: { read_file }, until }).pipe(
     Stream.runCollect,
     Effect.map((events) => Array.from(events)),
   )
 
-describe("LLM.loop", () => {
+describe("ai.text.loop", () => {
   it.effect("runs tool calls and sends the full assistant turn back to the model", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
@@ -97,7 +97,7 @@ describe("LLM.loop", () => {
         toModelOutput: ({ output }) => [{ type: "text", text: `sum=${output}` }],
       })
 
-      const events = yield* LLM.loop({ model, prompt: "Add.", tools: { add } }).pipe(Stream.runCollect)
+      const events = yield* ai.text.loop({ model, prompt: "Add.", tools: { add } }).pipe(Stream.runCollect)
 
       expect(Array.from(events).filter(LLMEvent.is.toolResult)).toEqual([
         expect.objectContaining({ id: "call-1", result: { type: "text", value: "sum=5" } }),

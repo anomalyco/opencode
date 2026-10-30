@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, LLMRequest, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
+import { ai, CacheHint, LLMRequest, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import * as Anthropic from "../../src/providers/anthropic.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
@@ -13,7 +13,7 @@ const model = Anthropic.configure({
 // Two identical generations in a row. The first call writes the prefix into
 // Anthropic's cache; the second should report a cache read against the same
 // prefix. Cassette captures both interactions in order.
-const cacheRequest = LLM.request({
+const cacheRequest = ai.text.request({
   id: "recorded_anthropic_cache",
   model,
   system: [{ type: "text", text: LARGE_CACHEABLE_SYSTEM, cache: new CacheHint({ type: "ephemeral" }) }],
@@ -48,7 +48,7 @@ const longToolTurn = [
     ]
   }).flat(),
 ]
-const longToolTurnRequest = LLM.request({
+const longToolTurnRequest = ai.text.request({
   id: "recorded_anthropic_cache_long_tool_turn",
   model,
   system: LARGE_CACHEABLE_SYSTEM,

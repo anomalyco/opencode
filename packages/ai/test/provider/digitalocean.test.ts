@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM } from "../../src/effect.js"
+import { ai, CacheHint } from "../../src/effect.js"
 import { compileRequest } from "../../src/route/client.js"
 import { DigitalOcean } from "../../src/providers/digitalocean.js"
 import { it } from "../lib/effect.js"
@@ -32,7 +32,7 @@ describe("DigitalOcean", () => {
       })
       expect(model.route.endpoint.baseURL).toBe("https://inference.do-ai.run/v1")
 
-      const prepared = yield* compileRequest(LLM.request({ model, prompt: "Say hello.", cache: "none" }))
+      const prepared = yield* compileRequest(ai.text.request({ model, prompt: "Say hello.", cache: "none" }))
 
       expect(prepared.route).toBe("digitalocean")
       expect(prepared.body).toMatchObject({
@@ -46,7 +46,7 @@ describe("DigitalOcean", () => {
   it.effect("lowers the native cache policy to DigitalOcean cache_control markers", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.text.request({
           model: DigitalOcean.configure({ apiKey: "test-key" }).model("anthropic-claude-fable-5.1"),
           system: [
             { type: "text", text: "Base agent", cache: new CacheHint({ type: "ephemeral", ttl: "1h" }) },
@@ -80,7 +80,7 @@ describe("DigitalOcean", () => {
   it.effect("parses DigitalOcean cache usage fields into AI.Usage", () =>
     Effect.gen(function* () {
       const model = DigitalOcean.configure({ apiKey: "test-key" }).model("anthropic-claude-fable-5.1")
-      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Say OK" })).pipe(
+      const response = yield* LLMClient.generate(ai.text.request({ model, prompt: "Say OK" })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(

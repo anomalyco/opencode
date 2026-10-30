@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { Socket } from "effect/socket"
-import { LLM, LLMRequest, Message, ToolRuntime } from "../../src/effect.js"
+import { ai, LLMRequest, Message, ToolRuntime } from "../../src/effect.js"
 import {
   LLMClient,
   WebSocketTransport,
@@ -115,7 +115,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
   recorded.effect.with("continues a tool call over one socket", { tags: ["tool", "continuation"] }, () =>
     Effect.gen(function* () {
       const channel = yield* makeChannel
-      const request = LLM.request({
+      const request = ai.text.request({
         id: "recorded_openai_responses_websocket_tool",
         model,
         system: "Call get_weather once, then reply exactly: Paris is sunny.",
@@ -153,7 +153,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
   recorded.effect.with("reconstructs full context after reconnect", { tags: ["reconnect", "full-context"] }, () =>
     Effect.gen(function* () {
       const channel = yield* makeChannel
-      const request = LLM.request({
+      const request = ai.text.request({
         id: "recorded_openai_responses_websocket_reconnect",
         model,
         system: "Follow the user's exact reply instruction.",
@@ -186,7 +186,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
   recorded.effect.with("recovers from explicit continuation rejection", { tags: ["continuation", "recovery"] }, () =>
     Effect.gen(function* () {
       const channel = yield* makeChannel
-      const request = LLM.request({
+      const request = ai.text.request({
         id: "recorded_openai_responses_websocket_rejection",
         model,
         system: "Follow the user's exact reply instruction.",

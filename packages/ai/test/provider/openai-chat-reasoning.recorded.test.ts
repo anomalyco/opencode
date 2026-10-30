@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMResponse, LanguageModel } from "../../src/effect.js"
+import { ai, LanguageModel, LLMEvent, LLMResponse } from "../../src/effect.js"
 import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
 import * as OpenRouter from "../../src/providers/openrouter.js"
 import { LLMClient } from "../../src/route.js"
@@ -56,7 +56,7 @@ for (const item of cases) {
       () =>
         Effect.gen(function* () {
           const response = yield* LLMClient.generate(
-            LLM.request({
+            ai.text.request({
               model: item.model,
               system: "Think through the arithmetic, then reply with only the final integer.",
               prompt: "What is 173 multiplied by 219?",
@@ -86,7 +86,7 @@ for (const item of cases) {
             ),
           ).toBe(true)
 
-          const replay = yield* compileRequest(LLM.request({ model: item.model, messages: [response.message] }))
+          const replay = yield* compileRequest(ai.text.request({ model: item.model, messages: [response.message] }))
           expect(replay.body.messages).toMatchObject([
             {
               role: "assistant",

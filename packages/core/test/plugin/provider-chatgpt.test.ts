@@ -2,7 +2,7 @@ import { Money } from "@opencode/schema/money"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/core/session"
 import { OpenAIResponses } from "@opencode/ai/protocols/openai-responses"
-import { AIError, HttpContext, LLM, Message, RateLimitError } from "@opencode/ai/effect"
+import { ai, AIError, HttpContext, Message, RateLimitError } from "@opencode/ai/effect"
 import { classifyProviderFailure } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/testing"
 import { describe, expect } from "bun:test"
@@ -1097,7 +1097,7 @@ describe("ChatGPTPlugin", () => {
         const model = required(yield* models.get(Provider.ID.openai, modelID))
         const body = (variant: string, messages: ReadonlyArray<Message>) =>
           resolver.resolveModel(model, Model.VariantID.make(variant)).pipe(
-            Effect.flatMap((resolved) => compileRequest(LLM.request({ model: resolved.model, messages }))),
+            Effect.flatMap((resolved) => compileRequest(ai.text.request({ model: resolved.model, messages }))),
             Effect.map((compiled) => compiled.body),
           )
         const switched = [

@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LanguageModel, LLM, Message } from "../../src/effect.js"
+import { ai, LanguageModel, Message } from "../../src/effect.js"
 import { OpenAIChat } from "../../src/protocols/openai-chat.js"
 import { Groq } from "../../src/providers/groq.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -13,7 +13,7 @@ it.effect("Groq reuses Chat streaming and defaults to parsed reasoning", () =>
     const model = Groq.configure({ apiKey: "fixture" }).model("llama-3.3-70b-versatile")
     expect(model.route.endpoint.baseURL).toBe("https://api.groq.com/openai/v1")
     const compiled = yield* compileRequest(
-      LLM.request({ model, prompt: "Hello", tools: [weatherTool], generation: { maxTokens: 64 } }),
+      ai.text.request({ model, prompt: "Hello", tools: [weatherTool], generation: { maxTokens: 64 } }),
     )
     expect(compiled.body).toMatchObject({
       max_completion_tokens: 64,
@@ -42,7 +42,7 @@ it.effect("Groq lowers its own options for custom catalog identities and endpoin
       { provider: "custom-groq" },
     )
     const compiled = yield* compileRequest(
-      LLM.request({
+      ai.text.request({
         model,
         prompt: "Hello",
         tools: [weatherTool],
@@ -69,7 +69,7 @@ it.effect("Groq honors disableParallelToolUse and sends parallel_tool_calls only
   Effect.gen(function* () {
     const model = Groq.configure({ apiKey: "fixture" }).model("openai/gpt-oss-20b")
     const withTools = yield* compileRequest(
-      LLM.request({
+      ai.text.request({
         model,
         prompt: "Hello",
         tools: [weatherTool],
@@ -78,7 +78,7 @@ it.effect("Groq honors disableParallelToolUse and sends parallel_tool_calls only
     )
     expect(withTools.body.parallel_tool_calls).toBe(false)
     const withoutTools = yield* compileRequest(
-      LLM.request({ model, prompt: "Hello", providerOptions: { parallelToolCalls: true } }),
+      ai.text.request({ model, prompt: "Hello", providerOptions: { parallelToolCalls: true } }),
     )
     expect(withoutTools.body).not.toHaveProperty("parallel_tool_calls")
   }),
@@ -87,7 +87,7 @@ it.effect("Groq honors disableParallelToolUse and sends parallel_tool_calls only
 it.effect("Groq replays reasoning only when present and preserves explicit reasoning exclusion", () =>
   Effect.gen(function* () {
     const compiled = yield* compileRequest(
-      LLM.request({
+      ai.text.request({
         model: Groq.configure({ apiKey: "fixture" }).model("openai/gpt-oss-20b"),
         messages: [
           Message.user("Think"),
@@ -114,7 +114,7 @@ it.effect("Groq omits reasoning_format for the GPT-OSS family by default", () =>
   Effect.gen(function* () {
     for (const id of ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "openai/gpt-oss-safeguard-20b"]) {
       const compiled = yield* compileRequest(
-        LLM.request({ model: Groq.configure({ apiKey: "fixture" }).model(id), prompt: "Hello" }),
+        ai.text.request({ model: Groq.configure({ apiKey: "fixture" }).model(id), prompt: "Hello" }),
       )
       expect(compiled.body.reasoning_format).toBeUndefined()
       expect(compiled.body.include_reasoning).toBeUndefined()
@@ -125,7 +125,7 @@ it.effect("Groq omits reasoning_format for the GPT-OSS family by default", () =>
 it.effect("Groq validates option types", () =>
   Effect.gen(function* () {
     const error = yield* compileRequest(
-      LLM.request({
+      ai.text.request({
         model: Groq.configure({ apiKey: "fixture" }).model("qwen"),
         prompt: "Hello",
         providerOptions: { includeReasoning: "false" },

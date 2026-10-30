@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, LLM, LLMEvent, LLMRequest, Media, Message } from "../../src/effect.js"
+import { ai, LLMEvent, LLMRequest, Media, Message } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -25,7 +25,7 @@ recorded.effect.with(
   { protocol: "meta-images", tags: ["generation", "webp"] },
   () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model: meta.image(modelID),
         prompt: "A flat black square centered on a plain white background. No text.",
         n: 1,
@@ -46,7 +46,7 @@ recorded.effect.with(
   { protocol: "meta-images", tags: ["editing", "png"] },
   () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model: meta.image(modelID),
         prompt: "Change the shape to bright purple. Keep the plain white background.",
         images: [
@@ -69,7 +69,7 @@ recorded.effect.with(
   { protocol: "meta-responses", tags: ["hosted", "continuation", "editing"] },
   () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.text.request({
         model: meta.responses(modelID),
         prompt: "A simple flat black square centered on a plain white background. No text.",
         tools: [

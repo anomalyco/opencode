@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMRequest } from "../../src/effect.js"
+import { ai, LLMRequest } from "../../src/effect.js"
 import { DigitalOcean } from "../../src/providers/digitalocean.js"
 import { LLMClient } from "../../src/route.js"
 import {
@@ -33,7 +33,7 @@ for (const item of [
       { tags: ["cache", "usage"], metadata: { model: item.id } },
       () =>
         Effect.gen(function* () {
-          const request = LLM.request({
+          const request = ai.text.request({
             model,
             system: LARGE_CACHEABLE_SYSTEM,
             prompt: "Reply exactly: OK",

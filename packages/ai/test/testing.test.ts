@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import {
+  ai,
   AIError,
+  CompactionCheckpointResponse,
   CompactionPart,
   CompactionResponse,
-  CompactionCheckpointResponse,
   LanguageModel,
-  LLM,
   LLMClient,
   LLMEvent,
   LLMRequest,
@@ -19,7 +19,7 @@ import { TestLLM } from "../src/testing.js"
 import { Effect, Fiber, Latch, Stream } from "effect"
 import { testEffect } from "./lib/effect.js"
 
-const request = LLM.request({
+const request = ai.text.request({
   model: LanguageModel.make({ id: "fictional-model", provider: "fixture", route: OpenAIChat.route }),
   prompt: "Say hello",
 })
@@ -29,7 +29,7 @@ describe("TestLLM first-class client", () => {
   it.effect("returns scripted checkpoints only for trigger compaction", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
-      const request = LLM.request({ model: OpenAI.configure().responses("fixture"), prompt: "hello" })
+      const request = ai.text.request({ model: OpenAI.configure().responses("fixture"), prompt: "hello" })
       const checkpoint = new CompactionCheckpointResponse({
         checkpoint: { type: "compaction", provider: ProviderID.make("openai"), encrypted: "opaque" },
         responseID: "resp_fixture",
@@ -54,7 +54,10 @@ describe("TestLLM first-class client", () => {
   it.effect("rejects response fixtures for the wrong operation", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
-      const request = LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" })
+      const request = ai.text.request({
+        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        prompt: "hello",
+      })
       yield* client.push(TestLLM.stop(), new CompactionResponse({ replacement: [] }))
       expect(yield* client.compact(request).pipe(Effect.catchDefect(Effect.succeed))).toBe(
         "TestLLM compaction requires a CompactionResponse",
@@ -68,7 +71,10 @@ describe("TestLLM first-class client", () => {
   it.effect("scripts replacement windows with the same lazy recording, gates, and fallback controls", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
-      const request = LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" })
+      const request = ai.text.request({
+        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        prompt: "hello",
+      })
       const compacted = new CompactionResponse({
         replacement: [
           Message.user("retained input"),
