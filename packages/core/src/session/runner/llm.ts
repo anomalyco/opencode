@@ -232,7 +232,9 @@ const layer = Layer.effect(
                 // The Session would go idle; a plugin may admit input to keep this execution working.
                 yield* restore(
                   SessionBackground.outstanding(jobs, store, sessionID).pipe(
-                    Effect.flatMap((background) => hooks.trigger("session", "experimental.idle", { sessionID, background })),
+                    Effect.flatMap((background) =>
+                      hooks.trigger("session", "experimental.idle", { sessionID, background }),
+                    ),
                   ),
                 )
                 if (!(yield* SessionInbox.has(db, sessionID, "input"))) return DrainResult.Complete()
