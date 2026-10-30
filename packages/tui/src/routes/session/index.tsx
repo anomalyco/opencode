@@ -1,5 +1,6 @@
 import {
   batch,
+  children,
   createContext,
   createEffect,
   createMemo,
@@ -24,7 +25,15 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import {
+  BoxRenderable,
+  ScrollBoxRenderable,
+  addDefaultParsers,
+  TextAttributes,
+  RGBA,
+  treeSitterToTextChunks,
+  type SimpleHighlight,
+} from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -55,6 +64,9 @@ import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
+import { highlightCached } from "../../util/highlight-cache"
+import { narrowBashHighlights } from "../../util/bash-highlight"
+import { highlightHeredocs } from "../../util/heredoc"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
 import { Toast, useToast } from "../../ui/toast"
@@ -2016,8 +2028,15 @@ function Shell(props: ToolProps) {
           onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}</text>}>
-              <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
+            <Show
+              when={ctx.tui.syntax?.bash !== false}
+              fallback={
+                <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}</text>}>
+                  <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
+                </Show>
+              }
+            >
+              <ShellCommand command={stringValue(props.input.command) ?? ""} running={isRunning()} />
             </Show>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
@@ -2035,6 +2054,58 @@ function Shell(props: ToolProps) {
       </Match>
     </Switch>
   )
+}
+
+// The command as shell code, each heredoc body in the language of the command that reads it. It
+// is the same <text> the plain command is, so it wraps and indents
+// exactly as before, with each token a colored span. It draws plain at once and takes its colors
+// when the parser worker answers, which the shared cache makes immediate for a command already
+// seen. Colors come from toolSyntax, which never uses red: in the transcript red means failure.
+export function ShellCommand(props: { command: string; running: boolean }) {
+  const { theme, toolSyntax } = useTheme()
+  const ctx = use()
+  const [highlighted, setHighlighted] = createSignal<{ command: string; highlights: SimpleHighlight[] }>()
+  createEffect(() => {
+    const command = props.command
+    shellHighlights(command, ctx.tui.syntax?.heredoc !== false)
+      .then((highlights) => setHighlighted({ command, highlights }))
+      .catch(() => setHighlighted(undefined))
+  })
+  const segments = createMemo((): CommandSegment[] => {
+    const result = highlighted()
+    if (result?.command !== props.command) return [{ text: props.command, fg: theme.text }]
+    return treeSitterToTextChunks(result.command, result.highlights, toolSyntax(), { enabled: false })
+  })
+  const spans = children(() => <CommandSpans segments={segments()} />)
+  return (
+    <Show when={props.running} fallback={<text fg={theme.text}>$ {spans()}</text>}>
+      <Spinner color={theme.text}>{spans()}</Spinner>
+    </Show>
+  )
+}
+
+type CommandSegment = { text: string; fg?: RGBA; bg?: RGBA; attributes?: number }
+
+export function CommandSpans(props: { segments: CommandSegment[] }) {
+  return (
+    <For each={props.segments}>
+      {(segment) => (
+        <span style={{ fg: segment.fg, bg: segment.bg, attributes: segment.attributes }}>{segment.text}</span>
+      )}
+    </For>
+  )
+}
+
+async function shellHighlights(command: string, heredocs: boolean) {
+  const result = await highlightCached(command, "bash")
+  const narrowed = narrowBashHighlights(result.highlights ?? [], command)
+  if (!heredocs) return narrowed
+  const merged = await highlightHeredocs(narrowed, command, (body, filetype) =>
+    highlightCached(body, filetype).then((answer) =>
+      filetype === "bash" ? { highlights: narrowBashHighlights(answer.highlights ?? [], body) } : answer,
+    ),
+  )
+  return merged ?? narrowed
 }
 
 function Write(props: ToolProps) {
