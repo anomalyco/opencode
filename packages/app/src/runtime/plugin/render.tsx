@@ -7,6 +7,7 @@ import { Style, type MountedSession } from "@opencode/plugin/gui"
 import { BuiltinSlot, type BuiltinSlotMap } from "@opencode/plugin/gui/builtin"
 import { PluginContext } from "@opencode/plugin/gui/host"
 import { usePluginHost } from "./host"
+import { createLinkCheck } from "./link-check"
 
 /**
  * Renders one plugin contribution with its context and error isolation: a contribution that throws records the
@@ -76,16 +77,21 @@ export function PluginStyles() {
  * Routes local markdown links in the session to plugin LinkHandler contributions, keeping image loading. A turn's
  * sources chip opens its turn through the Sources plugin's handler.
  */
-export function PluginLinks(props: ParentProps<{ session: MountedSession }>) {
+export function PluginLinks(props: ParentProps<{ session: MountedSession; active?: boolean }>) {
   const host = usePluginHost()
   const markdown = useMarkdown()
+
+  // Checks untracked: markdown calls this inside its render effect, which must not follow the routed session.
+  const localFileExists = createLinkCheck(
+    () => props.active !== false,
+    (href) => host.links.exists({ href, session: props.session }),
+  )
 
   return (
     <MarkdownProvider
       readImage={markdown?.readImage}
       openLocalFile={(href) => void host.links.open({ href, session: props.session })}
-      // Untracked: markdown calls this inside its render effect, which must not follow the routed session.
-      localFileExists={(href) => untrack(() => host.links.exists({ href, session: props.session }))}
+      localFileExists={localFileExists}
     >
       <SourcesProvider
         enabled={sourcesExperiment.enabled}

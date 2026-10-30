@@ -1,10 +1,14 @@
 import { Effect, Schema } from "effect"
+import { fromJson } from "./data.js"
 import type { Extension } from "./extension.js"
 import { executeProgram } from "./interpreter/execute.js"
 import { extensionGlobals } from "./interpreter/extensions.js"
 import { globalNames } from "./interpreter/globals.js"
+import { scanTools } from "./scan.js"
 import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
+
+export { scanTools }
 
 /** A tool call admitted during an execution. */
 export type {
@@ -41,21 +45,31 @@ export type ResolvedExecutionLimits = {
 }
 
 /** Configuration shared by `CodeMode.make` and `CodeMode.execute`. */
-export type Options<Provided extends Record<string, unknown> = {}> = {
+export type Options<Provided extends Record<string, unknown> = {}, Extensions extends ReadonlyArray<Extension> = []> = {
   /** Explicit tools exposed to the program as `tools`. */
   tools?: Provided & Tools<Services<Provided>>
   /** Hooks around every tool and extension call the program makes; see `Hooks`. */
-  hooks?: ToolRuntime.Hooks<Services<Provided>>
+  hooks?: ToolRuntime.Hooks<Environment<Provided, Extensions>>
   /** Host functions exposed as globals; see `Extension.make`. */
-  extensions?: ReadonlyArray<Extension>
+  extensions?: Extensions
   /** Resource limits enforced on each execution. */
   limits?: ExecutionLimits
 }
 
+/** The Effect environment an execution needs: what the tools and the extensions' Effect globals require. */
+export type Environment<Provided extends Record<string, unknown>, Extensions extends ReadonlyArray<Extension>> =
+  | Services<Provided>
+  | Extension.Services<Extensions[number]>
+
 /** Options for one CodeMode execution. */
-export type ExecuteOptions<Provided extends Record<string, unknown> = {}> = Options<Provided> & {
+export type ExecuteOptions<
+  Provided extends Record<string, unknown> = {},
+  Extensions extends ReadonlyArray<Extension> = [],
+> = Options<Provided, Extensions> & {
   /** Source for one program in the supported JavaScript subset. */
   code: string
+  /** Read-only JSON values bound in the program's outer global scope (shadowable by top-level declarations). */
+  bindings?: Readonly<Record<string, DataValue>>
 }
 
 /** A JSON value that can cross the confined interpreter boundary. */
@@ -120,7 +134,7 @@ export type Result = typeof Result.Type
 /** Reusable confined runtime over explicit tools. */
 export type Runtime<R = never> = {
   readonly catalog: ReadonlyArray<ToolDescription>
-  readonly execute: (code: string) => Effect.Effect<Result, never, R>
+  readonly execute: (code: string, bindings?: Readonly<Record<string, DataValue>>) => Effect.Effect<Result, never, R>
 }
 
 const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, minimum: number): number | undefined => {
@@ -137,15 +151,23 @@ const resolveExecutionLimits = (limits?: ExecutionLimits): ResolvedExecutionLimi
 })
 
 /** Executes one Effect-native CodeMode program without constructing a reusable runtime. */
-export const execute = <const Provided extends Record<string, unknown>>(
-  options: ExecuteOptions<Provided>,
-): Effect.Effect<Result, never, Services<Provided>> => make(options).execute(options.code)
+export const execute = <
+  const Provided extends Record<string, unknown>,
+  const Extensions extends ReadonlyArray<Extension> = [],
+>(
+  options: ExecuteOptions<Provided, Extensions>,
+): Effect.Effect<Result, never, Environment<Provided, Extensions>> => make(options).execute(options.code, options.bindings)
 
-/** Creates an Effect-native runtime over explicit, schema-described tools. */
-export const make = <const Provided extends Record<string, unknown> = {}>(
-  options: Options<Provided> = {},
-): Runtime<Services<Provided>> => {
-  const prepared = ToolRuntime.prepare((options.tools ?? {}) as Tools<Services<Provided>>)
+/** Creates an Effect-native runtime over explicit, schema-described tools and extensions. */
+export const make = <
+  const Provided extends Record<string, unknown> = {},
+  const Extensions extends ReadonlyArray<Extension> = [],
+>(
+  options: Options<Provided, Extensions> = {},
+): Runtime<Environment<Provided, Extensions>> => {
+  const prepared = ToolRuntime.prepare<Environment<Provided, Extensions>>(
+    (options.tools ?? {}) as Tools<Services<Provided>>,
+  )
   const limits = resolveExecutionLimits(options.limits)
   const extensions = options.extensions ?? []
   const bound = new Set(globalNames)
@@ -159,7 +181,10 @@ export const make = <const Provided extends Record<string, unknown> = {}>(
     get catalog() {
       return prepared.catalog
     },
-    execute: (code) =>
-      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => extensionGlobals(ctx, extensions)),
+    execute: (code, bindings) =>
+      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => [
+        ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
+        ...extensionGlobals(ctx, extensions),
+      ]),
   }
 }

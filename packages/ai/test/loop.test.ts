@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { LanguageModel, LLM, LLMEvent, Tool, ToolFailure } from "../src/effect.js"
+import { ai, LanguageModel, type LLM, LLMEvent, tool, ToolFailure } from "../src/effect.js"
+import { AI } from "../src/index.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { TestLLM } from "../src/testing.js"
 import { testEffect } from "./lib/effect.js"
@@ -8,7 +9,7 @@ import { testEffect } from "./lib/effect.js"
 const model = LanguageModel.make({ id: "fictional-model", provider: "fixture", route: OpenAIChat.route })
 const it = testEffect(TestLLM.testLayer())
 
-const read_file = Tool.make({
+const read_file = tool({
   description: "Read a file.",
   parameters: Schema.Struct({ path: Schema.String }),
   success: Schema.String,
@@ -17,12 +18,12 @@ const read_file = Tool.make({
 })
 
 const collect = (until?: LLM.LoopInput["until"]) =>
-  LLM.loop({ model, prompt: "Read the file.", tools: { read_file }, until }).pipe(
+  ai.loop({ model, prompt: "Read the file.", tools: { read_file }, until }).pipe(
     Stream.runCollect,
     Effect.map((events) => Array.from(events)),
   )
 
-describe("LLM.loop", () => {
+describe("ai.loop", () => {
   it.effect("runs tool calls and sends the full assistant turn back to the model", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
@@ -61,7 +62,7 @@ describe("LLM.loop", () => {
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
       yield* client.push(
-        TestLLM.tool("call-1", "read_file", { path: "missing.txt" }),
+        TestLLM.toolCall("call-1", "read_file", { path: "missing.txt" }),
         TestLLM.text("That file does not exist.", "text-1"),
       )
 
@@ -78,10 +79,39 @@ describe("LLM.loop", () => {
     }),
   )
 
+  it.effect("runs Promise tools, validating success and projecting toModelOutput", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.toolCalls(
+          LLMEvent.toolCall({ id: "call-1", name: "add", input: { a: 2, b: 3 } }),
+          LLMEvent.toolCall({ id: "call-2", name: "add", input: { a: -1, b: 0 } }),
+        ),
+        TestLLM.text("Done.", "text-1"),
+      )
+      const add = AI.tool({
+        description: "Add two numbers.",
+        parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
+        success: Schema.Number,
+        execute: async ({ a, b }) => (a < 0 ? "negative" : a + b) as number,
+        toModelOutput: ({ output }) => [{ type: "text", text: `sum=${output}` }],
+      })
+
+      const events = yield* ai.loop({ model, prompt: "Add.", tools: { add } }).pipe(Stream.runCollect)
+
+      expect(Array.from(events).filter(LLMEvent.is.toolResult)).toEqual([
+        expect.objectContaining({ id: "call-1", result: { type: "text", value: "sum=5" } }),
+        expect.objectContaining({
+          result: { type: "error", value: expect.stringContaining("invalid value for its success schema") },
+        }),
+      ])
+    }),
+  )
+
   it.effect("stops when until returns true without running that step's tools", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
-      yield* client.always(TestLLM.tool("call-1", "read_file", { path: "a.txt" }))
+      yield* client.always(TestLLM.toolCall("call-1", "read_file", { path: "a.txt" }))
       const seen: number[] = []
 
       const events = yield* collect(({ steps }) => {

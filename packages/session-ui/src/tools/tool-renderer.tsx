@@ -107,7 +107,8 @@ function ShellSubmessage(props: { text: string; animate?: boolean }) {
 }
 
 // Tool input and metadata are open records shared by every tool. Each field decodes on its own,
-// so a malformed value drops only that field.
+// so a malformed value drops only that field. Plugin tools are untyped at runtime, so a record that
+// is not an object reads as empty instead of failing the render.
 function optional<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
   const field = Schema.optional(schema)
 
@@ -133,7 +134,7 @@ const toolInput = Schema.decodeUnknownSync(
     id: optional(Schema.String),
     name: optional(Schema.String),
     questions: optional(Schema.Array(Schema.Unknown)),
-  }),
+  }).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some({})))),
 )
 
 const toolMetadata = Schema.decodeUnknownSync(
@@ -151,7 +152,7 @@ const toolMetadata = Schema.decodeUnknownSync(
     loaded: optional(Schema.Array(Schema.Unknown)),
     answers: optional(Schema.Array(Schema.Unknown)),
     diagnostics: optional(Schema.Record(Schema.String, Schema.Array(Schema.Unknown))),
-  }),
+  }).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some({})))),
 )
 
 type ToolInput = ReturnType<typeof toolInput>
@@ -2011,6 +2012,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
   const fileComponent = useFileComponent()
   const lineCount = (text: string) => text.split("\n").length
   const lines = (text: string) => i18n.plural("ui.tool.execute.lines", lineCount(text))
+
   // Code and output share one number gutter, sized to the longer block, so their content starts on the same column.
   const numberDigits = () =>
     String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(props.output) : 0)).length
@@ -2225,7 +2227,7 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
               {([key, value]) => (
                 <div data-slot="execute-tool-call-input-entry">
                   <dt>{key}:</dt>
-                  <dd>{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</dd>
+                  <dd>{Option.getOrElse(decodeString(value), () => JSON.stringify(value, null, 2))}</dd>
                 </div>
               )}
             </For>

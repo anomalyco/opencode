@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, Message, ToolDefinition, Media } from "../../src/effect.js"
+import { ai, LLMEvent, LLMRequest, Media, Message, ToolDefinition } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -25,7 +25,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
         { tags: ["thinking", "usage"] },
         () =>
           Effect.gen(function* () {
-            const request = LLM.request({
+            const request = ai.request({
               model: alibaba[api]("qwen3.7-plus"),
               providerOptions:
                 api === "messages"
@@ -59,7 +59,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
             Bun.file(new URL("../fixtures/media/restroom.png", import.meta.url)).bytes(),
           )
           const response = yield* LLMClient.generate(
-            LLM.request({
+            ai.request({
               model: alibaba[api]("qwen3.8-flash"),
               providerOptions: api === "messages" ? { thinking: { type: "disabled" } } : { enableThinking: false },
               messages: [
@@ -82,7 +82,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
       () =>
         Effect.gen(function* () {
           const response = yield* LLMClient.generate(
-            LLM.request({
+            ai.request({
               model: alibaba[api]("qwen3.8-max"),
               prompt: "Find the current weather in Paris.",
               providerOptions: api === "messages" ? { thinking: { type: "disabled" } } : { reasoningEffort: "none" },
@@ -116,7 +116,7 @@ record("chat").effect.with(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: alibaba.chat("qwen3.8-max"),
           prompt: 'Return a JSON object with one key "city" set to the capital city of France.',
           providerOptions: { reasoningEffort: "none", responseFormat: { type: "json_object" } },
@@ -135,7 +135,7 @@ record("messages").effect.with(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: alibaba.messages("qwen3.8-max"),
           prompt: 'Return a JSON object with one key "city" set to the capital city of France.',
           providerOptions: {
@@ -168,7 +168,7 @@ responses.effect.with(
   () =>
     Effect.gen(function* () {
       const first = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: alibaba.responses("qwen3.8-max"),
           prompt: "Remember the password word apricot. Reply OK.",
           providerOptions: { store: true, reasoningEffort: "none" },
@@ -179,7 +179,7 @@ responses.effect.with(
       expect(id).toBeString()
       if (typeof id !== "string") throw new Error("Missing Alibaba response ID")
       const second = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: alibaba.responses("qwen3.8-max"),
           prompt: "What word did I ask you to remember? Reply with only the word.",
           providerOptions: { previousResponseId: id, store: true, reasoningEffort: "none" },
@@ -197,7 +197,7 @@ responses.effect.with(
   { tags: ["hosted-tool", "web-search", "web-extractor"] },
   () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.request({
         model: alibaba.responses("qwen3.8-max"),
         prompt:
           "Use web search to find Alibaba Cloud Model Studio's official documentation, then use web_extractor to read the page. Give a brief summary with the source URL.",
@@ -235,7 +235,7 @@ responses.effect.with(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: alibaba.responses("qwen3.8-max"),
           prompt:
             "Use the code interpreter to compute the SHA-256 hash of the UTF-8 string hello (no newline). Reply with only the hash.",

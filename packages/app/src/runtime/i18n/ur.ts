@@ -757,6 +757,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "ڈیٹا کی منتقلی \u2068{{current}}\u2069/\u2068{{total}}\u2069",
   "home.workspaceTip": "تبدیلیوں کو الگ تھلگ رکھنے کے لیے اگلا سیشن ایک نئی ورک اسپیس میں شروع کریں۔",
   "session.tab.add": "ٹیب شامل کریں۔",
+  "session.tab.closeOthers": "دیگر ٹیبز بند کریں",
   "session.queue.attachments.one": "پلس \u2068{{count}}\u2069 منسلکہ",
   "session.queue.attachments.other": "پلس \u2068{{count}}\u2069 منسلکات",
   "settings.backToSettings": "ترتیبات پر واپس جائیں۔",

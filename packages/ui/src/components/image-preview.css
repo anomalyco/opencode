@@ -182,8 +182,9 @@
 }
 
 /* A modal Kobalte dialog turns the body's pointer events off and only restores them when its content unmounts, which
-   the closing flight above holds back; the page takes clicks again as soon as the close starts. */
-body:has([data-component="image-preview"] [data-slot="image-preview-content"][data-closed]) {
+   the closing flight above holds back; the page takes clicks again as soon as the close starts. The preview marks the
+   body itself: a body:has() rule made Chromium restyle the body on every DOM insertion anywhere in the page. */
+body[data-image-preview-closing] {
   pointer-events: auto !important;
 }
 

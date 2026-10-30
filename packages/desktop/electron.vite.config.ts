@@ -60,20 +60,11 @@ export default defineConfig(async ({ command }) => {
         minify: command === "build",
         rolldownOptions: {
           input: { index: "src/main/index.ts" },
-          // Keep this identical to electron-vite's Node 20.11+ shim. Its regex insertion can
-          // corrupt bundled TypeScript, while an output banner places the shim safely.
           output: {
             format: "es",
             // DesktopPaths resolves resources from the main output directory,
             // including when the lazy desktop entry shares it with other chunks.
             chunkFileNames: "[name]-[hash].js",
-            banner: `
-// -- CommonJS Shims --
-import __cjs_mod__ from 'node:module';
-const __filename = import.meta.filename;
-const __dirname = import.meta.dirname;
-const require = __cjs_mod__.createRequire(import.meta.url);
-`,
           },
         },
         externalizeDeps: {
@@ -90,6 +81,17 @@ const require = __cjs_mod__.createRequire(import.meta.url);
             if (s === "@lydell/node-pty") return nodePtyPkg
 
             return undefined
+          },
+        },
+        {
+          // Rolldown emits its own scoped createRequire runtime for CommonJS dependencies.
+          // electron-vite's post-bundle regex shim injects a top-level `const require` that collides
+          // with bundled ESM modules declaring their own `require` (such as @effect/platform-node).
+          name: "opencode:disable-esm-shim",
+          configResolved(config) {
+            const shim = config.plugins.find((plugin) => plugin.name === "vite:esm-shim")
+
+            if (shim) delete shim.renderChunk
           },
         },
       ],
