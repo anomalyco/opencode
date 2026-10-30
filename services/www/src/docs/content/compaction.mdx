@@ -97,9 +97,10 @@ Add `compaction` to any [OpenCode configuration file](/config):
 | 128k | ~102k |
 | 1M | 800k |
 
-- Accepts `"0%"` to `"100%"`, including decimals such as `"12.5%"`. `"0%"` keeps no room free and compacts only at the limit.
+- It is the room kept free, not the point where compaction starts: `"20%"` compacts at 80% full.
+- Accepts `"1%"` to `"99%"`, including decimals such as `"12.5%"`.
 - A token count such as `20000` also works. The same count is a large share of a small window and a small share of a large one.
-- A buffer that leaves the model no room, such as `"100%"` or a token count at least as large as the window, is ignored and the default applies.
+- A token count at least as large as the model's window is ignored and the default applies.
 
 ## Model
 

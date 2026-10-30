@@ -16889,7 +16889,7 @@
       },
       "Config.Compaction.Percent": {
         "type": "string",
-        "pattern": "^(100(\\.0+)?|\\d{1,2}(\\.\\d+)?)%$"
+        "pattern": "^([1-9]\\d?(\\.\\d+)?)%$"
       },
       "Config.DirectoryEncoded": {
         "type": "object",

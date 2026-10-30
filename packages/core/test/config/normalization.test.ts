@@ -522,9 +522,11 @@ describe("ConfigNormalize", () => {
     ])
 
     expect(normalized({ compaction: { buffer: "12.5%" } }).encoded.compaction).toEqual({ buffer: "12.5%" })
-    const over = normalized({ compaction: { buffer: "150%" } })
-    expect(over.encoded.compaction).toBeUndefined()
-    expect(over.diagnostics.map((item) => [item.kind, item.path])).toEqual([["invalid", ["compaction", "buffer"]]])
+    for (const buffer of ["0%", "100%", "150%"]) {
+      const result = normalized({ compaction: { buffer } })
+      expect(result.encoded.compaction).toBeUndefined()
+      expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([["invalid", ["compaction", "buffer"]]])
+    }
   })
 
   test("distinguishes empty, mixed, and wholly malformed enabled provider lists", () => {
