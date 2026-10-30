@@ -534,4 +534,53 @@ describe("Job", () => {
       yield* jobs.completeBackground(notificationID)
     }),
   )
+
+  it.live("delivers notices via registerNotifier, reads live output, and honors stop and silent cancel", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const sessionID = SessionSchema.ID.make("ses_notifier_owner")
+      const delivered = yield* Deferred.make<{ sessionID: SessionSchema.ID; notice: Job.Notice }>()
+      const stopped = yield* Deferred.make<void>()
+      const finish = yield* Deferred.make<Job.RunOutput<{ exit: number }>>()
+      yield* jobs.registerNotifier((target, notice) => Deferred.succeed(delivered, { sessionID: target, notice }).pipe(Effect.asVoid))
+
+      yield* jobs.start({
+        id: "sh_notify_1",
+        sessionID,
+        type: "shell",
+        title: "bun test",
+        recovery: { kind: "shell", sessionID, shellID: "sh_notify_1", command: "bun test" },
+        output: Effect.succeed("running suite..."),
+        run: Deferred.await(finish),
+      })
+      yield* jobs.background("sh_notify_1")
+      expect((yield* jobs.read("sh_notify_1"))?.output).toBe("running suite...")
+      expect(yield* jobs.list({ sessionID, running: true })).toMatchObject([{ id: "sh_notify_1", output: "running suite..." }])
+      expect(yield* jobs.wait({ id: "sh_notify_1", timeout: 0 })).toMatchObject({
+        timedOut: true,
+        info: { id: "sh_notify_1", output: "running suite..." },
+      })
+
+      yield* Deferred.succeed(finish, { output: "12 passed", value: { exit: 0 } })
+      const first = yield* Deferred.await(delivered).pipe(Effect.timeout("1 second"))
+      expect(first.sessionID).toBe(sessionID)
+      expect(first.notice.text).toContain("12 passed")
+      yield* jobs.pendingBackground.pipe(Effect.repeat({ until: (items) => items.length === 0 }))
+
+      yield* jobs.start({
+        id: "sh_silent_cancel",
+        sessionID,
+        type: "shell",
+        recovery: { kind: "shell", sessionID, shellID: "sh_silent_cancel", command: "sleep 30" },
+        output: Effect.succeed("partial before stop"),
+        stop: Deferred.succeed(stopped, undefined).pipe(Effect.asVoid),
+        run: Effect.never,
+      })
+      yield* jobs.background("sh_silent_cancel")
+      const cancelled = yield* jobs.cancel("sh_silent_cancel", { notify: false })
+      expect(cancelled).toMatchObject({ id: "sh_silent_cancel", status: "cancelled", output: "partial before stop" })
+      yield* Deferred.await(stopped).pipe(Effect.timeout("1 second"))
+      expect(yield* jobs.pendingBackground).toEqual([])
+    }),
+  )
 })
