@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
 import { FileMutation } from "@opencode/core/file-mutation"
 import { Formatter } from "@opencode/core/formatter"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -25,7 +25,7 @@ import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "
 const writeToolNode = makeLocationNode({
   name: "test/write-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(WriteTool.Plugin)),
-  deps: [Tool.node, FileAccess.node, FileMutation.node, Environment.node, Formatter.node, Permission.node],
+  deps: [Tool.node, FileAccess.node, FileMutation.node, Environment.node, Formatter.node, Location.node, Permission.node],
 })
 
 const sessionID = Session.ID.make("ses_write_tool_test")
@@ -141,6 +141,38 @@ describe("WriteTool", () => {
             path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "new.txt"),
           ])
         }),
+      )
+    }),
+  )
+
+  it.live("waits for a transaction lock held for the same file", () =>
+    withTempDir((tmp) => {
+      const fixture = makeWriteFixture()
+      const file = path.join(tmp.path, "locked.txt")
+      return Effect.promise(() => fs.writeFile(file, "old" + String.fromCharCode(10))).pipe(
+        Effect.andThen(
+          withTool(tmp.path, fixture, (registry) =>
+            Effect.gen(function* () {
+              const files = yield* FileMutation.Service
+              const target = yield* Effect.promise(() => fs.realpath(file))
+              const started = yield* Deferred.make<void>()
+              const release = yield* Deferred.make<void>()
+              const holder = yield* files
+                .withLock([target])(Deferred.succeed(started, void 0).pipe(Effect.andThen(Deferred.await(release))))
+                .pipe(Effect.forkChild)
+              yield* Deferred.await(started)
+              const write = yield* executeTool(registry, call({ path: "locked.txt", content: "other" })).pipe(
+                Effect.forkChild,
+              )
+              const early = yield* Fiber.join(write).pipe(Effect.timeoutOption("50 millis"))
+              expect(early._tag).toBe("None")
+              yield* Deferred.succeed(release, void 0)
+              yield* Fiber.join(holder)
+              yield* Fiber.join(write)
+              expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("other")
+            }),
+          ),
+        ),
       )
     }),
   )
