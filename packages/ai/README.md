@@ -55,16 +55,16 @@ Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployme
 `stream` runs one model call; `loop` runs the model's tool calls and calls the model again until it stops calling
 tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs. `until` is checked
 after each step that has tool calls, with every step's `LLMResponse`; returning `true` ends the loop without running
-them. `AI.tool` takes a plain `async` execute; a throw or rejection goes back to the model as an error result, and
+them. `tool` takes a plain `async` execute; a throw or rejection goes back to the model as an error result, and
 `signal` aborts when the loop is interrupted.
-`Tool.make` from `@opencode/ai/effect` is the Effect form, with a validated `success` schema:
+`tool` from `@opencode/ai/effect` takes the same options (including an optional `success` schema) with an Effect execute:
 
 ```ts
 import { readFile } from "node:fs/promises"
 import { Schema } from "effect"
-import { AI } from "@opencode/ai"
+import { tool } from "@opencode/ai"
 
-const read_file = AI.tool({
+const read_file = tool({
   description: "Read a UTF-8 file.",
   parameters: Schema.Struct({ path: Schema.String }),
   execute: ({ path }, { signal }) => readFile(path, { encoding: "utf8", signal }),
@@ -87,7 +87,7 @@ A tool with exactly one required string parameter can set `freeform`, so the mod
 instead of JSON arguments: unconstrained `text`, or text matching a `regex` or `lark` grammar.
 
 ```ts
-const run_code = AI.tool({
+const run_code = tool({
   description: "Run JavaScript",
   parameters: Schema.Struct({ code: Schema.String }),
   freeform: { type: "lark", grammar: JS_GRAMMAR },
@@ -1158,7 +1158,7 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
 - **`LLM.generate` / `LLM.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
-- **`LLM.loop`** — stream model calls, running `Tool.make(...)` tools between them until the model stops calling tools.
+- **`LLM.loop`** — stream model calls, running `tool(...)` tools between them until the model stops calling tools.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.

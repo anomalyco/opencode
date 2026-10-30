@@ -21,7 +21,7 @@ import * as Venice from "../../src/providers/venice.js"
 import * as VercelAIGateway from "../../src/providers/vercel-ai-gateway.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
-import { Tool } from "../../src/tool.js"
+import { tool } from "../../src/tool.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
@@ -30,7 +30,7 @@ const GRAMMAR = 'start: "ZZ" /[0-9]{3}/'
 
 const tools = (freeform?: Freeform) =>
   toDefinitions({
-    run: Tool.make({
+    run: tool({
       description: "Run code",
       parameters: Schema.Struct({ code: Schema.String }),
       success: Schema.String,
@@ -303,7 +303,7 @@ describe("freeform tools", () => {
   it.effect("rejects freeform tools without exactly one required string parameter", () =>
     Effect.sync(() => {
       const make = (parameters: Schema.Struct<Schema.Struct.Fields>) =>
-        Tool.make({
+        tool({
           description: "Run code",
           jsonSchema: Schema.toJsonSchemaDocument(parameters).schema,
           freeform: { type: "text" },
