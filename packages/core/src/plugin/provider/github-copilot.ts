@@ -1,7 +1,8 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
 import { isRecord } from "@opencode/util/record"
-import { Effect, Option, Schema, Semaphore, Stream } from "effect"
+import { Hash } from "@opencode/util/hash"
+import { Effect, Equal, Option, Schema, Semaphore, Stream } from "effect"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
 import { Bus } from "../../bus.js"
@@ -13,6 +14,7 @@ import { Agent } from "../../agent.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
+import { SharedCache } from "../../shared-cache.js"
 import type { PluginInternal } from "../internal.js"
 
 const clientID = "Ov23li8tweQw6odWQebz"
@@ -20,6 +22,7 @@ const apiVersion = "2026-08-01"
 const userApiVersion = "2025-04-01"
 const pollingSafetyMargin = 3000
 const methodID = Integration.MethodID.make("device")
+const interval = "10 minutes"
 
 const Device = Schema.Struct({
   verification_uri: Schema.String,
@@ -162,6 +165,7 @@ export const GithubCopilotPlugin = define({
   effect: Effect.fn(function* (ctx) {
     const providers = yield* Provider.Service
     const bus = yield* Bus.Service
+    const cache = yield* SharedCache.Service
     const loading = Semaphore.makeUnsafe(1)
     const loaded: {
       baseURL?: string
@@ -175,39 +179,58 @@ export const GithubCopilotPlugin = define({
       const credential = connection
         ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
-      if (credential?.type !== "oauth") {
+      if (!connection || credential?.type !== "oauth") {
+        const changed = loaded.connection !== undefined || loaded.models !== undefined
         loaded.baseURL = undefined
         loaded.token = undefined
         loaded.models = undefined
         loaded.connection = undefined
-        return
+        return changed
       }
 
       const url = copilotBaseURL(credential.metadata) ?? baseURL()
-      const provider = yield* providers.get(Provider.ID.githubCopilot)
-      const remote = yield* Effect.tryPromise({
-        try: () =>
-          CopilotModels.load(url, {
-            ...provider?.headers,
-            Authorization: `Bearer ${credential.refresh}`,
-            "User-Agent": App.useragent(ctx.app),
-            "X-GitHub-Api-Version": apiVersion,
-          }),
-        catch: (cause) => cause,
-      }).pipe(
-        Effect.catch((cause) =>
-          Effect.logWarning("failed to sync GitHub Copilot models", { cause }).pipe(Effect.as(undefined)),
-        ),
-      )
+      const headers = (yield* providers.get(Provider.ID.githubCopilot))?.headers
+      const remote = yield* cache
+        .get({
+          key: `github-copilot:${IntegrationConnection.key(connection)}:${url}:${Hash.fast(JSON.stringify(Object.entries(headers ?? {}).toSorted()))}`,
+          maxAge: interval,
+          load: ctx.integration.connection.resolve(connection).pipe(
+            Effect.flatMap((current) =>
+              current?.type === "oauth"
+                ? Effect.tryPromise({
+                    try: () =>
+                      CopilotModels.load(url, {
+                        ...headers,
+                        Authorization: `Bearer ${current.refresh}`,
+                        "User-Agent": App.useragent(ctx.app),
+                        "X-GitHub-Api-Version": apiVersion,
+                      }),
+                    catch: (cause) => cause,
+                  })
+                : Effect.fail(new Error("GitHub Copilot connection has no OAuth credential")),
+            ),
+          ),
+        })
+        .pipe(
+          Effect.catch((cause) =>
+            Effect.logWarning("failed to sync GitHub Copilot models", { cause }).pipe(Effect.as(undefined)),
+          ),
+        )
       if (
         IntegrationConnection.key(connection) !==
         IntegrationConnection.key(yield* ctx.integration.connection.active("github-copilot"))
       )
-        return
+        return false
+      const changed =
+        IntegrationConnection.key(connection) !== IntegrationConnection.key(loaded.connection) ||
+        url !== loaded.baseURL ||
+        credential.refresh !== loaded.token ||
+        !Equal.equals(remote, loaded.models)
       loaded.baseURL = url
       loaded.token = credential.refresh
       loaded.models = remote
       loaded.connection = connection
+      return changed
     })
 
     yield* ctx.integration.transform((editor) => {
@@ -255,13 +278,15 @@ export const GithubCopilotPlugin = define({
         })
       }
     })
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
+    const refresh = () =>
+      loading.withPermit(load().pipe(Effect.flatMap((changed) => (changed ? ctx.provider.reload() : Effect.void))))
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("github-copilot")),
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* refresh().pipe(Effect.forkScoped)
+    yield* Effect.sleep(interval).pipe(Effect.andThen(refresh()), Effect.forever, Effect.forkScoped)
     yield* ctx.aisdk.hook(
       "sdk",
       Effect.fn(function* (evt) {
@@ -300,7 +325,9 @@ export const GithubCopilotPlugin = define({
         Effect.gen(function* () {
           if (evt.model.providerID !== Provider.ID.githubCopilot) return
           if (!loaded.baseURL || !loaded.token || !loaded.models) return
-          const agent = yield* ctx.agent.get({ agentID: Agent.ID.make("title") }).pipe(Effect.orElseSucceed(() => undefined))
+          const agent = yield* ctx.agent
+            .get({ agentID: Agent.ID.make("title") })
+            .pipe(Effect.orElseSucceed(() => undefined))
           if (agent?.data.model) return
           const model = utilityTitleModels.find((id) => loaded.models?.has(id))
           if (!model) return

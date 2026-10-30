@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schedule } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { TestClock } from "effect/testing"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
@@ -117,7 +118,25 @@ describe("DigitalOceanPlugin", () => {
         name: "Configured router",
         limit: { context: 256_000 },
       })
+    }),
+  )
 
+  it.effect("refreshes routers in the background with the latest access token", () =>
+    Effect.gen(function* () {
+      const fixture = yield* discovery
+      const credentials = yield* Credential.Service
+      const credential = yield* oauthCredential()
+      yield* fixture.install
+      yield* drain
+      expect(fixture.remote.requests).toHaveLength(1)
+
+      yield* credentials.update(credential.id, {
+        value: Credential.OAuth.make({ type: "oauth", methodID, access: "rotated-token", refresh: "", expires: 0 }),
+      })
+      yield* TestClock.adjust("10 minutes")
+      yield* drain
+      expect(fixture.remote.requests).toHaveLength(2)
+      expect(fixture.remote.requests[1]?.headers.authorization).toBe("Bearer rotated-token")
     }),
   )
 

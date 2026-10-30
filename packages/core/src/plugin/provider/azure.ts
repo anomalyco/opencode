@@ -11,6 +11,7 @@ import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
+import { SharedCache } from "../../shared-cache.js"
 import { which } from "../../util/which.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
@@ -19,6 +20,7 @@ const cognitiveScope = "https://cognitiveservices.azure.com/.default"
 const foundryScope = "https://ai.azure.com/.default"
 const managementScope = "https://management.azure.com/.default"
 const methodID = Integration.MethodID.make("azure-cli")
+const interval = "10 minutes"
 // A resource name becomes a hostname label and a query literal, so anything else never leaves the process. Azure
 // allows only letters, digits, and hyphens in it.
 // https://learn.microsoft.com/azure/ai-services/cognitive-services-custom-subdomains
@@ -67,6 +69,7 @@ export function make(
       const bus = yield* Bus.Service
       const credentials = yield* Credential.Service
       const providers = yield* Provider.Service
+      const cache = yield* SharedCache.Service
       const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
       const tokens = new Map<string, { access: string; expires: number }>()
       // A resource keeps its Azure Resource Manager ID until it is deleted, so discovery looks it up once.
@@ -305,13 +308,25 @@ export function make(
           (credential.type === "external" && credential.methodID !== methodID)
         )
           return
-        const found = yield* deployments(url, name, credential).pipe(
-          // Azure promises no order; normalize it so a reordered response does not rebuild the model list.
-          Effect.map((list) => list.toSorted((a, b) => a.name.localeCompare(b.name))),
-          Effect.catch((cause) =>
-            Effect.logWarning("failed to sync Azure deployments", { cause }).pipe(Effect.as(undefined)),
-          ),
-        )
+        const found = yield* cache
+          .get({
+            key: `azure:${IntegrationConnection.key(connection)}:${url}`,
+            maxAge: interval,
+            load: ctx.integration.connection.resolve(connection).pipe(
+              Effect.flatMap((current) =>
+                !current || current.type === "oauth" || (current.type === "external" && current.methodID !== methodID)
+                  ? Effect.fail(new Error("Azure connection has no usable credential"))
+                  : deployments(url, name, current),
+              ),
+              // Azure promises no order; normalize it so a reordered response does not rebuild the model list.
+              Effect.map((list) => list.toSorted((a, b) => a.name.localeCompare(b.name))),
+            ),
+          })
+          .pipe(
+            Effect.catch((cause) =>
+              Effect.logWarning("failed to sync Azure deployments", { cause }).pipe(Effect.as(undefined)),
+            ),
+          )
         if (!found) return
         if (
           loaded.connection !== connection ||
@@ -421,8 +436,12 @@ export function make(
         Effect.forkScoped({ startImmediately: true }),
       )
       // Deployments load in the background so startup never waits on Azure; the catalog serves until they arrive.
-      // Later changes load when the connection changes, so a new deployment needs a reconnect or restart.
       yield* refresh().pipe(Effect.forkScoped)
+      yield* Effect.sleep(interval).pipe(
+        Effect.andThen(FiberHandle.run(discovery, discover())),
+        Effect.forever,
+        Effect.forkScoped,
+      )
 
       // Entra bearer tokens are minted per request from the target URL's scope, so they are injected
       // at the transport hooks rather than stored as a credential.

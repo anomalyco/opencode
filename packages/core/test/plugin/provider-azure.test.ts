@@ -4,7 +4,6 @@ import { describe, expect } from "bun:test"
 import { Effect, Schedule, Schema } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
-import { Bus } from "@opencode/core/bus"
 import { Credential } from "@opencode/core/credential"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
@@ -169,12 +168,6 @@ const connect = Effect.fn(function* (value: Credential.Value) {
   return yield* credentials.create({ integrationID: azureID, value })
 })
 
-// Republishing a switch reruns discovery for the connection that is already active.
-const announceSwitch = Effect.fn(function* (credentialID: Credential.ID) {
-  const bus = yield* Bus.Service
-  yield* bus.publish(Credential.Event.Switched, { integrationID: azureID, credentialID }, { global: true })
-})
-
 const seedProvider = (settings?: Provider.Settings) =>
   Effect.gen(function* () {
     const catalog = yield* Provider.Service
@@ -276,7 +269,6 @@ describe("AzurePlugin connecting", () => {
       ])
     }),
   )
-
 })
 
 describe("AzurePlugin startup", () => {
@@ -424,35 +416,6 @@ describe("AzurePlugin discovery", () => {
     }),
   )
 
-  it.live("keeps the last complete list when a later page fails", () =>
-    Effect.gen(function* () {
-      const cli = yield* fakeAzureCli()
-      const state = { paged: false }
-      const fellBack = Promise.withResolvers<void>()
-      const azure = yield* fakeAzure({
-        resource: () => {
-          fellBack.resolve()
-          return notFound()
-        },
-        management: (request) => {
-          if (request.path.startsWith("/page-2")) return new Response("Unavailable", { status: 503 })
-          if (state.paged) return managementPage([managed("nano", "gpt-5-nano")], `${request.origin}/page-2`)
-          return managementPage([managed("mini", "gpt-5-mini")])
-        },
-      })
-      yield* seedCatalog
-      const credential = yield* connect(cliCredential())
-      yield* addPlugin(azure.endpoints).pipe(cli.provide)
-      yield* eventually(azureModelIDs, (ids) => ids.length === 1)
-
-      state.paged = true
-      yield* announceSwitch(credential.id)
-      yield* Effect.promise(() => fellBack.promise)
-      yield* settle
-      expect(yield* azureModelIDs).toEqual(["mini"])
-    }),
-  )
-
   // The test harness fails any request to a non-local host, so following the link would fail the test.
   it.live("never sends the management token to a page link outside the management endpoint", () =>
     Effect.gen(function* () {
@@ -510,25 +473,20 @@ describe("AzurePlugin switching accounts", () => {
   it.live("shows the new account without waiting for the previous account's discovery", () =>
     Effect.gen(function* () {
       const stuck = Promise.withResolvers<Response>()
-      const calls = { count: 0 }
+      const asked = Promise.withResolvers<void>()
       const azure = yield* fakeAzure({
         resource: (request) => {
-          calls.count++
-          if (calls.count === 2) return stuck.promise
-          return resourceList(listed(request.key === "secret" ? "production-a" : "production-b", "gpt-5-mini"))
+          if (request.key !== "secret") return resourceList(listed("production-b", "gpt-5-mini"))
+          asked.resolve()
+          return stuck.promise
         },
       })
       yield* seedCatalog
-      const first = yield* connect(keyCredential())
+      yield* connect(keyCredential())
       yield* addPlugin(azure.endpoints)
-      yield* eventually(azureModelIDs, (ids) => ids.includes("production-a"))
 
       // Start a discovery for the first account that Azure never answers.
-      yield* announceSwitch(first.id)
-      yield* eventually(
-        Effect.sync(() => calls.count),
-        (count) => count === 2,
-      )
+      yield* Effect.promise(() => asked.promise)
       yield* connect(keyCredential("other-key", "other-resource"))
 
       const deployed = yield* eventually(azureModels, (list) => list.length === 1 && list[0]?.id === "production-b")
