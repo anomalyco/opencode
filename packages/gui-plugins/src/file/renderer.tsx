@@ -650,7 +650,11 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
         return !signal.aborted && current?.key === sessionKey && ctx.screen.current() === screen ? current : undefined
       }
 
-      const openResolvedFile = (targetPath: string, selection?: LineRange): Promise<boolean> => {
+      const openResolvedFile = (
+        targetPath: string,
+        selection?: LineRange,
+        options?: { readonly silent?: boolean },
+      ): Promise<boolean> => {
         const routed = stillCurrent()
 
         if (!routed) return Promise.resolve(false)
@@ -667,7 +671,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
         // Confirm the file exists before a tab appears for it; a file deleted since its link rendered shows the load
         // error. Always reread: a cached copy can be stale.
         return files
-          .sync(targetPath, { force: true })
+          .sync(targetPath, { force: true, silent: options?.silent })
           .then(() => {
             const latest = stillCurrent()
 
@@ -703,10 +707,13 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
         // Absolute paths, links written relative to a document, and agent previews name one exact file.
         if (isAbsoluteLink(parsed.path) || link.base !== undefined || link.background) {
-          for (const candidate of candidates) {
+          for (const [index, candidate] of candidates.entries()) {
             const path = resolve(files, candidate.path, link.base)
 
-            if (path && (await openResolvedFile(path, candidate.selection))) return
+            // A failed attempt only shows its load error when no reading opens the file.
+            if (path && (await openResolvedFile(path, candidate.selection, { silent: index < candidates.length - 1 }))) {
+              return
+            }
           }
 
           return
