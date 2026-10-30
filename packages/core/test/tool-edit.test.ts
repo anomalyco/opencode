@@ -43,17 +43,20 @@ const makeEditFixture = () => {
     writes: string[]
     reads: number
     denyAction?: string
+    readAllowed: boolean
     afterRead: () => Effect.Effect<void>
     formatFile: (target: string) => Effect.Effect<boolean>
   } = {
     assertions: [],
     writes: [],
     reads: 0,
+    readAllowed: true,
     afterRead: () => Effect.void,
     formatFile: () => Effect.succeed(false),
   }
 
   const permission = permissionLayer({
+    allows: (input) => Effect.succeed(input.action === "read" && fixture.readAllowed),
     assert: (input) =>
       Effect.sync(() => fixture.assertions.push(input)).pipe(
         Effect.andThen(
@@ -430,7 +433,7 @@ describe("EditTool", () => {
     }),
   )
 
-  it.live("points a missed oldString at the closest lines, or at newString already applied", () =>
+  it.live("points a missed oldString at the closest lines, or at newString already applied, when read is allowed", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()
       const target = path.join(tmp.path, "miss.ts")
@@ -464,6 +467,18 @@ describe("EditTool", () => {
               },
             })
             expect(yield* miss("nothing like it", "anything")).toEqual({
+              status: "error",
+              error: { type: "tool.execution", message: missed },
+            })
+            expect(yield* miss("import { a } from './a'\n\n\n\n\n\n", "x")).toEqual({
+              status: "error",
+              error: {
+                type: "tool.execution",
+                message: `${missed}\n\nThe closest lines in the file:\n1: import { a } from './a'`,
+              },
+            })
+            edit.readAllowed = false
+            expect(yield* miss("export function run() {\n\tconst value = a()\n\treturn value + 2\n}", "x")).toEqual({
               status: "error",
               error: { type: "tool.execution", message: missed },
             })

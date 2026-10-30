@@ -193,7 +193,8 @@ const hintLineLength = 200
 /**
  * A short hint for an oldString miss, so the next attempt can succeed without rereading the file: newString is
  * already there (often an edit that already applied), or the lines closest to oldString, numbered like Read output.
- * Lines vote for where oldString starts when they match ignoring all whitespace; at least half must agree.
+ * Lines vote for where oldString starts when they match ignoring all whitespace; at least half must agree. Only the
+ * span from the first to the last line that matched is shown, so padding oldString cannot reveal the lines after it.
  */
 const missHint = (source: string, oldString: string, newString: string) => {
   const view = source.replaceAll(crlf, "\n")
@@ -221,8 +222,13 @@ const missHint = (source: string, oldString: string, newString: string) => {
   }).length
   const [start, count] = [...votes].reduce((best, vote) => (vote[1] > best[1] ? vote : best), [0, 0])
   if (count === 0 || count * 2 < wanted) return
-  const from = Math.max(0, start)
-  const to = Math.min(lines.length, start + search.length, from + hintLines)
+  const matched = search.flatMap((line, offset) => {
+    const value = key(line)
+    const index = start + offset
+    return value !== "" && index >= 0 && index < lines.length && key(lines[index]) === value ? [index] : []
+  })
+  const from = matched[0]
+  const to = Math.min(matched.at(-1)! + 1, from + hintLines)
   return [
     "The closest lines in the file:",
     ...lines
@@ -329,7 +335,16 @@ export const Plugin = {
                 source: permissionSource,
               })
               if (replacements === 0) {
-                const hint = missHint(source, input.oldString, input.newString)
+                // The hint shows file contents, so only when reading this file is already allowed.
+                const readable = yield* permission.allows({
+                  action: "read",
+                  resources: [target.resource],
+                  save: ["*"],
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source: permissionSource,
+                })
+                const hint = readable ? missHint(source, input.oldString, input.newString) : undefined
                 return yield* new ToolFailure({
                   message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.${hint ? `\n\n${hint}` : ""}`,
                 })
