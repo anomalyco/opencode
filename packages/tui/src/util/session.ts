@@ -1,5 +1,6 @@
-import type { ModelInfo, SessionMessageInfo } from "@opencode/client"
+import type { ModelInfo, SessionInfo, SessionMessageInfo } from "@opencode/client"
 import { lastAssistantWithUsage } from "@opencode/client/solid"
+import { Model } from "@opencode/schema/model"
 import { Locale } from "./locale"
 
 type SessionNode = {
@@ -63,4 +64,28 @@ export function contextUsage(
 export function formatContextUsage(tokens: number, percent?: number) {
   const value = Locale.number(tokens)
   return percent === undefined ? value : `${value} (${percent}%)`
+}
+
+export function costEstimate(
+  sessions: ReadonlyArray<SessionInfo>,
+  models: ReadonlyArray<ModelInfo> | undefined,
+  messages: (sessionID: string) => ReadonlyArray<SessionMessageInfo>,
+) {
+  return sessions.reduce((total, session) => {
+    const model = models?.find(
+      (candidate) =>
+        session.model && candidate.providerID === session.model.providerID && candidate.id === session.model.id,
+    )
+    if (!model) return total
+    const base = model.cost.filter((cost) => cost.tier === undefined)
+    const estimate = total + Model.calculateCost(base, session.tokens)
+    if (!model.cost.some((cost) => cost.tier !== undefined)) return estimate
+    // Only assistant messages retain individual call usage. Title, compaction, and unloaded usage stay at base rates.
+    return messages(session.id).reduce((sum, message) => {
+      if (message.type !== "assistant" || !message.tokens) return sum
+      // Forks copy parent timestamps and messages, but start with zero recorded usage.
+      if (session.fork && message.time.created <= session.time.created) return sum
+      return sum + Model.calculateCost(model.cost, message.tokens) - Model.calculateCost(base, message.tokens)
+    }, estimate)
+  }, 0)
 }
