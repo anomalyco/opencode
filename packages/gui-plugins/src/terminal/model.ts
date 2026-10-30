@@ -127,7 +127,11 @@ export function createTerminalModel(input: {
 
         if (supported) refreshServer(server)
       })
-      .catch((error) => console.error("Failed to read server terminal support", error))
+      .catch((error) => {
+        // Like the TUI: unknown support offers no terminals until the next connection checks again.
+        setState("capabilities", server.id, false)
+        console.error("Failed to read server terminal support", error)
+      })
 
   // A restarted server replaces its data under the same ref, so reads that track `server.data` subscribe again.
   const watch = (server: ServerRef) => {

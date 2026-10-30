@@ -74,6 +74,10 @@ export function TerminalTab(props: {
   }
 
   // Ending the edit unmounts the focused field, whose blur would save again, or save a cancelled title.
+  // The field renders inside the strip's tab trigger, so it keeps its keys, pointer and focus from the trigger: the
+  // tab list returns focus that enters it from outside to the trigger.
+  const isolate = (event: Event) => event.stopPropagation()
+
   const save = () => {
     if (!store.editing || !store.blurEnabled) return
 
@@ -141,8 +145,15 @@ export function TerminalTab(props: {
                 value={store.title}
                 onInput={(e) => setStore("title", e.currentTarget.value)}
                 onBlur={save}
-                onKeyDown={keydown}
-                onMouseDown={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  isolate(e)
+                  keydown(e)
+                }}
+                onKeyUp={isolate}
+                onFocusIn={isolate}
+                onPointerDown={isolate}
+                onMouseDown={isolate}
+                onClick={isolate}
                 class="bg-transparent border-none outline-none min-w-0 flex-1 p-0 text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-base [font-weight:440] [font-variation-settings:'slnt'_0] [font-variant-numeric:tabular-nums]"
               />
             </div>
