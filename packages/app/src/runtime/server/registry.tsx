@@ -133,6 +133,21 @@ export function canRemoveServer(input: {
   return input.stored.some((server) => server.http.url === input.key)
 }
 
+/**
+ * The servers Home lists. Home needs at least one, so when every server is flagged hidden (stored by an older
+ * build, or edited by hand) the built-in server, otherwise the first, is shown anyway.
+ */
+export function resolveVisibleServers(input: {
+  servers: Array<ServerConnection.Any>
+  hidden: StoredState["hidden"]
+}): Array<ServerConnection.Any> {
+  const visible = input.servers.filter((conn) => !input.hidden[ServerConnection.key(conn)])
+
+  if (visible.length > 0 || input.servers.length === 0) return visible
+
+  return [input.servers.find(ServerConnection.builtin) ?? input.servers[0]]
+}
+
 export namespace ServerConnection {
   type Base = { displayName?: string; label?: string }
 
@@ -229,7 +244,16 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       return resolveServerList({ stored: store.list, props: props.servers })
     })
 
-    const visibleServers = createMemo(() => allServers().filter((conn) => !store.hidden[ServerConnection.key(conn)]))
+    const visibleServers = createMemo(() => resolveVisibleServers({ servers: allServers(), hidden: store.hidden }))
+
+    // Clears the hidden flag of any server shown despite it, so the stored flags say what Home shows.
+    function unhideShown(servers: Array<ServerConnection.Any>) {
+      for (const conn of resolveVisibleServers({ servers, hidden: store.hidden })) {
+        const key = ServerConnection.key(conn)
+
+        if (store.hidden[key]) setStore("hidden", key, false)
+      }
+    }
 
     function add(input: ServerConnection.Http) {
       const url_ = normalizeServerUrl(input.http.url)
@@ -254,6 +278,18 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       const list = store.list.filter((x) => x.http.url !== key)
       batch(() => {
         setStore("list", list)
+        // Removing the only shown server must not leave the rest all hidden.
+        unhideShown(resolveServerList({ stored: list, props: props.servers }))
+      })
+    }
+
+    function setHidden(key: ServerConnection.Key, hidden: boolean) {
+      batch(() => {
+        // A server shown only because every one is hidden stays shown when another is toggled.
+        unhideShown(allServers())
+        setStore("hidden", key, hidden)
+        // Hiding the only shown server is a no-op.
+        unhideShown(allServers())
       })
     }
 
@@ -300,11 +336,9 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       // state wait on this, but the provider must not block first render on storage.
       hydrated,
       isHidden(key: ServerConnection.Key) {
-        return store.hidden[key] ?? false
+        return !!store.hidden[key] && !visibleServers().some((conn) => ServerConnection.key(conn) === key)
       },
-      setHidden(key: ServerConnection.Key, hidden: boolean) {
-        setStore("hidden", key, hidden)
-      },
+      setHidden,
       add,
       remove,
       canRemove,
