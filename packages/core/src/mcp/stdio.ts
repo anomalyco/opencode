@@ -19,10 +19,13 @@ const CLOSE_GRACE = Duration.seconds(2)
 const FORCE_KILL_AFTER = Duration.seconds(2)
 const OUTGOING_CAPACITY = 64
 const MAX_FRAME_BYTES = 16 * 1024 * 1024
-// The id of an oversized response, when a server writes it before the payload as SDKs do. Requiring
-// `result` or `error` next rules out server requests, whose ids are not ours.
-const LEADING_ID =
-  /^\s*\{\s*(?:"jsonrpc"\s*:\s*"2\.0"\s*,\s*)?"id"\s*:\s*(-?\d+|"(?:[^"\\]|\\.)*")\s*,\s*"(?:result|error)"/
+// An oversized line is answered with an error only when it is a response, read from its first and
+// last bytes: SDKs write the id either before the result or as the last key. Ids with escapes are
+// not recognised, which only means the connection closes instead.
+const RESPONSE_HEAD =
+  /^\s*\{\s*(?:"jsonrpc"\s*:\s*"2\.0"\s*,\s*)?(?:"id"\s*:\s*(-?\d+|"[^"\\\u0000-\u001f]*")\s*,\s*)?"(?:result|error)"/
+const TRAILING_ID = /,\s*"id"\s*:\s*(-?\d+|"[^"\\\u0000-\u001f]*")\s*\}\s*$/
+const EDGE_BYTES = 256
 // An unexpected exit is reported with its exit code and the end of stderr, which usually names the cause.
 const EXIT_WAIT = Duration.seconds(1)
 const STDERR_TAIL = 1_000
@@ -65,7 +68,9 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   let pending: Array<Uint8Array> = []
   let pendingBytes = 0
   // Set once a line passed MAX_FRAME_BYTES: its remaining bytes are dropped up to the next newline.
-  let discarding = false
+  // A response whose id comes last keeps its final bytes in `tail` until then.
+  let discarding: "line" | "response" | undefined
+  let tail: Uint8Array = new Uint8Array()
   const decoder = new TextDecoder()
   let stderr = ""
 
@@ -92,7 +97,8 @@ export const make = Effect.fnUntraced(function* (options: Options) {
           Effect.sync(() => {
             pending = []
             pendingBytes = 0
-            discarding = false
+            discarding = undefined
+            tail = new Uint8Array()
           }),
         ),
       ),
@@ -140,57 +146,63 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   const deliver = (chunk: Uint8Array) => {
     let start = 0
     let newline = chunk.indexOf(10)
-    while (newline !== -1) {
-      const size = pendingBytes + newline - start
-      if (discarding) discarding = false
-      else if (size > MAX_FRAME_BYTES) oversized(chunk.subarray(start, newline))
-      else {
-        const tail = chunk.subarray(start, newline)
-        const line = pending.length === 0 ? tail : Buffer.concat([...pending, tail], size)
-        receive(line.at(-1) === 13 ? line.subarray(0, -1) : line)
-      }
+    while (newline !== -1 && state.phase !== "closed") {
+      const line = chunk.subarray(start, newline)
+      const size = pendingBytes + line.length
+      if (discarding === undefined && size > MAX_FRAME_BYTES) oversized(line)
+      if (discarding === undefined) receive(pending.length === 0 ? line : Buffer.concat([...pending, line], size))
+      if (discarding === "response") respond(TRAILING_ID.exec(decoder.decode(keepTail(line)))?.[1])
+      discarding = undefined
       pending = []
       pendingBytes = 0
       start = newline + 1
       newline = chunk.indexOf(10, start)
     }
-    if (start === chunk.length || discarding) return
-    pendingBytes += chunk.length - start
-    if (pendingBytes > MAX_FRAME_BYTES) {
-      oversized(chunk.subarray(start))
-      discarding = true
-      pending = []
-      pendingBytes = 0
-      return
-    }
+    if (start === chunk.length || state.phase === "closed") return
+    const rest = chunk.subarray(start)
+    if (discarding === undefined && pendingBytes + rest.length > MAX_FRAME_BYTES) oversized(rest)
+    if (discarding === "response") keepTail(rest)
+    if (discarding) return
     // A view is enough: the runtime hands out a fresh buffer for every pipe read.
-    pending.push(start === 0 ? chunk : chunk.subarray(start))
+    pending.push(rest)
+    pendingBytes += rest.length
   }
 
   const receive = (line: Uint8Array) => {
-    if (state.phase === "closed") return
-    const text = decoder.decode(line)
+    const text = decoder.decode(line.at(-1) === 13 ? line.subarray(0, -1) : line)
     if (text.trim() === "") return
     const message = Result.try({
       try: () => deserializeMessage(text),
-      catch: (cause) => new Error(`Invalid MCP stdio message from ${options.server}`, { cause }),
+      catch: (cause) => new Error(`Invalid MCP stdio message from ${options.server}: ${cause}`, { cause }),
     })
     if (Result.isFailure(message)) return transport.onerror?.(message.failure)
     transport.onmessage?.(message.success)
   }
 
-  // An oversized line is dropped. When it is a response whose id leads the frame, only that request
-  // fails; otherwise nothing could settle the request, so the connection closes as it did before.
-  const oversized = (rest: Uint8Array) => {
-    const error = `MCP server ${options.server} sent a stdio message over 16 MiB`
-    transport.onerror?.(new Error(error))
-    const head = decoder.decode(Buffer.concat([...pending, rest], 256))
-    const id = LEADING_ID.exec(head)?.[1]
+  const tooLarge = `MCP server ${options.server} sent a stdio message over 16 MiB`
+
+  // Drops the line `segment` belongs to. A response fails only its own request; anything else could
+  // leave a request unanswered, so the connection closes as it did before.
+  const oversized = (segment: Uint8Array) => {
+    transport.onerror?.(new Error(tooLarge))
+    const head = RESPONSE_HEAD.exec(decoder.decode(Buffer.concat([...pending, segment], EDGE_BYTES)))
+    tail = Buffer.concat(pending.slice(-EDGE_BYTES).map((part) => part.subarray(-EDGE_BYTES))).subarray(-EDGE_BYTES)
+    pending = []
+    pendingBytes = 0
+    discarding = head && head[1] === undefined ? "response" : "line"
+    if (!head) return void close()
+    if (head[1] !== undefined) respond(head[1])
+  }
+
+  const keepTail = (segment: Uint8Array) =>
+    (tail = Buffer.concat([tail, segment.subarray(-EDGE_BYTES)]).subarray(-EDGE_BYTES))
+
+  const respond = (id: string | undefined) => {
     if (id === undefined) return void close()
     transport.onmessage?.({
       jsonrpc: "2.0",
       id: JSON.parse(id),
-      error: { code: ProtocolErrorCode.InternalError, message: error },
+      error: { code: ProtocolErrorCode.InternalError, message: tooLarge },
     })
   }
 

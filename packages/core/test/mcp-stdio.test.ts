@@ -10,13 +10,9 @@ const encoder = new TextEncoder()
 const MiB = 1024 * 1024
 const after = encoder.encode('{"jsonrpc":"2.0","method":"after"}\n')
 
-// Built once: a 12 MiB frame sits between the SDK read buffer's 10 MiB default and our 16 MiB cap.
-const large = frame(12 * MiB)
-const oversized = frame(17 * MiB)
-const oversizedRequest = frame(17 * MiB, '{"jsonrpc":"2.0","id":1,"method":"sampling/createMessage","params":{"text":"')
-
 test("receives a frame between 10 and 16 MiB split into pipe-sized chunks", async () => {
-  const output = await read(chunks(large, 64 * 1024))
+  // 12 MiB sits between the SDK read buffer's 10 MiB default and our 16 MiB cap.
+  const output = await read(chunks(frame(12 * MiB), 64 * 1024))
 
   expect(output.errors).toEqual([])
   expect(output.messages).toHaveLength(1)
@@ -45,25 +41,46 @@ test("frames CRLF, blank lines, several messages per chunk and split UTF-8", asy
   }
 })
 
-test("fails only the request whose response is over 16 MiB", async () => {
-  const output = await read([...chunks(oversized, 64 * 1024), after])
+test("accepts a frame of exactly 16 MiB and rejects one byte more", async () => {
+  // Frame sizes include the newline.
+  const output = await read([...chunks(frame(16 * MiB + 1), 64 * 1024), ...chunks(frame(16 * MiB + 2), 64 * 1024)])
 
   expect(output.errors).toEqual([expect.stringContaining("over 16 MiB")])
-  expect(output.messages).toEqual([
-    { jsonrpc: "2.0", id: 1, error: { code: -32603, message: expect.stringContaining("over 16 MiB") } },
-    { jsonrpc: "2.0", method: "after" },
-  ])
+  expect(
+    output.messages.map((message) => ("result" in message ? "result" : "error" in message ? "error" : "")),
+  ).toEqual(["result", "error"])
+})
+
+test("fails only the request whose response is over 16 MiB", async () => {
+  const leading = await read([...chunks(frame(17 * MiB), 64 * 1024), after])
+  // The TypeScript SDK writes the id after the result. One chunk covers a newline arriving in the
+  // chunk that crosses the cap; an odd chunk size splits the trailing id across chunks.
+  const response = frame(17 * MiB, '{"result":{"text":"', '"},"jsonrpc":"2.0","id":"call-7"}\n')
+  const trailing = await read([response, after])
+  const split = await read([...chunks(response, response.length - 20), after])
+
+  for (const [output, id] of [
+    [leading, 1],
+    [trailing, "call-7"],
+    [split, "call-7"],
+  ] as const) {
+    expect(output.errors).toEqual([expect.stringContaining("over 16 MiB")])
+    expect(output.messages).toEqual([
+      { jsonrpc: "2.0", id, error: { code: -32603, message: expect.stringContaining("over 16 MiB") } },
+      { jsonrpc: "2.0", method: "after" },
+    ])
+  }
 })
 
 test("closes the connection when an oversized message is not a response", async () => {
-  const output = await read([...chunks(oversizedRequest, 64 * 1024), after])
+  const request = frame(17 * MiB, '{"jsonrpc":"2.0","id":1,"method":"sampling/createMessage","params":{"text":"')
+  const output = await read([...chunks(request, 64 * 1024), after])
 
   expect(output.errors).toEqual([expect.stringContaining("over 16 MiB")])
   expect(output.messages).toEqual([])
 })
 
-function frame(size: number, prefix = '{"jsonrpc":"2.0","id":1,"result":{"text":"') {
-  const suffix = '"}}\n'
+function frame(size: number, prefix = '{"jsonrpc":"2.0","id":1,"result":{"text":"', suffix = '"}}\n') {
   return encoder.encode(prefix + "x".repeat(size - prefix.length - suffix.length) + suffix)
 }
 
