@@ -5,7 +5,6 @@ import { Icon } from "@opencode/ui/icon"
 import { abort } from "@opencode/util/abort"
 import { useI18n } from "../../context/i18n"
 import { Loader } from "../../feedback/loader/loader"
-import { ScrollView } from "../../components/scroll-view"
 import { createTypeahead } from "./controller"
 
 export { createTypeahead } from "./controller"
@@ -166,34 +165,37 @@ export function Typeahead<T>(props: {
             )
           }
         >
-          {/* Draws its thumb over the rows, so both sides keep the same padding when the list overflows. */}
-          <ScrollView class="max-h-56 [&>.scroll-view\_\_thumb]:-me-0.5">
-            <div id={typeahead.listID} role="listbox" class="p-1 empty:hidden">
-              <For each={results().items}>
-                {(item) => (
-                  <div
-                    id={typeahead.optionID(item)}
-                    role="option"
-                    aria-selected={typeahead.activeItem() === item}
-                    aria-current={props.selected === props.key(item) ? "true" : undefined}
-                    class="flex h-7 min-w-0 cursor-default select-none items-center gap-2 rounded-sm px-2 transition-opacity duration-150 aria-selected:bg-v2-overlay-simple-overlay-hover"
-                    classList={{ "opacity-50": results().stale }}
-                    onMouseMove={(event) => {
-                      // A static cursor must not steal the active row while the keyboard scrolls the list.
-                      if (event.movementX !== 0 || event.movementY !== 0) typeahead.setActive(props.key(item))
-                    }}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => props.onSelect(item)}
-                  >
-                    {props.children(item)}
-                    <Show when={props.selected === props.key(item)}>
-                      <Icon name="check" size="small" class="ms-auto shrink-0 text-v2-icon-icon-muted" />
-                    </Show>
-                  </div>
-                )}
-              </For>
-            </div>
-          </ScrollView>
+          {/* A stable gutter keeps rows from shifting when the list overflows; the end padding gives way to it. */}
+          <div
+            id={typeahead.listID}
+            role="listbox"
+            data-scrollable
+            class="max-h-56 overflow-y-auto py-1 ps-1 pe-[max(0px,calc(4px-var(--scrollbar-size,0px)))] [scrollbar-gutter:stable] empty:hidden"
+          >
+            <For each={results().items}>
+              {(item) => (
+                <div
+                  id={typeahead.optionID(item)}
+                  role="option"
+                  aria-selected={typeahead.activeItem() === item}
+                  aria-current={props.selected === props.key(item) ? "true" : undefined}
+                  class="flex h-7 min-w-0 cursor-default select-none items-center gap-2 rounded-sm px-2 transition-opacity duration-150 aria-selected:bg-v2-overlay-simple-overlay-hover"
+                  classList={{ "opacity-50": results().stale }}
+                  onMouseMove={(event) => {
+                    // A static cursor must not steal the active row while the keyboard scrolls the list.
+                    if (event.movementX !== 0 || event.movementY !== 0) typeahead.setActive(props.key(item))
+                  }}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => props.onSelect(item)}
+                >
+                  {props.children(item)}
+                  <Show when={props.selected === props.key(item)}>
+                    <Icon name="check" size="small" class="ms-auto shrink-0 text-v2-icon-icon-muted" />
+                  </Show>
+                </div>
+              )}
+            </For>
+          </div>
           {/* Stays mounted while a retry or a newer query is pending, so the list never collapses to nothing. */}
           <Show when={results().items.length === 0}>
             <div
