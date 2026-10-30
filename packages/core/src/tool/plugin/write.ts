@@ -14,6 +14,7 @@ import { Environment } from "../../environment/index.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Formatter } from "../../formatter.js"
 import { FileAccess } from "../../file-access.js"
+import { Location } from "../../location.js"
 import { Permission } from "../../permission.js"
 import { fileDiff } from "./file-diff.js"
 
@@ -48,6 +49,7 @@ export const Plugin = {
   effect: Effect.fn("WriteTool.Plugin")(function* (ctx: Context) {
     const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
+    const location = yield* Location.Service
     const environment = yield* Environment.Service
     const formatter = yield* Formatter.Service
     const permission = yield* Permission.Service
@@ -91,6 +93,9 @@ export const Plugin = {
               }
               return result
             }).pipe(
+              // Write replaces the whole file, so it has to take part in the same transaction lock that edit and
+              // patch hold; otherwise a write that lands while an edit awaits approval is silently overwritten.
+              fileMutation.withLock([FileAccess.resolvePath(location.directory, input.path)]),
               Effect.map((output) => ({ output, content: toModelContent(output) })),
               Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
             ),
