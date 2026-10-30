@@ -1,5 +1,6 @@
 import { chmod } from "node:fs/promises"
 import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
 import { describe, expect } from "bun:test"
 import { Effect, Schedule, Schema } from "effect"
 import { Config } from "@opencode/core/config"
@@ -470,6 +471,29 @@ describe("AzurePlugin discovery", () => {
 })
 
 describe("AzurePlugin switching accounts", () => {
+  it.live("loads again when the API key changes in place", () =>
+    Effect.gen(function* () {
+      const azure = yield* fakeAzure({
+        resource: (request) =>
+          resourceList(listed(request.key === "secret" ? "production-a" : "production-b", "gpt-5-mini")),
+      })
+      yield* seedCatalog
+      const credential = yield* connect(keyCredential())
+      yield* addPlugin(azure.endpoints)
+      yield* eventually(azureModelIDs, (ids) => ids.includes("production-a"))
+
+      const credentials = yield* Credential.Service
+      const bus = yield* Bus.Service
+      yield* credentials.update(credential.id, { value: keyCredential("rotated-key") })
+      yield* bus.publish(
+        Credential.Event.Switched,
+        { integrationID: Integration.ID.make("azure"), credentialID: credential.id },
+        { global: true },
+      )
+      yield* eventually(azureModelIDs, (ids) => ids.includes("production-b"))
+    }),
+  )
+
   it.live("shows the new account without waiting for the previous account's discovery", () =>
     Effect.gen(function* () {
       const stuck = Promise.withResolvers<Response>()

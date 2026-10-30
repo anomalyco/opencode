@@ -42,7 +42,7 @@ export const ModalPlugin = define({
       }
       const remote = yield* cache
         .get({
-          key: `modal:${credential?.type === "key" ? IntegrationConnection.key(connection) : "env:MODAL_PROXY_TOKEN"}:${baseURL.replace(/\/+$/, "")}`,
+          key: `modal:${credential?.type === "key" ? `${IntegrationConnection.key(connection)}:${SharedCache.fingerprint(credential.key)}` : "env:MODAL_PROXY_TOKEN"}:${baseURL.replace(/\/+$/, "")}`,
           maxAge: interval,
           load: Effect.gen(function* () {
             const current =

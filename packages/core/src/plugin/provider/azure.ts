@@ -310,7 +310,7 @@ export function make(
           return
         const found = yield* cache
           .get({
-            key: `azure:${IntegrationConnection.key(connection)}:${url}`,
+            key: `azure:${IntegrationConnection.key(connection)}${credential.type === "key" ? `:${SharedCache.fingerprint(credential.key)}` : ""}:${url}`,
             maxAge: interval,
             load: ctx.integration.connection.resolve(connection).pipe(
               Effect.flatMap((current) =>
