@@ -390,6 +390,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       renderer,
       attention,
       Slot: pluginRuntime.Slot,
+      blocks: { register: pluginRuntime.registerBlock },
     }),
   )
   const [ready, setReady] = createSignal(false)

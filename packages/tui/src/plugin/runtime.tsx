@@ -1,4 +1,5 @@
 import type {
+  TuiMessageBlock,
   TuiPluginApi,
   TuiPluginInstallOptions,
   TuiPluginInstallResult,
@@ -13,12 +14,19 @@ export function createPluginRuntime() {
   const [commands, setCommands] = createSignal<PluginRuntimeCommands>(emptyCommands)
   const [status, setStatus] = createSignal<ReadonlyArray<TuiPluginStatus>>([])
   const slots = createSlots()
+  const [blocks, setBlocks] = createSignal<ReadonlyArray<TuiMessageBlock>>([])
 
   return {
     Slot: slots.Slot,
     routes: createPluginRoutes(),
     commands,
     status,
+    blocks,
+    registerBlock(block: TuiMessageBlock) {
+      const entry = { open: block.open, close: block.close, format: block.format }
+      setBlocks((list) => [...list, entry])
+      return () => setBlocks((list) => list.filter((item) => item !== entry))
+    },
     update(input: { commands?: PluginRuntimeCommands; status?: ReadonlyArray<TuiPluginStatus> }) {
       if (input.commands) setCommands(input.commands)
       if (input.status) setStatus(input.status)
@@ -26,6 +34,7 @@ export function createPluginRuntime() {
     clear() {
       setCommands(emptyCommands)
       setStatus([])
+      setBlocks([])
       slots.clear()
     },
     setupSlots(api: TuiPluginApi): HostSlots {
