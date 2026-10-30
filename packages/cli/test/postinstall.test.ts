@@ -32,6 +32,8 @@ function fixture() {
     directory,
     launcher: path.join(directory, "postinstall.mjs"),
     recorded: path.join(root, "npm-command.json"),
+    runtime: path.join(directory, "node.exe"),
+    emptyPath: path.join(root, "empty-path"),
   }
 }
 
@@ -52,11 +54,20 @@ function recorded(source: string, recordedPath: string) {
   return `${source.slice(0, start)}${stub}${source.slice(end)}`
 }
 
+// Windows treats environment names case-insensitively, so an override has to replace `Path` as well as `PATH`.
+function environment(overrides: Record<string, string>) {
+  const replaced = new Set(Object.keys(overrides).map((name) => name.toLowerCase()))
+  return {
+    ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !replaced.has(name.toLowerCase()))),
+    ...overrides,
+  }
+}
+
 // Runs the launcher copy with npm's own executable, which is a node: npm gives scripts `process.execPath` of that node
 // and its CLI in npm_execpath, and neither is a `.cmd` shim a Windows spawn can start.
 function launched(files: Fixture, source: string, runtime: string, env: Record<string, string> = {}) {
   fs.writeFileSync(files.launcher, source)
-  return childProcess.spawnSync(runtime, [files.launcher], { encoding: "utf8", env: { ...process.env, ...env } })
+  return childProcess.spawnSync(runtime, [files.launcher], { encoding: "utf8", env: environment(env) })
 }
 
 function commandIn(files: Fixture) {
@@ -68,39 +79,56 @@ function cleaned(files: Fixture) {
 }
 
 // Windows cannot start npm's `.cmd` shim, so the launcher has to name the npm CLI that runs npm scripts: the one beside
-// the node executable and named by npm_execpath.
-describe.skipIf(process.platform !== "win32")("npm command", () => {
-  test("starts the npm CLI beside node", () => {
+// the node executable and the one npm_execpath names, which works the same on every platform.
+describe("npm command", () => {
+  test("starts the npm CLI named by npm_execpath", () => {
     const files = fixture()
     try {
-      const runtime = path.join(files.directory, "node.exe")
-      const npmCli = path.join(files.directory, "node_modules", "npm", "bin", "npm-cli.js")
-      fs.copyFileSync(process.execPath, runtime)
+      const npmCli = path.join(files.root, "npm", "bin", "npm-cli.js")
       fs.mkdirSync(path.dirname(npmCli), { recursive: true })
       fs.writeFileSync(npmCli, "")
       launched(files, recorded(fs.readFileSync(script, "utf8"), files.recorded), process.execPath, {
         npm_execpath: npmCli,
       })
-      expect(commandIn(files)).toEqual([process.execPath, npmCli, "npm"])
+      expect(commandIn(files)).toEqual([process.execPath, npmCli])
     } finally {
       cleaned(files)
     }
   })
 
-  test("reports why npm could not be started", () => {
-    const files = fixture()
-    try {
-      const missing = path.join(files.root, "missing", "npm-cli.js")
-      const source = fs
-        .readFileSync(script, "utf8")
-        .replace(/^const npm = \["npm"\]$/m, () => `const npm = [${JSON.stringify(missing)}]`)
-      const result = launched(files, source, process.execPath)
-      expect(result.stdout).toBe("")
-      expect(result.stderr).toContain("npm could not be started: ENOENT")
-      expect(result.status).toBe(1)
-      expect(fs.existsSync(files.recorded)).toBe(false)
-    } finally {
-      cleaned(files)
-    }
+  describe.skipIf(process.platform !== "win32")("windows", () => {
+    test("starts the npm CLI beside node", () => {
+      const files = fixture()
+      try {
+        fs.copyFileSync(process.execPath, files.runtime)
+        const npmCli = path.join(files.directory, "node_modules", "npm", "bin", "npm-cli.js")
+        fs.mkdirSync(path.dirname(npmCli), { recursive: true })
+        fs.writeFileSync(npmCli, "")
+        // The copy runs as node beside npm's CLI, so the launcher finds that CLI instead of npm's `.cmd` shim. An empty
+        // npm_execpath keeps npm from naming itself.
+        launched(files, recorded(fs.readFileSync(script, "utf8"), files.recorded), files.runtime, { npm_execpath: "" })
+        expect(commandIn(files)).toEqual([files.runtime, npmCli])
+      } finally {
+        cleaned(files)
+      }
+    })
+
+    test("reports why npm could not be started", () => {
+      const files = fixture()
+      try {
+        // With no npm on PATH a spawn cannot start npm, which the launcher reports before npm can fail on its own.
+        fs.mkdirSync(files.emptyPath)
+        const result = launched(files, fs.readFileSync(script, "utf8"), process.execPath, {
+          npm_execpath: "",
+          PATH: files.emptyPath,
+        })
+        expect(result.stdout).toBe("")
+        expect(result.stderr).toContain("npm could not be started: ENOENT")
+        expect(result.status).toBe(1)
+        expect(fs.existsSync(files.recorded)).toBe(false)
+      } finally {
+        cleaned(files)
+      }
+    })
   })
 })

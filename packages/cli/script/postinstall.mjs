@@ -21,9 +21,15 @@ const arch =
   platform === "windows" && nodeArch === "x64" && process.env.PROCESSOR_IDENTIFIER?.startsWith("ARM")
     ? "arm64"
     : nodeArch
-// Windows cannot spawn npm's .cmd shim directly, so reuse the npm CLI that runs this script. Build tools that restrict
-// child process permissions keep this Node path, so a source checkout installs under `bun install` as well.
-const npm = ["npm"]
+// Windows cannot spawn npm's .cmd shim directly, so start the npm CLI with node instead. npm names that CLI in
+// npm_execpath on every platform, while build tools that restrict child process permissions, such as a source checkout
+// under `bun install`, leave only the copy beside this node executable.
+const nodeNpmCli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js")
+const npm = process.env.npm_execpath?.endsWith("npm-cli.js")
+  ? [process.execPath, process.env.npm_execpath]
+  : platform === "windows" && fs.existsSync(nodeNpmCli)
+    ? [process.execPath, nodeNpmCli]
+    : ["npm"]
 // A failed spawn says why npm never ran, while a failed install says only that npm tried and failed.
 const npmFailure = (result) => `npm could not be started: ${result.error.code ?? result.error.message}`
 const sourceBinary = platform === "windows" ? `${sourceCommand}.exe` : sourceCommand
@@ -31,18 +37,6 @@ const targetBinary = path.resolve(directory, packageJson.bin[command])
 const dependencies = packageJson.optionalDependencies ?? {}
 const base = Object.keys(dependencies).find((name) => name.endsWith(`-${platform}-${arch}`))
 if (!base) throw new Error(`OpenCode does not provide a binary for ${platform}-${arch}`)
-
-function installWithNode() {
-  if (platform !== "windows") return
-  const npmCli = [
-    process.env.npm_execpath,
-    path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
-  ].find((candidate) => candidate?.endsWith("npm-cli.js") && fs.existsSync(candidate))
-  if (!npmCli) return
-  npm.unshift(process.execPath, npmCli)
-}
-
-installWithNode()
 
 function supportsAvx2() {
   if (arch !== "x64") return false
