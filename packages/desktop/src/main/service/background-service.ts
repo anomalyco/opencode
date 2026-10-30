@@ -3,7 +3,7 @@ import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect
 import { CHANNEL, serviceChannel } from "../constants"
 import { BackgroundServiceState } from "./background-service-state"
 import { cleanStages } from "./cli-stages"
-import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
+import { stageRetention, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { sidecarProbe } from "./sidecar-probe"
@@ -98,10 +98,10 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   })
 
   // Only packaged and isolated builds run a staged copy; any other binary sits in the source tree.
-  // Keep both the bundled stage and any adopted server's stage so its executable stays on disk.
+  // Keep the bundled copy and possible stages of the adopted server.
   if (mode === "initial" && (app.isPackaged || isolated) && cli.binary && runningVersion)
     runFork(
-      cleanStages(cli.binary, { keep: keptStages(cli.version, runningVersion) }).pipe(
+      cleanStages(cli.binary, stageRetention(runningVersion)).pipe(
         Effect.catch((error) => Effect.logError("failed to clean staged v2 CLIs", { error })),
       ),
     )

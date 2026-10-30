@@ -19,6 +19,10 @@ export function resolveChannel(): Channel {
   return "dev"
 }
 
+export function resolveCliChannel(built: boolean) {
+  return built ? process.env.OPENCODE_CHANNEL || "dev" : resolveChannel()
+}
+
 export const CLI_BINARIES: Array<{ target: string; package: string; os: string; cpu: string }> = [
   {
     target: "darwin-arm64",

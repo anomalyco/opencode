@@ -2,7 +2,7 @@
 import { $ } from "bun"
 import { exists } from "node:fs/promises"
 import path from "node:path"
-import { copyBuiltCliToResources, downloadCliToResources, getCurrentCli, resolveChannel } from "./utils"
+import { copyBuiltCliToResources, downloadCliToResources, getCurrentCli, resolveChannel, resolveCliChannel } from "./utils"
 import { verifyBundles } from "./verify-bundles"
 
 // Prepares resources/ (icons, metainfo, the bundled CLI) for OPENCODE_CHANNEL and builds the app into out/.
@@ -25,10 +25,12 @@ const built = await exists(path.join(cli, getCurrentCli().package.replace("@open
 if (channel === "prod" && !built)
   throw new Error(`Production desktop builds bundle the CLI from ${cli}; build it first`)
 
+const cliChannel = resolveCliChannel(built)
+
 if (built) await copyBuiltCliToResources(cli)
 
-if (!built) await downloadCliToResources(channel === "beta" ? "beta" : undefined)
+if (!built) await downloadCliToResources(cliChannel)
 
-await $`bunx electron-vite build`
+await $`bunx electron-vite build`.env({ ...process.env, OPENCODE_CHANNEL: cliChannel })
 
 await verifyBundles(path.join(dir, "out"))
