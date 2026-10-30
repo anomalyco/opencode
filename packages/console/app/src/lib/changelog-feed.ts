@@ -59,7 +59,6 @@ export function parseReleaseBody(body: string): { highlights: HighlightGroup[]; 
   return { highlights: mergeGroups(groups), sections }
 }
 
-/** Splits a `- **Title**: description.` detail bullet into a highlight when it carries both parts. */
 
 function mergeGroups(groups: HighlightGroup[]): HighlightGroup[] {
   const merged = new Map<string, HighlightItem[]>()
