@@ -8,10 +8,12 @@ import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpaw
 
 const encoder = new TextEncoder()
 const MiB = 1024 * 1024
+const after = encoder.encode('{"jsonrpc":"2.0","method":"after"}\n')
 
 // Built once: a 12 MiB frame sits between the SDK read buffer's 10 MiB default and our 16 MiB cap.
 const large = frame(12 * MiB)
 const oversized = frame(17 * MiB)
+const oversizedNotification = frame(17 * MiB, '{"jsonrpc":"2.0","method":"big","params":{"text":"')
 
 test("receives a frame between 10 and 16 MiB split into pipe-sized chunks", async () => {
   const output = await read(chunks(large, 64 * 1024))
@@ -43,16 +45,24 @@ test("frames CRLF, blank lines, several messages per chunk and split UTF-8", asy
   }
 })
 
-test("drops a frame over 16 MiB and keeps reading the connection", async () => {
-  const next = encoder.encode('{"jsonrpc":"2.0","method":"after"}\n')
-  const output = await read([...chunks(oversized, 64 * 1024), next])
+test("fails only the request whose response is over 16 MiB", async () => {
+  const output = await read([...chunks(oversized, 64 * 1024), after])
 
   expect(output.errors).toEqual([expect.stringContaining("over 16 MiB")])
-  expect(output.messages).toEqual([{ jsonrpc: "2.0", method: "after" }])
+  expect(output.messages).toEqual([
+    { jsonrpc: "2.0", id: 1, error: { code: -32603, message: expect.stringContaining("over 16 MiB") } },
+    { jsonrpc: "2.0", method: "after" },
+  ])
 })
 
-function frame(size: number) {
-  const prefix = '{"jsonrpc":"2.0","id":1,"result":{"text":"'
+test("closes the connection when an oversized message has no leading id", async () => {
+  const output = await read([...chunks(oversizedNotification, 64 * 1024), after])
+
+  expect(output.errors).toEqual([expect.stringContaining("over 16 MiB")])
+  expect(output.messages).toEqual([])
+})
+
+function frame(size: number, prefix = '{"jsonrpc":"2.0","id":1,"result":{"text":"') {
   const suffix = '"}}\n'
   return encoder.encode(prefix + "x".repeat(size - prefix.length - suffix.length) + suffix)
 }

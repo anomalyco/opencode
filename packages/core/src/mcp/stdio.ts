@@ -1,6 +1,12 @@
 export * as McpStdio from "./stdio.js"
 
-import { deserializeMessage, serializeMessage, type JSONRPCMessage, type Transport } from "@modelcontextprotocol/client"
+import {
+  deserializeMessage,
+  ProtocolErrorCode,
+  serializeMessage,
+  type JSONRPCMessage,
+  type Transport,
+} from "@modelcontextprotocol/client"
 import { Cause, Duration, Effect, Fiber, Option, Queue, Result, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import type { ChildProcessHandle } from "effect/process/ChildProcessSpawner"
@@ -13,6 +19,8 @@ const CLOSE_GRACE = Duration.seconds(2)
 const FORCE_KILL_AFTER = Duration.seconds(2)
 const OUTGOING_CAPACITY = 64
 const MAX_FRAME_BYTES = 16 * 1024 * 1024
+// The top-level id of an oversized response, when a server writes it before the payload as SDKs do.
+const LEADING_ID = /^\s*\{\s*(?:"jsonrpc"\s*:\s*"2\.0"\s*,\s*)?"id"\s*:\s*(-?\d+|"(?:[^"\\]|\\.)*")/
 // An unexpected exit is reported with its exit code and the end of stderr, which usually names the cause.
 const EXIT_WAIT = Duration.seconds(1)
 const STDERR_TAIL = 1_000
@@ -127,15 +135,13 @@ export const make = Effect.fnUntraced(function* (options: Options) {
     close,
   }
 
-  // A line over the cap is reported and dropped rather than closing the connection, so one oversized
-  // result fails only its own request.
   const deliver = (chunk: Uint8Array) => {
     let start = 0
     let newline = chunk.indexOf(10)
     while (newline !== -1) {
       const size = pendingBytes + newline - start
       if (discarding) discarding = false
-      else if (size > MAX_FRAME_BYTES) oversized()
+      else if (size > MAX_FRAME_BYTES) oversized(chunk.subarray(start, newline))
       else {
         const tail = chunk.subarray(start, newline)
         const line = pending.length === 0 ? tail : Buffer.concat([...pending, tail], size)
@@ -149,7 +155,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
     if (start === chunk.length || discarding) return
     pendingBytes += chunk.length - start
     if (pendingBytes > MAX_FRAME_BYTES) {
-      oversized()
+      oversized(chunk.subarray(start))
       discarding = true
       pending = []
       pendingBytes = 0
@@ -160,6 +166,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   }
 
   const receive = (line: Uint8Array) => {
+    if (state.phase === "closed") return
     const text = decoder.decode(line)
     if (text.trim() === "") return
     const message = Result.try({
@@ -170,8 +177,20 @@ export const make = Effect.fnUntraced(function* (options: Options) {
     transport.onmessage?.(message.success)
   }
 
-  const oversized = () =>
-    transport.onerror?.(new Error(`MCP server ${options.server} sent a stdio message over 16 MiB; it was dropped`))
+  // An oversized line is dropped. When it is a response whose id leads the frame, only that request
+  // fails; otherwise nothing could settle the request, so the connection closes as it did before.
+  const oversized = (rest: Uint8Array) => {
+    const error = `MCP server ${options.server} sent a stdio message over 16 MiB`
+    transport.onerror?.(new Error(error))
+    const head = decoder.decode(Buffer.concat([...pending, rest], 256))
+    const id = LEADING_ID.exec(head)?.[1]
+    if (id === undefined) return void close()
+    transport.onmessage?.({
+      jsonrpc: "2.0",
+      id: JSON.parse(id),
+      error: { code: ProtocolErrorCode.InternalError, message: error },
+    })
+  }
 
   const startOutput = (handle: ChildProcessHandle) =>
     Effect.gen(function* () {
