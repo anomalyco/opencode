@@ -763,6 +763,21 @@ story("replaces completed DOM before live rendering and retains streamed code co
   await expect(markdown).toHaveCount(0)
 })
 
+story("relabels streamed code copy actions when the language changes", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "```sh\necho hello\n", streaming: true })
+  }, fixture)
+  const harness = page.getByTestId("markdown-fixture")
+  const markdown = harness.locator('[data-component="markdown"]')
+  await expect(markdown.getByRole("button", { name: "Copy" })).toHaveCount(1)
+  await harness.getByLabel("Markdown text").fill("```sh\necho hello\n```\n\nStreaming continues")
+  await expect(markdown.locator("p")).toHaveText("Streaming continues")
+  await harness.getByLabel("German").check()
+  await expect(markdown.getByRole("button", { name: "Kopieren" })).toHaveCount(1)
+  await expect(markdown.getByRole("button", { name: "Copy" })).toHaveCount(0)
+})
+
 story("highlights streamed code across comment and string boundaries", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
