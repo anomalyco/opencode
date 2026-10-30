@@ -17,7 +17,6 @@ export function make() {
     const status = message.subtype === "success" ? (message.api_error_status ?? undefined) : undefined
     const httpError = status !== undefined && status >= 400
     if (message.subtype === "success" && !message.is_error && !httpError) return
-    // Claude Code's own text tells the user to run its /login slash command, which does not exist here.
     if (code === "authentication_failed") {
       return new Error("Claude Code is not logged in. Run `claude auth login` in a terminal.")
     }
