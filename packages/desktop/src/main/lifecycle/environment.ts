@@ -74,12 +74,12 @@ const loadSystemCertificates = Effect.try({
 function ensureLoopbackNoProxy() {
   const noProxy = [
     ...new Set(
-      [process.env.NO_PROXY, process.env.no_proxy, "127.0.0.1,localhost,::1"]
-        .flatMap((value) => value?.split(",") ?? [])
-        .map((value) => value.trim())
-        .filter(Boolean),
+      [process.env.NO_PROXY, process.env.no_proxy, "127.0.0.1,localhost,::1"].flatMap((value) =>
+        (value ?? "").split(",").flatMap((entry) => entry.trim() || []),
+      ),
     ),
   ].join(",")
+
   process.env.NO_PROXY = noProxy
   process.env.no_proxy = noProxy
 }
