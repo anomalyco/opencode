@@ -50,9 +50,10 @@ export function mountTimelineVirtualizer(input: {
         viewport = element
         resize.observe(element, { box: "border-box" })
       },
-      setContentRef: (element) => {
-        content = element
-        reveal.observe(element, { attributes: true, attributeFilter: ["style"] })
+      onContentResize: () => {
+        if (content) return
+        content = host.querySelector<HTMLDivElement>("[data-timeline-virtual-content]")!
+        reveal.observe(content, { attributes: true, attributeFilter: ["style"] })
       },
       onPin: () => setState("pinned", true),
       onUnpin: () => setState("pinned", false),

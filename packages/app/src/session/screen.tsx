@@ -314,7 +314,7 @@ function SessionScreenContent(props: {
             pinned={timeline.view.pinned()}
             centered={screen.centered()}
             reserveReviewToggle={!sideVisible()}
-            setContentRef={timeline.view.setContentRef}
+            onContentResize={timeline.view.contentResized}
             bottomInset={timeline.inset()}
             setVisibleRef={timeline.view.setVisibleRef}
             anchor={timeline.view.anchor}
