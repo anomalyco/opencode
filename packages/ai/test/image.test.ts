@@ -273,6 +273,40 @@ describe("Image", () => {
       }),
   )
 
+  it.effect("decodes a response whose usage is null instead of omitted (OpenAI-compatible hosts)", () =>
+    Effect.gen(function* () {
+      const response = yield* Image.generate({
+        model: OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).image("gpt-image-2"),
+        prompt: "A lighthouse",
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.succeed(
+              json(input, {
+                background: "opaque",
+                data: [{ b64_json: "AQID", url: null }],
+                output_format: "png",
+                quality: "standard",
+                size: "1024x1024",
+                usage: null,
+              }),
+            ),
+          ),
+        ),
+      )
+      expect(response.images).toHaveLength(1)
+      expect(response.image.source).toEqual({
+        type: "bytes",
+        data: Uint8Array.from([1, 2, 3]),
+        mediaType: "image/png",
+      })
+      expect(response.usage).toBeUndefined()
+      expect(response.providerMetadata).toEqual({
+        openai: { outputFormat: "png", size: "1024x1024", quality: "standard", background: "opaque" },
+      })
+    }),
+  )
+
   it.effect("classifies an OpenAI stream moderation error event as a content policy rejection", () =>
     Effect.gen(function* () {
       const error = yield* Image.stream({
