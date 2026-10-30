@@ -10,11 +10,12 @@ import { type BaseRouterProps, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { type Component, createRenderEffect, ErrorBoundary, type JSX, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import { CommandProvider } from "@/shell/commands/command"
+import { CommandProvider, useCommand } from "@/shell/commands/command"
+import { createPromptKeybinds, PROMPT_KEYBINDS } from "@/composer/keybinds"
 import { DesktopCommands } from "@/shell/commands/desktop"
 import { ProjectIconsProvider } from "@/shell/layout/project-icons"
 import { GlobalProvider } from "@/runtime/server/runtime"
-import { LanguageProvider, UiI18nBridge, type Locale } from "@/runtime/i18n/language"
+import { LanguageProvider, UiI18nBridge, type Locale, useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, ServersProvider } from "@/runtime/server/registry"
 import { SettingsProvider } from "@/settings/model"
 import { TabsProvider } from "@/shell/tabs/tabs"
@@ -44,6 +45,22 @@ function BodyTypography() {
     document.body.classList.remove("text-12-regular")
     document.body.classList.add("font-(family-name:--font-family-text)", "text-[13px]", "font-[440]")
   })
+
+  return null
+}
+
+function PromptCommands() {
+  const command = useCommand()
+  const language = useLanguage()
+  const keybinds = createPromptKeybinds()
+
+  command.register("prompt", () =>
+    keybinds.options({
+      submit: language.t(PROMPT_KEYBINDS.submit.title),
+      newline: language.t(PROMPT_KEYBINDS.newline.title),
+      alternate: language.t(PROMPT_KEYBINDS.alternate.title),
+    }),
+  )
 
   return null
 }
@@ -103,6 +120,7 @@ export function AppInterface(props: {
         <ProjectIconsProvider>
           <BodyTypography />
           <CommandProvider>
+            <PromptCommands />
             <DesktopCommands />
             <VoiceProvider>
               {props.children}

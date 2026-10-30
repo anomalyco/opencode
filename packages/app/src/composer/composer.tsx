@@ -13,6 +13,7 @@ import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerModel } from "./model"
 import type { ComposerModelLabel } from "./model-label"
+import { createPromptKeybinds, PROMPT_KEYBINDS } from "./keybinds"
 
 export function Composer(props: {
   class?: string
@@ -24,6 +25,7 @@ export function Composer(props: {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
+  const keybinds = createPromptKeybinds()
 
   const modelName = () => {
     const preview = props.model.model.preview
@@ -59,9 +61,11 @@ export function Composer(props: {
         modelControlsVisible={!props.model.model.loading || !!props.model.model.preview}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
-        alternateKeybind={[formatKeybind("mod", language.t), "↵"]}
+        alternateKeybind={command.keybindParts(PROMPT_KEYBINDS.alternate.id)}
         exitShellKeybind={[formatKeybind("esc", language.t)]}
         suggestionBoundary={props.suggestionBoundary}
+        keybinds={keybinds}
+        submitKeybind={command.keybindParts(PROMPT_KEYBINDS.submit.id)}
         modelControl={
           <ComposerModelControl
             loading={props.model.model.loading}

@@ -44,6 +44,7 @@ import type {
 } from "../types"
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment } from "../prompt-parts"
+import { handleComposerKeyDown, type ComposerKeybinds } from "./keybind"
 import { QuoteCommentEditor } from "./quote-comment"
 import "../attachments/attachments.css"
 import "./editor.css"
@@ -82,6 +83,8 @@ export type ComposerEditorProps = {
   alternateKeybind?: string[]
   exitShellKeybind?: string[]
   suggestionBoundary?: () => HTMLElement | undefined
+  keybinds?: ComposerKeybinds
+  submitKeybind?: string[]
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
@@ -151,6 +154,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
     })
   })
   let localInput = false
+  let composing = false
 
   const updateCursor = () => {
     if (!editor || !window.getSelection()?.isCollapsed) return
@@ -324,27 +328,34 @@ export function ComposerEditor(props: ComposerEditorProps) {
                     ? composer?.getBoundingClientRect().height
                     : undefined
 
-                if (!view.draftOnly && props.controller.onKeyDown(event)) {
-                  if (height !== undefined && state.popover.type === "history") setHistoryLayout("height", height)
+                handleComposerKeyDown({
+                  event,
+                  keybinds: props.keybinds,
+                  composing,
+                  selectSuggestion: () => {
+                    const popover = state.popover
 
-                  return
-                }
+                    if (popover.type === "closed") return false
+                    const item = props.controller.suggestions().find((entry) => entry.id === popover.activeID)
 
-                const mod = event.metaKey || event.ctrlKey
+                    if (item) props.controller.dispatch({ type: "popover.select", item })
 
-                if (mod && event.key === "ArrowUp" && !event.shiftKey && !event.altKey) {
-                  if (view.submit.queue?.editFirst()) event.preventDefault()
+                    return true
+                  },
+                  handleController: () => {
+                    const handled = !view.draftOnly && props.controller.onKeyDown(event)
 
-                  return
-                }
+                    if (height !== undefined && state.popover.type === "history") setHistoryLayout("height", height)
 
-                if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-                  event.preventDefault()
-
-                  if (event.repeat) return
-                  props.controller.submit(mod ? { alternate: true } : undefined)
-                }
+                    return handled
+                  },
+                  editFirst: view.submit.queue?.editFirst,
+                  insertNewline: props.controller.insertNewline,
+                  submit: (alternate) => props.controller.submit(alternate ? { alternate: true } : undefined),
+                })
               }}
+              onCompositionStart={() => (composing = true)}
+              onCompositionEnd={() => (composing = false)}
               onKeyUp={updateCursor}
               onPointerUp={updateCursor}
               onPaste={(event) => {
@@ -480,6 +491,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               held={view.submit.held?.() ?? false}
               disabled={!props.controller.canSubmit()}
               sendLabel={i18n.t("ui.promptInput.send")}
+              sendKeybind={props.submitKeybind}
               stopLabel={i18n.t("ui.promptInput.stop")}
               onSubmit={() => props.controller.submit()}
               onStop={props.controller.stop}
@@ -1433,6 +1445,7 @@ function ComposerEditorSubmitButton(props: {
   held?: boolean
   disabled: boolean
   sendLabel: string
+  sendKeybind?: string[]
   stopLabel: string
   onSubmit: () => void
   onStop: () => void
@@ -1441,7 +1454,18 @@ function ComposerEditorSubmitButton(props: {
     <Tooltip
       placement="top"
       inactive={!props.stopping && props.disabled}
-      value={props.stopping ? props.stopLabel : props.sendLabel}
+      value={
+        props.stopping ? (
+          props.stopLabel
+        ) : (
+          <>
+            {props.sendLabel}
+            <Show when={props.sendKeybind?.length}>
+              <Keybind keys={props.sendKeybind ?? []} variant="neutral" />
+            </Show>
+          </>
+        )
+      }
     >
       <IconButton
         data-action="composer-submit"
