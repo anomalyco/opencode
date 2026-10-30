@@ -3,7 +3,8 @@ import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { OpenAIDecisions } from "../protocols/openai-decisions.js"
-import { OpenAIImages } from "../protocols/openai-images.js"
+import { OpenAIImages, type OpenAIImageSizing } from "../protocols/openai-images.js"
+import { XAIImages } from "../protocols/xai-images.js"
 import { ProviderShared } from "../protocols/shared.js"
 import { gatewayProtocol } from "../protocols/utils/gateway-protocol.js"
 import type { ProviderPackage } from "../provider-package.js"
@@ -98,7 +99,7 @@ export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
     readonly cacheAnchorItems?: number
   }
 
-export type Options = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptionsInput
@@ -211,7 +212,15 @@ const chatRoute = route({
 
 export const routes = [messagesRoute, responsesRoute, chatRoute]
 
-export const configure = (input: Options = {}) => {
+// The Gateway passes `size` through to most image models, but Grok ignores it and renders 1024x1024; it only reads
+// sizing from `providerOptions.xai`.
+const imageSizing: OpenAIImageSizing = (request) => {
+  if (!/^(spacexai|xai)\//.test(request.model.id)) return OpenAIImages.pixelSize(request)
+  if (request.aspect === undefined && request.resolution === undefined) return undefined
+  return { providerOptions: { xai: { aspect_ratio: request.aspect, resolution: XAIImages.resolution(request) } } }
+}
+
+export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const configured = {
     ...defaults,
@@ -238,7 +247,7 @@ export const configure = (input: Options = {}) => {
   }
   const media = MediaRoute.deployment({ ...input, baseURL: configured.endpoint.baseURL }, configured.auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
+    OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions, sizing: imageSizing })
   const decisionRoute = OpenAIDecisions.route.with({
     provider: id,
     endpoint: { baseURL: configured.endpoint.baseURL },
@@ -258,26 +267,24 @@ export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image
 
-export const model: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
-export const messagesModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
+export const messagesModel: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).messages(modelID)
-export const responsesModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => configure(config(settings)).responses(modelID)
-export const chatModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
+export const responsesModel: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).responses(modelID)
+export const chatModel: ProviderPackage.Model<Settings, ProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).chat(modelID)
-export const imageModel = (modelID: string, settings: Settings) => {
+export const imageModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)
 }
-export const decisionModel = (modelID: string, settings: Settings) => {
+export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).decision(modelID, input.providerOptions)
 }
 
-function config({ apiKey, baseURL, headers, body, ...providerOptions }: Settings) {
+function config({ apiKey, baseURL, headers, body, ...providerOptions }: Settings = {}) {
   return {
     apiKey,
     baseURL,

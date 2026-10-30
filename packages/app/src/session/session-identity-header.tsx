@@ -67,7 +67,12 @@ export function SessionTitleHeader(props: ParentProps) {
 }
 
 export function SessionHeaderLayout(
-  props: ParentProps<{ title: string | undefined; location: JSX.Element; actions?: JSX.Element }>,
+  props: ParentProps<{
+    title: string | undefined
+    location: JSX.Element
+    /** Receives the fit: `compact` while the title needs the room the actions' details take. */
+    actions?: (fit: { readonly compact: boolean }) => JSX.Element
+  }>,
 ) {
   const fit = createSessionHeaderFit()
 
@@ -81,8 +86,7 @@ export function SessionHeaderLayout(
           </span>
           {props.children}
         </div>
-        {/* Each read of a JSX prop renders it again, so the actions render once, from the condition's value. */}
-        <Show when={props.actions}>{(actions) => <div class="session-header-actions">{actions()}</div>}</Show>
+        <Show when={props.actions}>{(actions) => <div class="session-header-actions">{actions()(fit)}</div>}</Show>
       </div>
     </SessionHeaderCollapse.Provider>
   )

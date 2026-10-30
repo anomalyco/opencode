@@ -27,6 +27,7 @@ import { createKeyed, useDrawer, usePlugin, type MountedSession } from "@opencod
 import { globalConfigDirectory, serviceConfigFile } from "./config-file"
 import { configuredLsps } from "./configured-lsp"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
+import { createFlyoutMotion } from "./flyout-motion"
 
 const services = [
   { type: "mcp", icon: "mcp", label: "mcp" },
@@ -101,6 +102,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
   const ctx = usePlugin()
   const drawer = useDrawer()
   const id = createUniqueId()
+  const motion = createFlyoutMotion()
 
   // A new scope whenever visibility changes closes the flyout.
   const scope = createMemo(
@@ -435,6 +437,7 @@ function ServiceMenu(props: ServiceProps & { mobile?: boolean; name: string }) {
         ref={flyout}
         class="session-service-flyout"
         data-open={active() !== undefined || undefined}
+        data-motion={motion() || undefined}
         inert={active() === undefined || undefined}
         style={{ transform: `translateY(${offset()}px)` }}
         onKeyDown={keydown}
@@ -1053,11 +1056,11 @@ function useMcpToggle(session: MountedSession, directory: () => string) {
       if (!server) return
 
       if (!input.enabled) {
-        await client.mcp.disconnect({ server: input.name, location: ref })
+        await client.experimental.mcp.disconnect({ server: input.name, location: ref })
       }
 
       if (input.enabled && server.status.status !== "needs_auth") {
-        await client.mcp.connect({ server: input.name, location: ref })
+        await client.experimental.mcp.connect({ server: input.name, location: ref })
       }
 
       source.location.mcp.server.invalidate(ref)

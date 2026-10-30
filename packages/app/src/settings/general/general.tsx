@@ -249,6 +249,17 @@ export const SettingsGeneral: Component = () => {
     void update.catch(() => setPinchZoom(!checked))
   }
 
+  const [spellcheck, { mutate: setSpellcheck }] = createResource(
+    () => desktop() && "getSpellcheckEnabled" in platform,
+    () => platform.getSpellcheckEnabled?.().catch(() => true) ?? true,
+    { initialValue: true },
+  )
+
+  const onSpellcheckChange = (checked: boolean) => {
+    setSpellcheck(checked)
+    void platform.setSpellcheckEnabled?.(checked).catch(() => setSpellcheck(!checked))
+  }
+
   const GeneralSection = () => (
     <div class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
@@ -280,6 +291,14 @@ export const SettingsGeneral: Component = () => {
           >
             <div data-action="settings-pinch-zoom">
               <Switch checked={pinchZoom.latest} onChange={onPinchZoomChange} />
+            </div>
+          </SettingsRow>
+          <SettingsRow
+            title={language.t("settings.general.row.spellcheck.title")}
+            description={language.t("settings.general.row.spellcheck.description")}
+          >
+            <div data-action="settings-spellcheck">
+              <Switch checked={spellcheck.latest} onChange={onSpellcheckChange} />
             </div>
           </SettingsRow>
         </Show>

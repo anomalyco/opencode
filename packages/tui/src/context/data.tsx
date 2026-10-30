@@ -1,5 +1,5 @@
 import { createData } from "@opencode/client/solid"
-import type { LocationRef } from "@opencode/client"
+import { withMediaRefs, type LocationRef } from "@opencode/client"
 import type { Plugin } from "@opencode/plugin/tui"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -13,7 +13,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
   init: (props: { directory: string }) => {
     const client = useClient()
     const data = createData({
-      api: () => client.api,
+      // Only the transcript store reads stored media as `media:<hash>` refs; plugins and other callers keep inline bytes.
+      api: () => withMediaRefs(client.api),
       event: client.event,
       connection: client.connection,
       directory: props.directory,

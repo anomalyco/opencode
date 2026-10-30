@@ -3,7 +3,7 @@
 # (INPUT_BUMP, INPUT_VERSION) only, and writes them to $GITHUB_OUTPUT. Nothing here reads repository files.
 #
 #   push or dispatch on dev           -> dev      0.0.0-dev-<run>     npm tag dev, desktop
-#   dispatch on dev with bump/version -> latest   x.y.z               npm tag latest, releasers only
+#   dispatch on dev with bump/version -> latest   x.y.z               npm tag latest, releasers only, notes required
 #   push or dispatch on beta          -> beta     0.0.0-beta-<run>    desktop only
 #   pull_request                      -> pr       0.0.0-pr-<run>      everything, dry run
 #
@@ -19,6 +19,10 @@ case "$GITHUB_EVENT_NAME:$GITHUB_REF:$versioned" in
   pull_request:*:false) channel="pr" ;;
   *) die "$GITHUB_EVENT_NAME on $GITHUB_REF cannot publish (versioned: $versioned)" ;;
 esac
+
+if [ "$channel" = latest ] && [ -z "${INPUT_RELEASE_NOTES//[[:space:]]/}" ]; then
+  die "Stable releases need release notes; generate them with ./script/release.ts --print"
+fi
 
 if [ "$channel" = latest ]; then
   actor=${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR:-}}

@@ -556,6 +556,40 @@ describe("Git capture", () => {
       expect(entries.split("\n").filter(Boolean)).toEqual(["a.txt", "b.txt"])
     }),
   )
+
+  it.live("seeds and rebuilds the store from a source with a split index", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      const project = path.join(root.path, "project")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(project)
+        await initRepo(project)
+        await Bun.write(path.join(project, "a.txt"), "one\n")
+        await $`git add . && git commit -q -m initial && git update-index --split-index`.cwd(project).quiet()
+      })
+      const git = yield* Git.Service
+      const source = yield* git.repo.discover(AbsolutePath.make(project))
+      if (!source) throw new Error("Repository not found")
+      const storage = AbsolutePath.make(path.join(root.path, "storage"))
+      const repository = yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
+      const capture = () => git.tree.capture({ repository, scopes: [RelativePath.make(".")], ignores: source })
+      const before = yield* capture()
+      yield* Effect.promise(() => Bun.write(path.join(project, "a.txt"), "two\n"))
+      const after = yield* capture()
+      expect(yield* git.tree.files({ repository, from: before, to: after })).toEqual([RelativePath.make("a.txt")])
+      yield* git.tree.restore({ repository, files: new Map([[RelativePath.make("a.txt"), before]]) })
+      expect(yield* read(path.join(project, "a.txt"))).toBe("one\n")
+
+      yield* Effect.promise(() => Bun.write(path.join(storage, "index"), "not an index"))
+      expect(yield* capture()).toBe(before)
+      expect((yield* Effect.promise(() => fs.readdir(storage))).filter((entry) => entry.startsWith("sharedindex."))).toEqual(
+        [],
+      )
+    }),
+  )
 })
 
 const captureSetup = Effect.gen(function* () {

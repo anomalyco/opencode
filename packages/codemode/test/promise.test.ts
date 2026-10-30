@@ -1560,10 +1560,40 @@ describe("job order matches V8", () => {
 })
 
 describe("a program that can never finish", () => {
-  test("fails at once when it awaits a promise nothing can settle, without a timeout", async () => {
-    const failure = await error(`await new Promise(() => {}); return 1`)
-    expect(failure.kind).toBe("ExecutionFailure")
-    expect(failure.message).toStartWith("Execution stalled")
+  const stalled =
+    "Error: The program is waiting on a promise that can never settle: nothing else is running, so nothing can resolve it. Code Mode has no timers or sleep, so don't wait or poll inside a program."
+
+  // Each program stalls at the await on line `line`, column `column`; an outer await only waits on that one.
+  test.each([
+    ["the program's own await", "await new Promise((r) => r)", 1, 1],
+    [
+      "an async function whose result the program returns",
+      ["async function wait() {", "  await new Promise(() => {})", "}", "return wait()"].join("\n"),
+      2,
+      3,
+    ],
+    [
+      "an async function the program awaits",
+      ["async function wait() {", "  await new Promise(() => {})", "}", "await wait()"].join("\n"),
+      2,
+      3,
+    ],
+    [
+      "a later await in an async body the program awaits",
+      [
+        "const { promise } = Promise.withResolvers()",
+        "const p = (async () => { await null; await promise })()",
+        "await p",
+      ].join("\n"),
+      2,
+      38,
+    ],
+  ])("fails at once, without a timeout, at the stuck await in %s", async (_, code, line, column) => {
+    expect(await error(code)).toEqual({
+      kind: "ExecutionFailure",
+      message: `${stalled} (line ${line}, col ${column})`,
+      location: { line, column },
+    })
   })
 
   test("fails when the unsettleable promise is deep inside other async work", async () => {
@@ -1571,7 +1601,26 @@ describe("a program that can never finish", () => {
       const never = async () => { await null; await new Promise(() => {}) }
       return await Promise.all([never(), Promise.resolve(1)])
     `)
-    expect(failure.message).toStartWith("Execution stalled")
+    expect(failure.message).toStartWith(stalled)
+  })
+
+  test("cannot be caught by the program", async () => {
+    expect(await error(`try { await new Promise(() => {}) } catch { return "caught" }`)).toEqual({
+      kind: "ExecutionFailure",
+      message: `${stalled} (line 1, col 7)`,
+      location: { line: 1, column: 7 },
+    })
+  })
+
+  test("is not stalled while a tool call that settles a hand-made promise is still running", async () => {
+    expect(
+      await value(`
+        const { promise, resolve } = Promise.withResolvers()
+        tools.host.gated({ id: 1 }).then(resolve)
+        tools.host.open({ id: 1 })
+        return await promise
+      `),
+    ).toBe(1)
   })
 
   test("is not stalled while a tool call it waits on is still running", async () => {

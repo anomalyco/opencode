@@ -52,24 +52,36 @@ test("startup auth_token credentials override a persisted same-url server; witho
   expect(kept[0]?.type === "http" ? kept[0].authToken : true).toBeUndefined()
 })
 
-test("treats WSL sidecars as remote server connections", () => {
+test("treats WSL and mismatched-port loopback servers as remote connections", () => {
+  const windowsSidecar = "http://127.0.0.1:28894"
+
   expect(
-    ServerConnection.local({
-      type: "plugin",
-      key: "wsl:Debian",
-      plugin: "wsl",
-      state: "ready",
-      connecting: false,
-      authenticationRequired: false,
-      managed: false,
-      http: { url: "http://127.0.0.1:4097" },
-    }),
+    ServerConnection.local(
+      {
+        type: "plugin",
+        key: "wsl:Debian",
+        plugin: "wsl",
+        state: "ready",
+        connecting: false,
+        authenticationRequired: false,
+        managed: false,
+        http: { url: "http://127.0.0.1:4097" },
+      },
+      windowsSidecar,
+    ),
   ).toBe(false)
-  expect(ServerConnection.local({ type: "sidecar", variant: "base", http: { url: "http://127.0.0.1:4096" } })).toBe(
-    true,
+  expect(
+    ServerConnection.local({ type: "sidecar", variant: "base", http: { url: windowsSidecar } }),
+  ).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:28894" } }, windowsSidecar)).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://[::1]:28894" } }, windowsSidecar)).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:4096" } }, windowsSidecar)).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://127.0.0.1:4096" } }, windowsSidecar)).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:49374" } }, windowsSidecar)).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:4096" } })).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "https://server.example.test" } }, windowsSidecar)).toBe(
+    false,
   )
-  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:4096" } })).toBe(true)
-  expect(ServerConnection.local({ type: "http", http: { url: "https://server.example.test" } })).toBe(false)
 })
 
 test("keeps exact persisted server identities and prevents removing provided servers", () => {

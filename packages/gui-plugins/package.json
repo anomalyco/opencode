@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/gui-plugins",
-  "version": "2.2.0",
+  "version": "2.2.2",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -35,7 +35,6 @@
     "@opencode/util": "workspace:*",
     "@pierre/trees": "1.0.0-beta.6",
     "@solid-primitives/event-listener": "catalog:",
-    "@solid-primitives/keyed": "1.5.3",
     "@solid-primitives/media": "catalog:",
     "@solid-primitives/resize-observer": "catalog:",
     "@solid-primitives/scheduled": "1.5.3",
@@ -45,7 +44,6 @@
     "fuzzysort": "catalog:",
     "ghostty-web": "github:anomalyco/ghostty-web#e91e38a9ceb13c566ddfa15185a9393849f712a9",
     "knobs": "npm:@kitlangton/knobs@0.4.0-next.22",
-    "remeda": "catalog:",
     "solid-js": "catalog:"
   },
   "devDependencies": {

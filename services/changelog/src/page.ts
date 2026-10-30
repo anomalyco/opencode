@@ -71,6 +71,7 @@ export function renderPage(state: PageState) {
 <meta property="og:description" content="OpenCode release notes and changelog">
 <meta property="og:url" content="${SITE}/changelog">
 <style>${style}</style>
+<script src="/changelog/status.js" defer></script>
 </head>
 <body>
 <header class="top"><div class="top-inner">
@@ -99,6 +100,7 @@ export function renderPage(state: PageState) {
 </footer>
 <div class="legal">
 <span>©${new Date().getUTCFullYear()} <a href="https://anoma.ly">Anomaly</a></span>
+<a class="status" href="/status" data-status="unknown">System status</a>
 <a href="${SITE}/brand">Brand</a>
 <a href="${SITE}/legal/privacy-policy">Privacy</a>
 <a href="${SITE}/legal/terms-of-service">Terms</a>

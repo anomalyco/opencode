@@ -846,11 +846,11 @@ interface SessionContext {
   instructions: {
     entry: {
       list(
-        input: SessionInstructionsEntryListInput,
+        input: ExperimentalSessionInstructionsEntryListInput,
         requestOptions?: RequestOptions,
       ): Promise<readonly InstructionEntryInfo[]>
-      put(input: SessionInstructionsEntryPutInput, requestOptions?: RequestOptions): Promise<void>
-      remove(input: SessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions): Promise<void>
+      put(input: ExperimentalSessionInstructionsEntryPutInput, requestOptions?: RequestOptions): Promise<void>
+      remove(input: ExperimentalSessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions): Promise<void>
     }
   }
   switchAgent(input: SessionSwitchAgentInput, requestOptions?: RequestOptions): Promise<void>
@@ -863,7 +863,7 @@ interface SessionContext {
   compact(input: SessionCompactInput, requestOptions?: RequestOptions): Promise<SessionInboxCompaction>
   synthetic(input: SessionSyntheticInput, requestOptions?: RequestOptions): Promise<SessionInboxSynthetic>
   interrupt(input: SessionInterruptInput, requestOptions?: RequestOptions): Promise<{ interrupted: boolean }>
-  wait(input: SessionWaitInput, requestOptions?: RequestOptions): Promise<void>
+  wait(input: ExperimentalSessionWaitInput, requestOptions?: RequestOptions): Promise<void>
 }
 ```
 

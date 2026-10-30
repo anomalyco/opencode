@@ -120,16 +120,13 @@ export const configure = (input: Config) => {
 
 export const provider = { id, configure }
 
-export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (id, input) =>
-  configure(config(input)).chat(id)
-export const messagesModel: ProviderPackage.Definition<
-  Settings<MessagesOptionsInput>,
-  MessagesOptionsInput
->["model"] = (id, input) => configure(config(input)).messages(id)
-export const responsesModel: ProviderPackage.Definition<
-  Settings<ResponsesOptionsInput>,
-  ResponsesOptionsInput
->["model"] = (id, input) => configure(config(input)).responses(id)
+export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (id, input) => configure(config(input)).chat(id)
+export const messagesModel: ProviderPackage.Model<Settings<MessagesOptionsInput>, MessagesOptionsInput> = (id, input) =>
+  configure(config(input)).messages(id)
+export const responsesModel: ProviderPackage.Model<Settings<ResponsesOptionsInput>, ResponsesOptionsInput> = (
+  id,
+  input,
+) => configure(config(input)).responses(id)
 export const imageModel = (id: string, settings: Settings) => {
   const input = config(settings)
   return configure(input).image(id, input.providerOptions)

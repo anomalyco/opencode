@@ -120,8 +120,10 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
 type InputItem = OpenResponses.OpenResponsesBody["input"][number]
 
 // Hosted replay items have an open `type`, so a plain tag check does not narrow the union.
-const isFunctionCallOutput = (item: InputItem): item is Extract<InputItem, { type: "function_call_output" }> =>
-  item.type === "function_call_output"
+const isFunctionCallOutput = (
+  item: InputItem,
+): item is Extract<InputItem, { type: "function_call_output" | "custom_tool_call_output" }> =>
+  item.type === "function_call_output" || item.type === "custom_tool_call_output"
 
 const HOSTED_TOOLS = {
   web_search_call: { name: "web_search", input: (item) => item.action ?? {} },

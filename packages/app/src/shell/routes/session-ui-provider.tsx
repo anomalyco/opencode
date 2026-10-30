@@ -1,15 +1,15 @@
-import { DataProvider } from "@opencode/session-ui/context"
+import { DataProvider, type TurnDiffInput } from "@opencode/session-ui/context"
 import { MarkdownProvider, type ReadMarkdownImage } from "@opencode/session-ui/context/markdown"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useQuery } from "@tanstack/solid-query"
-import { createMemo, onCleanup, type ParentProps } from "solid-js"
+import { createMemo, onCleanup, untrack, type ParentProps } from "solid-js"
 import { useProviders } from "@/providers/catalog/providers"
 import { LocalProvider } from "@/providers/models/selection"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { sessionHref } from "@/shell/routes/session"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
-import { useTabs, type Tab } from "@/shell/tabs/tabs"
+import { findSessionTab, useTabs } from "@/shell/tabs/tabs"
 import { readLocalImage } from "@/runtime/server/image"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
@@ -94,22 +94,26 @@ export function SessionUIProvider(
       ?.flatMap((entry) => (entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : []))
       .at(-1)?.background_compaction === true
 
-  // Turn diffs live in the tab's in-memory state, so they outlast timeline remounts and go when the tab closes.
-  const turnDiffs = () => {
-    const id = params.id
+  // Turn diffs live in the routed tab's in-memory state, so they outlast timeline remounts and go when the tab closes.
+  // A cached timeline keeps the source it had while routed, so a child keeps its tab's diffs after the tab returns to
+  // the parent. A route without an open tab, such as one whose tab is closing, loads into a loose cache rather than
+  // tab state nothing would remove.
+  const looseTurnDiffs = createTurnDiffCache()
 
-    if (!id) return
+  const turnDiffCache = createMemo(() => {
+    const tab = params.id ? findSessionTab(tabs.store, props.server, params.id) : undefined
 
-    const tab =
-      tabs.store.find(
-        (item) =>
-          item.type === "session" &&
-          item.server === props.server &&
-          (item.sessionId === id || item.routeSessionId === id),
-      ) ?? ({ type: "session", server: props.server, sessionId: id } satisfies Tab)
+    return tab ? untrack(() => tabs.state(tab, "turnDiffs", createTurnDiffCache)) : looseTurnDiffs
+  })
 
-    return tabs.state(tab, "turnDiffs", createTurnDiffCache)
-  }
+  const turnDiff = createMemo(() => {
+    const cache = turnDiffCache()
+
+    return {
+      get: cache.get,
+      load: (input: TurnDiffInput) => cache.load(input, () => serverSDK.api.session.diff(input)),
+    }
+  })
 
   const sessionUIData = createMemo(() => ({
     provider: providers.ready()
@@ -136,10 +140,9 @@ export function SessionUIProvider(
         agents={settings.visibility.customAgents()}
         shellRunning={(id) => !!data.shell.get(id)}
         shellOutput={(input) => serverSDK.api.shell.output(input)}
-        turnDiff={{
-          get: (input) => turnDiffs()?.get(input),
-          load: (input) => turnDiffs()?.load(input, () => serverSDK.api.session.diff(input)),
-        }}
+        readMedia={(uri, mime, signal) => serverSDK.media.load(uri, mime, signal)}
+        peekMedia={(uri, mime) => serverSDK.media.peek(uri, mime)}
+        turnDiff={turnDiff()}
         onNavigateToSession={navigateToSession}
         onSessionHref={href}
         backgroundCompaction={backgroundCompaction()}

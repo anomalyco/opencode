@@ -76,6 +76,14 @@ export function NewSessionView(props: {
 
   const [wordmark, setWordmark] = createStore<WordmarkState>({ mode: "flat", game: false })
 
+  const location = (project?: PromptProject) =>
+    props.location({
+      project,
+      onWorkspace: (value) => {
+        if (value !== "main") setOnboarding("used", true)
+      },
+    })
+
   // Imperative handles for the brick breaker; they are not reactive state.
   const handles: BrickBreakerHandles = {}
   let panel!: HTMLDivElement
@@ -115,15 +123,15 @@ export function NewSessionView(props: {
                       project={project()}
                       workspace={props.workspace.bar.visible() ? props.workspace.selection.value() : "main"}
                       root={props.workspace.project.root()}
-                      branch={<NewSessionBranch workspace={props.workspace} onDone={props.composer.restoreFocus} />}
-                      onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
-                      onClick={() =>
-                        props.location({
-                          onWorkspace: (value) => {
-                            if (value !== "main") setOnboarding("used", true)
-                          },
-                        })
+                      branch={
+                        <NewSessionBranch
+                          workspace={props.workspace}
+                          onDone={props.composer.restoreFocus}
+                          onWorktree={project().id && project().vcs === "git" ? () => location(project()) : undefined}
+                        />
                       }
+                      onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
+                      onClick={() => location()}
                     />
                   )}
                 </Show>
@@ -361,7 +369,8 @@ function NewSessionLocation(props: {
         </Tooltip>
         {props.branch}
       </div>
-      <Show when={path()}>
+      {/* An open tooltip can outlive this row; keep its path instead of a stale Show accessor. */}
+      <Show when={path()} keyed>
         {(directory) => (
           <div
             class="flex min-w-0 flex-1 justify-end pe-1.5 @max-[560px]:hidden"
@@ -369,8 +378,8 @@ function NewSessionLocation(props: {
           >
             <Tooltip
               placement="top"
-              value={directory()}
-              disabled={fitted().text === directory() && fitted().minimum <= layout.width}
+              value={directory}
+              disabled={fitted().text === directory && fitted().minimum <= layout.width}
               class="flex min-w-0 flex-1"
               contentClass="max-w-[calc(100vw-32px)] break-all"
             >
