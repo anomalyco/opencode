@@ -20,6 +20,8 @@ import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 import { Button } from "@opencode/ui/button"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Icon } from "@opencode/ui/icon"
 import { Select } from "@opencode/ui/select"
 import { displayName } from "@opencode/ui/project-avatar"
 import { useSettings } from "@/settings/model"
@@ -508,6 +510,13 @@ export function TitlebarTabStrip(props: {
     candidates.forEach((_, key) => {
       if (!positions.has(key)) positions.set(key, positions.size)
     })
+    candidates.forEach((tab, key) => {
+      if (tab.type !== "session") return
+      const ctx = global.serverCtx(tab.server)
+      const session = ctx?.data.session.get(tab.sessionId) ?? indexed().get(key)?.session
+      // Child sessions stay accessible through their parent's subagent view.
+      if (session?.parentID) candidates.delete(key)
+    })
     const recent = [...candidates.values()]
       .filter((tab) => tab.type === "session")
       .map((tab) => ({
@@ -529,7 +538,10 @@ export function TitlebarTabStrip(props: {
   const opened = createMemo(() => new Set(props.tabs.map(tabKey)))
   const groups = createMemo(() => {
     if (!grouped()) return []
-    const result = new Map<string, { key: string; name: string; directory?: string; server?: string; tabs: Tab[] }>()
+    const result = new Map<
+      string,
+      { key: string; name: string; directory?: string; server?: string; connection: ServerConnection.Key; tabs: Tab[] }
+    >()
     const totals = new Map<string, string[]>()
     sidebar?.sources().forEach((source) =>
       source.inventory.forEach((session) => {
@@ -551,6 +563,7 @@ export function TitlebarTabStrip(props: {
           key,
           name: displayName(project),
           directory: project.worktree,
+          connection: server,
           server: servers.visible.length > 1 ? serverName(source.conn) : undefined,
           tabs: [],
         })
@@ -585,6 +598,7 @@ export function TitlebarTabStrip(props: {
         key,
         name: root ? displayName(project ?? { worktree: root }) : language.t("sidebar.grouping.other"),
         directory: root,
+        connection: tab.server,
         server: servers.visible.length > 1 && conn ? serverName(conn) : undefined,
         tabs: [tab],
       })
@@ -906,6 +920,21 @@ export function TitlebarTabStrip(props: {
                           <span class="shrink-0 rounded px-1 text-[11px] leading-4 tabular-nums text-v2-text-text-faint">
                             {group().recent}/{group().total}
                           </span>
+                          <Show when={group().directory}>
+                            {(directory) => (
+                              <IconButton
+                                size="small"
+                                variant="ghost-muted"
+                                icon={<Icon name="plus-small" />}
+                                aria-label={language.t("sidebar.project.newSession", { project: group().name })}
+                                title={language.t("sidebar.project.newSession", { project: group().name })}
+                                onClick={() => {
+                                  global.serverCtx(group().connection)?.projects.touch(directory())
+                                  void tabs.newDraft({ server: group().connection, directory: directory() })
+                                }}
+                              />
+                            )}
+                          </Show>
                         </div>
                         <Show when={group().server}>
                           <div dir="auto" class="truncate text-[12px] leading-4 text-v2-text-text-faint">

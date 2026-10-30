@@ -15,6 +15,8 @@ import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { SessionInfo } from "@opencode/client/promise"
 import { sessionLastRunLabel, sessionTabTitle } from "./tab-title"
 import { TabPreviewPopover } from "./tab-popover"
+import { createSessionBranches } from "./session-branches"
+import { pathKey } from "@/workspaces/path-key"
 import "./tab-nav.css"
 
 // MouseEvent.button uses 1 for the middle/wheel button.
@@ -136,6 +138,28 @@ export function TabNavItem(props: {
   })
 
   const [popoverOpen, setPopoverOpen] = createSignal(false)
+  const branches = createSessionBranches({ resolveUnknown: true })
+  const branchEntry = () => {
+    const ctx = serverCtx()
+    const session = props.session
+    return ctx && session ? { ctx, session, server: props.server } : undefined
+  }
+  createEffect(() => {
+    if (!popoverOpen()) return
+    const entry = branchEntry()
+    if (entry) branches.load([entry])
+  })
+  const worktree = createMemo(() => {
+    const value = project()
+    const directory = props.session?.location.directory
+    if (!value || !directory || !("sandboxes" in value)) return
+    const key = pathKey(directory)
+    return (
+      value.sandboxes
+        .filter((root) => key === pathKey(root) || key.startsWith(`${pathKey(root)}/`))
+        .toSorted((a, b) => b.length - a.length)[0] ?? value.worktree
+    )
+  })
   const previewBlocked = () => !!props.dragging || editing() || menu.open || !!props.pressed || !props.session
 
   const measureTitleOverflow = () => {
@@ -409,6 +433,8 @@ export function TabNavItem(props: {
           path: previewPath(),
           serverName: serverLabel(),
           lastRun: sessionLastRunLabel(props.session?.time, language),
+          branch: branchEntry() ? branches.branch(branchEntry()!) : undefined,
+          worktree: worktree(),
         }}
       />
       <Menu.Context.Portal>

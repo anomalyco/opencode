@@ -54,6 +54,10 @@ test("sidebar and Home share projects and history without opening session tabs",
   await expect(sidebar.getByRole("button", { name: "Close tab", exact: true })).toHaveCount(0)
   await expect(sidebar.getByRole("heading", { name: "Recent sessions", exact: true })).toBeVisible()
   await expect(sidebar.getByRole("button", { name: "Group sessions By project", exact: true })).toBeVisible()
+  await expect(home.locator('[data-component="home-project-row"] [data-slot="home-row-label"]')).toHaveText([
+    "Shared history",
+    "Empty project",
+  ])
 
   for (const mode of ["Top tabs", "Side tabs"]) {
     await page.keyboard.press("Control+,")
@@ -97,6 +101,10 @@ test("sidebar and Home share projects and history without opening session tabs",
   await expect(homeRow("Shared rename")).toHaveCount(0)
   await expect(sidebar.getByRole("heading", { level: 3 })).toHaveText(["Shared history", "Empty project"])
   await expect(sidebar.getByText("1/1", { exact: true })).toBeVisible()
+  await sidebar.getByRole("button", { name: "New session in Empty project", exact: true }).click()
+  await expect(page.locator('[data-component="new-session"] [data-action="prompt-project"]')).toContainText(
+    "Empty project",
+  )
 })
 
 test("recent sessions caps each project at five and can reveal a selected overflow session", async ({ page }) => {
@@ -163,16 +171,20 @@ test("recent sessions caps each project at five and can reveal a selected overfl
 
 test("recent sessions follow last activity and preview the previous run completion", async ({ page }) => {
   const ended = 1700000100000
+  const worktree = "C:/OpenCode/Activity order/task"
   const loaded: string[] = []
   const workspace = await mockWorkspace(page, {
     name: "Activity order",
+    project: { sandboxes: [worktree] },
+    vcs: (directory) => ({ current: directory === worktree ? "task-branch" : "main", default: "main" }),
     sessions: [
       { ...a, time: { created: ended - 10000, updated: ended - 3000 } },
-      { ...b, time: { created: ended - 10000, updated: ended, idle: ended } },
+      { ...b, directory: worktree, time: { created: ended - 10000, updated: ended, idle: ended } },
       { ...c, time: { created: ended - 10000, updated: ended - 2000 } },
+      { id: "ses_child_sidebar", title: "Child task", parentID: a.id },
     ],
     onSession: (id) => loaded.push(id),
-    seed: { tabs: [a.id], settings: { appearance: { tabLayout: "vertical" } } },
+    seed: { tabs: [a.id, "ses_child_sidebar"], settings: { appearance: { tabLayout: "vertical" } } },
   })
   await page.goto("/")
   const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
@@ -182,6 +194,8 @@ test("recent sessions follow last activity and preview the previous run completi
   const preview = page.locator('[data-component="session-tab-popover"]')
   await expect(preview).toContainText(b.title)
   await expect(preview).toContainText("Last run ended:")
+  await expect(preview).toContainText("Branch: task-branch")
+  await expect(preview).toContainText(`Worktree: ${worktree}`)
   await expect(preview).toContainText(
     new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "medium" }).format(ended),
   )
