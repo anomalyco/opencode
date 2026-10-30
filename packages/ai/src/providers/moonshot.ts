@@ -133,9 +133,9 @@ export const chat = provider.chat
 export const messages = provider.messages
 export const responses = provider.responses
 
-export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (
+export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (
   modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions },
+  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
 ) =>
   configure({
     apiKey,

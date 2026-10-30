@@ -40,6 +40,7 @@ import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
 import { createTimelineQuote, TimelineQuote } from "./timeline/quote"
+import { createTimelineQuoteHighlight } from "./timeline/quote-highlight"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader, SessionLocation } from "./session-identity-header"
 import { SessionHeaderDrag, windowDragEnabled } from "./header/drag-area"
@@ -50,7 +51,7 @@ import { createTimelineCache } from "./timeline/cache"
 import { createPanelMotion, holdLandingWidth, panelOpacity } from "@/shell/panel-motion"
 
 export function SessionScreenView(props: { session: SessionModel }) {
-  // The timeline cache captures its owner when created, so link handling must be provided above it.
+  // Link handling for the rest of the screen; each cached timeline provides its own for its session.
   const mounted = createMountedSession(props.session)
 
   return (
@@ -162,8 +163,13 @@ function SessionScreenContent(props: {
   let sideGlyph: SVGPathElement | undefined
   let sideClosed = 0
   // While the left sidebar moves the side panel's edge, its contents keep the width they land at, and centred content,
-  // like a Markdown preview, keeps its place rather than jumping by half the change.
-  holdLandingWidth(() => sideContent, "blocks")
+  // like a Markdown preview, keeps its place rather than jumping by half the change. The side region's content box is
+  // the one element whose own width reads the hold.
+  holdLandingWidth(
+    () => sideContent,
+    "blocks",
+    () => sideContent?.querySelector<HTMLElement>('[data-slot="session-review-content"]'),
+  )
   // The toggle's pane fills from the panel's edge as far as the panel is open.
   const paintSideGlyph = () => sideGlyph?.setAttribute("transform", reviewGlyphFill(1 - sideClosed))
 
@@ -248,6 +254,12 @@ function SessionScreenContent(props: {
     add: composer.quote.add,
   })
 
+  createTimelineQuoteHighlight({
+    root: timeline.scroller,
+    source: composer.quote.source,
+    enabled: () => conversationVisible() && composer.quote.available(),
+  })
+
   const sessionErrorFallback = (cause: unknown, reset: () => void) => {
     createEffect(on(session.identity.sessionKey, reset, { defer: true }))
 
@@ -268,47 +280,56 @@ function SessionScreenContent(props: {
     (source, active) => {
       // A cached timeline keeps its own session's latest object while another session is routed.
       const own = createMemo<MountedSession>((previous) => {
+        if (!active()) return previous
         const view = props.view()
 
         return view.id === source.identity.sessionID() ? view : previous
       }, untrack(props.view))
 
+      const actions = composer.actions.timeline({
+        sessionID: source.identity.sessionID,
+        isChild: () => !!source.data.parentID(),
+      })
+
       return (
-        <MessageTimeline
-          active={active()}
-          hideHeader={!isDesktop()}
-          registerHeaderGap={registerHeaderGap}
-          session={source}
-          view={own()}
-          screen={props.screen}
-          background={composer.requests.background}
-          actions={composer.actions.timeline}
-          scroll={timeline.scroll}
-          onResumeScroll={timeline.actions.resume}
-          setScrollRef={timeline.view.setScrollRef}
-          onScheduleScrollState={timeline.view.scheduleScrollState}
-          onPin={timeline.view.pin}
-          onUnpin={timeline.view.unpin}
-          onUserScroll={timeline.view.markUserScroll}
-          onHistoryScroll={timeline.view.onHistoryScroll}
-          onSelectionInteraction={timeline.view.selectionInteraction}
-          pinned={timeline.view.pinned()}
-          centered={screen.centered()}
-          reserveReviewToggle={!sideVisible()}
-          setContentRef={timeline.view.setContentRef}
-          bottomInset={timeline.inset()}
-          setVisibleRef={timeline.view.setVisibleRef}
-          anchor={timeline.view.anchor}
-          setRevealMessage={timeline.view.setRevealMessage}
-          setRevealPart={timeline.view.setRevealPart}
-          reveal={timeline.view.reveal}
-          setScrollToEnd={timeline.view.setScrollToEnd}
-          search={
-            <Show when={active()}>
-              <TimelineSearchBar controller={timelineSearch} />
-            </Show>
-          }
-        />
+        <PluginLinks session={own()} active={active()}>
+          <MessageTimeline
+            active={active()}
+            hideHeader={!isDesktop()}
+            registerHeaderGap={registerHeaderGap}
+            session={source}
+            view={own()}
+            screen={props.screen}
+            background={composer.requests.background}
+            actions={actions}
+            scroll={timeline.scroll}
+            onResumeScroll={timeline.actions.resume}
+            setScrollRef={timeline.view.setScrollRef}
+            onScheduleScrollState={timeline.view.scheduleScrollState}
+            onPin={timeline.view.pin}
+            onUnpin={timeline.view.unpin}
+            onUserScroll={timeline.view.markUserScroll}
+            onHistoryScroll={timeline.view.onHistoryScroll}
+            onSelectionInteraction={timeline.view.selectionInteraction}
+            pinned={timeline.view.pinned()}
+            centered={screen.centered()}
+            reserveReviewToggle={!sideVisible()}
+            onContentResize={timeline.view.contentResized}
+            bottomInset={timeline.inset()}
+            setVisibleRef={timeline.view.setVisibleRef}
+            anchor={timeline.view.anchor}
+            setRevealMessage={timeline.view.setRevealMessage}
+            setRevealPart={timeline.view.setRevealPart}
+            reveal={timeline.view.reveal}
+            setScrollToEnd={timeline.view.setScrollToEnd}
+            setPage={timeline.view.setPage}
+            search={
+              <Show when={active()}>
+                <TimelineSearchBar controller={timelineSearch} />
+              </Show>
+            }
+          />
+        </PluginLinks>
       )
     },
     () => conversationVisible() && messagesReady(),
@@ -473,21 +494,21 @@ function SessionScreenContent(props: {
               <SessionHeaderDrag pane={chat} gap={headerGap()} />
             </Show>
 
-            <Show when={screen.panel.resizable()}>
-              <div onPointerDown={() => screen.size.start()}>
-                <ResizeHandle
-                  class="-end-1"
-                  direction="horizontal"
-                  size={screen.panel.resizedWidth()}
-                  min={SESSION_PANEL_WIDTH_MIN}
-                  max={screen.panel.max()}
-                  onResize={(width) => {
-                    screen.size.touch()
-                    session.layout.view().session.resize(width)
-                  }}
-                />
-              </div>
-            </Show>
+            {/* Hidden rather than unmounted: removing it makes the transcript frame the last child, and structural
+                selectors in the transcript then restyle every element in it as the side panel starts to close. */}
+            <div classList={{ hidden: !screen.panel.resizable() }} onPointerDown={() => screen.size.start()}>
+              <ResizeHandle
+                class="-end-1"
+                direction="horizontal"
+                size={screen.panel.resizedWidth()}
+                min={SESSION_PANEL_WIDTH_MIN}
+                max={screen.panel.max()}
+                onResize={(width) => {
+                  screen.size.touch()
+                  session.layout.view().session.resize(width)
+                }}
+              />
+            </div>
           </div>
 
           <Show when={sideMotion.present() || store.sideMounted}>

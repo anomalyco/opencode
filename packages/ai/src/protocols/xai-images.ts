@@ -20,6 +20,7 @@ export const EDIT_PATH = "/images/edits"
 
 /** Provider-native options. Common fields (`n`, `aspect`, `resolution`, `images`) live on the request. */
 export type XAIImageOptions = {
+  /** Defaults to `b64_json`; `url` returns a short-lived hosted URL instead. */
   readonly responseFormat?: OpenString<"url" | "b64_json">
   readonly response_format?: OpenString<"url" | "b64_json">
 } & Record<string, unknown>
@@ -47,13 +48,12 @@ const XAIImageResponse = Schema.Struct({
 // ---------------------------------------------------------------------------
 
 const nativeOptions = (options: XAIImageOptions | undefined) => {
-  if (!options) return undefined
-  const { responseFormat, ...native } = options
-  return { response_format: responseFormat, ...native }
+  const { responseFormat, ...native } = options ?? {}
+  return { response_format: responseFormat ?? "b64_json", ...native }
 }
 
 /** xAI renders `1k` or `2k`; other tiers use the nearest one. */
-const resolution = (request: Request) => {
+export const resolution = (request: { readonly resolution?: string }) => {
   if (request.resolution === undefined) return undefined
   return (ImageSizing.tier(request.resolution) ?? 1) < 1.5 ? "1k" : "2k"
 }
@@ -133,4 +133,5 @@ export const model = (input: MediaRoute.ModelInput) =>
 export const XAIImages = {
   protocol,
   model,
+  resolution,
 } as const

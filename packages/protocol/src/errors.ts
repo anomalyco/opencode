@@ -324,3 +324,12 @@ export class ProviderRequestError extends Schema.TaggedError<ProviderRequestErro
   },
   { httpApiStatus: 502 },
 ) {}
+
+export class ScheduleNotFoundError extends Schema.TaggedError<ScheduleNotFoundError>()(
+  "ScheduleNotFoundError",
+  {
+    scheduleID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}

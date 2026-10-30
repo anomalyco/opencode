@@ -1,5 +1,6 @@
 import type {
   BackgroundDefinition,
+  DialogTokensDefinition,
   ModeDefinition,
   StatefulColorDefinition,
   TextDefinition,
@@ -11,7 +12,14 @@ export function expandTheme<Definition extends ModeDefinition>(definition: Defin
   return {
     ...definition,
     ...expandTokens(definition),
-    ...(definition["@dialog"] ? { "@dialog": expandTokens(definition["@dialog"]) } : {}),
+    ...(definition["@dialog"] ? { "@dialog": expandDialog(definition["@dialog"]) } : {}),
+  }
+}
+
+function expandDialog(definition: DialogTokensDefinition): DialogTokensDefinition {
+  return {
+    ...expandTokens(definition),
+    ...(definition["@footer"] ? { "@footer": expandTokens(definition["@footer"]) } : {}),
   }
 }
 

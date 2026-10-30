@@ -24,7 +24,6 @@ describe("xAI Images recorded", () => {
         prompt: "A simple flat black diamond centered on a plain white background.",
         aspect: "1:1",
         resolution: "1K",
-        providerOptions: { responseFormat: "b64_json" },
       })
 
       expect(response.images).toHaveLength(1)
@@ -46,7 +45,6 @@ describe("xAI Images recorded", () => {
         ],
         aspect: "1:1",
         resolution: "1K",
-        providerOptions: { responseFormat: "b64_json" },
       })
 
       expect(response.image.mediaType).toMatch(/^image\/(jpeg|png)$/)

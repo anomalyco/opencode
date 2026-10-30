@@ -7,7 +7,7 @@ import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import type { Terminal as Term } from "ghostty-web"
-import { usePlugin } from "@opencode/plugin/gui"
+import { usePlugin, type ComposerQuoteAnchor } from "@opencode/plugin/gui"
 
 const SETTLE_MS = 150
 
@@ -19,7 +19,7 @@ const MAX_LENGTH = 20_000
 /** Where a terminal sends quoted output: the composer of the screen that shows it. */
 export type TerminalQuoteTarget = {
   available: () => boolean
-  add: (text: string, comment: boolean) => void
+  add: (text: string, anchor?: ComposerQuoteAnchor) => void
 }
 
 type Place = { top: number; left: number }
@@ -27,7 +27,12 @@ type Place = { top: number; left: number }
 type Anchor = { top: number; bottom: number; start: number; end: number; single: boolean }
 
 /** Offers to quote text selected in a terminal into the composer, like the timeline's Quote button. */
-export function TerminalQuote(props: { term: Term; container: HTMLElement; target: TerminalQuoteTarget }) {
+export function TerminalQuote(props: {
+  term: Term
+  container: HTMLElement
+  target: TerminalQuoteTarget
+  written: number
+}) {
   const plugin = usePlugin()
   const mac = /(Mac|iPhone|iPad)/.test(navigator.platform)
 
@@ -36,8 +41,20 @@ export function TerminalQuote(props: { term: Term; container: HTMLElement; targe
     truncated: boolean
     anchor: Anchor | undefined
     bounds: DOMRect | undefined
+    revision: number
+    resized: number
+    disposed: boolean
     size: { width: number; height: number }
-  }>({ text: undefined, truncated: false, anchor: undefined, bounds: undefined, size: { width: 0, height: 0 } })
+  }>({
+    text: undefined,
+    truncated: false,
+    anchor: undefined,
+    bounds: undefined,
+    revision: 0,
+    resized: 0,
+    disposed: false,
+    size: { width: 0, height: 0 },
+  })
 
   let element: HTMLElement | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -89,6 +106,9 @@ export function TerminalQuote(props: { term: Term; container: HTMLElement; targe
   }
 
   const schedulePlace = () => {
+    // The source editor can outlive the selection, and follows terminal scrolling and resizing.
+    setState("revision", (value) => value + 1)
+
     if (frame !== undefined || state.text === undefined) return
     frame = requestAnimationFrame(() => {
       frame = undefined
@@ -96,14 +116,20 @@ export function TerminalQuote(props: { term: Term; container: HTMLElement; targe
     })
   }
 
+  // A cached tab can regain its DOM size after visibility changes without changing the terminal's grid.
+  createResizeObserver(() => props.container, schedulePlace)
+
   const inside = (target: EventTarget | null) => target instanceof Node && !!element?.contains(target)
 
   // ghostty-web announces a finished selection but clears one without an event, on a press or while typing.
   const subscriptions = [
     props.term.onSelectionChange(schedule),
     props.term.onScroll(schedulePlace),
-    props.term.onResize(schedulePlace),
-    props.term.onRender(schedulePlace),
+    props.term.onResize(() => {
+      // Both column reflow and row changes can move content without preserving its captured cell coordinates.
+      setState("resized", (value) => value + 1)
+      schedulePlace()
+    }),
   ]
 
   makeEventListener(document, "pointerdown", (event) => {
@@ -126,33 +152,61 @@ export function TerminalQuote(props: { term: Term; container: HTMLElement; targe
   makeEventListener(window, "resize", schedulePlace)
 
   onCleanup(() => {
+    // The composer can retain a memoized anchor after this component is disposed.
+    setState("disposed", true)
     subscriptions.forEach((subscription) => subscription.dispose())
     clearTimeout(timer)
 
     if (frame !== undefined) cancelAnimationFrame(frame)
   })
 
-  const add = (comment: boolean) => {
+  const add = (skip: boolean) => {
     const text = state.text
 
     if (!text || state.truncated) return
+    const cells = props.term.getSelectionPosition()
+    const offset = props.term.getScrollbackLength() - props.term.getViewportY()
+    const written = props.written
+    const resized = state.resized
+
+    const anchor: ComposerQuoteAnchor = (size) => {
+      if (state.disposed) return
+      void state.revision
+
+      if (!props.target.available()) return
+
+      // Ghostty has no stable line identity: a write can evict history even while its retained length grows.
+      if (!cells || resized !== state.resized || written !== props.written || !props.container.isConnected) return
+      const bounds = props.container.getBoundingClientRect()
+      const canvas = props.term.renderer?.getCanvas()
+      const metrics = props.term.renderer?.getMetrics()
+
+      if (!bounds.width || !bounds.height || !canvas || !metrics) return
+      const origin = canvas.getBoundingClientRect()
+      const rows = offset - props.term.getScrollbackLength() + props.term.getViewportY()
+
+      return position(size, bounds, {
+        top: origin.top + (cells.start.y + rows) * metrics.height,
+        bottom: origin.top + (cells.end.y + rows + 1) * metrics.height,
+        start: origin.left + cells.start.x * metrics.width,
+        end: origin.left + (cells.end.x + 1) * metrics.width,
+        single: cells.start.y === cells.end.y,
+      })
+    }
+
     props.term.clearSelection()
     close()
-    props.target.add(text, comment)
+    props.target.add(text, skip ? undefined : anchor)
   }
 
   // A one-line selection gets it above; a taller one below its end, where the drag usually stops.
-  const position = (): Place | undefined => {
-    const bounds = state.bounds
-    const anchor = state.anchor
-
+  const position = (size = state.size, bounds = state.bounds, anchor = state.anchor): Place | undefined => {
     if (!bounds || !anchor) return
 
-    const size = state.size
     const above = anchor.top - size.height - GAP
     const below = anchor.bottom + GAP
-    const fitsAbove = above >= bounds.top + GAP
-    const fitsBelow = below + size.height <= bounds.bottom - GAP
+    const fitsAbove = above >= bounds.top + GAP && anchor.top <= bounds.bottom
+    const fitsBelow = below + size.height <= bounds.bottom - GAP && anchor.bottom >= bounds.top
     const sides = anchor.single ? [fitsAbove && above, fitsBelow && below] : [fitsBelow && below, fitsAbove && above]
     const top = sides.find((side) => side !== false)
     const center = anchor.single ? (anchor.start + anchor.end - size.width) / 2 : anchor.end - size.width / 2
@@ -197,12 +251,12 @@ export function TerminalQuote(props: { term: Term; container: HTMLElement; targe
             <Tooltip
               value={
                 <>
-                  {plugin.t("quote.addWithComment")}
+                  {plugin.t("quote.addWithoutComment")}
                   <Keybind keys={[mac ? "⌥" : plugin.t("common.key.alt")]} variant="neutral" />
                 </>
               }
               placement="top"
-              openDelay={1200}
+              openDelay={800}
             >
               <Button
                 size="small"

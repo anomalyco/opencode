@@ -136,7 +136,7 @@ const run = (snapshots: Layer.Layer<Snapshot.Service>) =>
           delayed(
             kind === "text"
               ? TestLLM.text("Done.", `text-${call}`)
-              : TestLLM.tool(call, kind, { path: files[edits % files.length] }),
+              : TestLLM.toolCall(call, kind, { path: files[edits % files.length] }),
           ),
         )
         yield* steps.attempt({

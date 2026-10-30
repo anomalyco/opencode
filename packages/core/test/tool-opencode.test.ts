@@ -144,17 +144,15 @@ it.effect("groups available models by provider with paging", () =>
   }),
 )
 
-const approvals = { assertions: [] as Permission.AssertInput[], denyEdit: false }
+const approvals = { assertions: [] as Permission.AssertInput[], rejectEdit: false }
 const worktreeIt = testEffect(
   makePluginTestLayer(
     permissionLayer({
       assert: (input) =>
         Effect.sync(() => approvals.assertions.push(input)).pipe(
           Effect.andThen(
-            approvals.denyEdit && input.action === "edit"
-              ? Effect.fail(
-                  new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }),
-                )
+            approvals.rejectEdit && input.action === "edit"
+              ? Effect.fail(new Permission.CorrectedError({ feedback: "Keep this worktree" }))
               : Effect.void,
           ),
         ),
@@ -193,17 +191,14 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
     yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins))
     const session = yield* sessions.create({ location: Location.Ref.make({ directory: location.directory }) })
     const registry = yield* Tool.Service
-    const call = (name: string, input: Record<string, unknown>) =>
+    const program = (code: string) =>
       executeTool(registry, {
         sessionID: session.id,
         ...toolIdentity,
-        call: {
-          type: "tool-call",
-          id: `call-${name}-${JSON.stringify(input)}`,
-          name: "execute",
-          input: { code: `return await tools.opencode.${name}(${JSON.stringify(input)})` },
-        },
+        call: { type: "tool-call", id: `call-${code}`, name: "execute", input: { code } },
       })
+    const call = (name: string, input: Record<string, unknown>) =>
+      program(`return await tools.opencode.${name}(${JSON.stringify(input)})`)
     const run = (name: string, input: Record<string, unknown>) =>
       call(name, input).pipe(
         Effect.map((result) => JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")),
@@ -234,12 +229,21 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
     expect(yield* Effect.promise(() => Bun.file(path.join(directory, "draft.txt")).exists())).toBe(true)
     yield* Effect.promise(() => fs.rm(path.join(directory, "draft.txt")))
 
-    // Removal requires the same approval as editing files in the worktree.
+    // Removal requires the same approval as editing files in the worktree. Rejection feedback reaches the
+    // program and the execute result, as it would reach the model from a direct call.
     approvals.assertions.length = 0
-    approvals.denyEdit = true
-    expect(yield* call("worktree_remove", { directory })).toMatchObject({ metadata: { error: true } })
+    approvals.rejectEdit = true
+    expect(yield* call("worktree_remove", { directory })).toMatchObject({
+      content: [{ type: "text", text: "Keep this worktree" }],
+      metadata: { error: true },
+    })
+    expect(
+      yield* program(
+        `try { await tools.opencode.worktree_remove(${JSON.stringify({ directory })}) } catch (error) { return error.message }`,
+      ),
+    ).toMatchObject({ content: [{ type: "text", text: "Keep this worktree" }] })
     expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git")).exists())).toBe(true)
-    approvals.denyEdit = false
+    approvals.rejectEdit = false
 
     // Relative paths resolve from the session's directory for both approval and removal.
     expect(yield* run("worktree_remove", { directory: path.relative(location.directory, directory) })).toEqual({
@@ -250,6 +254,7 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
     // Permission resources always use forward slashes, including on Windows.
     const resource = directory.replaceAll("\\", "/")
     expect(approvals.assertions).toMatchObject([
+      { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
       { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
       { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
     ])

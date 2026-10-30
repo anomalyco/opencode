@@ -159,6 +159,32 @@ ctx.add(Command, () => ({
 }))
 ```
 
+### Referencing a subject
+
+Attach a `type: "note"` part to reference a subject outside workspace lines. Set `comment: ""` to attach only the
+subject: the model reads "The user referenced <subject>." With a comment it reads "The user made the following
+comment regarding <subject>: <comment>" instead.
+
+For an uncommented note, optional `title` supplies the primary heading. Optional `subtitle` supplies a plain-text
+footer beside the icon, with or without a comment. Each defaults to `label` when omitted. For example, the browser
+uses a selector as `title` and its localized annotation label as `subtitle`; a comment replaces only the heading.
+These display fields do not change `subject`. Both survive draft storage, sent-message metadata and restoration.
+Only the process-bound `live` reference is dropped when a stored draft or sent message is restored.
+
+### Quoting selected content
+
+Attach a `type: "quote"` part with a `commentID`, then call `screen.composer.focus(commentID, { anchor })` to open its
+optional comment beside the source. `anchor(size)` returns the editor's physical viewport `{ top, left }` for its
+current `width` and frozen opening `height`. It is first called after measurement (never with an unmeasured zero
+height), then again on scroll, resize, and changes to reactive values it reads. The editor holds its opening bottom
+edge as its input grows upward. Return `undefined` when the source is hidden or gone to fall back to the quote's
+composer tile. The anchor is client-only and never persisted. Omitting the options
+anchors the editor to the tile, as clicking that tile does. To quote without opening a comment, call
+`screen.composer.focus()` instead; the built-in selection toolbars offer this through Alt-click.
+
+The built-in terminal follows manual scrolling until new output or a grid resize invalidates the captured source.
+It then falls back to the quote's composer tile without closing the editor or discarding its unsaved comment.
+
 ## Primitives
 
 | Primitive                                        | Use it for                                                                     |
@@ -223,14 +249,24 @@ SDK icon fields take an `IconName` from `@opencode/plugin/gui`: the names of the
 | [`Server`](../plugin/src/gui/registries.ts)       | window  | A source of servers, such as SSH hosts                                                                                                                              |
 | [`LinkHandler`](../plugin/src/gui/registries.ts)  | window  | Opens local links, such as file paths in messages, and says whether their target exists                                                                             |
 | [`TitlebarItem`](../plugin/src/gui/registries.ts) | window  | A pill in the titlebar or the tabs footer                                                                                                                           |
-| [`ComposerPill`](../plugin/src/gui/registries.ts) | window  | A pill in the row above a session's composer, optionally opening a menu of rows                                                                                     |
-| [`Slot`](../plugin/src/gui/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.location.menu`, `session.panel.end`; built-ins also fill `session.location.workspace` through `BuiltinSlot` |
+| [`ComposerPill`](../plugin/src/gui/registries.ts) | window  | A pill in the row above a session's composer, optionally opening a menu of rows or a popover of your own content                                                    |
+| [`Slot`](../plugin/src/gui/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.location.menu`, `session.panel.end`; built-ins also fill `session.location.workspace`, `session.location.branch.menu` and `session.location.path.menu` through `BuiltinSlot` |
 | [`Style`](../plugin/src/gui/registries.ts)        | window  | CSS imported with `?inline`                                                                                                                                         |
 | [`MenubarItem`](../plugin/src/gui/main.ts)        | main    | An item of the native app menu                                                                                                                                      |
 
 `session.location.menu` contributes items after the project menu's location details. It receives the owning `screen`,
 the live `session`, and `shown`; keep data subscriptions active only while `shown` is true. Loading headers without an
 owning screen show the host's location details without this slot.
+
+`session.location.branch.menu` (built-ins only, through `BuiltinSlot`) contributes items after Copy branch name in
+the branch submenu, with the same `screen`, live `session`, and project-menu `shown` context. It renders only when a
+branch name and owning screen are available. Use it for actions on the branch's working directory, such as opening
+an integrated terminal.
+
+`session.location.path.menu` (built-ins only, through `BuiltinSlot`) contributes items after the host's copy and
+reveal actions in the session directory's path submenu. It receives the same session context and renders only with
+an owning screen. Use it for external-app actions on `session.directory` without duplicating the host's file-manager
+action.
 
 `session.location.workspace` (built-ins only, through `BuiltinSlot`) replaces the current location row with the same
 session context plus its `label` and `icon`; one contribution owns it. Without a contribution, the host keeps its
@@ -668,6 +704,7 @@ export const builtins = compose({
   wsl: { ...wsl, mainEntry: () => import("./wsl/main") },
   "microsoft-office": microsoftOffice,
   sources,
+  goal,
 })
 ```
 
@@ -692,6 +729,7 @@ export const builtins = compose({
   wsl: { ...wsl, windowEntry: eager(wslRenderer) },
   "microsoft-office": { ...microsoftOffice, windowEntry: eager(microsoftOfficeRenderer) },
   sources: { ...sources, windowEntry: eager(sourcesRenderer) },
+  goal: { ...goal, windowEntry: eager(goalRenderer) },
 })
 ```
 
