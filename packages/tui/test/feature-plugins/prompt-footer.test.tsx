@@ -241,10 +241,16 @@ test("prompt footer shows the session's goal without its objective and opens it 
   }
 })
 
-test.each([
-  { sessionID: "session", expected: "≈ $12.60" },
-  { sessionID: "child", expected: "≈ $1.50" },
-])("prompt footer estimates $sessionID spend", async ({ sessionID, expected }) => {
+test.each(
+  [
+    { sessionID: "session", expected: "≈ $12.60" },
+    { sessionID: "child", expected: "≈ $1.50" },
+    { sessionID: "session", scale: 0.0001, expected: "≈ <$0.01" },
+    { sessionID: "session", cost: 1, expected: "$1.00" },
+    { sessionID: "session", experiment: false, expected: undefined },
+    { sessionID: "session", unpriced: true, expected: undefined },
+  ].map((options) => ({ cost: 0, experiment: true, scale: 1, unpriced: false, ...options })),
+)("prompt footer spend: $expected ($sessionID)", async ({ sessionID, expected, cost, experiment, scale, unpriced }) => {
   const color = RGBA.fromInts(200, 200, 200)
   const context = {
     location: { directory: "/workspace" },
@@ -256,18 +262,31 @@ test.each([
       session: {
         family: () => ["session", "child", "sibling"],
         status: () => "idle",
-        get: (id: string) => ({
-          id,
-          parentID: id === "session" ? undefined : "session",
-          location: { directory: "/workspace" },
-          model: { providerID: "provider", id: "model" },
-          tokens:
-            id === "session"
-              ? { input: 1_000_000, output: 100_000, reasoning: 0, cache: { read: 2_000_000, write: 0 } }
-              : { input: id === "child" ? 500_000 : 2_000_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-          cost: 0,
-        }),
-        cost: () => 0,
+        get: (id: string) => {
+          if (id !== sessionID && (cost > 0 || !experiment)) throw new Error("Unused estimate reads family sessions")
+          return {
+            id,
+            parentID: id === "session" ? undefined : "session",
+            location: { directory: "/workspace" },
+            model: { providerID: "provider", id: unpriced && id === "child" ? "removed" : "model" },
+            tokens:
+              id === "session"
+                ? {
+                    input: 1_000_000 * scale,
+                    output: 100_000 * scale,
+                    reasoning: 0,
+                    cache: { read: 2_000_000 * scale, write: 0 },
+                  }
+                : {
+                    input: (id === "child" ? 500_000 : 2_000_000) * scale,
+                    output: 0,
+                    reasoning: 0,
+                    cache: { read: 0, write: 0 },
+                  },
+            cost: 0,
+          }
+        },
+        cost: () => cost,
         message: { list: () => [] },
       },
       shell: { list: () => [] },
@@ -286,7 +305,7 @@ test.each([
   } as unknown as Context
   const app = await testRender(
     () => (
-      <ConfigProvider config={createTuiResolvedConfig({ experimental: { "cost-estimate": true } })}>
+      <ConfigProvider config={createTuiResolvedConfig({ experimental: { "cost-estimate": experiment } })}>
         <PromptFooter context={context} sessionID={sessionID} mode="normal" showDetails={true} />
       </ConfigProvider>
     ),
@@ -298,7 +317,10 @@ test.each([
 
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain(expected)
+    const frame = app.captureCharFrame()
+    if (expected) expect(frame).toContain(expected)
+    if (!expected) expect(frame).not.toContain("$")
+    if (cost > 0) expect(frame).not.toContain("≈")
   } finally {
     app.renderer.destroy()
   }

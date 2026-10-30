@@ -101,21 +101,27 @@ test("sidebar shows available context usage", async () => {
   }
 })
 
-test("sidebar estimates spend from catalog prices when the provider reports $0", async () => {
-  const app = await render(
-    context({
-      experiment: true,
-      family: [{ tokens: usage(1_000_000, 100_000, 2_000_000) }, { parentID: "session", tokens: usage(0, 10_000) }],
-    }),
-  )
+test.each([
+  { input: 1_000_000, output: 100_000, read: 2_000_000, childOutput: 10_000, expected: "≈ $5.25 spent" },
+  { input: 100, output: 0, read: 0, childOutput: 0, expected: "≈ <$0.01 spent" },
+])(
+  "sidebar estimates $expected when the provider reports $0",
+  async ({ input, output, read, childOutput, expected }) => {
+    const app = await render(
+      context({
+        experiment: true,
+        family: [{ tokens: usage(input, output, read) }, { parentID: "session", tokens: usage(0, childOutput) }],
+      }),
+    )
 
-  try {
-    await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("≈ $5.25 spent")
-  } finally {
-    app.renderer.destroy()
-  }
-})
+    try {
+      await app.renderOnce()
+      expect(app.captureCharFrame()).toContain(expected)
+    } finally {
+      app.renderer.destroy()
+    }
+  },
+)
 
 test("sidebar keeps the reported cost over the estimate", async () => {
   const app = await render(context({ experiment: true, cost: 1, family: [{ tokens: usage(1_000_000) }] }))

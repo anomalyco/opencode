@@ -20,7 +20,7 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
   )
 
   const estimate = createMemo(() => {
-    if (!enabled()) return 0
+    if (cost() > 0 || !enabled()) return 0
     const info = session()
     if (!info) return 0
     const data = props.context.data.session
@@ -39,7 +39,8 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
   const spent = createMemo(() => {
     if (cost() > 0) return `${money.format(cost())} spent`
     // The tilde marks the catalog-price figure as an estimate; the recorded cost stays authoritative.
-    return estimate() > 0 ? `≈ ${money.format(estimate())} spent` : undefined
+    const value = estimate()
+    return value !== undefined && value > 0 ? `≈ ${value < 0.01 ? "<$0.01" : money.format(value)} spent` : undefined
   })
 
   return (

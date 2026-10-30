@@ -46,21 +46,26 @@ export function PromptFooter(props: {
       session.revert?.messageID,
     )
     const cost = props.context.data.session.cost(props.sessionID)
-    const estimate = enabled()
-      ? costEstimate(
-          session.parentID
-            ? [session]
-            : props.context.data.session
-                .family(props.sessionID)
-                .map((id) => props.context.data.session.get(id))
-                .filter((info) => info !== undefined),
-          props.context.data.location.model.list(session.location),
-          (id) => props.context.data.session.message.list(id),
-        )
-      : 0
+    const estimate =
+      cost <= 0 && enabled()
+        ? costEstimate(
+            session.parentID
+              ? [session]
+              : props.context.data.session
+                  .family(props.sessionID)
+                  .map((id) => props.context.data.session.get(id))
+                  .filter((info) => info !== undefined),
+            props.context.data.location.model.list(session.location),
+            (id) => props.context.data.session.message.list(id),
+          )
+        : 0
     return [
       usage ? formatContextUsage(usage.tokens, usage.percent) : undefined,
-      cost > 0 ? money.format(cost) : estimate > 0 ? `≈ ${money.format(estimate)}` : undefined,
+      cost > 0
+        ? money.format(cost)
+        : estimate !== undefined && estimate > 0
+          ? `≈ ${estimate < 0.01 ? "<$0.01" : money.format(estimate)}`
+          : undefined,
     ].filter((item): item is string => Boolean(item))
   })
   const live = createMemo(() => Boolean(subagents() || shells()))
