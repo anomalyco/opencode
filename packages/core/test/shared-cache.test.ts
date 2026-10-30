@@ -34,18 +34,13 @@ describe("SharedCache", () => {
     }),
   )
 
-  it.effect("joins a running load, keeps values per key until maxAge, and forces without overlapping", () =>
+  it.effect("joins a running load, refreshes after the caller's interval, and forces without overlapping", () =>
     Effect.gen(function* () {
       const cache = yield* SharedCache.Service
       const loads = { a: 0, b: 0 }
       const gate = yield* Deferred.make<void>()
-      const get = (key: "a" | "b", options: { maxAge?: Duration.Input; force?: boolean } = {}) =>
-        cache.get({
-          key,
-          maxAge: options.maxAge ?? "10 minutes",
-          force: options.force,
-          load: Deferred.await(gate).pipe(Effect.map(() => `${key}${++loads[key]}`)),
-        })
+      const get = (key: "a" | "b", options: { interval?: Duration.Input; force?: boolean } = {}) =>
+        cache.get({ key, ...options, load: Deferred.await(gate).pipe(Effect.map(() => `${key}${++loads[key]}`)) })
 
       const joined = yield* Effect.all([get("a"), get("a", { force: true }), get("b")], {
         concurrency: "unbounded",
@@ -55,7 +50,7 @@ describe("SharedCache", () => {
 
       yield* TestClock.adjust("5 minutes")
       expect(yield* get("a")).toBe("a1")
-      expect(yield* get("a", { maxAge: "1 minute" })).toBe("a2")
+      expect(yield* get("a", { interval: "1 minute" })).toBe("a2")
       expect(yield* get("a", { force: true })).toBe("a3")
       yield* TestClock.adjust("10 minutes")
       expect(yield* get("b")).toBe("b2")
@@ -63,33 +58,41 @@ describe("SharedCache", () => {
     }),
   )
 
-  it.effect("keeps a failure for 30 seconds, and the last good value through any later failure", () =>
+  it.effect("retries transient failures, then keeps the last list or the failure until the next interval", () =>
     Effect.gen(function* () {
       const cache = yield* SharedCache.Service
-      const remote = { results: [] as Array<number | unknown>, loads: 0 }
-      const get = cache.get({
-        key: "models",
-        maxAge: "10 minutes",
-        load: Effect.suspend(() => {
-          remote.loads++
-          const result = remote.results.shift()
-          return typeof result === "number" ? Effect.succeed(result) : Effect.fail(result)
-        }),
-      })
+      const remote = { results: [] as unknown[], loads: 0 }
+      const get = (force?: boolean) =>
+        cache.get({
+          key: "models",
+          force,
+          load: Effect.suspend(() => {
+            remote.loads++
+            const result = remote.results.shift()
+            return typeof result === "string" ? Effect.succeed(result) : Effect.fail(result)
+          }),
+        })
+      const timeout = new Cause.TimeoutError()
 
-      remote.results = ["signed out", 1]
-      expect(yield* Effect.flip(get)).toBe("signed out")
-      yield* TestClock.adjust("29 seconds")
-      expect(yield* Effect.flip(get)).toBe("signed out")
-      yield* TestClock.adjust("1 second")
-      expect(yield* get).toBe(1)
-
-      remote.results = ["revoked"]
-      yield* TestClock.adjust("10 minutes")
-      expect(yield* get).toBe(1)
+      remote.results = [401]
+      expect(yield* Effect.flip(get())).toBe(401)
       yield* TestClock.adjust("9 minutes")
-      expect(yield* get).toBe(1)
-      expect(remote.loads).toBe(3)
+      expect(yield* Effect.flip(get())).toBe(401)
+      remote.results = [timeout, timeout, "list"]
+      const flaky = yield* get(true).pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("1 second")))
+      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("2 seconds")))
+      expect(yield* Fiber.join(flaky)).toBe("list")
+      expect(remote.loads).toBe(4)
+
+      remote.results = [401, timeout, timeout, timeout, timeout]
+      expect(yield* get(true)).toBe("list")
+      const outage = yield* get(true).pipe(Effect.forkChild({ startImmediately: true }))
+      for (const wait of ["1 second", "2 seconds", "4 seconds"] as const)
+        yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust(wait)))
+      expect(yield* Fiber.join(outage)).toBe("list")
+      expect(yield* get()).toBe("list")
+      expect(remote.loads).toBe(9)
     }),
   )
 
@@ -101,7 +104,6 @@ describe("SharedCache", () => {
       const get = (load: Effect.Effect<number>) =>
         cache.get({
           key: "models",
-          maxAge: "10 minutes",
           load: Effect.suspend(() => {
             loads.count++
             return load
@@ -125,28 +127,35 @@ describe("SharedCache", () => {
     }),
   )
 
-  it.effect("evicts unread entries but never one with a load in flight", () =>
+  it.effect("drops entries unread for 24 hours, never one still in use or loading", () =>
     Effect.gen(function* () {
       const cache = yield* SharedCache.Service
-      const loads = { slow: 0, idle: 0 }
+      const loads = { idle: 0, used: 0, daily: 0, slow: 0 }
+      const once = (key: keyof typeof loads) =>
+        Effect.suspend(() => (++loads[key] === 1 ? Effect.succeed(key) : Effect.fail("offline")))
       const gate = yield* Deferred.make<void>()
-      const load = (key: "slow" | "idle") => Effect.sync(() => ++loads[key])
-      const forever = { key: "idle", maxAge: Duration.infinity, load: load("idle") } as const
 
-      expect(yield* cache.get(forever)).toBe(1)
-      const slow = yield* cache
-        .get({ key: "slow", maxAge: "1 minute", load: Deferred.await(gate).pipe(Effect.andThen(load("slow"))) })
+      expect(yield* cache.get({ key: "idle", load: once("idle") })).toBe("idle")
+      expect(yield* cache.get({ key: "daily", interval: "48 hours", load: once("daily") })).toBe("daily")
+      const getSlow = cache
+        .get({ key: "slow", load: Deferred.await(gate).pipe(Effect.andThen(once("slow"))) })
         .pipe(Effect.forkChild({ startImmediately: true }))
+      const slow = yield* getSlow
       yield* Effect.yieldNow
-      yield* TestClock.adjust("2 hours")
+      // A Location refreshing every 10 minutes keeps its entry, so its list survives later failures.
+      for (let elapsed = 0; elapsed <= 25 * 60; elapsed += 10) {
+        expect(yield* cache.get({ key: "used", load: once("used") })).toBe("used")
+        yield* TestClock.adjust("10 minutes")
+      }
 
-      expect(yield* cache.get(forever)).toBe(2)
-      const joined = yield* cache
-        .get({ key: "slow", maxAge: "1 minute", load: load("slow") })
-        .pipe(Effect.forkChild({ startImmediately: true }))
+      expect(yield* Effect.flip(cache.get({ key: "idle", load: once("idle") }))).toBe("offline")
+      expect(loads.idle).toBe(2)
+      yield* TestClock.adjust("23 hours")
+      expect(yield* cache.get({ key: "daily", interval: "48 hours", load: once("daily") })).toBe("daily")
+      const joined = yield* getSlow
       yield* Deferred.succeed(gate, undefined)
-      expect([yield* Fiber.join(slow), yield* Fiber.join(joined)]).toEqual([1, 1])
-      expect(loads).toEqual({ slow: 1, idle: 2 })
+      expect([yield* Fiber.join(slow), yield* Fiber.join(joined)]).toEqual(["slow", "slow"])
+      expect(loads.slow).toBe(1)
     }),
   )
 })

@@ -312,7 +312,6 @@ export function make(
         const found = yield* cache
           .get({
             key: deploymentsKey(connection, credential, url),
-            maxAge: SharedCache.interval,
             load: ctx.integration.connection.resolve(connection).pipe(
               Effect.flatMap((current) =>
                 !current || current.type === "oauth" || (current.type === "external" && current.methodID !== methodID)

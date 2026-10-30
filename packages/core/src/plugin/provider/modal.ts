@@ -25,7 +25,7 @@ export const ModalPlugin = define({
       },
       active: ctx.integration.connection.active("modal"),
       reload: ctx.provider.reload(),
-      load: Effect.fn("ModalPlugin.load")(function* () {
+      load: Effect.fn("ModalPlugin.load")(function* (_, interval) {
         const connection = yield* ctx.integration.connection.active("modal")
         const credential = connection
           ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
@@ -37,7 +37,7 @@ export const ModalPlugin = define({
         const models = yield* cache
           .get({
             key: modelsKey(connection, apiKey, baseURL),
-            maxAge: SharedCache.interval,
+            interval,
             load: (connection ? ctx.integration.connection.resolve(connection) : Effect.undefined).pipe(
               Effect.map((current) =>
                 current?.type === "key" ? current.key : connection ? undefined : process.env.MODAL_PROXY_TOKEN,

@@ -5,14 +5,15 @@ import { HttpClientError } from "effect/http"
 import { Hash } from "@opencode/util/hash"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
-/** How often the built-in provider plugins refresh their shared lists. */
+/** How long a result stays fresh, and how often callers refresh, unless a caller passes its own. */
 export const interval = Duration.minutes(10)
 
 export interface Input<A, E> {
   /** Everything that changes the answer, such as the connection and base URL. Never a raw secret: see `fingerprint`. */
   readonly key: string
   readonly load: Effect.Effect<A, E>
-  readonly maxAge: Duration.Input
+  /** How long a result stays fresh. Defaults to `interval`; a caller refreshing on a timer uses the same value. */
+  readonly interval?: Duration.Input
   /** Skips the age check, but still joins a running load. */
   readonly force?: boolean
 }
@@ -20,8 +21,9 @@ export interface Input<A, E> {
 export interface Interface {
   /**
    * Returns the last result for `key` while it is fresh, otherwise joins the running load or starts one, so loads
-   * never overlap per key. A load retries `transient` failures 3 times. A failure keeps the last good value for
-   * `maxAge`; without one, the failure is kept for 30 seconds. Interrupts and defects are never kept.
+   * never overlap per key. A load retries `transient` failures 3 times. A failure keeps the last good value, or
+   * without one is returned, until the next interval. Interrupts and defects are never kept. Entries nobody asked
+   * for in 24 hours, or in two of their intervals if longer, are dropped.
    */
   readonly get: <A, E>(input: Input<A, E>) => Effect.Effect<A, E>
 }
@@ -43,10 +45,10 @@ interface Entry {
   last?: { readonly exit: Exit.Exit<unknown, unknown>; readonly time: number }
   loading?: Fiber.Fiber<unknown, unknown>
   read: number
+  unread: number
 }
 
-const failureAge = Duration.toMillis(Duration.seconds(30))
-const unread = Duration.toMillis(Duration.hours(1))
+const unread = Duration.toMillis(Duration.hours(24))
 
 const layer = Layer.effect(
   Service,
@@ -70,12 +72,14 @@ const layer = Layer.effect(
 
     const get = Effect.fnUntraced(function* <A, E>(input: Input<A, E>) {
       const now = yield* Clock.currentTimeMillis
-      for (const [key, item] of entries) if (!item.loading && now - item.read > unread) entries.delete(key)
-      const entry = entries.get(input.key) ?? { read: now }
+      const age = Duration.toMillis(input.interval ?? interval)
+      for (const [key, item] of entries) if (!item.loading && now - item.read > item.unread) entries.delete(key)
+      const entry = entries.get(input.key) ?? { read: now, unread }
       entries.set(input.key, entry)
       entry.read = now
+      // A caller refreshing less often than daily must never find its entry dropped between two of its refreshes.
+      entry.unread = Math.max(entry.unread, 2 * age)
       const last = entry.last
-      const age = last && Exit.isSuccess(last.exit) ? Duration.toMillis(input.maxAge) : failureAge
       // The key decides the value's type, so a stored or joined result under the same key has this caller's types.
       if (!input.force && last && now - last.time < age) return yield* last.exit as Exit.Exit<A, E>
       // Yield first so `entry.loading` is set before a synchronous load can finish and clear it.

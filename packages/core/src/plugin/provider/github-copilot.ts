@@ -175,7 +175,7 @@ export const GithubCopilotPlugin = define({
       },
       active: ctx.integration.connection.active("github-copilot"),
       reload: ctx.provider.reload(),
-      load: Effect.fn("GithubCopilotPlugin.load")(function* () {
+      load: Effect.fn("GithubCopilotPlugin.load")(function* (_, interval) {
         const connection = yield* ctx.integration.connection.active("github-copilot")
         const credential = connection
           ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
@@ -186,7 +186,7 @@ export const GithubCopilotPlugin = define({
         const models = yield* cache
           .get({
             key: modelsKey(connection, url, headers),
-            maxAge: SharedCache.interval,
+            interval,
             load: ctx.integration.connection.resolve(connection).pipe(
               Effect.flatMap((current) =>
                 current?.type === "oauth"
@@ -350,7 +350,11 @@ export const GithubCopilotPlugin = define({
   }),
 } satisfies PluginInternal.InternalPlugin)
 
-function modelsKey(connection: Parameters<typeof IntegrationConnection.key>[0], url: string, headers: Record<string, string>) {
+function modelsKey(
+  connection: Parameters<typeof IntegrationConnection.key>[0],
+  url: string,
+  headers: Record<string, string>,
+) {
   const fingerprint = SharedCache.fingerprint(JSON.stringify(Object.entries(headers).toSorted()))
   return `github-copilot:${IntegrationConnection.key(connection)}:${url}:${fingerprint}`
 }

@@ -189,8 +189,8 @@ describe("DigitalOceanPlugin", () => {
       expect(fixture.remote.requests).toHaveLength(count)
       expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeUndefined()
 
-      // The second account's failed load is kept for 30 seconds before anyone tries it again.
-      yield* TestClock.adjust("30 seconds")
+      // The second account's failed load is kept until the next refresh interval.
+      yield* TestClock.adjust("10 minutes")
       yield* credentials.activate(second.id)
       yield* drain
       expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
