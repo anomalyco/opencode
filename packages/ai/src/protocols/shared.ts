@@ -283,6 +283,13 @@ export const toolFileMedia = (item: Tool.FileContent): MediaPart => {
   return Message.media(asset, { filename: item.name })
 }
 
+// A tool result the provider can only read as text. `undefined` has no JSON encoding, and a throw here would be a
+// defect that escapes the typed channel — the session dies instead of one step failing — so fall back to String.
+const encodeJsonOption = Schema.encodeUnknownOption(Json)
+
+const jsonText = (value: unknown) =>
+  Option.getOrElse(encodeJsonOption(value), () => String(value))
+
 export const toolResultText = (part: ToolResultPart) => {
   if (part.result.type === "text") return String(part.result.value)
   if (part.result.type === "error") {
@@ -292,7 +299,7 @@ export const toolResultText = (part: ToolResultPart) => {
     const structured = Array.isArray(value) || prototype === Object.prototype || prototype === null
     return structured && isJson(value) ? encodeJson(value) : String(value)
   }
-  return encodeJson(part.result.value)
+  return jsonText(part.result.value)
 }
 
 export const errorText = (error: unknown) => {

@@ -578,7 +578,7 @@ const prepareRequest = (request: LLMRequest) => {
     : LLMRequest.update(resolved, { http: mergeHttpOptions(new HttpOptions({ headers }), resolved.http) })
 }
 
-const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
+const compileUnsafe = Effect.fnUntraced(function* (request: LLMRequest, options?: StreamOptions) {
   const references = request.messages.flatMap((message) =>
     message.content.flatMap((part) => {
       if (part.type === "media") {
@@ -605,6 +605,19 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
     body,
     prepared,
   }
+})
+
+const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
+  return yield* compileUnsafe(request, options).pipe(
+    // Protocol lowering is synchronous and total-by-contract; a throw here is a bug, but it must fail this step
+    // instead of killing the session's drain fiber. Any cause carrying an interrupt keeps it, including the mixed
+    // "interrupt + defect" case that `hasInterruptsOnly` would reclassify as a plain error.
+    Effect.catchCause((cause) =>
+      Cause.hasInterrupts(cause)
+        ? Effect.failCause(cause)
+        : Effect.fail(streamError(request.model.route.id, "Failed to compile request", cause)),
+    ),
+  )
 })
 
 /** Test-only projection of the execution compiler; exported from `@opencode/ai/testing`. */
