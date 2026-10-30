@@ -4,6 +4,8 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import {
   Client,
+  ProtocolError,
+  ProtocolErrorCode,
   SdkError,
   SdkErrorCode,
   SdkHttpError,
@@ -410,7 +412,12 @@ export const connect = Effect.fnUntraced(function* (
       resourceTemplates: () =>
         advertised("resources")
           ? list("list MCP resource templates", (signal) =>
-              client.listResourceTemplates(undefined, { ...catalog, signal }),
+              // Some servers declare resources without implementing template listing.
+              client.listResourceTemplates(undefined, { ...catalog, signal }).catch((error: unknown) => {
+                if (error instanceof ProtocolError && error.code === ProtocolErrorCode.MethodNotFound)
+                  return { resourceTemplates: [] }
+                throw error
+              }),
             ).pipe(Effect.map((r) => r.resourceTemplates))
           : Effect.succeed([]),
       readResource: (input) => {

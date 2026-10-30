@@ -7,7 +7,22 @@ import type { Session } from "@opencode/schema/session"
 import type { Transport } from "@modelcontextprotocol/client"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
+import {
+  Cause,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  FiberSet,
+  Latch,
+  Layer,
+  Result,
+  Schema,
+  Scope,
+  Semaphore,
+  Stream,
+  Types,
+} from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -84,6 +99,7 @@ type ServerEntry = {
   client?: McpClient.Connection
   tools?: ReadonlyArray<Tool>
   prompts?: ReadonlyArray<Prompt>
+  catalog?: { readonly connection: McpClient.Connection; readonly load: Deferred.Deferred<ResourceCatalog, Error> }
   // Set when a remote server is registered as an OAuth integration; the credential lives in the global store.
   integrationID?: Integration.ID
   registration?: State.Registration
@@ -393,14 +409,14 @@ export const layer = (options?: Options) =>
           Effect.all(
             {
               resources: connection.resources(),
-              // Some servers declare resources without implementing template listing.
-              templates: connection.resourceTemplates().pipe(Effect.orElseSucceed(() => [])),
+              templates: Effect.result(connection.resourceTemplates()),
             },
             { concurrency: "unbounded" },
           ),
         ).pipe(
-          Effect.map((catalog) =>
-            ResourceCatalog.make({
+          Effect.map((catalog) => ({
+            complete: Result.isSuccess(catalog.templates),
+            catalog: ResourceCatalog.make({
               resources: catalog.resources.map((resource) =>
                 Resource.make({
                   server: name,
@@ -410,7 +426,7 @@ export const layer = (options?: Options) =>
                   mimeType: resource.mimeType,
                 }),
               ),
-              templates: catalog.templates.map((template) =>
+              templates: Result.getOrElse(catalog.templates, () => []).map((template) =>
                 ResourceTemplate.make({
                   server: name,
                   name: template.name,
@@ -420,8 +436,31 @@ export const layer = (options?: Options) =>
                 }),
               ),
             }),
-          ),
+          })),
         )
+
+      const catalog = (name: ServerName, entry: ServerEntry, connection: McpClient.Connection) =>
+        Effect.suspend(() => {
+          if (entry.catalog?.connection === connection) return Deferred.await(entry.catalog.load)
+          const current = { connection, load: Deferred.makeUnsafe<ResourceCatalog, Error>() }
+          entry.catalog = current
+          fork(
+            loadCatalog(name, entry, connection).pipe(
+              Effect.onExit((exit) =>
+                Effect.sync(() => {
+                  if (entry.catalog === current && (Exit.isFailure(exit) || !exit.value.complete))
+                    entry.catalog = undefined
+                  Deferred.doneUnsafe(
+                    current.load,
+                    Exit.map(exit, (result) => result.catalog),
+                  )
+                }),
+              ),
+              Effect.ignore,
+            ),
+          )
+          return Deferred.await(current.load)
+        })
 
       const watch = (name: ServerName, entry: ServerEntry, connection: McpClient.Connection) => {
         const live = whenLive(name, entry, connection)
@@ -445,7 +484,13 @@ export const layer = (options?: Options) =>
           ),
         )
         connection.onPromptsChanged(() => live(refreshPrompts(name, entry, connection)))
-        connection.onResourcesChanged(() => live(bus.publish(McpEvent.ResourcesChanged, { server: name })))
+        connection.onResourcesChanged(() =>
+          live(
+            Effect.sync(() => {
+              entry.catalog = undefined
+            }).pipe(Effect.andThen(bus.publish(McpEvent.ResourcesChanged, { server: name }))),
+          ),
+        )
       }
 
       const startServer = (name: ServerName, entry: ServerEntry) =>
@@ -511,6 +556,7 @@ export const layer = (options?: Options) =>
         entry.client = undefined
         entry.tools = undefined
         entry.prompts = undefined
+        entry.catalog = undefined
         yield* Scope.close(scope, Exit.void)
         yield* bus.publish(McpEvent.ToolsChanged, { server: name })
         yield* bus.publish(McpEvent.ResourcesChanged, { server: name })
@@ -883,7 +929,7 @@ export const layer = (options?: Options) =>
             Array.from(entries),
             ([name, entry]) =>
               entry.client
-                ? loadCatalog(name, entry, entry.client).pipe(Effect.orElseSucceed(() => empty))
+                ? catalog(name, entry, entry.client).pipe(Effect.orElseSucceed(() => empty))
                 : Effect.succeed(empty),
             { concurrency: "unbounded" },
           )
@@ -893,7 +939,7 @@ export const layer = (options?: Options) =>
           const target = yield* requireServer(ServerName.make(input.server))
           yield* target.entry.startup.await
           if (!target.entry.client) return ResourceCatalog.make({ resources: [], templates: [] })
-          return mergeCatalogs([yield* loadCatalog(target.name, target.entry, target.entry.client)])
+          return mergeCatalogs([yield* catalog(target.name, target.entry, target.entry.client)])
         }),
         readResource: Effect.fn("MCP.readResource")(function* (input) {
           const target = yield* requireServer(ServerName.make(input.server))

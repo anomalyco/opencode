@@ -7,6 +7,8 @@ import {
   createMcpHandler,
   inputRequired,
   inputResponse,
+  ProtocolError,
+  ProtocolErrorCode,
   Server,
   WebStandardStreamableHTTPServerTransport,
 } from "@modelcontextprotocol/server"
@@ -233,7 +235,8 @@ function resourceServer(
           })
           protocol.setRequestHandler("resources/templates/list", (request) => {
             state.templateLists += 1
-            if (state.templatesUnsupported) return Promise.reject(new Error("Method not found"))
+            if (state.templatesUnsupported)
+              return Promise.reject(new ProtocolError(ProtocolErrorCode.MethodNotFound, "Method not found"))
             const page = state.templatePages?.[request.params?.cursor ?? "initial"]
             return Promise.resolve({ resourceTemplates: page?.items ?? state.templates, nextCursor: page?.nextCursor })
           })
@@ -400,6 +403,15 @@ const settled = (service: Mcp.Interface, name = "resources") =>
     if (status?.status === "pending") return yield* Effect.fail(status)
     return status
   }).pipe(Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }))
+
+const catalogUntil = <E>(
+  load: Effect.Effect<Mcp.ResourceCatalog, E>,
+  done: (catalog: Mcp.ResourceCatalog) => boolean,
+) =>
+  load.pipe(
+    Effect.filterOrFail(done, () => new Error("MCP resource change was not applied")),
+    Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+  )
 
 const mcp = Layer.mock(Mcp.Service, {
   tools: () =>
@@ -1447,7 +1459,7 @@ test("loads and reads MCP resources", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const server = yield* resourceServer()
+        const server = yield* resourceServer({ listChanged: true })
         server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
         server.state.templates = [{ name: "File", uriTemplate: "docs://{path}" }]
 
@@ -1476,7 +1488,11 @@ test("loads and reads MCP resources", async () => {
           })
 
           server.state.resources = [{ name: "Guide", uri: "docs://guide" }]
-          expect((yield* service.resourceCatalog()).resources.map((resource) => resource.uri)).toEqual(["docs://guide"])
+          yield* Effect.promise(server.sendResourceListChanged)
+          yield* catalogUntil(
+            service.resourceCatalog(),
+            (catalog) => catalog.resources.map((resource) => resource.uri).join() === "docs://guide",
+          )
           expect(yield* service.readResource({ server: "resources", uri: "docs://readme" })).toEqual({
             server: "resources",
             uri: "docs://readme",
@@ -1494,11 +1510,134 @@ test("loads and reads MCP resources", async () => {
   )
 })
 
+test("lists MCP resources once per connection until the server reports a change", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ listChanged: true })
+        server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
+
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* settled(service)
+          const lists = () => ({ resources: server.state.resourceLists, templates: server.state.templateLists })
+
+          yield* Effect.all(
+            Array.from({ length: 8 }, (_, index) =>
+              index % 2 === 0 ? service.resourceCatalog() : service.resources({ server: "resources" }),
+            ),
+            { concurrency: "unbounded" },
+          )
+          yield* service.resourceCatalog()
+          expect(lists()).toEqual({ resources: 1, templates: 1 })
+
+          server.state.resources = [{ name: "Guide", uri: "docs://guide" }]
+          yield* Effect.promise(server.sendResourceListChanged)
+          yield* catalogUntil(service.resourceCatalog(), (catalog) => catalog.resources[0]?.uri === "docs://guide")
+          expect(lists()).toEqual({ resources: 2, templates: 2 })
+
+          yield* Effect.promise(server.restart)
+          yield* service.connect("resources")
+          yield* service.resourceCatalog()
+          yield* service.resourceCatalog()
+          expect(lists()).toEqual({ resources: 3, templates: 3 })
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
+
+const failingResourceServer = (method: string) =>
+  Effect.gen(function* () {
+    const failing = { active: true }
+    const server = yield* resourceServer({
+      respond: async (request) => {
+        if (!failing.active || request.method !== "POST") return undefined
+        const body = (await request.clone().json()) as { method: string; id: number }
+        if (body.method !== method) return undefined
+        return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32603, message: "Unavailable" } })
+      },
+    })
+    server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
+    server.state.templates = [{ name: "File", uriTemplate: "docs://{path}" }]
+    return { server, failing }
+  })
+
+test("lists MCP resources again after a failed resource list", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { server, failing } = yield* failingResourceServer("resources/list")
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* settled(service)
+          expect(Exit.isFailure(yield* service.resources({ server: "resources" }).pipe(Effect.exit))).toBe(true)
+          failing.active = false
+          expect((yield* service.resources({ server: "resources" })).resources.map((item) => item.uri)).toEqual([
+            "docs://readme",
+          ])
+          yield* service.resources({ server: "resources" })
+          expect(server.state.resourceLists).toBe(1)
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
+
+test("keeps MCP resources when template listing fails, without caching them", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { server, failing } = yield* failingResourceServer("resources/templates/list")
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* settled(service)
+          const partial = yield* service.resources({ server: "resources" })
+          expect(partial.resources.map((item) => item.uri)).toEqual(["docs://readme"])
+          expect(partial.templates).toEqual([])
+          failing.active = false
+          const complete = yield* service.resources({ server: "resources" })
+          expect(complete.templates.map((item) => item.uriTemplate)).toEqual(["docs://{path}"])
+          yield* service.resources({ server: "resources" })
+          expect({ resources: server.state.resourceLists, templates: server.state.templateLists }).toEqual({
+            resources: 2,
+            templates: 1,
+          })
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
+
+test("caches MCP resources from a server that does not implement template listing", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer()
+        server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
+        server.state.templatesUnsupported = true
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* settled(service)
+          yield* service.resources({ server: "resources" })
+          const catalog = yield* service.resources({ server: "resources" })
+          expect(catalog.resources.map((item) => item.uri)).toEqual(["docs://readme"])
+          expect(catalog.templates).toEqual([])
+          expect({ resources: server.state.resourceLists, templates: server.state.templateLists }).toEqual({
+            resources: 1,
+            templates: 1,
+          })
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
+
 it.live("discovers and reads MCP resources through Code Mode", () =>
   Effect.gen(function* () {
     assertion = yield* Deferred.make<Permission.AssertInput>()
     decision = Effect.void
-    const server = yield* resourceServer()
+    const server = yield* resourceServer({ listChanged: true })
     server.state.resourcePages = {
       initial: { items: [{ name: "Readme", uri: "docs://readme" }], nextCursor: "resources-2" },
       "resources-2": { items: [{ name: "Guide", uri: "docs://guide" }] },
@@ -1557,6 +1696,8 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
 
       // A server may declare resources without implementing template listing.
       server.state.templatesUnsupported = true
+      yield* Effect.promise(server.sendResourceListChanged)
+      yield* catalogUntil(mcp.resources({ server: "resources" }), (catalog) => catalog.templates.length === 0)
       const untemplated = yield* run('return await tools.opencode.list_mcp_resources({ server: "resources" })')
       expect(JSON.parse(untemplated.output.output)).toEqual({
         resources: [
