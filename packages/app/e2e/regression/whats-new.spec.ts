@@ -60,7 +60,29 @@ const changelog = {
 }
 
 // The list form, whose one release in range has no desktop highlights.
-const cliOnly = [{ tag: current, highlights: [{ source: "cli", title: "Terminal only", description: "Not here." }] }]
+const cliOnly = [
+  { tag: current, highlights: [{ source: "mobile", title: "Phone only", description: "Not here." }] },
+]
+
+// The V2 feed shape: no highlight groups, the release notes live in Desktop sections.
+const sections = {
+  releases: [
+    {
+      tag: `v${current}`,
+      highlights: [],
+      sections: [
+        {
+          title: "Desktop",
+          items: ["**Worktree picker**: Click the branch on the new-session screen to open the picker."],
+        },
+        { title: "Core", items: ["A server change."] },
+      ],
+    },
+  ],
+}
+
+// A present but unreadable feed that does not even name the current release.
+const broken = { releases: [{ tag: "v0.0.1", highlights: [] }] }
 
 // A user who last saw 1.9.1, stored where the app kept it before the updater plugin owned What's New.
 const upgraded = { storage: { "highlights.v1": { version: "1.9.1" } } }
@@ -170,6 +192,29 @@ test("a failed changelog request leaves What's New for the next start", async ({
   await expect(page.getByRole("dialog").getByRole("heading", { level: 1 })).toHaveText("Split panes")
 })
 
+test("a feed present but missing the current release leaves What's New for the next start", async ({ page }) => {
+  const requests = await serveChangelog(page, broken)
+  await start(page, upgraded)
+  expect(await stored(page, SEEN)).toEqual({ version: "1.9.1" })
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+
+  await page.route("https://opencode.ai/changelog.json", async (route) =>
+    route.fulfill({ headers: cors, json: changelog }),
+  )
+  await page.reload()
+  await expect(page.getByRole("dialog").getByRole("heading", { level: 1 })).toHaveText("Split panes")
+  expect(requests.length).toBeGreaterThan(0)
+})
+
+test("a V2 feed without highlight groups falls back to its Desktop section", async ({ page }) => {
+  await serveChangelog(page, sections)
+  await start(page, upgraded)
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("heading", { level: 1 })).toHaveText("Worktree picker")
+  await expect(dialog.getByText("Click the branch on the new-session screen to open the picker.")).toBeVisible()
+  await expect.poll(() => stored(page, SEEN)).toEqual({ version: current })
+})
+
 // Each start ends with the current version seen and no dialog; only a release in range is worth a changelog request.
 for (const row of [
   { name: "the first run only remembers the version", seed: {}, requests: 0 },
@@ -200,7 +245,11 @@ for (const row of [
 }
 
 /** Serves this changelog and records each request for it. */
-async function serveChangelog(page: Page, body: typeof changelog | typeof cliOnly = changelog, held?: Promise<void>) {
+async function serveChangelog(
+  page: Page,
+  body: typeof changelog | typeof cliOnly | typeof sections | typeof broken = changelog,
+  held?: Promise<void>,
+) {
   const requests: string[] = []
 
   await page.route("https://opencode.ai/changelog.json", async (route) => {
