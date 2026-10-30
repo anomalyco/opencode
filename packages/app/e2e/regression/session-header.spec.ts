@@ -407,10 +407,10 @@ test.describe("location", () => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"])
     await page.setViewportSize({ width: 1440, height: 900 })
 
-    const { pty } = await openSession(page, {
+    const { persistentPty } = await openSession(page, {
       ...workspace,
       vcs: (directory) => ({ current: directory === worktree ? "feature/branch-menu" : "main", default: "main" }),
-      pty: {},
+      persistentPty: {},
     })
 
     await expect(page.getByRole("button", { name: "More options", exact: true })).toBeVisible()
@@ -430,9 +430,9 @@ test.describe("location", () => {
     await branch.click()
     await actions.getByRole("menuitem", { name: "Open in terminal", exact: true }).click()
     await expect(card).toBeHidden()
-    await expect.poll(() => pty.created.map((item) => item.cwd)).toEqual([worktree])
-    await expect.poll(() => pty.sockets.length).toBe(1)
-    pty.send("$ pwd\r\n" + worktree + "\r\n")
+    await expect.poll(() => persistentPty.created.map((item) => item.cwd)).toEqual([worktree])
+    await expect.poll(() => persistentPty.sockets.length).toBe(1)
+    persistentPty.output(persistentPty.created[0]!.id, "$ pwd\r\n" + worktree + "\r\n")
     const terminal = page.locator('[data-component="terminal"]')
     await expect(terminal).toHaveCSS("opacity", "1")
     await expect(terminal.locator("textarea")).toBeFocused()
