@@ -495,10 +495,20 @@
     padding-inline-end: 12px;
     gap: 8px;
     --tabs-review-fade: 8px;
+
+    /* Like browser tabs, each tab keeps its natural width while they all fit; otherwise the longest titles truncate
+       first, and the strip scrolls only once every tab is at its minimum. Close buttons stay in view meanwhile. */
+    > :not(.sticky) {
+      flex: 1 1 0;
+      min-width: 72px;
+      max-width: max-content;
+    }
   }
 
   [data-slot="tabs-trigger-wrapper"] {
     height: 28px;
+    min-width: 0;
+    flex-shrink: 1;
     padding-inline: 10px;
     border: 0;
     background-color: transparent;
@@ -510,6 +520,15 @@
 
     [data-slot="tabs-trigger"] {
       padding: 0 !important;
+
+      /* A plugin's label shrinks with the tab so its own `truncate` text can ellipsize. */
+      > * {
+        min-width: 0;
+      }
+    }
+
+    [data-slot="tabs-trigger-close-button"] {
+      flex-shrink: 0;
     }
 
     /* The 20px close button sits 4px from the tab's end, as from its top and bottom. */

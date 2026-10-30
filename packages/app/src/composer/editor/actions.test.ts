@@ -104,4 +104,47 @@ describe("Composer store", () => {
     ])
     expect(prompt.state.cursor).toBe(9)
   })
+
+  test("inserts consecutive mentions without a range and replaces typed triggers after an existing mention", () => {
+    const prompt = createComposerEditorActions(
+      createStore<ComposerPersistedState>({
+        prompt: [{ type: "text", content: "", start: 0, end: 0 }],
+        context: { items: [] },
+      }),
+    )
+
+    prompt.addMention({ type: "file", path: "src/a.ts", content: "@src/a.ts", start: 0, end: 0 })
+    prompt.addMention({ type: "file", path: "src/b.ts", content: "@src/b.ts", start: 0, end: 0 })
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "file", path: "src/a.ts", content: "@src/a.ts", start: 0, end: 9 },
+      { type: "text", content: " ", start: 9, end: 10 },
+      { type: "file", path: "src/b.ts", content: "@src/b.ts", start: 10, end: 19 },
+      { type: "text", content: " ", start: 19, end: 20 },
+    ])
+    expect(prompt.state.cursor).toBe(20)
+
+    prompt.addText("@src/c")
+    prompt.addMention({ type: "file", path: "src/c.ts", content: "@src/c.ts", start: 0, end: 0 })
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "file", path: "src/a.ts", content: "@src/a.ts", start: 0, end: 9 },
+      { type: "text", content: " ", start: 9, end: 10 },
+      { type: "file", path: "src/b.ts", content: "@src/b.ts", start: 10, end: 19 },
+      { type: "text", content: " ", start: 19, end: 20 },
+      { type: "file", path: "src/c.ts", content: "@src/c.ts", start: 20, end: 29 },
+      { type: "text", content: " ", start: 29, end: 30 },
+    ])
+    expect(prompt.state.cursor).toBe(30)
+
+    prompt.setPrompt([{ type: "file", path: "src/a.ts", content: "@src/a.ts", start: 0, end: 9 }], 9)
+    prompt.addMention({ type: "file", path: "src/b.ts", content: "@src/b.ts", start: 0, end: 0 })
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "file", path: "src/a.ts", content: "@src/a.ts", start: 0, end: 9 },
+      { type: "file", path: "src/b.ts", content: "@src/b.ts", start: 9, end: 18 },
+      { type: "text", content: " ", start: 18, end: 19 },
+    ])
+    expect(prompt.state.cursor).toBe(19)
+  })
 })

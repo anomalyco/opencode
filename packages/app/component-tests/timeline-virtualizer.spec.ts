@@ -55,6 +55,40 @@ story("bounds the cheap suffix and reveals only ready measured rows", async ({ p
   })
 })
 
+story("treats the reachable end as the end under page zoom", async ({ page }) => {
+  // At 110% the browser stops scrolling more than a pixel short of scrollHeight - clientHeight. A mount that waited
+  // for that distance to close stayed blank, or froze the renderer in a microtask loop, and scrolling back down to
+  // the bottom never resumed following.
+  await page.evaluate(async (fixture) => {
+    document.documentElement.style.zoom = "1.1"
+    const { mountTimelineVirtualizer } = await import(fixture)
+    mountTimelineVirtualizer({ count: 4, rowHeight: 59.3, immediate: true, viewportHeight: 200.5 })
+  }, fixture)
+  const root = page.getByTestId("timeline-virtualizer-fixture")
+  const content = root.locator("[data-timeline-virtual-content]")
+  await root.getByRole("button", { name: "Complete Markdown", exact: true }).click()
+  await expect(content).toHaveCSS("visibility", "visible")
+  const viewport = root.locator("[data-scrollable]")
+  expect(
+    await viewport.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop),
+  ).toBeGreaterThan(1)
+
+  const controls = root.getByTestId("timeline-controls")
+  await viewport.dispatchEvent("wheel", { deltaY: -1 })
+  await expect(controls).toHaveAttribute("data-pinned", "false")
+
+  for (const top of [40, Number.MAX_SAFE_INTEGER])
+    await viewport.evaluate(
+      (element, top) =>
+        new Promise((resolve) => {
+          element.addEventListener("scroll", resolve, { once: true })
+          element.scrollTop = top
+        }),
+      top,
+    )
+  await expect(controls).toHaveAttribute("data-pinned", "true")
+})
+
 for (const input of [
   { name: "offset-only", count: 1, rowHeight: 600, reveal: { scrollTop: 0 } },
   { name: "zero-height", count: 4, rowHeight: 60, reveal: {} },
@@ -74,8 +108,8 @@ for (const input of [
     await expect(content.locator("[data-timeline-key]")).toHaveCount(1)
 
     if (input.name === "offset-only") {
-      // Pinned to the end: the 600px row and the virtualizer's 82px tail, less the 180px viewport.
-      await expect(root).toHaveAttribute("data-last-scroll-top", "502")
+      // Pinned to the end: the 600px row and the virtualizer's 86px tail, less the 180px viewport.
+      await expect(root).toHaveAttribute("data-last-scroll-top", "506")
       await root.locator("[data-scrollable]").dispatchEvent("wheel", { deltaY: -1 })
       await expect(root.getByTestId("timeline-controls")).toHaveAttribute("data-pinned", "false")
     }

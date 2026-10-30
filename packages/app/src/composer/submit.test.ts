@@ -250,6 +250,60 @@ describe("Composer submission", () => {
     expect(state.context.items()).toEqual([])
   })
 
+  test.each(["", "Align these targets"])("hands off and admits uncommented notes with instruction %j", async (text) => {
+    const draft = createMemoryComposerState({ prompt: text }).capture()
+
+    const notes = [
+      {
+        type: "note" as const,
+        origin: "example",
+        label: "Save",
+        title: "button#save",
+        subtitle: "Browser annotation",
+        icon: "select-element",
+        subject: 'the "Save" element',
+        href: "example:save",
+        live: { subject: 'the "Save" element (live reference @e42)', href: "example:save#e42" },
+        comment: "",
+      },
+      {
+        type: "note" as const,
+        origin: "another-plugin",
+        label: "Cancel",
+        icon: "select-element",
+        subject: 'the "Cancel" element',
+        comment: "",
+      },
+    ]
+
+    notes.forEach((note, index) => draft.context.add({ ...note, commentID: `${index}` }))
+    const handoffs: SessionMessageHandoff[] = []
+    const first: Parameters<NewSessionComposerAdapter["start"]>[2][] = []
+    const admitted = Promise.withResolvers<Parameters<ComposerSession["data"]["session"]["prompt"]>[0]>()
+    const calls: string[] = []
+
+    const target = session({
+      calls,
+      handoff: { set: (value) => handoffs.push(value), clear() {} },
+      prompt: async (value) => admitted.resolve(value),
+    })
+
+    await submitInput(
+      fresh(draft, async (_selection, _submission, message) => {
+        first.push(message)
+
+        return { session: target, cleanupReady: Promise.resolve() }
+      }),
+    ).submit(new Event("submit"))
+
+    expect(calls).toContain("admit")
+    const request = await admitted.promise
+    expect(request.metadata).toMatchObject({ displayText: text, comments: notes })
+    expect(first).toMatchObject([{ text, metadata: { displayText: text, comments: notes } }])
+    expect(handoffs).toMatchObject([{ message: { text, metadata: { displayText: text, comments: notes } } }])
+    expect(draft.context.items()).toEqual([])
+  })
+
   test.each(["steer", "queue"] as const)(
     "shows a %s in the session as the composer clears, before its selection commits",
     async (delivery) => {
@@ -401,6 +455,21 @@ describe("Composer submission", () => {
 
     state.set(prompt)
     state.context.add({ type: "file", path: "notes.md", description: "the failing version" })
+
+    const note = {
+      type: "note" as const,
+      origin: "example",
+      label: "Target",
+      title: "#target",
+      subtitle: "Browser annotation",
+      icon: "select-element",
+      subject: "the target",
+      live: { subject: "the live target" },
+      comment: "",
+      commentID: "target",
+    }
+
+    state.context.add(note)
     const attempts: string[] = []
     const calls: string[] = []
     const statuses: ("idle" | "running")[] = []
@@ -438,6 +507,7 @@ describe("Composer submission", () => {
     expect(statuses).toEqual(["running", "idle", "running", "idle"])
     expect(state.current()).toEqual(prompt)
     expect(state.context.items()).toMatchObject([
+      note,
       { type: "file", path: "notes.md", description: "the failing version" },
     ])
     // The caret returns after the mention text; attachments take no caret positions.

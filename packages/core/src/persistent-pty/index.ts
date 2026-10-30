@@ -1,10 +1,12 @@
 export * as PersistentPty from "./index.js"
 
+import { stat } from "node:fs/promises"
 import path from "node:path"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Added, Handoff, PersistentPty, ReadLines, Removed, type ReadResult } from "@opencode/schema/persistent-pty"
 import { Session } from "@opencode/schema/session"
+import { SessionEvent } from "@opencode/schema/session-event"
 import { Bus } from "../bus.js"
 import { Pty } from "@opencode/schema/pty"
 import { Global } from "@opencode/util/global"
@@ -57,6 +59,11 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Persiste
   ptyID: Pty.ID,
 }) {}
 
+export class InvalidCwdError extends Schema.TaggedError<InvalidCwdError>()("PersistentPty.InvalidCwdError", {
+  cwd: Schema.String,
+  message: Schema.String,
+}) {}
+
 export interface Interface {
   readonly list: (sessionID?: Session.ID) => Effect.Effect<Info[], UnavailableError>
   readonly get: (id: Pty.ID) => Effect.Effect<Info, NotFoundError | UnavailableError>
@@ -71,7 +78,7 @@ export interface Interface {
       readonly cols?: number
       readonly rows?: number
     },
-  ) => Effect.Effect<Info, UnavailableError>
+  ) => Effect.Effect<Info, InvalidCwdError | UnavailableError>
   readonly write: (
     id: Pty.ID,
     data: string,
@@ -158,13 +165,22 @@ const makeLayer = (options: Options = {}) =>
         sessionID: Session.ID,
         input: Parameters<Interface["create"]>[1],
       ) {
+        const cwd = path.resolve(input.cwd ?? "/")
+        // opencode-pty's PTY library silently falls back to $HOME when the cwd is not a directory.
+        const directory = yield* Effect.promise(() =>
+          stat(cwd).then(
+            (info) => info.isDirectory(),
+            () => false,
+          ),
+        )
+        if (!directory) return yield* new InvalidCwdError({ cwd, message: `cwd is not a directory: ${cwd}` })
         const response = yield* request(
           daemon,
           {
             op: "create",
             program: input.command ?? ShellSelect.environment(global.bin),
             args: input.args,
-            cwd: input.cwd ?? path.resolve("/"),
+            cwd,
             title: input.title,
             group_id: sessionID,
             env: input.env,
@@ -322,6 +338,38 @@ const makeLayer = (options: Options = {}) =>
           ),
         )
       }
+
+      const removeSession = (sessionID: Session.ID) =>
+        list(sessionID).pipe(
+          Effect.flatMap((terminals) =>
+            Effect.forEach(
+              terminals,
+              (terminal) =>
+                remove(terminal.id).pipe(
+                  Effect.catchTags({
+                    "PersistentPty.NotFoundError": () => Effect.void,
+                    "PersistentPty.UnavailableError": (error) =>
+                      Effect.logWarning("failed to remove deleted session's terminal", {
+                        sessionID,
+                        id: terminal.id,
+                        error: error.message,
+                      }),
+                  }),
+                ),
+              { discard: true },
+            ),
+          ),
+          Effect.catchTag("PersistentPty.UnavailableError", (error) =>
+            Effect.logWarning("failed to list deleted session's terminals", { sessionID, error: error.message }),
+          ),
+          Effect.ensuring(Effect.sync(() => current.delete(sessionID))),
+        )
+
+      // Errors are handled per event so one failed cleanup does not end the subscription.
+      yield* bus.subscribe(SessionEvent.Deleted).pipe(
+        Stream.runForEach((event) => removeSession(event.data.sessionID)),
+        Effect.forkScoped({ startImmediately: true }),
+      )
 
       const attach = Effect.fn("PersistentPty.attach")(function* (
         id: Pty.ID,

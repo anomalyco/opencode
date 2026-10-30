@@ -226,6 +226,28 @@ it("holds content beside the panel at its landing width for the flight, its anch
   expect(box.style.translate).toBe("")
 })
 
+it("writes a hold to the element whose own width reads it, measured from its box", () => {
+  const box = document.createElement("div")
+  const target = document.createElement("div")
+  box.append(target)
+  document.body.append(box)
+  cleanups.push(() => box.remove())
+  const [open, setOpen] = createSignal(false)
+  const painted = { width: 0 }
+  box.getBoundingClientRect = () => new DOMRect(0, 0, 1000 - painted.width, 10)
+  createRoot((dispose) => {
+    cleanups.push(dispose)
+    holdLandingWidth(() => box, undefined, () => target)
+    createPanelMotion({ open, paint: (shut) => (painted.width = 300 * (1 - shut)) })
+  })
+
+  setOpen(true)
+  expect(target.style.getPropertyValue("--panel-hold-width")).toBe("700px")
+  expect(box.style.getPropertyValue("--panel-hold-width")).toBe("")
+  settle()
+  expect(target.style.getPropertyValue("--panel-hold-width")).toBe("")
+})
+
 it("keeps a held box's end-aligned blocks still and its centred column centred while its start edge moves", () => {
   const box = document.createElement("div")
   const tabs = document.createElement("div")

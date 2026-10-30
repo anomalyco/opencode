@@ -13,9 +13,9 @@ import { CLI_BINARIES, nodePtyPackage } from "./script/utils"
 const { FileMatcher } = createRequire(import.meta.resolve("electron-builder"))("app-builder-lib/out/fileMatcher")
 
 const channels = [
-  { channel: "dev", appId: "ai.opencode.desktop.dev" },
-  { channel: "beta", appId: "ai.opencode.desktop.beta" },
-  { channel: "prod", appId: "ai.opencode.desktop" },
+  { channel: "dev", appId: "ai.opencode.desktop.dev", feed: "dev" },
+  { channel: "beta", appId: "ai.opencode.desktop.beta", feed: "beta" },
+  { channel: "prod", appId: "ai.opencode.desktop", feed: "latest" },
 ] as const
 
 function load(channel: string, target?: string): Configuration {
@@ -47,9 +47,15 @@ function trimFilter(dir: string, config: Configuration) {
   ]).createFilter()
 }
 
-test.each(channels)("channel identity for $channel", ({ channel, appId }) => {
+test.each(channels)("channel identity for $channel", ({ channel, appId, feed }) => {
   const config = load(channel)
   expect(config.appId).toBe(appId)
+  // Every published channel updates from its own feed on the update service.
+  expect(config.publish).toEqual({
+    provider: "generic",
+    url: `https://opencode.ai/update/api/${feed}/desktop/opencode/`,
+    channel: "latest",
+  })
   expect(config.extraMetadata?.desktopName).toBe(`${appId}.desktop`)
   // The executable must never end in `.desktop`: libappimage resolves the
   // AppImage's desktop entry by globbing `*.desktop`, and an ELF matching
@@ -80,6 +86,22 @@ test("legacy Linux launcher stays hidden", async () => {
   expect(desktop).toContain("Icon=ai.opencode")
   expect(desktop).toContain("StartupWMClass=ai.opencode.desktop")
   expect(desktop).toContain("NoDisplay=true")
+})
+
+test.each(channels)("macOS icon format for $channel", ({ channel }) => {
+  const config = load(channel)
+  expect(config.mac?.icon).toBe(channel === "prod" ? "resources/icons/icon.icon" : "resources/icons/icon.icns")
+  expect(config.dmg?.icon).toBe(channel === "prod" ? "resources/icons/icon.icns" : undefined)
+  // The prod override must keep the rest of the shared macOS settings.
+  expect(config.mac?.target).toEqual(["dmg", "zip"])
+  expect(config.mac?.extendInfo?.NSMicrophoneUsageDescription).toBeTruthy()
+})
+
+test("the production Icon Composer package references its bundled artwork", async () => {
+  const icon = await Bun.file(path.join(import.meta.dirname, "icons/prod/icon.icon/icon.json")).json()
+  expect(icon["supported-platforms"]).toEqual({ squares: ["macOS"] })
+  const image = icon.groups[0].layers[0]["image-name"]
+  expect(await Bun.file(path.join(import.meta.dirname, "icons/prod/icon.icon/Assets", image)).exists()).toBe(true)
 })
 
 test("shared packaging defaults", async () => {

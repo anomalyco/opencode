@@ -249,6 +249,7 @@ export const Terminal = (props: TerminalProps) => {
   let revealed = false
   // The opened terminal, for the quote toolbar.
   const [opened, setOpened] = createSignal<Term>()
+  const [written, setWritten] = createSignal(0)
 
   const reveal = () => {
     if (revealed) return
@@ -465,6 +466,7 @@ export const Terminal = (props: TerminalProps) => {
       setOptionIfSupported(t, "colorScheme", theme.mode() === "dark" ? "dark" : "light")
       output = terminalWriter((data, done) =>
         t.write(data, () => {
+          setWritten((value) => value + 1)
           done?.()
         }),
       )
@@ -829,7 +831,7 @@ export const Terminal = (props: TerminalProps) => {
       <Show when={local.quote}>
         {(target) => (
           <Show when={opened()}>
-            {(term) => <TerminalQuote term={term()} container={container} target={target()} />}
+            {(term) => <TerminalQuote term={term()} container={container} target={target()} written={written()} />}
           </Show>
         )}
       </Show>

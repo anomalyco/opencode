@@ -25,7 +25,7 @@ const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 55 * 60 * 1000
 // (helper builds the URL) or `baseURL` directly.
 type AzureURL = AtLeastOne<{ readonly resourceName: string; readonly baseURL: string }>
 
-export type LanguageModelOptions = AzureURL &
+export type Config = AzureURL &
   RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
     readonly apiVersion?: string
@@ -33,7 +33,6 @@ export type LanguageModelOptions = AzureURL &
     readonly useDeploymentBasedUrls?: boolean
     readonly providerOptions?: OpenAIProviderOptionsInput
   }
-export type Config = LanguageModelOptions
 
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput &
@@ -195,15 +194,13 @@ const config = ({
   throw new ProviderConfigurationError({ provider: id, message: "Azure requires resourceName or baseURL" })
 }
 
-export const responsesModel: ProviderPackage.Definition<
+export const responsesModel: ProviderPackage.Model<
   Settings,
   OpenAIProviderOptionsInput,
   typeof responsesRoute.compact
->["model"] = (modelID, settings) => configure(config(settings)).responses(modelID)
-export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (
-  modelID,
-  settings,
-) => configure(config(settings)).chat(modelID)
+> = (modelID, settings) => configure(config(settings)).responses(modelID)
+export const chatModel: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).chat(modelID)
 export const imageModel = (modelID: string, settings: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)

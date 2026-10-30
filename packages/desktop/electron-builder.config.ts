@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises"
+import { copyFile, readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -26,9 +26,9 @@ const rpmNoBuildIdLinksFpm = "--rpm-rpmbuild-define=_build_id_links none"
 const metainfoFpm = (appId: string) =>
   `${path.join(packageDir, "resources", `${appId}.metainfo.xml`)}=/usr/share/metainfo/${appId}.metainfo.xml`
 
-// Beta packages every commit for the team, so it trades about 5% (deb) and 17% (rpm) larger files for xz -1, which
+// Dev and beta package every commit, so they trade about 5% (deb) and 17% (rpm) larger files for xz -1, which
 // compresses the payload about 3x faster than the deb default (-3) and 5x faster than the rpm default (-9).
-const betaCompressionFpm = (target: "deb" | "rpm") => [`--${target}-compression-level`, "1"]
+const previewCompressionFpm = (target: "deb" | "rpm") => [`--${target}-compression-level`, "1"]
 
 function resolveChannel() {
   const raw = process.env.OPENCODE_CHANNEL
@@ -126,6 +126,11 @@ const getBase = (appId: string): Configuration => {
 
       if ((await stat(version)).size === 0) throw new Error(`Bundled CLI version must be a non-empty file: ${version}`)
 
+      // With an Icon Composer mac.icon, electron-builder bundles the ICNS that actool generates as the pre-macOS 26
+      // fallback. That one tops out at 256px and draws a light ring around the squircle, so ship ours instead.
+      if (context.electronPlatformName === "darwin")
+        await copyFile(path.join(packageDir, "resources/icons/icon.icns"), path.join(resources, "icon.icns"))
+
       if (context.electronPlatformName !== "win32") return
 
       const prebuilds = path.join(
@@ -207,8 +212,16 @@ export function getConfig() {
         ...base,
         appId,
         productName: "OpenCode Dev",
-        deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-dev", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId)] },
+        publish: {
+          provider: "generic",
+          url: "https://opencode.ai/update/api/dev/desktop/opencode/",
+          channel: "latest",
+        },
+        deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
+        rpm: {
+          packageName: "opencode-dev",
+          fpm: [rpmNoBuildIdLinksFpm, ...previewCompressionFpm("rpm"), metainfoFpm(appId)],
+        },
       }
     }
 
@@ -223,10 +236,10 @@ export function getConfig() {
           url: "https://opencode.ai/update/api/beta/desktop/opencode/",
           channel: "latest",
         },
-        deb: { fpm: [...betaCompressionFpm("deb"), metainfoFpm(appId)] },
+        deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
         rpm: {
           packageName: "opencode-beta",
-          fpm: [rpmNoBuildIdLinksFpm, ...betaCompressionFpm("rpm"), metainfoFpm(appId)],
+          fpm: [rpmNoBuildIdLinksFpm, ...previewCompressionFpm("rpm"), metainfoFpm(appId)],
         },
       }
     }
@@ -237,6 +250,11 @@ export function getConfig() {
         appId,
         productName: "OpenCode",
         protocols: { name: "OpenCode", schemes: ["opencode"] },
+        // An Icon Composer package compiles to Assets.car, which macOS 26 and later draw the app icon from
+        // (Dock, Finder, system dialogs and the system icon styles). Older macOS keeps using the ICNS.
+        mac: { ...base.mac, icon: "resources/icons/icon.icon" },
+        // The DMG volume icon would otherwise use the same actool-generated ICNS.
+        dmg: { icon: "resources/icons/icon.icns" },
         publish: {
           provider: "generic",
           url: "https://opencode.ai/update/api/latest/desktop/opencode/",

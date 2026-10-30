@@ -1,4 +1,4 @@
-import { OpenCode, type OpenCodeClient } from "@opencode/client/promise"
+import { OpenCode, withMediaRefs, type MediaRequestOptions } from "@opencode/client/promise"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { decode64 } from "@/runtime/persistence/base64"
 
@@ -19,21 +19,23 @@ export function authFromToken(token: string | null) {
   }
 }
 
-export function createApiForServer(input: {
-  server: ServerConnection.HttpBase
-  fetch?: typeof globalThis.fetch
-}): OpenCodeClient {
-  return OpenCode.make({
-    baseUrl: input.server.url,
-    fetch: input.fetch,
-    headers: input.server.password
-      ? {
-          Authorization: `Basic ${authTokenFromCredentials({
-            password: input.server.password,
-          })}`,
-        }
-      : undefined,
-  })
+/** `mediaRefs: false` reads stored media as inline bytes, for callers such as export that need self-contained messages. */
+export type ServerRequestOptions = MediaRequestOptions
+
+export function createApiForServer(input: { server: ServerConnection.HttpBase; fetch?: typeof globalThis.fetch }) {
+  return withMediaRefs(
+    OpenCode.make({
+      baseUrl: input.server.url,
+      fetch: input.fetch,
+      headers: input.server.password
+        ? {
+            Authorization: `Basic ${authTokenFromCredentials({
+              password: input.server.password,
+            })}`,
+          }
+        : undefined,
+    }),
+  )
 }
 
 /**
@@ -53,4 +55,4 @@ export function fileStreamUrl(server: ServerConnection.HttpBase, input: { path: 
   return url.href
 }
 
-export type ServerApi = OpenCodeClient
+export type ServerApi = ReturnType<typeof createApiForServer>

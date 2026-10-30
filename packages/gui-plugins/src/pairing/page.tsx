@@ -286,9 +286,8 @@ function DialogPairing(props: {
   }))
 
   const refresh = () => (
-    <button
-      type="button"
-      class="rounded-[4px] px-1 text-12-regular leading-[var(--line-height-compact)] text-v2-text-text-muted underline-offset-2 hover:text-v2-text-text-base hover:underline focus-visible:underline focus-visible:outline-none disabled:opacity-50"
+    <Button
+      variant="ghost"
       disabled={code.isFetching}
       onClick={() => {
         clearTimeout(copied.timeout)
@@ -297,7 +296,7 @@ function DialogPairing(props: {
       }}
     >
       {ctx.t("refresh")}
-    </button>
+    </Button>
   )
 
   // The QR code carries the remote address as `opencode pair --remote` prints it, {"code","urls"} JSON, which the
@@ -313,7 +312,8 @@ function DialogPairing(props: {
   })
 
   // The QR code's frame, which also holds the setup progress and its failure, so the dialog keeps its size.
-  const frame = "mx-auto aspect-square w-full max-w-[min(320px,calc(100dvh-360px))] shrink-0 rounded-[6px]"
+  // It spans the dialog's content width, inset as the header is, and shrinks only to fit a short window.
+  const frame = "mx-auto aspect-square w-full max-w-[calc(100dvh-360px)] shrink-0 rounded-[6px]"
 
   return (
     <Dialog fit containerClass="max-w-[min(400px,calc(100vw-32px))]">
@@ -328,21 +328,25 @@ function DialogPairing(props: {
             aria-label={ctx.t("qr")}
             innerHTML={qr()}
           />
-          <div class="flex flex-col items-center gap-1 pb-2">
-            <Button
-              variant="neutral"
-              icon={copy.isSuccess ? "check" : "copy"}
-              disabled={copy.isPending}
-              onClick={() => copy.mutate()}
+          <div class="flex flex-wrap items-center gap-2">
+            <span
+              class="me-auto text-12-regular leading-[var(--line-height-compact)] tabular-nums text-v2-text-text-muted"
+              role="timer"
+              aria-live="off"
             >
-              {ctx.t(copy.isSuccess ? "common.copied" : "copyLink")}
-            </Button>
-            <div class="flex items-center gap-2 text-12-regular leading-[var(--line-height-compact)] text-v2-text-text-muted">
-              <span role="timer" aria-live="off">
-                {ctx.t("expires", { time: countdown(remaining()) })}
-              </span>
-              <span aria-hidden="true">·</span>
+              {ctx.t("expires", { time: countdown(remaining()) })}
+            </span>
+            {/* The actions wrap together, so a narrow dialog keeps them in one row, right-aligned under the countdown. */}
+            <div class="ms-auto flex items-center gap-2">
               {refresh()}
+              <Button
+                variant="neutral"
+                icon={copy.isSuccess ? "check" : "copy"}
+                disabled={copy.isPending}
+                onClick={() => copy.mutate()}
+              >
+                {ctx.t(copy.isSuccess ? "common.copied" : "copyLink")}
+              </Button>
             </div>
           </div>
         </Show>

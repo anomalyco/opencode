@@ -10,7 +10,7 @@ const setup: Plugin.MainSetup = async (ctx) => {
   const builtin = builtinMainContext(ctx)
   const build = ctx.app
   const lifecycle = builtin.lifecycle
-  const enabled = build.packaged && build.channel !== "dev"
+  const enabled = build.packaged
   // Holds no resources, so it needs no cleanup.
   const context = logContext(ctx.log.write)
   const runPromise = Effect.runPromiseWith(context)
@@ -23,7 +23,7 @@ const setup: Plugin.MainSetup = async (ctx) => {
     from: { settings: "ready", file: "opencode.updater" },
   })
 
-  // electron-updater loads only in packaged builds that update, after the first window is up.
+  // electron-updater loads only in packaged builds, after the first window is up.
   const platform = enabled
     ? await import("./platform").then((module) => runPromise(module.make(build.channel)))
     : undefined

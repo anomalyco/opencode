@@ -70,7 +70,13 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       const serverCtx = createRoot((dispose) => {
         serverCtxDisposers.set(key, dispose)
 
-        return createServerController(conn, server.scope(key), server.projects.forServer(key), notificationCoordinator)
+        return createServerController(
+          conn,
+          server.scope(key),
+          () => server.local(conn),
+          server.projects.forServer(key),
+          notificationCoordinator,
+        )
       }, owner)
 
       serverCtxs.set(key, serverCtx)
@@ -185,6 +191,7 @@ function createGlobalModels() {
 function createServerController(
   conn: ServerConnection.Any,
   scope: ServerScope,
+  isLocal: Accessor<boolean>,
   projects: ReturnType<typeof createServerProjects>,
   notificationCoordinator: ReturnType<typeof createNotificationCoordinator>,
 ) {
@@ -321,14 +328,13 @@ function createServerController(
       })
   }
 
-  const isLocal =
-    (conn?.type === "sidecar" && conn.variant === "base") || (conn?.type === "http" && isLocalHost(conn.http.url))
-
   return {
     data,
     sdk,
     sync,
-    isLocal,
+    get isLocal() {
+      return isLocal()
+    },
     projects: {
       list,
       unique,
@@ -366,12 +372,6 @@ export function useServerCtx(server: Accessor<ServerConnection.Any | undefined>)
 }
 
 export type ServerCtx = ReturnType<typeof createServerController>
-
-function isLocalHost(url: string) {
-  const host = url.replace(/^https?:\/\//, "").split(":")[0]
-
-  if (host === "localhost" || host === "127.0.0.1") return "local"
-}
 
 /** What an HTTP server's controller authenticates with; other servers keep one controller per id. */
 function credentials(conn: ServerConnection.Any) {
