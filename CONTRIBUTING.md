@@ -75,7 +75,7 @@ Follow the repository [style guide](./AGENTS.md).
 
 ### Nix packaging
 
-Nix builds use dependency versions and checksums recorded in `bun.lock`.
+Nix builds use dependency versions and checksums from `bun.lock` (text formats 1–3).
 
 ```bash
 nix build .#opencode .#opencode-desktop

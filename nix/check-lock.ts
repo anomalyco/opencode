@@ -94,9 +94,22 @@ const fetches = (result: ReturnType<typeof evaluate>) => {
     Object.entries(sources).map((entry) => [entry[0], { url: entry[1].url, hash: entry[1].hash }]),
   )
 }
-const projected = evaluate("bun-lock", JSON.stringify(lock))
-assert.equal(projected.exitCode, 0, projected.stderr.toString())
-assert.deepEqual(fetches(projected), expected)
+for (const input of [
+  lock,
+  { ...lock, lockfileVersion: 2 },
+  {
+    ...lock,
+    lockfileVersion: 3,
+    overrides: {
+      "@scope/lib@^1.0.0": { ".": "1.2.3" },
+      consumer: { "@scope/lib": "1.2.3" },
+    },
+  },
+]) {
+  const projected = evaluate("bun-lock", JSON.stringify(input))
+  assert.equal(projected.exitCode, 0, projected.stderr.toString())
+  assert.deepEqual(fetches(projected), expected)
+}
 
 const updated = evaluate(
   "bun-lock",
@@ -182,10 +195,12 @@ for (const [entry, error] of [
   assert.notEqual(result.exitCode, 0)
   assert.match(result.stderr.toString(), error)
 }
-const version = evaluate("bun-lock", JSON.stringify({ lockfileVersion: 2, packages: {} }))
-assert.notEqual(version.exitCode, 0)
-assert.match(version.stderr.toString(), /Unsupported Bun lockfile version/)
+for (const lockfileVersion of [0, 4]) {
+  const result = evaluate("bun-lock", JSON.stringify({ ...lock, lockfileVersion }))
+  assert.notEqual(result.exitCode, 0)
+  assert.match(result.stderr.toString(), /Unsupported Bun lockfile version/)
+}
 
 console.log(
-  `Bun lock: ${valid.length} JSONC fixtures, ${invalid.length} invalid inputs, ${platformCases.length} platform cases on ${platforms.length} targets, full-lock JSONC parity, source contexts, conflicts and automatic updates passed`,
+  `Bun lock: ${valid.length} JSONC fixtures, ${invalid.length} invalid inputs, ${platformCases.length} platform cases on ${platforms.length} targets, lockfile formats 1-3, full-lock JSONC parity, source contexts, conflicts and automatic updates passed`,
 )

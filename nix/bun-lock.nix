@@ -153,7 +153,14 @@ let
         flags.removed != [ ] || !flags.unknown
     );
 in
-if lock.lockfileVersion != 1 then
+# Versions 2 and 3 retain package tuples; Bun handles their validation and scoped overrides.
+if
+  !(builtins.elem lock.lockfileVersion [
+    1
+    2
+    3
+  ])
+then
   throw "Unsupported Bun lockfile version"
 else
   builtins.mapAttrs (

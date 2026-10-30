@@ -13,16 +13,17 @@ let
       toHashFormat = "sri";
     };
   hash = integrity "sha256";
+  registry = [
+    "cache-fixture@1.0.0"
+    ""
+    { }
+    hash
+  ];
   cases = [
     {
       name = "registry";
       dependency = "1.0.0";
-      entry = [
-        "cache-fixture@1.0.0"
-        ""
-        { }
-        hash
-      ];
+      entry = registry;
     }
     {
       name = "mirror";
@@ -81,6 +82,22 @@ let
         hash
       ];
     }
+    {
+      name = "registry-v2";
+      dependency = "1.0.0";
+      entry = registry;
+      lock.lockfileVersion = 2;
+    }
+    {
+      name = "scoped-overrides";
+      dependency = "1.0.0";
+      entry = registry;
+      project.overrides."cache-fixture@^1.0.0" = "1.0.0";
+      lock = {
+        lockfileVersion = 3;
+        overrides."cache-fixture@^1.0.0"."." = "1.0.0";
+      };
+    }
   ];
   check =
     case:
@@ -89,7 +106,8 @@ let
         name = "cache-review-${case.name}";
         version = "1.0.0";
         dependencies.cache-fixture = case.dependency;
-      };
+      }
+      // (case.project or { });
       lock = {
         lockfileVersion = 1;
         configVersion = 1;
@@ -97,7 +115,8 @@ let
           inherit (project) name dependencies;
         };
         packages.cache-fixture = case.entry;
-      };
+      }
+      // (case.lock or { });
       cache =
         pkgs.callPackage ./bun-cache.nix
           {
