@@ -202,12 +202,7 @@ impl TerminalHandle {
 fn reset_signals() -> io::Result<()> {
     // SAFETY: sigemptyset, sigprocmask and signal are async-signal-safe.
     unsafe {
-        let mut empty: libc::sigset_t = std::mem::zeroed();
-        if libc::sigemptyset(&mut empty) != 0
-            || libc::sigprocmask(libc::SIG_SETMASK, &empty, std::ptr::null_mut()) != 0
-        {
-            return Err(io::Error::last_os_error());
-        }
+        // Dispositions first, so no inherited handler can run once unmasked.
         for signal in [
             libc::SIGCHLD,
             libc::SIGHUP,
@@ -217,6 +212,12 @@ fn reset_signals() -> io::Result<()> {
             libc::SIGALRM,
         ] {
             libc::signal(signal, libc::SIG_DFL);
+        }
+        let mut empty: libc::sigset_t = std::mem::zeroed();
+        if libc::sigemptyset(&mut empty) != 0
+            || libc::sigprocmask(libc::SIG_SETMASK, &empty, std::ptr::null_mut()) != 0
+        {
+            return Err(io::Error::last_os_error());
         }
     }
     Ok(())
