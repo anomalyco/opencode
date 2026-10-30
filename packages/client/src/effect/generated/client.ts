@@ -109,6 +109,8 @@ import type {
   ExperimentalSessionInstructionsEntryRemoveOutput,
   ExperimentalSessionLogInput,
   ExperimentalSessionLogOutput,
+  ExperimentalSessionJobsInput,
+  ExperimentalSessionJobsOutput,
   MessageListInput,
   MessageListOutput,
   ModelListInput,
@@ -878,6 +880,14 @@ const EndpointExperimentalSessionLog = (raw: RawClient["server.session"]) => (in
     ),
   )
 
+const EndpointExperimentalSessionJobs = (raw: RawClient["server.session"]) => (input: ExperimentalSessionJobsInput) =>
+  preserveEffect<ExperimentalSessionJobsOutput>()(
+    raw["session.jobs"]({ params: { sessionID: input["sessionID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
   stats: EndpointExperimentalSessionStats(raw),
   import: EndpointExperimentalSessionImport(raw),
@@ -892,6 +902,7 @@ const adaptGroupExperimentalSession = (raw: RawClient["server.session"]) => ({
     },
   },
   log: EndpointExperimentalSessionLog(raw),
+  jobs: EndpointExperimentalSessionJobs(raw),
 })
 
 const EndpointMessageList = (raw: RawClient["server.message"]) => (input: MessageListInput) =>
@@ -2013,6 +2024,8 @@ const adaptClient = (raw: RawClient) => {
       },
       /** @deprecated Use `client.experimental.session.log`. Removed in the next minor. */
       log: client.experimental.session.log,
+      /** @deprecated Use `client.experimental.session.jobs`. Removed in the next minor. */
+      jobs: client.experimental.session.jobs,
     },
     /** @deprecated Use `client.experimental.generate`. Removed in the next minor. */
     generate: {

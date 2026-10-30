@@ -13,6 +13,7 @@ import { FileSystemV1 } from "./filesystem-v1.js"
 import { Form } from "./form.js"
 import { InstallationEvent } from "./installation-event.js"
 import { Integration } from "./integration.js"
+import { Job } from "./job.js"
 import { LegacyEventV1 } from "./legacy-event.js"
 import { LspEvent } from "./lsp-event.js"
 import { LocationEvent } from "./location-event.js"
@@ -64,6 +65,7 @@ const featureDefinitions = Event.inventory(
   ...Pty.Event.Definitions,
   ...PersistentPty.Event.Definitions,
   ...Shell.Event.Definitions,
+  ...Job.Event.Definitions,
   ...Form.Event.Definitions,
   ...WebSearch.Event.Definitions,
   ...Artifact.Event.Definitions,

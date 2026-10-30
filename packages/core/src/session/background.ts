@@ -1,7 +1,7 @@
 export * as SessionBackground from "./background.js"
 
 import { Effect } from "effect"
-import type { Job } from "../job.js"
+import { Job } from "../job.js"
 import type { SessionSchema } from "./schema.js"
 import type { SessionStore } from "./store.js"
 
@@ -43,6 +43,19 @@ export const outstanding = Effect.fnUntraced(function* (
       description: recovery.description,
     }
   })
+})
+
+/** Running jobs owned by a Session or any of its descendants. */
+export const jobs = Effect.fnUntraced(function* (
+  registry: Pick<Job.Interface, "list">,
+  store: Pick<SessionStore.Interface, "get">,
+  sessionID: SessionSchema.ID,
+) {
+  const running = yield* registry.list({ running: true })
+  const owned = yield* Effect.filter(running, (info) =>
+    info.sessionID === undefined ? Effect.succeed(false) : descends(store, info.sessionID, sessionID),
+  )
+  return owned.map(Job.toPublicInfo)
 })
 
 const descends = Effect.fnUntraced(function* (

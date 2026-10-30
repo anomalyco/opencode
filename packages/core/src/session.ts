@@ -64,6 +64,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import type { EventLog } from "@opencode/schema/event-log"
 import type { FileDiff } from "@opencode/schema/file-diff"
 import { Job } from "./job.js"
+import { SessionBackground } from "./session/background.js"
 import type { Command } from "./command.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
@@ -238,6 +239,7 @@ export interface Interface {
   ) => Effect.Effect<SessionInbox.Compaction, NotFoundError | CompactionConflictError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
+  readonly jobs: (sessionID: SessionSchema.ID) => Effect.Effect<readonly Job.PublicInfo[], NotFoundError>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly resume?: boolean }) => Effect.Effect<boolean>
@@ -505,7 +507,13 @@ const layer = Layer.effect(
       move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),
-      active: execution.active,
+      active: Effect.all([execution.active, jobs.activeSessions]).pipe(
+        Effect.map(([draining, working]) => new Set([...draining, ...working])),
+      ),
+      jobs: Effect.fn("Session.jobs")(function* (sessionID) {
+        yield* result.get(sessionID)
+        return yield* SessionBackground.jobs(jobs, store, sessionID)
+      }),
       background: Effect.fn("Session.background")(function* (sessionID) {
         yield* result.get(sessionID)
         const backgrounded = yield* jobs.backgroundAll({ sessionID })

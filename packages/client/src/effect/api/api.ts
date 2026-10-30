@@ -26,6 +26,7 @@ import type { Workspace } from "@opencode/schema/workspace"
 import type { Instruction } from "@opencode/schema/instruction"
 import type { Snapshot } from "@opencode/schema/snapshot"
 import type { Shell } from "@opencode/schema/shell"
+import type { Job } from "@opencode/schema/job"
 import type { Generate } from "@opencode/schema/generate"
 import type { Provider } from "@opencode/schema/provider"
 import type { Integration } from "@opencode/schema/integration"
@@ -473,6 +474,9 @@ export interface SessionApi<E = never> {
 
   /** @deprecated Use `client.experimental.session.log`. Removed in the next minor. */
   readonly log: ExperimentalSessionLogOperation<E>
+
+  /** @deprecated Use `client.experimental.session.jobs`. Removed in the next minor. */
+  readonly jobs: ExperimentalSessionJobsOperation<E>
 }
 
 export type ExperimentalSessionStatsInput = {
@@ -1419,6 +1423,12 @@ export type ExperimentalSessionLogOperation<E = never> = (
   input: ExperimentalSessionLogInput,
 ) => Stream.Stream<ExperimentalSessionLogOutput, E>
 
+export type ExperimentalSessionJobsInput = { readonly sessionID: Session.ID }
+export type ExperimentalSessionJobsOutput = ReadonlyArray<Job.Info>
+export type ExperimentalSessionJobsOperation<E = never> = (
+  input: ExperimentalSessionJobsInput,
+) => Effect.Effect<ExperimentalSessionJobsOutput, E>
+
 export interface ExperimentalSessionApi<E = never> {
   readonly stats: ExperimentalSessionStatsOperation<E>
   readonly import: ExperimentalSessionImportOperation<E>
@@ -1433,6 +1443,7 @@ export interface ExperimentalSessionApi<E = never> {
     }
   }
   readonly log: ExperimentalSessionLogOperation<E>
+  readonly jobs: ExperimentalSessionJobsOperation<E>
 }
 
 export type MessageListInput = {
@@ -2127,6 +2138,7 @@ export type EventSubscribeInput = {
         | "shell.created"
         | "shell.exited"
         | "shell.deleted"
+        | "job.updated"
         | "form.created"
         | "form.replied"
         | "form.cancelled"
@@ -2862,6 +2874,15 @@ export type SessionLogOutput = ExperimentalSessionLogOutput
 
 /** @deprecated Use `ExperimentalSessionLogOperation`. Removed in the next minor. */
 export type SessionLogOperation<E = never> = ExperimentalSessionLogOperation<E>
+
+/** @deprecated Use `ExperimentalSessionJobsInput`. Removed in the next minor. */
+export type SessionJobsInput = ExperimentalSessionJobsInput
+
+/** @deprecated Use `ExperimentalSessionJobsOutput`. Removed in the next minor. */
+export type SessionJobsOutput = ExperimentalSessionJobsOutput
+
+/** @deprecated Use `ExperimentalSessionJobsOperation`. Removed in the next minor. */
+export type SessionJobsOperation<E = never> = ExperimentalSessionJobsOperation<E>
 
 /** @deprecated Use `ExperimentalGenerateTextInput`. Removed in the next minor. */
 export type GenerateTextInput = ExperimentalGenerateTextInput

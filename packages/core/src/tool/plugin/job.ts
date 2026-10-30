@@ -7,13 +7,11 @@ import { Effect, Schema } from "effect"
 import { Job } from "../../job.js"
 import { Session } from "../../session.js"
 
-const Status = Schema.Literals(["running", "completed", "error", "cancelled"])
-
 const JobEntry = Schema.Struct({
   id: Schema.String,
   type: Schema.String,
   title: optional(Schema.String),
-  status: Status,
+  status: Job.Status,
   started_at: NonNegativeInt,
   completed_at: optional(NonNegativeInt),
   output: optional(Schema.String),

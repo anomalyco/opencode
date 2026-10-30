@@ -36,6 +36,7 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Form } from "@opencode/schema/form"
+import { Job } from "@opencode/schema/job"
 import { PublicSessionMessage } from "./message.js"
 
 const SessionActive = Schema.Struct({
@@ -702,6 +703,20 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           summary: "Background blocking session tools",
           description:
             "Move active foreground backgroundable tools for this session into background observation. Idle requests are a no-op.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.jobs", "/api/experimental/session/:sessionID/jobs", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.Array(Job.Info) }),
+        error: SessionNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "experimental.session.jobs",
+          summary: "List session jobs",
+          description:
+            "List running jobs owned by this session or its descendants. Experimental: may change without compatibility guarantees.",
         }),
       ),
     )

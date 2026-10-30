@@ -1555,3 +1555,67 @@ async function wait(check: () => boolean) {
     await Bun.sleep(10)
   }
 }
+
+test("keeps a session busy while background jobs are running after its foreground drain settles", () => {
+  const setup = activityFixture(() => Response.json({ data: {} }))
+  try {
+    setup.emit({
+      id: "evt_exec_start",
+      created: 1,
+      type: "session.execution.started",
+      durable: { aggregateID: "ses_jobs", seq: 1, version: 1 },
+      data: { sessionID: "ses_jobs" },
+    })
+    setup.emit({
+      id: "evt_job_start",
+      created: 2,
+      type: "job.updated",
+      data: {
+        active: true,
+        info: {
+          id: "sh_bg",
+          sessionID: "ses_jobs",
+          type: "shell",
+          title: "cargo build",
+          status: "running",
+          started_at: 2,
+        },
+      },
+    })
+    expect(setup.data.session.status("ses_jobs")).toBe("running")
+    expect(setup.data.session.jobs.list("ses_jobs")).toMatchObject([{ id: "sh_bg", status: "running" }])
+
+    // Foreground turn ends while background job continues.
+    setup.emit({
+      id: "evt_exec_end",
+      created: 3,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: "ses_jobs", seq: 2, version: 1 },
+      data: { sessionID: "ses_jobs" },
+    })
+    expect(setup.data.session.status("ses_jobs")).toBe("running")
+
+    // Once the background job settles with no active drain, the session goes idle.
+    setup.emit({
+      id: "evt_job_end",
+      created: 4,
+      type: "job.updated",
+      data: {
+        active: false,
+        info: {
+          id: "sh_bg",
+          sessionID: "ses_jobs",
+          type: "shell",
+          title: "cargo build",
+          status: "completed",
+          started_at: 2,
+          completed_at: 4,
+        },
+      },
+    })
+    expect(setup.data.session.jobs.list("ses_jobs")).toEqual([])
+    expect(setup.data.session.status("ses_jobs")).toBe("idle")
+  } finally {
+    setup.dispose()
+  }
+})
