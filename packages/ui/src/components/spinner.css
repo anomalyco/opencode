@@ -4,3 +4,18 @@
   width: 18px;
   aspect-ratio: 1;
 }
+
+/* Each dot rests at its frozen pose, so reduced motion only has to stop the animation. */
+[data-slot="spinner-dots"] rect {
+  opacity: var(--still);
+}
+
+/* syncSpinPhase marks spinners out of view; `!important` beats the inline animation each dot carries. */
+[data-slot="spinner-dots"][data-offscreen] rect {
+  animation-play-state: paused !important;
+}
+
+:root[data-motion="reduce"] [data-slot="spinner-dots"] rect {
+  /* Beats the inline animation each dot carries. */
+  animation: none !important;
+}

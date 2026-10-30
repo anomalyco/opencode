@@ -91,7 +91,7 @@ opencode auth list
 opencode service unset env ANTHROPIC_API_KEY
 ```
 
-Some cloud providers also use their native ambient credential chain instead of an API-key variable:
+Some providers also use their native ambient credential chain instead of an API-key variable:
 
 - Amazon Bedrock supports the AWS default credential chain, including profiles, access-key environments, web identity,
   and container credentials. It also supports `AWS_BEARER_TOKEN_BEDROCK`.
@@ -99,6 +99,8 @@ Some cloud providers also use their native ambient credential chain instead of a
   `gcloud auth application-default login` and set `GOOGLE_CLOUD_PROJECT`.
 - Azure exposes **Microsoft Entra ID (Azure CLI)** as a connect method when `az` is installed. Run `az login` first, then
   select that method in `/connect` or `auth login azure`.
+- [Claude Agent](/providers#claude-agent) uses your Claude Code login. Run `claude auth login` first, then select
+  Claude Agent in `/connect` or run `auth login claude-agent`.
 
 ```bash
 gcloud auth application-default login

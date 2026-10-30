@@ -164,7 +164,6 @@ export const UsageRecorded = Event.durable({
     ...Base,
     source: Schema.Literals(["title", "compaction"]),
     cost: Money.USD,
-    allowance: Money.USD.pipe(optional),
     tokens: TokenUsage.Info,
   },
 })
@@ -175,7 +174,6 @@ export const UsageUpdated = Event.ephemeral({
   schema: {
     ...Base,
     cost: Money.USD,
-    allowance: Money.USD.pipe(optional),
     tokens: TokenUsage.Info,
   },
 })
@@ -369,7 +367,6 @@ export namespace Step {
       rawFinish: Schema.String.pipe(optional),
       native: SessionMessage.Native.pipe(optional),
       cost: Money.USD,
-      allowance: Money.USD.pipe(optional),
       tokens: TokenUsage.Info,
       snapshot: Snapshot.ID.pipe(optional),
       files: Schema.Array(RelativePath).pipe(optional),
@@ -388,7 +385,6 @@ export namespace Step {
       rawFinish: Schema.String.pipe(optional),
       native: SessionMessage.Native.pipe(optional),
       cost: Money.USD.pipe(optional),
-      allowance: Money.USD.pipe(optional),
       tokens: TokenUsage.Info.pipe(optional),
       snapshot: Snapshot.ID.pipe(optional),
       files: Schema.Array(RelativePath).pipe(optional),

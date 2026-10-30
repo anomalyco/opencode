@@ -1,12 +1,13 @@
 import {
   applyMarkdownWorkerResponse,
+  applyProjectionBlocks,
   shouldReleaseMarkdownWorkerState,
   type MarkdownWorkerRequest,
   type MarkdownWorkerResponse,
   type MarkdownWorkerState,
 } from "./markdown-worker-protocol"
 import { createWorkerTransport } from "./markdown-worker-transport"
-import type { Projection } from "./markdown-stream"
+import type { Block, Projection } from "./markdown-stream"
 
 type HighlightPending = {
   key: string
@@ -17,6 +18,7 @@ type HighlightPending = {
 
 type ProjectPending = {
   key: string
+  text: string
   resolve: (projection: Projection) => void
   reject: (error: Error) => void
 }
@@ -37,6 +39,9 @@ const pending = new Map<number, HighlightPending>()
 const projects = new Map<number, ProjectPending>()
 
 const parses = new Map<number, ParsePending>()
+
+// The blocks of the last projection the worker sent for each key, which its next response builds on.
+const projected = new Map<string, Block[]>()
 
 const states = new Map<string, MarkdownWorkerState>()
 
@@ -67,12 +72,12 @@ const projectTransport = createWorkerTransport<Extract<MarkdownWorkerRequest, { 
 })
 
 export function parseMarkdown(text: string, signal: AbortSignal) {
-  if (signal.aborted) return Promise.reject(new MarkdownWorkerDisposedError())
+  if (signal.aborted) return Promise.reject(markdownWorkerDisposed)
   const instance = getWorker()
   const id = ++nextID
 
   const abort = () => {
-    parses.get(id)?.reject(new MarkdownWorkerDisposedError())
+    parses.get(id)?.reject(markdownWorkerDisposed)
     parses.delete(id)
   }
 
@@ -91,17 +96,18 @@ export function projectMarkdown(key: string, text: string, live: boolean) {
   const id = ++nextID
 
   return new Promise<Projection>((resolve, reject) => {
-    projects.set(id, { key, resolve, reject })
+    projects.set(id, { key, text, resolve, reject })
     projectTransport.send({ type: "project", id, key, text, live })
   })
 }
 
 export function disposeMarkdownProjection(key: string) {
   projectTransport.dispose(key)
+  projected.delete(key)
   projects.forEach((request, id) => {
     if (request.key !== key) return
     projects.delete(id)
-    request.reject(new MarkdownWorkerDisposedError())
+    request.reject(markdownWorkerDisposed)
   })
   worker?.postMessage({ type: "dispose", key } satisfies MarkdownWorkerRequest)
 }
@@ -129,12 +135,16 @@ export function disposeStreamingCode(key: string) {
   pending.forEach((request, id) => {
     if (request.key !== key) return
     pending.delete(id)
-    request.reject(new MarkdownWorkerDisposedError())
+    request.reject(markdownWorkerDisposed)
   })
   worker?.postMessage({ type: "dispose", key } satisfies MarkdownWorkerRequest)
 }
 
 export class MarkdownWorkerDisposedError extends Error {}
+
+// Made once: disposal rejects from inside a Solid cleanup, and a new error there would record that stack and keep the
+// whole disposing batch alive for as long as the rejected promise is reachable.
+export const markdownWorkerDisposed = new MarkdownWorkerDisposedError()
 
 export class MarkdownWorkerSupersededError extends Error {}
 
@@ -166,6 +176,7 @@ function getWorker() {
     if (event.data.type === "project") {
       const result = projects.get(event.data.id)
 
+      // Only disposal drops a sent request, and the worker forgets that key's projection too.
       if (!result) {
         projectTransport.complete(event.data.key, event.data.id)
 
@@ -173,7 +184,9 @@ function getWorker() {
       }
 
       projects.delete(event.data.id)
-      result.resolve(event.data.projection)
+      const blocks = applyProjectionBlocks(projected.get(event.data.key), event.data.from, event.data.blocks)
+      projected.set(event.data.key, blocks)
+      result.resolve({ text: result.text, blocks })
       projectTransport.complete(event.data.key, event.data.id)
 
       return
@@ -226,7 +239,7 @@ function getWorker() {
     pending.delete(event.data.id)
 
     if (!keys.has(key)) {
-      result.reject(new MarkdownWorkerDisposedError())
+      result.reject(markdownWorkerDisposed)
       transport.complete(key, event.data.id)
 
       return
@@ -268,6 +281,7 @@ function getWorker() {
     pending.clear()
     projects.clear()
     parses.clear()
+    projected.clear()
     states.clear()
     keys.clear()
     latest.clear()

@@ -53,6 +53,8 @@ const GLOW_RELEASE_PEAK = 1.25
 const GLOW_TAIL = 12
 const GLOW_OPACITY = 0.16
 const DEFAULT_FOREGROUND = RGBA.defaultForeground()
+// The sweep front crosses a 32-cell tab at up to about 24 cells per second, so 20 fps steps it about a cell at a time.
+const PULSE_FPS = 20
 export const intensityAt = (index: number, front: number, head: number, tail: number) => {
   const distance = front - index
   return distance < 0 ? smootherstep(clamp(1 + distance / head)) : smootherstep(clamp(1 - distance / tail))
@@ -418,6 +420,8 @@ class PulseState {
   }
 }
 
+// Not live: a live node holds the renderer at its full frame rate. The pulse ticks at PULSE_FPS on the renderer's shared
+// animation clock while it animates and is drawn, on frames it shares with the other animations.
 class TabPulseRenderable extends Renderable {
   private _enabled: boolean
   private inner: PulseState
@@ -448,11 +452,7 @@ class TabPulseRenderable extends Renderable {
     const edge = options.edge
     const outerActive = options.outerActive ?? active
     const outerGlow = options.outerGlow ?? glow
-    super(ctx, {
-      ...options,
-      height: 1,
-      live: enabled && (active || (edge !== undefined && outerActive)),
-    })
+    super(ctx, { ...options, height: 1 })
     this._enabled = enabled
     this.inner = new PulseState({
       enabled,
@@ -483,6 +483,7 @@ class TabPulseRenderable extends Renderable {
     this._outerCompletionColor = options.outerCompletionColor ?? options.completionColor ?? this._outerColor
     this._backgroundColor = options.backgroundColor ?? RGBA.defaultBackground()
     this._onLevel = options.onLevel
+    this.changed()
   }
 
   set onLevel(value: ((level: number) => void) | undefined) {
@@ -502,8 +503,7 @@ class TabPulseRenderable extends Renderable {
     this._enabled = value
     this.inner.setEnabled(value)
     this.outer.setEnabled(value && this._edge !== undefined)
-    this.live = this.inner.live || this.outer.live
-    this.requestRender()
+    this.changed()
   }
 
   set active(value: boolean) {
@@ -538,9 +538,21 @@ class TabPulseRenderable extends Renderable {
     if (this.outer.setGlow(value)) this.changed()
   }
 
+  // The level and the clock follow every state change, outside the paint, so onLevel's color update needs no frame.
   private changed() {
-    this.live = this.inner.live || this.outer.live
+    const animating = this.inner.live || this.outer.live
+    this.animationFps = animating ? PULSE_FPS : undefined
+    this.emitLevel(this.level())
     this.requestRender()
+  }
+
+  private level() {
+    const running = this.inner.running
+    if (running === 0 || this.width <= 0) return 0
+    const fronts = this.inner.fronts(this.width)
+    return (
+      Math.max(intensityAt(1, fronts[0], RUN_HEAD, RUN_TAIL), intensityAt(1, fronts[1], RUN_HEAD, RUN_TAIL)) * running
+    )
   }
 
   set color(value: RGBA) {
@@ -583,8 +595,7 @@ class TabPulseRenderable extends Renderable {
     if (value === this._edge) return
     this._edge = value
     this.outer.setEnabled(this._enabled && value !== undefined)
-    this.live = this.inner.live || this.outer.live
-    this.requestRender()
+    this.changed()
   }
 
   set flashColor(value: RGBA) {
@@ -629,11 +640,11 @@ class TabPulseRenderable extends Renderable {
     this.requestRender()
   }
 
-  protected override onUpdate(deltaTime: number): void {
-    if (!this.live) return
+  // deltaTime is the time since the previous tick, so a tick that runs early or late draws the sweep where it is.
+  protected override onAnimationTick(deltaTime: number): void {
     this.inner.advance(deltaTime)
     this.outer.advance(deltaTime)
-    this.live = this.inner.live || this.outer.live
+    this.changed()
   }
 
   protected override renderSelf(buffer: OptimizedBuffer): void {
@@ -659,19 +670,10 @@ class TabPulseRenderable extends Renderable {
       outerRunning === 0 &&
       outerCompletion === 0 &&
       outerFlash === 0
-    ) {
-      this.emitLevel(0)
+    )
       return
-    }
     const fronts = running === 0 ? undefined : this.inner.fronts(this.width)
     const outerFronts = outerRunning === 0 ? undefined : this.outer.fronts(this.width)
-    if (this._onLevel)
-      this.emitLevel(
-        running === 0
-          ? 0
-          : Math.max(intensityAt(1, fronts![0], RUN_HEAD, RUN_TAIL), intensityAt(1, fronts![1], RUN_HEAD, RUN_TAIL)) *
-              running,
-      )
     const glowTail = Math.min(this._glowTail, Math.max(1, this.width - 2))
     const outerGlowTail = Math.min(this._outerGlowTail, Math.max(1, this.width - 2))
     const releaseSwell = this.inner.glowReleaseSwell

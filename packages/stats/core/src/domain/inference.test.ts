@@ -283,6 +283,19 @@ describe("inference stat normalization", () => {
     queries.forEach((query) => expect(query).toContain("lower(model) NOT IN ('alpha-gpt-next', 'hidden-model')"))
   })
 
+  test("excludes requests rejected before routing from stats and retention queries", () => {
+    const source = { namespace: "inference", table: "generation", dataset: "zen" }
+    const queries = [
+      ...buildStatsQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-11T00:00:00.000Z"), source),
+      ...buildRetentionQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-24T00:00:00.000Z"), source).map(
+        (item) => item.query,
+      ),
+    ]
+
+    expect(queries.length).toBeGreaterThan(0)
+    queries.forEach((query) => expect(query).toContain("AND attempts > 0\n"))
+  })
+
   test("builds bounded R2 SQL queries for each day and week", () => {
     const queries = buildStatsQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-12T12:00:00.000Z"), {
       namespace: "inference",
@@ -294,7 +307,7 @@ describe("inference stat normalization", () => {
     queries.forEach((query) => {
       expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next')")
       expect(query).toContain(
-        "CASE\n      WHEN lower(model) IN ('exo', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
+        "CASE\n      WHEN lower(model) IN ('exo', 'iceman-contributor', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
       )
       expect(query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
       expect(query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
@@ -367,7 +380,7 @@ describe("inference stat normalization", () => {
     expect(queries[0]?.query).toContain("AND product IN ('go', 'go-plus')")
     expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next')")
     expect(queries[0]?.query).toContain(
-      "CASE\n      WHEN lower(model) IN ('exo', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
+      "CASE\n      WHEN lower(model) IN ('exo', 'iceman-contributor', 'omen-alpha', 'union-alpha') THEN 'unknown'\n",
     )
     expect(queries[0]?.query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
     expect(queries[0]?.query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")

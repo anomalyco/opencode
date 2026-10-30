@@ -40,14 +40,15 @@ export const Info = Schema.Struct({
   agent: Agent.ID.pipe(optional),
   model: Model.Ref.pipe(optional),
   cost: Money.USD,
-  /** Subscription allowance used instead of money, such as OpenCode Go's; absent when none was. */
-  allowance: Money.USD.pipe(optional),
   tokens: TokenUsage.Info,
   /** Outcome of the last completed execution, recorded at `time.idle`. Absent until a run reaches a terminal transition. */
   outcome: Schema.Literals(["succeeded", "failed", "interrupted"]).pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     updated: DateTimeUtcFromMillis,
+    /** Start of the most recent execution. While it runs, `idle` still holds the previous execution's end. Resuming after a restart starts a new execution. */
+    busy: DateTimeUtcFromMillis.pipe(optional),
+    /** End of the most recent completed execution. */
     idle: DateTimeUtcFromMillis.pipe(optional),
     viewed: DateTimeUtcFromMillis.pipe(optional),
     archived: DateTimeUtcFromMillis.pipe(optional),

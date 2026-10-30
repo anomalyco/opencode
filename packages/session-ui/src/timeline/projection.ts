@@ -8,7 +8,7 @@ import type {
   SessionStatus,
 } from "@opencode/client/promise"
 import { Effect, Option, Predicate, Schema } from "effect"
-import { createMemo, mapArray, type Accessor } from "solid-js"
+import { createComputed, createMemo, createSignal, mapArray, type Accessor } from "solid-js"
 import {
   currentContentDefaultOpen,
   currentToolFailed,
@@ -16,7 +16,7 @@ import {
   currentToolHasLoadedFiles,
 } from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
-import { timelineCategory, timelineNoticeRequired, type TimelineDetail } from "./detail"
+import { timelineCategory, timelineNoticePlacement, timelineNoticeRequired, type TimelineDetail } from "./detail"
 
 export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap }
 
@@ -124,6 +124,7 @@ export function createTimelineProjection(input: TimelineProjectionInput) {
     rows,
     sessionMessageByID,
     userContextByID: indexUserContext(input.sessionMessages),
+    previousSelectionByID: indexPreviousSelection(input.sessionMessages),
   }
 }
 
@@ -144,6 +145,7 @@ export function createReactiveTimelineProjection(input: {
   )
 
   const userContextByID = createMemo(() => indexUserContext(input.sessionMessages()))
+  const previousSelectionByID = createMemo(() => indexPreviousSelection(input.sessionMessages()))
   const assistantMessagesByParent = createMemo(() => indexAssistantMessages(input.sessionMessages()))
 
   // Row structure depends on the empty/non-empty boundary, not each text delta.
@@ -155,7 +157,15 @@ export function createReactiveTimelineProjection(input: {
         .flatMap((message) =>
           message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
         ),
-    (content) => [content, createMemo(() => !!content.text.trim())] as const,
+    (content) => {
+      // A memo here went stale on every streamed delta, which marked the projection below pending; Solid then
+      // re-checked each of its thousands of sources to find nothing changed. A signal set from a computation
+      // notifies only when visibility actually flips.
+      const [visible, setVisible] = createSignal(false)
+      createComputed(() => setVisible(!!content.text.trim()))
+
+      return [content, visible] as const
+    },
   )
 
   const textVisible = createMemo(() => new Map<Content, Accessor<boolean>>(textParts()))
@@ -224,6 +234,7 @@ export function createReactiveTimelineProjection(input: {
     rows,
     sessionMessageByID,
     userContextByID,
+    previousSelectionByID,
   }
 }
 
@@ -356,8 +367,21 @@ export namespace Timeline {
       turns.findLast((turn) => !pendingInputIDs?.has(turn.id) || turn.entries.some((entry) => entry.type === "idle"))
         ?.id ?? turns.at(-1)?.id
 
-    const visibleNotice = (message: Notice) =>
-      !detail || detail.notices.placement !== "hidden" || timelineNoticeRequired(message)
+    const commentary = new Set(
+      detail && detail.commentary.placement !== "separate"
+        ? turns.flatMap((turn) =>
+            turnCommentary(turn.entries, turn.id !== activeMessageID || status.type === "idle", (content) =>
+              isRenderable(content, showReasoning, detail),
+            ),
+          )
+        : [],
+    )
+
+    const visible = (content: Content, showReasoning: boolean, detail?: TimelineDetail) =>
+      !(detail?.commentary.placement === "hidden" && commentary.has(content)) &&
+      isRenderable(content, showReasoning, detail)
+
+    const visibleNotice = (message: Notice) => !detail || timelineNoticePlacement(message, detail) !== "hidden"
 
     const visibleTurns = detail
       ? turns.filter((turn) => {
@@ -372,7 +396,7 @@ export namespace Timeline {
                 entry.type === "diff" ||
                 !!entry.message.error ||
                 !!entry.message.retry ||
-                entry.message.content.some((content) => isRenderable(content, showReasoning, detail)),
+                entry.message.content.some((content) => visible(content, showReasoning, detail)),
           )
         })
       : turns
@@ -407,8 +431,9 @@ export namespace Timeline {
           turn.id === activeMessageID,
           shellToolDefaultOpen,
           editToolDefaultOpen,
-          isRenderable,
+          visible,
           detail,
+          commentary,
         )
       }),
     ]
@@ -443,7 +468,8 @@ export namespace Timeline {
               messages.flatMap((message) =>
                 message.type === "compaction" ||
                 message.type === "model-switched" ||
-                message.type === "location-switched"
+                message.type === "location-switched" ||
+                (message.type === "synthetic" && timelineNoticePlacement(message, detail) === "separate")
                   ? [message.id]
                   : [],
               ),
@@ -465,6 +491,7 @@ export namespace Timeline {
     editToolDefaultOpen = false,
     isRenderable = renderable,
     detail?: TimelineDetail,
+    commentary: ReadonlySet<Content> = new Set(),
   ) {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
@@ -488,15 +515,6 @@ export namespace Timeline {
       lastContent?.type === "reasoning" &&
       lastContent.time?.completed === undefined
 
-    const thoughtOnly =
-      working &&
-      detail?.thinking.placement === "grouped" &&
-      assistantMessages.every((message) =>
-        message.content.every(
-          (content) => content.type === "reasoning" || !isRenderable(content, showReasoning, detail),
-        ),
-      )
-
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: turnID }))
 
     if (userMessage) rows.push(new TimelineRow.UserMessage({ userMessageID: turnID }))
@@ -507,8 +525,6 @@ export namespace Timeline {
     // An assistant message can produce several rows because its content parts are
     // rendered separately. Notices end a segment so none of those rows cross it.
     const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
-      if (thoughtOnly) return
-
       const refs = messages.flatMap((message, messageIndex) =>
         contentEntries(message)
           .filter(
@@ -524,7 +540,7 @@ export namespace Timeline {
 
       const appendGroups = (items: typeof refs) => {
         let offset = 0
-        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, detail).forEach((group) => {
+        groupContent(items, shellToolDefaultOpen, editToolDefaultOpen, commentary, detail).forEach((group) => {
           const tool = group.type !== "part" || items[offset]?.content.type !== "text"
           offset += group.type === "part" ? 1 : group.refs.length
           rows.push(
@@ -567,7 +583,8 @@ export namespace Timeline {
           new TimelineRow.Error({
             userMessageID: turnID,
             text: unwrapErrorMessage(lastAssistant.error.message),
-            ...freeLimit(lastAssistant),
+            ...usageLimit(lastAssistant),
+            ...budgetLimit(lastAssistant),
           }),
         )
     }
@@ -588,7 +605,8 @@ export namespace Timeline {
               new TimelineRow.Error({
                 userMessageID: turnID,
                 text: unwrapErrorMessage(entry.message.error.message),
-                ...freeLimit(entry.message),
+                ...usageLimit(entry.message),
+                ...budgetLimit(entry.message),
               }),
             )
 
@@ -607,7 +625,7 @@ export namespace Timeline {
 
           return
         case "notice":
-          if (detail?.notices.placement === "hidden" && !timelineNoticeRequired(entry.message)) return
+          if (detail && timelineNoticePlacement(entry.message, detail) === "hidden") return
           appendAssistantSegment(assistantSegment)
           assistantSegment = []
           rows.push(new TimelineRow.Notice({ userMessageID: turnID, messageID: entry.message.id }))
@@ -641,11 +659,15 @@ export namespace Timeline {
 
 const MAX_RETRY_AFTER_MS = 7 * 86_400_000
 
-function freeLimit(
+function usageLimit(
   message: Pick<SessionMessageAssistant, "error"> & { time: { created: number; completed?: number } },
 ) {
-  if (message.error?.type !== "provider.free-limit") return {}
-  const delay = message.error.retryAfterMs
+  const type = message.error?.type
+
+  if (type !== "provider.free-limit" && type !== "provider.go-limit") return {}
+
+  const kind = type === "provider.go-limit" ? ("go-limit" as const) : ("free-limit" as const)
+  const delay = message.error?.retryAfterMs
   const base = message.time.completed ?? message.time.created
 
   if (
@@ -656,12 +678,22 @@ function freeLimit(
     !Number.isFinite(base) ||
     Number.isNaN(new Date(base + delay).getTime())
   )
-    return { kind: "free-limit" as const }
+    return { kind }
 
-  return {
-    kind: "free-limit" as const,
-    resetAt: base + delay,
-  }
+  return { kind, resetAt: base + delay }
+}
+
+// OpenCode Console says when the budget resets in its refusal's metadata, which every protocol's envelope names `resetsAt`.
+function budgetLimit(message: Pick<SessionMessageAssistant, "error">) {
+  const type = message.error?.type
+
+  if (type !== "provider.budget-limit" && type !== "provider.model-budget-limit") return {}
+  const kind = type === "provider.budget-limit" ? ("budget-limit" as const) : ("model-budget-limit" as const)
+  const at = Date.parse(/"resetsAt"\s*:\s*"([^"]+)"/.exec(message.error?.response?.body ?? "")?.[1] ?? "")
+
+  if (Number.isNaN(at)) return { kind }
+
+  return { kind, resetAt: at }
 }
 
 function isInterrupted(error: SessionMessageAssistant["error"]) {
@@ -676,6 +708,26 @@ function shellFailed(message: SessionMessageShell) {
   return (
     message.status === "timeout" || (message.status === "exited" && message.exit !== undefined && message.exit !== 0)
   )
+}
+
+// Text that a tool call follows in the same turn is commentary; text after the last tool call is the answer.
+// OpenAI Responses models label each message with a phase, which wins over position. A settled turn
+// without an answer keeps its last text, so an interrupted turn still ends with something to read.
+function turnCommentary(entries: Entry[], settled: boolean, visible: (content: Content) => boolean) {
+  const contents = entries.flatMap((entry) => (entry.type === "assistant" ? entry.message.content : []))
+  const lastTool = contents.findLastIndex((content) => content.type === "tool")
+
+  const commentary = contents.filter(
+    (content, index) =>
+      content.type === "text" &&
+      (content.native?.phase === "commentary" || (content.native?.phase !== "final_answer" && index < lastTool)),
+  )
+
+  const texts = contents.filter((content) => content.type === "text" && visible(content))
+
+  if (!settled || texts.some((content) => !commentary.includes(content))) return commentary
+
+  return commentary.filter((content) => content !== texts.at(-1))
 }
 
 function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, separate: ReadonlySet<string>) {
@@ -753,8 +805,24 @@ export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefine
   return next
 }
 
+type UserSelection = { agent: string; model: ModelRef }
+
+/** The agent and model a user message's metadata names, when it names them. */
+function localSelection(message: SessionMessageUser): Partial<UserSelection> {
+  const localModel = Option.getOrUndefined(decodeLocalModel(message.metadata))?.model
+  const localModelID = localModel?.id ?? localModel?.modelID
+
+  return {
+    agent: Option.getOrUndefined(decodeLocalAgent(message.metadata))?.agent,
+    model:
+      localModel && localModelID
+        ? { id: localModelID, providerID: localModel.providerID, variant: localModel.variant }
+        : undefined,
+  }
+}
+
 function indexUserContext(messages: SessionMessageInfo[]) {
-  const result = new Map<string, { agent: string; model: ModelRef }>()
+  const result = new Map<string, UserSelection>()
   let agent = ""
   let model: ModelRef = { id: "", providerID: "" }
   let userID: string | undefined
@@ -766,19 +834,8 @@ function indexUserContext(messages: SessionMessageInfo[]) {
 
     if (message.type === "user") {
       userID = message.id
-      const localModel = Option.getOrUndefined(decodeLocalModel(message.metadata))?.model
-      const localModelID = localModel?.id ?? localModel?.modelID
-
-      result.set(message.id, {
-        agent: Option.match(decodeLocalAgent(message.metadata), {
-          onNone: () => agent,
-          onSome: (local) => local.agent,
-        }),
-        model:
-          localModel && localModelID
-            ? { id: localModelID, providerID: localModel.providerID, variant: localModel.variant }
-            : model,
-      })
+      const local = localSelection(message)
+      result.set(message.id, { agent: local.agent ?? agent, model: local.model ?? model })
     }
 
     if (message.type === "shell") userID = undefined
@@ -788,6 +845,45 @@ function indexUserContext(messages: SessionMessageInfo[]) {
     model = message.model
 
     if (userID) result.set(userID, { agent, model })
+  })
+
+  return result
+}
+
+/**
+ * The agent and model the previous user message chose, for each user message after the first. A message whose
+ * metadata names neither chose what its first reply ran with; later replies, which a steer's switch reconfigures,
+ * do not count, so a waiting steer can tell whether it changes the agent or model of the turn it joins.
+ */
+function indexPreviousSelection(messages: SessionMessageInfo[]) {
+  const result = new Map<string, UserSelection>()
+  let agent = ""
+  let model: ModelRef = { id: "", providerID: "" }
+  let previous: { chosen: Partial<UserSelection>; current: UserSelection } | undefined
+
+  messages.forEach((message) => {
+    if (message.type === "agent-switched") agent = message.agent
+
+    if (message.type === "model-switched") model = message.model
+
+    if (message.type === "assistant") {
+      agent = message.agent
+      model = message.model
+
+      if (previous) {
+        previous.chosen.agent ??= message.agent
+        previous.chosen.model ??= message.model
+      }
+    }
+
+    if (message.type !== "user") return
+
+    if (previous)
+      result.set(message.id, {
+        agent: previous.chosen.agent ?? previous.current.agent,
+        model: previous.chosen.model ?? previous.current.model,
+      })
+    previous = { chosen: localSelection(message), current: { agent, model } }
   })
 
   return result
@@ -883,6 +979,7 @@ function groupContent(
   items: { messageID: string; partID: string; content: Content }[],
   shellToolDefaultOpen: boolean,
   editToolDefaultOpen: boolean,
+  commentary: ReadonlySet<Content>,
   detail?: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
@@ -920,6 +1017,7 @@ function groupContent(
       shellToolDefaultOpen,
       editToolDefaultOpen,
       adjacent?.type === "context" && adjacent.tools,
+      commentary,
       detail,
     )
 
@@ -949,11 +1047,12 @@ function contentGroupType(
   shellExpanded: boolean,
   editExpanded: boolean,
   hasContextGroup: boolean,
+  commentary: ReadonlySet<Content>,
   detail?: TimelineDetail,
 ) {
   if (content.type === "tool") return toolGroupType(content, shellExpanded, editExpanded, hasContextGroup, detail)
 
-  if (content.type !== "reasoning") return undefined
+  if (content.type === "text") return commentary.has(content) ? "context" : undefined
 
   return detail && detail.thinking.placement !== "grouped" ? undefined : "context"
 }

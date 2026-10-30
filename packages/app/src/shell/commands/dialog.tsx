@@ -1,42 +1,40 @@
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { FileIcon } from "@opencode/ui/file-icon"
-import { ScrollView } from "@opencode/ui/scroll-view"
 import { Dialog, DialogBody } from "@opencode/ui/dialog"
-import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
-import { TextInput } from "@opencode/ui/text-input"
-import { createEffect, createMemo, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { SearchHighlight, SearchList, type SearchListRow } from "@opencode/ui/search-list"
+import { createMemo, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { formatKeybindParts } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useTabs } from "@/shell/tabs/tabs"
-import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
+import { ActivityRing } from "@opencode/ui/activity-ring"
+import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
+import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
+import type { ServerConnection } from "@/runtime/server/registry"
 import { getRelativeTime } from "@/shell/time"
 import { createCommandPaletteFileEntry, createCommandPaletteModel, type CommandPaletteEntry } from "./palette"
-import { createCommandPaletteSearch } from "./search"
+import { createCommandPaletteSearch, matchesCommandPaletteEntry } from "./search"
 import "./dialog.css"
+import "../palette-menu.css"
 
-function groups(entries: CommandPaletteEntry[]) {
-  const map = new Map<string, CommandPaletteEntry[]>()
+export { matchesCommandPaletteEntry }
 
-  for (const entry of entries) map.set(entry.category, [...(map.get(entry.category) ?? []), entry])
-
-  return Array.from(map.entries()).map(([category, entries]) => ({ category, entries }))
-}
-
-export function matchesCommandPaletteEntry(entry: CommandPaletteEntry, query: string) {
-  const value = query.toLowerCase()
-
-  return [entry.title, entry.description, entry.category].some((text) => text?.toLowerCase().includes(value))
+function groupKey(entry: CommandPaletteEntry) {
+  return entry.type === "session" ? "session" : `${entry.type}:${entry.category}`
 }
 
 export function DialogCommandPalette(props: { onOpenFile?: (path: string) => void }) {
   const palette = createCommandPaletteModel(props)
 
   const items = (q: string) => {
-    if (!q) return [...palette.preferredCommandEntries(), ...palette.recentFileEntries()]
+    if (!q) return [...palette.preferredCommandEntries(), ...palette.recentFileEntries(), ...palette.sessions.items("")]
 
-    return palette.commandEntries().filter((entry) => matchesCommandPaletteEntry(entry, q))
+    return [
+      ...palette.commandEntries().filter((entry) => matchesCommandPaletteEntry(entry, q)),
+      ...palette.sessions.items(q),
+      ...palette.settings.items(q),
+    ]
   }
 
   return (
@@ -44,9 +42,9 @@ export function DialogCommandPalette(props: { onOpenFile?: (path: string) => voi
       placeholder={palette.language.t("palette.search.placeholder")}
       items={items}
       sources={[
-        palette.sessions,
+        palette.sessions.search,
         async (query, signal) => {
-          if (!query) return []
+          if (!query) return palette.recentFileEntries()
           const files = await palette.file.searchFiles(query, { signal })
           const category = palette.language.t("palette.group.files")
 
@@ -70,142 +68,56 @@ export function CommandPaletteView(props: {
 }) {
   const language = useLanguage()
   const tabs = useTabs()
-  const [store, setStore] = createStore<{ query: string; active?: string }>({ query: "" })
-
-  const search = createCommandPaletteSearch({ query: () => store.query, items: props.items, sources: props.sources })
-  const visibleEntries = search.items
-  const groupedEntries = createMemo(() => groups(visibleEntries()))
-
-  // Follow the first result until the user explicitly chooses a row.
-  const activeEntry = createMemo(
-    () => visibleEntries().find((entry) => entry.id === store.active) ?? visibleEntries()[0],
-  )
+  const [store, setStore] = createStore({ query: "" })
 
   const openSessions = createMemo(
     () => new Set(tabs.store.flatMap((tab) => (tab.type === "session" ? [`${tab.server}\0${tab.sessionId}`] : []))),
   )
 
-  createEffect(() => {
-    props.highlight(activeEntry())
+  const sessionOpen = (entry: CommandPaletteEntry) =>
+    !!entry.server && !!entry.sessionID && openSessions().has(`${entry.server}\0${entry.sessionID}`)
+
+  const search = createCommandPaletteSearch({
+    query: () => store.query,
+    items: props.items,
+    sources: props.sources,
+    open: sessionOpen,
   })
-
-  let resultsRef: HTMLDivElement | undefined
-
-  createEffect(() => {
-    // Incoming results can move an explicitly selected row below the viewport.
-    visibleEntries()
-
-    if (!activeEntry()) return
-
-    const frame = requestAnimationFrame(() => {
-      resultsRef?.querySelector("[data-active]")?.scrollIntoView({ block: "nearest" })
-    })
-
-    onCleanup(() => cancelAnimationFrame(frame))
-  })
-
-  const move = (delta: -1 | 1) => {
-    const count = visibleEntries().length
-
-    if (count === 0) return
-    const index = visibleEntries().findIndex((entry) => entry.id === activeEntry()?.id)
-    setStore("active", visibleEntries()[(index + delta + count) % count].id)
-  }
-
-  const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault()
-      move(1)
-
-      return
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault()
-      move(-1)
-
-      return
-    }
-
-    if (event.key === "Enter") {
-      event.preventDefault()
-      props.select(activeEntry())
-
-      return
-    }
-
-    if (event.key === "Escape") {
-      event.preventDefault()
-      props.close()
-    }
-  }
 
   return (
-    <Dialog class="command-palette" size="large">
+    <Dialog class="command-palette command-palette-compact" size="large" fit>
       <DialogBody class="command-palette-body">
-        <div class="command-palette-search">
-          <TextInput
-            value={store.query}
-            autofocus
-            autocomplete="off"
-            spellcheck={false}
-            appearance="large"
-            placeholder={props.placeholder}
-            leadingIcon={<Icon name="magnifying-glass" />}
-            onInput={(event) => setStore({ query: event.currentTarget.value, active: undefined })}
-            onKeyDown={handleKeyDown}
-          />
-        </div>
-        <ScrollView class="command-palette-scroll" viewportRef={(el) => (resultsRef = el)}>
-          <div class="command-palette-results" role="listbox">
-            <Show
-              when={visibleEntries().length > 0}
-              fallback={
-                <div class="command-palette-state">
-                  {search.loading() ? language.t("common.loading") : language.t("palette.empty")}
-                </div>
-              }
-            >
-              <For each={groupedEntries()}>
-                {(group) => (
-                  <div class="command-palette-group">
-                    <Show when={group.category}>
-                      <div class="command-palette-group-title">{group.category}</div>
-                    </Show>
-                    <For each={group.entries}>
-                      {(item) => (
-                        <PaletteRow
-                          item={item}
-                          active={activeEntry()?.id === item.id}
-                          language={language}
-                          sessionOpen={
-                            item.server && item.sessionID
-                              ? openSessions().has(`${item.server}\0${item.sessionID}`)
-                              : false
-                          }
-                          onActive={() => setStore("active", item.id)}
-                          onSelect={() => props.select(item)}
-                        />
-                      )}
-                    </For>
-                  </div>
-                )}
-              </For>
-            </Show>
-          </div>
-        </ScrollView>
+        <SearchList
+          query={store.query}
+          onQuery={(query) => setStore("query", query)}
+          placeholder={props.placeholder}
+          items={search.items()}
+          key={(entry) => entry.id}
+          section={groupKey}
+          header={(entry) => entry.category || undefined}
+          empty={
+            search.loading()
+              ? language.t("common.loading")
+              : search.failed()
+                ? language.t("common.requestFailed")
+                : language.t("palette.empty")
+          }
+          onActive={props.highlight}
+          onSelect={props.select}
+          onClose={props.close}
+        >
+          {(item, row) => <PaletteRow row={row} item={item()} language={language} sessionOpen={sessionOpen(item())} />}
+        </SearchList>
       </DialogBody>
     </Dialog>
   )
 }
 
 function PaletteRow(props: {
+  row: SearchListRow
   item: CommandPaletteEntry
-  active: boolean
   language: ReturnType<typeof useLanguage>
   sessionOpen: boolean
-  onActive: () => void
-  onSelect: () => void
 }) {
   const session = () =>
     props.item.server && props.item.directory && props.item.sessionID
@@ -213,37 +125,34 @@ function PaletteRow(props: {
       : undefined
 
   return (
-    <button
-      type="button"
-      class="command-palette-row group"
-      role="option"
-      aria-selected={props.active}
-      data-active={props.active ? "" : undefined}
-      onMouseMove={(event) => {
-        // Ignore hover from a static cursor when keyboard scrolling moves rows underneath it.
-        if (event.movementX === 0 && event.movementY === 0) return
-        props.onActive()
-      }}
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={props.onSelect}
-    >
+    <button type="button" class="command-palette-row group" data-size="compact" {...props.row}>
       <Switch
         fallback={
           <div class="command-palette-row-main">
             <FileIcon node={{ path: props.item.path ?? "", type: "file" }} class="command-palette-row-icon size-4" />
-            <div class="command-palette-file-path">
-              <span class="command-palette-file-dir">{getDirectory(props.item.path ?? "")}</span>
-              <span class="command-palette-file-name">{getFilename(props.item.path ?? "")}</span>
+            <div class="command-palette-file-path" dir="ltr">
+              <span class="command-palette-file-dir">
+                <SearchHighlight text={getDirectory(props.item.path ?? "")} />
+              </span>
+              <span class="command-palette-file-name">
+                <SearchHighlight text={getFilename(props.item.path ?? "")} />
+              </span>
             </div>
           </div>
         }
       >
-        <Match when={props.item.type === "command"}>
+        <Match when={props.item.type === "command" || props.item.type === "setting"}>
           <div class="command-palette-row-main">
             <div class="command-palette-row-text">
-              <span class="command-palette-title">{props.item.title}</span>
+              <span class="command-palette-title palette-menu-title" dir="auto">
+                <SearchHighlight text={props.item.title} />
+              </span>
               <Show when={props.item.description}>
-                <span class="command-palette-description">{props.item.description}</span>
+                {(description) => (
+                  <span class="command-palette-description" dir="auto">
+                    <SearchHighlight text={description()} />
+                  </span>
+                )}
               </Show>
             </div>
           </div>
@@ -251,45 +160,90 @@ function PaletteRow(props: {
             <Keybind keys={formatKeybindParts(props.item.keybind ?? "", props.language.t)} variant="neutral" />
           </Show>
         </Match>
-        <Match when={props.item.type === "session"}>
-          <div class="command-palette-row-main">
-            <div class="relative shrink-0">
-              <Show when={props.sessionOpen}>
-                <span
-                  aria-hidden="true"
-                  class="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
-                  style={{ right: "calc(100% + 4px)" }}
-                />
-              </Show>
-              <Show when={session()}>
-                {(session) => (
-                  <SessionTabAvatar
-                    project={props.item.project}
-                    directory={session().directory}
-                    sessionId={session().sessionID}
-                    server={session().server}
-                  />
-                )}
-              </Show>
-            </div>
-            <div class="command-palette-row-text">
-              <span class="command-palette-title" classList={{ "opacity-70": !!props.item.archived }}>
-                {props.item.title}
-              </span>
-              <Show when={props.item.description}>
-                <span class="command-palette-description" classList={{ "opacity-70": !!props.item.archived }}>
-                  {props.item.description}
-                </span>
-              </Show>
-            </div>
-          </div>
-          <Show when={props.item.updated}>
-            <span class="command-palette-meta">
-              {getRelativeTime(new Date(props.item.updated!).toISOString(), props.language.t)}
-            </span>
-          </Show>
+        <Match when={props.item.type === "session" && session()}>
+          {(session) => (
+            <PaletteSessionRow
+              item={props.item}
+              server={session().server}
+              directory={session().directory}
+              sessionID={session().sessionID}
+              language={props.language}
+              sessionOpen={props.sessionOpen}
+            />
+          )}
         </Match>
       </Switch>
     </button>
+  )
+}
+
+function PaletteSessionRow(props: {
+  item: CommandPaletteEntry
+  server: ServerConnection.Key
+  directory: string
+  sessionID: string
+  language: ReturnType<typeof useLanguage>
+  sessionOpen: boolean
+}) {
+  const status = useSessionTabAvatarState(
+    () => props.server,
+    () => props.sessionID,
+    () => true,
+  )
+
+  return (
+    <>
+      <div class="command-palette-row-main">
+        <div class="relative shrink-0">
+          <Show when={props.sessionOpen}>
+            <span
+              aria-hidden="true"
+              class="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-y-1/2 rounded-[2px] bg-v2-background-bg-layer-04"
+              style={{ "inset-inline-start": "-6px" }}
+            />
+          </Show>
+          {/* A busy session shows its activity ring instead of the unread dot, as session tabs do. */}
+          <SessionTabAvatarView
+            project={props.item.project}
+            directory={props.directory}
+            unread={status.unread() && !status.loading()}
+          />
+        </div>
+        <div class="command-palette-row-text">
+          <span
+            class="command-palette-title palette-menu-title"
+            dir="auto"
+            classList={{ "opacity-70": !!props.item.archived }}
+          >
+            <SearchHighlight text={props.item.title} />
+          </span>
+          <Show when={props.item.description}>
+            {(description) => (
+              <span class="command-palette-description" dir="auto" classList={{ "opacity-70": !!props.item.archived }}>
+                <SearchHighlight text={description()} />
+              </span>
+            )}
+          </Show>
+        </div>
+      </div>
+      {/* The project avatar stays put; a working session shows its activity ring where its age would be. */}
+      <Show
+        when={status.loading()}
+        fallback={
+          <Show when={props.item.updated}>
+            {(updated) => (
+              <span class="command-palette-meta">
+                {getRelativeTime(new Date(updated()).toISOString(), props.language.t)}
+              </span>
+            )}
+          </Show>
+        }
+      >
+        <span class="command-palette-meta">
+          <span class="sr-only">{props.language.t("session.timeline.working")}</span>
+          <ActivityRing />
+        </span>
+      </Show>
+    </>
   )
 }

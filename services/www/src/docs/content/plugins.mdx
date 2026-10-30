@@ -30,10 +30,11 @@ Add published packages, versioned packages, scoped packages, or local plugin dir
 
 Relative paths resolve from the config file containing the entry.
 
-Configured local paths must be directories. OpenCode loads the directory's `server` or `index` module, such as
-`index.ts`. A path to a single file is skipped.
+Configured local paths must be directories. A path to a single file is skipped. See [Load](/build/plugins#load) for
+how OpenCode finds each part in a directory.
 
-Plugin arrays from applicable config files are applied from lowest to highest precedence instead of replacing one another.
+Plugin arrays from applicable config files are applied from lowest to highest precedence instead of replacing one
+another.
 
 ```text
 ~/.config/opencode/opencode.jsonc
@@ -99,8 +100,9 @@ opencode plugin update opencode-acme-plugin
 opencode plugin remove opencode-acme-plugin@1.2.0
 ```
 
-`plugin check` checks server and TUI-only package plugins for updates. `plugin update` updates every outdated package;
-pass a configured package target to check or update only that package. Local plugins and exact package revisions are skipped.
+`plugin check` checks server, GUI-only, and TUI-only package plugins for updates. `plugin update` updates every outdated package;
+pass a configured package target to check or update only that package. Local plugins and exact package revisions are
+skipped.
 
 Package installation accepts npm names with versions, tags, or ranges, plus npm-compatible Git package specifications.
 Git repositories can use hosted shortcuts, HTTPS, or SSH, including private repositories available through your existing
@@ -120,17 +122,32 @@ local paths directly; tarball and npm alias targets are not accepted by `plugin 
 
 Changes under watched config directories reload automatically. Server startup loads cached package plugins immediately,
 installs missing packages in the background, and checks unpinned npm and Git plugins for updates without changing the
-installed package. Exact npm versions and full Git commit hashes stay pinned. Changes to unwatched local dependencies may
-still require restarting OpenCode.
+installed package. Exact npm versions and full Git commit hashes stay pinned. Changes to unwatched local dependencies
+may still require restarting OpenCode.
 
 ```sh
 touch .opencode/plugins/concise/index.ts
 opencode service restart
 ```
 
+## Desktop
+
+A plugin that exports `./gui-experimental` also adds panels, commands, or settings to OpenCode Desktop. The app loads
+plugins from the server it runs, so configure the plugin in your global `opencode.json(c)` to use it in every window.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "plugins": ["opencode-acme-plugin"],
+}
+```
+
+**Settings > Extensions > Plugins** lists them when the app's own server is selected. A plugin's switch turns off only
+its desktop UI, and **Reload** loads it again after a failure. To turn off the whole plugin, add `-` and its ID to
+`plugins`, for example `"-acme"`.
+
 ## Terminal
 
-CLI-only plugins are configured separately and remain active when connected to a remote server.
+TUI-only plugins are configured separately and remain active when connected to a remote server.
 
 ```json title="cli.json"
 {

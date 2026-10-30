@@ -3,7 +3,14 @@ import type { Tool } from "@opencode/schema/tool"
 import { Media } from "../../media.js"
 import { Framing } from "../../route/framing.js"
 import type { MediaProtocol } from "../../route/media-protocol.js"
-import { AIError, ContentPolicyError, ProviderID, type MediaUsage, type ProviderMetadata } from "../../schema/index.js"
+import {
+  AIError,
+  ContentPolicyError,
+  ProviderID,
+  tokenUsage,
+  type MediaUsage,
+  type ProviderMetadata,
+} from "../../schema/index.js"
 import { ProviderShared } from "../shared.js"
 import { MediaInput } from "./media-input.js"
 
@@ -99,28 +106,15 @@ export const withheld = (name: string, chunk: Chunk, frame: string) => {
   })
 }
 
-/** Any finish reason other than `STOP` means the output may be cut short, so it is surfaced rather than dropped. */
-export const notices = (name: string, state: Metadata): ReadonlyArray<Media.Notice> | undefined =>
-  state.finishReason === undefined || state.finishReason === "STOP"
-    ? undefined
-    : [
-        {
-          type: contentFiltered(state.finishReason) ? "filtered" : "other",
-          message: `${name} finished with ${state.finishReason}`,
-          providerMetadata: { google: { finishReason: state.finishReason } },
-        },
-      ]
-
 export const usage = (usage: UsageMetadata | undefined): MediaUsage | undefined =>
   usage === undefined
     ? undefined
-    : {
-        type: "tokens",
+    : tokenUsage({
         input: usage.promptTokenCount,
         output: usage.candidatesTokenCount,
         total: ProviderShared.totalTokens(usage.promptTokenCount, usage.candidatesTokenCount, usage.totalTokenCount),
         details: { google: usage },
-      }
+      })
 
 export const providerMetadata = (state: Metadata): ProviderMetadata => ({
   google: { finishReason: state.finishReason, modelVersion: state.modelVersion, responseId: state.responseId },

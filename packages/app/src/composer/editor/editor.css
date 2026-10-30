@@ -2,6 +2,46 @@
   content: "\200B";
 }
 
+[data-component="composer-editor"] [data-mention="session"] {
+  border-radius: 4px;
+  padding-inline: 4px;
+  background: var(--v2-background-bg-layer-02);
+  color: var(--v2-text-text-base);
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-base);
+}
+
+/* Matches the 16px session title fade. The top fade only covers the editor's 16px top padding until text scrolls
+   under it. */
+[data-component="composer-scroll"],
+[data-slot="composer-content"][data-history-preview] {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 16px,
+    black calc(100% - var(--composer-fade-bottom, 0px)),
+    transparent
+  );
+}
+
+/* Chromium reveals the caret flush with the viewport edge after Enter or typing, ignoring the editor padding, so the
+   last line would land under the fade. Keep revealed carets clear of both 16px fades. */
+[data-component="composer-scroll"],
+[data-slot="composer-content"][data-history-preview] {
+  scroll-padding-block: 16px;
+}
+
+/* Reserving the scrollbar keeps a long prompt from rewrapping when it starts to scroll; the editor's end padding gives
+   the reserved width back, so text keeps the same 12px inset. */
+[data-component="composer-scroll"] {
+  --composer-scroll-end: calc(12px - var(--scrollbar-size, 0px));
+  scrollbar-gutter: stable;
+}
+
+/* History scrolls text and attachments together, so only the outer viewport applies the mask. */
+[data-slot="composer-content"][data-history-preview] [data-component="composer-scroll"] {
+  mask-image: none;
+}
+
 /* Masks only cover hidden content; they do not reserve space in the toolbar. */
 [data-slot="composer-controls"][data-overflow-start="true"] {
   --mask-start: 16px;
@@ -9,6 +49,11 @@
 
 [data-slot="composer-controls"][data-overflow-end="true"] {
   --mask-end: 16px;
+}
+
+/* Focus scrolls a control clear of the 16px fade instead of under it. */
+[data-slot="composer-controls"] {
+  scroll-padding-inline: 16px;
 }
 
 [data-slot="composer-controls"]:dir(rtl) {
@@ -25,6 +70,12 @@
   );
 }
 
+/* The controls viewport scrolls and clips, so toolbar rings sit inside each control where no edge can cut them. */
+[data-component="composer"]
+  :is([data-component="button-v2"], [data-component="icon-button-v2"]):is(:focus-visible, [data-state="focus"]) {
+  outline-offset: -2px;
+}
+
 @media (hover: hover) {
   [data-component="composer"]:not(:hover) .composer-variant-default:not(:focus-visible, [data-expanded]) {
     opacity: 0;
@@ -34,10 +85,16 @@
 
 [data-color-scheme="dark"] [data-component="composer"][data-dock-border-underlay="true"],
 [data-color-scheme="dark"] [data-component="session-composer-dock"] [data-component="composer"],
-[data-color-scheme="dark"] [data-component="new-session"] [data-component="composer"] {
+[data-color-scheme="dark"] [data-component="new-session"] [data-component="composer"],
+[data-color-scheme="dark"]
+  [data-component="composer-suggestions"]:has(~ [data-component="composer"][data-dock-border-underlay="true"]),
+[data-color-scheme="dark"] [data-component="session-composer-dock"] [data-component="composer-suggestions"],
+[data-color-scheme="dark"] [data-component="new-session"] [data-component="composer-suggestions"] {
   background: var(--v2-background-bg-layer-01);
 }
 
-[data-color-scheme="dark"] [data-component="composer-suggestions"] [data-active] {
-  background: var(--v2-alpha-light-10);
+[data-moving][data-dock-border-underlay]
+  :is([data-component="composer"], [data-component="dock-prompt"], [data-component="session-websearch-dock"]) {
+  background: transparent !important;
+  box-shadow: none !important;
 }

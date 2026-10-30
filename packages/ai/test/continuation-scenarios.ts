@@ -1,13 +1,13 @@
 import {
-  LLM,
+  ai,
+  type ContentPart,
+  type LanguageModel,
   Media,
   Message,
   ToolCallPart,
   ToolDefinition,
   ToolResultPart,
-  type ContentPart,
-  type LanguageModel,
-} from "../src/index.js"
+} from "../src/effect.js"
 
 export const basicContinuation = ["system", "user-text", "assistant-text", "user-follow-up"] as const
 export const toolContinuation = ["tool-call", "tool-result"] as const
@@ -98,7 +98,7 @@ export function continuationRequest(input: {
   if (features.has("user-follow-up"))
     messages.push(Message.user("Continue from this conversation in one short sentence."))
 
-  return LLM.request({
+  return ai.request({
     id: input.id,
     model: input.model,
     system: features.has("system") ? "You are concise. Continue from the provided history." : undefined,
