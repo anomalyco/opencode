@@ -756,10 +756,10 @@ export namespace LLMResponse {
   /** Convenience reducer for callers that already have a collected event list. */
   export const fromEvents = (events: ReadonlyArray<LLMEvent>) => complete(events.reduce(reduce, empty()))
 
-  /** Output that arrived before a failure, or `undefined` if none did; an unfinished response reports `error`. */
+  /** Output that arrived before a failure, or `undefined` if only `step-start` did; an unfinished response reports `error`. */
   export const partial = (events: ReadonlyArray<LLMEvent>) => {
     const state = events.reduce(reduce, empty())
-    if (state.events.length === 0) return undefined
+    if (state.events.every(LLMEvent.is.stepStart)) return undefined
     return complete({ ...state, finishReason: state.finishReason ?? { normalized: "error" } })
   }
 

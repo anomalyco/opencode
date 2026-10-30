@@ -38,15 +38,12 @@ describe("AIError.partial", () => {
     }),
   )
 
-  it.effect("generate has no partial when the failure comes before any event", () =>
+  it.effect("generate keeps the same error when the failure comes before any output", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
-      yield* client.push(TestLLM.failAfter(overloaded))
+      yield* client.push(TestLLM.failAfter(overloaded, LLMEvent.stepStart({ index: 0 })))
 
-      const error = yield* LLM.generate({ model, prompt: "Hello" }).pipe(Effect.flip)
-
-      expect(error.reason).toBe(overloaded.reason)
-      expect(error.partial).toBeUndefined()
+      expect(yield* LLM.generate({ model, prompt: "Hello" }).pipe(Effect.flip)).toBe(overloaded)
     }),
   )
 
