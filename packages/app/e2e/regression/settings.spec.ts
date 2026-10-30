@@ -885,7 +885,13 @@ test.describe("pages open before slow data", () => {
         { name: "stripe", integrationID: "stripe-oauth", status: { status: "needs_auth", error: "Sign in required" } },
       ],
       integrations: [
-        { id: "stripe-oauth", name: "Stripe", methods: [{ id: "oauth", type: "oauth" }], connections: [] },
+        {
+          id: "stripe-oauth",
+          name: "Stripe",
+          methods: [{ id: "oauth", type: "oauth" }],
+          connections: [],
+          metadata: { source: "mcp" },
+        },
       ],
       onIntegrationOAuth: (input) => {
         signIns.push(input.integrationID)
@@ -1369,6 +1375,13 @@ test("providers: the connect dialog lists connected providers and manages their 
         connections: accounts.toSorted((a, b) => Number(b.id === state.active) - Number(a.id === state.active)),
       },
       { id: "anthropic", name: "Anthropic", methods: [{ type: "key", label: "API key" }], connections: [] },
+      {
+        id: "linear",
+        name: "Linear",
+        methods: [{ id: "oauth", type: "oauth", label: "Sign in" }],
+        connections: [],
+        metadata: { source: "mcp" },
+      },
     ],
     onCredentialActivate: (credentialID) => {
       activated.push(credentialID)
@@ -1389,6 +1402,9 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(
     dialog.locator('[data-provider-id="anthropic"]').locator('[data-slot="provider-connected"]'),
   ).toHaveCount(0)
+  // MCP servers connect from the MCPs dialog and settings, not here.
+  await expect(dialog.locator('[data-provider-id="linear"]')).toHaveCount(0)
+  await expect(dialog.getByText("MCP", { exact: true })).toHaveCount(0)
   const container = page.locator('[data-slot="dialog-container"]')
   await expect.poll(async () => (await container.boundingBox())?.height).toBe(512)
   const picker = await container.boundingBox()

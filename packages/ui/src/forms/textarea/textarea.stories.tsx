@@ -9,6 +9,7 @@ Multiline text field with the same neutral elevation, states, and tokens as Text
 ### API
 - Forwards native \`textarea\` props (\`value\`, \`defaultValue\`, \`placeholder\`, \`disabled\`, \`name\`, \`rows\`, etc.).
 - \`invalid\`: Error outline and danger text color.
+- \`surface\`: \`"base"\` (default) or \`"layer-1"\` for a flat fill.
 
 ### States
 - **Hover**: neutral overlay on the raised surface.
@@ -39,8 +40,13 @@ export default {
     disabled: false,
     invalid: false,
     rows: 3,
+    surface: "base",
   },
   argTypes: {
+    surface: {
+      control: "select",
+      options: ["base", "layer-1"],
+    },
     disabled: {
       control: "boolean",
     },
@@ -57,6 +63,18 @@ export default {
 }
 
 export const Playground = {}
+
+export const Surfaces = {
+  parameters: { frameHeight: "700px" },
+  render: () => (
+    <div style={{ display: "grid", gap: "20px", width: "280px" }}>
+      <Textarea placeholder="Base (default)" />
+      <Textarea surface="layer-1" placeholder="Layer 1" />
+      <Textarea surface="layer-1" placeholder="Layer 1, invalid" invalid />
+      <Textarea surface="layer-1" placeholder="Layer 1, disabled" disabled />
+    </div>
+  ),
+}
 
 export const Controlled = {
   render: () => {

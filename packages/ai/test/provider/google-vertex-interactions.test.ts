@@ -259,6 +259,49 @@ describe("Google Vertex Interactions", () => {
         ],
       })
       expect(prepared.body.previous_interaction_id).toBeUndefined()
+
+      const unsigned = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "call_foreign", name: "lookup", input: { city: "Paris" } }),
+            ]),
+            Message.tool({ id: "call_foreign", name: "lookup", result: { weather: "sunny" } }),
+            Message.assistant([
+              ToolCallPart.make({
+                id: "call_signed",
+                name: "lookup",
+                input: { city: "Lyon" },
+                providerMetadata: { vertex: { interactionSignature: "sig_1" } },
+              }),
+              ToolCallPart.make({ id: "call_sibling", name: "lookup", input: { city: "Nice" } }),
+            ]),
+            Message.tool({ id: "call_signed", name: "lookup", result: { weather: "cloudy" } }),
+            Message.tool({ id: "call_sibling", name: "lookup", result: { weather: "warm" } }),
+          ],
+        }),
+      )
+      expect(unsigned.body.input).toEqual([
+        {
+          type: "function_call",
+          id: "call_foreign",
+          name: "lookup",
+          arguments: { city: "Paris" },
+          signature: "skip_thought_signature_validator",
+        },
+        { type: "function_result", call_id: "call_foreign", name: "lookup", result: { weather: "sunny" } },
+        {
+          type: "function_call",
+          id: "call_signed",
+          name: "lookup",
+          arguments: { city: "Lyon" },
+          signature: "sig_1",
+        },
+        { type: "function_call", id: "call_sibling", name: "lookup", arguments: { city: "Nice" } },
+        { type: "function_result", call_id: "call_signed", name: "lookup", result: { weather: "cloudy" } },
+        { type: "function_result", call_id: "call_sibling", name: "lookup", result: { weather: "warm" } },
+      ])
     }),
   )
 })

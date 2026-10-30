@@ -76,6 +76,7 @@ const enabledEntries = [
     type: "document",
     info: new Info({
       timezone: "America/New_York",
+      experimental: new ConfigExperimental.Info({ schedules: true }),
     }),
   }),
 ]

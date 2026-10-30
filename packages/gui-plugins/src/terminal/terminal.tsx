@@ -307,6 +307,8 @@ export const Terminal = (props: TerminalProps) => {
     // A tab's rename field keeps focus, before and after a tick; it may take it before the terminal mounts. Other
     // fields, such as the command palette that created the terminal, give focus to it.
     const focus = () => {
+      if (disposed) return
+
       const current = document.activeElement
 
       if (current instanceof HTMLInputElement && current.closest('[role="tablist"]')) return

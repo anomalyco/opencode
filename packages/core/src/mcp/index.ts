@@ -184,6 +184,11 @@ export const layer = (options?: Options) =>
       // Server scopes close in parallel on shutdown, so one slow server's stop grace does not delay
       // the rest past a service restart's kill deadline and leave them orphaned.
       const servers = yield* Scope.fork(root, "parallel")
+      // Connection callbacks run here. Created after `servers`, so the layer scope closes this set first
+      // (finalizers run in reverse): in-flight callbacks are interrupted and later ones never start, so
+      // connections closing with the Location publish nothing. Clients re-fetch on MCP events, which
+      // would boot the Location straight back up.
+      const callbacks = yield* FiberSet.makeRuntime<never, void, never>()
 
       const entries = new Map<ServerName, ServerEntry>()
       const attached = new Map<ServerName, AttachedEntry[]>()
@@ -352,7 +357,7 @@ export const layer = (options?: Options) =>
       const whenLive =
         (name: ServerName, entry: ServerEntry, connection: McpClient.Connection) =>
         <E>(effect: Effect.Effect<void, E>) =>
-          fork(
+          callbacks(
             Effect.suspend(() => (entry.client === connection ? effect : Effect.void)).pipe(
               locks.withLock(name),
               Effect.ignore,
