@@ -7,7 +7,7 @@
   isolation: isolate;
 }
 
-[data-slot="menu-scroll-viewport"] {
+[data-component="menu-scroll"] > [data-scrollable] {
   min-height: 0;
   overflow-y: auto;
 }
@@ -17,14 +17,15 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  [data-slot="menu-scroll-viewport"] {
+  [data-component="menu-scroll"] > [data-scrollable] {
     scrollbar-width: none;
   }
 
-  [data-slot="menu-scroll-viewport"]::-webkit-scrollbar {
+  [data-component="menu-scroll"] > [data-scrollable]::-webkit-scrollbar {
     display: none;
   }
 
+  /* Matches the shared native thumb in styles/scrollbar.css: a 4px pill in an 8px strip. */
   [data-slot="menu-scroll-thumb"] {
     position: absolute;
     z-index: 1;
@@ -36,6 +37,7 @@
     pointer-events: none;
     touch-action: none;
     user-select: none;
+    transition: opacity 200ms ease;
 
     &::after {
       position: absolute;
@@ -45,15 +47,23 @@
       content: "";
     }
 
-    &:hover::after,
-    &[data-dragging]::after {
+    &:hover::after {
       background: var(--v2-border-border-strong);
     }
   }
 
-  [data-component="menu-scroll"]:hover > [data-slot="menu-scroll-thumb"],
-  [data-slot="menu-scroll-thumb"][data-dragging] {
+  [data-component="menu-scroll"]:is(:hover, [data-scrolling], [data-dragging]) > [data-slot="menu-scroll-thumb"] {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  [data-component="menu-scroll"][data-dragging] > [data-slot="menu-scroll-thumb"]::after {
+    background: var(--v2-border-border-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="menu-scroll-thumb"] {
+    transition: none;
   }
 }

@@ -1,25 +1,40 @@
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { onMount, Show, splitProps, type ComponentProps } from "solid-js"
+import { onCleanup, onMount, Show, splitProps, type ComponentProps, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import "./menu-scroll.css"
 
+/**
+ * A scroll container for menus, popovers and dialog lists. It hides the native scrollbar and draws the shared thumb
+ * over the content, so rows keep equal start and end padding whether or not the list overflows. Touch devices keep
+ * their native overlay scrollbar.
+ */
 export function MenuScroll(
   props: Omit<ComponentProps<"div">, "ref" | "onScroll"> & {
     viewportClass?: string
     viewportRef?: (element: HTMLDivElement) => void
+    onScroll?: JSX.EventHandler<HTMLDivElement, Event>
   },
 ) {
-  const [local, rest] = splitProps(props, ["class", "children", "viewportClass", "viewportRef"])
+  const [local, rest] = splitProps(props, ["class", "children", "viewportClass", "viewportRef", "onScroll"])
 
-  const [state, setState] = createStore<{ size: number; start: number; overflow: boolean; grab?: number }>({
+  const [state, setState] = createStore<{
+    size: number
+    start: number
+    overflow: boolean
+    scrolling: boolean
+    grab?: number
+  }>({
     size: 0,
     start: 4,
     overflow: false,
+    scrolling: false,
   })
 
   let viewport!: HTMLDivElement
 
   let content!: HTMLDivElement
+
+  let idle: ReturnType<typeof setTimeout> | undefined
 
   const measure = () => {
     const track = Math.max(0, viewport.clientHeight - 8)
@@ -33,27 +48,40 @@ export function MenuScroll(
     if (max <= 0) setState("grab", undefined)
   }
 
-  onMount(() => {
-    local.viewportRef?.(viewport)
-    createResizeObserver([viewport, content], measure)
-  })
+  onMount(() => createResizeObserver([viewport, content], measure))
+
+  onCleanup(() => clearTimeout(idle))
 
   return (
-    <div data-component="menu-scroll" class={local.class}>
+    <div
+      data-component="menu-scroll"
+      data-scrolling={state.scrolling ? "" : undefined}
+      data-dragging={state.grab !== undefined ? "" : undefined}
+      class={local.class}
+    >
       <div
-        {...rest}
-        ref={viewport}
         data-slot="menu-scroll-viewport"
+        {...rest}
+        ref={(element) => {
+          viewport = element
+          local.viewportRef?.(element)
+        }}
         data-scrollable
         class={local.viewportClass}
-        onScroll={measure}
+        onScroll={(event) => {
+          measure()
+          // Keyboard navigation scrolls without hovering, so the thumb also shows while the list scrolls.
+          setState("scrolling", true)
+          clearTimeout(idle)
+          idle = setTimeout(() => setState("scrolling", false), 800)
+          local.onScroll?.(event)
+        }}
       >
         <div ref={content}>{local.children}</div>
       </div>
       <Show when={state.overflow}>
         <div
           data-slot="menu-scroll-thumb"
-          data-dragging={state.grab !== undefined ? "" : undefined}
           aria-hidden="true"
           style={{ height: `${state.size}px`, transform: `translateY(${state.start}px)` }}
           onPointerDown={(event) => {
