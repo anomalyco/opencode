@@ -909,7 +909,13 @@ export function Autocomplete(props: {
                 flexGrow={newDesigns() ? 1 : undefined}
                 backgroundColor={rowBackground()}
               >
-                <text fg={emptyError() ? theme.text.feedback.error.base : theme.text.muted}>{emptyMessage()}</text>
+                {/* Under new designs the 1-row popup keeps the message on one line, so it never scrolls past the rail. */}
+                <text
+                  fg={emptyError() ? theme.text.feedback.error.base : theme.text.muted}
+                  wrapMode={newDesigns() ? "none" : undefined}
+                >
+                  {newDesigns() ? Locale.truncate(emptyMessage(), Math.max(1, position().width - 4)) : emptyMessage()}
+                </text>
               </box>
             </AutocompleteRail>
           }
