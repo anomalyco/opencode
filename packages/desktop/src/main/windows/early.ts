@@ -11,7 +11,13 @@ import { platformFrame, storedBackgroundColor, storedZoomLevel, tone } from "./d
 import { registerRendererProtocol } from "./protocol"
 import { loadWindow } from "./scheme"
 import { allowRendererPermissions, wireNavigationPolicy, wireRendererHeaders } from "./security"
-import { manageWindowState, readWindowState, resolveWindowState, windowStateFile, type WindowState } from "./window-state"
+import {
+  manageWindowState,
+  readWindowState,
+  resolveWindowState,
+  windowStateFile,
+  type WindowState,
+} from "./window-state"
 
 export type EarlyWindow = {
   id: string
@@ -43,12 +49,16 @@ export function createEarlyWindow() {
   const zoom = storedZoomLevel()
   const icons = app.isPackaged ? path.join(process.resourcesPath, "icons") : path.join(root, "../../resources/icons")
 
+  // On Windows, maximize() on a hidden window shows it with SW_SHOWMAXIMIZED, so it never paints at
+  // its normal bounds first. macOS does not reliably enter fullscreen while hidden, so it shows first.
+  const deferReveal = process.platform === "win32" && state.isMaximized
+
   const win = new BrowserWindow({
     x: state.x,
     y: state.y,
     width: state.width,
     height: state.height,
-    show: true,
+    show: !deferReveal,
     autoHideMenuBar: true,
     title: "OpenCode",
     icon: path.join(icons, `icon.${process.platform === "win32" ? "ico" : "png"}`),
@@ -66,6 +76,8 @@ export function createEarlyWindow() {
   })
 
   manageWindowState(win, file, state, displays)
+
+  if (deferReveal) win.show()
   // Closing the only window before the rest of the app has adopted it is a quit.
   win.once("closed", () => {
     if (pending?.win !== win) return

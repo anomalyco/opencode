@@ -116,7 +116,7 @@ export function SettingsNavigation(props: {
             <SettingsSearch />
           </Show>
           <Show when={!searchable() || !surface.search.state.query.trim()}>
-            <Tabs.List class="settings-nav-groups">
+            <Tabs.List class="settings-nav-groups" data-scrollable>
               <For each={props.groups}>
                 {(group) => (
                   <div class="settings-nav-group">

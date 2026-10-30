@@ -111,7 +111,8 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "你還可以連接你的",
   "home.faq.a3.p4.localLink": "本地模型",
   "home.faq.q4": "可以使用我現有的 AI 訂閱嗎？",
-  "home.faq.a4.p1": "可以，你可以使用 ChatGPT Plus/Pro 或 GitHub Copilot 訂閱。",
+  "home.faq.a4.p1":
+    "可以，你可以使用 ChatGPT Plus/Pro 或 GitHub Copilot 訂閱，也可以透過 Claude Code 使用 Claude 訂閱。",
   "home.faq.q5": "OpenCode 只能在終端中使用嗎？",
   "home.faq.a5.beforeDesktop": "不再是了！OpenCode 現在也提供",
   "home.faq.a5.desktop": "桌面端",
