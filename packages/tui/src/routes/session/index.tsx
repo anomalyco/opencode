@@ -80,6 +80,7 @@ import { Composer } from "./composer"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
+import { noticeText } from "../../util/error-notice"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
@@ -2564,7 +2565,7 @@ function AssistantRetry(props: { retry: SessionMessageAssistant["retry"] }) {
         <box paddingLeft={3}>
           <text fg={theme.text.feedback.warning.base}>
             ⚠ {seconds() > 0 ? `Retrying in ${seconds()}s` : "Retry due"} · attempt {retry().attempt} ·{" "}
-            {retry().error.message}
+            {noticeText(retry().error.message)}
           </text>
         </box>
       )}
