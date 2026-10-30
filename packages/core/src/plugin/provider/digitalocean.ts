@@ -1,6 +1,6 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
-import { Clock, Deferred, Duration, Effect, Equal, Option, Schema, Semaphore, Stream } from "effect"
+import { Clock, Deferred, Effect, Equal, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { Server } from "node:http"
 import { App } from "../../app.js"
@@ -17,7 +17,6 @@ import type { PluginInternal } from "../internal.js"
 const providerID = Provider.ID.make("digitalocean")
 const integrationID = Integration.ID.make("digitalocean")
 const methodID = Integration.MethodID.make("browser")
-const interval = "10 minutes"
 
 const clientID = "b1a6c5158156caac821fd1b30253ca8acb52454a48fa744420e41889cb589f82"
 const authorizeEndpoint = "https://cloud.digitalocean.com/v1/oauth/authorize"
@@ -28,6 +27,7 @@ const tokenPath = "/auth/token"
 const RoutersResponse = Schema.Struct({
   model_routers: Schema.Array(Schema.Struct({ name: Schema.NonEmptyString })),
 })
+type Routers = (typeof RoutersResponse.Type)["model_routers"]
 const decodeCallback = Schema.decodeUnknownOption(
   Schema.fromJsonString(
     Schema.Struct({
@@ -121,32 +121,29 @@ export const DigitalOceanPlugin = define({
     const cache = yield* SharedCache.Service
     const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
     const loading = Semaphore.makeUnsafe(1)
-    const loaded: { key?: string; routers: (typeof RoutersResponse.Type)["model_routers"] } = { routers: [] }
+    const discovery = yield* FiberHandle.make<void, never>()
+    const loaded: { routers: Routers } = { routers: [] }
 
-    const load = Effect.fn("DigitalOceanPlugin.load")(function* () {
+    const load = Effect.fn("DigitalOceanPlugin.load")(function* (since?: number) {
       const connection = yield* ctx.integration.connection.active(integrationID)
       const credential = connection
         ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
-      if (!connection || credential?.type !== "oauth" || credential.methodID !== methodID) {
-        const changed = loaded.routers.length > 0
-        loaded.key = undefined
-        loaded.routers = []
-        return changed
-      }
+      if (!connection || credential?.type !== "oauth" || credential.methodID !== methodID)
+        return yield* apply(connection, [])
       const key = `digitalocean:${IntegrationConnection.key(connection)}`
-      const expired = credential.expires !== 0 && credential.expires <= (yield* Clock.currentTimeMillis)
-      const result = yield* cache
+      // An expired token cannot be refreshed, so it only reuses routers another Location already loaded.
+      if (credential.expires !== 0 && credential.expires <= (yield* Clock.currentTimeMillis))
+        return yield* apply(connection, (yield* cache.peek<Routers>(key)) ?? [])
+      const routers = yield* cache
         .get({
           key,
-          // An expired token cannot load again, so it keeps any routers already loaded for the connection.
-          maxAge: expired ? Duration.infinity : interval,
+          maxAge: SharedCache.interval,
+          since,
           load: Effect.gen(function* () {
             const current = yield* ctx.integration.connection.resolve(connection)
             if (current?.type !== "oauth" || current.methodID !== methodID)
               return yield* Effect.fail(new Error("DigitalOcean connection has no OAuth credential"))
-            if (current.expires !== 0 && current.expires <= (yield* Clock.currentTimeMillis))
-              return yield* Effect.fail(new Error("DigitalOcean access token expired"))
             const response = yield* http
               .execute(
                 HttpClientRequest.get(routersEndpoint).pipe(
@@ -159,24 +156,28 @@ export const DigitalOceanPlugin = define({
             return response.model_routers.toSorted((a, b) => a.name.localeCompare(b.name))
           }),
         })
-        .pipe(
-          Effect.catch((cause) =>
-            expired
-              ? Effect.undefined
-              : Effect.logWarning("failed to sync DigitalOcean routers", { cause }).pipe(Effect.as(undefined)),
-          ),
-        )
-      if (
-        IntegrationConnection.key(connection) !==
-        IntegrationConnection.key(yield* ctx.integration.connection.active(integrationID))
-      )
-        return false
-      const routers = result ?? (loaded.key === key ? loaded.routers : [])
-      const changed = !Equal.equals(routers, loaded.routers)
-      loaded.key = key
-      loaded.routers = routers
-      return changed
+        .pipe(Effect.orElseSucceed((): Routers => []))
+      yield* apply(connection, routers)
     })
+
+    const apply = (
+      connection: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>,
+      routers: Routers,
+    ) =>
+      loading
+        .withPermit(
+          Effect.gen(function* () {
+            if (
+              IntegrationConnection.key(connection) !==
+              IntegrationConnection.key(yield* ctx.integration.connection.active(integrationID))
+            )
+              return
+            if (Equal.equals(routers, loaded.routers)) return
+            loaded.routers = routers
+            yield* ctx.provider.reload()
+          }),
+        )
+        .pipe(Effect.uninterruptible)
 
     yield* ctx.integration.transform((draft) => {
       draft.method.update(oauth)
@@ -194,15 +195,15 @@ export const DigitalOceanPlugin = define({
         })
       }
     })
-    const refresh = () =>
-      loading.withPermit(load().pipe(Effect.flatMap((changed) => (changed ? ctx.provider.reload() : Effect.void))))
+    // A switch replaces whatever refresh is waiting; the timer only starts one when none is running.
+    const refresh = (since?: number) => FiberHandle.run(discovery, load(since), { onlyIfMissing: since === undefined })
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === integrationID),
-      Stream.runForEach(refresh),
+      Stream.runForEach((event) => refresh(event.created)),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* refresh().pipe(Effect.forkScoped)
-    yield* Effect.sleep(interval).pipe(Effect.andThen(refresh()), Effect.forever, Effect.forkScoped)
+    yield* refresh()
+    yield* Effect.sleep(SharedCache.interval).pipe(Effect.andThen(refresh()), Effect.forever, Effect.forkScoped)
   }),
 } satisfies PluginInternal.InternalPlugin)
 

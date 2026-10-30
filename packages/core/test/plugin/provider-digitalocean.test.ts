@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schedule } from "effect"
+import { Effect, Logger, Schedule } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { TestClock } from "effect/testing"
 import { Credential } from "@opencode/core/credential"
@@ -121,6 +121,28 @@ describe("DigitalOceanPlugin", () => {
     }),
   )
 
+  it.effect("loads nothing and logs nothing at startup when the access token has expired", () =>
+    Effect.gen(function* () {
+      const fixture = yield* discovery
+      const warnings: unknown[] = []
+      yield* TestClock.adjust("1 second")
+      yield* oauthCredential("do-token", 1)
+      yield* fixture.install.pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.make((entry) => {
+              if (entry.logLevel === "Warn" || entry.logLevel === "Error") warnings.push(entry.message)
+            }),
+          ]),
+        ),
+      )
+      yield* drain
+      expect(fixture.remote.requests).toHaveLength(0)
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:alpha"))).toBeUndefined()
+      expect(warnings).toEqual([])
+    }),
+  )
+
   it.effect("refreshes routers in the background with the latest access token", () =>
     Effect.gen(function* () {
       const fixture = yield* discovery
@@ -167,8 +189,6 @@ describe("DigitalOceanPlugin", () => {
       expect(fixture.remote.requests).toHaveLength(count)
       expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeUndefined()
 
-      // The failed load for the second account is reused until it is older than the 10 minute refresh.
-      yield* TestClock.adjust("10 minutes")
       yield* credentials.activate(second.id)
       yield* drain
       expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeDefined()

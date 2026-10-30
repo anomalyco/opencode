@@ -1,50 +1,50 @@
 export * as SharedCache from "./shared-cache.js"
 
-import { Cause, Clock, Context, Duration, Effect, Exit, Fiber, FiberSet, Layer, Predicate, Schedule } from "effect"
+import { Cause, Clock, Context, Duration, Effect, Exit, Fiber, FiberSet, Layer, Schedule } from "effect"
 import { HttpClientError } from "effect/http"
 import { Hash } from "@opencode/util/hash"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
+/** How often the built-in provider plugins refresh their shared lists. */
+export const interval = Duration.minutes(10)
+
+export interface Input<A, E> {
+  /** Everything that changes the answer, such as the connection and base URL. Never a raw secret: see `fingerprint`. */
+  readonly key: string
+  readonly load: Effect.Effect<A, E>
+  readonly maxAge: Duration.Input
+  /** Accepts only a result whose load started at or after this time, such as the time of an account switch. */
+  readonly since?: number
+}
+
 export interface Interface {
   /**
-   * Returns the result of the last load for `key` while it is newer than `maxAge`, otherwise joins the load running
-   * for `key` or starts one; `force` skips the age check but still joins a running load. The load retries `transient`
-   * failures up to 3 times, after 1, 2 and 4 seconds. A failed load keeps the last
-   * good value, or without one is returned to every caller until `maxAge` passes, so a key loads at most once per
-   * `maxAge`. The key must include everything that changes the answer, such as the connection and base URL, but
-   * never a raw secret: use `fingerprint` for a static API key.
+   * Returns the last result for `key` while it is fresh, otherwise joins the running load or starts one. Loads never
+   * overlap per key. A load retries `transient` failures 3 times. A transient failure keeps the last good value; any
+   * other failure replaces it. Either is kept until `maxAge` passes, so a failing key loads at most once per
+   * `maxAge`. Interrupts and defects are never kept.
    */
-  readonly get: <A, E>(input: {
-    readonly key: string
-    readonly load: Effect.Effect<A, E>
-    readonly maxAge: Duration.Input
-    readonly force?: boolean
-  }) => Effect.Effect<A, E>
+  readonly get: <A, E>(input: Input<A, E>) => Effect.Effect<A, E>
+  /** Returns the last good value for `key`, however old, without loading. */
+  readonly peek: <A>(key: string) => Effect.Effect<A | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SharedCache") {}
 
-/** A short, one-way stand-in for a static secret in a cache key, so a key changed in place loads again. */
+/** A short, one-way stand-in for a secret in a cache key, so a secret changed in place loads again. */
 export const fingerprint = (secret: string) => Hash.sha256(secret).slice(0, 16)
 
-/** Network errors, timeouts and HTTP 408, 429 or 5xx, from Effect's HttpClient or from `fetch`. */
-export const transient = (error: unknown): boolean => {
-  if (Cause.isTimeoutError(error) || error instanceof TypeError) return true
-  if (error instanceof DOMException) return error.name === "TimeoutError"
-  if (HttpClientError.isHttpClientError(error))
-    return (
-      error.reason._tag === "TransportError" ||
-      (error.reason._tag === "StatusCodeError" && retryable(error.reason.response.status))
-    )
-  return Predicate.hasProperty(error, "status") && typeof error.status === "number" && retryable(error.status)
-}
-
-const retryable = (status: number) => status === 408 || status === 429 || status >= 500
+/** Network errors, timeouts and HTTP 408, 429, 500, 502, 503 or 504, as Effect's `HttpClient.retryTransient` counts them. */
+export const transient = (error: unknown) =>
+  Cause.isTimeoutError(error) ||
+  (HttpClientError.isHttpClientError(error) &&
+    (error.reason._tag === "TransportError" ||
+      (error.reason._tag === "StatusCodeError" &&
+        [408, 429, 500, 502, 503, 504].includes(error.reason.response.status))))
 
 interface Entry {
-  good?: { readonly value: unknown }
   last?: { readonly exit: Exit.Exit<unknown, unknown>; readonly time: number }
-  loading?: Fiber.Fiber<unknown, unknown>
+  loading?: { readonly fiber: Fiber.Fiber<unknown, unknown>; readonly time: number }
   read: number
 }
 
@@ -53,48 +53,73 @@ const unread = Duration.toMillis(Duration.hours(1))
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const run = yield* FiberSet.runtime(yield* FiberSet.make<unknown, unknown>())()
+    const fibers = yield* FiberSet.make<unknown, unknown>()
+    const run = yield* FiberSet.runtime(fibers)()
     const entries = new Map<string, Entry>()
 
-    const get = Effect.fnUntraced(function* <A, E>(
-      input: Parameters<Interface["get"]>[0] & {
-        readonly load: Effect.Effect<A, E>
-      },
+    const start = Effect.fnUntraced(function* (
+      key: string,
+      entry: Entry,
+      load: Effect.Effect<unknown, unknown>,
+      time: number,
     ) {
+      const exit = yield* Effect.exit(
+        Effect.retry(load, { schedule: Schedule.exponential("1 second"), times: 3, while: transient }),
+      )
+      entry.read = yield* Clock.currentTimeMillis
+      if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* exit
+      if (Exit.isFailure(exit)) yield* Effect.logWarning("failed to load shared value", { key, cause: exit.cause })
+      if (Exit.isFailure(exit) && Cause.hasDies(exit.cause)) return yield* exit
+      const previous = entry.last?.exit
+      entry.last = {
+        exit:
+          Exit.isFailure(exit) && previous && Exit.isSuccess(previous) && transient(Cause.squash(exit.cause))
+            ? previous
+            : exit,
+        time,
+      }
+      return yield* entry.last.exit
+    })
+
+    const get = Effect.fnUntraced(function* <A, E>(input: Input<A, E>) {
       const now = yield* Clock.currentTimeMillis
       for (const [key, item] of entries) if (!item.loading && now - item.read > unread) entries.delete(key)
       const entry = entries.get(input.key) ?? { read: now }
       entries.set(input.key, entry)
       entry.read = now
+      const since = input.since ?? now - Duration.toMillis(input.maxAge) + 1
       // The key decides the value's type, so a stored or joined result under the same key has this caller's types.
-      if (!input.force && entry.last && now - entry.last.time < Duration.toMillis(input.maxAge))
-        return yield* entry.last.exit as Exit.Exit<A, E>
-      // Yield first so `entry.loading` is set before a synchronous load can finish and clear it.
-      entry.loading ??= run(
-        Effect.gen(function* () {
-          yield* Effect.yieldNow
-          const exit = yield* Effect.exit(
-            Effect.retry(input.load, { schedule: Schedule.exponential("1 second"), times: 3, while: transient }),
-          )
-          if (Exit.isSuccess(exit)) entry.good = { value: exit.value }
-          else yield* Effect.logWarning("failed to load shared value", { key: input.key, cause: exit.cause })
-          entry.last = {
-            exit: Exit.isFailure(exit) && entry.good ? Exit.succeed(entry.good.value) : exit,
-            time: yield* Clock.currentTimeMillis,
-          }
-          return yield* entry.last.exit
-        }).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              entry.loading = undefined
-            }),
+      while (true) {
+        if (entry.last && entry.last.time >= since) return yield* entry.last.exit as Exit.Exit<A, E>
+        if (entry.loading && (input.since === undefined || entry.loading.time >= input.since))
+          return yield* Fiber.join(entry.loading.fiber as Fiber.Fiber<A, E>)
+        if (entry.loading) {
+          yield* Fiber.await(entry.loading.fiber)
+          continue
+        }
+        // Yield first so `entry.loading` is set before a synchronous load can finish and clear it.
+        const fiber = run(
+          Effect.yieldNow.pipe(
+            Effect.andThen(start(input.key, entry, input.load, now)),
+            Effect.ensuring(
+              Effect.sync(() => {
+                entry.loading = undefined
+              }),
+            ),
           ),
-        ),
-      )
-      return yield* Fiber.join(entry.loading as Fiber.Fiber<A, E>)
+        )
+        entry.loading = { fiber, time: now }
+      }
     })
 
-    return Service.of({ get })
+    const peek = Effect.fnUntraced(function* <A>(key: string) {
+      const entry = entries.get(key)
+      if (!entry?.last || Exit.isFailure(entry.last.exit)) return undefined
+      entry.read = yield* Clock.currentTimeMillis
+      return entry.last.exit.value as A
+    })
+
+    return Service.of({ get, peek })
   }),
 )
 

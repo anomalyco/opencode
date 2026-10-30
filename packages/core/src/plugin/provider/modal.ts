@@ -1,4 +1,5 @@
-import { Effect, Equal, Semaphore, Stream } from "effect"
+import { Effect, Equal, FiberHandle, Semaphore, Stream } from "effect"
+import { HttpClient } from "effect/http"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Bus } from "../../bus.js"
 import { IntegrationConnection } from "../../integration/connection.js"
@@ -10,7 +11,6 @@ import { SharedCache } from "../../shared-cache.js"
 import type { PluginInternal } from "../internal.js"
 
 const providerID = Provider.ID.make("modal")
-const interval = "10 minutes"
 
 export const ModalPlugin = define({
   id: "opencode.provider.modal",
@@ -18,14 +18,16 @@ export const ModalPlugin = define({
     const providers = yield* Provider.Service
     const bus = yield* Bus.Service
     const cache = yield* SharedCache.Service
+    const http = yield* HttpClient.HttpClient
     const loading = Semaphore.makeUnsafe(1)
+    const discovery = yield* FiberHandle.make<void, never>()
     const loaded: {
-      baseURL?: string
-      models?: ModalModels.Snapshot
-      connection?: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
-    } = {}
+      baseURL: string | undefined
+      models: ModalModels.Snapshot | undefined
+      connection: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
+    } = { baseURL: undefined, models: undefined, connection: undefined }
 
-    const load = Effect.fn("ModalPlugin.load")(function* () {
+    const load = Effect.fn("ModalPlugin.load")(function* (since?: number) {
       const connection = yield* ctx.integration.connection.active("modal")
       const credential = connection
         ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
@@ -33,55 +35,40 @@ export const ModalPlugin = define({
       const apiKey = credential?.type === "key" ? credential.key : process.env.MODAL_PROXY_TOKEN
       const provider = yield* providers.get(providerID)
       const baseURL = typeof provider?.settings?.baseURL === "string" ? provider.settings.baseURL : undefined
-      if (!apiKey || !baseURL) {
-        const changed = loaded.baseURL !== undefined || loaded.models !== undefined
-        loaded.baseURL = undefined
-        loaded.models = undefined
-        loaded.connection = undefined
-        return changed
-      }
+      if (!apiKey || !baseURL) return yield* apply(connection, { baseURL: undefined, models: undefined, connection })
       const remote = yield* cache
         .get({
-          key: `modal:${credential?.type === "key" ? `${IntegrationConnection.key(connection)}:${SharedCache.fingerprint(credential.key)}` : "env:MODAL_PROXY_TOKEN"}:${baseURL.replace(/\/+$/, "")}`,
-          maxAge: interval,
-          load: Effect.gen(function* () {
-            const current =
-              connection && credential?.type === "key"
-                ? yield* ctx.integration.connection.resolve(connection)
-                : undefined
-            const key =
-              credential?.type === "key"
-                ? current?.type === "key"
-                  ? current.key
-                  : undefined
-                : process.env.MODAL_PROXY_TOKEN
-            if (!key) return yield* Effect.fail(new Error("Modal connection has no API key"))
-            const models = yield* Effect.tryPromise({
-              try: () => ModalModels.load(baseURL, key),
-              catch: (cause) => cause,
-            })
-            return models.toSorted((a, b) => a.id.localeCompare(b.id))
-          }),
-        })
-        .pipe(
-          Effect.catch((cause) =>
-            Effect.logWarning("failed to sync Modal models", { cause }).pipe(Effect.as(undefined)),
+          key: `modal:${IntegrationConnection.key(connection) ?? "env:MODAL_PROXY_TOKEN"}:${SharedCache.fingerprint(apiKey)}:${baseURL.replace(/\/+$/, "")}`,
+          maxAge: SharedCache.interval,
+          since,
+          load: (connection ? ctx.integration.connection.resolve(connection) : Effect.undefined).pipe(
+            Effect.map((current) => (current?.type === "key" ? current.key : process.env.MODAL_PROXY_TOKEN)),
+            Effect.flatMap((key) =>
+              key ? ModalModels.load(baseURL, key) : Effect.fail(new Error("Modal connection has no API key")),
+            ),
+            Effect.map((models) => models.toSorted((a, b) => a.id.localeCompare(b.id))),
+            Effect.provideService(HttpClient.HttpClient, http),
           ),
-        )
-      if (
-        IntegrationConnection.key(connection) !==
-        IntegrationConnection.key(yield* ctx.integration.connection.active("modal"))
-      )
-        return false
-      const changed =
-        IntegrationConnection.key(connection) !== IntegrationConnection.key(loaded.connection) ||
-        baseURL !== loaded.baseURL ||
-        !Equal.equals(remote, loaded.models)
-      loaded.baseURL = baseURL
-      loaded.models = remote
-      loaded.connection = connection
-      return changed
+        })
+        .pipe(Effect.orElseSucceed(() => undefined))
+      yield* apply(connection, { baseURL, models: remote, connection })
     })
+
+    const apply = (connection: typeof loaded.connection, next: typeof loaded) =>
+      loading
+        .withPermit(
+          Effect.gen(function* () {
+            if (
+              IntegrationConnection.key(connection) !==
+              IntegrationConnection.key(yield* ctx.integration.connection.active("modal"))
+            )
+              return
+            if (Equal.equals(next, loaded)) return
+            Object.assign(loaded, next)
+            yield* ctx.provider.reload()
+          }),
+        )
+        .pipe(Effect.uninterruptible)
 
     yield* ctx.provider.transform((evt) => {
       const item = evt.get(providerID)
@@ -95,14 +82,14 @@ export const ModalPlugin = define({
         sourceConnection: loaded.connection,
       })
     })
-    const refresh = () =>
-      loading.withPermit(load().pipe(Effect.flatMap((changed) => (changed ? ctx.provider.reload() : Effect.void))))
+    // A switch replaces whatever refresh is waiting; the timer only starts one when none is running.
+    const refresh = (since?: number) => FiberHandle.run(discovery, load(since), { onlyIfMissing: since === undefined })
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("modal")),
-      Stream.runForEach(refresh),
+      Stream.runForEach((event) => refresh(event.created)),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* refresh().pipe(Effect.forkScoped)
-    yield* Effect.sleep(interval).pipe(Effect.andThen(refresh()), Effect.forever, Effect.forkScoped)
+    yield* refresh()
+    yield* Effect.sleep(SharedCache.interval).pipe(Effect.andThen(refresh()), Effect.forever, Effect.forkScoped)
   }),
 } satisfies PluginInternal.InternalPlugin)

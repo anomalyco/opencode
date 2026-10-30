@@ -1,4 +1,4 @@
-import { Clock, Effect, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
+import { Clock, Effect, Equal, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ChildProcess } from "effect/process"
 import { define } from "@opencode/plugin/effect/plugin"
@@ -20,7 +20,6 @@ const cognitiveScope = "https://cognitiveservices.azure.com/.default"
 const foundryScope = "https://ai.azure.com/.default"
 const managementScope = "https://management.azure.com/.default"
 const methodID = Integration.MethodID.make("azure-cli")
-const interval = "10 minutes"
 // A resource name becomes a hostname label and a query literal, so anything else never leaves the process. Azure
 // allows only letters, digits, and hyphens in it.
 // https://learn.microsoft.com/azure/ai-services/cognitive-services-custom-subdomains
@@ -262,7 +261,12 @@ export function make(
       // https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/data-plane/OpenAIAuthoring/stable/2022-12-01/azureopenai.json
       const deployments = (url: string, resource: string, credential: Credential.Key | Credential.External) =>
         credential.type === "external"
-          ? managementDeployments(resource).pipe(Effect.catch(() => resourceDeployments(url, credential)))
+          ? managementDeployments(resource).pipe(
+              Effect.catchIf(
+                (error) => !SharedCache.transient(error),
+                () => resourceDeployments(url, credential),
+              ),
+            )
           : resourceDeployments(url, credential)
 
       // Local and quick, so a switch rebinds the provider before discovery for the new connection calls Azure.
@@ -280,7 +284,7 @@ export function make(
           }),
         )
 
-      const discover = Effect.fn("AzurePlugin.discover")(function* () {
+      const discover = Effect.fn("AzurePlugin.discover")(function* (since?: number) {
         const connection = loaded.connection
         const settings = (yield* providers.get(Provider.ID.azure))?.settings
         const name = loaded.resource ?? resolveResourceName(settings)
@@ -311,7 +315,8 @@ export function make(
         const found = yield* cache
           .get({
             key: `azure:${IntegrationConnection.key(connection)}${credential.type === "key" ? `:${SharedCache.fingerprint(credential.key)}` : ""}:${url}`,
-            maxAge: interval,
+            maxAge: SharedCache.interval,
+            since,
             load: ctx.integration.connection.resolve(connection).pipe(
               Effect.flatMap((current) =>
                 !current || current.type === "oauth" || (current.type === "external" && current.methodID !== methodID)
@@ -322,35 +327,34 @@ export function make(
               Effect.map((list) => list.toSorted((a, b) => a.name.localeCompare(b.name))),
             ),
           })
-          .pipe(
-            Effect.catch((cause) =>
-              Effect.logWarning("failed to sync Azure deployments", { cause }).pipe(Effect.as(undefined)),
-            ),
-          )
-        if (!found) return
-        if (
-          loaded.connection !== connection ||
-          IntegrationConnection.key(connection) !==
-            IntegrationConnection.key(yield* ctx.integration.connection.active(Provider.ID.azure))
+          .pipe(Effect.orElseSucceed(() => undefined))
+        yield* Effect.uninterruptible(
+          Effect.gen(function* () {
+            if (
+              loaded.connection !== connection ||
+              IntegrationConnection.key(connection) !==
+                IntegrationConnection.key(yield* ctx.integration.connection.active(Provider.ID.azure))
+            )
+              return
+            if (Equal.equals(found, loaded.deployments)) return
+            const catalog = new Map(
+              Array.from((yield* providers.snapshot()).records.get(Provider.ID.azure)?.models.keys() ?? [], (id) => [
+                id.toLowerCase(),
+                id,
+              ]),
+            )
+            const unmatched = found?.filter((deployment) => !catalogModel(catalog, deployment)) ?? []
+            if (unmatched.length > 0)
+              yield* Effect.logWarning("Azure deployments of models outside the catalog need explicit configuration", {
+                deployments: unmatched.map((deployment) => deployment.name),
+              })
+            loaded.deployments = found
+            yield* ctx.model.reload()
+          }),
         )
-          return
-        if (JSON.stringify(found) === JSON.stringify(loaded.deployments)) return
-        const catalog = new Map(
-          Array.from((yield* providers.snapshot()).records.get(Provider.ID.azure)?.models.keys() ?? [], (id) => [
-            id.toLowerCase(),
-            id,
-          ]),
-        )
-        const unmatched = found.filter((deployment) => !catalogModel(catalog, deployment))
-        if (unmatched.length > 0)
-          yield* Effect.logWarning("Azure deployments of models outside the catalog need explicit configuration", {
-            deployments: unmatched.map((deployment) => deployment.name),
-          })
-        loaded.deployments = found
-        yield* ctx.model.reload()
       })
 
-      const refresh = () => rebind().pipe(Effect.andThen(FiberHandle.run(discovery, discover())))
+      const refresh = (since?: number) => rebind().pipe(Effect.andThen(FiberHandle.run(discovery, discover(since))))
 
       // The connection's resource wins over configured settings for Azure itself.
       const resourceFor = (provider: Provider.Info) =>
@@ -432,13 +436,13 @@ export function make(
       // A switch interrupts discovery for the previous connection instead of waiting for its Azure calls.
       yield* bus.subscribe(Credential.Event.Switched).pipe(
         Stream.filter((event) => event.data.integrationID === Integration.ID.make("azure")),
-        Stream.runForEach(() => refresh()),
+        Stream.runForEach((event) => refresh(event.created)),
         Effect.forkScoped({ startImmediately: true }),
       )
       // Deployments load in the background so startup never waits on Azure; the catalog serves until they arrive.
       yield* refresh().pipe(Effect.forkScoped)
-      yield* Effect.sleep(interval).pipe(
-        Effect.andThen(FiberHandle.run(discovery, discover())),
+      yield* Effect.sleep(SharedCache.interval).pipe(
+        Effect.andThen(FiberHandle.run(discovery, discover(), { onlyIfMissing: true })),
         Effect.forever,
         Effect.forkScoped,
       )

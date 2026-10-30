@@ -3,6 +3,7 @@ import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
 import { describe, expect } from "bun:test"
 import { Effect, Schedule, Schema } from "effect"
+import { TestClock } from "effect/testing"
 import { Config } from "@opencode/core/config"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { Credential } from "@opencode/core/credential"
@@ -216,6 +217,19 @@ const eventually = <A, R>(effect: Effect.Effect<A, never, R>, predicate: (value:
     Effect.retry({ times: 3000, schedule: Schedule.spaced("1 millis") }),
   )
 
+// Lets real Azure answers arrive between TestClock steps, so retries and the 10 minute refresh need no real waiting.
+const eventuallyOnClock = <A, R>(effect: Effect.Effect<A, never, R>, predicate: (value: A) => boolean) =>
+  Effect.gen(function* () {
+    const deadline = performance.now() + 15_000
+    while (performance.now() < deadline) {
+      const value = yield* effect
+      if (predicate(value)) return value
+      yield* TestClock.withLive(Effect.sleep("1 millis"))
+      yield* TestClock.adjust("500 millis")
+    }
+    return yield* Effect.die(new Error("Timed out waiting for value"))
+  })
+
 // Lets a discovery that has received its last answer finish publishing before asserting that nothing changed.
 const settle = Effect.promise(() => Bun.sleep(25))
 
@@ -414,6 +428,55 @@ describe("AzurePlugin discovery", () => {
       lastPage.resolve(managementPage([managed("nano", "gpt-5-nano")]))
       yield* eventually(azureModelIDs, (ids) => ids.length === 2)
       expect(yield* azureModelIDs).toEqual(["mini", "nano"])
+    }),
+  )
+
+  it.effect("keeps the last complete list when a later page fails", () =>
+    Effect.gen(function* () {
+      const cli = yield* fakeAzureCli()
+      const state = { paged: false }
+      const azure = yield* fakeAzure({
+        management: (request) => {
+          if (request.path.startsWith("/page-2")) return new Response("Unavailable", { status: 503 })
+          if (state.paged) return managementPage([managed("nano", "gpt-5-nano")], `${request.origin}/page-2`)
+          return managementPage([managed("mini", "gpt-5-mini")])
+        },
+      })
+      yield* seedCatalog
+      yield* connect(cliCredential())
+      yield* addPlugin(azure.endpoints).pipe(cli.provide)
+      yield* eventuallyOnClock(azureModelIDs, (ids) => ids.length === 1)
+
+      state.paged = true
+      yield* TestClock.adjust("10 minutes")
+      const pages = Effect.sync(() => azure.requests.filter((request) => request.path.startsWith("/page-2")).length)
+      yield* eventuallyOnClock(pages, (count) => count === 4)
+      yield* Effect.repeat(
+        TestClock.withLive(Effect.sleep("1 millis")).pipe(Effect.andThen(TestClock.adjust("500 millis"))),
+        { times: 3 },
+      )
+      expect(yield* azureModelIDs).toEqual(["mini"])
+      expect(azure.requests.some((request) => request.path.startsWith("/openai/deployments"))).toBe(false)
+    }),
+  )
+
+  it.effect("retries a temporary management API failure instead of falling back to the resource's list", () =>
+    Effect.gen(function* () {
+      const cli = yield* fakeAzureCli()
+      const state = { failures: 1 }
+      const azure = yield* fakeAzure({
+        resource: () => resourceList(listed("fallback", "gpt-5-nano")),
+        management: () =>
+          state.failures-- > 0
+            ? new Response("Unavailable", { status: 503 })
+            : managementPage([managed("mini", "gpt-5-mini")]),
+      })
+      yield* seedCatalog
+      yield* connect(cliCredential())
+      yield* addPlugin(azure.endpoints).pipe(cli.provide)
+
+      expect(yield* eventuallyOnClock(azureModelIDs, (ids) => ids.length === 1)).toEqual(["mini"])
+      expect(azure.requests.some((request) => request.path.startsWith("/openai/deployments"))).toBe(false)
     }),
   )
 
