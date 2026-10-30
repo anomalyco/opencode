@@ -102,15 +102,18 @@ export default function TerminalPanel(props: {
 
       return opened() && id && terminal().focusRequested(id) ? { id } : undefined
     },
-    (request) =>
-      requestAnimationFrame(() => {
+    (request) => {
+      const focusFrame = requestAnimationFrame(() => {
         if (!opened() || active() !== request.id || !terminal().focusRequested(request.id)) return
 
         focusTerminalById(request.id)
         const input = document.getElementById(`terminal-wrapper-${request.id}`)?.querySelector("textarea")
 
         if (input === document.activeElement) terminal().consumeFocus(request.id)
-      }),
+      })
+
+      onCleanup(() => cancelAnimationFrame(focusFrame))
+    },
   )
 
   // Terminals whose tabs the user moved to another pane render there, so this pane lets their screens go.

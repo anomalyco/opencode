@@ -148,7 +148,7 @@ export interface MockServerConfig {
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
   onBackground?: (input: { sessionID: string }) => void
   // Serves the session-scoped persistent PTY routes and their connect WebSockets (`e2e/utils/persistent-pty.ts`).
-  // Without it, those routes answer 503 like a server whose opencode-pty daemon cannot run.
+  // Without it, the server has a working daemon and no terminals; `capability: false` makes the routes answer 503.
   persistentPty?: MockPersistentPtyConfig
   // Answers 500 InvalidDirectory when a request names a directory this server does not own.
   strictDirectory?: boolean
