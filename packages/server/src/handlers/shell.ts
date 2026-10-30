@@ -2,9 +2,10 @@ import { Shell } from "@opencode/core/shell"
 import { Location } from "@opencode/core/location"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
-import { ShellNotFoundError } from "@opencode/protocol/errors"
+import { ShellNotFoundError, InvalidRequestError } from "@opencode/protocol/errors"
 import { Api } from "../api"
 import { response } from "../location"
+import { FSUtil } from "@opencode-ai/util/fs-util"
 
 export const ShellHandler = HttpApiBuilder.group(Api, "server.shell", (handlers) =>
   Effect.gen(function* () {
@@ -21,8 +22,19 @@ export const ShellHandler = HttpApiBuilder.group(Api, "server.shell", (handlers)
         Effect.fn(function* (ctx) {
           const shell = yield* Shell.Service
           const location = yield* Location.Service
+          const fs = yield* FSUtil.Service
+          const requestedCwd = ctx.payload.cwd || location.directory
+          const resolvedCwd = yield* fs.realPath(requestedCwd).pipe(
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(requestedCwd)),
+          )
+          if (!(yield* fs.contains(location.directory, resolvedCwd))) {
+            return yield* new InvalidRequestError({
+              message: "CWD must be within the project directory",
+              kind: "shell_cwd_outside_project",
+            })
+          }
           return yield* response(
-            shell.create({ ...ctx.payload, cwd: ctx.payload.cwd || location.directory }).pipe(Effect.orDie),
+            shell.create({ ...ctx.payload, cwd: resolvedCwd }).pipe(Effect.orDie),
           )
         }),
       )
