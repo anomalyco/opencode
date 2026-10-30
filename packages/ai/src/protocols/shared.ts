@@ -7,6 +7,7 @@ import {
   InvalidRequestError,
   UnsupportedOperationError,
   AIError,
+  LLMEvent,
   LLMRequest,
   Message,
   ToolDefinition,
@@ -454,6 +455,107 @@ function compressBody(text: string, encoding: RequestEncoding | undefined) {
   } catch {
     // Compression is an optimization, so a failure sends plain JSON instead of failing the request.
     return undefined
+  }
+}
+
+/**
+ * Some providers, notably local servers without native tool-call streaming (e.g. OpenVINO Model Server, Ollama),
+ * emit tool calls as model text instead of tool stream parts. When tools were offered but the step streamed no tool
+ * part, the step boundary synthesizes the calls embedded in the accumulated text so downstream consumers execute
+ * them like provider-emitted calls.
+ */
+const TOOL_CALL_TEXT_PATTERN = /"(?:tool_)?name"\s*:\s*"([^"]+)"\s*,\s*"(?:arguments|parameters|input)"\s*:\s*/g
+
+const decodeJsonText = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+
+export const recoverToolCalls = (text: string): ReadonlyArray<Extract<LLMEvent, { type: "tool-call" }>> => {
+  if (!text.includes(`"name"`)) return []
+  const calls: Extract<LLMEvent, { type: "tool-call" }>[] = []
+  for (const match of text.matchAll(TOOL_CALL_TEXT_PATTERN)) {
+    const input = recoverToolInput(text, (match.index ?? 0) + match[0].length)
+    if (input === undefined) continue
+    calls.push(LLMEvent.toolCall({ id: `recovered-${calls.length + 1}`, name: match[1]!, input }))
+  }
+  return calls
+}
+
+/** Decodes an embedded JSON object argument at `start`, either directly or as a JSON-escaped string. */
+function recoverToolInput(text: string, start: number): Record<string, unknown> | undefined {
+  const source = jsonValueExtent(text, start)
+  if (source === undefined) return undefined
+  // A doubly encoded argument string carries its JSON indirectly, as in OpenAI's text call format.
+  const value = text[start] === "{" ? source : Option.getOrUndefined(decodeJsonText(source))
+  if (typeof value !== "string") return undefined
+  const parsed = Option.getOrUndefined(decodeJsonText(value))
+  return isRecord(parsed) ? parsed : undefined
+}
+
+/** The extent of a JSON value at `start`: a balanced object or a complete string literal, else nothing. */
+function jsonValueExtent(text: string, start: number): string | undefined {
+  if (text[start] === "{") return jsonObjectExtent(text, start)
+  return /^"(?:[^"\\]|\\.)*"/.exec(text.slice(start))?.[0]
+}
+
+function jsonObjectExtent(text: string, start: number): string | undefined {
+  let depth = 0
+  let inString = false
+  for (let index = start; index < text.length; index++) {
+    const char = text[index]!
+    if (inString) {
+      if (char === "\\") index++
+      else if (char === '"') inString = false
+      continue
+    }
+    if (char === '"') inString = true
+    else if (char === "{") depth++
+    else if (char === "}" && --depth === 0) return text.slice(start, index + 1)
+  }
+  return undefined
+}
+
+/**
+ * Per-step scanner that returns events a consumer must publish ahead of each event. Text accumulates per fragment
+ * (following the authoritative `text-end` replacement semantics), and a `step-finish` after no tool part yields the
+ * recovered tool calls so they precede the step settlement. Publish only what `step` returns plus the event itself.
+ */
+export interface ToolCallRecovery {
+  step: (event: LLMEvent) => ReadonlyArray<LLMEvent>
+}
+
+export const toolCallRecovery = (request: LLMRequest): ToolCallRecovery | undefined => {
+  if (request.tools.length === 0 || request.toolChoice?.type === "none") return undefined
+  const fragments = new Map<string, string[]>()
+  const order: string[] = []
+  let toolSeen = false
+  return {
+    step: (event) => {
+      switch (event.type) {
+        case "text-delta": {
+          if (!fragments.has(event.id)) order.push(event.id)
+          const fragment = fragments.get(event.id) ?? []
+          fragment.push(event.text)
+          fragments.set(event.id, fragment)
+          return []
+        }
+        case "text-end": {
+          if (event.text === undefined) return []
+          if (!fragments.has(event.id)) order.push(event.id)
+          fragments.set(event.id, [event.text])
+          return []
+        }
+        case "tool-input-start":
+        case "tool-call":
+          toolSeen = true
+          return []
+        case "step-finish": {
+          if (toolSeen) return []
+          const text = order.map((id) => (fragments.get(id) ?? []).join("")).join("")
+          return recoverToolCalls(text)
+        }
+        default:
+          return []
+      }
+    },
   }
 }
 

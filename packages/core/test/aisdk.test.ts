@@ -1219,3 +1219,119 @@ it.effect("falls back to the status alone for malformed response bodies", () =>
     expect(error.message).toBe("Provider request failed with HTTP 502")
   }),
 )
+
+const tool = (name: string) => ({ name, description: `find ${name}`, inputSchema: {} })
+
+it.effect("recovers tool calls a provider emitted as plain text", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            { type: "text-start", id: "msg_1" },
+            { type: "text-delta", id: "msg_1", delta: "Let me look. " },
+            {
+              type: "text-delta",
+              id: "msg_1",
+              delta: '{"name":"read","arguments":{"path":"pixel.png"}}',
+            },
+            { type: "text-end", id: "msg_1" },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const response = yield* LLMClient.generate(
+      LLM.request({ model: resolved, prompt: "Think", tools: [tool("read")] }),
+    ).pipe(Effect.provide(client))
+
+    expect(response.toolCalls).toMatchObject([
+      { type: "tool-call", id: "recovered-1", name: "read", input: { path: "pixel.png" } },
+    ])
+  }),
+)
+
+it.effect("recovers string-encoded arguments", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            {
+              type: "text-delta",
+              id: "msg_1",
+              delta: '{"name":"lookup","arguments":"{\\"query\\":\\"Effect\\"}"}',
+            },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
+    const response = yield* LLMClient.generate(
+      LLM.request({ model: resolved, prompt: "Think", tools: [tool("lookup")] }),
+    ).pipe(Effect.provide(client))
+
+    expect(response.toolCalls).toMatchObject([
+      { type: "tool-call", id: "recovered-1", name: "lookup", input: { query: "Effect" } },
+    ])
+  }),
+)
+
+it.effect("keeps streamed tool parts even when text quotes a tool call", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            { type: "text-start", id: "msg_1" },
+            { type: "text-delta", id: "msg_1", delta: '{"name":"ghost","arguments":{}}' },
+            { type: "text-end", id: "msg_1" },
+            { type: "tool-input-start", id: "call_1", toolName: "read" },
+            { type: "tool-input-delta", id: "call_1", delta: '{"path":"pixel.png"}' },
+            { type: "tool-input-end", id: "call_1" },
+            { type: "tool-call", toolCallId: "call_1", toolName: "read", input: '{"path":"pixel.png"}' },
+            { type: "finish", finishReason: { unified: "tool-calls", raw: "tool_calls" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const response = yield* LLMClient.generate(
+      LLM.request({ model: resolved, prompt: "Think", tools: [tool("read")] }),
+    ).pipe(Effect.provide(client))
+
+    expect(response.toolCalls).toHaveLength(1)
+    expect(response.toolCalls[0]).toMatchObject({ id: "call_1", name: "read" })
+  }),
+)
+
+it.effect("does not recover tool calls without offered tools", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            {
+              type: "text-delta",
+              id: "msg_1",
+              delta: '{"name":"read","arguments":{"path":"pixel.png"}}',
+            },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Think" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(response.toolCalls).toHaveLength(0)
+  }),
+)

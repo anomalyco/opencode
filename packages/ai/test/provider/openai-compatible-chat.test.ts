@@ -548,6 +548,58 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("recovers tool calls a compatible provider emitted as plain text", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "write", description: "Write a file", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Sure. Writing the file:" }),
+              deltaChunk({ content: '{"name":"write","arguments":{"path":"hello.txt","content":"hi"}}' }),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      // Recovery executes the call but leaves the model text untouched, including the embedded JSON.
+      expect(response.text).toBe('Sure. Writing the file:{"name":"write","arguments":{"path":"hello.txt","content":"hi"}}')
+      expect(response.toolCalls).toMatchObject([
+        { id: "recovered-1", name: "write", input: { path: "hello.txt", content: "hi" } },
+      ])
+      const types = response.events.map((event) => event.type)
+      expect(types.indexOf("tool-call")).toBeLessThan(types.indexOf("step-finish"))
+    }),
+  )
+
+  it.effect("keeps streamed tool calls when text also embeds call JSON", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "write", description: "Write a file", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: '{"name":"write","arguments":{"path":"quoted.txt"}}' }),
+              deltaChunk({ tool_calls: [{ id: "call_real", function: { name: "write", arguments: '{"path":"real.txt"}' } }] }),
+              deltaChunk({}, "tool_calls"),
+            ),
+          ),
+        ),
+      )
+
+      // The genuine streamed call wins; quoted JSON in the text is not treated as a second recovery.
+      expect(response.text).toBe('{"name":"write","arguments":{"path":"quoted.txt"}}')
+      expect(response.toolCalls).toMatchObject([{ id: "call_real", name: "write", input: { path: "real.txt" } }])
+    }),
+  )
+
   it.effect("rejects a stream without a required finish reason", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(

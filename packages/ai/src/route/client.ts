@@ -480,13 +480,21 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                   Stream.flatMap(Stream.fromIterable),
                 )
                 const onHalt = protocol.stream.onHalt
-                return onHalt
+                // Tool calls some local providers emit as model text are recovered at the step boundary.
+                const recovery = ProviderShared.toolCallRecovery(request)
+                const drained = onHalt
                   ? parsed.pipe(
                       Stream.concat(
                         Stream.suspend(() => Stream.unwrap(onHalt(state).pipe(Effect.map(Stream.fromIterable)))),
                       ),
                     )
                   : parsed
+                return recovery
+                  ? drained.pipe(
+                      Stream.mapEffect((event) => Effect.succeed([...recovery.step(event), event])),
+                      Stream.flatMap(Stream.fromIterable),
+                    )
+                  : drained
               }).pipe(
                 Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
                 requireTerminalEvent(route),
