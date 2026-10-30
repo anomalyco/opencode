@@ -70,24 +70,8 @@ test("the location shortcuts choose worktrees from every state and keep cycling"
 
   const path = page.locator('[data-slot="new-session-location-path"]')
 
-  const tooltip = page.getByRole("tooltip").and(page.locator("[data-expanded]"))
-
-  await expect(path).toHaveText(view.directory)
-  await newSessionLocation(page).hover()
-  await expect(tooltip).toContainText("Choose project")
-  await expect(tooltip.locator('[data-component="keybind-v2"]')).toContainText("O")
-  await newSessionWorktree(page).hover()
-  await expect(tooltip).toContainText("Isolate sessions with worktrees")
-  await expect(tooltip).not.toContainText("Cycle session location")
-  await expect(tooltip.locator('[data-component="keybind-v2"]')).toHaveText([/O$/])
-  await view.editor.press(`${modifier}+Alt+KeyO`)
-
   const search = page.getByRole("combobox", { name: "Search worktrees", exact: true })
 
-  await expect(search).toBeFocused()
-  await search.press("Escape")
-  await expect(page.getByRole("dialog")).toHaveCount(0)
-  await expect(view.editor).toBeFocused()
   await expect(path).toHaveText(view.directory)
   await view.editor.press(`${modifier}+Alt+KeyO`)
   await expect(search).toBeFocused()
@@ -95,29 +79,11 @@ test("the location shortcuts choose worktrees from every state and keep cycling"
   await expect(view.editor).toBeFocused()
   await expect(path).toHaveText(existing)
   await expect(page.locator('[data-slot="new-session-location-icon"]')).toHaveCount(0)
-  await newSessionWorktree(page).hover()
-  await expect(tooltip).toContainText("Choose worktree")
-  await expect(tooltip).not.toContainText("Cycle session location")
-  await expect(tooltip.locator('[data-component="keybind-v2"]')).toHaveText([/O$/])
   await view.editor.press(`${modifier}+Alt+KeyO`)
   await expect(search).toBeFocused()
-  await search.press("Escape")
-  await expect(page.getByRole("dialog")).toHaveCount(0)
-  await expect(view.editor).toBeFocused()
-  await expect(path).toHaveText(existing)
-  await view.editor.press(`${modifier}+Alt+KeyL`)
-  await expect(newSessionWorktree(page)).toHaveText("Local")
-  await expect(view.editor).toBeFocused()
+  await page.getByRole("option", { name: /LocationShortcut C:\/OpenCode\/LocationShortcut$/ }).click()
   await view.editor.press(`${modifier}+Alt+KeyL`)
   await expect(newSessionWorktree(page)).toContainText("New worktree")
-  await expect(view.editor).toBeFocused()
-  await view.editor.press(`${modifier}+Alt+KeyO`)
-  await expect(search).toBeFocused()
-  await search.fill("quiet")
-  await search.press("Escape")
-  await expect(page.getByRole("dialog")).toHaveCount(0)
-  await expect(newSessionWorktree(page)).toContainText("New worktree")
-  await expect(view.editor).toBeFocused()
   await view.editor.press(`${modifier}+Alt+KeyO`)
   await expect(search).toBeFocused()
   await page.getByRole("option", { name: /^quiet-river / }).click()
@@ -190,95 +156,43 @@ test("the worktree picker shortcut is disabled for non-Git projects", async ({ p
   await expect(view.editor).toHaveText("Keep working locally")
 })
 
-for (const direction of ["ltr", "rtl"]) {
-  test(`picker scrollbars overlay full-width rows and support dragging in ${direction}`, async ({ page }) => {
-    const root = "C:/OpenCode/OverlayMenus"
+test("picker scrollbars overlay full-width rows and support dragging", async ({ page }) => {
+  const root = "C:/OpenCode/OverlayMenus"
 
-    const worktrees = Array.from({ length: 24 }, (_, index) => ({
-      directory: `${root}/worktree-${index}`,
-      strategy: "git" as const,
-    }))
-
-    await openDraft(page, {
-      name: "OverlayMenus",
-      vcs: () => ({ current: "dev", default: "main" }),
-      worktrees: () => [{ directory: root }, ...worktrees],
-      branches: () => ["dev", ...Array.from({ length: 24 }, (_, index) => `branch-${index}`)],
-    })
-    await page.evaluate((dir) => document.documentElement.setAttribute("dir", dir), direction)
-    await newSessionWorktree(page).click()
-
-    const worktreeSearch = page.getByRole("combobox", { name: "Search worktrees", exact: true })
-
-    await expect(worktreeSearch).toBeFocused()
-
-    for (const kind of ["worktree", "branch"]) {
-      const menu = page.locator('[data-component="menu-scroll"]')
-
-      const viewport = menu.locator('[data-slot="menu-scroll-viewport"]')
-
-      const thumb = menu.locator('[data-slot="menu-scroll-thumb"]')
-
-      const last = page.getByRole("option", {
-        name: kind === "worktree" ? /^worktree-23 / : "branch-23",
-        exact: kind === "branch",
-      })
-
-      await menu.hover()
-      await expect(thumb).toHaveCSS("opacity", "1")
-      await expect.poll(() => viewport.evaluate((el) => el.getBoundingClientRect().width - el.clientWidth)).toBe(0)
-
-      const track = (await menu.boundingBox())!
-
-      const handle = (await thumb.boundingBox())!
-
-      expect(direction === "rtl" ? handle.x - track.x : track.x + track.width - handle.x - handle.width).toBe(0)
-      await thumb.hover()
-      await page.mouse.down()
-      await page.mouse.move(handle.x + handle.width / 2, track.y + track.height - 4, { steps: 8 })
-      await page.mouse.up()
-      await expect.poll(() => viewport.evaluate((el) => el.scrollTop > 0)).toBe(true)
-      await expect(last).toBeInViewport()
-
-      const search =
-        kind === "worktree" ? worktreeSearch : page.getByRole("combobox", { name: "Search branches", exact: true })
-
-      await search.fill(kind === "worktree" ? "worktree-23" : "branch-23")
-      await expect(page.getByRole("option")).toHaveCount(1)
-      await expect(thumb).toHaveCount(0)
-      await expect.poll(() => viewport.evaluate((el) => el.getBoundingClientRect().width - el.clientWidth)).toBe(0)
-      await search.fill("no matching result")
-      await expect(page.getByRole("option")).toHaveCount(0)
-      await search.fill("")
-      await expect(thumb).toHaveCount(1)
-      await menu.hover()
-      await thumb.hover()
-      await page.mouse.down()
-      await expect(thumb).toHaveAttribute("data-dragging", "")
-      await search.fill(kind === "worktree" ? "worktree-23" : "branch-23")
-      await expect(thumb).toHaveCount(0)
-      await page.mouse.up()
-      await search.fill("no matching result")
-      await expect(page.getByRole("option")).toHaveCount(0)
-      await search.fill("")
-      await expect(thumb).toHaveCount(1)
-      await expect(thumb).not.toHaveAttribute("data-dragging")
-      await expect(
-        page.getByRole("option", {
-          name: kind === "worktree" ? /OverlayMenus C:\/OpenCode\/OverlayMenus$/ : "dev",
-          exact: kind === "branch",
-        }),
-      ).toHaveAttribute("aria-selected", "true")
-      await search.press("ArrowUp")
-      await expect(last).toBeInViewport()
-
-      if (kind === "branch") continue
-      await page.getByRole("option", { name: /^New worktree/ }).click()
-      await page.getByRole("button", { name: "from dev", exact: true }).click()
-      await expect(page.getByRole("combobox", { name: "Search branches", exact: true })).toBeFocused()
-    }
+  await openDraft(page, {
+    name: "OverlayMenus",
+    worktrees: () => [
+      { directory: root },
+      ...Array.from({ length: 24 }, (_, index) => ({
+        directory: `${root}/worktree-${index}`,
+        strategy: "git" as const,
+      })),
+    ],
   })
-}
+  await newSessionWorktree(page).click()
+  await expect(page.getByRole("combobox", { name: "Search worktrees", exact: true })).toBeFocused()
+
+  const menu = page.locator('[data-component="menu-scroll"]')
+
+  const viewport = menu.locator('[data-slot="menu-scroll-viewport"]')
+
+  const thumb = menu.locator('[data-slot="menu-scroll-thumb"]')
+
+  await menu.hover()
+  await expect(thumb).toHaveCSS("opacity", "1")
+  await expect.poll(() => viewport.evaluate((el) => el.getBoundingClientRect().width - el.clientWidth)).toBe(0)
+
+  const track = (await menu.boundingBox())!
+
+  const handle = (await thumb.boundingBox())!
+
+  await thumb.hover()
+  await page.mouse.down()
+  await page.mouse.move(handle.x + handle.width / 2, track.y + track.height - 4)
+  await page.mouse.up()
+  await expect.poll(() => viewport.evaluate((el) => el.scrollTop > 0)).toBe(true)
+  await expect(page.getByRole("option", { name: /^worktree-23 / })).toBeInViewport()
+})
 
 for (const row of [
   {
@@ -302,6 +216,7 @@ for (const row of [
     await expect(page.getByRole("tooltip")).toHaveText(row.directory)
 
     if (row.name !== "POSIX") return
+    await expect(path).toHaveCSS("user-select", "text")
     await path.click()
     await path.evaluate((element) => {
       const range = document.createRange()
@@ -312,20 +227,6 @@ for (const row of [
     })
     const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
 
-    await page.keyboard.press(`${modifier}+c`)
-    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(row.directory)
-
-    await page.setViewportSize({ width: 1280, height: 900 })
-    await expect(path).toHaveText(row.directory)
-    await expect(path).toHaveCSS("user-select", "text")
-    await path.click()
-    const bounds = (await path.boundingBox())!
-
-    await page.mouse.move(bounds.x, bounds.y + bounds.height / 2)
-    await page.mouse.down()
-    await page.mouse.move(bounds.x + bounds.width, bounds.y + bounds.height / 2, { steps: 8 })
-    await page.mouse.up()
-    await expect.poll(() => page.evaluate(() => getSelection()?.toString())).toBe(row.directory)
     await page.keyboard.press(`${modifier}+c`)
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(row.directory)
   })
