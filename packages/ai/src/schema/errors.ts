@@ -167,7 +167,7 @@ export class AIError extends Schema.TaggedError<AIError>()("AI.Error", {
   /** Output that arrived before `generate`, `generateObject` or a `loop` step failed. Not in the schema, so encoding omits it. */
   readonly partial?: LLMResponse
 
-  constructor(props: { readonly reason: AIErrorReason; readonly partial?: LLMResponse }) {
+  constructor(props: Pick<AIError, "reason" | "partial">) {
     super({ reason: props.reason })
     this.partial = props.partial
   }
@@ -176,6 +176,10 @@ export class AIError extends Schema.TaggedError<AIError>()("AI.Error", {
     return this.reason.message
   }
 }
+
+/** Return `error` with `partial` attached, or unchanged when there is no partial output. */
+export const withPartial = (error: AIError, partial: LLMResponse | undefined) =>
+  partial === undefined ? error : new AIError({ reason: error.reason, partial })
 
 /**
  * Failure type for tool execute handlers. Handlers must map their internal

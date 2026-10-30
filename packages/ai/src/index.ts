@@ -316,6 +316,6 @@ export const tool = <
 /** Default client over `RequestExecutor.fetchLayer` for scripts; the runtime builds its layer on first use. */
 export const ai = make()
 
+export { AIError } from "./schema/index.js"
 export * as AI from "./index.js"
-export { AIError }
 export type { ExecutableTool, Tool, ToolOptions, Tools } from "./tool.js"

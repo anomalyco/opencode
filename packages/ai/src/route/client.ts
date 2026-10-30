@@ -30,6 +30,7 @@ import {
   mergeGenerationOptions,
   mergeHttpOptions,
   mergeProviderOptions,
+  withPartial,
 } from "../schema/index.js"
 
 export interface RouteBody<Body> {
@@ -629,22 +630,19 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest, o
     }),
   )
 
-/** Attach the output that arrived before `error`; the error is returned unchanged when nothing arrived. */
-export const withPartial = (error: AIError, events: ReadonlyArray<LLMEvent>) => {
-  const partial = LLMResponse.partial(events)
-  return partial === undefined ? error : new AIError({ reason: error.reason, partial })
-}
-
 export const generateWith = (stream: Interface["stream"]) =>
   Effect.fn("LLM.generate")(function* (request: LLMRequest, options?: StreamOptions) {
-    const events: LLMEvent[] = []
+    let state = LLMResponse.empty()
     yield* stream(request, options).pipe(
-      Stream.runForEach((event) => Effect.sync(() => events.push(event))),
-      Effect.mapError((error) => withPartial(error, events)),
+      Stream.runForEach((event) => Effect.sync(() => (state = LLMResponse.reduce(state, event)))),
+      Effect.mapError((error) => withPartial(error, LLMResponse.partial(state))),
     )
-    const response = LLMResponse.fromEvents(events)
+    const response = LLMResponse.complete(state)
     if (response) return response
-    return yield* withPartial(incompleteStreamError(`${request.model.provider}/${request.model.route.id}`), events)
+    return yield* withPartial(
+      incompleteStreamError(`${request.model.provider}/${request.model.route.id}`),
+      LLMResponse.partial(state),
+    )
   })
 
 export function stream(request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, AIError, Service> {

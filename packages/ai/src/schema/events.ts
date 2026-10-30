@@ -757,11 +757,10 @@ export namespace LLMResponse {
   export const fromEvents = (events: ReadonlyArray<LLMEvent>) => complete(events.reduce(reduce, empty()))
 
   /** Output that arrived before a failure, or `undefined` if only `step-start` did; an unfinished response reports `error`. */
-  export const partial = (events: ReadonlyArray<LLMEvent>) => {
-    const state = events.reduce(reduce, empty())
-    if (state.events.every(LLMEvent.is.stepStart)) return undefined
-    return complete({ ...state, finishReason: state.finishReason ?? { normalized: "error" } })
-  }
+  export const partial = (state: State) =>
+    state.events.every(LLMEvent.is.stepStart)
+      ? undefined
+      : complete({ ...state, finishReason: state.finishReason ?? { normalized: "error" } })
 
   /** Concatenate assistant text from a response or collected event list. */
   export const text = (response: Output) => responseText(response.events)
