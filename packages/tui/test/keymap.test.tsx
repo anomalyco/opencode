@@ -139,3 +139,58 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
     app.renderer.destroy()
   }
 })
+
+test("leader then v runs the raw paste, and a terminal paste after the leader finds it still pending", async () => {
+  const ran: string[] = []
+  const pasted: { text: string; leader: boolean }[] = []
+  let leaderActive = () => false
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    const config = createResolvedKeymapConfig()
+    const offKeymap = registerOpencodeKeymap(keymap, renderer, config)
+    const offLayer = keymap.registerLayer({
+      commands: [{ name: "prompt.paste.raw", run: () => void ran.push("prompt.paste.raw") }],
+      bindings: config.keybinds.get("prompt.paste.raw"),
+    })
+    leaderActive = () => keymap.getPendingSequence()[0]?.tokenName === "leader"
+    onCleanup(() => {
+      offLayer()
+      offKeymap()
+    })
+
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <textarea
+          focused
+          onPaste={(event: { bytes: Uint8Array; preventDefault(): void }) => {
+            event.preventDefault()
+            pasted.push({ text: Buffer.from(event.bytes).toString(), leader: leaderActive() })
+          }}
+        />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(() => <Harness />)
+  const press = async (bytes: string) => {
+    app.renderer.stdin.emit("data", Buffer.from(bytes))
+    await Bun.sleep(50)
+  }
+  try {
+    await press("\x18") // ctrl+x, the default leader
+    await press("v")
+    expect(ran).toEqual(["prompt.paste.raw"])
+
+    await press("\x1b[200~one\ntwo\nthree\x1b[201~")
+    await press("\x18")
+    await press("\x1b[200~one\ntwo\nthree\x1b[201~")
+    expect(pasted).toEqual([
+      { text: "one\ntwo\nthree", leader: false },
+      { text: "one\ntwo\nthree", leader: true },
+    ])
+  } finally {
+    app.renderer.destroy()
+  }
+})
