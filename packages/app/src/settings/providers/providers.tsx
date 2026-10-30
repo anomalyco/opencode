@@ -176,13 +176,13 @@ export const SettingsProviders: Component<{
   })
 
   // Connection state comes from the integration list like the TUI: credential
-  // connections mean an API key or OAuth grant, env connections mean detected
+  // connections mean an API key or an account login, env connections mean detected
   // environment variables, and a connectionless integration is config-provided.
   const source = (item: ProviderItem): ProviderSource | undefined => {
     const current = integration(item)
     const credential = current?.connections.find((connection) => connection.type === "credential")
 
-    if (credential) return credential.method === "oauth" ? "account" : "api"
+    if (credential) return credential.method === "key" ? "api" : "account"
 
     if (current?.connections.some((connection) => connection.type === "env")) return "env"
 
@@ -452,6 +452,19 @@ export const SettingsProviders: Component<{
                               </Show>
                             }
                           >
+                            <Show when={activeProviderAccount(integration(item))?.status}>
+                              {(status) => (
+                                <Button
+                                  size="normal"
+                                  variant="ghost-muted"
+                                  class="text-[var(--v2-state-fg-warning)]"
+                                  title={status().message}
+                                  onClick={() => connect(item.id)}
+                                >
+                                  {language.t("dialog.provider.needsSignIn")}
+                                </Button>
+                              )}
+                            </Show>
                             <AccountMenu provider={item} />
                           </Show>
                         </div>
