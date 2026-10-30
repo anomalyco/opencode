@@ -499,9 +499,7 @@ test("a pending worktree session keeps Session as its mobile title until the gen
   const label = page.locator('[data-slot="mobile-tab-title"]')
   await expect(label).toHaveText("Session")
   const pending = await submitPending(page, mock)
-  await expect(
-    page.locator('[data-slot="mobile-tabs-trigger"] [data-component="session-progress-indicator-v2"]'),
-  ).toBeVisible()
+  await expect(page.locator('[data-slot="mobile-tabs-trigger"] [data-component="activity-ring"]')).toBeVisible()
   mock.worktree.resolve({ status: 200, json: { directory: workspace } })
   await expect(pending.shimmer).toHaveCount(0)
   await expect(submit(page)).toBeEnabled()

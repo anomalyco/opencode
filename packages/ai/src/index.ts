@@ -10,6 +10,7 @@ import {
   type CheckpointRequest,
   type CompactionRequest,
   type EndpointCompactOptions,
+  type StreamOptions,
   type TriggerCompactOptions,
 } from "./route/client.js"
 import { RequestExecutor } from "./route/executor.js"
@@ -63,6 +64,8 @@ export type Services = AIClient.Services
  * new handle rather than updating this one.
  */
 export type GenerationHandle<Response> = Snapshot & {
+  readonly snapshot: Snapshot
+  readonly terminal: boolean
   /** Serializable JSON; pass it back to `resume` from another process. */
   readonly token: unknown
   readonly await: (options?: AwaitOptions & RunOptions) => Promise<Response>
@@ -145,9 +148,11 @@ export const make = <R = never>(options: Options<R> = {}) => {
 
   const handle = <Response>(generation: Generation<Response>): GenerationHandle<Response> => ({
     ...generation.snapshot,
+    snapshot: generation.snapshot,
+    terminal: generation.terminal,
     token: generation.token,
-    await: (options) => run(generation.await({ poll: options?.poll }), options),
-    events: (options) => iterate(generation.events({ poll: options?.poll }), options),
+    await: (options) => run(generation.await(options), options),
+    events: (options) => iterate(generation.events(options), options),
     result: (options) => run(generation.result(), options),
     refresh: (options) => run(generation.refresh(), options).then(handle),
     cancel: (options) => run(generation.cancel(), options),
@@ -193,28 +198,33 @@ export const make = <R = never>(options: Options<R> = {}) => {
     },
     llm: {
       request: LLM.request,
-      generate: <const Model extends LanguageModel>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
-        run(LLM.generate(input), options),
-      stream: <const Model extends LanguageModel>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
-        iterate(LLM.stream(input), options),
+      generate: <const Model extends LanguageModel>(
+        input: RequestInput<Model> | LLMRequest,
+        options?: StreamOptions & RunOptions,
+      ) => run(LLM.generate(input, options), options),
+      stream: <const Model extends LanguageModel>(
+        input: RequestInput<Model> | LLMRequest,
+        options?: StreamOptions & RunOptions,
+      ) => iterate(LLM.stream(input, options), options),
       /** Stream model calls, running their tool calls, until the model stops calling tools or `until` is true. */
-      loop: <const Model extends LanguageModel>(input: LoopInput<Model>, options?: RunOptions) =>
-        iterate(LLM.loop(input), options),
+      loop: <const Model extends LanguageModel>(input: LoopInput<Model>, options?: StreamOptions & RunOptions) =>
+        iterate(LLM.loop(input, options), options),
       /** Decode the model's output against `schema` (or `jsonSchema`, unvalidated) like `LLM.generateObject`. */
       generateObject,
       /** Compact a Responses request like `LLMClient.compact`: a replacement window, or a checkpoint with `mechanism: "trigger"`. */
       compact,
+      canCompact: LLMClient.canCompact,
     },
     image: {
       request: Image.request,
       generate: <const Model extends ImageModel>(
         input: ImageRequestInput<Model> | ImageRequest,
         options?: AwaitOptions & RunOptions,
-      ) => run(Image.generate(input, { poll: options?.poll }), options),
+      ) => run(Image.generate(input, options), options),
       stream: <const Model extends ImageModel>(
         input: ImageRequestInput<Model> | ImageRequest,
         options?: AwaitOptions & RunOptions,
-      ) => iterate(Image.stream(input, { poll: options?.poll }), options),
+      ) => iterate(Image.stream(input, options), options),
       start: <const Model extends ImageModel>(input: ImageRequestInput<Model> | ImageRequest, options?: RunOptions) =>
         run(Image.start(input), options).then(handle),
       resume: (model: ImageModel, token: unknown, options?: RunOptions) =>

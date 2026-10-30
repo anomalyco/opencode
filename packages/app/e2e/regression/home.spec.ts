@@ -39,6 +39,28 @@ test("Home keeps the session list in every interface mode", async ({ page }) => 
   }
 })
 
+test("a working Home session keeps its project avatar and shows its activity ring at the end of the row", async ({
+  page,
+}) => {
+  const working = { id: "ses_home_working", title: "Working session" }
+  const idle = { id: "ses_home_idle", title: "Idle session" }
+  await mockWorkspace(page, {
+    name: "HomeActivity",
+    sessions: [working, idle],
+    sessionStatus: { [working.id]: { type: "running" } },
+  })
+  await page.goto("/")
+  const ring = row(page, working.title).locator('[data-component="activity-ring"]')
+  await expect(ring).toBeVisible()
+  await expect(row(page, working.title).locator('[data-component="project-avatar-v2"]')).toBeVisible()
+  await expect(row(page, idle.title).locator('[data-component="activity-ring"]')).toHaveCount(0)
+
+  // The ring trails the title rather than standing in for the avatar.
+  const title = await row(page, working.title).getByText(working.title, { exact: true }).boundingBox()
+  const box = await ring.boundingBox()
+  expect(box!.x).toBeGreaterThan(title!.x + title!.width)
+})
+
 test("the session context menu renames, exports, and deletes a Home session", async ({ page }) => {
   await openHome(page)
   const target = row(page, fixture.expected.targetTitle)
