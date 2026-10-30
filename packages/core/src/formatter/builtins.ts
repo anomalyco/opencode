@@ -237,6 +237,8 @@ export function make(input: {
   const ormolu = executable("ormolu", [".hs"], ["-i", "$FILE"], findExecutable)
   const cljfmt = executable("cljfmt", [".clj", ".cljs", ".cljc", ".edn"], ["fix", "--quiet", "$FILE"], findExecutable)
   const dfmt = executable("dfmt", [".d"], ["-i", "$FILE"], findExecutable)
+  const stylua = executable("stylua", [".lua"], ["$FILE"], findExecutable)
+  const scalafmt = executable("scalafmt", [".scala", ".sc"], ["$FILE"], findExecutable)
 
   return [
     gofmt,
@@ -265,6 +267,8 @@ export function make(input: {
     ormolu,
     cljfmt,
     dfmt,
+    stylua,
+    scalafmt,
   ] satisfies Info[]
 }
 
