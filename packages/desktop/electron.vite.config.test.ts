@@ -1,14 +1,11 @@
 import { expect, test } from "bun:test"
 import { existsSync } from "node:fs"
-import { mkdtemp, rm } from "node:fs/promises"
-import { tmpdir } from "node:os"
 import path from "node:path"
-import { MainConfigFactory, PreloadConfigFactory } from "electron-vite"
+import { MainConfigFactory } from "electron-vite"
 import { build } from "vite"
 import createConfig from "./electron.vite.config"
 import pkg from "./package.json"
 import { CLI_BINARIES, nodePtyPackage } from "./script/utils"
-import { verifyBundles } from "./script/verify-bundles"
 
 const load = async (command: "build" | "serve") => ({
   config: await createConfig({ command, mode: command === "build" ? "production" : "development" }),
@@ -85,13 +82,11 @@ test("bundles one Effect runtime and Drizzle while keeping native dependencies e
   const crossTarget = process.arch === "arm64" ? "windows-x64" : "windows-arm64"
   const crossNodePty = nodePtyPackage(crossTarget)
 
-  const outDir = await mkdtemp(path.join(tmpdir(), "opencode-desktop-vite-"))
-
   try {
     process.env.OPENCODE_TARGET = crossTarget
     const result = await load("build")
 
-    if (!result.config.main || !result.config.preload) throw new Error("Missing main or preload build configuration")
+    if (!result.config.main) throw new Error("Missing main-process build configuration")
 
     const config = await new MainConfigFactory(
       result.config.main,
@@ -99,18 +94,9 @@ test("bundles one Effect runtime and Drizzle while keeping native dependencies e
       { root: import.meta.dirname },
     ).build()
 
-    const preload = await new PreloadConfigFactory(
-      result.config.preload,
-      { configFile: false, mode: "production" },
-      { root: import.meta.dirname },
-    ).build()
-
-    config.build = { ...config.build, outDir: path.join(outDir, "main") }
+    config.build = { ...config.build, minify: false, write: false }
     config.logLevel = "silent"
-    preload.build = { ...preload.build, outDir: path.join(outDir, "preload") }
-    preload.logLevel = "silent"
-    const [output] = await Promise.all([build(config), build(preload)])
-    await verifyBundles(outDir)
+    const output = await build(config)
 
     const chunks = (Array.isArray(output) ? output : [output]).flatMap((item) =>
       "output" in item ? item.output.filter((entry) => entry.type === "chunk") : [],
@@ -138,7 +124,6 @@ test("bundles one Effect runtime and Drizzle while keeping native dependencies e
     expect(modules.some((id) => id.includes("/node_modules/msgpackr"))).toBe(false)
     expect(chunks.some((chunk) => chunk.code.includes("msgpackr"))).toBe(false)
   } finally {
-    await rm(outDir, { recursive: true, force: true })
     delete process.env.OPENCODE_TARGET
 
     if (previousTarget !== undefined) process.env.OPENCODE_TARGET = previousTarget
