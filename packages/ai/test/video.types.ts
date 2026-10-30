@@ -1,7 +1,6 @@
 import { Effect } from "effect"
+import { Generation, Media } from "../src/effect.js"
 import {
-  Generation,
-  Media,
   Video,
   VideoClient,
   VideoModel,
@@ -9,7 +8,7 @@ import {
   type VideoModelOptions,
   type VideoOptions,
   type VideoRequestFor,
-} from "../src/effect.js"
+} from "../src/experimental.js"
 import type { Service } from "../src/video-client.js"
 import { Anthropic, Google, OpenAI, Runway, XAI } from "../src/providers.js"
 

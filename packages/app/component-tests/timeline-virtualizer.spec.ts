@@ -89,6 +89,45 @@ story("treats the reachable end as the end under page zoom", async ({ page }) =>
   await expect(controls).toHaveAttribute("data-pinned", "true")
 })
 
+story("leaves a reader who scrolled up in place after a scroll to the zoomed end", async ({ page }) => {
+  // At 110% the end the browser reaches sits more than a pixel short of scrollHeight - clientHeight. TanStack kept
+  // scrolling toward that max on every frame for five seconds, so a row that grew meanwhile pulled the reader back down.
+  await page.evaluate(async (fixture) => {
+    document.documentElement.style.zoom = "1.1"
+    const { mountTimelineVirtualizer } = await import(fixture)
+    mountTimelineVirtualizer({ count: 40, rowHeight: 59.3, immediate: true, viewportHeight: 200.5 })
+  }, fixture)
+  const root = page.getByTestId("timeline-virtualizer-fixture")
+  await root.getByRole("button", { name: "Complete Markdown", exact: true }).click()
+  await expect(root.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+  const viewport = root.locator("[data-scrollable]")
+  const distance = () => viewport.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
+  expect(await distance()).toBeGreaterThan(1.01)
+
+  // A scroll command settles or scrolls again on its next frame.
+  const frames = () =>
+    page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+
+  await root.getByRole("button", { name: "Scroll to end", exact: true }).click()
+  await frames()
+  // The wheel and the scroll it causes arrive together. A wheel alone would leave an earlier arrival at the end free to
+  // pin again once that scroll settles.
+  await viewport.evaluate(
+    (element) =>
+      new Promise((resolve) => {
+        element.addEventListener("scroll", resolve, { once: true })
+        element.dispatchEvent(new WheelEvent("wheel", { deltaY: -1, bubbles: true }))
+        element.scrollTop -= 40
+      }),
+  )
+  await expect(root.getByTestId("timeline-controls")).toHaveAttribute("data-pinned", "false")
+  const height = await viewport.evaluate((element) => element.scrollHeight)
+  await root.getByRole("button", { name: "Grow last row", exact: true }).click()
+  await expect.poll(() => viewport.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height + 30)
+  await frames()
+  expect(await distance()).toBeGreaterThan(70)
+})
+
 for (const input of [
   { name: "offset-only", count: 1, rowHeight: 600, reveal: { scrollTop: 0 } },
   { name: "zero-height", count: 4, rowHeight: 60, reveal: {} },

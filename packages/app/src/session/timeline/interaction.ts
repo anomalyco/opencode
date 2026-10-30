@@ -23,7 +23,6 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     inset: number
     refs: {
       scroller: HTMLDivElement | undefined
-      content: HTMLDivElement | undefined
       dock: HTMLDivElement | undefined
       visible: HTMLDivElement | undefined
     }
@@ -41,7 +40,6 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     inset: 0,
     refs: {
       scroller: undefined,
-      content: undefined,
       dock: undefined,
       visible: undefined,
     },
@@ -362,13 +360,6 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     ),
   )
   createResizeObserver(
-    () => state.refs.content,
-    () => {
-      if (scroller) scheduleScrollState(scroller)
-      fill()
-    },
-  )
-  createResizeObserver(
     () => state.refs.dock,
     (_rect, _element, entry) => {
       // The activity pill floats above the region out of flow, so only the docks, queue and composer count here.
@@ -426,10 +417,9 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       pinned,
       selectionInteraction,
       scheduleScrollState,
-      setContentRef: (element: HTMLDivElement | undefined) => {
-        setState("refs", "content", element)
-
+      contentResized: () => {
         if (scroller) scheduleScrollState(scroller)
+        fill()
       },
       setDockRef: (element: HTMLDivElement | undefined) => {
         setState("refs", "dock", element)
