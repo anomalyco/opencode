@@ -72,6 +72,39 @@ describe("SharedCache", () => {
     }),
   )
 
+  it.effect("retries transient failures within one load and never permanent ones", () =>
+    Effect.gen(function* () {
+      const cache = yield* SharedCache.Service
+      const loads = { flaky: 0, denied: 0 }
+      const failure = (status: number) => Object.assign(new Error(`HTTP ${status}`), { status })
+      const flaky = yield* cache
+        .get({
+          key: "flaky",
+          maxAge: "10 minutes",
+          load: Effect.suspend(() => (++loads.flaky <= 2 ? Effect.fail(failure(503)) : Effect.succeed("models"))),
+        })
+        .pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("1 second")
+      yield* TestClock.adjust("2 seconds")
+      expect(yield* Fiber.join(flaky)).toBe("models")
+      expect(loads.flaky).toBe(3)
+
+      const denied = yield* cache
+        .get({
+          key: "denied",
+          maxAge: "10 minutes",
+          load: Effect.suspend(() => {
+            loads.denied++
+            return Effect.fail(failure(401))
+          }),
+        })
+        .pipe(Effect.flip)
+      expect(denied.message).toBe("HTTP 401")
+      expect(loads.denied).toBe(1)
+    }),
+  )
+
   it.effect("evicts unread entries but never one with a load in flight", () =>
     Effect.gen(function* () {
       const cache = yield* SharedCache.Service

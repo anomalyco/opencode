@@ -83,7 +83,10 @@ export async function load(baseURL: string, headers: RequestInit["headers"]): Pr
     headers,
     signal: AbortSignal.timeout(5_000),
   })
-  if (!response.ok) throw new Error(`Failed to fetch Copilot models: ${response.status}`)
+  if (!response.ok)
+    throw Object.assign(new Error(`Failed to fetch Copilot models: ${response.status}`), {
+      status: response.status,
+    })
 
   return new Map(
     decodeResponse(await response.json()).data.flatMap((raw) => {

@@ -152,7 +152,7 @@ describe("DigitalOceanPlugin", () => {
       yield* drain
       expect(yield* fixture.models.get(providerID, Model.ID.make("router:alpha"))).toBeDefined()
 
-      fixture.remote.status = 503
+      fixture.remote.status = 401
       const second = yield* oauthCredential("other-account")
       yield* drain
       expect(fixture.remote.requests.at(-1)?.headers.authorization).toBe("Bearer other-account")

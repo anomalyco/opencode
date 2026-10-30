@@ -60,7 +60,8 @@ export async function load(baseURL: string, apiKey: string): Promise<Snapshot> {
     },
     signal: AbortSignal.timeout(3_000),
   })
-  if (!response.ok) throw new Error(`Failed to fetch Modal models: ${response.status}`)
+  if (!response.ok)
+    throw Object.assign(new Error(`Failed to fetch Modal models: ${response.status}`), { status: response.status })
 
   // Decode each item tolerantly so one malformed entry cannot discard the
   // whole inventory. A malformed envelope still fails the fetch.

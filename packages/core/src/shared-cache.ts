@@ -1,13 +1,15 @@
 export * as SharedCache from "./shared-cache.js"
 
-import { Clock, Context, Duration, Effect, Exit, Fiber, FiberSet, Layer } from "effect"
+import { Cause, Clock, Context, Duration, Effect, Exit, Fiber, FiberSet, Layer, Predicate, Schedule } from "effect"
+import { HttpClientError } from "effect/http"
 import { Hash } from "@opencode/util/hash"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
 export interface Interface {
   /**
    * Returns the result of the last load for `key` while it is newer than `maxAge`, otherwise joins the load running
-   * for `key` or starts one; `force` skips the age check but still joins a running load. A failed load keeps the last
+   * for `key` or starts one; `force` skips the age check but still joins a running load. The load retries `transient`
+   * failures up to 3 times, after 1, 2 and 4 seconds. A failed load keeps the last
    * good value, or without one is returned to every caller until `maxAge` passes, so a key loads at most once per
    * `maxAge`. The key must include everything that changes the answer, such as the connection and base URL, but
    * never a raw secret: use `fingerprint` for a static API key.
@@ -24,6 +26,20 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Sh
 
 /** A short, one-way stand-in for a static secret in a cache key, so a key changed in place loads again. */
 export const fingerprint = (secret: string) => Hash.sha256(secret).slice(0, 16)
+
+/** Network errors, timeouts and HTTP 408, 429 or 5xx, from Effect's HttpClient or from `fetch`. */
+export const transient = (error: unknown): boolean => {
+  if (Cause.isTimeoutError(error) || error instanceof TypeError) return true
+  if (error instanceof DOMException) return error.name === "TimeoutError"
+  if (HttpClientError.isHttpClientError(error))
+    return (
+      error.reason._tag === "TransportError" ||
+      (error.reason._tag === "StatusCodeError" && retryable(error.reason.response.status))
+    )
+  return Predicate.hasProperty(error, "status") && typeof error.status === "number" && retryable(error.status)
+}
+
+const retryable = (status: number) => status === 408 || status === 429 || status >= 500
 
 interface Entry {
   good?: { readonly value: unknown }
@@ -57,7 +73,9 @@ const layer = Layer.effect(
       entry.loading ??= run(
         Effect.gen(function* () {
           yield* Effect.yieldNow
-          const exit = yield* Effect.exit(input.load)
+          const exit = yield* Effect.exit(
+            Effect.retry(input.load, { schedule: Schedule.exponential("1 second"), times: 3, while: transient }),
+          )
           if (Exit.isSuccess(exit)) entry.good = { value: exit.value }
           else yield* Effect.logWarning("failed to load shared value", { key: input.key, cause: exit.cause })
           entry.last = {
