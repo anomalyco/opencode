@@ -103,6 +103,9 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
       requests.push(path)
       response.setHeader("cache-control", "no-store")
 
+      if (url.searchParams.has("proxy-test"))
+        return void response.writeHead(200, { "content-type": "text/html" }).end("<h1>Proxy endpoint</h1>")
+
       if (path === "/auth/login") {
         const target = url.searchParams.get("rd")!
         const callback = new URL("/auth/callback", target)
@@ -481,7 +484,7 @@ fixture("keeps the current page when a lazy asset fails offline", async ({ page,
   expect(site.requests).not.toContain("/auth/login")
 })
 
-fixture("does not substitute cached HTML for API, missing asset, or reauth navigations", async ({ page, site }) => {
+fixture("bypasses cached HTML for API, assets, SSO proxies, and reauth", async ({ page, site }) => {
   await install(page, site.url)
   const api = await page.goto(`${site.url}/api/info`)
   expect(await api?.json()).toEqual({
@@ -494,6 +497,17 @@ fixture("does not substitute cached HTML for API, missing asset, or reauth navig
   const asset = await page.goto(`${site.url}/_assets/missing.js`)
   expect(asset?.status()).toBe(404)
   expect(await asset?.text()).toBe("Not found")
+  for (const prefix of ["outpost.goauthentik.io", "oauth2", ".pomerium", "_oauth", "cdn-cgi", ".auth", "authelia"]) {
+    for (const path of [`/${prefix}?proxy-test=1`, `/${prefix}/callback?proxy-test=1&code=test`]) {
+      const response = await page.goto(site.url + path)
+      expect(response?.fromServiceWorker(), path).toBe(false)
+      expect(site.requests).toContain(new URL(path, site.url).pathname)
+      await expect(page.getByRole("heading")).toHaveText("Proxy endpoint")
+    }
+  }
+  const local = await page.goto(`${site.url}/authelia-project?view=diff`)
+  expect(local?.fromServiceWorker()).toBe(true)
+  await expect(page.getByRole("heading")).toHaveText("old")
   const reauth = await page.goto(`${site.url}/workspace/open?view=diff&reauth=1`)
   expect(reauth?.fromServiceWorker()).toBe(false)
 })

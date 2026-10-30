@@ -32,6 +32,8 @@ export function serviceWorker(directory: string) {
       navigateFallbackDenylist: [
         /^\/(?:api|auth)(?:\/|$)/,
         /^\/(?:_assets|assets)(?:\/|$)/,
+        // SSO callbacks and portals belong to the proxy, not the cached app router.
+        /^\/(?:outpost\.goauthentik\.io|oauth2|\.pomerium|_oauth|cdn-cgi|\.auth|authelia)(?:[/?]|$)/,
         // Proxy recovery must reach the network without removing the installed worker.
         /[?&]reauth=/,
       ],
