@@ -544,8 +544,20 @@ const layer = Layer.effect(
         ),
       )
 
+    const hasActiveRows = db
+      .select({ id: ScheduleTable.id })
+      .from(ScheduleTable)
+      .where(eq(ScheduleTable.status, "active"))
+      .limit(1)
+      .get()
+      .pipe(
+        Effect.orDie,
+        Effect.map((row) => row !== undefined),
+      )
+
     const ownerID = randomUUID()
     let leading = false
+    let bootChecked = false
 
     const claimLeader = Effect.fnUntraced(function* (now: number) {
       const value = { owner: ownerID, until: now + LEADER_TTL }
@@ -583,16 +595,29 @@ const layer = Layer.effect(
 
     const loop = Effect.gen(function* () {
       yield* doorbell.close
+      const active = yield* hasActiveRows
+      if (!active && bootChecked) {
+        if (leading) yield* releaseLeader
+        yield* doorbell.await
+        return
+      }
       const now = yield* Clock.currentTimeMillis
       const isLeader = yield* claimLeader(now)
       if (!isLeader) {
         leading = false
+        bootChecked = true
         yield* doorbell.await.pipe(Effect.timeoutOption(MAX_SLEEP))
         return
       }
       if (!leading) {
         leading = true
+        bootChecked = true
         yield* rewake.pipe(Effect.catchCause((cause) => Effect.logError("schedule rewake failed", { cause })))
+      }
+      if (!active) {
+        yield* releaseLeader
+        yield* doorbell.await
+        return
       }
       yield* Effect.scoped(
         Effect.forkScoped(heartbeat).pipe(
@@ -601,6 +626,11 @@ const layer = Layer.effect(
           ),
         ),
       )
+      if (!(yield* hasActiveRows)) {
+        yield* releaseLeader
+        yield* doorbell.await
+        return
+      }
       const wait = yield* nextWake(now)
       if (wait > 0) yield* doorbell.await.pipe(Effect.timeoutOption(wait))
     })
