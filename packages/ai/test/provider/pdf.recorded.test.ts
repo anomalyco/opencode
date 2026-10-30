@@ -3,7 +3,7 @@ import { Effect, Schema, Stream } from "effect"
 import { LLM, LLMResponse, Message, ToolDefinition, type LanguageModel, Media } from "../../src/effect.js"
 import { AmazonBedrock, Anthropic, Google, OpenAI, XAI } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
-import { Tool } from "../../src/tool.js"
+import { tool } from "../../src/tool.js"
 import { runTools } from "../lib/tool-runtime.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -89,7 +89,7 @@ const readPdf = ToolDefinition.make({
   description: "Read the attached PDF.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
 })
-const readPdfRuntime = Tool.make({
+const readPdfRuntime = tool({
   description: readPdf.description,
   parameters: Schema.Struct({ path: Schema.String }),
   success: Schema.String,

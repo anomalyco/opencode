@@ -8,6 +8,7 @@ import { AppProcess } from "@opencode/util/process"
 import { Context, Effect, Scope } from "effect"
 import { HttpClient } from "effect/http"
 import { Agent } from "../agent.js"
+import { Artifact } from "../artifact.js"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
 import { Command } from "../command.js"
@@ -79,6 +80,7 @@ import { OpenCodeTools } from "../tool/plugin/opencode.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { ReadToolFileSystem } from "../tool/read-filesystem.js"
 import { ReadTool } from "../tool/plugin/read.js"
+import { ArtifactTools } from "../tool/plugin/artifact.js"
 import { ScheduleTools } from "../tool/plugin/schedule.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
@@ -99,6 +101,7 @@ import { GoalPlugin } from "./goal.js"
 import { ModelsDevPlugin } from "./models-dev.js"
 import { McpCodeModeDefaultsPlugin } from "./mcp-codemode-defaults.js"
 import { ProviderPlugins } from "./provider.js"
+import { DynamicProviderPlugin } from "./provider/dynamic.js"
 import { OpencodePlugin } from "./provider/opencode.js"
 import { WebSearchPlugins } from "./websearch/index.js"
 import { SkillPlugin } from "./skill.js"
@@ -112,6 +115,7 @@ import { WellKnownPlugin } from "../wellknown/plugin.js"
 
 const services = [
   Agent.Service,
+  Artifact.Service,
   AppProcess.Service,
   Provider.Service,
   Model.Service,
@@ -167,6 +171,7 @@ export type Requirements = Context.Service.Identifier<(typeof services)[number]>
 
 export const requirements = LayerNode.group([
   Agent.node,
+  Artifact.node,
   AppProcess.node,
   Provider.node,
   Model.node,
@@ -249,6 +254,7 @@ const pre = [
   McpResourceTools.Plugin,
   QuestionTool.Plugin,
   ReadTool.Plugin,
+  ArtifactTools.Plugin,
   ScheduleTools.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,
@@ -276,6 +282,8 @@ const post = [
   ConfigCompatibilityPlugin.Plugin,
   ConfigSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
+  // Run the dynamic npm SDK loader after SDK, instance, and external plugins register their `sdk` hooks.
+  DynamicProviderPlugin,
   ConfigWebSearchPlugin.Plugin,
   ConfigPolicyPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]

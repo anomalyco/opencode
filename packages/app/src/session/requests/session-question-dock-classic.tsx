@@ -47,22 +47,57 @@ function Option(props: {
   description?: string
   number: number
   disabled: boolean
-  ref?: (el: HTMLButtonElement) => void
+  ref?: (el: HTMLDivElement) => void
   onFocus?: VoidFunction
   onClick: VoidFunction
 }) {
+  let pointer: { x: number; y: number } | undefined
+
   return (
-    <button
-      type="button"
+    <div
       ref={props.ref}
       data-slot="question-option"
       data-picked={props.picked}
+      data-disabled={props.disabled}
       role={props.multi ? "checkbox" : "radio"}
       aria-checked={props.picked}
       aria-keyshortcuts={props.number <= 9 ? String(props.number) : undefined}
-      disabled={props.disabled}
+      aria-disabled={props.disabled}
+      tabindex={props.disabled ? -1 : 0}
       onFocus={props.onFocus}
-      onClick={props.onClick}
+      onPointerDown={(event) => (pointer = { x: event.clientX, y: event.clientY })}
+      onClick={(event) => {
+        const moved = pointer && (event.clientX !== pointer.x || event.clientY !== pointer.y)
+
+        pointer = undefined
+
+        if (props.disabled) return
+
+        const selection = window.getSelection()
+
+        // Padding and nonselectable marks can retain an old highlight without selecting text.
+        if (
+          event.detail > 0 &&
+          (moved || event.shiftKey) &&
+          !(event.target instanceof Element && event.target.closest('[data-slot="question-option-check"]')) &&
+          selection &&
+          !selection.isCollapsed &&
+          selection.getRangeAt(0).intersectsNode(event.currentTarget)
+        )
+          return
+
+        props.onClick()
+      }}
+      onKeyDown={(event) => {
+        if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return
+
+        if (event.key !== " " && event.key !== "Enter") return
+        event.preventDefault()
+
+        if (event.key === " " && event.repeat) return
+
+        if (!props.disabled) props.onClick()
+      }}
     >
       <Mark multi={props.multi} picked={props.picked} />
       <span data-slot="question-option-main">
@@ -83,7 +118,7 @@ function Option(props: {
           aria-hidden="true"
         />
       </Show>
-    </button>
+    </div>
   )
 }
 
@@ -122,10 +157,11 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
   onCleanup(observeReducedMotion(() => setStore("reducedMotion", prefersReducedMotion())))
 
   let root: HTMLDivElement | undefined
+  let detailsRef: HTMLDivElement | undefined
   let optionsRef: HTMLDivElement | undefined
   let customRef: HTMLButtonElement | undefined
   let customInput: HTMLInputElement | undefined
-  let optsRef: HTMLButtonElement[] = []
+  let optsRef: HTMLDivElement[] = []
   let replied = false
   let focusFrame: number | undefined
 
@@ -197,7 +233,10 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
     const dock = root.closest('[data-component="session-composer-dock"]')
     // In the app this row can have zero height and overflow upward; the containing panel bounds the question.
     const column = bounds(dock?.parentElement)
-    const bottom = Math.min(window.innerHeight, column?.bottom ?? window.innerHeight)
+    const parent = dock?.parentElement?.getBoundingClientRect()
+    const edge = parent && parent.width > 0 ? parent.bottom : Infinity
+    const view = window.visualViewport ? window.visualViewport.offsetTop + window.visualViewport.height : Infinity
+    const bottom = Math.min(window.innerHeight, view, column?.bottom ?? Infinity, edge)
 
     const around =
       dock instanceof HTMLElement
@@ -232,7 +271,14 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
     focusFrame = requestAnimationFrame(() => {
       focusFrame = undefined
       const el = next === options().length ? customRef : optsRef[next]
-      el?.focus()
+      el?.focus({ preventScroll: true })
+      const row = el?.closest<HTMLElement>('[data-slot="question-option"]')
+
+      if (!row || !optionsRef) return
+      optionsRef.scrollTop = Math.min(
+        row.offsetTop,
+        Math.max(optionsRef.scrollTop, row.offsetTop + row.offsetHeight - optionsRef.clientHeight),
+      )
     })
   }
 
@@ -247,8 +293,13 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
       })
     }
 
-    update()
+    measure()
     makeEventListener(window, "resize", update)
+
+    if (window.visualViewport) {
+      makeEventListener(window.visualViewport, "resize", update)
+      makeEventListener(window.visualViewport, "scroll", update)
+    }
 
     const dock = root?.closest('[data-component="session-composer-dock"]')
     const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
@@ -527,7 +578,12 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
     setStore("tab", tab)
     setStore("editing", false)
 
-    if (optionsRef) setStore("optionsHeight", optionsRef.scrollHeight)
+    if (detailsRef) detailsRef.scrollTop = 0
+
+    if (optionsRef) {
+      optionsRef.scrollTop = 0
+      setStore("optionsHeight", optionsRef.scrollHeight)
+    }
 
     if (!store.minimized) focus(pickFocus(tab))
   }
@@ -547,6 +603,8 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
 
   const minimize = () => {
     if (sending()) return
+
+    if (optionsRef) setStore("optionsHeight", optionsRef.offsetHeight)
     setStore("editing", false)
     setStore("minimized", true)
   }
@@ -606,7 +664,11 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
                 />
               </div>
             </div>
-            <div data-slot="question-details">
+            <div
+              data-slot="question-details"
+              data-scrollable={!store.minimized || undefined}
+              ref={(el) => (detailsRef = el)}
+            >
               <div
                 data-slot="question-text"
                 style={{
@@ -694,7 +756,7 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
           aria-hidden={store.minimized || optionsOff() ? "true" : undefined}
           classList={{ "pointer-events-none": hidden() > 0.1 }}
           style={{
-            "max-height": `${Math.max(0, store.optionsHeight * (1 - hidden()))}px`,
+            "max-height": hidden() > 0 ? `${Math.max(0, store.optionsHeight * (1 - hidden()))}px` : undefined,
             opacity: `${Math.max(0, Math.min(1, 1 - hidden()))}`,
             visibility: optionsOff() ? "hidden" : "visible",
           }}

@@ -725,6 +725,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "ውሂብ በማዛወር ላይ {{current}}/{{total}}",
   "home.workspaceTip": "ለውጦችን ለብለል ለማቆየት ቀጣዩን ክፍለ ጊዜ በአዲስ የስራ ቦታ ይጀምሩ",
   "session.tab.add": "ትር አክል",
+  "session.tab.closeOthers": "ሌሎች ትሮችን ዝጋ",
   "session.queue.attachments.one": "ፕላስ {{count}} አባሪ",
   "session.queue.attachments.other": "ፕላስ {{count}} አባሪዎች",
   "settings.backToSettings": "ወደ ቅንብሮች ተመለስ",

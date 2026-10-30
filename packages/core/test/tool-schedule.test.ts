@@ -3,6 +3,7 @@ import { DateTime, Effect, Layer, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Config } from "@opencode/core/config"
 import { Image } from "@opencode/core/image"
+import { Permission } from "@opencode/core/permission"
 import { Schedule } from "@opencode/core/schedule"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
@@ -22,7 +23,9 @@ const names = ["schedule_create", "schedule_list", "schedule_pause", "schedule_r
   (name) => `opencode.${name}`,
 )
 
-const it = testEffect(AppNodeBuilder.build(Tool.node, [Image.node.replace(imagePassthrough)]))
+const it = testEffect(
+  AppNodeBuilder.build(Tool.node, [Image.node.replace(imagePassthrough), Permission.node.replace(permissionLayer())]),
+)
 
 /** An in-memory Schedule service. The real one is covered in schedule.test.ts; this exercises the tool layer. */
 const memory = () => {
@@ -47,8 +50,10 @@ const memory = () => {
           id: Schedule.ID.make(`sch_${rows.size + 1}`),
           sessionID: input.sessionID,
           name: input.name,
-          when: input.when,
+          when: input.when ?? { type: "every", every: "30 seconds" },
           tz: "America/New_York",
+          if: input.if,
+          until: input.until,
           action: input.action,
           status: "active",
           nextDueAt: DateTime.add(now, { minutes: 20 }),
@@ -259,6 +264,44 @@ describe("ScheduleTools", () => {
         })
       }
       expect(rows.get(Schedule.ID.make("sch_1"))).toMatchObject({ status: "active", sessionID: otherSessionID })
+    }),
+  )
+
+  it.effect("creates until schedules with optional when and formats check conditions", () =>
+    Effect.gen(function* () {
+      const { registry, rows } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
+      const created = yield* run(registry, "schedule_create", {
+        until: { run: "gh pr checks 59962" },
+        prompt: "CI passed",
+      })
+      expect(created).toMatchObject({
+        id: "sch_1",
+        when: { type: "every", every: "30 seconds" },
+        until: { type: "shell", run: "gh pr checks 59962" },
+      })
+      expect(rows.get(Schedule.ID.make("sch_1"))?.until).toEqual({
+        type: "shell",
+        run: "gh pr checks 59962",
+      })
+      expect(
+        yield* direct(registry, "schedule_create", {
+          when: { every: "2 minutes" },
+          if: { run: "git status -s", changes: true },
+          prompt: "working tree changed",
+        }),
+      ).toContain('if "git status -s", active')
+      expect(
+        yield* direct(registry, "schedule_create", {
+          until: { code: "return (await tools.slack.read_thread({})).ok" },
+          prompt: "thread ok",
+        }),
+      ).toContain('until code "return (await tools.slack.read_thread({})).ok", active')
+      expect(
+        yield* call(registry, "schedule_create", {
+          until: { run: "true", code: "return true" },
+          prompt: "both",
+        }),
+      ).toMatchObject({ metadata: { error: true } })
     }),
   )
 })

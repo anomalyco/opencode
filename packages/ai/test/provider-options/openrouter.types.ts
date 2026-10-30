@@ -31,3 +31,25 @@ LLM.request({
   // @ts-expect-error OpenRouter usage must be boolean or an option record.
   providerOptions: { usage: "yes" },
 })
+
+const responses = OpenRouter.provider.responses("openai/gpt-5.4")
+
+LLM.request({
+  model: responses,
+  prompt: "Hello",
+  providerOptions: {
+    reasoningEffort: "low",
+    models: ["openai/gpt-5.4-mini"],
+    provider: { only: ["openai"], sort: "future-sort", data_collection: "future-policy" },
+    plugins: [{ id: "future-plugin", enabled: true }],
+    debug: { echo_upstream_body: true },
+    user: "user_123",
+  },
+})
+
+LLM.request({
+  model: responses,
+  prompt: "Hello",
+  // @ts-expect-error OpenRouter fallback models must be a list of model IDs.
+  providerOptions: { models: "openai/gpt-5.4-mini" },
+})

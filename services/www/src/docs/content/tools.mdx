@@ -161,10 +161,10 @@ for providers, selection, rate limits, and disabling the tool.
 
 ### Image generate
 
-`image_generate` creates a new image from a prompt, or edits existing ones. It
-is experimental and off by default; turn it on with
-[`experimental.image_generate`](/config#image-generation). It appears only
-while a connected provider has an image model.
+`experimental_image_generate` creates a new image from a prompt, or edits
+existing ones. It is experimental and appears while a connected provider has an
+image model. To choose its default model, see
+[`experimental.image_generate`](/config#image-generation).
 
 ```text
 Generate a flat app icon of a paper plane on a blue background and save it to assets/icon.png.
@@ -174,7 +174,7 @@ Give it a `prompt`, and optionally `images` to edit or use as references, a
 specific `model`, or a `path` to save to. It runs in the background and
 notifies the session with the saved path when the image is ready.
 
-Permission: `image_generate` with the selected model as its resource.
+Permission: `experimental_image_generate` with the selected model as its resource.
 
 ## Interaction
 

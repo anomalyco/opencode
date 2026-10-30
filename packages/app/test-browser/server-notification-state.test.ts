@@ -1,10 +1,13 @@
-import { beforeAll, expect, mock, setSystemTime, test, vi } from "bun:test"
+import { beforeAll, beforeEach, expect, mock, setSystemTime, test, vi } from "bun:test"
 import { createEffect, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { OpenCodeEvent } from "@opencode/client/promise"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { ServerScope } from "@/runtime/server/scope"
 import type { Tab } from "@/shell/tabs/tabs"
+import type { createNotificationCoordinator } from "@/shell/notifications/coordinator"
+
+type NotificationDelivery = Parameters<ReturnType<typeof createNotificationCoordinator>["system"]>[1]
 
 // SAFETY: this is the key format `ServerConnection.key` produces for a local server.
 const server = "local\nhttp://localhost:4096" as ServerConnection.Key
@@ -13,9 +16,34 @@ const session = { id: "session-1", title: "Test session", location: { directory:
 
 const alerts: string[] = []
 
-const tabs = { store: new Array<Tab>() }
+const sounds: string[] = []
+
+const clicks: Array<() => void> = []
+
+const selected: string[] = []
+
+const tabs = {
+  store: new Array<Tab>(),
+  addSessionTab: (input: { server: ServerConnection.Key; sessionId: string }) => ({
+    type: "session" as const,
+    ...input,
+  }),
+  rememberSessionRoute: () => {},
+  select: (tab: Tab) => {
+    if (tab.type === "session") selected.push(tab.sessionId)
+  },
+}
 
 let createServerNotificationState: typeof import("@/shell/notifications/notification").createServerNotificationState
+
+const preferences = {
+  autoApprove: false,
+  agent: true,
+  permissions: true,
+  questions: true,
+  permissionsSound: true,
+  questionsSound: true,
+}
 
 // Each test fakes only the parts of the SDK, data store and coordinator that the notification state reads.
 const createState = (input: { sdk: object; data: object; coordinator: object }) =>
@@ -36,24 +64,186 @@ beforeAll(async () => {
     ...real.platform,
     usePlatform: () => ({
       platform: "web",
-      notify: async (title: string) => {
+      notify: async (title: string, _description?: string, onClick?: () => void) => {
         alerts.push(title)
+
+        if (onClick) clicks.push(onClick)
       },
-    }),
-  }))
-  mock.module("@/settings/model", () => ({
-    ...real.settings,
-    useSettings: () => ({
-      sounds: { agentEnabled: () => false, errorsEnabled: () => false },
-      notifications: { agent: () => true, errors: () => true },
     }),
   }))
   mock.module("@/runtime/i18n/language", () => ({
     ...real.language,
     useLanguage: () => ({ t: (key: string) => key }),
   }))
+  mock.module("@/settings/model", () => ({
+    ...real.settings,
+    useSettings: () => ({
+      sounds: {
+        agentEnabled: () => false,
+        errorsEnabled: () => false,
+        permissionsEnabled: () => preferences.permissionsSound,
+        permissions: () => "alert-01",
+        questionsEnabled: () => preferences.questionsSound,
+        questions: () => "alert-02",
+      },
+      notifications: {
+        agent: () => preferences.agent,
+        errors: () => true,
+        permissions: () => preferences.permissions,
+        questions: () => preferences.questions,
+      },
+      permissions: { autoApproves: () => preferences.autoApprove },
+    }),
+  }))
   mock.module("@/shell/tabs/tabs", () => ({ ...real.tabs, useTabs: () => tabs }))
+  mock.module("@/shell/notifications/sound", () => ({
+    playSoundById: async (id: string) => {
+      sounds.push(id)
+    },
+  }))
   createServerNotificationState = (await import("@/shell/notifications/notification")).createServerNotificationState
+})
+
+beforeEach(() => {
+  alerts.length = 0
+  sounds.length = 0
+  clicks.length = 0
+  selected.length = 0
+  Object.assign(preferences, {
+    autoApprove: false,
+    agent: true,
+    permissions: true,
+    questions: true,
+    permissionsSound: true,
+    questionsSound: true,
+  })
+})
+
+const requests = [
+  { kind: "permission", category: "permissions", title: "notification.permission.title" },
+  { kind: "question", category: "questions", title: "notification.question.title" },
+  { kind: "mcp-elicitation", category: "questions", title: "notification.elicitation.title" },
+  { kind: "websearch.provider", category: "permissions", title: "notification.permission.title" },
+] as const
+
+test.each(
+  requests.flatMap((request) =>
+    [
+      "enabled",
+      "other category disabled",
+      "notifications disabled",
+      "sound disabled",
+      "resolved",
+      "auto approve",
+      "root tab",
+      "no tab",
+      "disposed",
+    ].map((scenario) => ({ ...request, scenario })),
+  ),
+)("request alerts: $kind / $scenario", async (options) => {
+  preferences.agent = false
+  preferences.autoApprove = options.scenario === "auto approve"
+  preferences[options.category] = options.scenario !== "notifications disabled"
+  preferences[options.category === "questions" ? "questionsSound" : "permissionsSound"] =
+    options.scenario !== "sound disabled"
+
+  if (options.scenario === "other category disabled") {
+    preferences[options.category === "questions" ? "permissions" : "questions"] = false
+    preferences[options.category === "questions" ? "permissionsSound" : "questionsSound"] = false
+  }
+
+  tabs.store =
+    options.scenario === "no tab"
+      ? []
+      : [{ type: "session", server, sessionId: options.scenario === "root tab" ? "root" : session.id }]
+  const listeners = new Array<(event: OpenCodeEvent) => void>()
+
+  const deliveries = new Array<NotificationDelivery>()
+
+  const pending = { value: true }
+
+  const dispose = createRoot((dispose) => {
+    createState({
+      sdk: {
+        scope: ServerScope.local,
+        event: {
+          listen: (listener: (event: OpenCodeEvent) => void) => {
+            listeners.push(listener)
+
+            return () => {}
+          },
+        },
+      },
+      data: {
+        session: {
+          get: () => ({ ...session, parentID: "root", projectID: "project-1" }),
+          root: () => "root",
+          permission: { list: () => (pending.value ? [{ id: "request-1" }] : []) },
+          form: { list: () => (pending.value ? [{ id: "request-1" }] : []) },
+        },
+      },
+      coordinator: {
+        sound: async (_key: string, run: NotificationDelivery) => {
+          deliveries.push(run)
+        },
+        system: async (_key: string, run: NotificationDelivery) => {
+          deliveries.push(run)
+        },
+      },
+    })
+
+    return dispose
+  })
+
+  try {
+    const event: OpenCodeEvent =
+      options.kind === "permission"
+        ? {
+            id: "event-1",
+            created: 0,
+            location: session.location,
+            type: "permission.asked",
+            data: { sessionID: session.id, id: "request-1", action: "shell", resources: [], metadata: {} },
+          }
+        : {
+            id: "event-1",
+            created: 0,
+            location: session.location,
+            type: "form.created",
+            data: {
+              form: {
+                sessionID: session.id,
+                id: "request-1",
+                title: "Input",
+                fields: [{ key: "answer", type: "string", title: "Continue?" }],
+                metadata: { kind: options.kind },
+              },
+            },
+          }
+
+    listeners.forEach((listener) => listener(event))
+    await Promise.resolve()
+
+    if (options.scenario === "resolved") pending.value = false
+
+    if (options.scenario === "disposed") dispose()
+    await Promise.all(deliveries.map((run) => run()))
+
+    const suppressed =
+      ["resolved", "disposed", "no tab"].includes(options.scenario) ||
+      (options.scenario === "auto approve" && options.kind === "permission")
+
+    expect(alerts).toEqual(!suppressed && options.scenario !== "notifications disabled" ? [options.title] : [])
+    expect(sounds).toEqual(
+      !suppressed && options.scenario !== "sound disabled"
+        ? [options.category === "questions" ? "alert-02" : "alert-01"]
+        : [],
+    )
+    clicks.forEach((click) => click())
+    expect(selected).toEqual(alerts.length ? [options.scenario === "root tab" ? "root" : session.id] : [])
+  } finally {
+    dispose()
+  }
 })
 
 test.each([

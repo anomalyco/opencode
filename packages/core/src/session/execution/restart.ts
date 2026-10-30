@@ -159,7 +159,7 @@ export const layer = (options?: Options) =>
               body,
             }),
             metadata: {
-              source: "image_generate",
+              source: "experimental_image_generate",
               jobID: background.id,
               state: background.status === "running" ? "cancelled" : background.status,
               path: recovery.path,

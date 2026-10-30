@@ -1176,6 +1176,15 @@ describe("Uint8Array", () => {
 })
 
 describe("TextEncoder and TextDecoder", () => {
+  test("encodes null as text while omitted and undefined inputs stay empty", async () => {
+    expect(
+      await value(`
+        const encoder = new TextEncoder()
+        return [[...encoder.encode(null)], [...encoder.encode()], [...encoder.encode(undefined)]]
+      `),
+    ).toEqual([[110, 117, 108, 108], [], []])
+  })
+
   test("round-trips UTF-8 and exposes the standard fields", async () => {
     expect(
       await value(`

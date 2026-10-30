@@ -1,4 +1,5 @@
-import { createEffect, createMemo, createResource, For, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show } from "solid-js"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
@@ -268,6 +269,7 @@ function SessionTabEntry(props: {
       pending() ||
       !ctx ||
       props.active ||
+      ctx.data.session.missing(id) ||
       (!session() && !persisted()?.title) ||
       ctx.sdk.connection.status() !== "connected"
     )
@@ -447,6 +449,22 @@ export function TitlebarTabStrip(props: {
   const vertical = () => props.orientation === "vertical"
   const grouped = () => vertical() && props.grouping && settings.appearance.tabGrouping() === "project"
   let listRef!: HTMLDivElement
+  let scrollRef!: HTMLDivElement
+  // Each vertical edge feathers by as much as there is left to scroll past it, so it appears and leaves without a jump.
+  const [fade, setFade] = createStore({ top: 0, bottom: 0 })
+
+  const measureFade = () =>
+    setFade({
+      top: Math.min(16, Math.round(scrollRef.scrollTop)),
+      bottom: Math.min(
+        16,
+        Math.max(0, Math.round(scrollRef.scrollHeight - scrollRef.clientHeight - scrollRef.scrollTop)),
+      ),
+    })
+
+  onMount(() => {
+    if (vertical()) createResizeObserver([scrollRef, listRef], measureFade)
+  })
   const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
   const [unread, setUnread] = createStore<Record<string, boolean>>({})
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
@@ -778,12 +796,21 @@ export function TitlebarTabStrip(props: {
         </div>
       </Show>
       <div
+        ref={scrollRef}
         data-slot={vertical() ? "vertical-tabs-scroll" : "titlebar-tabs-scroll"}
         data-scrollable
         class="flex min-w-0 no-scrollbar [app-region:no-drag]"
         classList={{
           "flex-row items-center gap-1.5 overflow-x-auto": !vertical(),
           "max-h-full flex-col overflow-y-auto overflow-x-hidden": vertical(),
+        }}
+        style={
+          vertical()
+            ? { "--vertical-tabs-fade-top": `${fade.top}px`, "--vertical-tabs-fade-bottom": `${fade.bottom}px` }
+            : undefined
+        }
+        onScroll={() => {
+          if (vertical()) measureFade()
         }}
       >
         <DragDropProvider

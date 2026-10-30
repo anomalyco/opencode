@@ -4,6 +4,7 @@ import type { Effect, Scope } from "effect"
 import type { PluginOptions } from "../options.js"
 import type { App } from "../app.js"
 import type { AgentDomain } from "./agent.js"
+import type { ExperimentalArtifactDomain } from "./artifact.js"
 import type { AISDKDomain } from "./aisdk.js"
 import type { CommandDomain } from "./command.js"
 import type { EventDomain } from "./event.js"
@@ -36,6 +37,7 @@ export interface Context {
     readonly terminal: Pick<ExperimentalApi<unknown>["persistentPty"], "read">
     /** Stateless generation with a model and a prompt: no session, history or tools. */
     readonly generate: ExperimentalGenerateApi<unknown>
+    readonly artifact: ExperimentalArtifactDomain
   }
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain

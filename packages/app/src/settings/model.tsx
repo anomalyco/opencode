@@ -170,6 +170,7 @@ const workspacesSchema = Persistence.struct({
 const notificationsSchema = Persistence.struct({
   agent: Schema.Boolean,
   permissions: Schema.Boolean,
+  questions: Schema.Boolean,
   errors: Schema.Boolean,
 })
 
@@ -178,6 +179,8 @@ const soundsSchema = Persistence.struct({
   agent: Schema.String,
   permissionsEnabled: Schema.Boolean,
   permissions: Schema.String,
+  questionsEnabled: Schema.Boolean,
+  questions: Schema.String,
   errorsEnabled: Schema.Boolean,
   errors: Schema.String,
   interfaceEnabled: Schema.optional(Schema.Boolean),
@@ -319,12 +322,14 @@ export const defaultSettings: Settings = {
   keybinds: {},
   permissions: { autoApprove: false, autoApproveProjects: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
-  notifications: { agent: false, permissions: true, errors: false },
+  notifications: { agent: false, permissions: true, questions: true, errors: false },
   sounds: {
     agentEnabled: true,
     agent: "staplebops-01",
     permissionsEnabled: true,
     permissions: "staplebops-02",
+    questionsEnabled: true,
+    questions: "staplebops-05",
     errorsEnabled: true,
     errors: "nope-03",
     interfaceEnabled: true,
@@ -553,6 +558,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setPermissions(value: boolean) {
           setStore("notifications", "permissions", value)
         },
+        questions: withFallback(() => store.notifications?.questions, defaultSettings.notifications.questions),
+        setQuestions(value: boolean) {
+          setStore("notifications", "questions", value)
+        },
         errors: withFallback(() => store.notifications?.errors, defaultSettings.notifications.errors),
         setErrors(value: boolean) {
           setStore("notifications", "errors", value)
@@ -577,6 +586,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         permissions: withFallback(() => store.sounds?.permissions, defaultSettings.sounds.permissions),
         setPermissions(value: string) {
           setStore("sounds", "permissions", value)
+        },
+        questionsEnabled: withFallback(() => store.sounds?.questionsEnabled, defaultSettings.sounds.questionsEnabled),
+        setQuestionsEnabled(value: boolean) {
+          setStore("sounds", "questionsEnabled", value)
+        },
+        questions: withFallback(() => store.sounds?.questions, defaultSettings.sounds.questions),
+        setQuestions(value: string) {
+          setStore("sounds", "questions", value)
         },
         errorsEnabled: withFallback(() => store.sounds?.errorsEnabled, defaultSettings.sounds.errorsEnabled),
         setErrorsEnabled(value: boolean) {

@@ -96,10 +96,6 @@ const setup = (providerID = "test") =>
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
     const location = yield* Location.Service
-    const config = yield* Config.Test
-    const entries = yield* config.entries()
-    if (!entries.some((entry) => entry.type === "document" && entry.info.experimental?.image_generate !== undefined))
-      yield* configure(true)
     const host = yield* PluginHost.make(plugins)
     yield* ImageGenerateTool.Plugin.effect(host)
     yield* OpenCodeTools.Plugin.effect(host)
@@ -167,7 +163,7 @@ const text = (result: { readonly content?: ReadonlyArray<Tool.Content> }) =>
   result.content?.[0]?.type === "text" ? result.content[0].text : undefined
 const failure = (result: { readonly error?: { readonly message: string } }) => result.error?.message
 
-describe("image_generate", () => {
+describe("experimental_image_generate", () => {
   it.live("is registered only while an image model is available", () =>
     Effect.gen(function* () {
       yield* setup()
@@ -180,20 +176,20 @@ describe("image_generate", () => {
     }),
   )
 
-  it.live("is offered only when experimental.image_generate is enabled", () =>
+  it.live("is on by default and off with experimental.image_generate: false", () =>
     Effect.gen(function* () {
       yield* imageModel("test", "painter")
-      yield* configure(false)
       yield* setup()
-      expect(yield* registered).toBe(false)
+      expect(yield* until(true)).toBe(true)
+      yield* configure(false)
+      expect(yield* until(false)).toBe(false)
+      // Older configs that set true or a model keep working and keep the tool on.
       yield* configure(true)
       expect(yield* until(true)).toBe(true)
       yield* configure(false)
       expect(yield* until(false)).toBe(false)
       yield* configure({})
       expect(yield* until(true)).toBe(true)
-      yield* configure(undefined)
-      expect(yield* until(false)).toBe(false)
     }),
   )
 
@@ -266,7 +262,7 @@ describe("image_generate", () => {
         },
       ])
       expect(fixture.assertions.map((item) => [item.action, item.resources])).toEqual([
-        ["image_generate", ["test/painter"]],
+        ["experimental_image_generate", ["test/painter"]],
         ["edit", ["out.png"]],
         ["read", ["in.png"]],
       ])
@@ -360,7 +356,7 @@ describe("image_generate", () => {
       fixture.deny = "edit"
       const result = yield* run({ prompt: "x", path: "out.png" })
       expect(result.status).toBe("error")
-      expect(fixture.assertions.map((item) => item.action)).toEqual(["image_generate", "edit"])
+      expect(fixture.assertions.map((item) => item.action)).toEqual(["experimental_image_generate", "edit"])
       expect(fixture.requests).toEqual([])
     }),
   )
@@ -454,7 +450,7 @@ describe("image_generate", () => {
       const result = yield* run({ prompt: "x", images: ["https://example.invalid/cat.png"] })
       expect(result.status).toBe("error")
       expect(fixture.assertions.map((item) => [item.action, item.resources])).toEqual([
-        ["image_generate", ["test/painter"]],
+        ["experimental_image_generate", ["test/painter"]],
         ["webfetch", ["https://example.invalid/cat.png"]],
       ])
       expect(fixture.requests).toEqual([])

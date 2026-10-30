@@ -39,6 +39,7 @@ export const dict = {
   "home.workspaceTip":
     "Démarrez la prochaine session dans un nouvel espace de travail pour garder les modifications isolées",
   "session.tab.add": "Ajouter un onglet",
+  "session.tab.closeOthers": "Fermer les autres onglets",
   "session.queue.attachments.one": "Plus accessoire {{count}}",
   "session.queue.attachments.other": "Plus les accessoires {{count}}",
   "settings.backToSettings": "Retour aux paramètres",
