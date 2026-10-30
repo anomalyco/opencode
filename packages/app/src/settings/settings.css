@@ -846,7 +846,10 @@
   justify-content: flex-end;
 }
 
-[data-slot="settings-row-control"] > div:has([data-component="switch"]),
+/* The :has() belongs on the control, not on its div. Chromium checks a div:has() subject against every div in the
+   document and flags each one, then restyles a flagged div whenever an element is inserted anywhere beneath it, which
+   is every ancestor of a streaming answer. */
+[data-slot="settings-row-control"]:has(> div [data-component="switch"]) > div,
 [data-slot="settings-row-control"] > [data-component="switch"] {
   display: inline-flex;
   align-items: center;
@@ -854,8 +857,11 @@
 }
 
 [data-component="settings-list"][data-variant="catalog"]
+  [data-slot="settings-row-control"]:has(> div [data-component="switch"])
+  > div,
+[data-component="settings-list"][data-variant="catalog"]
   [data-slot="settings-row-control"]
-  > :is(div:has([data-component="switch"]), [data-component="switch"]) {
+  > [data-component="switch"] {
   padding: 0;
 }
 

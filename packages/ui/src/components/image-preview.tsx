@@ -417,6 +417,10 @@ export function ImagePreview(props: ImagePreviewProps) {
     ),
   )
 
+  // See image-preview.css: the body takes clicks again while the closing flight holds the dialog mounted.
+  createEffect(() => document.body.toggleAttribute("data-image-preview-closing", !dialog.isOpen()))
+  onCleanup(() => document.body.removeAttribute("data-image-preview-closing"))
+
   // From the center of the box zoom is measured in: the window's for an image, the frame's for a video.
   const point = (event: MouseEvent) => {
     const rect = (props.video ? image : viewport).getBoundingClientRect()
