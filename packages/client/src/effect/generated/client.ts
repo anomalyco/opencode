@@ -255,6 +255,19 @@ import type {
   ExperimentalScheduleResumeOutput,
   ExperimentalScheduleDeleteInput,
   ExperimentalScheduleDeleteOutput,
+  ExperimentalTradingSnapshotOutput,
+  ExperimentalTradingSystemActivateInput,
+  ExperimentalTradingSystemActivateOutput,
+  ExperimentalTradingSystemPauseInput,
+  ExperimentalTradingSystemPauseOutput,
+  ExperimentalTradingPositionCloseInput,
+  ExperimentalTradingPositionCloseOutput,
+  ExperimentalTradingPositionsCloseAllOutput,
+  ExperimentalTradingTaskListOutput,
+  ExperimentalTradingTaskAddInput,
+  ExperimentalTradingTaskAddOutput,
+  ExperimentalTradingTaskCancelInput,
+  ExperimentalTradingTaskCancelOutput,
   ExperimentalArtifactsProvidersInput,
   ExperimentalArtifactsProvidersOutput,
   ExperimentalArtifactsListInput,
@@ -1641,6 +1654,82 @@ const EndpointExperimentalScheduleDelete =
       raw["schedule.delete"]({ params: { scheduleID: input["scheduleID"] } }).pipe(Effect.mapError(mapClientError)),
     )
 
+const EndpointExperimentalTradingSnapshot = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalTradingSnapshotOutput>()(
+    raw["trading.snapshot"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalTradingSystemActivate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalTradingSystemActivateInput) =>
+    preserveEffect<ExperimentalTradingSystemActivateOutput>()(
+      raw["trading.system.activate"]({ params: { systemID: input["systemID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalTradingSystemPause =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalTradingSystemPauseInput) =>
+    preserveEffect<ExperimentalTradingSystemPauseOutput>()(
+      raw["trading.system.pause"]({ params: { systemID: input["systemID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalTradingPositionClose =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalTradingPositionCloseInput) =>
+    preserveEffect<ExperimentalTradingPositionCloseOutput>()(
+      raw["trading.position.close"]({ params: { symbol: input["symbol"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalTradingPositionsCloseAll = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalTradingPositionsCloseAllOutput>()(
+    raw["trading.position.closeAll"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalTradingTaskList = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalTradingTaskListOutput>()(
+    raw["trading.task.list"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalTradingTaskAdd =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalTradingTaskAddInput) =>
+    preserveEffect<ExperimentalTradingTaskAddOutput>()(
+      raw["trading.task.add"]({
+        payload: {
+          kind: input["kind"],
+          systemIDs: input["systemIDs"],
+          delayMinutes: input["delayMinutes"],
+          atTime: input["atTime"],
+        },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalTradingTaskCancel =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalTradingTaskCancelInput) =>
+    preserveEffect<ExperimentalTradingTaskCancelOutput>()(
+      raw["trading.task.cancel"]({ params: { taskID: input["taskID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const EndpointExperimentalArtifactsProviders =
   (raw: RawClient["server.experimental"]) => (input?: ExperimentalArtifactsProvidersInput) =>
     preserveEffect<ExperimentalArtifactsProvidersOutput>()(
@@ -1718,6 +1807,20 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     pause: EndpointExperimentalSchedulePause(raw),
     resume: EndpointExperimentalScheduleResume(raw),
     delete: EndpointExperimentalScheduleDelete(raw),
+  },
+  trading: {
+    snapshot: EndpointExperimentalTradingSnapshot(raw),
+    system: {
+      activate: EndpointExperimentalTradingSystemActivate(raw),
+      pause: EndpointExperimentalTradingSystemPause(raw),
+    },
+    position: { close: EndpointExperimentalTradingPositionClose(raw) },
+    positions: { closeAll: EndpointExperimentalTradingPositionsCloseAll(raw) },
+    task: {
+      list: EndpointExperimentalTradingTaskList(raw),
+      add: EndpointExperimentalTradingTaskAdd(raw),
+      cancel: EndpointExperimentalTradingTaskCancel(raw),
+    },
   },
   artifacts: {
     providers: EndpointExperimentalArtifactsProviders(raw),

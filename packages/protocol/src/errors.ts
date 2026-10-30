@@ -108,6 +108,24 @@ export class IntegrationAttemptNotFoundError extends Schema.TaggedError<Integrat
   { httpApiStatus: 404 },
 ) {}
 
+export class TradingSystemNotFoundError extends Schema.TaggedError<TradingSystemNotFoundError>()(
+  "TradingSystemNotFoundError",
+  {
+    systemID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class TradingTaskNotFoundError extends Schema.TaggedError<TradingTaskNotFoundError>()(
+  "TradingTaskNotFoundError",
+  {
+    taskID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
 export class IntegrationMethodNotFoundError extends Schema.TaggedError<IntegrationMethodNotFoundError>()(
   "IntegrationMethodNotFoundError",
   {

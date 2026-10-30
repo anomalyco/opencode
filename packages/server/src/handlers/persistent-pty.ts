@@ -1,11 +1,14 @@
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { PtyTicket } from "@opencode/core/pty/ticket"
+import { TradingEngine } from "@opencode/core/trading"
 import {
   ForbiddenError,
   InvalidRequestError,
   PtyFeatureUnsupportedError,
   PtyNotFoundError,
   ServiceUnavailableError,
+  TradingSystemNotFoundError,
+  TradingTaskNotFoundError,
 } from "@opencode/protocol/errors"
 import {
   PTY_CONNECT_TICKET_QUERY,
@@ -29,6 +32,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const cors = yield* CorsConfig
     const pty = yield* PersistentPty.Service
     const artifact = yield* makeArtifact
+    const trading = yield* TradingEngine.Service
     const mediaGet = yield* makeMediaGet
     const schedule = yield* makeSchedule
 
@@ -47,6 +51,57 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle("schedule.pause", (ctx) => schedule.pause(ctx.params.scheduleID))
       .handle("schedule.resume", (ctx) => schedule.resume(ctx.params.scheduleID))
       .handle("schedule.delete", (ctx) => schedule.remove(ctx.params.scheduleID))
+      .handle("trading.snapshot", Effect.fn(function* () {
+        return { data: trading.snapshot() }
+      }))
+      .handle(
+        "trading.system.activate",
+        Effect.fn(function* (ctx) {
+          const system = yield* trading
+            .activate(ctx.params.systemID)
+            .pipe(
+              Effect.mapError(() => unknownSystem(ctx.params.systemID)),
+            )
+          return { data: system }
+        }),
+      )
+      .handle(
+        "trading.system.pause",
+        Effect.fn(function* (ctx) {
+          const system = yield* trading
+            .pause(ctx.params.systemID)
+            .pipe(
+              Effect.mapError(() => unknownSystem(ctx.params.systemID)),
+            )
+          return { data: system }
+        }),
+      )
+      .handle(
+        "trading.position.close",
+        Effect.fn(function* (ctx) {
+          return { data: yield* trading.closePosition(ctx.params.symbol) }
+        }),
+      )
+      .handle("trading.position.closeAll", Effect.fn(function* () {
+        return { data: yield* trading.closeAllPositions() }
+      }))
+      .handle("trading.task.list", Effect.fn(function* () {
+        return { data: yield* trading.taskList() }
+      }))
+      .handle(
+        "trading.task.add",
+        Effect.fn(function* (ctx) {
+          const task = yield* trading.taskAdd(ctx.payload).pipe(Effect.mapError(mapTaskAddError))
+          return { data: task }
+        }),
+      )
+      .handle(
+        "trading.task.cancel",
+        Effect.fn(function* (ctx) {
+          const task = yield* trading.taskCancel(ctx.params.taskID).pipe(Effect.mapError(mapTaskCancelError))
+          return { data: task }
+        }),
+      )
       .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {
@@ -271,3 +326,24 @@ const notFound = (error: PersistentPty.NotFoundError) =>
 
 const unavailable = (error: PersistentPty.UnavailableError) =>
   new ServiceUnavailableError({ message: error.message, service: "opencode-pty" })
+
+const unknownSystem = (systemID: string) =>
+  new TradingSystemNotFoundError({ systemID, message: `Unknown trading system: ${systemID}` })
+
+const invalidTask = (message: string) => new InvalidRequestError({ message, kind: "invalid-trading-task" })
+
+const mapTaskAddError = (error: TradingEngine.InvalidTaskError | TradingEngine.SystemNotFoundError) => {
+  if (error._tag === "TradingEngine.SystemNotFound") return unknownSystem(error.systemID)
+
+  return invalidTask(error.message)
+}
+
+const mapTaskCancelError = (error: TradingEngine.InvalidTaskError | TradingEngine.TaskNotFoundError) => {
+  if (error._tag === "TradingEngine.TaskNotFound")
+    return new TradingTaskNotFoundError({
+      taskID: error.taskID,
+      message: `Unknown or already resolved trading task: ${error.taskID}`,
+    })
+
+  return invalidTask(error.message)
+}
