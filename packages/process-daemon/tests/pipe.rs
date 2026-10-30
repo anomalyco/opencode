@@ -302,11 +302,22 @@ fn pipe_processes_need_no_terminal_size() {
     service.terminate(info.id).unwrap();
 }
 
-fn temp_path(name: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!(
-        "opencode-pty-pipe-{name}-{:032x}",
-        rand::random::<u128>()
-    ))
+/// A unique temporary path, removed when dropped even if a test fails.
+struct TempPath(std::path::PathBuf);
+
+impl TempPath {
+    fn new(name: &str) -> Self {
+        Self(std::env::temp_dir().join(format!(
+            "opencode-pty-pipe-{name}-{:032x}",
+            rand::random::<u128>()
+        )))
+    }
+}
+
+impl Drop for TempPath {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
 }
 
 fn wait_exited(service: &TerminalService, id: TerminalId) -> TerminalLifecycle {
@@ -333,7 +344,8 @@ fn output_path_keeps_everything_beyond_the_replay_window_without_a_subscriber() 
 
     // A replay window far smaller than the output.
     let service = TerminalService::new(1024);
-    let path = temp_path("full");
+    let file = TempPath::new("full");
+    let path = &file.0;
     let info = service
         .create(CreateTerminal {
             output_path: Some(path.clone()),
@@ -348,23 +360,27 @@ fn output_path_keeps_everything_beyond_the_replay_window_without_a_subscriber() 
         }
     );
     let expected = (1..=20000).map(|n| format!("{n}\n")).collect::<String>() + "done\n";
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), expected);
+    assert_eq!(std::fs::read_to_string(path).unwrap(), expected);
     assert_eq!(
-        std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
         0o600
     );
     let replay = service.replay(info.id, 0).unwrap();
     assert!(replay.truncated);
     assert_eq!(replay.end_offset, expected.len() as u64);
+    assert_eq!(
+        service.list_mode(ProcessMode::Pipe).unwrap()[0].output_error,
+        None
+    );
     service.terminate(info.id).unwrap();
-    std::fs::remove_file(path).unwrap();
 }
 
 #[test]
 fn output_path_appends_to_an_existing_file() {
     let service = TerminalService::default();
-    let path = temp_path("append");
-    std::fs::write(&path, "earlier\n").unwrap();
+    let file = TempPath::new("append");
+    let path = &file.0;
+    std::fs::write(path, "earlier\n").unwrap();
     let info = service
         .create(CreateTerminal {
             output_path: Some(path.clone()),
@@ -372,15 +388,20 @@ fn output_path_appends_to_an_existing_file() {
         })
         .unwrap();
     wait_exited(&service, info.id);
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "earlier\nlater\n");
+    assert_eq!(std::fs::read_to_string(path).unwrap(), "earlier\nlater\n");
     service.terminate(info.id).unwrap();
-    std::fs::remove_file(path).unwrap();
 }
 
 #[test]
 fn output_path_must_be_an_absolute_file_for_a_pipe_process() {
     let service = TerminalService::default();
-    let missing = temp_path("missing-directory").join("out");
+    let missing = TempPath::new("missing-directory").0.join("out");
+    let marker = TempPath::new("should-not-run");
+    let target = TempPath::new("target");
+    std::fs::write(&target.0, "").unwrap();
+    let link = TempPath::new("link");
+    std::os::unix::fs::symlink(&target.0, &link.0).unwrap();
+    let touch = format!("touch '{}'", marker.0.display());
     for (request, error) in [
         (
             CreateTerminal {
@@ -391,7 +412,7 @@ fn output_path_must_be_an_absolute_file_for_a_pipe_process() {
         ),
         (
             CreateTerminal {
-                output_path: Some(temp_path("pty")),
+                output_path: Some(TempPath::new("pty").0.clone()),
                 cols: 80,
                 rows: 24,
                 mode: ProcessMode::Pty,
@@ -402,7 +423,14 @@ fn output_path_must_be_an_absolute_file_for_a_pipe_process() {
         (
             CreateTerminal {
                 output_path: Some(missing),
-                ..pipe("touch should-not-run")
+                ..pipe(&touch)
+            },
+            "failed to open output file",
+        ),
+        (
+            CreateTerminal {
+                output_path: Some(link.0.clone()),
+                ..pipe(&touch)
             },
             "failed to open output file",
         ),
@@ -411,5 +439,28 @@ fn output_path_must_be_an_absolute_file_for_a_pipe_process() {
         assert!(message.contains(error), "{message}");
     }
     assert!(service.list_mode(ProcessMode::Pipe).unwrap().is_empty());
-    assert!(!std::path::Path::new("should-not-run").exists());
+    // Give a wrongly spawned child time to run before checking.
+    std::thread::sleep(Duration::from_millis(100));
+    assert!(!marker.0.exists());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_failing_output_file_is_reported_and_the_process_keeps_running() {
+    let service = TerminalService::default();
+    let info = service
+        .create(CreateTerminal {
+            output_path: Some("/dev/full".into()),
+            ..pipe("echo lost; echo kept; exit 5")
+        })
+        .unwrap();
+    let finished = run(&service, info.id);
+    assert_eq!(finished.output, "lost\nkept\n");
+    assert_eq!(finished.exit_code, Some(5));
+    let error = service.list_mode(ProcessMode::Pipe).unwrap()[0]
+        .output_error
+        .clone()
+        .unwrap();
+    assert!(error.contains("failed to write output file"), "{error}");
+    service.terminate(info.id).unwrap();
 }

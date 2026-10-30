@@ -104,6 +104,8 @@ impl TerminalHandle {
                     .create(true)
                     .append(true)
                     .mode(0o600)
+                    // Never write through a symlink planted at the final component.
+                    .custom_flags(libc::O_NOFOLLOW)
                     .open(path)
                     .with_context(|| format!("failed to open output file {}", path.display()))
             })
@@ -388,6 +390,8 @@ fn read_output(
                             .revents()
                             .is_some_and(|events| events.contains(PollFlags::POLLHUP));
                     if !hung_up {
+                        // Close the file before anyone can observe the exit.
+                        drop(sink);
                         let _ = actor.send(ActorMessage::ReaderEof);
                         return;
                     }
@@ -441,6 +445,8 @@ fn read_output(
         if ready(&fds[0]) {
             match output.read(&mut buffer) {
                 Ok(0) => {
+                    // Close the file before anyone can observe the exit.
+                    drop(sink);
                     let _ = actor.send(ActorMessage::ReaderEof);
                     return;
                 }
@@ -450,8 +456,17 @@ fn read_output(
                     if let Some(file) = &mut sink
                         && let Err(error) = file.write_all(&buffer[..length])
                     {
-                        eprintln!("opencode-pty stopped writing output file: {error}");
+                        // Ordered before this chunk's output, so the error is
+                        // visible no later than the bytes the file lacks.
                         sink = None;
+                        if actor
+                            .send(ActorMessage::OutputFileFailed(format!(
+                                "failed to write output file: {error}"
+                            )))
+                            .is_err()
+                        {
+                            return;
+                        }
                     }
                     if actor
                         .send(ActorMessage::Output(buffer[..length].to_vec()))

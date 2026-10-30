@@ -148,7 +148,9 @@ the byte reaches the replay buffer or any subscriber. The file therefore keeps
 all output, including what falls out of the 2 MiB replay window or arrives
 while no server is attached during a handoff. A path that cannot be opened
 fails `create` without starting the process; a later write error stops the
-file and is logged, and the process keeps running. `output_path` is rejected
+file, sets `TerminalInfo.output_error` (omitted otherwise), and the process
+keeps running. The file is closed before the exit is published, and a symlink
+as the final path component is refused. `output_path` is rejected
 for PTYs.
 
 `List` takes `mode` too. Without it, `list` returns PTYs only, so servers that

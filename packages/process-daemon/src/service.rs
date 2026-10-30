@@ -87,6 +87,10 @@ pub struct TerminalInfo {
     pub lifecycle: TerminalLifecycle,
     pub output_head: u64,
     pub output_tail: u64,
+    /// Set when writing a pipe process's `output_path` failed; the file then
+    /// lacks everything from that point on. Omitted when there is no error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_error: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -832,6 +836,7 @@ fn new_info(
         lifecycle: TerminalLifecycle::Running,
         output_head: 0,
         output_tail: 0,
+        output_error: None,
     }))
 }
 
@@ -859,6 +864,9 @@ enum ActorMessage {
     /// A pipe process ended by a signal; the value is the signal's name.
     #[cfg(unix)]
     ChildKilled(String),
+    /// Writing the `output_path` file failed; it stops at this point.
+    #[cfg(unix)]
+    OutputFileFailed(String),
     #[cfg(not(windows))]
     RefreshForegroundProcess {
         reply: Reply<Result<()>>,
@@ -1349,6 +1357,12 @@ fn run_actor(config: ActorConfig) -> Result<()> {
                             generation,
                         },
                     );
+                }
+            }
+            #[cfg(unix)]
+            Ok(ActorMessage::OutputFileFailed(message)) => {
+                if let Ok(mut value) = info.write() {
+                    value.output_error = Some(message);
                 }
             }
             #[cfg(unix)]
@@ -1945,6 +1959,7 @@ mod tests {
             lifecycle: TerminalLifecycle::Running,
             output_head: 0,
             output_tail: 0,
+            output_error: None,
         }
     }
 
