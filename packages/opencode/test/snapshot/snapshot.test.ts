@@ -7,6 +7,9 @@ import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Layer } from "effect"
 import { Snapshot } from "../../src/snapshot"
+import { Global } from "@opencode-ai/core/global"
+import { Hash } from "@opencode-ai/core/util/hash"
+import { existsSync } from "fs"
 import {
   disposeAllInstances,
   provideInstance,
@@ -272,6 +275,49 @@ it.instance(
       const patch = yield* snapshot.patch("invalid-hash-12345")
       expect(patch.files).toEqual([])
       expect(patch.hash).toBe("invalid-hash-12345")
+    }),
+  ),
+  { git: true },
+)
+
+// What `cleanup()` does to a snapshot older than its prune window: snapshot trees have no refs, so once the
+// store has moved on they are unreachable and `git gc` deletes them.
+const pruneSnapshotStore = Effect.fn("SnapshotTest.pruneSnapshotStore")(function* (worktree: string) {
+  const root = path.join(Global.Path.data, "snapshot")
+  const projects = yield* Effect.promise(() => fs.readdir(root))
+  const gitdir = projects.map((project) => path.join(root, project, Hash.fast(worktree))).find((dir) => existsSync(dir))
+  if (!gitdir) throw new Error(`no snapshot store for ${worktree}`)
+  yield* exec(worktree, ["git", "--git-dir", gitdir, "gc", "--quiet", "--prune=now"])
+})
+
+it.instance(
+  "revert keeps files whose earlier content the snapshot store no longer has",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      yield* write(`${tmp.path}/a.txt`, "edited after the snapshot")
+      yield* write(`${tmp.path}/new.txt`, "NEW")
+      const patch = yield* snapshot.patch(before)
+      yield* pruneSnapshotStore(tmp.path)
+
+      const kept = yield* snapshot.revert([patch])
+
+      expect(yield* readText(`${tmp.path}/a.txt`)).toBe("edited after the snapshot")
+      expect(yield* readText(`${tmp.path}/new.txt`)).toBe("NEW")
+      expect(kept.toSorted()).toEqual([fwd(tmp.path, "a.txt"), fwd(tmp.path, "new.txt")])
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
+  "revert still deletes a file the readable snapshot records as absent, and reports nothing",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      yield* write(`${tmp.path}/new.txt`, "NEW")
+      yield* write(`${tmp.path}/a.txt`, "edited")
+      expect(yield* snapshot.revert([yield* snapshot.patch(before)])).toEqual([])
+      expect(yield* exists(`${tmp.path}/new.txt`)).toBe(false)
+      expect(yield* readText(`${tmp.path}/a.txt`)).toBe(tmp.extra.aContent)
     }),
   ),
   { git: true },
