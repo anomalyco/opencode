@@ -1,5 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Effect, Layer, Context, Option, Schema } from "effect"
+import { Database } from "@opencode-ai/core/database/database"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "../snapshot"
@@ -14,6 +15,10 @@ export const RevertInput = Schema.Struct({
   sessionID: SessionID,
   messageID: MessageID,
   partID: Schema.optional(PartID),
+  files: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Also revert the file changes the reverted messages made (default: true). With false, only the messages are reverted: no snapshot is taken and no file is touched, so a later unrevert restores messages only",
+  }),
 })
 export type RevertInput = Schema.Schema.Type<typeof RevertInput>
 
@@ -34,9 +39,34 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const summary = yield* SessionSummary.Service
     const state = yield* SessionRunState.Service
+    const database = yield* Database.Service
+
+    // Messages only: nothing is snapshotted, diffed or written. A revert that already put files back keeps its
+    // snapshot, because those files are still put back and unrevert is the only way to restore them.
+    const revertMessages = Effect.fnUntraced(function* (
+      session: Session.Info,
+      rev: NonNullable<Session.Info["revert"]>,
+    ) {
+      const kept = session.revert?.snapshot
+        ? { ...rev, snapshot: session.revert.snapshot, diff: session.revert.diff }
+        : rev
+      yield* sessions.setRevert({ sessionID: session.id, revert: kept, summary: session.summary })
+      return yield* sessions.get(session.id).pipe(Effect.orDie)
+    })
 
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
       yield* state.assertNotBusy(input.sessionID)
+      if (input.files === false && !input.partID) {
+        // A prompt is its own revert point, so reading it alone avoids loading the whole session.
+        const target = yield* MessageV2.get(input).pipe(
+          Effect.provideService(Database.Service, database),
+          Effect.option,
+        )
+        if (Option.isSome(target) && target.value.info.role === "user")
+          return yield* revertMessages(yield* sessions.get(input.sessionID).pipe(Effect.orDie), {
+            messageID: input.messageID,
+          })
+      }
       const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
       let lastUser: SessionV1.User | undefined
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
@@ -66,6 +96,7 @@ const layer = Layer.effect(
       }
 
       if (!rev) return session
+      if (input.files === false) return yield* revertMessages(session, rev)
 
       rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
       if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
@@ -130,7 +161,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Session.node, Snapshot.node, Storage.node, EventV2Bridge.node, SessionSummary.node, SessionRunState.node],
+  deps: [Database.node, Session.node, Snapshot.node, Storage.node, EventV2Bridge.node, SessionSummary.node, SessionRunState.node],
 })
 
 export * as SessionRevert from "./revert"

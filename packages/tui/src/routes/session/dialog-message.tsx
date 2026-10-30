@@ -5,7 +5,10 @@ import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
 import { useClipboard } from "../../context/clipboard"
 import type { PromptInfo } from "../../component/prompt/history"
-import { stripPromptPartIDs as strip } from "../../prompt/part"
+import { useToast } from "../../ui/toast"
+import { TuiConfig, useTuiConfig } from "../../config"
+import type { DialogContext } from "../../ui/dialog"
+import { messagePrompt, revertChoices, revertSession } from "./revert"
 
 export function DialogMessage(props: {
   messageID: string
@@ -17,42 +20,31 @@ export function DialogMessage(props: {
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
   const clipboard = useClipboard()
+  const toast = useToast()
+  const tuiConfig = useTuiConfig()
+
+  const revertOptions = revertChoices(TuiConfig.revertFiles(tuiConfig.revert)).map((choice) => ({
+    title: choice.title,
+    value: choice.value,
+    description: choice.description,
+    onSelect: (dialog: DialogContext) => {
+      const msg = message()
+      if (!msg) return
+      const draft = messagePrompt(sync.data.part[msg.id] ?? [])
+      const busy = (sync.data.session_status?.[props.sessionID]?.type ?? "idle") !== "idle"
+      const done = revertSession({ sync, sdk, toast, sessionID: props.sessionID, messageID: msg.id, files: choice.files })
+      // A running turn makes the server refuse the revert, so the prompt only comes back once it went through.
+      if (busy) void done.then((reverted) => reverted && props.setPrompt?.(draft))
+      if (!busy) props.setPrompt?.(draft)
+      dialog.clear()
+    },
+  }))
 
   return (
     <DialogSelect
       title="Message Actions"
       options={[
-        {
-          title: "Revert",
-          value: "session.revert",
-          description: "undo messages and file changes",
-          onSelect: (dialog) => {
-            const msg = message()
-            if (!msg) return
-
-            void sdk.client.session.revert({
-              sessionID: props.sessionID,
-              messageID: msg.id,
-            })
-
-            if (props.setPrompt) {
-              const parts = sync.data.part[msg.id]
-              const promptInfo = parts.reduce(
-                (agg, part) => {
-                  if (part.type === "text") {
-                    if (!part.synthetic) agg.input += part.text
-                  }
-                  if (part.type === "file") agg.parts.push(strip(part))
-                  return agg
-                },
-                { input: "", parts: [] as PromptInfo["parts"] },
-              )
-              props.setPrompt(promptInfo)
-            }
-
-            dialog.clear()
-          },
-        },
+        ...revertOptions,
         {
           title: "Copy",
           value: "message.copy",

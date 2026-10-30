@@ -637,6 +637,25 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "reverts only the messages when revert is sent files: false",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const session = yield* createSession({ title: "revert messages" })
+        const message = yield* createTextMessage(session.id, "hello")
+
+        const reverted = yield* requestJson<Session.Info>(pathFor(SessionPaths.revert, { sessionID: session.id }), {
+          headers,
+          method: "POST",
+          body: JSON.stringify({ messageID: message.info.id, files: false }),
+        })
+        expect(reverted.revert).toEqual({ messageID: message.info.id })
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "returns v2 public unavailable errors for unfinished session mutations",
     () =>
       Effect.gen(function* () {

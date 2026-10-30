@@ -680,4 +680,118 @@ describe("revert + compact workflow", () => {
       { git: true },
     ),
   )
+
+  const fileTurns = Effect.fn("test.fileTurns")(function* (dir: string, sid: SessionID) {
+    const session = yield* Session.Service
+    const snapshot = yield* Snapshot.Service
+    return Effect.fn("test.fileTurn")(function* (file: string, next: string) {
+      const u = yield* user(sid)
+      yield* text(sid, u.id, `${file}:${next}`)
+      const a = yield* assistant(sid, u.id, dir)
+      const before = yield* snapshot.track()
+      if (!before) throw new Error("expected snapshot")
+      yield* write(path.join(dir, file), next)
+      const after = yield* snapshot.track()
+      if (!after) throw new Error("expected snapshot")
+      const patch = yield* snapshot.patch(before)
+      yield* session.updatePart({ id: PartID.ascending(), messageID: a.id, sessionID: sid, type: "step-start", snapshot: before })
+      yield* session.updatePart({
+        id: PartID.ascending(),
+        messageID: a.id,
+        sessionID: sid,
+        type: "step-finish",
+        reason: "stop",
+        snapshot: after,
+        cost: 0,
+        tokens,
+      })
+      yield* session.updatePart({
+        id: PartID.ascending(),
+        messageID: a.id,
+        sessionID: sid,
+        type: "patch",
+        hash: patch.hash,
+        files: patch.files,
+      })
+      return u.id
+    })
+  })
+
+  it.live(
+    "a messages-only revert leaves files alone and stores no snapshot, so unrevert restores messages only",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          yield* write(path.join(dir, "a.txt"), "a0")
+          const sid = (yield* session.create({})).id
+          const turn = yield* fileTurns(dir, sid)
+          const first = yield* turn("a.txt", "a1")
+          yield* turn("a.txt", "a2")
+
+          yield* revert.revert({ sessionID: sid, messageID: first, files: false })
+          expect((yield* session.get(sid)).revert).toEqual({ messageID: first })
+          expect(yield* read(path.join(dir, "a.txt"))).toBe("a2")
+
+          yield* write(path.join(dir, "a.txt"), "edited after the revert")
+          yield* revert.unrevert({ sessionID: sid })
+          expect((yield* session.get(sid)).revert).toBeUndefined()
+          expect(yield* read(path.join(dir, "a.txt"))).toBe("edited after the revert")
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live(
+    "a messages-only revert after a file revert keeps that revert's snapshot, so unrevert still restores the files",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          yield* write(path.join(dir, "a.txt"), "a0")
+          yield* write(path.join(dir, "b.txt"), "b0")
+          const sid = (yield* session.create({})).id
+          const turn = yield* fileTurns(dir, sid)
+          const first = yield* turn("a.txt", "a1")
+          const second = yield* turn("b.txt", "b2")
+
+          yield* revert.revert({ sessionID: sid, messageID: second })
+          const armed = (yield* session.get(sid)).revert
+          expect(armed?.snapshot).toBeString()
+          expect(yield* read(path.join(dir, "b.txt"))).toBe("b0")
+
+          yield* revert.revert({ sessionID: sid, messageID: first, files: false })
+          expect((yield* session.get(sid)).revert).toEqual({ messageID: first, snapshot: armed?.snapshot, diff: armed?.diff })
+          expect(yield* read(path.join(dir, "a.txt"))).toBe("a1")
+          expect(yield* read(path.join(dir, "b.txt"))).toBe("b0")
+
+          yield* revert.unrevert({ sessionID: sid })
+          expect(yield* read(path.join(dir, "a.txt"))).toBe("a1")
+          expect(yield* read(path.join(dir, "b.txt"))).toBe("b2")
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live(
+    "a messages-only revert of an answer reverts to the prompt it answers",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const sid = (yield* session.create({})).id
+          const u = yield* user(sid)
+          yield* text(sid, u.id, "question")
+          const a = yield* assistant(sid, u.id, dir)
+          yield* text(sid, a.id, "answer")
+
+          yield* revert.revert({ sessionID: sid, messageID: a.id, files: false })
+          expect((yield* session.get(sid)).revert).toEqual({ messageID: u.id })
+        }),
+      { git: true },
+    ),
+  )
 })
