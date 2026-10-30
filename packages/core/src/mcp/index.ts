@@ -184,6 +184,14 @@ export const layer = (options?: Options) =>
       // Server scopes close in parallel on shutdown, so one slow server's stop grace does not delay
       // the rest past a service restart's kill deadline and leave them orphaned.
       const servers = yield* Scope.fork(root, "parallel")
+      // Runs before `servers` closes. Connections closing with the Location must not publish MCP
+      // events: clients re-fetch on them, which boots the Location straight back up.
+      let closing = false
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          closing = true
+        }),
+      )
 
       const entries = new Map<ServerName, ServerEntry>()
       const attached = new Map<ServerName, AttachedEntry[]>()
@@ -348,12 +356,12 @@ export const layer = (options?: Options) =>
         )
 
       // Runs a connection callback under the server lock, dropping it if the connection is no longer
-      // the entry's live client, so late SDK callbacks cannot commit obsolete state.
+      // the entry's live client or the layer is closing, so late SDK callbacks cannot commit obsolete state.
       const whenLive =
         (name: ServerName, entry: ServerEntry, connection: McpClient.Connection) =>
         <E>(effect: Effect.Effect<void, E>) =>
           fork(
-            Effect.suspend(() => (entry.client === connection ? effect : Effect.void)).pipe(
+            Effect.suspend(() => (entry.client === connection && !closing ? effect : Effect.void)).pipe(
               locks.withLock(name),
               Effect.ignore,
             ),
