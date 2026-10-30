@@ -381,10 +381,12 @@ export function SessionLocation(props: {
                   <Menu.SubTrigger
                     data-slot="session-location-path"
                     class="[&_[data-slot=menu-v2-item-chevron]]:text-v2-icon-icon-muted"
+                    // The split spans are flex items, which the accessible name would join with a space.
+                    aria-label={directory()}
                   >
                     <Icon name="folder" class="shrink-0 text-v2-icon-icon-muted" />
                     {/* Truncates in the middle: the parent folders shrink, the last folder stays whole. */}
-                    <bdi dir="ltr" class="flex min-w-0 whitespace-nowrap">
+                    <bdi dir="ltr" class="flex min-w-0 select-text whitespace-nowrap">
                       <span class="min-w-0 truncate">{directory().slice(0, lastSeparator(directory()))}</span>
                       <span class="max-w-full shrink-0 truncate">{directory().slice(lastSeparator(directory()))}</span>
                     </bdi>
