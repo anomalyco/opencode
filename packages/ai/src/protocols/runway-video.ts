@@ -121,7 +121,7 @@ const decodeStatus = Effect.fn("RunwayVideo.decodeStatus")(function* (
   context: MediaProtocol.PollContext<Token>,
 ) {
   const output = yield* decodeTask(response)
-  const status = yield* MediaProtocol.status(STATUS, output.value.status, output)
+  const status = MediaProtocol.status(STATUS, output.value.status)
   return { id: context.token.taskID, status, progress: output.value.progress ?? undefined }
 })
 
@@ -131,7 +131,7 @@ const decodeResult = Effect.fn("RunwayVideo.decodeResult")(function* (
 ) {
   const output = yield* decodeTask(response)
   const task = output.value
-  const status = yield* MediaProtocol.status(STATUS, task.status, output)
+  const status = MediaProtocol.status(STATUS, task.status)
   if (status === "failed") {
     const code = task.failureCode ?? undefined
     const message = `${route.name} task failed${code === undefined ? "" : ` (${code})`}${task.failure ? `: ${task.failure}` : ""}`

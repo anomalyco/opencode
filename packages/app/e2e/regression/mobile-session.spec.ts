@@ -347,6 +347,7 @@ test.describe("touch", () => {
     await expect(page).toHaveURL(new RegExp(`/session/${fixture.sourceID}$`))
     await expect(drawer).toBeHidden()
     await expect(trigger).toContainText(fixture.expected.sourceTitle)
+    await expect(trigger).toBeFocused()
     await trigger.click()
     await drawer.getByRole("button", { name: "Home", exact: true }).click()
     await expect(page).toHaveURL("/")

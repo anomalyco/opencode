@@ -46,6 +46,7 @@ import {
 } from "../context/markdown"
 import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
+import { setupFragmentLinks } from "./markdown-fragment-links"
 import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
 import { markdownClipboardHtml } from "./markdown-clipboard"
 
@@ -805,6 +806,7 @@ export function Markdown(
   let linkCleanup: (() => void) | undefined
   let faviconCleanup: (() => void) | undefined
   let sessionLinkCleanup: (() => void) | undefined
+  let fragmentLinkCleanup: (() => void) | undefined
   let readImage: ReadMarkdownImage | undefined
   let images: ReturnType<typeof createMarkdownImages> | undefined
 
@@ -895,6 +897,8 @@ export function Markdown(
 
     if (!sessionLinkCleanup) sessionLinkCleanup = setupSessionLinks(container, () => markdown?.openSession)
 
+    if (!fragmentLinkCleanup) fragmentLinkCleanup = setupFragmentLinks(container)
+
     if (!faviconCleanup) faviconCleanup = setupExternalLinkFavicons(container)
     container.toggleAttribute("data-local-links", !!markdown?.openLocalFile)
 
@@ -923,6 +927,8 @@ export function Markdown(
     if (linkCleanup) linkCleanup()
 
     if (sessionLinkCleanup) sessionLinkCleanup()
+
+    if (fragmentLinkCleanup) fragmentLinkCleanup()
 
     if (faviconCleanup) faviconCleanup()
     const container = root()

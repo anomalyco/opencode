@@ -220,15 +220,6 @@ The database normally lives at:
 
 `OPENCODE_DB` can override the database location.
 
-Stable, beta and next share these files, so switching between them keeps your sessions. Dev builds run their own
-server with its own files, so they never replace or reuse the shared one:
-
-|              | Stable, beta, next       | Dev builds               |
-| ------------ | ------------------------ | ------------------------ |
-| Registration | `service.json`           | `service-dev.json`       |
-| Database     | `opencode.db`            | `opencode-dev.db`        |
-| Default port | 49374 (28894 on Windows) | 49376 (28896 on Windows) |
-
 <Callout type="warning">
   Do not delete or edit service files or the database while troubleshooting. Use the service commands to manage the
   daemon, and make a backup before inspecting persistent data with external tools.

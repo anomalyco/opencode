@@ -1,6 +1,6 @@
 {
   "name": "@opencode/session-ui",
-  "version": "2.2.0",
+  "version": "2.2.2",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -45,6 +45,8 @@
     "./sources/title": "./src/sources/sources-title.tsx",
     "./styles": "./src/styles/index.css",
     "./storybook": "./src/storybook/index.ts",
+    "./tools/ansi": "./src/tools/ansi.ts",
+    "./tools/shell-output": "./src/tools/shell-output.ts",
     "./v2/*.css": "./src/v2/components/*.css",
     "./v2/*": "./src/v2/components/*.tsx"
   },
@@ -76,10 +78,9 @@
     "@solid-primitives/event-listener": "catalog:",
     "@solid-primitives/media": "catalog:",
     "@solid-primitives/resize-observer": "catalog:",
-    "@solidjs/meta": "catalog:",
     "diff": "catalog:",
     "effect": "catalog:",
-    "dompurify": "3.4.14",
+    "dompurify": "3.4.17",
     "marked": "catalog:",
     "pele": "1.7.0",
     "solid-js": "catalog:"

@@ -308,7 +308,6 @@ export function request(input: DecisionRequest | DecisionRequestInput) {
 export function generate<const Model extends DecisionModel, const Questions extends DecisionQuestions>(
   input: DecisionRequestInput<Model, Questions>,
 ): Effect.Effect<DecisionResponseFor<Questions>, AIError, Service>
-export function generate(input: DecisionRequest): Effect.Effect<DecisionResponse, AIError, Service>
 export function generate(input: DecisionRequest | DecisionRequestInput) {
   return tryRequest(() => request(input)).pipe(Effect.flatMap(DecisionClient.generate))
 }

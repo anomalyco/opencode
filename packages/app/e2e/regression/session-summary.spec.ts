@@ -557,6 +557,8 @@ test("MCP rows toggle once per action and keep sign-in, errors, and management a
       }
     })
     .toEqual({ width: 6, height: 6, alignment: 0, gap: 8 })
+  // Like every other control in the menu, a row that toggles its server keeps the default cursor.
+  await expect(row("figma")).not.toHaveCSS("cursor", "pointer")
   await page.screenshot({ path: test.info().outputPath("mcp-toggles.png"), animations: "disabled" })
 
   for (const [index, target] of ["label", "dot", "padding", "control", "keyboard"].entries()) {
@@ -567,7 +569,11 @@ test("MCP rows toggle once per action and keep sign-in, errors, and management a
         ? await holdRoute(page, /\/api\/experimental\/mcp\/figma\/disconnect(?:\?|$)/, { method: "POST" })
         : undefined
 
-    if (target === "label") await row("figma").locator('[data-slot="truncated-text-label"]').click()
+    if (target === "label") {
+      await row("figma").locator('[data-slot="truncated-text-label"]').click()
+      // A name that fits has nothing to reveal, so a click on it leaves no focus ring of its own.
+      await expect(row("figma").locator('[data-component="tooltip-v2-trigger"]')).not.toBeFocused()
+    }
 
     if (target === "dot") await row("figma").locator(".session-service-dot").click()
 
@@ -673,11 +679,15 @@ test("Extensions lists open on hover, hold course into the open list, and follow
 test("Extensions lists open config files and skills in a side tab and start setup sessions", async ({ page }) => {
   const global = "C:/Users/kit/.config/opencode/opencode.jsonc"
   const skill = `${fixture.directory}/.opencode/skills/release-notes/SKILL.md`
+  let builtinReads = 0
 
   await mockStressTimeline(page, {
     mcp: [{ name: "atlas-search", status: { status: "connected" } }],
     plugins: [],
-    skills: [{ id: "release-notes", name: "release-notes", path: skill, content: "Release notes" }],
+    skills: [
+      { id: "opencode", name: "OpenCode", path: "/builtin/opencode.md", content: "# Built-in OpenCode guide" },
+      { id: "release-notes", name: "release-notes", path: skill, content: "Release notes" },
+    ],
     configEntries: [
       {
         type: "document",
@@ -688,6 +698,16 @@ test("Extensions lists open config files and skills in a side tab and start setu
       { type: "document", path: `${fixture.directory}/.opencode/opencode.jsonc`, info: { mcp: {} } },
     ],
     fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+  })
+
+  await page.route(/\/api\/fs\/read\/opencode\.md(\?|$)/, (route) => {
+    builtinReads += 1
+
+    return route.fulfill({
+      status: 404,
+      json: { message: "Location not found: /builtin" },
+      headers: cors,
+    })
   })
   await page.goto(sessionHref(fixture.targetID))
   const trigger = page.getByRole("button", { name: "Session details", exact: true })
@@ -704,6 +724,15 @@ test("Extensions lists open config files and skills in a side tab and start setu
   await expect(summary).toBeHidden()
   await expect(page.getByRole("tab", { name: "opencode.jsonc", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(page.getByText("contents:opencode.jsonc", { exact: true })).toBeVisible()
+
+  await trigger.click()
+  await row("Skills").hover()
+  await list("Skills").getByRole("button", { name: "OpenCode", exact: true }).click()
+  await expect(summary).toBeHidden()
+  await expect(page.getByRole("tab", { name: "opencode.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByRole("heading", { name: "Built-in OpenCode guide", exact: true })).toBeVisible()
+  await expect(page.getByText("Failed to load file", { exact: true })).toHaveCount(0)
+  expect(builtinReads).toBe(0)
 
   await trigger.click()
   await row("Skills").hover()
@@ -842,6 +871,12 @@ test("long MCP lists stay in the viewport in a real RTL locale", async ({ page }
   const menu = page.getByRole("group", { name: "MCP", exact: true })
   await expect(menu.locator(".session-mcp-row")).toHaveCount(30)
   await expect.poll(() => menu.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  // Long names truncate; the list only scrolls vertically.
+  expect(await menu.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0)
+  // The submenu shows and moves without motion unless its Knobs toggle is on.
+  expect(
+    await page.locator(".session-service-flyout").evaluate((element) => getComputedStyle(element).transitionDuration),
+  ).toBe("0s")
   await expect
     .poll(async () => {
       const bounds = (await menu.boundingBox())!

@@ -5,8 +5,23 @@ import type { AwaitOptions, Event, Generation, Snapshot } from "./generation.js"
 import { Image, type ImageModel, type ImageRequest, type ImageRequestInput } from "./image.js"
 import { LLM } from "./effect.js"
 import { Media } from "./media.js"
+import {
+  LLMClient,
+  type CheckpointRequest,
+  type CompactionRequest,
+  type EndpointCompactOptions,
+  type StreamOptions,
+  type TriggerCompactOptions,
+} from "./route/client.js"
 import { RequestExecutor } from "./route/executor.js"
-import { AIError, InvalidRequestError, LanguageModel, type LLMRequest } from "./schema/index.js"
+import {
+  AIError,
+  InvalidRequestError,
+  LanguageModel,
+  type CompactionCheckpointResponse,
+  type CompactionResponse,
+  type LLMRequest,
+} from "./schema/index.js"
 import type {
   GenerateObjectDynamicOptions,
   GenerateObjectOptions,
@@ -21,7 +36,8 @@ import {
   type TranscriptionRequest,
   type TranscriptionRequestInput,
 } from "./transcription.js"
-import { Tool, ToolFailure, type ToolExecuteContext, type ToolSchema } from "./tool.js"
+import { ToolFailure, build } from "./tool.js"
+import type { NoExecute, ToolExecuteContext, ToolOptions, ToolSchema } from "./tool.js"
 import { fileMediaType } from "./utils/media-type.js"
 import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } from "./video.js"
 
@@ -30,9 +46,11 @@ import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } fro
  * transcription and decision clients over a request executor; every method runs the corresponding Effect API and rethrows
  * `AIError` unchanged. `file` and `write` load `node:fs/promises` on first use, so importing this module does not.
  */
-export interface Options {
+export interface Options<R = never> {
   /** Executor layer; defaults to `RequestExecutor.fetchLayer`. Inject a recorder or `RequestExecutor.middleware(fn)` here. */
   readonly layer?: Layer.Layer<RequestExecutor.Service>
+  /** Replaces default clients, for example with `TestImage.testLayer()`; its other services are available to `run`. */
+  readonly clients?: Layer.Layer<R>
 }
 
 export interface RunOptions {
@@ -46,6 +64,8 @@ export type Services = AIClient.Services
  * new handle rather than updating this one.
  */
 export type GenerationHandle<Response> = Snapshot & {
+  readonly snapshot: Snapshot
+  readonly terminal: boolean
   /** Serializable JSON; pass it back to `resume` from another process. */
   readonly token: unknown
   readonly await: (options?: AwaitOptions & RunOptions) => Promise<Response>
@@ -71,14 +91,20 @@ const abortEffect = (signal: AbortSignal | undefined) =>
         return Effect.sync(() => signal.removeEventListener("abort", onAbort))
       })
 
-export const make = (options: Options = {}) => {
-  const runtime = ManagedRuntime.make(AIClient.layerWith(options.layer ?? RequestExecutor.fetchLayer))
+export const make = <R = never>(options: Options<R> = {}) => {
+  const runtime = ManagedRuntime.make(
+    Layer.merge(
+      AIClient.layerWith(options.layer ?? RequestExecutor.fetchLayer),
+      // `R` is only inferred from `clients`, so it is `never` whenever `clients` is omitted.
+      (options.clients ?? Layer.empty) as Layer.Layer<R>,
+    ),
+  )
 
   /** Run any package Effect (for example `LLMClient.compact(...)`) inside this runtime. */
-  const run = <A, E>(effect: Effect.Effect<A, E, Services>, options?: RunOptions) =>
+  const run = <A, E>(effect: Effect.Effect<A, E, Services | R>, options?: RunOptions) =>
     runtime.runPromise(Effect.raceFirst(effect, abortEffect(options?.signal)))
 
-  const iterate = <A, E>(stream: Stream.Stream<A, E, Services>, options?: RunOptions): AsyncIterable<A> =>
+  const iterate = <A, E>(stream: Stream.Stream<A, E, Services | R>, options?: RunOptions): AsyncIterable<A> =>
     Stream.toAsyncIterable(
       Stream.unwrap(
         runtime.contextEffect.pipe(
@@ -105,11 +131,28 @@ export const make = (options: Options = {}) => {
     return run("schema" in input ? LLM.generateObject(input) : LLM.generateObject(input), options)
   }
 
+  function compact(
+    request: CheckpointRequest,
+    options: TriggerCompactOptions & RunOptions,
+  ): Promise<CompactionCheckpointResponse>
+  function compact(request: CompactionRequest, options?: EndpointCompactOptions & RunOptions): Promise<CompactionResponse>
+  // The overloads pair each request type with its mechanism; `LLMClient.compact` checks the route's capability at runtime.
+  function compact(
+    request: CheckpointRequest | CompactionRequest,
+    options?: (TriggerCompactOptions | EndpointCompactOptions) & RunOptions,
+  ) {
+    return options?.mechanism === "trigger"
+      ? run(LLMClient.compact(request as CheckpointRequest, options), options)
+      : run(LLMClient.compact(request as CompactionRequest, options), options)
+  }
+
   const handle = <Response>(generation: Generation<Response>): GenerationHandle<Response> => ({
     ...generation.snapshot,
+    snapshot: generation.snapshot,
+    terminal: generation.terminal,
     token: generation.token,
-    await: (options) => run(generation.await({ poll: options?.poll }), options),
-    events: (options) => iterate(generation.events({ poll: options?.poll }), options),
+    await: (options) => run(generation.await(options), options),
+    events: (options) => iterate(generation.events(options), options),
     result: (options) => run(generation.result(), options),
     refresh: (options) => run(generation.refresh(), options).then(handle),
     cancel: (options) => run(generation.cancel(), options),
@@ -155,73 +198,37 @@ export const make = (options: Options = {}) => {
     },
     llm: {
       request: LLM.request,
-      generate: <const Model extends LanguageModel>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
-        run(LLM.generate(input), options),
-      stream: <const Model extends LanguageModel>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
-        iterate(LLM.stream(input), options),
+      generate: <const Model extends LanguageModel>(
+        input: RequestInput<Model> | LLMRequest,
+        options?: StreamOptions & RunOptions,
+      ) => run(LLM.generate(input, options), options),
+      stream: <const Model extends LanguageModel>(
+        input: RequestInput<Model> | LLMRequest,
+        options?: StreamOptions & RunOptions,
+      ) => iterate(LLM.stream(input, options), options),
       /** Stream model calls, running their tool calls, until the model stops calling tools or `until` is true. */
-      loop: <const Model extends LanguageModel>(input: LoopInput<Model>, options?: RunOptions) =>
-        iterate(LLM.loop(input), options),
+      loop: <const Model extends LanguageModel>(input: LoopInput<Model>, options?: StreamOptions & RunOptions) =>
+        iterate(LLM.loop(input, options), options),
       /** Decode the model's output against `schema` (or `jsonSchema`, unvalidated) like `LLM.generateObject`. */
       generateObject,
+      /** Compact a Responses request like `LLMClient.compact`: a replacement window, or a checkpoint with `mechanism: "trigger"`. */
+      compact,
+      canCompact: LLMClient.canCompact,
     },
     image: {
       request: Image.request,
       generate: <const Model extends ImageModel>(
         input: ImageRequestInput<Model> | ImageRequest,
         options?: AwaitOptions & RunOptions,
-      ) => run(Image.generate(input, { poll: options?.poll }), options),
+      ) => run(Image.generate(input, options), options),
       stream: <const Model extends ImageModel>(
         input: ImageRequestInput<Model> | ImageRequest,
         options?: AwaitOptions & RunOptions,
-      ) => iterate(Image.stream(input, { poll: options?.poll }), options),
+      ) => iterate(Image.stream(input, options), options),
       start: <const Model extends ImageModel>(input: ImageRequestInput<Model> | ImageRequest, options?: RunOptions) =>
         run(Image.start(input), options).then(handle),
       resume: (model: ImageModel, token: unknown, options?: RunOptions) =>
         run(Image.resume(model, token), options).then(handle),
-    },
-    video: {
-      request: Video.request,
-      start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
-        run(Video.start(input), options).then(handle),
-      generate: <const Model extends VideoModel>(
-        input: VideoRequestInput<Model> | VideoRequest,
-        options?: AwaitOptions & RunOptions,
-      ) => run(Video.generate(input, { poll: options?.poll }), options),
-      resume: (model: VideoModel, token: unknown, options?: RunOptions) =>
-        run(Video.resume(model, token), options).then(handle),
-      stream: <const Model extends VideoModel>(
-        input: VideoRequestInput<Model> | VideoRequest,
-        options?: AwaitOptions & RunOptions,
-      ) => iterate(Video.stream(input, { poll: options?.poll }), options),
-    },
-    speech: {
-      request: Speech.request,
-      generate: <const Model extends SpeechModel>(
-        input: SpeechRequestInput<Model> | SpeechRequest,
-        options?: RunOptions,
-      ) => run(Speech.generate(input), options),
-      stream: <const Model extends SpeechModel>(
-        input: SpeechRequestInput<Model> | SpeechRequest,
-        options?: RunOptions,
-      ) => iterate(Speech.stream(input), options),
-    },
-    transcription: {
-      request: Transcription.request,
-      generate: <const Model extends TranscriptionModel>(
-        input: TranscriptionRequestInput<Model> | TranscriptionRequest,
-        options?: AwaitOptions & RunOptions,
-      ) => run(Transcription.generate(input, { poll: options?.poll }), options),
-      stream: <const Model extends TranscriptionModel>(
-        input: TranscriptionRequestInput<Model> | TranscriptionRequest,
-        options?: AwaitOptions & RunOptions,
-      ) => iterate(Transcription.stream(input, { poll: options?.poll }), options),
-      start: <const Model extends TranscriptionModel>(
-        input: TranscriptionRequestInput<Model> | TranscriptionRequest,
-        options?: RunOptions,
-      ) => run(Transcription.start(input), options).then(handle),
-      resume: (model: TranscriptionModel, token: unknown, options?: RunOptions) =>
-        run(Transcription.resume(model, token), options).then(handle),
     },
     decision: {
       request: Decision.request,
@@ -230,39 +237,88 @@ export const make = (options: Options = {}) => {
         options?: RunOptions,
       ) => run(Decision.generate(input), options),
     },
+    /** Experimental: may change without compatibility guarantees. */
+    experimental: {
+      speech: {
+        request: Speech.request,
+        generate: <const Model extends SpeechModel>(
+          input: SpeechRequestInput<Model> | SpeechRequest,
+          options?: RunOptions,
+        ) => run(Speech.generate(input), options),
+        stream: <const Model extends SpeechModel>(
+          input: SpeechRequestInput<Model> | SpeechRequest,
+          options?: RunOptions,
+        ) => iterate(Speech.stream(input), options),
+      },
+      transcription: {
+        request: Transcription.request,
+        generate: <const Model extends TranscriptionModel>(
+          input: TranscriptionRequestInput<Model> | TranscriptionRequest,
+          options?: AwaitOptions & RunOptions,
+        ) => run(Transcription.generate(input, { poll: options?.poll }), options),
+        stream: <const Model extends TranscriptionModel>(
+          input: TranscriptionRequestInput<Model> | TranscriptionRequest,
+          options?: AwaitOptions & RunOptions,
+        ) => iterate(Transcription.stream(input, { poll: options?.poll }), options),
+        start: <const Model extends TranscriptionModel>(
+          input: TranscriptionRequestInput<Model> | TranscriptionRequest,
+          options?: RunOptions,
+        ) => run(Transcription.start(input), options).then(handle),
+        resume: (model: TranscriptionModel, token: unknown, options?: RunOptions) =>
+          run(Transcription.resume(model, token), options).then(handle),
+      },
+      video: {
+        request: Video.request,
+        start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
+          run(Video.start(input), options).then(handle),
+        generate: <const Model extends VideoModel>(
+          input: VideoRequestInput<Model> | VideoRequest,
+          options?: AwaitOptions & RunOptions,
+        ) => run(Video.generate(input, { poll: options?.poll }), options),
+        resume: (model: VideoModel, token: unknown, options?: RunOptions) =>
+          run(Video.resume(model, token), options).then(handle),
+        stream: <const Model extends VideoModel>(
+          input: VideoRequestInput<Model> | VideoRequest,
+          options?: AwaitOptions & RunOptions,
+        ) => iterate(Video.stream(input, { poll: options?.poll }), options),
+      },
+    },
     dispose: () => runtime.dispose(),
   }
 }
 
-export type Client = ReturnType<typeof make>
+export type Client<R = never> = ReturnType<typeof make<R>>
 
 const fileError = (message: string, cause: unknown) =>
   new AIError({ reason: new InvalidRequestError({ message, cause }) })
 
-/**
- * Promise counterpart of `Tool.make` for `ai.llm.loop`. A throw or rejection becomes the error result the model sees, the
- * returned value is sent unvalidated (`undefined` as `null`), and `signal` aborts when the loop is interrupted.
- */
-export const tool = <Parameters extends ToolSchema<any>>(config: {
-  readonly description: string
-  readonly parameters: Parameters
-  readonly execute: (
-    params: Schema.Schema.Type<Parameters>,
-    context: Partial<ToolExecuteContext> & { readonly signal: AbortSignal },
-  ) => unknown
-}) =>
-  Tool.make({
-    description: config.description,
-    parameters: config.parameters,
-    success: Schema.Unknown,
-    execute: (params, context) =>
-      Effect.tryPromise({
-        try: async (signal) => (await config.execute(params, { ...context, signal })) ?? null,
-        catch: (error) => new ToolFailure({ message: error instanceof Error ? error.message : String(error), error }),
-      }),
-  })
+/** `tool` from `@opencode/ai/effect`, with an `execute` that returns a value or a Promise and throws to fail. */
+export const tool = <
+  Parameters extends ToolSchema<any> = typeof Schema.Unknown,
+  Success extends ToolSchema<any> = typeof Schema.Unknown,
+  Result extends Schema.Schema.Type<Success> | PromiseLike<Schema.Schema.Type<Success>> | NoExecute = NoExecute,
+>(
+  config: ToolOptions<
+    Parameters,
+    Success,
+    (params: Schema.Schema.Type<Parameters>, context: Partial<ToolExecuteContext> & { signal: AbortSignal }) => Result
+  >,
+) => {
+  const execute = config.execute
+  return build(
+    config,
+    execute &&
+      ((params, context) =>
+        Effect.tryPromise({
+          try: async (signal) => execute(params, { ...context, signal }),
+          catch: (error) => new ToolFailure({ message: error instanceof Error ? error.message : String(error), error }),
+        })),
+  )
+}
 
 /** Default client over `RequestExecutor.fetchLayer` for scripts; the runtime builds its layer on first use. */
 export const ai = make()
 
+export { AIError } from "./schema/index.js"
 export * as AI from "./index.js"
+export type { ExecutableTool, Tool, ToolOptions, Tools } from "./tool.js"

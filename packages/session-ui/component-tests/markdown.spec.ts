@@ -438,6 +438,39 @@ story("keeps link icons on the same line as the start of their label", async ({ 
   expect(result.long).toBeGreaterThan(1)
 })
 
+story("scrolls fragment links to their heading inside the document's scroller", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    const filler = Array.from({ length: 40 }, (_, index) => `Paragraph ${index}`).join("\n\n")
+    await mountMarkdown({
+      text: `See [Host services](#host-services) and [the second usage](#usage-1).\n\n## Usage\n\n${filler}\n\n## Host services\n\n${filler}\n\n## Usage\n\n${filler}`,
+    })
+    const host = document.querySelector<HTMLElement>('[data-testid="markdown-fixture"]')!
+    host.style.height = "240px"
+    host.style.overflowY = "auto"
+  }, fixture)
+  const host = page.getByTestId("markdown-fixture")
+  const markdown = host.locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  const url = page.url()
+
+  const offset = (index: number) =>
+    host.evaluate(
+      (host, index) =>
+        host.querySelectorAll("h2")[index]!.getBoundingClientRect().top - host.getBoundingClientRect().top,
+      index,
+    )
+
+  await expect(markdown.getByRole("link", { name: "Host services" })).not.toHaveAttribute("target", "_blank")
+  await markdown.getByRole("link", { name: "Host services" }).click()
+  await expect.poll(() => offset(1)).toBeCloseTo(0, 0)
+
+  await host.evaluate((host) => host.scrollTo({ top: 0 }))
+  await markdown.getByRole("link", { name: "the second usage" }).click()
+  await expect.poll(() => offset(2)).toBeCloseTo(0, 0)
+  expect(page.url()).toBe(url)
+})
+
 async function resolvedColor(page: Page, token: string) {
   return page.evaluate((token) => {
     const probe = document.createElement("span")

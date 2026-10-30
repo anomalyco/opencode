@@ -139,7 +139,7 @@ export function bearerHeader(name: string, source?: Secret | Credential) {
   return render(source)
 }
 
-/** `Authorization: <scheme> <secret>` for providers whose scheme is not `Bearer`, such as fal's `Key`. */
+/** `Authorization: <scheme> <secret>` for providers whose scheme is not `Bearer`, such as Deepgram's `Token`. */
 export function scheme(name: string): (source: Secret | Credential) => Definition
 export function scheme(name: string, source: Secret | Credential): Definition
 export function scheme(name: string, source?: Secret | Credential) {

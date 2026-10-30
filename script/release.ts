@@ -10,7 +10,6 @@ import { parseArgs } from "util"
 
 const root = path.resolve(import.meta.dir, "..")
 const review = path.join(root, "RELEASE_REVIEW.md")
-const changelog = path.join(root, "UPCOMING_CHANGELOG.md")
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
@@ -86,7 +85,6 @@ const notes = document.match(/<!-- changelog:start -->\s*([\s\S]*?)\s*<!-- chang
 if (!notes) throw new Error("Release review is missing its changelog markers")
 const releaseNotes = notes[1].trim()
 if (!releaseNotes) throw new Error("Release review has no changelog")
-await Bun.write(changelog, `${releaseNotes}\n`)
 
 const highlights = parse(releaseNotes)
 highlights.problems.forEach((problem) => console.warn(`Warning: ${problem}`))
