@@ -65,6 +65,7 @@ import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
+import { DialogAutomations } from "./component/dialog-automations"
 import { DialogUsage } from "./component/usage"
 import { DialogStatus } from "./component/dialog-status"
 import { DialogConfig } from "./component/dialog-config"
@@ -156,6 +157,7 @@ const appBindingCommands = [
   "model.cycle_favorite_reverse",
   "agent.list",
   "mcp.list",
+  "automations.list",
   "usage.show",
   "agent.cycle",
   "agent.cycle.reverse",
@@ -970,6 +972,15 @@ function App() {
         slash: { name: "mcps" },
         run: () => {
           dialog.replace(() => <DialogMcp />)
+        },
+      },
+      {
+        name: "automations.list",
+        title: "Automations",
+        category: "Agent",
+        slash: { name: "automations" },
+        run: () => {
+          dialog.replace(() => <DialogAutomations />)
         },
       },
       {
