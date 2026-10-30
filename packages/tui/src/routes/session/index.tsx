@@ -55,6 +55,15 @@ import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { filetype } from "../../util/filetype"
+import { toolCodeTheme } from "../../theme/tool-code"
+import {
+  fitsInline,
+  formatToolInput,
+  inlineToolInput,
+  toolOutputReach,
+  type ToolInputKind,
+  type ToolInputRow,
+} from "../../util/tool-input"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
 import { Toast, useToast } from "../../ui/toast"
@@ -1733,6 +1742,8 @@ type ToolProps = {
 function GenericTool(props: ToolProps) {
   const { theme } = useTheme()
   const ctx = use()
+  // Never red: in the transcript red means a failed tool call.
+  const code = createMemo(() => toolCodeTheme(theme))
   const output = createMemo(() => props.output?.trim() ?? "")
   const [expanded, setExpanded] = createSignal(false)
   const maxLines = 3
@@ -1742,29 +1753,117 @@ function GenericTool(props: ToolProps) {
     if (expanded() || !collapsed().overflow) return output()
     return collapsed().output
   })
+  const showOutput = createMemo(() => Boolean(props.output && ctx.showGenericToolOutput()))
+  const reach = createMemo(() =>
+    toolOutputReach({
+      output: Boolean(props.output),
+      toggle: ctx.showGenericToolOutput(),
+      toolInput: ctx.tui.syntax?.tool_input === true,
+      expanded: expanded(),
+    }),
+  )
+  const heldOutput = () => reach().held
+  const outputShown = () => reach().shown
+  // The block's measured width, reported on layout and on resize only; until then an estimate.
+  const [inputWidth, setInputWidth] = createSignal<number>()
+  const inputBlock = createMemo(() => {
+    if (ctx.tui.syntax?.tool_input !== true || fitsInline(props.input)) return
+    return formatToolInput(props.input, expanded() ? undefined : (inputWidth() ?? Math.max(20, ctx.width - 6)))
+  })
+  const overflow = createMemo(() =>
+    Boolean(inputBlock()?.overflow || (showOutput() && collapsed().overflow) || heldOutput()),
+  )
+  const outputOverflow = createMemo(() => collapsed().overflow || heldOutput())
 
   return (
-    <Show
-      when={props.output && ctx.showGenericToolOutput()}
-      fallback={
-        <InlineTool icon="⚙" pending="Writing command…" complete={true} part={props.part}>
+    <Switch>
+      <Match when={inputBlock()}>
+        {(block) => (
+          <BlockTool
+            title={`# ${props.tool}`}
+            part={props.part}
+            onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+          >
+            <box gap={1}>
+              <ToolInput
+                onWidth={setInputWidth}
+                rows={block().rows}
+                colors={{
+                  indent: code().text,
+                  key: code().syntaxVariable,
+                  punctuation: code().syntaxPunctuation,
+                  string: code().syntaxString,
+                  number: code().syntaxNumber,
+                  boolean: code().syntaxKeyword,
+                  null: code().syntaxKeyword,
+                  fold: code().textMuted,
+                }}
+              />
+              <Show when={outputShown()}>
+                <text fg={theme.text}>{limited()}</text>
+              </Show>
+              <Show when={overflow()}>
+                <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+              </Show>
+            </box>
+          </BlockTool>
+        )}
+      </Match>
+      <Match when={!outputShown()}>
+        <InlineTool
+          icon="⚙"
+          pending="Writing command…"
+          complete={true}
+          part={props.part}
+          onClick={heldOutput() ? () => setExpanded(true) : undefined}
+        >
           {props.tool} {input(props.input)}
         </InlineTool>
-      }
+      </Match>
+      <Match when={true}>
+        <BlockTool
+          title={`# ${props.tool} ${input(props.input)}`}
+          part={props.part}
+          onClick={outputOverflow() ? () => setExpanded((prev) => !prev) : undefined}
+        >
+          <box gap={1}>
+            <text fg={theme.text}>{limited()}</text>
+            <Show when={outputOverflow()}>
+              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+            </Show>
+          </box>
+        </BlockTool>
+      </Match>
+    </Switch>
+  )
+}
+
+// A tool's input as rows of key and value, each value colored by its type. `onWidth` reports the
+// width the rows have to fit in, on layout and on resize.
+export function ToolInput(props: {
+  rows: ToolInputRow[]
+  colors: Record<ToolInputKind, RGBA>
+  onWidth?: (width: number) => void
+}) {
+  return (
+    <box
+      onSizeChange={function () {
+        props.onWidth?.(this.width)
+      }}
     >
-      <BlockTool
-        title={`# ${props.tool} ${input(props.input)}`}
-        part={props.part}
-        onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
-      >
-        <box gap={1}>
-          <text fg={theme.text}>{limited()}</text>
-          <Show when={collapsed().overflow}>
-            <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
-          </Show>
-        </box>
-      </BlockTool>
-    </Show>
+      <text>
+        <For each={props.rows}>
+          {(row, index) => (
+            <>
+              <Show when={index() > 0}>{"\n"}</Show>
+              <For each={row}>
+                {(segment) => <span style={{ fg: props.colors[segment.kind] }}>{segment.text}</span>}
+              </For>
+            </>
+          )}
+        </For>
+      </text>
+    </box>
   )
 }
 
@@ -2542,12 +2641,7 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
 }
 
 function input(input: Record<string, unknown>, omit?: string[]): string {
-  const primitives = Object.entries(input).filter(([key, value]) => {
-    if (omit?.includes(key)) return false
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-  })
-  if (primitives.length === 0) return ""
-  return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
+  return inlineToolInput(input, omit)
 }
 
 function stringValue(value: unknown) {
