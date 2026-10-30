@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { GenerationOptions, LanguageModel, LLM } from "../../src/effect.js"
+import { ai, GenerationOptions, LanguageModel } from "../../src/effect.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
@@ -13,7 +13,14 @@ const bedrock = (id: string, settings: Parameters<typeof AmazonBedrock.model>[1]
 
 const fields = (model: LanguageModel, generation?: GenerationOptions) =>
   compileRequest(
-    LLM.request({ id: "req_1", model, system: "You are concise.", prompt: "Say hello.", cache: "none", generation }),
+    ai.request({
+      id: "req_1",
+      model,
+      system: "You are concise.",
+      prompt: "Say hello.",
+      cache: "none",
+      generation,
+    }),
   ).pipe(Effect.map((prepared) => prepared.body.additionalModelRequestFields))
 
 describe("Bedrock Converse thinking block binding", () => {

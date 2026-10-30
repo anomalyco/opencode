@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/cli",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "type": "module",
   "license": "MIT",
   "bin": {
@@ -33,7 +33,7 @@
     "@effect/platform-node": "catalog:",
     "@opencode/client": "workspace:*",
     "@opencode/plugin": "workspace:*",
-    "@opencode/pty": "0.3.3",
+    "@opencode/pty": "0.4.0",
     "@opencode/schema": "workspace:*",
     "@opencode/server": "workspace:*",
     "@opencode/tui": "workspace:*",

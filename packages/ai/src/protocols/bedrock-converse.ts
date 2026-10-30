@@ -427,12 +427,7 @@ const lowerMessages = Effect.fnUntraced(function* (
             content.push({ reasoningContent: { redactedContent: redactedData } })
             continue
           }
-          if (signature === undefined || signature.trim().length === 0) {
-            // Interrupted streams and model switches can leave unsigned reasoning.
-            // Preserve readable history as text rather than replay invalid reasoningContent.
-            if (part.text.trim().length > 0) content.push(...textWithCache(breakpoints, part.text, part.cache))
-            continue
-          }
+          if (signature === undefined || signature.trim().length === 0) continue
           content.push({ reasoningContent: { reasoningText: { text: part.text, signature } } })
           continue
         }

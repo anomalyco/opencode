@@ -115,8 +115,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Vous pouvez même connecter vos",
   "home.faq.a3.p4.localLink": "modèles locaux",
   "home.faq.q4": "Puis-je utiliser mes abonnements IA existants avec OpenCode ?",
-  "home.faq.a4.p1":
-    "Oui, vous pouvez utiliser vos abonnements ChatGPT Plus/Pro ou GitHub Copilot, ou votre abonnement Claude via Claude Code.",
+  "home.faq.a4.p1": "Oui, vous pouvez utiliser vos abonnements ChatGPT Plus/Pro ou GitHub Copilot.",
   "home.faq.q5": "Puis-je utiliser OpenCode uniquement dans le terminal ?",
   "home.faq.a5.beforeDesktop": "Plus maintenant ! OpenCode est désormais disponible en application pour",
   "home.faq.a5.desktop": "desktop",

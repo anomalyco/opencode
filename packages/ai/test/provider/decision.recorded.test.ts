@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Decision, type DecisionModel, type DecisionOptions } from "../../src/effect.js"
+import { ai, type DecisionModel, type DecisionOptions } from "../../src/effect.js"
 import {
   Baseten,
   CloudflareAIGateway,
@@ -171,10 +171,10 @@ describe("Decision recorded", () => {
 
 const assertDecision = <Options extends DecisionOptions>(
   model: DecisionModel<Options>,
-  input: Parameters<typeof Decision.generate>[0]["input"] = [{ type: "text", text: ticket }],
+  input: Parameters<typeof ai.decision.generate>[0]["input"] = [{ type: "text", text: ticket }],
 ) =>
   Effect.gen(function* () {
-    const response = yield* Decision.generate({ model, input, questions })
+    const response = yield* ai.decision.generate({ model, input, questions })
     const [department, urgency, refund] = response.answers
     if (department.type === "error" || urgency.type === "error" || refund.type === "error")
       throw new Error("expected every question to be answered")

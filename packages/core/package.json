@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "name": "@opencode/core",
   "type": "module",
   "license": "MIT",
@@ -104,7 +104,7 @@
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/core": "2.3.1",
     "@modelcontextprotocol/server": "2.3.1",
-    "@opencode/pty": "0.3.3",
+    "@opencode/pty": "0.4.0",
     "@opencode/ai": "workspace:*",
     "@opencode/codemode": "workspace:*",
     "@opencode/plugin": "workspace:*",

@@ -1133,6 +1133,39 @@ test("/reload reloads the server's configuration once and reports it", async ({ 
 
 const followUp = "Add follow-up, / for commands, @ for context…"
 
+test("the shell shortcut toggles modes and keeps explicit bindings", async ({ page }) => {
+  const view = await openDraft(page, {
+    name: "ShellToggle",
+    seed: {
+      settings: {
+        keybinds: { "prompt.mode.shell": "mod+alt+s", "prompt.mode.normal": "mod+alt+e" },
+      },
+    },
+  })
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+  const exit = page.getByRole("button", { name: /^Exit/ })
+
+  await view.editor.fill("echo hello")
+  await view.editor.press(`${modifier}+Shift+x`)
+  await expect(exit).toBeVisible()
+  await expect(view.editor).toHaveText("echo hello")
+  await view.editor.press(`${modifier}+Shift+x`)
+  await expect(exit).toHaveCount(0)
+  await expect(view.editor).toHaveText("echo hello")
+  await view.editor.press(`${modifier}+Shift+x`)
+  await expect(exit).toBeVisible()
+  await view.editor.press("Escape")
+  await expect(exit).toHaveCount(0)
+  await expect(view.editor).toBeFocused()
+  await view.editor.press(`${modifier}+Alt+s`)
+  await expect(exit).toBeVisible()
+  await view.editor.press(`${modifier}+Alt+e`)
+  await expect(exit).toHaveCount(0)
+  await expect(view.editor).toHaveText("echo hello")
+})
+
 for (const row of [
   { state: "an idle", copy: "Ask anything, / for commands, @ for context…" },
   { state: "a running", copy: followUp, sessionStatus: { ses_placeholder: { type: "running" } } },

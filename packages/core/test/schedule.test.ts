@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { FileSystem } from "@opencode/core/filesystem"
-import { DateTime, Effect, Fiber, Latch, Layer, LayerMap, Queue, Schema, Sink, Stream } from "effect"
+import { Clock, DateTime, Effect, Fiber, Latch, Layer, LayerMap, Queue, Schema, Sink, Stream } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { TestClock } from "effect/testing"
@@ -80,7 +80,16 @@ const enabledEntries = [
     }),
   }),
 ]
+const disabledEntries = [
+  new Document({
+    type: "document",
+    info: new Info({
+      experimental: new ConfigExperimental.Info({ schedules: false }),
+    }),
+  }),
+]
 const enabled = Config.testLayer(enabledEntries)
+const disabled = Config.testLayer(disabledEntries)
 /** A location whose flag the test turns on, counting every config read. */
 const toggle = { on: false, reads: 0 }
 const toggled = Layer.succeed(
@@ -89,7 +98,7 @@ const toggled = Layer.succeed(
     entries: () =>
       Effect.sync(() => {
         toggle.reads++
-        return toggle.on ? enabledEntries : []
+        return toggle.on ? enabledEntries : disabledEntries
       }),
     changes: () => Stream.empty,
   }),
@@ -224,7 +233,7 @@ const locations = makeGlobalNode({
               ? enabled
               : ref.directory === toggleDirectory
                 ? toggled
-                : Layer.empty,
+                : disabled,
             configureAgent.pipe(
               Layer.provideMerge(
                 LayerNode.compile(
@@ -1463,6 +1472,52 @@ describe("Schedule", () => {
         const { db } = yield* Database.Service
         expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
           payload: { text: expect.stringContaining("[Schedule paused after invalid check:") },
+        })
+      }),
+    )
+
+    it.effect("picks up a schedule created by another process sharing the DB while idle", () =>
+      Effect.gen(function* () {
+        const primary = yield* setup()
+        const { db } = yield* Database.Service
+        const runner = yield* Effect.forkChild(primary.run)
+        yield* Effect.repeat(Effect.yieldNow, { times: 5 })
+
+        // Insert directly into SQLite (bypassing primary.create so primary's in-memory doorbell is never opened)
+        // to simulate a short-lived `opencode serve` / `--standalone` writing a schedule and exiting.
+        const now = yield* Clock.currentTimeMillis
+        const externalID = Schedule.ID.create()
+        yield* db
+          .insert(ScheduleTable)
+          .values({
+            id: externalID,
+            session_id: sessionID,
+            name: "external",
+            check: null,
+            state: null,
+            checks: 0,
+            action: { type: "prompt", prompt: "Cross-process wake." },
+            when: { type: "in", in: "10 seconds" },
+            tz: "UTC",
+            status: "active",
+            next_due_at: now + 10_000,
+            ends_at: null,
+            remaining_runs: 1,
+            time_created: now,
+            time_updated: now,
+          })
+          .run()
+          .pipe(Effect.orDie)
+
+        // Bounded MAX_SLEEP (30s) wakes the idle loop, claims leadership, and fires the row.
+        yield* TestClock.adjust("30 seconds")
+        yield* Effect.repeat(Effect.yieldNow, { times: 5 })
+        yield* Fiber.interrupt(runner)
+
+        expect(yield* primary.get(externalID)).toMatchObject({
+          status: "done",
+          runCount: 1,
+          lastOutcome: "fired",
         })
       }),
     )

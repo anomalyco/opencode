@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/gui-plugins",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -21,9 +21,6 @@
     "@betteroffice/fonts": "0.4.0",
     "@betteroffice/pptx": "0.2.0",
     "@betteroffice/xlsx": "0.3.0",
-    "@dnd-kit/abstract": "0.5.0",
-    "@dnd-kit/dom": "0.5.0",
-    "@dnd-kit/solid": "0.5.0",
     "@effect/platform-node": "catalog:",
     "@kobalte/core": "catalog:",
     "@opencode/client": "workspace:*",
@@ -49,6 +46,7 @@
   "devDependencies": {
     "@happy-dom/global-registrator": "20.0.11",
     "@lydell/node-pty": "catalog:",
+    "@opencode/protocol": "workspace:*",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",

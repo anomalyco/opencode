@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, Message, ToolCallPart } from "../../src/effect.js"
+import { ai, Message, ToolCallPart } from "../../src/effect.js"
 import { OpenAIChat } from "../../src/protocols/openai-chat.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
 import { Auth } from "../../src/route/auth.js"
@@ -31,7 +31,7 @@ for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
           ],
         ]) {
           const prepared = yield* compileRequest(
-            LLM.request({ model, messages, tools: [], toolChoice: choice, cache: "none" }),
+            ai.request({ model, messages, tools: [], toolChoice: choice, cache: "none" }),
           )
           expect(prepared.body.tool_choice).toBeUndefined()
         }
@@ -41,7 +41,7 @@ for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
     it.effect(`${route.id} preserves ${choice.type} tool choice with active tools`, () =>
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
-          LLM.request({ model, prompt: "Look up the value.", tools: [tool], toolChoice: choice }),
+          ai.request({ model, prompt: "Look up the value.", tools: [tool], toolChoice: choice }),
         )
         expect(prepared.body.tool_choice).toEqual(
           choice.type !== "tool"
@@ -62,7 +62,7 @@ it.effect("OpenAI Responses omits allowed tool choice without tool definitions",
       .model({ id: "gpt-4.1-mini" })
     for (const tools of [[], [tool]]) {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model,
           prompt: "Look up the value.",
           tools,
