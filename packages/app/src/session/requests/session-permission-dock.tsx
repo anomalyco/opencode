@@ -21,6 +21,18 @@ export function SessionPermissionDock(props: {
     return value
   }
 
+  // MCP tools ask with the bare wildcard, which says nothing about what is being approved
+  const resources = () => props.request.resources.filter((resource) => resource !== "*")
+
+  const input = () => {
+    const value = props.request.metadata?.input
+    if (!value || typeof value !== "object") return []
+    return Object.entries(value).map(([key, item]) => {
+      const text = `${key}: ${typeof item === "string" ? item : JSON.stringify(item)}`
+      return text.length > 200 ? `${text.slice(0, 200)}…` : text
+    })
+  }
+
   return (
     <DockPrompt
       kind="permission"
@@ -54,18 +66,18 @@ export function SessionPermissionDock(props: {
         </>
       }
     >
-      <Show when={toolDescription()}>
-        <div data-slot="permission-row">
-          <span data-slot="permission-spacer" aria-hidden="true" />
+      <div data-slot="permission-row">
+        <span data-slot="permission-spacer" aria-hidden="true" />
+        <Show when={toolDescription()} fallback={<code data-slot="permission-hint">{props.request.action}</code>}>
           <div data-slot="permission-hint">{toolDescription()}</div>
-        </div>
-      </Show>
+        </Show>
+      </div>
 
-      <Show when={props.request.resources.length > 0}>
+      <Show when={resources().length > 0 || input().length > 0}>
         <div data-slot="permission-row">
           <span data-slot="permission-spacer" aria-hidden="true" />
           <div data-slot="permission-patterns">
-            <For each={props.request.resources}>
+            <For each={[...resources(), ...input()]}>
               {(pattern) => <code class="text-text-base break-all">{pattern}</code>}
             </For>
           </div>
