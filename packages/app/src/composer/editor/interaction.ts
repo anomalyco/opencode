@@ -745,14 +745,15 @@ export function createComposerEditor(input: {
       selection.addRange(range)
       target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: normalized }))
     },
+    // The document's dragover owns the drag state. A dragleave fires on every move between the editor's own
+    // nodes, so clearing the state here made the dropzone flicker.
     onDragEnter(event: DragEvent) {
       event.preventDefault()
-      dispatch({ type: "drag.enter" })
     },
     onDragOver(event: DragEvent) {
       event.preventDefault()
     },
-    onDragLeave() {
+    clearDrag() {
       dispatch({ type: "drag.leave" })
     },
     onDrop(event: DragEvent) {

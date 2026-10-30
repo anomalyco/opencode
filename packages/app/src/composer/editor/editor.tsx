@@ -238,7 +238,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
         }}
         onDragEnter={props.controller.onDragEnter}
         onDragOver={props.controller.onDragOver}
-        onDragLeave={props.controller.onDragLeave}
         onDrop={props.controller.onDrop}
       >
         <div

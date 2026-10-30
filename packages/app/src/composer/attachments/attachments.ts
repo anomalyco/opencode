@@ -235,9 +235,7 @@ export function createComposerAttachments(
     makeEventListener(document, "dragover", (event) => {
       if (input.isDialogActive()) return
       event.preventDefault()
-
-      if (event.dataTransfer?.types.includes("Files")) input.setDraggingType("image")
-      else if (event.dataTransfer?.types.includes("text/plain")) input.setDraggingType("@mention")
+      input.setDraggingType(dragType(event.dataTransfer))
     })
     makeEventListener(document, "dragleave", (event) => {
       if (!input.isDialogActive() && !event.relatedTarget) clearDrag()
@@ -270,6 +268,16 @@ export function createComposerAttachments(
         .catch(input.onError)
     },
   }
+}
+
+// Files from the system and file rows from the workspace tree (which also carry a file URL) drop as attachments.
+// A text selection carries neither, so dragging it shows no dropzone.
+function dragType(data: DataTransfer | null) {
+  if (data?.types.includes("Files")) return "image"
+
+  if (data?.types.includes("text/uri-list")) return "@mention"
+
+  return null
 }
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
