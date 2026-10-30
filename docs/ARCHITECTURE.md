@@ -162,10 +162,17 @@ Three native tools are registered into `packages/core/src/plugin/internal.ts` gi
 
 ---
 
-## 6. Subsystem D: User Interface & Settings
+## 6. Subsystem D: User Interface & Customization Center
 
 Implemented in `packages/app/src/settings/`:
-- **`project-extensions.tsx`**: Universal Extension Center featuring tabs for MCP Servers, Plugins, Skills, Rules, and LSPs, plus live MCP diagnostics runner and Universal Skill Import modal.
+- **`project-extensions.tsx`**: Complete Universal Customization Center featuring 6 dedicated sections:
+  1. **Skills**: Browse installed skills, pre-installation inspection modal with platform detection and security audit, supporting files view, enable/disable toggling, version pinning, rollback, and project/global scopes.
+  2. **MCP Servers**: Live connection diagnostic runner with actual latency measurement, discovered tools viewer, and import support for Claude Desktop and Cursor configurations.
+  3. **Rules & Instructions**: Custom ruleset authoring, scope toggles (project vs. global), Markdown instructions viewer, and a **Live Pattern Matcher & Precedence Tester** previewing which rules apply to any arbitrary file path.
+  4. **Plugins**: External plugins and shims management, permission inspection, and **AI Adapter Gap Analysis** displaying mappable vs. unsupported capabilities.
+  5. **Imported Packages**: Multi-component package decomposition viewer grouping skills, MCP configs, rules, and plugins under common package identities.
+  6. **Compatibility Adapters**: Engine status and active ecosystem adapter specifications.
+  - **Comprehensive Compatibility Reports**: Drawer presenting CIR metadata, native compatibility indicators, converted components, security findings, and version rollback.
 - **`project-folders.tsx`**: Multi-folder workspace explorer with folder cards, primary root badges, attach folder dialog, safe detach, and path relinking.
 - **`project-attachments.tsx`**: Project attachments hub with category filters (Source, Documents, Data, Images, Archives), search bar, file upload dialog, and text preview drawer.
 - **`shell.tsx` & `route.ts`**: Settings routing and navigation tabs integrated cleanly with search index.

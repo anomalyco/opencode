@@ -101,13 +101,20 @@ graph TD
   - Service injection: Added all new services to `Context.pick` in `packages/server/src/routes.ts`.
   - Codegen: Ran `bun run generate` from `packages/client`.
 
-### Milestone 6: User Interface & Settings Workspaces (Completed)
-- **Goal**: Deliver intuitive settings workspaces in the shared frontend.
+### Milestone 6: User Interface & Customization Management (Completed)
+- **Goal**: Deliver intuitive Customization Center and workspace settings in the shared frontend.
 - **Implementation**:
-  - `project-extensions.tsx`: Universal Extension Center (MCP, Plugins, Skills, Rules, LSPs, live diagnostics, import modal).
+  - `project-extensions.tsx`: Complete Customization Center with 6 dedicated tabs:
+    1. **Skills**: Browse, pre-installation inspection modal, source platform indicators, enable/disable toggle, version pinning, rollback, project vs. global scopes.
+    2. **MCP Servers**: Live connection latency diagnostics (`extension.mcp.test`), dynamic tool discovery viewer, and Claude Desktop & Cursor config import.
+    3. **Rules**: Instruction rulesets manager with project/global scope, markdown instructions, and **Live Pattern Matcher & Precedence Tester**.
+    4. **Plugins**: External plugins and shims manager with permissions review and **AI Adapter Gap Analysis** (`extension.proposeAdapter`).
+    5. **Imported Packages**: Multi-component package decomposition viewer grouping decomposed CIR components by parent package ID.
+    6. **Compatibility Adapters**: Engine status and active ecosystem adapter specifications.
+    - **Compatibility Report Drawer**: Detailed CIR inspector displaying source platform, native compatibility, missing capabilities, security findings, and version rollback.
   - `project-folders.tsx`: Multi-folder explorer with primary/secondary badges, attach dialog, safe detach, and relink.
   - `project-attachments.tsx`: Attachments hub with category filters, full-text search, and preview drawer.
-  - Navigation: `shell.tsx`, `route.ts`, and `search-index.ts`.
+  - Navigation: `shell.tsx`, `route.ts` (with `packages` and `adapters` subtabs), and `search-index.ts`.
 
 ### Milestone 7: Verification, Baseline Regression Gates & Documentation (Completed)
 - **Goal**: Zero regressions, 100% typecheck pass, comprehensive documentation.

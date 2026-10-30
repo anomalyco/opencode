@@ -24,7 +24,7 @@ export type SettingsProjectTab = "general" | "folders" | "attachments" | "worksp
 
 type SettingsViewState = {
   target?: string
-  subtab?: "mcps" | "plugins" | "skills" | "rules" | "lsps"
+  subtab?: "mcps" | "plugins" | "skills" | "rules" | "lsps" | "packages" | "adapters"
   searchActivation?: number
 }
 
@@ -72,6 +72,8 @@ const subtabs: Record<NonNullable<SettingsView["subtab"]>, true> = {
   skills: true,
   rules: true,
   lsps: true,
+  packages: true,
+  adapters: true,
 }
 
 export function parseSettingsView(
