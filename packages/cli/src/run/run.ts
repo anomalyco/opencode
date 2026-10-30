@@ -19,7 +19,7 @@ export type RunCommandInput = {
   continue?: boolean
   session?: string
   fork?: boolean
-  worktree?: string
+  worktree?: string | true
   model?: string
   agent?: string
   format: "default" | "json"
@@ -74,7 +74,6 @@ async function run(input: RunCommandInput, options: ExecutionOptions) {
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
   if (input.worktree !== undefined && (input.continue || input.session))
     fail("--worktree starts a new session and cannot be combined with --continue or --session")
-  if (input.worktree !== undefined && !input.worktree.trim()) fail("--worktree requires a name")
   const root = options.root ?? process.env.PWD ?? process.cwd()
   const local = localDirectory(root)
   const directory = options.useServerDirectory ? undefined : (options.directory ?? local)

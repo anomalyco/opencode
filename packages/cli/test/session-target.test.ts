@@ -154,4 +154,14 @@ describe("session target resolver", () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ location: { directory: "/worktrees/pr-12" } }))
     expect(target.location.directory).toBe("/worktrees/pr-12")
   })
+
+  test("lets the server name an unnamed worktree", async () => {
+    const client = OpenCode.make({ baseUrl: "https://opencode.test" })
+    spyOn(client.location, "get").mockResolvedValue(location("/project"))
+    const worktree = spyOn(client.worktree, "create").mockResolvedValue({ directory: "/worktrees/brave-otter" })
+    spyOn(client.session, "create").mockResolvedValue(session("ses_fresh", "/worktrees/brave-otter"))
+
+    await resolveSessionTarget({ client, location: { directory: "/project" }, worktree: true, prepare })
+    expect(worktree).toHaveBeenCalledWith({ projectID: "project", name: undefined })
+  })
 })
