@@ -18,7 +18,7 @@ import type { StreamOptions } from "@opencode/ai/route"
 import type { SessionCompactionResult } from "@opencode/plugin/effect/session"
 import type { SessionError } from "@opencode/schema/session-error"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Context, Effect, Exit, Fiber, Layer, Result, Scope, Stream } from "effect"
+import { Clock, Context, DateTime, Effect, Exit, Fiber, Layer, Result, Scope, Stream } from "effect"
 import { Agent } from "../agent.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
@@ -149,16 +149,23 @@ const TRANSCRIPT_LEVELS = [0, OUTPUTS_CLIPPED, OUTPUTS_REMOVED, USER_ONLY, OMITT
 const TRANSCRIPT_CLIP = 2_000
 const IMAGE_TOKEN_ESTIMATE = 1_500
 const PDF_TOKEN_ESTIMATE = 2_000
-/** Share of the compaction ceiling at which a background summary starts. */
-const PRECOMPUTE_RATIO = 0.85
-/** Measured prompt tokens below which a background summary is not worth its cost. */
-const PRECOMPUTE_MIN_TOKENS = 64_000
 /**
- * The most text a swapped-in summary keeps verbatim beside it: twice `keep`, at least 30k, at most a quarter of the
- * budget. A longer tail would leave the context near the threshold, so compaction summarizes from scratch instead.
+ * Tokens before the ceiling at which a background summary starts. Writing one takes 30–60 s, and in that time the
+ * conversation grows by a few thousand tokens at the median but by 25k or more one time in twenty, when large file
+ * reads arrive together. How far ahead to start depends on that growth, not on the window, so the lead is fixed.
  */
-const PRECOMPUTED_TAIL_MIN = 30_000
-const PRECOMPUTED_TAIL_SHARE = 0.25
+const PRECOMPUTE_LEAD = 60_000
+/** Prompt caches expire this long after their last use unless the model sets `cache.ttl`. */
+const CACHE_LIFETIME = 5 * 60_000
+/** A background summary starts only while this much of the latest response's cache lifetime is left. */
+const CACHE_MARGIN = 30_000
+/**
+ * The most text a swapped-in summary keeps verbatim beside it, and the tail at which a held summary is replaced, as a
+ * share of the budget. Tails are usually far shorter; the limit is there for bursts of large tool inputs or pasted
+ * text. At 40%, a swapped-in context stays under about two thirds of the budget even with Claude's tokenizer, so the
+ * next cycle keeps room; a longer tail makes compaction summarize from scratch instead.
+ */
+const PRECOMPUTED_TAIL_SHARE = 0.4
 /** Failed background summaries after which no new one starts until the next compaction. */
 const PRECOMPUTE_MAX_FAILURES = 2
 
@@ -328,11 +335,14 @@ export const layer = Layer.effect(
     })
 
     /**
-     * Once the context passes `PRECOMPUTE_RATIO` of the ceiling, summarizes everything before the latest response in
-     * the background. That is the prefix the provider just processed, so the summary request reads it from the prompt
-     * cache. The summary is held, not applied: swapping it in now would rewrite the prefix and throw away the cache
-     * for every step until compaction is actually due. One summary is held per Session until compaction takes it, or
-     * until it fails or falls too far behind, when a newer response replaces it.
+     * Once the context is within `PRECOMPUTE_LEAD` of the ceiling, summarizes everything before the latest response
+     * in the background. That is the prefix the provider just processed, so the summary request reads it from the
+     * prompt cache. The summary is held, not applied: swapping it in now would rewrite the prefix and throw away the
+     * cache for every step until compaction is actually due. One summary is held per Session until compaction takes
+     * it, or until it fails or falls too far behind, when a newer response replaces it.
+     *
+     * On a small window the lead is at most half the room the cycle started with, so the summary still covers more
+     * than the previous one.
      */
     const precompute = Effect.fn("SessionCompaction.precompute")(function* <E>(
       load: Effect.Effect<SessionContext.Loaded, E>,
@@ -346,12 +356,13 @@ export const layer = Layer.effect(
       if (!Number.isFinite(ceiling)) return
       const estimate = given ?? estimatePrompt(context)
       if (due(context, ceiling, estimate)) return
-      if (total(estimate) < ceiling * PRECOMPUTE_RATIO) return
+      const first = context.messages.find((message) => hasMeasuredPrompt(message, context.model.ref))
+      const cycleStart = first?.type === "assistant" && first.tokens ? promptTokens(first.tokens) : 0
+      if (total(estimate) < ceiling - Math.min(PRECOMPUTE_LEAD, (ceiling - cycleStart) / 2)) return
 
       const anchorIndex = context.messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
       const anchor = context.messages[anchorIndex]
       if (anchorIndex <= 0 || anchor?.type !== "assistant" || !anchor.tokens) return
-      if (anchor.tokens.input + anchor.tokens.cache.read + anchor.tokens.cache.write < PRECOMPUTE_MIN_TOKENS) return
 
       const sessionID = context.session.id
       const existing = precomputed.get(sessionID)
@@ -368,6 +379,10 @@ export const layer = Layer.effect(
       }
       // After a model switch nothing is cached for the new model yet; wait until its first response has written it.
       if (anchor.model.id !== context.model.ref.id || anchor.model.variant !== context.model.ref.variant) return
+      // The same once the latest response is older than the cache lifetime, as when the user comes back from a
+      // break: the summary would write the whole prefix again, at the same time as the next request.
+      const age = (yield* Clock.currentTimeMillis) - DateTime.toEpochMillis(anchor.time.created)
+      if (age > cacheLifetime(context.model.cache?.ttl) - CACHE_MARGIN) return
 
       const model = yield* selectModel(context, settings.buffer, false)
       const usage: SessionUsage.Recorded[] = []
@@ -380,7 +395,7 @@ export const layer = Layer.effect(
         keepID: anchor.id,
         model: context.model.ref,
         initial: context.initial,
-        tailLimit: tailLimit(settings.keep, model.cap),
+        tailLimit: tailLimit(model.cap),
         failures,
         usage,
         fiber,
@@ -405,7 +420,7 @@ export const layer = Layer.effect(
         trigger.reason !== "overflow" &&
         context.model.compaction?.type !== "native" &&
         index >= 0 &&
-        tailTokens(context, index) <= tailLimit(settings.keep, budget)
+        tailTokens(context, index) <= tailLimit(budget)
       if (!usable) {
         yield* Fiber.interrupt(held.fiber)
         return undefined
@@ -959,8 +974,18 @@ const heldIndex = (held: Precomputed, context: SessionContext.Loaded) => {
 const tailTokens = (context: SessionContext.Loaded, index: number) =>
   Token.estimate(context.messages.slice(index).map(SessionRecentText.messageToText).filter(Boolean).join("\n\n"))
 
-const tailLimit = (keep: number, budget: number) =>
-  Math.min(Math.max(keep * 2, PRECOMPUTED_TAIL_MIN), Math.floor(budget * PRECOMPUTED_TAIL_SHARE))
+const tailLimit = (budget: number) => Math.floor(budget * PRECOMPUTED_TAIL_SHARE)
+
+const promptTokens = (tokens: { input: number; cache: { read: number; write: number } }) =>
+  tokens.input + tokens.cache.read + tokens.cache.write
+
+const DURATION_UNITS = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }
+
+/** Milliseconds a prompt cache entry lives, from a `cache.ttl` such as "5m" or "1h". */
+const cacheLifetime = (ttl: string | undefined) => {
+  const match = ttl?.match(/^(\d+)(ms|s|m|h|d)$/)
+  return match ? Number(match[1]) * DURATION_UNITS[match[2] as keyof typeof DURATION_UNITS] : CACHE_LIFETIME
+}
 
 /** History loads from the latest completed compaction, so a previous one is always the first message. */
 const previousCompaction = (messages: ReadonlyArray<SessionMessage.Info>) => {
@@ -1156,7 +1181,7 @@ const hasMeasuredPrompt = (message: SessionMessage.Info, model: SessionContext.L
   message.model.providerID === model.providerID &&
   !message.error &&
   message.tokens !== undefined &&
-  message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0
+  promptTokens(message.tokens) > 0
 
 /** The prompt size, only while the model, variant and agent that were measured still match; they shape the request. */
 const measuredPrompt = (context: SessionContext.Loaded) => {

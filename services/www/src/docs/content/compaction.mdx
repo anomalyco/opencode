@@ -123,16 +123,20 @@ writes the summary ahead of time and swaps it in when compaction is due:
 ```
 
 ```text
-85% of the threshold   summary of the conversation so far starts in the background
-                       the session keeps going; the summary is held, not applied
-threshold              the held summary is swapped in; everything since it is kept as is
+60k tokens before the threshold   summary of the conversation so far starts in the background
+                                  the session keeps going; the summary is held, not applied
+threshold                         the held summary is swapped in; everything since it is kept as is
 ```
+
+On small context windows, the summary starts at most halfway between the first response after the last compaction
+and the threshold.
 
 | Rule | Behavior |
 | --- | --- |
-| Cost | The summary request reuses the prompt cache. A summary that is never used still costs tokens. |
-| Falls back | Compaction summarizes as usual if too much conversation arrived since the held summary, or if the model, instructions, or start of the conversation changed. |
-| Skipped | Not used for native compaction, in sessions under about 64k tokens, right after a model switch, or when a provider rejects a request as too long. |
+| Cost | The summary request reuses the prompt cache. A summary that is never used, for example because the session ends before the threshold, still costs tokens. |
+| Waits | If the summary is still being written when compaction is due, the session waits for it to finish. |
+| Falls back | Compaction summarizes as usual if the conversation since the held summary grew past about 40% of the threshold, or if the model, instructions, or start of the conversation changed. |
+| Skipped | Not used for native compaction, right after a model switch, or when a provider rejects a request as too long. After a break longer than the prompt cache lifetime, it starts from the next response instead. |
 | Storage | Held summaries live in memory and are lost on restart. |
 
 ## Providers
