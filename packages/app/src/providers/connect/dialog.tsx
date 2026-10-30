@@ -273,7 +273,7 @@ const CLAUDE_CODE_SETUP_URL = "https://code.claude.com/docs/en/setup"
 const CLAUDE_AGENT_DOCS_URL = "https://opencode.ai/v2/docs/providers#claude-agent"
 
 // The TUI's integration groups and order, plus Claude Agent, with connected integrations pulled up into their own group first.
-const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "claude-agent", "google"]
+const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"]
 
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
   const integrations = useIntegrations(() => props.directory)
