@@ -1703,7 +1703,12 @@ const EndpointExperimentalArtifactsDelete =
 const EndpointExperimentalJobList = (raw: RawClient["server.experimental"]) => (input?: ExperimentalJobListInput) =>
   preserveEffect<ExperimentalJobListOutput>()(
     raw["job.list"]({
-      query: { sessionID: input?.["sessionID"], kind: input?.["kind"], descendants: input?.["descendants"] },
+      query: {
+        sessionID: input?.["sessionID"],
+        kind: input?.["kind"],
+        status: input?.["status"],
+        descendants: input?.["descendants"],
+      },
     }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),

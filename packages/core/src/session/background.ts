@@ -1,6 +1,6 @@
 export * as SessionBackground from "./background.js"
 
-import type { Kind } from "@opencode/schema/job"
+import type { Kind, Status } from "@opencode/schema/job"
 import { Effect } from "effect"
 import type { Job } from "../job.js"
 import type { SessionSchema } from "./schema.js"
@@ -12,6 +12,7 @@ export type Lookup = {
 export type ListFilter = {
   readonly sessionID?: SessionSchema.ID
   readonly kind?: Kind
+  readonly status?: Status
   readonly descendants?: boolean
 }
 
@@ -49,13 +50,17 @@ export const outstanding = Effect.fnUntraced(function* (
   })
 })
 
-/** Active and unconsumed background jobs matching the requested Session, kind, and descendant scope. */
+/** Active and unconsumed background jobs matching the requested Session, kind, status, and descendant scope. */
 export const list = Effect.fn("SessionBackground.list")(function* (
   jobs: Pick<Job.Interface, "backgroundJobs">,
   store: Lookup,
   filter: ListFilter = {},
 ) {
-  const items = (yield* jobs.backgroundJobs).filter((item) => filter.kind === undefined || item.kind === filter.kind)
+  const items = (yield* jobs.backgroundJobs).filter(
+    (item) =>
+      (filter.kind === undefined || item.kind === filter.kind) &&
+      (filter.status === undefined || item.status === filter.status),
+  )
   if (filter.sessionID === undefined) return items
   const sessionID = filter.sessionID
   if (!filter.descendants) return items.filter((item) => item.sessionID === sessionID)

@@ -2496,6 +2496,7 @@ export type ExperimentalArtifactsDeleteOperation<E = never> = (
 export type ExperimentalJobListInput = {
   readonly sessionID?: Session.ID | undefined
   readonly kind?: Job.Kind | undefined
+  readonly status?: Job.Status | undefined
   readonly descendants?: boolean | undefined
 }
 export type ExperimentalJobListOutput = ReadonlyArray<Job.Info>

@@ -160,6 +160,16 @@ it.live("lists background jobs by session, kind, and descendants until completio
         time: { started: expect.any(Number), completed: expect.any(Number) },
       },
     ])
+    expect(
+      (yield* Effect.promise(() => api.experimental.job.list({ sessionID: root.id, status: "running" }))).map(
+        (item) => item.id,
+      ),
+    ).toEqual([child.id])
+    expect(
+      (yield* Effect.promise(() => api.experimental.job.list({ sessionID: root.id, status: "completed" }))).map(
+        (item) => item.id,
+      ),
+    ).toEqual(["sh_root"])
 
     if (shellBg?.notificationID) yield* jobs.completeBackground(shellBg.notificationID)
     expect(yield* Effect.promise(() => api.experimental.job.list({ sessionID: root.id, kind: "shell" }))).toEqual([])

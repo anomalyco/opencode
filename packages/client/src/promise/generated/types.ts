@@ -4688,6 +4688,7 @@ export type ExperimentalArtifactsViewOutput = globalThis.Uint8Array
 export type ExperimentalJobListInput = {
   readonly sessionID?: string | undefined
   readonly kind?: ("shell" | "subagent" | "image") | undefined
+  readonly status?: ("running" | "completed" | "error" | "cancelled") | undefined
   readonly descendants?: boolean | undefined
 }
 

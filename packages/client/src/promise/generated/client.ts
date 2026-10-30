@@ -1689,7 +1689,12 @@ export function make(options: ClientOptions) {
             {
               method: "GET",
               path: `/api/experimental/job`,
-              query: { sessionID: input?.["sessionID"], kind: input?.["kind"], descendants: input?.["descendants"] },
+              query: {
+                sessionID: input?.["sessionID"],
+                kind: input?.["kind"],
+                status: input?.["status"],
+                descendants: input?.["descendants"],
+              },
               successStatus: 200,
               declaredStatuses: [400, 401, 404],
               empty: false,
