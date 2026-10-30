@@ -1005,6 +1005,8 @@ export const dict = {
   "settings.general.row.followUpBehavior.steer": "Steer",
   "settings.general.row.pinchZoom.title": "Pinch to zoom",
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
+  "settings.general.row.spellcheck.title": "Spellcheck",
+  "settings.general.row.spellcheck.description": "Underline misspelled words while typing",
 
   "sound.option.none": "None",
   "sound.option.alert01": "Alert 01",
