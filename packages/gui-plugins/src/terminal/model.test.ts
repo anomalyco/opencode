@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createStore, produce } from "solid-js/store"
 import { ClientError, type PersistentPtyInfo } from "@opencode/client"
 import type { Layout, ServerRef, SessionRef, Storage, ToastOptions } from "@opencode/plugin/gui"
-import { PtyFeatureUnsupportedError } from "@opencode/protocol/errors"
+import { PtyFeatureUnsupportedError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { createTerminalModel } from "./model"
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -57,6 +57,8 @@ function fakeServer(options: { capabilities?: { persistentPty?: boolean } } = {}
           list: async (input: { sessionID: string }) => {
             calls.list += 1
             await state.list
+
+            if (state.listError) throw state.listError
 
             return [...(terminals.get(input.sessionID) ?? [])]
           },
@@ -120,6 +122,7 @@ type FakeState = {
   directory: string
   created: number
   createError?: Error
+  listError?: Error
   updateError?: Error
   update?: Promise<void>
   list?: Promise<void>
@@ -268,6 +271,30 @@ describe("terminal model", () => {
 
     // Servers that predate the capability omit it and still offer terminals.
     server.state.capabilities = undefined
+    server.emit("server.connected")
+    await flush()
+
+    expect(model.available(server.ref)).toBe(true)
+    expect(terminal.all().map((item) => item.id)).toEqual(["pty_1"])
+  })
+
+  test("treats a server whose terminal daemon is unavailable like one without terminal support", async () => {
+    const server = fakeServer()
+    server.state.listError = new ServiceUnavailableError({
+      message: "opencode-pty is not available",
+      service: "opencode-pty",
+    })
+    const { model, session } = setup(server)
+
+    const terminal = model.load(session)
+    await flush()
+
+    expect(model.available(server.ref)).toBe(false)
+    expect(terminal.ready()).toBe(true)
+    expect(terminal.all()).toEqual([])
+
+    server.state.listError = undefined
+    server.terminals.set("ses_1", [info("pty_1", "Terminal 1")])
     server.emit("server.connected")
     await flush()
 

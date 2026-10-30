@@ -420,13 +420,11 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     })
   }
 
-  if (config.persistentPty) {
-    const host = new URL(server).host
-    await page.routeWebSocket(
-      (url) => url.host === host && /^\/api\/experimental\/persistent-pty\/[^/]+\/connect$/.test(url.pathname),
-      (ws) => transport.persistentPty.connect(ws),
-    )
-  }
+  const host = new URL(server).host
+  await page.routeWebSocket(
+    (url) => url.host === host && /^\/api\/experimental\/persistent-pty\/[^/]+\/connect$/.test(url.pathname),
+    (ws) => transport.persistentPty.connect(ws),
+  )
 
   return { server, persistentPty: transport.persistentPty, push }
 }
@@ -610,8 +608,10 @@ function mockHandlers(
   const delay = config.messageDelay === undefined ? Effect.void : Effect.sleep(Duration.millis(config.messageDelay))
   const configEntries = config.configEntries ?? []
 
+  // Without a persistent PTY config the mock is a server with a working daemon and no terminals, since the desktop
+  // lists a session's terminals whenever its side panel renders.
   const persistentPtyEnabled = Effect.suspend(() =>
-    config.persistentPty && state.persistentPty.capability !== false
+    state.persistentPty.capability !== false
       ? Effect.void
       : Effect.fail(new MockServiceUnavailable({ message: "opencode-pty is not available", service: "opencode-pty" })),
   )

@@ -1,7 +1,12 @@
 import { createRoot, getOwner, runWithOwner, type Owner } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Predicate, Schema } from "effect"
-import { ClientError, isPtyFeatureUnsupportedError, type PersistentPtyInfo } from "@opencode/client"
+import {
+  ClientError,
+  isPtyFeatureUnsupportedError,
+  isServiceUnavailableError,
+  type PersistentPtyInfo,
+} from "@opencode/client"
 import {
   createKeyed,
   type Layout,
@@ -95,8 +100,16 @@ export function createTerminalModel(input: {
       if (list && index !== -1) draft.sessions[key] = list.with(index, terminal)
     })
 
-  const refreshQuietly = (session: SessionRef) =>
-    void refresh(session).catch((error) => console.error("Failed to list terminals", error))
+  // A server whose terminal daemon can't run answers 503; like a server reporting no support, it offers no terminals
+  // until the next connection checks again.
+  const listed = (session: SessionRef) =>
+    refresh(session).catch((error) => {
+      if (!isServiceUnavailableError(error)) return console.error("Failed to list terminals", error)
+      setState("capabilities", session.server.id, false)
+      setLists((draft) => void (draft.sessions[session.key] = []))
+    })
+
+  const refreshQuietly = (session: SessionRef) => void listed(session)
 
   const refreshServer = (server: ServerRef) =>
     sessions.forEach((session) => {
@@ -275,7 +288,7 @@ export function createTerminalModel(input: {
 
         if (!info) return undefined
 
-        await refresh(target).catch((error) => console.error("Failed to list terminals", error))
+        await listed(target)
         selection(target).set({ id: info.id })
 
         if (state.focus?.request === request) setState("focus", { key, request, id: info.id, pending: false })
