@@ -83,6 +83,8 @@ export const ToolResultValue = withStatics(toolResultValueSchema, {
   make: (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
     if (isToolResultValue(value)) return value
     if (type === "content") return { type, value: Array.isArray(value) ? value : [] }
+    // A json result must stay JSON-encodable; `undefined` has no encoding and would abort request lowering later.
+    if (type === "json" && value === undefined) return { type, value: null }
     return { type, value }
   },
 })
@@ -112,7 +114,11 @@ export const ToolOutput = withStatics(
       }
     },
     toResultValue: (output: ToolOutput): ToolResultValue => {
-      if (output.content.length === 0) return { type: "json", value: output.structured }
+      // Explicit json envelope: `make` short-circuits on a value already shaped like `{ type, value }`, which
+      // would silently treat a structured output of that shape as a result envelope (and an "error" one as a
+      // failed tool). Undefined still has to become null so the type stays encodable.
+      if (output.content.length === 0)
+        return { type: "json", value: output.structured === undefined ? null : output.structured }
       if (output.content.length === 1 && output.content[0]?.type === "text")
         return { type: "text", value: output.content[0].text }
       return { type: "content", value: output.content }
