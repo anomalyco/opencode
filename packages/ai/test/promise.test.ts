@@ -493,7 +493,7 @@ describe("AI promise client", () => {
       ),
     })
 
-    const response = await ai.generateObject({
+    const response = await ai.generate({
       model: openai.chat("gpt-4o-mini"),
       prompt: "Pick a city.",
       schema: Schema.Struct({ city: Schema.String }),

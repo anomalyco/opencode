@@ -123,9 +123,8 @@ const streamWithTools = Effect.gen(function* () {
   }
 })
 
-// 6. `generateObject` is the structured-output helper. It forces a synthetic
-// tool call internally, so the same call site works across providers instead of
-// depending on provider-specific JSON mode flags.
+// 6. `schema` asks for structured output. It forces a hidden tool call, so the
+// same call site works across providers, and decodes its input into `object`.
 const WeatherReport = Schema.Struct({
   city: Schema.String,
   forecast: Schema.String,
@@ -133,7 +132,7 @@ const WeatherReport = Schema.Struct({
 })
 
 const generateStructuredObject = Effect.gen(function* () {
-  const response = yield* ai.generateObject({
+  const response = yield* ai.generate({
     model,
     system: "Return only structured weather data.",
     prompt: "Give me today's weather for San Francisco.",
@@ -141,16 +140,16 @@ const generateStructuredObject = Effect.gen(function* () {
     generation: { maxTokens: 120, temperature: 0 },
   })
 
-  console.log("\n== generateObject ==")
+  console.log("\n== structured output ==")
   console.log(Formatter.formatJson(response.object, { space: 2 }))
 })
 
 // If the shape is only known at runtime, pass raw JSON Schema instead. The
 // `.object` type is `unknown`; callers that need static types should validate it.
-const generateDynamicObject = ai.generateObject({
+const generateDynamicObject = ai.generate({
   model,
   prompt: "Extract the city and forecast from: San Francisco is sunny.",
-  jsonSchema: {
+  schema: {
     type: "object",
     properties: {
       city: { type: "string" },

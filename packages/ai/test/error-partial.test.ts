@@ -47,7 +47,7 @@ describe("AIError.partial", () => {
     }),
   )
 
-  it.effect("generateObject keeps the raw output when the token limit cuts off the forced tool call", () =>
+  it.effect("generate with schema keeps the raw output when the token limit cuts off the forced tool call", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
       yield* client.push(
@@ -59,7 +59,7 @@ describe("AIError.partial", () => {
       )
 
       const error = yield* ai
-        .generateObject({
+        .generate({
           model,
           prompt: "Answer",
           schema: Schema.Struct({ answer: Schema.String }),

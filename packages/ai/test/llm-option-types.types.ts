@@ -1,6 +1,7 @@
 import { Effect, Schema, Stream } from "effect"
 import {
   ai,
+  type Finish,
   type LanguageModel,
   type LanguageModelProviderOptions,
   type LLMClientService,
@@ -21,6 +22,8 @@ const model = OpenAIChat.route
   .model<ExampleProviderOptions>({ id: "example" })
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
+type Success<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never
+type StreamEvent<T> = T extends Stream.Stream<infer A, infer _E, infer _R> ? A : never
 type StreamRequirements<T> = T extends Stream.Stream<infer _A, infer _E, infer R> ? R : never
 type Equal<A, B> = [A, B] extends [B, A] ? true : false
 type Assert<T extends true> = T
@@ -49,28 +52,40 @@ ai.generate({ model, prompt: "Hello", providerOptions: { mode: "slow" } })
 // @ts-expect-error Stream input keeps the selected model's provider option types.
 ai.stream({ model, prompt: "Hello", providerOptions: { mode: "slow" } })
 
-const generatedObject = ai.generateObject({
+const generatedObject = ai.generate({
   model,
   prompt: "Hello",
   schema: Schema.Struct({ answer: Schema.String }),
   providerOptions: { mode: "thorough" },
 })
-type GenerateObjectRequirements = Assert<Equal<Requirements<typeof generatedObject>, LLMClientService>>
+type StructuredOutputRequirements = Assert<Equal<Requirements<typeof generatedObject>, LLMClientService>>
+type StructuredOutputValue = Assert<Equal<Success<typeof generatedObject>["object"], { readonly answer: string }>>
+type StructuredOutputText = Assert<Equal<Success<typeof generatedObject>["text"], string>>
 
-const generatedDynamicObject = ai.generateObject({
+const generatedDynamicObject = ai.generate({
   model,
   prompt: "Hello",
-  jsonSchema: { type: "object" },
+  schema: { type: "object" },
 })
 type GenerateDynamicObjectRequirements = Assert<Equal<Requirements<typeof generatedDynamicObject>, LLMClientService>>
+type GenerateDynamicObjectValue = Assert<Equal<Success<typeof generatedDynamicObject>["object"], unknown>>
 
-ai.generateObject({
-  model,
-  prompt: "Hello",
-  jsonSchema: { type: "object" },
-  // @ts-expect-error Dynamic object generation uses the selected model's provider options.
-  providerOptions: { mode: false },
-})
+// @ts-expect-error Structured output keeps the selected model's provider options.
+ai.generate({ model, prompt: "Hello", schema: { type: "object" }, providerOptions: { mode: false } })
+
+// @ts-expect-error A plain request has no decoded object.
+void ai.generate({ model, prompt: "Hello" }).pipe(Effect.map((response) => response.object))
+
+type FinishObject<T> = Extract<T, { readonly type: "finish" }> extends { readonly object?: infer O } ? O : never
+const streamedObject = ai.stream({ model, prompt: "Hello", schema: Schema.Struct({ answer: Schema.String }) })
+type StreamObjectValue = Assert<Equal<FinishObject<StreamEvent<typeof streamedObject>>, { readonly answer: string }>>
+const loopedObject = ai.loop({ model, prompt: "Hello", tools: {}, schema: Schema.Struct({ answer: Schema.String }) })
+type LoopObjectValue = Assert<
+  Equal<
+    Extract<StreamEvent<typeof loopedObject>, { readonly type: "finish" }>,
+    Finish & { readonly object?: { readonly answer: string } }
+  >
+>
 
 declare const generic: LanguageModel
 ai.request({ model: generic, prompt: "Hello", providerOptions: { arbitrary: { option: true } } })
@@ -81,9 +96,17 @@ void (true satisfies GenerateRequirements)
 void (true satisfies StreamClientRequirements)
 void (true satisfies InputGenerateRequirements)
 void (true satisfies InputStreamRequirements)
-void (true satisfies GenerateObjectRequirements)
+void (true satisfies StructuredOutputRequirements)
 void (true satisfies GenerateDynamicObjectRequirements)
+void (true satisfies StructuredOutputValue)
+void (true satisfies StructuredOutputText)
+void (true satisfies GenerateDynamicObjectValue)
+void (true satisfies StreamObjectValue)
+void (true satisfies LoopObjectValue)
 
+void AI.ai
+  .generate({ model, prompt: "Hello", schema: Schema.Struct({ answer: Schema.String }) })
+  .then((response) => response.object.answer satisfies string)
 void AI.ai.generate({ model, prompt: "Hello", providerOptions: { mode: "fast" } })
 void AI.ai.stream({ model, prompt: "Hello", providerOptions: { mode: "thorough" } })
 void AI.ai.generate(AI.ai.request({ model, prompt: "Hello" }))

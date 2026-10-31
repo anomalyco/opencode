@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
-import { ai } from "../src/effect.js"
+import { Effect, Schema, Stream } from "effect"
+import { ai, LLMEvent } from "../src/effect.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { Auth } from "../src/route.js"
 import { toDefinitions, tool } from "../src/tool.js"
-import { it } from "./lib/effect.js"
+import { TestLLM } from "../src/testing.js"
+import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 import { finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
 import { sseEvents } from "./lib/sse.js"
@@ -63,7 +64,7 @@ describe("tool (dynamic JSON Schema)", () => {
   )
 })
 
-describe("ai.generateObject", () => {
+describe("ai.generate with schema", () => {
   it.effect("forces a synthetic tool call and decodes the input", () =>
     Effect.gen(function* () {
       const bodies: OpenAIChatBody[] = []
@@ -81,7 +82,7 @@ describe("ai.generateObject", () => {
       )
 
       const response = yield* ai
-        .generateObject({
+        .generate({
           model,
           prompt: "Return a structured weather report.",
           schema: Schema.Struct({ city: Schema.String, temp: Schema.Number }),
@@ -89,7 +90,7 @@ describe("ai.generateObject", () => {
         .pipe(Effect.provide(layer))
 
       expect(response.object).toEqual({ city: "Paris", temp: 22 })
-      expect(response.response.toolCalls).toHaveLength(1)
+      expect(response.toolCalls).toHaveLength(1)
       expect(bodies).toHaveLength(1)
       expect(bodies[0].tool_choice).toEqual({ type: "function", function: { name: "generate_object" } })
       const tool = bodies[0].tools?.[0]
@@ -124,10 +125,10 @@ describe("ai.generateObject", () => {
       )
 
       const response = yield* ai
-        .generateObject({
+        .generate({
           model,
           prompt: "Extract the user.",
-          jsonSchema: {
+          schema: {
             type: "object",
             properties: { name: { type: "string" }, age: { type: "number" } },
             required: ["name", "age"],
@@ -155,7 +156,7 @@ describe("ai.generateObject", () => {
       )
 
       const exit = yield* ai
-        .generateObject({
+        .generate({
           model,
           prompt: "Return a structured value.",
           schema: Schema.Struct({ value: Schema.Number }),
@@ -180,15 +181,59 @@ describe("ai.generateObject", () => {
         ),
       )
 
-      const exit = yield* ai
-        .generateObject({
+      const error = yield* ai
+        .generate({
           model,
           prompt: "Return a structured value.",
           schema: Schema.Struct({ value: Schema.Number }),
         })
-        .pipe(Effect.provide(layer), Effect.exit)
+        .pipe(Effect.provide(layer), Effect.flip)
 
-      expect(exit._tag).toBe("Failure")
+      expect(error.message).toContain("schema decode failed")
+      expect(error.partial?.toolCalls[0]?.input).toEqual({ value: "not-a-number" })
+    }),
+  )
+})
+
+describe("schema on ai.stream and ai.loop", () => {
+  const City = Schema.Struct({ city: Schema.String })
+  const scripted = testEffect(TestLLM.testLayer())
+
+  scripted.effect("stream puts the decoded object on finish", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(TestLLM.toolCall("call-1", "generate_object", { city: "Paris" }))
+
+      const events = Array.from(
+        yield* ai.stream({ model, prompt: "Pick a city.", schema: City }).pipe(Stream.runCollect),
+      )
+
+      const finish = events.at(-1)
+      expect(finish?.type === "finish" && finish.object).toEqual({ city: "Paris" })
+    }),
+  )
+
+  scripted.effect("loop runs tools, leaves the answer tool alone and decodes it on the final finish", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(TestLLM.toolCall("call-1", "echo", { value: "Paris" }))
+      yield* client.push(TestLLM.toolCall("call-2", "generate_object", { city: "Paris" }))
+      const echo = tool({
+        description: "Echo a value.",
+        parameters: Schema.Struct({ value: Schema.String }),
+        execute: ({ value }) => Effect.succeed(value),
+      })
+
+      const events = Array.from(
+        yield* ai.loop({ model, prompt: "Pick a city.", tools: { echo }, schema: City }).pipe(Stream.runCollect),
+      )
+
+      expect(events.filter(LLMEvent.is.toolResult).map((event) => event.name)).toEqual(["echo"])
+      expect(events.filter((event) => event.type === "finish").map((event) => event.object)).toEqual([
+        undefined,
+        { city: "Paris" },
+      ])
+      expect((yield* client.requests())[0]?.toolChoice?.type).toBe("required")
     }),
   )
 })

@@ -104,16 +104,16 @@ history works with or without `freeform`.
 
 ### Structured output
 
-`generateObject` forces a tool call and decodes its input against `schema`; pass `jsonSchema` instead for an
-unvalidated `unknown` object:
+Pass `schema` to `generate`, `stream` or `loop`. The model must answer through a hidden tool call, decoded into
+`object` (typed from an Effect Schema, or an unvalidated `unknown` for a raw JSON Schema object):
 
 ```ts
-const { object } = await ai.generateObject({
-  model,
-  prompt: "Pick a city.",
-  schema: Schema.Struct({ city: Schema.String }),
-})
+const res = await ai.generate({ model, prompt: "Pick a city.", schema: Schema.Struct({ city: Schema.String }) })
+res.object.city
 ```
+
+`stream` puts `object` on its `finish` event; `loop` runs tools first and puts it on the final step's `finish`. A
+decode failure is an `AIError` whose `partial` holds the response.
 
 ### Raw provider events
 
@@ -894,7 +894,7 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
 - **`ai.decision.request` / `ai.decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
 - **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
-- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `generateObject`, `compact`, `canCompact`) at the top level plus `image` and `decision` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer?, clients? })` builds a client over a custom executor or test layers. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
+- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `compact`, `canCompact`) at the top level plus `image` and `decision` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer?, clients? })` builds a client over a custom executor or test layers. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
 - **`@opencode/ai/experimental`** — APIs that may change without compatibility guarantees: `Video`, `Speech`, `Transcription`, `Extraction`, and `Realtime`. See [Experimental](#experimental).
 
 ## Experimental
