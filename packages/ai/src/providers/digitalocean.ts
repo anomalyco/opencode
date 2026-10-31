@@ -98,7 +98,10 @@ export const configure = (input: Config = {}) => {
     responses: (modelID: string | ModelID) =>
       configuredResponses.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     messages: (modelID: string | ModelID) =>
-      configuredMessages.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
+      configuredMessages.model<AnthropicMessages.ProviderOptionsInput>({
+        id: modelID,
+        compatibility: { requireSignature: modelID.startsWith("anthropic-") },
+      }),
     image,
     decision,
     configure,

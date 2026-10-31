@@ -15,10 +15,26 @@ for (const item of [
     ),
   },
   {
+    provider: "openrouter",
+    prefix: "openrouter-messages-open-model",
+    env: "OPENROUTER_API_KEY",
+    model: OpenRouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" }).messages(
+      "deepseek/deepseek-v4-flash",
+    ),
+  },
+  {
     provider: "digitalocean",
     env: "DIGITAL_OCEAN_OFFICIAL_API_KEY",
     model: DigitalOcean.configure({ apiKey: process.env.DIGITAL_OCEAN_OFFICIAL_API_KEY ?? "fixture" }).messages(
       "anthropic-claude-haiku-4.5",
+    ),
+  },
+  {
+    provider: "digitalocean",
+    prefix: "digitalocean-messages-open-model",
+    env: "DIGITAL_OCEAN_OFFICIAL_API_KEY",
+    model: DigitalOcean.configure({ apiKey: process.env.DIGITAL_OCEAN_OFFICIAL_API_KEY ?? "fixture" }).messages(
+      "deepseek-v4.1-flash",
     ),
   },
   {
@@ -42,7 +58,7 @@ for (const item of [
   },
 ]) {
   const recorded = recordedTests({
-    prefix: `${item.provider}-messages`,
+    prefix: item.prefix ?? `${item.provider}-messages`,
     provider: item.provider,
     protocol: "anthropic-messages",
     requires: [item.env],
@@ -65,7 +81,7 @@ for (const item of [
     Effect.gen(function* () {
       const events = yield* runWeatherToolLoop(
         weatherToolLoopRequest({
-          id: `${item.provider}-messages-tool-loop`,
+          id: `${item.prefix ?? `${item.provider}-messages`}-tool-loop`,
           model: item.model,
           maxTokens: 1024,
           temperature: false,

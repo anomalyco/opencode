@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "deepseek-v4.1-flash",
+    "tags": [
+      "prefix:digitalocean-messages-open-model",
+      "provider:digitalocean",
+      "protocol:anthropic-messages",
+      "text",
+      "usage"
+    ],
+    "name": "digitalocean-messages-open-model/streams-text",
+    "recordedAt": "2026-10-31T17:23:25.225Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://inference.do-ai.run/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"deepseek-v4.1-flash\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Reply exactly: OK\"}]}],\"stream\":true,\"max_tokens\":1024}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"message\":{\"content\":[],\"id\":\"msg_1d761ac2-15b9-48d2-a540-16da3dd1ea73\",\"model\":\"deepseek-ai/DeepSeek-V4.1-Flash\",\"role\":\"assistant\",\"stop_reason\":null,\"stop_sequence\":null,\"type\":\"message\",\"usage\":{\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"input_tokens\":0,\"output_tokens\":0}},\"type\":\"message_start\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"signature\":\"\",\"thinking\":\"\",\"type\":\"thinking\"},\"index\":0,\"type\":\"content_block_start\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\"We\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" need answer exactly \\\"\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\"OK\\\". Need comply.\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_stop\ndata: {\"index\":0,\"type\":\"content_block_stop\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"text\":\"\",\"type\":\"text\"},\"index\":1,\"type\":\"content_block_start\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\"OK\",\"type\":\"text_delta\"},\"index\":1,\"type\":\"content_block_delta\"}\n\nevent: content_block_stop\ndata: {\"index\":1,\"type\":\"content_block_stop\"}\n\nevent: message_delta\ndata: {\"delta\":{\"stop_reason\":\"end_turn\"},\"type\":\"message_delta\",\"usage\":{\"input_tokens\":34,\"output_tokens\":13}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}

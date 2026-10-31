@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "deepseek-v4.1-flash",
+    "tags": [
+      "prefix:digitalocean-messages-open-model",
+      "provider:digitalocean",
+      "protocol:anthropic-messages",
+      "tool",
+      "tool-loop"
+    ],
+    "name": "digitalocean-messages-open-model/continues-a-tool-call",
+    "recordedAt": "2026-10-31T17:23:26.668Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://inference.do-ai.run/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"deepseek-v4.1-flash\",\"system\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool, then answer in one short sentence.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\"}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"stream\":true,\"max_tokens\":1024}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"message\":{\"content\":[],\"id\":\"msg_649d9202-b1d2-4eec-b28c-a5a31ae9f139\",\"model\":\"deepseek-ai/DeepSeek-V4.1-Flash\",\"role\":\"assistant\",\"stop_reason\":null,\"stop_sequence\":null,\"type\":\"message\",\"usage\":{\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"input_tokens\":0,\"output_tokens\":0}},\"type\":\"message_start\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"signature\":\"\",\"thinking\":\"\",\"type\":\"thinking\"},\"index\":0,\"type\":\"content_block_start\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\"The\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" user wants\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" weather\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" in Paris. I need to\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" call get_weather. But\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" wait —\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" the user\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" says \\\"answer\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" in one short\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" sentence.\\\" I should\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" call the tool first,\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" then answer.\\n\\nLet me call\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" get_weather with\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\" city Paris\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"thinking\":\".\",\"type\":\"thinking_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_stop\ndata: {\"index\":0,\"type\":\"content_block_stop\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"id\":\"call_9c154f4de0874c44aaa532c5\",\"input\":{},\"name\":\"get_weather\",\"type\":\"tool_use\"},\"index\":1,\"type\":\"content_block_start\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"partial_json\":\"{\\\"city\\\":\\\"Paris\\\"}\",\"type\":\"input_json_delta\"},\"index\":1,\"type\":\"content_block_delta\"}\n\nevent: content_block_stop\ndata: {\"index\":1,\"type\":\"content_block_stop\"}\n\nevent: message_delta\ndata: {\"delta\":{\"stop_reason\":\"tool_use\"},\"type\":\"message_delta\",\"usage\":{\"input_tokens\":316,\"output_tokens\":88}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://inference.do-ai.run/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"deepseek-v4.1-flash\",\"system\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool, then answer in one short sentence.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"The user wants weather in Paris. I need to call get_weather. But wait — the user says \\\"answer in one short sentence.\\\" I should call the tool first, then answer.\\n\\nLet me call get_weather with city Paris.\",\"signature\":\"\"},{\"type\":\"tool_use\",\"id\":\"call_9c154f4de0874c44aaa532c5\",\"name\":\"get_weather\",\"input\":{\"city\":\"Paris\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_9c154f4de0874c44aaa532c5\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"stream\":true,\"max_tokens\":1024}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"message\":{\"content\":[],\"id\":\"msg_135fbb93-55a3-4786-b9a1-a8bdee779d52\",\"model\":\"deepseek-ai/DeepSeek-V4.1-Flash\",\"role\":\"assistant\",\"stop_reason\":null,\"stop_sequence\":null,\"type\":\"message\",\"usage\":{\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"input_tokens\":0,\"output_tokens\":0}},\"type\":\"message_start\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"text\":\"\",\"type\":\"text\"},\"index\":0,\"type\":\"content_block_start\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\"The weather in Paris is\",\"type\":\"text_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\" sunny\",\"type\":\"text_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\" with a\",\"type\":\"text_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\" temperature of 22°C\",\"type\":\"text_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\".\",\"type\":\"text_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_stop\ndata: {\"index\":0,\"type\":\"content_block_stop\"}\n\nevent: message_delta\ndata: {\"delta\":{\"stop_reason\":\"end_turn\"},\"type\":\"message_delta\",\"usage\":{\"input_tokens\":425,\"output_tokens\":17}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}

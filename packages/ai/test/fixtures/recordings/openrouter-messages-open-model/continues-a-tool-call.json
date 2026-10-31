@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "deepseek/deepseek-v4-flash",
+    "tags": [
+      "prefix:openrouter-messages-open-model",
+      "provider:openrouter",
+      "protocol:anthropic-messages",
+      "tool",
+      "tool-loop"
+    ],
+    "name": "openrouter-messages-open-model/continues-a-tool-call",
+    "recordedAt": "2026-10-31T17:23:22.008Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"deepseek/deepseek-v4-flash\",\"system\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool, then answer in one short sentence.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\"}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"stream\":true,\"max_tokens\":1024}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_p7mSnGFtYgcxJtvIsylW\",\"type\":\"message\",\"role\":\"assistant\",\"container\":null,\"content\":[],\"model\":\"deepseek/deepseek-v4-flash\",\"stop_reason\":null,\"stop_details\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"output_tokens_details\":null,\"cache_creation_input_tokens\":null,\"cache_read_input_tokens\":null,\"cache_creation\":null,\"inference_geo\":null,\"server_tool_use\":null,\"service_tier\":null,\"speed\":\"standard\"},\"provider\":\"Parasail\"}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"The\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" user wants\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" to know the weather\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" in Paris.\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" Let\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" me use\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" the get_\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"weather tool to\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" find\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" out\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\".\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_48da1688f62b487f91c89ef6\",\"caller\":{\"type\":\"direct\"},\"name\":\"get_weather\",\"input\":{}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"city\\\": \\\"Paris\\\"}\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"container\":null,\"stop_details\":null,\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":304,\"output_tokens\":68,\"output_tokens_details\":{\"thinking_tokens\":23},\"cache_creation_input_tokens\":null,\"cache_read_input_tokens\":0,\"cache_creation\":null,\"server_tool_use\":null,\"service_tier\":null,\"speed\":\"standard\",\"cost\":0.0000616,\"is_byok\":false,\"cost_details\":{\"upstream_inference_cost\":0.0000616,\"upstream_inference_prompt_cost\":0.00004256,\"upstream_inference_completions_cost\":0.00001904}},\"context_management\":null}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"deepseek/deepseek-v4-flash\",\"system\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool, then answer in one short sentence.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"The user wants to know the weather in Paris. Let me use the get_weather tool to find out.\",\"signature\":\"\"},{\"type\":\"tool_use\",\"id\":\"call_48da1688f62b487f91c89ef6\",\"name\":\"get_weather\",\"input\":{\"city\":\"Paris\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"call_48da1688f62b487f91c89ef6\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"stream\":true,\"max_tokens\":1024}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_F02xpd6Pl3JHFp2Tmwsn\",\"type\":\"message\",\"role\":\"assistant\",\"container\":null,\"content\":[],\"model\":\"deepseek/deepseek-v4-flash\",\"stop_reason\":null,\"stop_details\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"output_tokens_details\":null,\"cache_creation_input_tokens\":null,\"cache_read_input_tokens\":null,\"cache_creation\":null,\"inference_geo\":null,\"server_tool_use\":null,\"service_tier\":null,\"speed\":\"standard\"},\"provider\":\"Parasail\"}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"The\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" weather in\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" Paris is sunny\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" with a\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" temperature of \"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"22°C.\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\",\"citations\":[]}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"The weather in\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" Paris is sunny\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" with\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" a temperature of\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" 22°C\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\".\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"container\":null,\"stop_details\":null,\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":137,\"output_tokens\":32,\"output_tokens_details\":{\"thinking_tokens\":15},\"cache_creation_input_tokens\":null,\"cache_read_input_tokens\":256,\"cache_creation\":null,\"server_tool_use\":null,\"service_tier\":null,\"speed\":\"standard\",\"cost\":0.00004606,\"is_byok\":false,\"cost_details\":{\"upstream_inference_cost\":0.00004606,\"upstream_inference_prompt_cost\":0.0000371,\"upstream_inference_completions_cost\":0.00000896}},\"context_management\":null}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}
