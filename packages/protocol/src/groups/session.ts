@@ -169,7 +169,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           title: Schema.String.pipe(Schema.optional),
           agent: Agent.ID.pipe(Schema.optional),
           model: Model.Ref.pipe(Schema.optional),
-          location: Location.PublicRef.pipe(Schema.optional),
+          location: Location.Input.pipe(Schema.optional),
           metadata: Session.Metadata.pipe(Schema.optional),
           permissions: Permission.Ruleset.pipe(Schema.optional),
         }),
@@ -189,7 +189,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         payload: Schema.Struct({
           info: PublicSessionTransfer.fields.info,
           messages: ImportedMessages,
-          location: Location.PublicRef.pipe(Schema.optional),
+          location: Location.Input.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: PublicSessionInfo }),
         error: [ConflictError, SessionNotFoundError],
