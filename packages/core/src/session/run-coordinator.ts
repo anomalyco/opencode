@@ -1,6 +1,6 @@
 export * as SessionRunCoordinator from "./run-coordinator.js"
 
-import { Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, FiberSet, Option, Scope, Tracer } from "effect"
 import type { Promotable } from "./inbox.js"
 
 /** Serializes execution for each key while allowing different keys to run concurrently. */
@@ -36,7 +36,7 @@ type Execution<E, Reason> = {
   readonly done: Deferred.Deferred<void, E>
   owner?: Fiber.Fiber<void>
   scope: Promotable
-  pendingWake?: Promotable
+  pendingWake?: { scope: Promotable; span: Option.Option<Tracer.AnySpan> }
   stopping: boolean
   interruptionReason?: Reason
 }
@@ -71,7 +71,9 @@ export const make = <Key, E, Reason = never>(options: {
         Effect.andThen(
           Effect.suspend(() => {
             if (execution.stopping || execution.pendingWake === undefined) return Effect.void
-            execution.scope = execution.pendingWake
+            execution.scope = execution.pendingWake.scope
+            // Coalesced drains remain in this execution's trace. Only a fresh successor
+            // after settlement adopts the pending wake's span.
             execution.pendingWake = undefined
             // Trampoline so drains that complete synchronously cannot grow the stack.
             return Effect.yieldNow.pipe(Effect.andThen(loop(key, execution, false)))
@@ -79,40 +81,57 @@ export const make = <Key, E, Reason = never>(options: {
         ),
       )
 
-    const start = (key: Key, force: boolean, scope: Promotable) => {
-      const execution: Execution<E, Reason> = {
-        done: Deferred.makeUnsafe<void, E>(),
-        scope,
-        stopping: false,
-      }
-      executions.set(key, execution)
-      // The leading yield lets `owner` be assigned before the drain can settle, and keeps
-      // failing self-waking executions from growing the stack across successor starts.
-      // Drains start one tick after wake; callers observe progress through events or run.
-      execution.owner = fork(
-        Effect.yieldNow.pipe(
-          Effect.andThen(Effect.uninterruptible(options.started?.(key) ?? Effect.void)),
-          Effect.andThen(loop(key, execution, force)),
-          Effect.onExit((exit) =>
-            Effect.sync(() => {
-              execution.owner = undefined
-            }).pipe(Effect.andThen(options.settled?.(key, exit, execution.interruptionReason) ?? Effect.void)),
+    const start = (
+      key: Key,
+      force: boolean,
+      scope: Promotable,
+      span: Option.Option<Tracer.AnySpan>,
+    ): Effect.Effect<Execution<E, Reason>> =>
+      Effect.gen(function* () {
+        const execution: Execution<E, Reason> = {
+          done: Deferred.makeUnsafe<void, E>(),
+          scope,
+          stopping: false,
+        }
+        executions.set(key, execution)
+        // The leading yield lets `owner` be assigned before the drain can settle, and keeps
+        // failing self-waking executions from growing the stack across successor starts.
+        // Drains start one tick after wake; callers observe progress through events or run.
+        execution.owner = fork(
+          Effect.yieldNow.pipe(
+            Effect.andThen(Effect.uninterruptible(options.started?.(key) ?? Effect.void)),
+            Effect.andThen(loop(key, execution, force)),
+            Effect.onExit((exit) =>
+              Effect.sync(() => {
+                execution.owner = undefined
+              }).pipe(Effect.andThen(options.settled?.(key, exit, execution.interruptionReason) ?? Effect.void)),
+            ),
+            Effect.onExit((exit) => settle(key, execution, exit)),
+            Effect.exit,
+            Effect.asVoid,
+            Option.isSome(span)
+              ? Effect.withParentSpan(span.value)
+              : Effect.updateContext(Context.omit(Tracer.ParentSpan)),
           ),
-          Effect.onExit((exit) => Effect.sync(() => settle(key, execution, exit))),
-          Effect.exit,
-          Effect.asVoid,
-        ),
-      )
-      return execution
-    }
+        )
+        return execution
+      }).pipe(Effect.uninterruptible)
 
     // A doorbell that survives the execution loop (rung after the loop decided to end, or
     // during failure or interruption cleanup) starts a fresh execution for the remaining work.
-    const settle = (key: Key, execution: Execution<E, Reason>, exit: Exit.Exit<void, E>) => {
-      if (execution.pendingWake) start(key, false, execution.pendingWake)
-      else executions.delete(key)
-      Deferred.doneUnsafe(execution.done, exit)
-    }
+    const settle = (key: Key, execution: Execution<E, Reason>, exit: Exit.Exit<void, E>) =>
+      Effect.suspend(() => {
+        const pendingWake = execution.pendingWake
+        if (pendingWake)
+          return start(key, false, pendingWake.scope, pendingWake.span).pipe(
+            Effect.asVoid,
+            Effect.andThen(Effect.sync(() => Deferred.doneUnsafe(execution.done, exit))),
+          )
+        return Effect.sync(() => {
+          executions.delete(key)
+          Deferred.doneUnsafe(execution.done, exit)
+        })
+      })
 
     const isActive = (key: Key) => Effect.sync(() => executions.has(key))
 
@@ -125,22 +144,27 @@ export const make = <Key, E, Reason = never>(options: {
             return Deferred.await(execution.done).pipe(Effect.ignoreCause, Effect.andThen(run(key)))
           return Deferred.await(execution.done)
         }
-        return Deferred.await(start(key, true, "input").done)
+        return Effect.serviceOption(Tracer.ParentSpan).pipe(
+          Effect.flatMap((span) => start(key, true, "input", span)),
+          Effect.flatMap((execution) => Deferred.await(execution.done)),
+        )
       })
 
     const wake = (key: Key, scope: Promotable = "input") =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
+        const span = yield* Effect.serviceOption(Tracer.ParentSpan)
         const execution = executions.get(key)
         if (execution !== undefined) {
           // Coalesced wakes keep the widest scope: "input" subsumes "steer".
-          execution.pendingWake = execution.pendingWake === "input" ? "input" : scope
+          // If settlement needs a successor, the latest wake owns its trace.
+          execution.pendingWake = { scope: execution.pendingWake?.scope === "input" ? "input" : scope, span }
           return
         }
-        start(key, false, scope)
+        yield* start(key, false, scope, span)
       })
 
     const interrupt = (key: Key, reason?: Reason): Effect.Effect<boolean> =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         const execution = executions.get(key)
         if (execution === undefined || execution.stopping) return false
         if (execution.owner === undefined) {

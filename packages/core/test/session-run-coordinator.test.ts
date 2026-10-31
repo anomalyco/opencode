@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, References, Tracer } from "effect"
+import { State } from "@opencode/core/state"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
 import { testEffect } from "./lib/effect"
@@ -7,6 +8,117 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(Layer.empty)
 
 describe("SessionRunCoordinator", () => {
+  it.effect("does not inherit the caller's registration group", () =>
+    Effect.gen(function* () {
+      const reports: State.Failure[] = []
+      const state = State.create({ initial: () => 0, editor: (value) => value })
+      const coordinator = yield* SessionRunCoordinator.make({
+        drain: () =>
+          state
+            .transform(() => {
+              throw new Error("ungrouped")
+            })
+            .pipe(Effect.scoped, Effect.asVoid),
+      })
+      const exit = yield* coordinator.run("session").pipe(
+        State.group((failure) => reports.push(failure)),
+        Effect.exit,
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect(reports).toEqual([])
+    }),
+  )
+
+  it.effect("starts without the boot parent when the caller has no span", () =>
+    Effect.gen(function* () {
+      const parents: unknown[] = []
+      const coordinator = yield* SessionRunCoordinator.make({
+        drain: () =>
+          Effect.serviceOption(Tracer.ParentSpan).pipe(
+            Effect.tap((span) => Effect.sync(() => parents.push(span))),
+            Effect.asVoid,
+          ),
+      }).pipe(Effect.withSpan("boot"))
+      yield* coordinator
+        .run("session")
+        .pipe(Effect.updateContext((context: Context.Context<never>) => Context.omit(Tracer.ParentSpan)(context)))
+      expect(parents).toEqual([Option.none()])
+    }),
+  )
+
+  it.effect("inherits only the caller trace, not request services, annotations, or shutdown batches", () =>
+    Effect.gen(function* () {
+      const Service = Context.Reference<string>("coordinator-test-service", { defaultValue: () => "default" })
+      const observed: unknown[] = []
+      const notifications: number[] = []
+      const state = State.create({
+        initial: () => 0,
+        editor: (value) => value,
+        notify: (value) => Effect.sync(() => void notifications.push(value)),
+      })
+      const coordinator = yield* SessionRunCoordinator.make({
+        drain: () =>
+          Effect.gen(function* () {
+            observed.push(
+              yield* Service,
+              yield* References.CurrentLogAnnotations,
+              (yield* Effect.currentParentSpan).traceId,
+            )
+            yield* state.reload()
+          }),
+      }).pipe(Effect.provideService(Service, "boot"), Effect.annotateLogs({ origin: "boot" }), Effect.withSpan("boot"))
+      const request = Tracer.externalSpan({ traceId: "11111111111111111111111111111111", spanId: "2222222222222222" })
+      yield* coordinator
+        .run("session")
+        .pipe(
+          Effect.provideService(Service, "request"),
+          Effect.annotateLogs({ origin: "request" }),
+          Effect.withParentSpan(request),
+          State.shutdown,
+        )
+      expect(observed).toEqual(["boot", { origin: "boot" }, request.traceId])
+      expect(notifications).toEqual([0])
+      yield* state.reload()
+      expect(notifications).toEqual([0, 0])
+    }),
+  )
+
+  it.effect("keeps coalesced drains in one trace but gives a settlement successor the wake trace", () =>
+    Effect.gen(function* () {
+      const draining = yield* Deferred.make<void>()
+      const releaseDrain = yield* Deferred.make<void>()
+      const settling = yield* Deferred.make<void>()
+      const releaseSettlement = yield* Deferred.make<void>()
+      const traces: string[] = []
+      const scopes: string[] = []
+      const first = Tracer.externalSpan({ traceId: "11111111111111111111111111111111", spanId: "1111111111111111" })
+      const wake = Tracer.externalSpan({ traceId: "22222222222222222222222222222222", spanId: "2222222222222222" })
+      const successor = Tracer.externalSpan({ traceId: "33333333333333333333333333333333", spanId: "3333333333333333" })
+      const coordinator = yield* SessionRunCoordinator.make({
+        drain: (_key, _force, scope) =>
+          Effect.gen(function* () {
+            traces.push((yield* Effect.currentParentSpan).traceId)
+            scopes.push(scope)
+            if (traces.length !== 1) return
+            yield* Deferred.succeed(draining, undefined)
+            yield* Deferred.await(releaseDrain)
+          }),
+        settled: () => Deferred.succeed(settling, undefined).pipe(Effect.andThen(Deferred.await(releaseSettlement))),
+      })
+      yield* coordinator.wake("session", "steer").pipe(Effect.withParentSpan(first))
+      yield* Deferred.await(draining)
+      yield* coordinator.wake("session", "input").pipe(Effect.withParentSpan(wake))
+      yield* Deferred.succeed(releaseDrain, undefined)
+      yield* Deferred.await(settling)
+      yield* coordinator.wake("session", "input").pipe(Effect.withParentSpan(wake))
+      yield* coordinator.wake("session", "steer").pipe(Effect.withParentSpan(successor))
+      yield* Deferred.succeed(releaseSettlement, undefined)
+      yield* coordinator.awaitIdle("session")
+      expect(traces).toEqual([first.traceId, first.traceId, successor.traceId])
+      expect(scopes).toEqual(["steer", "input", "input"])
+    }),
+  )
+
   it.effect("joins concurrent resumes for one key", () =>
     Effect.gen(function* () {
       const gate = yield* Deferred.make<void>()
@@ -26,6 +138,48 @@ describe("SessionRunCoordinator", () => {
       expect(runs).toBe(1)
     }),
   )
+
+  it.effect("captures the trace when each execution starts", () => {
+    const spans: Tracer.NativeSpan[] = []
+    const tracer = Tracer.make({
+      span(options) {
+        const span = new Tracer.NativeSpan(options)
+        spans.push(span)
+        return span
+      },
+    })
+    return Effect.gen(function* () {
+      const coordinator = yield* SessionRunCoordinator.make({
+        drain: (key) => Effect.void.pipe(Effect.withSpan(`drain.${key}`)),
+      }).pipe(Effect.withSpan("boot"))
+
+      yield* Effect.all(
+        [
+          coordinator.run("first").pipe(Effect.withSpan("request.first")),
+          coordinator.run("second").pipe(Effect.withSpan("request.second")),
+        ],
+        { concurrency: "unbounded" },
+      )
+
+      const boot = spans.find((span) => span.name === "boot")
+      const firstRequest = spans.find((span) => span.name === "request.first")
+      const secondRequest = spans.find((span) => span.name === "request.second")
+      const firstDrain = spans.find((span) => span.name === "drain.first")
+      const secondDrain = spans.find((span) => span.name === "drain.second")
+
+      expect(boot).toBeDefined()
+      expect(firstRequest).toBeDefined()
+      expect(secondRequest).toBeDefined()
+      expect(firstDrain).toBeDefined()
+      expect(secondDrain).toBeDefined()
+      expect(firstDrain!.traceId).toBe(firstRequest!.traceId)
+      expect(secondDrain!.traceId).toBe(secondRequest!.traceId)
+      expect(firstDrain!.traceId).not.toBe(boot!.traceId)
+      expect(secondDrain!.traceId).not.toBe(boot!.traceId)
+      expect(firstDrain!.parent._tag === "Some" && firstDrain!.parent.value.spanId).toBe(firstRequest!.spanId)
+      expect(secondDrain!.parent._tag === "Some" && secondDrain!.parent.value.spanId).toBe(secondRequest!.spanId)
+    }).pipe(Effect.provideService(Tracer.Tracer, tracer))
+  })
 
   it.effect("joins a wake-started execution without forcing a successor", () =>
     Effect.gen(function* () {
