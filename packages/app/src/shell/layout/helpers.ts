@@ -29,7 +29,7 @@ export function homeProjectDirectories(result: string | string[] | null) {
 }
 
 export function projectForSession<T extends { id?: string; worktree: string; sandboxes?: string[] }>(
-  session: SessionInfo,
+  session: Pick<SessionInfo, "projectID" | "location">,
   projects: T[],
 ) {
   const matching = projects.filter((project) => project.id === session.projectID)

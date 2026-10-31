@@ -28,6 +28,9 @@ export interface TabPreviewData {
   title?: string
   path?: string
   serverName?: string
+  lastRun?: string
+  branch?: string
+  worktree?: string
 }
 
 export function TabPreviewPopover(props: {
@@ -162,8 +165,23 @@ export function TabPreviewPopover(props: {
             )}
           </Show>
 
+          <Show when={props.data.branch}>
+            <div data-slot="row">
+              <span data-slot="detail">{language.t("sidebar.session.branch", { branch: props.data.branch! })}</span>
+            </div>
+          </Show>
+          <Show when={props.data.worktree}>
+            <div data-slot="row">
+              <span data-slot="detail">{language.t("sidebar.session.worktree", { path: props.data.worktree! })}</span>
+            </div>
+          </Show>
           <Show when={props.data.serverName}>
             <div data-slot="server">{props.data.serverName}</div>
+          </Show>
+          <Show when={props.data.lastRun}>
+            <div data-slot="row">
+              <span data-slot="detail">{props.data.lastRun}</span>
+            </div>
           </Show>
         </HoverCard.Content>
       </HoverCard.Portal>

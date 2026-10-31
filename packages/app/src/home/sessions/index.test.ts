@@ -6,6 +6,7 @@ import {
   HOME_SESSION_LIMIT,
   HOME_V2_SESSION_PAGE_LIMIT,
   loadHomeSessionIndex,
+  loadHomeSessionInventory,
   mergeHomeSessionIndex,
   parseHomeSessionIndex,
   retainHomeSessions,
@@ -43,7 +44,7 @@ describe("Home session index", () => {
     const all = history("/repo", HOME_V2_SESSION_PAGE_LIMIT + 1)
     const calls: Array<{ cursor?: string; parentID: null }> = []
 
-    const result = await loadHomeSessionIndex(async (input) => {
+    const result = await loadHomeSessionInventory(async (input) => {
       calls.push(input)
 
       if (!input.cursor) return { data: all.slice(0, HOME_V2_SESSION_PAGE_LIMIT), cursor: { next: "next" } }
@@ -54,7 +55,8 @@ describe("Home session index", () => {
     expect(calls.map((call) => call.cursor)).toEqual([undefined, "next"])
     expect(calls.every((call) => call.parentID === null)).toBe(true)
     // Newest rows in server order, plus the recent window beyond the limit.
-    expect(ids(result)).toEqual(ids(all.slice(0, HOME_SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)))
+    expect(ids(result.sessions)).toEqual(ids(all.slice(0, HOME_SESSION_INDEX_LIMIT + SESSION_RECENT_LIMIT)))
+    expect(result.inventory).toHaveLength(all.length)
   })
 
   test("folds pages so every directory keeps its newest sessions", async () => {

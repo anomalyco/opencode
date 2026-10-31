@@ -69,6 +69,8 @@ export const ClosedTab = Persistence.struct({
 
 export const Closed = Persistence.array(ClosedTab)
 
+export const SidebarHidden = Persistence.array(Schema.String)
+
 /** A tab keeps its route only when it differs from the session, and the route's parent only with the route. */
 function withRoute(tab: typeof Session.Type) {
   const base = { type: tab.type, server: tab.server, sessionId: tab.sessionId }
