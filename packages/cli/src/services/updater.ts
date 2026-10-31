@@ -132,8 +132,8 @@ export function decodePolicy(text: string): Policy | undefined {
   }
   if (!("autoupdate" in input)) return
   if (input.autoupdate === false) return "disable"
-  if (input.autoupdate === "notify") return "notify"
-  if (input.autoupdate === true) return "auto"
+  // V1 never installed updates automatically; `autoupdate: true` only enabled update notices.
+  if (input.autoupdate === true || input.autoupdate === "notify") return "notify"
 }
 
 const make = Effect.gen(function* () {
