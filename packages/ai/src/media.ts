@@ -56,7 +56,11 @@ export type Source = Schema.Schema.Type<typeof Source>
 
 export type AspectRatio = `${number}:${number}`
 export const AspectRatio = Schema.declare<AspectRatio>(
-  (value): value is AspectRatio => typeof value === "string" && /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(value),
+  (value): value is AspectRatio => {
+    if (typeof value !== "string" || !/^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(value)) return false
+    const [width, height] = value.split(":").map(Number)
+    return width > 0 && height > 0
+  },
   { title: "Media.AspectRatio" },
 )
 
