@@ -673,6 +673,23 @@ describe("Provider and Model", () => {
     }),
   )
 
+  it.effect("does not fall back to another provider when the configured provider is missing", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const enabledProvider = Provider.ID.make("enabled")
+      yield* providers.transform((editor) => {
+        editor.update(enabledProvider, () => {})
+        editor.models.update(enabledProvider, Model.ID.make("fallback"), () => {})
+      })
+      yield* models.transform((editor) =>
+        editor.default.set(Provider.ID.make("dropped"), Model.ID.make("configured")),
+      )
+
+      expect(yield* models.default()).toBeUndefined()
+    }),
+  )
+
   it.effect("small model uses the newest release in the first matching family", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
