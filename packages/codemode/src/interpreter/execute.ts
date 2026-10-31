@@ -6,8 +6,18 @@ import { normalizeError } from "./errors.js"
 import type { Value } from "./objects.js"
 import { createBuiltins } from "./intrinsics.js"
 import { Interpreter } from "./interpreter.js"
-import { formatLocation } from "./model.js"
+import { type Binding, formatLocation } from "./model.js"
 import type { Runner } from "./runner.js"
+
+/** A REPL cell: the top-level scope earlier cells left, and how to save it once this cell succeeds. */
+export type Cell = {
+  readonly scope: Map<string, Binding>
+  /** Saves the cell's state as a new commit; the diagnostics say what was not saved. */
+  readonly save: Effect.Effect<ReadonlyArray<Diagnostic>>
+}
+
+/** Restores the state a REPL cell runs against, before the program starts. */
+export type OpenCell<R> = (ctx: Interpreter<R>, program: Program, code: string) => Effect.Effect<Cell, unknown>
 
 export const executeProgram = <R>(
   code: string,
@@ -15,6 +25,7 @@ export const executeProgram = <R>(
   limits: ResolvedExecutionLimits,
   hooks: ToolRuntime.Hooks<R>,
   globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>,
+  repl?: OpenCell<R>,
 ): Effect.Effect<Result, never, R> => {
   if (code.trim().length === 0) {
     return Effect.succeed({
@@ -33,6 +44,8 @@ export const executeProgram = <R>(
     // Set only after copy-out so timeouts cannot report invalid values as completed.
     let returned: { value: DataValue; runner: Runner<R> } | undefined
     let runner: Runner<R> | undefined
+    // Whether a REPL cell's state was saved; a timeout after the program returned can still stop the save.
+    let saved = repl === undefined
 
     const base = Effect.gen(function* () {
       const parsed = parseProgram(code)
@@ -40,7 +53,8 @@ export const executeProgram = <R>(
       const services = yield* Effect.context<R>()
       const ctx = new Interpreter<R>({ tools, services, builtins, logs, globals })
       runner = ctx.runner
-      const outcome = yield* runner.run(ctx.main(parsed.program))
+      const cell = repl === undefined ? undefined : yield* repl(ctx, parsed.program, code)
+      const outcome = yield* runner.run(ctx.main(parsed.program, cell?.scope))
       if (!outcome.ok) {
         return { ok: false, error: normalizeError(outcome.error), ...logged(), toolCalls: tools.calls } satisfies Result
       }
@@ -48,7 +62,9 @@ export const executeProgram = <R>(
       returned = { value: result, runner }
       // Host work the program left running is interrupted, not awaited.
       yield* runner.interrupt()
-      const warnings = runner.diagnostics()
+      const unsaved = cell === undefined ? [] : yield* cell.save
+      saved = true
+      const warnings = [...runner.diagnostics(), ...unsaved]
       return {
         ok: true,
         value: result,
@@ -84,6 +100,15 @@ export const executeProgram = <R>(
                         message: `The program returned, but background work was still running at the ${timeoutMs}ms timeout and was interrupted. Await all started promises.`,
                       },
                       ...returned.runner.diagnostics(),
+                      ...(saved
+                        ? []
+                        : [
+                            {
+                              kind: "StateNotSaved",
+                              message:
+                                "The timeout stopped this cell before its REPL state was saved; later cells see the state from before it.",
+                            } satisfies Diagnostic,
+                          ]),
                     ],
                     ...logged(),
                     toolCalls: tools.calls,
