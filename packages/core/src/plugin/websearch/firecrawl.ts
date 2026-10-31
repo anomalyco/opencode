@@ -5,6 +5,7 @@ import { Effect, Option, Schema, Scope } from "effect"
 import { HttpClient } from "effect/http"
 import { App } from "../../app.js"
 import { WebSearchMcp } from "./mcp.js"
+import { WebSearchProviderSettings } from "./settings.js"
 
 export const endpoint = "https://mcp.firecrawl.dev/v2/mcp"
 
@@ -52,19 +53,18 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       editor.add({
         id: "firecrawl",
         name: "Firecrawl",
-        execute: (input) =>
+        execute: (input, settings) =>
           Effect.gen(function* () {
-            const connection = yield* ctx.integration.connection.active("firecrawl")
-            const credential = connection ? yield* ctx.integration.connection.resolve(connection) : undefined
+            const resolved = yield* WebSearchProviderSettings.resolve(ctx.integration, "firecrawl", settings, endpoint)
             const result = yield* WebSearchMcp.call(
               http,
-              endpoint,
+              resolved.endpoint,
               "firecrawl_search",
               { input: McpInput, output: McpOutput },
               { query: input.query, limit: 8 },
               {
                 "User-Agent": App.useragent(ctx.app),
-                ...(credential?.type === "key" ? { Authorization: `Bearer ${credential.key}` } : {}),
+                ...(resolved.key ? { Authorization: `Bearer ${resolved.key}` } : {}),
               },
             )
             const content = result?.content.find((item) => item.text)
