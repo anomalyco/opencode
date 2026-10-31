@@ -1315,12 +1315,13 @@
 }
 
 [data-component="diagnostics"] {
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 8px 12px;
   background-color: var(--v2-state-bg-danger);
-  border-top: 0.5px solid var(--v2-state-border-danger);
+  border-block-start: 0.5px solid var(--v2-state-border-danger);
 
   [data-slot="diagnostic"] {
     display: flex;
@@ -1629,6 +1630,32 @@
 
   [data-slot="apply-patch-change"][data-type="modified"] {
     color: var(--icon-diff-modified-base);
+  }
+
+  [data-slot="accordion-item"]:has(> [data-component="diagnostics"]) {
+    &:not([data-expanded]) [data-slot="accordion-header"] [data-slot="accordion-trigger"] {
+      border-block-end-color: var(--v2-state-border-danger);
+    }
+
+    &[data-expanded] [data-slot="accordion-content"] {
+      border-block-end-color: var(--v2-state-border-danger);
+    }
+
+    &:last-child:not([data-expanded]) [data-slot="accordion-header"] [data-slot="accordion-trigger"],
+    &:last-child[data-expanded] [data-slot="accordion-content"] {
+      border-end-start-radius: 0;
+      border-end-end-radius: 0;
+    }
+
+    > [data-component="diagnostics"] {
+      border: 1px solid var(--v2-border-border-base);
+      border-block-start: 0;
+    }
+
+    &:last-child > [data-component="diagnostics"] {
+      border-end-start-radius: var(--radius-lg);
+      border-end-end-radius: var(--radius-lg);
+    }
   }
 }
 

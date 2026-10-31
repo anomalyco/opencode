@@ -199,6 +199,119 @@ const WrittenSource = {
   ),
 }
 
+const WrittenWithDiagnostics = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Write a file with diagnostics"
+      description="Error diagnostics from tool metadata render under the written file while warnings stay filtered out."
+      document={storyDocument([
+        storyTool(
+          "prt_write_diagnostics",
+          "write",
+          "completed",
+          {
+            path: "probe.go",
+            content: 'package main\n\nfunc main() {\n\tvar x int\n\tx = "s"\n}\n',
+          },
+          {
+            metadata: {
+              diagnostics: {
+                "probe.go": [
+                  {
+                    range: { start: { line: 5, character: 13 } },
+                    message: "cannot use string as int",
+                    severity: 1,
+                  },
+                  {
+                    range: { start: { line: 3, character: 5 } },
+                    message: "x declared and not used",
+                    severity: 2,
+                  },
+                ],
+              },
+            },
+          },
+        ),
+      ])}
+      editToolDefaultOpen
+    />
+  ),
+}
+
+function EditDiagnosticsFollowUpStory() {
+  const [state, setState] = createStore({ fixed: false })
+
+  const document = createMemo(() =>
+    storyDocument([
+      storyTool(
+        "prt_edit_diagnostics_initial",
+        "edit",
+        "completed",
+        {
+          path: "C:/workspaces/opencode/src/probe.go",
+          oldString: "export const before = true",
+          newString: "export const after = true",
+        },
+        {
+          metadata: {
+            files: [storyPatchFile("src/probe.go")],
+            diagnostics: {
+              "C:/workspaces/opencode/src/probe.go": [
+                {
+                  range: { start: { line: 0, character: 13 } },
+                  message: "type mismatch after edit",
+                  severity: 1,
+                },
+              ],
+            },
+          },
+        },
+      ),
+      ...(state.fixed
+        ? [
+            storyTool(
+              "prt_edit_diagnostics_fix",
+              "edit",
+              "completed",
+              {
+                path: "C:/workspaces/opencode/src/probe.go",
+                oldString: "export const after = true",
+                newString: "export const fixed = true",
+              },
+              {
+                metadata: {
+                  files: [
+                    {
+                      file: "src/probe.go",
+                      status: "modified",
+                      patch: "@@ -1 +1 @@\n-export const after = true\n+export const fixed = true",
+                      additions: 1,
+                      deletions: 1,
+                    },
+                  ],
+                  diagnostics: {},
+                },
+              },
+            ),
+          ]
+        : []),
+    ]),
+  )
+
+  return (
+    <section class="mx-auto flex w-full max-w-[860px] flex-col gap-4 p-6">
+      <button type="button" onClick={() => setState("fixed", true)}>
+        Apply fix edit
+      </button>
+      <CurrentSessionProviders document={document()}>
+        <SessionTimeline document={document()} editToolDefaultOpen />
+      </CurrentSessionProviders>
+    </section>
+  )
+}
+
+const EditDiagnosticsFollowUp = { render: () => <EditDiagnosticsFollowUpStory /> }
+
 // A finished turn: the step records which files changed, and the idle marker ends the turn.
 function finishedTurnDocument(files: { file: string; before: string; after: string }[]): SessionDocument {
   const document = storyDocument([
@@ -274,6 +387,8 @@ const fileScenarios = {
   streaming: EditWithStreamedSibling,
   patch: ThreeFilePatch,
   write: WrittenSource,
+  diagnostics: WrittenWithDiagnostics,
+  diagnosticsEdit: EditDiagnosticsFollowUp,
 }
 
 export const AppendingToolCalls = {
