@@ -77,6 +77,8 @@ export interface GrepInput {
   readonly include?: string
   readonly literal?: boolean
   readonly caseSensitive?: boolean
+  /** Enable ripgrep's PCRE2 engine so patterns may use look-around and backreferences. */
+  readonly pcre2?: boolean
   readonly limit: number
   readonly signal?: AbortSignal
 }
@@ -99,6 +101,10 @@ const normalizePath = (value: string) =>
 
 const isInvalidPattern = (stderr: string) =>
   stderr.includes("regex parse error") || stderr.includes("error parsing regex")
+
+// `pcre2: true` against an rg built without PCRE2 exits 2 before searching. Recognize it as a
+// failure, otherwise the empty stdout is reported as a successful "No matches found".
+const isPcre2Unavailable = (stderr: string) => stderr.includes("PCRE2 is not available")
 
 const layer = Layer.effect(
   Service,
@@ -143,7 +149,7 @@ const layer = Layer.effect(
 
           const code = yield* handle.exitCode
           const stderr = yield* Fiber.join(stderrFiber)
-          if (input.pattern && code === 2 && isInvalidPattern(stderr)) {
+          if (input.pattern && code === 2 && (isInvalidPattern(stderr) || isPcre2Unavailable(stderr))) {
             return yield* new InvalidPatternError({ pattern: input.pattern, message: stderr.trim() })
           }
           if (code !== 0 && code !== 1 && code !== 2) {
@@ -229,6 +235,8 @@ const layer = Layer.effect(
             ...(input.caseSensitive === false ? ["--ignore-case"] : []),
             ...(input.include ? [`--glob=${input.include}`] : []),
             "--glob=!**/.git/**",
+            // PCRE2 is opt-in; it is the only engine switch exposed because it enables look-around/backreferences.
+            ...(input.pcre2 ? ["--pcre2"] : []),
             "--",
             input.pattern,
             input.file ?? ".",
