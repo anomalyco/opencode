@@ -1,4 +1,5 @@
 /** @jsxImportSource @opentui/solid */
+import { TextareaRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { ConfigProvider } from "../src/config"
@@ -135,6 +136,112 @@ test("global commands stay reachable when the mode changes", async () => {
   try {
     exercise()
     expect(calls).toEqual(["global", "base", "global"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("cmd and command modifier aliases bind to super without swallowing plain c in textarea", async () => {
+  const calls: string[] = []
+  let shortcuts = () => ({ new: [] as readonly string[], list: "" })
+
+  function Harness() {
+    const view = Keymap.useShortcuts()
+    Keymap.createLayer(() => ({
+      commands: [
+        { id: "session.new", run: () => void calls.push("new") },
+        { id: "session.list", run: () => void calls.push("list") },
+      ],
+    }))
+    shortcuts = () => ({
+      new: view.list("session.new"),
+      list: view.get("session.list") ?? "",
+    })
+    return <textarea focused={true} />
+  }
+
+  const app = await testRender(
+    () => (
+      <ConfigProvider
+        config={createTuiResolvedConfig({
+          keybinds: {
+            "session.new": "cmd+n,cmd+t",
+            "session.list": "command+l",
+          },
+        })}
+      >
+        <Keymap.Provider>
+          <Harness />
+        </Keymap.Provider>
+      </ConfigProvider>
+    ),
+    { width: 80, height: 24, kittyKeyboard: true },
+  )
+  try {
+    await app.renderOnce()
+    const editor = app.renderer.currentFocusedEditor
+    if (!(editor instanceof TextareaRenderable)) throw new Error("expected focused textarea")
+
+    app.mockInput.pressKey("c")
+    expect(editor.plainText).toBe("c")
+
+    await app.mockInput.typeText("at")
+    expect(editor.plainText).toBe("cat")
+
+    expect(shortcuts()).toEqual({
+      new: ["super+n", "super+t"],
+      list: "super+l",
+    })
+
+    app.mockInput.pressKey("n", { super: true })
+    app.mockInput.pressKey("t", { super: true })
+    app.mockInput.pressKey("l", { super: true })
+    expect(calls).toEqual(["new", "new", "list"])
+    expect(editor.plainText).toBe("cat")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("cmd modifier alias works as a leader trigger", async () => {
+  const calls: string[] = []
+
+  function Harness() {
+    Keymap.createLayer(() => ({
+      commands: [{ id: "session.compact", run: () => void calls.push("compact") }],
+    }))
+    return <textarea focused={true} />
+  }
+
+  const app = await testRender(
+    () => (
+      <ConfigProvider
+        config={createTuiResolvedConfig({
+          keybinds: {
+            leader: "cmd+x",
+            "session.compact": "<leader>c",
+          },
+        })}
+      >
+        <Keymap.Provider>
+          <Harness />
+        </Keymap.Provider>
+      </ConfigProvider>
+    ),
+    { width: 80, height: 24, kittyKeyboard: true },
+  )
+  try {
+    await app.renderOnce()
+    const editor = app.renderer.currentFocusedEditor
+    if (!(editor instanceof TextareaRenderable)) throw new Error("expected focused textarea")
+
+    app.mockInput.pressKey("c")
+    expect(editor.plainText).toBe("c")
+
+    app.mockInput.pressKey("x", { super: true })
+    app.mockInput.pressKey("c")
+    expect(calls).toEqual(["compact"])
+    expect(editor.plainText).toBe("c")
   } finally {
     app.renderer.destroy()
   }

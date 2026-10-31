@@ -78,11 +78,7 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
   const dispose = [
     registerCommaBindings(keymap),
     keymap.appendBindingExpander((context) => {
-      const key = Object.entries({ enter: "return", esc: "escape", pgdown: "pagedown", pgup: "pageup" }).reduce(
-        (result, [alias, value]) =>
-          result.replace(new RegExp(`(^|[+,\\s>])${alias}(?=$|[+,\\s<])`, "gi"), `$1${value}`),
-        context.input,
-      )
+      const key = expandKeyAliases(context.input)
       if (key === context.input) return
       return [{ key, displays: context.displays }]
     }),
@@ -134,7 +130,7 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
       ].flatMap((command) => config.keybinds.get(command)),
     }),
   ]
-  const leader = config.keybinds.get("leader")?.[0]?.key
+  const leader = resolveLeaderKey(config)
   if (leader) {
     dispose.push(
       registerTimedLeader(keymap, {
@@ -186,7 +182,7 @@ export interface Keymap {
 function use(): Keymap {
   const value = useValue()
   const enabled = useInteractivity()
-  const leader = value.config.keybinds.get("leader")?.[0]?.key
+  const leader = resolveLeaderKey(value.config)
   const isLeader = leader ? value.keymap.createKeyMatcher(leader) : () => false
   return {
     dispatch(id, input) {
@@ -452,8 +448,26 @@ function createMode(keymap: OpenTuiKeymap) {
   }
 }
 
-function formatOptions(config: KeymapConfig) {
+const ALIAS_PATTERNS = Object.entries({
+  cmd: "super",
+  command: "super",
+  enter: "return",
+  esc: "escape",
+  pgdown: "pagedown",
+  pgup: "pageup",
+}).map(([alias, value]) => [new RegExp(`(^|[+,\\s>])${alias}(?=$|[+,\\s<])`, "gi"), `$1${value}`] as const)
+
+function expandKeyAliases(input: string) {
+  return ALIAS_PATTERNS.reduce((result, [pattern, replacement]) => result.replace(pattern, replacement), input)
+}
+
+function resolveLeaderKey(config: KeymapConfig) {
   const leader = config.keybinds.get("leader")?.[0]?.key
+  return typeof leader === "string" ? expandKeyAliases(leader) : leader
+}
+
+function formatOptions(config: KeymapConfig) {
+  const leader = resolveLeaderKey(config)
   return {
     tokenDisplay: {
       leader: leader ? (typeof leader === "string" ? leader : stringifyKeyStroke(leader)) : TuiKeybind.LeaderDefault,
