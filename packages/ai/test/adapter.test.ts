@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { ai, LLMRequest, LLMResponse } from "../src/effect.js"
-import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route.js"
+import { Route, Endpoint, LLMClient, Protocol, type Framing } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { LanguageModel } from "../src/schema/index.js"
 import { testEffect } from "./lib/effect.js"
@@ -23,7 +23,7 @@ const FakeEvent = Schema.Union([
 type FakeEvent = Schema.Schema.Type<typeof FakeEvent>
 const decodeFakeEvents = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(FakeEvent)))
 
-const fakeFraming: FramingDef<FakeEvent> = {
+const fakeFraming: Framing.Definition<FakeEvent> = {
   id: "fake-json-array",
   frame: (bytes) =>
     Stream.fromEffect(

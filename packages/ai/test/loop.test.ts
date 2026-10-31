@@ -10,6 +10,7 @@ const model = LanguageModel.make({ id: "fictional-model", provider: "fixture", r
 const it = testEffect(TestLLM.testLayer())
 
 const read_file = tool({
+  name: "read_file",
   description: "Read a file.",
   parameters: Schema.Struct({ path: Schema.String }),
   success: Schema.String,
@@ -18,7 +19,7 @@ const read_file = tool({
 })
 
 const collect = (until?: LLM.LoopInput["until"]) =>
-  ai.loop({ model, prompt: "Read the file.", tools: { read_file }, until }).pipe(
+  ai.loop({ model, prompt: "Read the file.", tools: [read_file], until }).pipe(
     Stream.runCollect,
     Effect.map((events) => Array.from(events)),
   )
@@ -90,6 +91,7 @@ describe("ai.loop", () => {
         TestLLM.text("Done.", "text-1"),
       )
       const add = AI.tool({
+        name: "add",
         description: "Add two numbers.",
         parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
         success: Schema.Number,
@@ -97,7 +99,7 @@ describe("ai.loop", () => {
         toModelOutput: ({ output }) => [{ type: "text", text: `sum=${output}` }],
       })
 
-      const events = yield* ai.loop({ model, prompt: "Add.", tools: { add } }).pipe(Stream.runCollect)
+      const events = yield* ai.loop({ model, prompt: "Add.", tools: [add] }).pipe(Stream.runCollect)
 
       expect(Array.from(events).filter(LLMEvent.is.toolResult)).toEqual([
         expect.objectContaining({ id: "call-1", result: { type: "text", value: "sum=5" } }),
@@ -140,6 +142,37 @@ describe("ai.loop", () => {
       expect(yield* client.requests()).toHaveLength(1)
       expect(events.filter(LLMEvent.is.toolResult)).toHaveLength(0)
       expect(events.at(-1)).toEqual(expect.objectContaining({ type: "provider-error", message: "Overloaded" }))
+    }),
+  )
+
+  it.effect("sends tools in array order, after wire entries given before them", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(TestLLM.text("Done.", "text-1"))
+      const search = tool({ name: "search", description: "Search.", parameters: Schema.String })
+
+      yield* ai.generate({
+        model,
+        prompt: "Hi.",
+        tools: [{ name: "hosted", description: "Hosted.", inputSchema: {} }, read_file, search],
+      })
+
+      expect((yield* client.requests())[0].tools.map((tool) => tool.name)).toEqual(["hosted", "read_file", "search"])
+    }),
+  )
+
+  it.effect("fails the request when two tools share a name", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      const copy = tool({ name: "read_file", description: "Read again.", parameters: Schema.String })
+      const loop = yield* ai
+        .loop({ model, prompt: "Hi.", tools: [read_file, read_file] })
+        .pipe(Stream.runDrain, Effect.flip)
+      const generate = yield* ai.generate({ model, prompt: "Hi.", tools: [read_file, copy] }).pipe(Effect.flip)
+
+      expect(loop.reason).toMatchObject({ _tag: "InvalidRequest", message: "Duplicate tool name: read_file" })
+      expect(generate.reason).toMatchObject({ _tag: "InvalidRequest", message: "Duplicate tool name: read_file" })
+      expect(yield* client.requests()).toHaveLength(0)
     }),
   )
 })

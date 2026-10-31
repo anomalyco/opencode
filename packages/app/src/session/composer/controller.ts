@@ -80,7 +80,7 @@ export function createSessionComposerController(input: {
   )
   const editable = createMemo(() => region.showComposer() && !region.child())
   // Requests hide the view without disposing its draft or queue edit.
-  createEffect(on(editable, () => composer.onDragLeave()))
+  createEffect(on(editable, () => composer.clearDrag()))
 
   return {
     region,

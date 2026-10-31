@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, Message, toDefinitions, ToolRuntime } from "../../src/effect.js"
+import { ai, LLMEvent, LLMRequest, Message, ToolRuntime } from "../../src/effect.js"
 import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
-import { weatherRuntimeTool, weatherToolName } from "../recorded-scenarios.js"
+import { weatherRuntimeTool } from "../recorded-scenarios.js"
 
 const model = OpenAICompatible.configure({
   provider: "google",
@@ -28,12 +28,12 @@ describe("Gemini OpenAI-compatible Chat recorded", () => {
     { cassette: "openai-compatible-chat/gemini-parallel-tool-signatures" },
     () =>
       Effect.gen(function* () {
-        const tools = { [weatherToolName]: weatherRuntimeTool }
+        const tools = [weatherRuntimeTool]
         const request = ai.request({
           model,
           system: "Call get_weather for every requested city in parallel, then answer in one short sentence.",
           prompt: "What is the weather in Paris and in Tokyo?",
-          tools: toDefinitions(tools),
+          tools,
           cache: "none",
         })
         const first = yield* LLMClient.generate(request)

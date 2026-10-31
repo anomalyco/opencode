@@ -1001,6 +1001,50 @@ test("shows the dropzone and attaches a dropped file", async ({ page }) => {
   await expect(page.locator('[data-component="composer-attachments"]')).toContainText("dropzone.txt")
 })
 
+test("keeps one dropzone while a file drag crosses the composer, and none for a text drag", async ({ page }) => {
+  const editor = await draft(page)
+  await page.keyboard.type("worktree off the latest dev")
+  const surface = page.locator('[data-component="new-session"]')
+  const dropzone = page.locator('[data-component="session-dropzone"]')
+
+  const text = await page.evaluateHandle(() => {
+    const value = new DataTransfer()
+    value.setData("text/plain", "worktree off the latest dev")
+
+    return value
+  })
+
+  await editor.dispatchEvent("dragenter", { dataTransfer: text })
+  await editor.dispatchEvent("dragover", { dataTransfer: text })
+  await expect(page.locator("[data-slot='session-dropzone-blur']")).toHaveAttribute("data-visible", "false")
+  await expect(dropzone).toHaveCount(0)
+
+  const files = await page.evaluateHandle(() => {
+    const value = new DataTransfer()
+    value.items.add(new File(["Dropzone fixture"], "dropzone.txt", { type: "text/plain" }))
+
+    return value
+  })
+
+  await surface.dispatchEvent("dragover", { dataTransfer: files })
+  await expect(dropzone).toHaveAttribute("data-visible", "true")
+  const shown = await dropzone.elementHandle()
+
+  // Moving onto the editor's own text fires dragleave on the editor before the next dragover.
+  await editor.evaluate((element, dataTransfer) => {
+    const inner = element.firstElementChild ?? element
+
+    const fire = (type: string, target: Element, relatedTarget: Element) =>
+      target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer, relatedTarget }))
+
+    fire("dragenter", inner, element)
+    fire("dragleave", element, inner)
+    fire("dragover", inner, element)
+  }, files)
+  await expect.poll(() => shown?.evaluate((element) => element.isConnected)).toBe(true)
+  await expect(dropzone).toHaveAttribute("data-visible", "true")
+})
+
 test("keeps a narrow session composer contained when invoking a built-in", async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 600 })
   const { editor } = await openSession(page, { name: "ComposerCommand", provider: NO_PROVIDER })

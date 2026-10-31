@@ -10,6 +10,7 @@ import {
   ImageModelSchema,
   LanguageModel,
   ProviderConfigurationError,
+  type ProviderPackage,
 } from "@opencode/ai/effect"
 import { Auth, mergeHttpOptions } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
@@ -188,7 +189,7 @@ export const withVariant = (
 }
 
 export interface Dependencies {
-  readonly loadPackage?: (specifier: string) => Effect.Effect<Provider.ProviderPackage, Provider.LoadError>
+  readonly loadPackage?: (specifier: string) => Effect.Effect<ProviderPackage.Definition, Provider.LoadError>
   readonly loadAISDK?: (model: RuntimeInfo) => Effect.Effect<LanguageModel, AISDK.InitError>
 }
 

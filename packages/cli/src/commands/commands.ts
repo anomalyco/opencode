@@ -1,5 +1,6 @@
 import { Argument, Flag, GlobalFlag } from "effect/cli"
 import { Schema } from "effect"
+import { CliFlag } from "../framework/flag"
 import { Spec } from "../framework/spec"
 import { Updater } from "../services/updater"
 
@@ -417,6 +418,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         fork: Flag.Boolean("fork").pipe(
           Flag.withDescription("Fork the session before continuing"),
           Flag.withDefault(false),
+        ),
+        worktree: CliFlag.optionalValue("worktree", "name").pipe(
+          Flag.withAlias("w"),
+          Flag.withDescription("Start a new session in a new git worktree, optionally with this name"),
         ),
         model: Flag.String("model").pipe(
           Flag.withAlias("m"),

@@ -45,6 +45,7 @@ export const weatherTool = ToolDefinition.make({
 })
 
 export const weatherRuntimeTool = tool({
+  name: weatherToolName,
   description: weatherTool.description,
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
@@ -92,7 +93,7 @@ const restroomImage = () =>
 
 export const runWeatherToolLoop = (request: LLMRequest) =>
   Effect.gen(function* () {
-    const tools = { [weatherToolName]: weatherRuntimeTool }
+    const tools = [weatherRuntimeTool]
     let next = LLMRequest.update(request, { tools: toDefinitions(tools) })
     const events: LLMEvent[] = []
 

@@ -295,7 +295,7 @@ export const dict = {
   "go.faq.a5.museRetention":
     "Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models.",
   "go.faq.a5.deepseekRetention":
-    "ZDR agreement is renewed monthly. The current agreement is valid through October 31, 2026.",
+    "ZDR agreement is renewed monthly. The current agreement is valid through November 30, 2026.",
   "go.faq.a5.learnMore": "Learn more",
 
   "go.faq.q6": "Can I top up credit?",

@@ -1,4 +1,4 @@
-import { Context, Effect, Exit, Fiber, Layer, Scope, Semaphore } from "effect"
+import { Context, Effect, Exit, Layer, Semaphore } from "effect"
 import { Reactivity } from "effect/reactivity"
 import { SqlClient, Statement } from "effect/sql"
 import type { Connection } from "effect/sql/SqlConnection"
@@ -170,14 +170,9 @@ const make = (options: Config) =>
 
     const semaphore = yield* Semaphore.make(1)
     const acquirer = semaphore.withPermits(1)(Effect.succeed(connection))
-    const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
-      const fiber = Fiber.getCurrent()!
-      const scope = Context.getUnsafe(fiber.context, Scope.Scope)
-      return Effect.as(
-        Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
-        connection,
-      )
-    })
+    const transactionAcquirer = Effect.uninterruptibleMask((restore) =>
+      Effect.as(restore(semaphore.takeScoped(1)), connection),
+    )
 
     const client = Object.assign(
       (yield* SqlClient.make({

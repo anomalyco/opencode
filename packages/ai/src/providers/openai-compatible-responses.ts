@@ -18,7 +18,7 @@ export type Config = RouteDefaultsInput &
 
 export type Settings = ProviderPackage.Settings &
   OpenResponsesProviderOptionsInput & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL: string
     readonly provider?: string
   }
