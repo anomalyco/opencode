@@ -29,6 +29,7 @@ import {
   addDefaultParsers,
   TextAttributes,
   RGBA,
+  MouseButton,
   MouseEvent,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
@@ -69,7 +70,7 @@ import { TodoItem } from "../../component/todo-item"
 import { DialogImagePreview } from "../../component/dialog-image-preview"
 import { createMediaSource } from "../../component/media-source"
 import { statusLabel } from "../../component/dialog-workspace-file-changes"
-import { DialogMessage } from "./dialog-message"
+import { DialogAssistantMessage, DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
@@ -1964,7 +1965,10 @@ function SessionPartView(props: {
   message: (messageID: string) => SessionMessageInfo | undefined
   images?: boolean
 }) {
+  const ctx = use()
   const message = createMemo(() => props.message(props.partRef.messageID))
+  const dialog = useDialog()
+  const renderer = useRenderer()
   const part = createMemo(() => {
     const item = message()
     if (item?.type !== "assistant") return
@@ -1979,6 +1983,15 @@ function SessionPartView(props: {
               part={item() as SessionMessageAssistantText}
               message={message() as SessionMessageAssistant}
               last={false}
+              onMouseUp={(event) => {
+                if (event.button !== MouseButton.RIGHT) return
+                if (renderer.getSelection()?.getSelectedText()) return
+                // The dialog can outlive this transcript row after a resync.
+                const messageID = props.partRef.messageID
+                dialog.replace(() => (
+                  <DialogAssistantMessage messageID={messageID} sessionID={ctx.sessionID} />
+                ))
+              }}
             />
           </Match>
           <Match when={item().type === "reasoning"}>
