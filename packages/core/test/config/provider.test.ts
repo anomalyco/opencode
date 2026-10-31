@@ -5,6 +5,7 @@ import { Effect, Schema } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
+import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
@@ -86,6 +87,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.make("proxy")
       yield* providers.transform((editor) => {
         editor.update(providerID, (provider) => {
+          provider.activation = "enabled"
           provider.package = "@opencode/ai/providers/openai/chat"
         })
         editor.models.update(providerID, Model.ID.make("catalog"), () => {})
@@ -141,6 +143,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.make("venice")
       yield* providers.transform((editor) => {
         editor.update(providerID, (provider) => {
+          provider.activation = "enabled"
           provider.package = "@opencode/ai/providers/openai-compatible"
         })
         editor.models.update(providerID, Model.ID.make("chat"), () => {})
@@ -205,6 +208,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.make("proxy")
       yield* providers.transform((editor) => {
         editor.update(providerID, (provider) => {
+          provider.activation = "enabled"
           provider.package = "@opencode/ai/providers/openai/chat"
         })
         editor.models.update(providerID, Model.ID.make("catalog"), (model) => {
@@ -248,6 +252,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.make("strict")
       yield* providers.transform((editor) => {
         editor.update(providerID, (provider) => {
+          provider.activation = "enabled"
           provider.package = "@opencode/ai/providers/openai-compatible"
           provider.settings = { baseURL: "https://strict.test/v1" }
         })
@@ -370,6 +375,80 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("keeps a catalog provider unavailable when config only overrides its settings", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const credentials = yield* Credential.Service
+      const catalogID = Provider.ID.make("catalog")
+      const modelID = Model.ID.make("chat")
+      yield* providers.transform((editor) => {
+        editor.update(catalogID, (provider) => {
+          provider.package = "@opencode/ai/providers/openai/chat"
+        })
+        editor.models.update(catalogID, modelID, () => {})
+      })
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              catalog: { settings: { timeout: 60_000 }, models: { alias: { modelID: "chat" } } },
+              custom: { package: "aisdk:@ai-sdk/openai-compatible", models: { local: {} } },
+              copy: { canonical: "catalog", models: { chat: {} } },
+            },
+          }),
+        }),
+      ])
+
+      const catalog = required(yield* providers.get(catalogID))
+      expect(catalog.activation).toBe("auto")
+      expect(catalog.settings?.timeout).toBe(60_000)
+      // Providers first declared by config, including a `canonical` copy of a catalog provider, need no connection.
+      expect((yield* providers.available()).map((provider) => provider.id)).toEqual([
+        Provider.ID.make("custom"),
+        Provider.ID.make("copy"),
+      ])
+      expect((yield* models.available()).map((model) => [model.providerID, model.id])).toEqual([
+        [Provider.ID.make("custom"), Model.ID.make("local")],
+        [Provider.ID.make("copy"), modelID],
+      ])
+
+      yield* credentials.create({
+        integrationID: Integration.ID.make(catalogID),
+        value: Credential.Key.make({ type: "key", key: "secret" }),
+      })
+      expect((yield* providers.available()).map((provider) => provider.id)).toContain(catalogID)
+    }),
+  )
+
+  it.effect("enables a catalog provider when config supplies its credential", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      yield* providers.transform((editor) => {
+        for (const id of ["keyed", "empty"])
+          editor.update(Provider.ID.make(id), (provider) => {
+            provider.package = "@opencode/ai/providers/openai/chat"
+          })
+      })
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              keyed: { settings: { apiKey: "secret" } },
+              empty: { settings: { apiKey: "" } },
+            },
+          }),
+        }),
+      ])
+
+      expect(required(yield* providers.get(Provider.ID.make("keyed"))).activation).toBe("enabled")
+      expect(required(yield* providers.get(Provider.ID.make("empty"))).activation).toBe("auto")
+      expect((yield* providers.available()).map((provider) => provider.id)).toEqual([Provider.ID.make("keyed")])
+    }),
+  )
+
   it.effect("defaults custom model metadata", () =>
     Effect.gen(function* () {
       const models = yield* Model.Service
@@ -430,6 +509,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const retypedID = Model.ID.make("retyped")
       const keptID = Model.ID.make("kept")
       yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.activation = "enabled"
+        })
         editor.models.update(providerID, retypedID, () => {})
         editor.models.update(providerID, keptID, (model) => {
           model.type = "decision"
@@ -467,6 +549,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const inheritedID = Model.ID.make("inherited")
       const overriddenID = Model.ID.make("overridden")
       yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.activation = "enabled"
+        })
         editor.models.update(providerID, inheritedID, (model) => {
           model.capabilities = { tools: false, input: ["text"], output: ["text"] }
         })
@@ -515,6 +600,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.make("custom")
       const modelID = Model.ID.make("partial")
       yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.activation = "enabled"
+        })
         editor.models.update(providerID, modelID, (model) => {
           model.capabilities = { tools: false, input: ["text"], output: ["text"] }
         })
@@ -728,6 +816,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.make("custom")
       const modelID = Model.ID.make("chat")
       yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.activation = "enabled"
+        })
         editor.models.update(providerID, modelID, (model) => {
           model.package = "aisdk:@ai-sdk/anthropic"
           model.settings = { baseURL: "https://catalog.example/v1" }
@@ -758,6 +849,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const models = yield* Model.Service
       const providerID = Provider.ID.make("gateway")
       yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.activation = "enabled"
+        })
         for (const id of ["chat", "pinned"])
           editor.models.update(providerID, Model.ID.make(id), (model) => {
             model.settings = { baseURL: "https://catalog.example/v1" }
@@ -876,6 +970,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.make("bedrock")
       const modelID = Model.ID.make("anthropic.claude-opus-5-5")
       yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.activation = "enabled"
+        })
         editor.models.update(providerID, modelID, (model) => {
           model.package = "@opencode/ai/providers/amazon-bedrock"
           model.variants = [
@@ -913,6 +1010,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const providerID = Provider.ID.make("bedrock")
       const modelID = Model.ID.make("anthropic.claude-plain")
       yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.activation = "enabled"
+        })
         editor.models.update(providerID, modelID, (model) => {
           model.package = "@opencode/ai/providers/amazon-bedrock"
         })
