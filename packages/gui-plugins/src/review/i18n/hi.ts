@@ -4,7 +4,7 @@ export default {
   "tab.count.other": "{{count}} फ़ाइलें बदली गईं",
   "mobile.title.one": "परिवर्तन",
   "mobile.title.other": "परिवर्तन",
-  "empty.git": "अभी तक कोई अप्रतिबद्ध परिवर्तन नहीं",
+  "empty.working": "अभी तक कोई अप्रतिबद्ध परिवर्तन नहीं",
   "empty.branch": "अभी तक शाखा में कोई परिवर्तन नहीं",
   "git.title": "एक Git रिपॉजिटरी बनाएं",
   "git.description": "इस प्रोजेक्ट में परिवर्तनों को ट्रैक करें, समीक्षा करें और पूर्ववत करें",

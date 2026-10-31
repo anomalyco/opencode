@@ -8,7 +8,7 @@ export default {
   "mobile.title.few": "Změny",
   "mobile.title.many": "Změny",
   "mobile.title.other": "Změny",
-  "empty.git": "Zatím žádné neprovedené změny",
+  "empty.working": "Zatím žádné neprovedené změny",
   "empty.branch": "Zatím žádné změny ve větvi",
   "git.title": "Vytvořte úložiště Git",
   "git.description": "Sledujte, kontrolujte a vracejte změny v tomto projektu",

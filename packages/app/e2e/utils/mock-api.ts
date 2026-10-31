@@ -38,6 +38,7 @@ const Query = Schema.Struct({
   query: Schema.optional(Schema.String),
   type: Schema.optional(Schema.String),
   mode: Schema.optional(Schema.String),
+  base: Schema.optional(Schema.String),
 })
 
 const SessionParams = { sessionID: Schema.String }
@@ -240,6 +241,7 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.post("vcsInit", "/api/vcs/init", { success: NoContent, error: Unsupported }))
   .add(HttpApiEndpoint.get("vcsStatus", "/api/vcs/status", { success: Json }))
   .add(HttpApiEndpoint.get("vcsBranches", "/api/vcs/branch", { success: Json }))
+  .add(HttpApiEndpoint.get("vcsBase", "/api/vcs/base", { success: Json }))
   .add(HttpApiEndpoint.get("vcsDiff", "/api/vcs/diff", { query: Query, success: Json }))
   .add(HttpApiEndpoint.get("fsList", "/api/fs/list", { query: Query, success: Json }))
   .add(

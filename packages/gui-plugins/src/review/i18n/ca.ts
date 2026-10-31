@@ -6,7 +6,7 @@ export default {
   "mobile.title.one": "Canviar",
   "mobile.title.many": "Canvis",
   "mobile.title.other": "Canvis",
-  "empty.git": "Encara no hi ha canvis no compromesos",
+  "empty.working": "Encara no hi ha canvis no compromesos",
   "empty.branch": "Encara no hi ha canvis de branca",
   "git.title": "Creeu un repositori Git.",
   "git.description": "Feu un seguiment, reviseu i desfer els canvis en aquest projecte",

@@ -4,7 +4,7 @@ export default {
   "tab.count.other": "ປ່ຽນ {{count}} ໄຟລ໌",
   "mobile.title.one": "ປ່ຽນແປງ",
   "mobile.title.other": "ການປ່ຽນແປງ",
-  "empty.git": "ບໍ່ມີການປ່ຽນແປງທີ່ບໍ່ໄດ້ຕົກລົງເທື່ອ",
+  "empty.working": "ບໍ່ມີການປ່ຽນແປງທີ່ບໍ່ໄດ້ຕົກລົງເທື່ອ",
   "empty.branch": "ບໍ່ມີການປ່ຽນແປງສາຂາເທື່ອ",
   "git.title": "ສ້າງບ່ອນເກັບຂໍ້ມູນ Git",
   "git.description": "ຕິດຕາມ, ທົບທວນ, ແລະຍົກເລີກການປ່ຽນແປງໃນໂຄງການນີ້",

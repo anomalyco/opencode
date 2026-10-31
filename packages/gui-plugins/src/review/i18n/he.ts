@@ -6,7 +6,7 @@ export default {
   "mobile.title.one": "שינוי",
   "mobile.title.two": "שינויים",
   "mobile.title.other": "שינויים",
-  "empty.git": "אין עדיין שינויים שלא בוצע להם commit",
+  "empty.working": "אין עדיין שינויים שלא בוצע להם commit",
   "empty.branch": "אין עדיין שינויים בענף",
   "git.title": "צור מאגר Git",
   "git.description": "עקוב, סקור ובטל שינויים בפרויקט הזה",

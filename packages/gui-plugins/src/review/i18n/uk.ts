@@ -8,7 +8,7 @@ export default {
   "mobile.title.few": "Зміни",
   "mobile.title.many": "Змін",
   "mobile.title.other": "Зміни",
-  "empty.git": "Ще немає незафіксованих змін",
+  "empty.working": "Ще немає незафіксованих змін",
   "empty.branch": "Ще немає змін у гілці",
   "git.title": "Створити Git-репозиторій",
   "git.description": "Відстежуйте, переглядайте та скасовуйте зміни в цьому проєкті",
