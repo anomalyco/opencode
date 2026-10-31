@@ -247,6 +247,22 @@ export const InboxDeliveryChanged = Event.durable({
 })
 export type InboxDeliveryChanged = typeof InboxDeliveryChanged.Type
 
+/**
+ * Recovery gives up on automatic execution of the pending rows it selected. `through` is the
+ * admission watermark captured when recovery decided, so rows admitted afterwards — including the
+ * successor a live interruption wakes — stay eligible instead of being retired by a terminal.
+ */
+export const InboxResumeRetired = Event.durable({
+  type: "session.inbox.resume.retired",
+  ...options,
+  schema: {
+    ...Base,
+    reason: Schema.Literals(["exhausted", "interrupted"]),
+    through: Event.Seq,
+  },
+})
+export type InboxResumeRetired = typeof InboxResumeRetired.Type
+
 export namespace Execution {
   export const Started = Event.durable({ type: "session.execution.started", ...options, schema: Base })
   export type Started = typeof Started.Type
@@ -728,6 +744,7 @@ export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
   UsageRecorded,
   MessageContentUpdated,
+  InboxResumeRetired,
 )
 export const EphemeralDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "ephemeral"),

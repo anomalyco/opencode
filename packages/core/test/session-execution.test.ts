@@ -31,8 +31,9 @@ import { Provider } from "@opencode/core/provider"
 import { daemonShells } from "./fixture/shell-daemon"
 import { SubagentCompletion } from "@opencode/core/session/subagent-completion"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Logger, Scope } from "effect"
-import { eq } from "drizzle-orm"
+import { asc, desc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
+import { drain } from "./lib/clock"
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -467,7 +468,6 @@ describe("SessionExecution lifecycle", () => {
       const database = yield* Database.Service
       const sessionID = Session.ID.make("ses_resume_counted")
       yield* seedSessions(database, [sessionID], { time_suspended: Date.now() })
-
       const draining = yield* Deferred.make<void>()
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
@@ -518,6 +518,63 @@ describe("SessionExecution lifecycle", () => {
       expect(continued).toEqual([])
       expect(yield* attempts(database, sessionID)).toBe(0)
       expect((yield* claims(database))[sessionID]).toBe(true)
+    }),
+  )
+})
+
+describe("SessionRestart crash matrix", () => {})
+
+describe("SessionRestart retirement settles the decision", () => {
+  it.effect("a second sweep counts nothing, fails nothing, and drains nothing after exhaustion", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_exhausted_second_sweep")
+      yield* seedSessions(database, [sessionID], { time_suspended: Date.now(), resume_attempts: 2 })
+      yield* seedInbox(database, sessionID, [
+        { delivery: "steer", resume: true },
+        { delivery: "queue", resume: true },
+        // Never asked for automatic execution, so no exhaustion decision can retire it.
+        { delivery: "steer", resume: false },
+      ])
+
+      const drained: string[] = []
+      const failures: string[] = []
+      const continuations: string[] = []
+      yield* bus.project(SessionEvent.Execution.Failed, (event) =>
+        Effect.sync(() => void failures.push(event.data.error.type)),
+      )
+      yield* bus.project(SessionEvent.Synthetic, (event) =>
+        Effect.sync(() => void continuations.push(event.data.description ?? "")),
+      )
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, ({ sessionID: id }) => Effect.sync(() => void drained.push(id)), {
+        maxAttempts: 2,
+      })
+      const restart = Context.get(context, SessionRestart.Service)
+
+      yield* restart.resumeSuspendedSessions
+      expect(failures).toEqual(["aborted"])
+      expect(continuations).toEqual([])
+      expect(drained).toEqual([])
+      expect((yield* pendingInbox(database, sessionID)).map((row) => [row.resume, row.retired])).toEqual([
+        [true, true],
+        [true, true],
+        [false, false],
+      ])
+
+      // Second sweep: the rows are still pending, but retirement removed them from eligibility.
+      failures.length = 0
+      continuations.length = 0
+      yield* restart.resumeSuspendedSessions
+      yield* drain
+      expect(failures).toEqual([])
+      expect(continuations).toEqual([])
+      expect(drained).toEqual([])
+      expect(yield* attempts(database, sessionID)).toBe(0)
+      // They stay pending, unconsumed: retirement is not deletion.
+      expect(yield* pendingInbox(database, sessionID)).toHaveLength(3)
     }),
   )
 })
@@ -2034,25 +2091,57 @@ function seedInbox(
   database: Database.Service["Service"],
   sessionID: Session.ID,
   items: ReadonlyArray<
-    SessionInbox.Delivery | { readonly delivery: SessionInbox.Delivery; readonly type: "compaction" }
+    | SessionInbox.Delivery
+    | { readonly delivery: SessionInbox.Delivery; readonly type: "compaction" }
+    | { readonly delivery: SessionInbox.Delivery; readonly resume: boolean }
   >,
 ) {
+  return Effect.gen(function* () {
+    // Continue the Session's sequence so a second seed can append instead of colliding.
+    const latest = yield* database.db
+      .select({ seq: SessionInboxTable.enqueued_seq })
+      .from(SessionInboxTable)
+      .where(eq(SessionInboxTable.session_id, sessionID))
+      .orderBy(desc(SessionInboxTable.enqueued_seq))
+      .limit(1)
+      .get()
+      .pipe(Effect.orDie)
+    const start = latest?.seq ?? 0
+    yield* database.db
+      .insert(SessionInboxTable)
+      .values(
+        items.map((item, index) => {
+          const entry = typeof item === "string" ? { delivery: item } : item
+          const compaction = "type" in entry && entry.type === "compaction"
+          return {
+            id: SessionMessage.ID.create(),
+            session_id: sessionID,
+            type: compaction ? ("compaction" as const) : ("user" as const),
+            payload: compaction ? {} : { text: "queued prompt" },
+            delivery: entry.delivery,
+            resume: "resume" in entry ? entry.resume : false,
+            enqueued_seq: start + index + 1,
+          }
+        }),
+      )
+      .run()
+      .pipe(Effect.orDie)
+  })
+}
+
+/** Pending rows for a Session with their recovery eligibility, oldest first. */
+function pendingInbox(database: Database.Service["Service"], sessionID: Session.ID) {
   return database.db
-    .insert(SessionInboxTable)
-    .values(
-      items.map((item, index) => {
-        const entry = typeof item === "string" ? { delivery: item, type: "user" as const } : item
-        return {
-          id: SessionMessage.ID.create(),
-          session_id: sessionID,
-          type: entry.type,
-          payload: entry.type === "user" ? { text: "queued prompt" } : {},
-          delivery: entry.delivery,
-          enqueued_seq: index + 1,
-        }
-      }),
-    )
-    .run()
+    .select({
+      id: SessionInboxTable.id,
+      resume: SessionInboxTable.resume,
+      retired: SessionInboxTable.resume_retired,
+      seq: SessionInboxTable.enqueued_seq,
+    })
+    .from(SessionInboxTable)
+    .where(eq(SessionInboxTable.session_id, sessionID))
+    .orderBy(asc(SessionInboxTable.enqueued_seq))
+    .all()
     .pipe(Effect.orDie)
 }
 
@@ -2116,6 +2205,13 @@ function buildExecution(
   options?: SessionRestart.Options,
   overrideJobs?: Job.Interface,
   shell?: Shell.Interface,
+  /**
+   * Opts out of the masking wrapper below, keeping the real `synthetic` resume semantics. Omitted
+   * by default **on purpose**: the wrapper forces `resume: false` on every synthetic so recovery
+   * tests never depend on a notice's own flag. Only a test that must observe that flag — such as
+   * the C5 suppression case — passes `true`, and it should be the only kind.
+   */
+  realSynthetic?: boolean,
 ) {
   return Effect.gen(function* () {
     const database = yield* Database.Service
@@ -2128,6 +2224,7 @@ function buildExecution(
       Session.Service,
       Effect.gen(function* () {
         const execution = yield* SessionExecution.Service
+        if (realSynthetic) return sessions
         return Session.Service.of({
           ...sessions,
           synthetic: (input) =>

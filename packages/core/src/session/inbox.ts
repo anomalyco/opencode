@@ -1,6 +1,6 @@
 export * as SessionInbox from "./inbox.js"
 
-import { and, asc, eq, or } from "drizzle-orm"
+import { and, asc, desc, eq, lte, or } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import {
@@ -433,6 +433,45 @@ export const projectDeliveryChanged = Effect.fn("SessionInbox.projectDeliveryCha
       to: input.delivery,
     }),
 )
+
+/**
+ * Retires the rows recovery selected, scoped to the admission watermark it captured. A row admitted
+ * after that boundary — including the successor steering wake after a live interruption — stays
+ * eligible, mirroring how the live coordinator claims only the wakes recorded so far.
+ */
+export const projectResumeRetired = Effect.fn("SessionInbox.projectResumeRetired")(function* (
+  db: DatabaseService,
+  input: { readonly sessionID: SessionSchema.ID; readonly through: number },
+) {
+  yield* db
+    .update(SessionInboxTable)
+    .set({ resume_retired: true })
+    .where(
+      and(
+        eq(SessionInboxTable.session_id, input.sessionID),
+        eq(SessionInboxTable.resume, true),
+        lte(SessionInboxTable.enqueued_seq, input.through),
+      ),
+    )
+    .run()
+    .pipe(Effect.orDie)
+})
+
+/** Highest admission sequence this Session has, the boundary recovery captures before deciding. */
+export const latestEnqueuedSeq = Effect.fn("SessionInbox.latestEnqueuedSeq")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const row = yield* db
+    .select({ seq: SessionInboxTable.enqueued_seq })
+    .from(SessionInboxTable)
+    .where(eq(SessionInboxTable.session_id, sessionID))
+    .orderBy(desc(SessionInboxTable.enqueued_seq))
+    .limit(1)
+    .get()
+    .pipe(Effect.orDie)
+  return row?.seq
+})
 
 const listRows = (db: DatabaseService, sessionID: SessionSchema.ID) =>
   db

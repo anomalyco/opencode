@@ -1,6 +1,7 @@
 export * as SessionExecution from "./execution.js"
 
 import { Cause, Context, Effect, Exit, Layer } from "effect"
+import type { Event } from "@opencode/schema/event"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Job } from "../job.js"
@@ -45,6 +46,22 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 
 type InterruptReason = "user" | "shutdown"
 
+/**
+ * Why an interruption happened, plus the admission watermark captured when it was requested.
+ * Recovery retires eligibility only through that boundary, so work admitted during cleanup — the
+ * successor an `interrupt({ resume: true })` wakes — stays eligible.
+ */
+type Interruption = { readonly reason: InterruptReason; readonly boundary?: number }
+
+/**
+ * The durable retirement an interrupted turn decides: rows admitted up to the watermark captured at
+ * the decision stop being resumable, while work admitted during cleanup stays eligible.
+ */
+const retirement = (sessionID: SessionSchema.ID, boundary: number | undefined) =>
+  boundary === undefined
+    ? undefined
+    : ([SessionEvent.InboxResumeRetired, { sessionID, reason: "interrupted", through: boundary }] as const)
+
 export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: InterruptReason) {
   if (Exit.isSuccess(exit)) return { type: "succeeded" as const }
   if (Cause.hasInterrupts(exit.cause)) return { type: "interrupted" as const, reason: reason ?? "shutdown" }
@@ -83,7 +100,7 @@ export const layer = Layer.effect(
     // The report coordinator is built first so the run coordinator's hooks can use it, while its
     // wake and draining dependencies bind late to the coordinator the hooks belong to.
     const holder: {
-      coordinator?: SessionRunCoordinator.Coordinator<SessionSchema.ID, SessionRunner.RunError, InterruptReason>
+      coordinator?: SessionRunCoordinator.Coordinator<SessionSchema.ID, SessionRunner.RunError, Interruption>
     } = {}
     const subagentReport = SubagentReport.make({
       store,
@@ -129,7 +146,7 @@ export const layer = Layer.effect(
         Reloaded: (result) => drain(sessionID, result.force, result.continuation, promotable, result.stepped),
       })
     })
-    const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
+    const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, Interruption>({
       started: (sessionID) =>
         reportLifecycle(
           sessionID,
@@ -147,11 +164,20 @@ export const layer = Layer.effect(
         ),
       drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
-      settled: (sessionID, exit, reason) =>
+      settled: (sessionID, exit, interruption) =>
         reportLifecycle(
           sessionID,
           Effect.gen(function* () {
-            const outcome = terminal(exit, reason)
+            const outcome = terminal(exit, interruption?.reason)
+            // Retirement rides in the terminal's own transaction: projectors and commit hooks run
+            // inside it, so a crash can never separate the terminal from the eligibility decision.
+            // Only a deliberate stop retires: shutdown keeps the turn resumable, and a turn that
+            // succeeds on its own leaves its parked work alone. A boundary can still reach the
+            // failure branch, because the interrupt captures it and the owner may then finish on
+            // its own before the interrupt lands (the coordinator re-checks ownership and skips
+            // the fork). `terminal` only reports `interrupted` when the exit carries interrupt causes.
+            const retire =
+              outcome.type === "succeeded" ? undefined : retirement(sessionID, interruption?.boundary)
             if (outcome.type === "interrupted" && outcome.reason === "shutdown") {
               subagentReport.clear(sessionID)
               // Shutdown keeps the claim and the running Job row for restart continuity.
@@ -161,7 +187,7 @@ export const layer = Layer.effect(
             // Claim the Job generation before cancelling it so the settlement commit owns its outbox row.
             const settlement = yield* subagentReport.prepare(sessionID, outcome)
             if (outcome.type === "interrupted") yield* jobs.cancel(sessionID)
-            yield* publishTerminal(bus, sessionID, outcome, settlement.commit)
+            yield* publishTerminal(bus, sessionID, outcome, settlement.commit, retire)
             // Post-commit delivery is best effort: a retained outbox marker is recovered on the
             // next restart, and a delivery defect must not fail the settled hook.
             yield* settlement.deliver.pipe(
@@ -178,7 +204,15 @@ export const layer = Layer.effect(
       isActive: coordinator.isActive,
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
-          const interrupted = yield* coordinator.interrupt(sessionID, "user")
+          // Retiring the rows that existed at the decision is the durable mirror of the live
+          // rule: `interrupt` claims the wakes recorded so far, while wakes arriving during
+          // cleanup belong to a successor. It also stops "user stops it, server restarts, it
+          // runs again on its own".
+          const boundary = yield* SessionInbox.latestEnqueuedSeq(db, sessionID)
+          const interrupted = yield* coordinator.interrupt(sessionID, {
+            reason: "user",
+            boundary,
+          })
           if (!options?.resume) return interrupted
           // Resume steering input and between-turn control work from the interrupted
           // intent. Queued next-turn prompts stay parked: a steer-scoped drain never
@@ -207,12 +241,31 @@ function publishTerminal(
   sessionID: SessionSchema.ID,
   outcome: ReturnType<typeof terminal>,
   commit: (seq: number) => Effect.Effect<void>,
+  retire?: ReturnType<typeof retirement>,
 ) {
   if (outcome.type === "succeeded") return bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, { commit })
   if (outcome.type === "interrupted") {
-    return bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: outcome.reason }, { commit })
+    return publishWithRetirement(
+      bus,
+      SessionEvent.Execution.Interrupted,
+      { sessionID, reason: outcome.reason },
+      commit,
+      retire,
+    )
   }
-  return bus.publish(SessionEvent.Execution.Failed, { sessionID, error: outcome.error }, { commit })
+  return publishWithRetirement(bus, SessionEvent.Execution.Failed, { sessionID, error: outcome.error }, commit, retire)
+}
+
+/** Publishes the terminal and the retirement it decided in one transaction. */
+function publishWithRetirement<D extends Event.DurableDefinition>(
+  bus: Bus.Interface,
+  definition: D,
+  data: Event.Data<D>,
+  commit: (seq: number) => Effect.Effect<void>,
+  retire?: ReturnType<typeof retirement>,
+) {
+  if (retire === undefined) return bus.publish(definition, data, { commit }).pipe(Effect.asVoid)
+  return bus.publishAll([[definition, data, { commit }] as const, retire]).pipe(Effect.asVoid)
 }
 
 export const node = makeGlobalNode({
