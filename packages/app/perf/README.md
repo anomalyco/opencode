@@ -32,7 +32,28 @@ strobe bench packages/app/perf/desktop.bench.ts --base app:opencode --head app:o
 strobe report experiment <exp_…> --open
 ```
 
+## Why did it change?
+
+`--why always` (or a verdict that moved, by default) adds one profiled launch per side after the timed pairs. The
+report's lower half and these views read it; the result lists the recording ids:
+
+```sh
+strobe query <rec_…> hotspots          # CPU self time by function, with original file:line:column and full stacks
+strobe query <rec_…> layout            # forced layouts and style recalcs, by the line that forced them
+strobe query <rec_…> alloc             # bytes allocated by function, with stacks
+strobe query <rec_…> gc                # collections and GC time per run
+strobe query <rec_…> heap              # live objects by class, retained sizes, retainer paths
+strobe query <base rec>..<head rec> heap   # which classes grew or shrank
+```
+
+Every timed pair also records `main.script`, `main.style` and `main.layout`, so "where main-thread time went" has
+intervals too. Names and paths come from the build's source maps (`sourcemap: true` in the app's Vite config).
+
+## Notes
+
 - A variant is a directory or a git ref. A git ref becomes a detached worktree in strobe's own build folder.
+- A locked screen pauses a bench: Chromium stops drawing behind the lock screen, so strobe waits for the unlock and
+  runs the interrupted launch again.
 - Strobe refuses invalid setups (a hidden window, a software GPU, a throttled CPU) instead of reporting numbers.
 - Close heavy apps first. Background load widens the intervals but does not bias them.
 
