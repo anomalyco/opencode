@@ -19,6 +19,7 @@ const targets = [
   { target: "x86_64-unknown-linux-musl", platform: "linux", arch: "x64", libc: "musl", suffix: "musl" },
   { target: "aarch64-pc-windows-msvc", platform: "win32", arch: "arm64" },
   { target: "x86_64-pc-windows-msvc", platform: "win32", arch: "x64" },
+  { target: "aarch64-linux-android", platform: "android", arch: "arm64" },
 ]
 
 await rm(output, { recursive: true, force: true })
