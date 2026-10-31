@@ -43,6 +43,9 @@ const sweep = (
     }),
   )
 
+// The Node client is swept in fixture/sqlite-node-client.ts under real Node,
+// because @effect/sql-sqlite-node cannot load inside `bun test` on macOS. It
+// shares makeSqliteAcquirers with the Bun client.
 describe("sqlite transaction interrupts", () => {
   test("bun client releases the connection when a queued transaction is interrupted", async () => {
     const leaked = await sweep(

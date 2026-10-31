@@ -49,6 +49,7 @@
       "@effect/platform-node": "4.1.0",
       "@effect/platform-node-shared": "4.1.0",
       "@effect/sql-sqlite-bun": "4.1.0",
+      "@effect/sql-sqlite-node": "4.1.0",
       "@npmcli/arborist": "9.4.0",
       "@types/bun": "1.4.3",
       "@types/cross-spawn": "6.0.6",
