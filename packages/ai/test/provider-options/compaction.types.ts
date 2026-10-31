@@ -32,12 +32,13 @@ for (const model of [
 }
 
 const unsupported = {
-  anthropic: ai.request({ model: Anthropic.configure().model("fixture") }),
-  openaiChat: ai.request({ model: OpenAI.configure().chat("fixture") }),
-  azureChat: ai.request({ model: Azure.configure({ resourceName: "test" }).chat("fixture") }),
-  xaiChat: ai.request({ model: XAI.configure().chat("fixture") }),
+  anthropic: ai.request({ model: Anthropic.configure().model("fixture"), prompt: "Hello" }),
+  openaiChat: ai.request({ model: OpenAI.configure().chat("fixture"), prompt: "Hello" }),
+  azureChat: ai.request({ model: Azure.configure({ resourceName: "test" }).chat("fixture"), prompt: "Hello" }),
+  xaiChat: ai.request({ model: XAI.configure().chat("fixture"), prompt: "Hello" }),
   compatible: ai.request({
     model: OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
+    prompt: "Hello",
   }),
 }
 // @ts-expect-error Anthropic has no standalone compact endpoint.
@@ -64,7 +65,10 @@ ai.compact(switched)
 ai.compact(LLMRequest.update(switched, { model: openai }))
 ai.compact(
   // @ts-expect-error Replacing the route also replaces compaction capability.
-  ai.request({ model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }) }),
+  ai.request({
+    model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }),
+    prompt: "Hello",
+  }),
 )
 
 declare const dynamicModel: LanguageModel
@@ -110,6 +114,7 @@ ai.compact(ai.request({ model: openai, prompt: "hello" })).pipe(
 )
 ai.request({
   model: openai,
+  prompt: "Hello",
   providerOptions: {
     // @ts-expect-error A token threshold is numeric.
     contextManagement: [{ type: "compaction", compactThreshold: "100000" }],
@@ -118,6 +123,7 @@ ai.request({
 const anthropic = Anthropic.configure().model("claude-opus-4-6")
 ai.request({
   model: anthropic,
+  prompt: "Hello",
   providerOptions: {
     contextManagement: {
       edits: [{ type: "compact_20260112", pauseAfterCompaction: true, instructions: "Summarize without using tools" }],
@@ -126,6 +132,7 @@ ai.request({
 })
 ai.request({
   model: anthropic,
+  prompt: "Hello",
   providerOptions: {
     // @ts-expect-error A pause setting is boolean.
     contextManagement: { edits: [{ type: "compact_20260112", pauseAfterCompaction: "yes" }] },

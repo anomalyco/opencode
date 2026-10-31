@@ -306,7 +306,10 @@ describe("provider package entrypoints", () => {
       baseURL: "https://messages.example.test/v1",
     })
     expect(
-      Endpoint.render(selected.route.endpoint, { request: ai.request({ model: selected }), body: {} }).toString(),
+      Endpoint.render(selected.route.endpoint, {
+        request: ai.request({ model: selected, prompt: "Hello" }),
+        body: {},
+      }).toString(),
     ).toBe("https://messages.example.test/v1/messages")
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ metadata: { user_id: "user_1" } })

@@ -214,6 +214,7 @@ it.effect("Cohere thinking budgets must be positive integers", () =>
     const error = yield* compileRequest(
       ai.request({
         model: cohere.model("command-a-reasoning-08-2025"),
+        prompt: "Hello",
         providerOptions: { thinking: { tokenBudget: 0 } },
       }),
     ).pipe(Effect.flip)

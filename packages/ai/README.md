@@ -47,7 +47,8 @@ await Effect.runPromise(program.pipe(Effect.provide(AIClient.layer)))
 ```
 
 Run `ai.stream(...)` instead of `generate` when you want incremental `LLMEvent`s. Both accept input or a prebuilt
-`ai.request(...)`. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
+`ai.request(...)`. Input takes either `prompt`, a single user message, or `messages`, the whole conversation, never
+both; `system` goes with either. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
 Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
 ### Tool loop

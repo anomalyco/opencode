@@ -5,6 +5,7 @@ import {
   GenerationOptions,
   HttpOptions,
   InvalidProviderOutputError,
+  InvalidRequestError,
   AIError,
   LLMEvent,
   LLMRequest,
@@ -24,14 +25,20 @@ import { tool, type ExecutableTool, type Tool, type ToolSchema } from "./tool.js
 import { ToolRuntime } from "./tool-runtime.js"
 
 /** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
-export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
+export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageModel> =
+  RequestFields<SelectedLanguageModel> & PromptOrMessages
+
+/** Exactly one of `prompt`, a single user message, or `messages`, the full conversation. */
+export type PromptOrMessages =
+  | { readonly prompt: string | ContentPart | ReadonlyArray<ContentPart>; readonly messages?: never }
+  | { readonly messages: ReadonlyArray<Message | Message.Input>; readonly prompt?: never }
+
+type RequestFields<SelectedLanguageModel extends LanguageModel> = Omit<
   ConstructorParameters<typeof LLMRequest>[0],
   "model" | "system" | "messages" | "tools" | "toolChoice" | "generation" | "http" | "providerOptions"
 > & {
   readonly model: SelectedLanguageModel
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
-  readonly prompt?: string | ContentPart | ReadonlyArray<ContentPart>
-  readonly messages?: ReadonlyArray<Message | Message.Input>
   /** Sent in array order. Pass `tool(...)` values or wire entries such as hosted provider tools. */
   readonly tools?: ReadonlyArray<Tool | ToolEntryInput>
   readonly toolChoice?: ToolChoice.Input
@@ -111,13 +118,14 @@ export function stream(input: Input, options?: StreamOptions) {
 }
 
 export type LoopInput<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
-  RequestInput<SelectedLanguageModel>,
+  RequestFields<SelectedLanguageModel>,
   "tools"
-> & {
-  readonly tools: ReadonlyArray<ExecutableTool>
-  /** Called after each step that has tool calls; returning `true` ends the loop without running them. */
-  readonly until?: (state: { readonly steps: ReadonlyArray<LLMResponse> }) => boolean
-}
+> &
+  PromptOrMessages & {
+    readonly tools: ReadonlyArray<ExecutableTool>
+    /** Called after each step that has tool calls; returning `true` ends the loop without running them. */
+    readonly until?: (state: { readonly steps: ReadonlyArray<LLMResponse> }) => boolean
+  }
 
 /**
  * Stream model calls, running the model's tool calls between them, until a step has no client-executed tool calls,
@@ -268,10 +276,14 @@ export const request = <const SelectedLanguageModel extends LanguageModel>(
     http: requestHttp,
     ...rest
   } = input
+  if ((prompt === undefined) === (messages === undefined))
+    throw new AIError({
+      reason: new InvalidRequestError({ message: "Pass exactly one of `prompt` or `messages`, not both or neither" }),
+    })
   return new LLMRequest({
     ...rest,
     system: SystemPart.content(requestSystem),
-    messages: [...(messages?.map(Message.make) ?? []), ...(prompt === undefined ? [] : [Message.user(prompt)])],
+    messages: prompt === undefined ? (messages ?? []).map(Message.make) : [Message.user(prompt)],
     tools: tools?.map((item) => ("_definition" in item ? item._definition : ToolEntry.make(item))) ?? [],
     toolChoice: requestToolChoice ? ToolChoice.make(requestToolChoice) : undefined,
     generation: requestGeneration === undefined ? undefined : GenerationOptions.make(requestGeneration),

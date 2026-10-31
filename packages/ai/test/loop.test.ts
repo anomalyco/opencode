@@ -175,4 +175,21 @@ describe("ai.loop", () => {
       expect(yield* client.requests()).toHaveLength(0)
     }),
   )
+
+  it.effect("fails untyped input that has neither or both of prompt and messages", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      const untyped = (input: object) => input as LLM.RequestInput
+      const message = "Pass exactly one of `prompt` or `messages`, not both or neither"
+      const neither = yield* ai.generate(untyped({ model })).pipe(Effect.flip)
+      const both = yield* ai
+        .loop({ ...untyped({ model, prompt: "Hi.", messages: [] }), tools: [read_file] })
+        .pipe(Stream.runDrain, Effect.flip)
+
+      expect(neither.reason).toMatchObject({ _tag: "InvalidRequest", message })
+      expect(both.reason).toMatchObject({ _tag: "InvalidRequest", message })
+      expect(() => ai.request(untyped({ model, system: "Be brief." }))).toThrow(message)
+      expect(yield* client.requests()).toHaveLength(0)
+    }),
+  )
 })
