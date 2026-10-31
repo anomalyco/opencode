@@ -73,11 +73,24 @@ environmentConformance("local environment", () =>
                 try: () => fs.symlink(target, link),
                 catch: (cause) => new Failed({ path: link, cause }),
               }),
+            chmod,
+            readMode,
           }),
       dispose: Effect.promise(() => tmp[Symbol.asyncDispose]()),
     }
   }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
+
+const chmod = (path: string, mode: number) =>
+  Effect.tryPromise({
+    try: () => fs.chmod(path, mode),
+    catch: (cause) => new Failed({ path, cause }),
+  })
+const readMode = (path: string) =>
+  Effect.tryPromise({
+    try: () => fs.stat(path).then((stats) => stats.mode & 0o7777),
+    catch: (cause) => new Failed({ path, cause }),
+  })
 
 environmentConformance(
   "GNU exec environment",
@@ -93,6 +106,8 @@ environmentConformance(
             try: () => fs.symlink(target, link),
             catch: (cause) => new Failed({ path: link, cause }),
           }),
+        chmod,
+        readMode,
         dispose: Effect.promise(() => tmp[Symbol.asyncDispose]()),
       }
     }).pipe(Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),

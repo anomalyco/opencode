@@ -66,6 +66,11 @@ export const makeLocalDriver = (spawner: ChildProcessSpawner["Service"]): Driver
         )
         yield* attempt(from, () => fs.rename(from, destination))
       }),
+    copyMode: (from, to) =>
+      Effect.gen(function* () {
+        const stats = yield* attempt(from, () => fs.stat(from), true)
+        yield* attempt(to, () => fs.chmod(to, stats.mode & 0o7777), true)
+      }),
     mkdir: (value) => attempt(value, () => fs.mkdir(value, { recursive: true }).then(() => undefined)),
   }
 
