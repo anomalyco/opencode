@@ -11,6 +11,8 @@ import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { emptyThemeSource } from "../../fixture/fixture"
+import { ClientProvider } from "../../../src/context/client"
+import { createApi, createFetch } from "../../fixture/tui-client"
 
 test("searches settings globally and opens the matching setting", async () => {
   let current: Info = {}
@@ -52,17 +54,19 @@ test("searches settings globally and opens the matching setting", async () => {
   const app = await testRender(
     () => (
       <TestTuiContexts>
-        <ConfigProvider config={resolve(current, { terminalSuspend: true })} service={service}>
-          <Keymap.Provider>
-            <ThemeProvider mode="dark" source={emptyThemeSource}>
-              <ToastProvider>
-                <DialogProvider>
-                  <Fixture />
-                </DialogProvider>
-              </ToastProvider>
-            </ThemeProvider>
-          </Keymap.Provider>
-        </ConfigProvider>
+        <ClientProvider api={createApi(createFetch().fetch)}>
+          <ConfigProvider config={resolve(current, { terminalSuspend: true })} service={service}>
+            <Keymap.Provider>
+              <ThemeProvider mode="dark" source={emptyThemeSource}>
+                <ToastProvider>
+                  <DialogProvider>
+                    <Fixture />
+                  </DialogProvider>
+                </ToastProvider>
+              </ThemeProvider>
+            </Keymap.Provider>
+          </ConfigProvider>
+        </ClientProvider>
       </TestTuiContexts>
     ),
     { width: 80, height: 24, kittyKeyboard: true },

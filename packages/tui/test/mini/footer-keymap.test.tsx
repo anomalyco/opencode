@@ -74,6 +74,7 @@ async function renderSubagent(interrupt: "ctrl+i" | "none") {
             splash: "show",
             work_spinner: "block-soft-slide",
             mono: false,
+            shell: "",
           })}
           mono={false}
           onSubmit={() => true}
