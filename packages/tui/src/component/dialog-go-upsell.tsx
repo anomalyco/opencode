@@ -5,7 +5,7 @@ import * as Open from "@opencode/util/open"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { useConfig, useNewDesigns } from "../config"
 import { useClient } from "../context/client"
-import { useClipboard } from "../context/clipboard"
+import { clipboardWriteToast, useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
 import { useLocal } from "../context/local"
@@ -398,7 +398,7 @@ function DialogGoUpsellConnect(props: { canContinue?: () => boolean; onSubscribe
     const value = current.instructions.match(OAUTH_CODE)?.[0] ?? current.url
     clipboard
       .write(value)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .then((result) => toast.show(clipboardWriteToast(result, "Copied to clipboard")))
       .catch(toast.error)
   }
 

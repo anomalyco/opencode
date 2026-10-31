@@ -22,6 +22,7 @@ function setup(text: string, isStart: boolean, behavior: SelectionBehavior = "ce
     read: async () => undefined,
     write: async (value) => {
       writes.push(value)
+      return "copied" as const
     },
   }
   const renderer = {
@@ -34,6 +35,34 @@ function setup(text: string, isStart: boolean, behavior: SelectionBehavior = "ce
   const toast = { show: () => {}, error: () => {} }
   return { clipboard, renderer, toast, writes, clears: () => clears }
 }
+
+test("copy reports unverified delivery when the terminal only attempted the write", async () => {
+  const shown: Array<{ message: string; variant: "info" | "success" | "warning" | "error" }> = []
+  const copied = copy(
+    {
+      getSelection: () => ({
+        getSelectedText: () => "beta",
+        selectedRenderables: [],
+        isStart: false,
+        behavior: "cell",
+      }),
+      clearSelection: () => {},
+    },
+    { show: (input) => shown.push(input), error: () => {} },
+    {
+      async read() {
+        return undefined
+      },
+      async write() {
+        return "attempted" as const
+      },
+    },
+  )
+
+  expect(copied).toBe(true)
+  await Promise.resolve()
+  expect(shown).toEqual([{ message: "Copied — delivery not confirmed", variant: "warning" }])
+})
 
 test("copy writes selected text without clearing the highlight", () => {
   let cleared = false
@@ -54,7 +83,9 @@ test("copy writes selected text without clearing the highlight", () => {
       async read() {
         return undefined
       },
-      async write() {},
+      async write() {
+        return "copied" as const
+      },
     },
   )
   expect(copied).toBe(true)
@@ -69,6 +100,7 @@ test("copy-on-select ignores a later non-drag release", () => {
     },
     async write(value: string) {
       writes.push(value)
+      return "copied" as const
     },
   }
   const toast = { show: () => {}, error: () => {} }
