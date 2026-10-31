@@ -1,43 +1,61 @@
-// A long assistant reply streaming into a 120-turn session: 240 markdown deltas (tables, code fences, bold) at 80 per
-// second. Per-delta markdown cost that grows with the reply shows up here, not in a short reply.
-import { bench, web } from "@strobe/bench"
-import {
-  buildInitialStreamEvent,
-  buildStreamDeltaEvents,
-  mockTimelineSession,
-  textPartID,
-} from "../e2e/performance/timeline/session-timeline-benchmark.fixture"
+// A reply streaming into a long session: 160 markdown deltas (bold text, tables, code fences) at 40 a second, from a
+// server that never waits for the renderer. Per-delta cost that grows with the reply or the history shows up here.
+import { bench, web, type Case } from "@strobe/bench"
+import { reviewDiffs } from "./fixtures/diffs"
+import { openReview } from "./fixtures/review"
+import { mockTimelineSession, reply, streamedReply, timeline } from "./fixtures/timeline"
 
-const timeline = ".scroll-view__viewport:has([data-timeline-row])"
-const reply = `[data-timeline-part-id="${textPartID}"]`
-const deltas = 240
+const { start, deltas } = streamedReply(160)
+
+const stream: Case<{}> = {
+  primary: "main.work",
+  metrics: ["frames.interval.p95", "frames.dropped.pct", "main.script", "main.layout", "main.style"],
+  async run({ page, prepared }) {
+    prepared.source.send(start)
+    await Promise.all([
+      prepared.source.stream(deltas, 25),
+      page.waitFor(reply, { text: "benchmark-complete", timeout: 60_000 }),
+    ])
+  },
+  // A fresh document without the streamed reply.
+  async reset({ case: name, page, prepared }) {
+    await page.goto(prepared.path, { until: timeline, timeout: 60_000 })
+
+    if (name === "stream with review open") await openReview(page)
+    await page.idle()
+  },
+}
 
 export default bench({
   targets: {
     web: web({
       viewport: { width: 1366, height: 768 },
-      prepare: ({ playwright, url }) =>
-        mockTimelineSession(playwright.page, { historyTurns: 120, eventBatch: 4, server: new URL(url).origin }),
+      prepare: ({ case: name, playwright, url }) =>
+        mockTimelineSession(playwright.page, {
+          server: new URL(url).origin,
+          historyTurns: name === "stream into a tool-heavy history" ? 320 : 120,
+          toolHeavy: name === "stream into a tool-heavy history",
+          busy: true,
+          stream: true,
+          vcsDiff: name === "stream with review open" ? reviewDiffs() : undefined,
+        }),
       url: ({ prepared }) => prepared.path,
     }),
   },
 
-  async setup({ page }) {
+  async setup({ case: name, page }) {
     await page.waitFor(timeline, { timeout: 60_000 })
+
+    if (name === "stream with review open") await openReview(page)
     await page.idle()
   },
 
   cases: {
-    "stream a long reply": {
-      primary: "main.work",
-      async run({ page, prepared }) {
-        prepared.transport.enqueue([...buildInitialStreamEvent(deltas), ...buildStreamDeltaEvents(deltas)])
-        await page.waitFor(reply, { text: "benchmark-complete", timeout: 60_000 })
-      },
-      async reset({ page, prepared }) {
-        await page.goto(prepared.path, { until: timeline, timeout: 60_000 })
-        await page.idle()
-      },
-    },
+    // 120 turns: 242 messages, 248 KB of history.
+    "stream a reply": stream,
+    // 320 turns with six file reads in every answer: 2,392 parts, 2.6 MB of history.
+    "stream into a tool-heavy history": stream,
+    // The review pane open beside the timeline on 72 changed files.
+    "stream with review open": stream,
   },
 })

@@ -49,7 +49,8 @@ unless release notes are turned off in Settings.
 ## Startup benchmark
 
 `bun run bench:startup` measures a **packaged** build from process spawn to the restored tab being ready and the
-renderer going idle, so dev-server and bundling costs are not part of the numbers.
+renderer going idle, so dev-server and bundling costs are not part of the numbers. What the app costs once it runs
+(idle CPU of every process, interactions in a window) is measured with strobe: see `packages/app/perf/README.md`.
 
 ```bash
 OPENCODE_CHANNEL=dev bun run build && bun run pack

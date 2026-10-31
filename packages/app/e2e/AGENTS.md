@@ -21,4 +21,5 @@
 - Build pages with the shared harness in `utils/` (`app.ts`, `workspace.ts`, `mock-server.ts` with `mockServers` and the mock PTY). Do not hand-write routing, storage seeding, or fixtures inside a spec. If the harness lacks something, add it to `utils/` once rather than copying setup.
 - Files in `utils/` must not end in `.spec.ts` or `.test.ts`, or Playwright runs them as tests.
 - Assert what the user sees and can do. Assert exact pixels or CSS values only when that measurement is the contract, and then only once, in the owning keeper.
-- `performance/` holds benchmarks that CI does not run. Never prove correctness with a benchmark, and never copy benchmark code into a regression spec; import it from `utils/`.
+- Benchmarks live in `packages/app/perf` and run with strobe; CI does not run them. Never prove correctness with a benchmark, and never copy benchmark code into a regression spec; a fixture both need belongs in `utils/`.
+- `stability/` (layout continuity under CPU stress, `bun run test:stability`) and `devex/` (desktop dev startup, `bun run bench:devex`) have their own configs and stay out of CI.
