@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
-import { createRoot } from "solid-js"
+import { createEffect, createRoot } from "solid-js"
+import { isServer } from "solid-js/web"
 import { createData, type CreateDataInput } from "../src/solid"
 import { OpenCode, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
 
@@ -1555,3 +1556,100 @@ async function wait(check: () => boolean) {
     await Bun.sleep(10)
   }
 }
+
+function syncFixture(remote: Map<string, SessionInfo>) {
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
+      if (url.pathname === "/api/session")
+        return Response.json({
+          data: [...remote.values()].filter((item) => item.parentID === url.searchParams.get("parentID")),
+          cursor: {},
+        })
+      return Response.json({ data: remote.get(decodeURIComponent(url.pathname.split("/").pop()!)) })
+    },
+  })
+  return createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: { on: () => () => {}, listen: () => () => {} },
+    }),
+    dispose,
+  }))
+}
+
+// The server build of solid-js has no effects, so this runs in the `test:reactivity` stage (browser condition).
+test.skipIf(isServer)("session sync reactivity: an unchanged sync keeps the list and consumers quiet", async () => {
+  const remote = new Map<string, SessionInfo>()
+  const setup = syncFixture(remote)
+  const toSorted = Array.prototype.toSorted
+  let sorted = 0
+  let runs = 0
+  let disposeObserver = () => {}
+  try {
+    for (let index = 0; index < 50; index++) {
+      const info = { ...session(0), id: `ses_${index}`, time: { created: index, updated: index, idle: 2 } }
+      remote.set(info.id, info)
+      setup.data.session.remember(info)
+    }
+    createRoot((dispose) => {
+      disposeObserver = dispose
+      createEffect(() => {
+        setup.data.session.list()
+        runs++
+      })
+    })
+    await Promise.resolve()
+    const before = setup.data.session.get("ses_10")
+    Array.prototype.toSorted = function (this: unknown[], compare?: (a: never, b: never) => number) {
+      sorted++
+      return toSorted.call(this, compare)
+    } as typeof Array.prototype.toSorted
+
+    for (let repeat = 0; repeat < 3; repeat++) {
+      setup.data.session.invalidate("ses_10")
+      await setup.data.session.sync("ses_10")
+      await Promise.resolve()
+    }
+    expect({ sorted, runs }).toEqual({ sorted: 0, runs: 1 })
+    expect(setup.data.session.get("ses_10")).toBe(before)
+
+    remote.set("ses_10", { ...remote.get("ses_10")!, time: { created: 10, updated: 100, idle: 2 } })
+    setup.data.session.invalidate("ses_10")
+    await setup.data.session.sync("ses_10")
+    await Promise.resolve()
+    expect(runs).toBe(2)
+    expect(setup.data.session.list()[0]?.id).toBe("ses_10")
+  } finally {
+    Array.prototype.toSorted = toSorted
+    disposeObserver()
+    setup.dispose()
+  }
+})
+
+test("session sync semantics: replaces the stored session, drops omitted fields, never deletes children", async () => {
+  const remote = new Map<string, SessionInfo>([
+    ["ses_root", { ...session(0), id: "ses_root", parentID: "ses_gone" }],
+    ["ses_child", { ...session(0), id: "ses_child", parentID: "ses_root" }],
+  ])
+  const setup = syncFixture(remote)
+  try {
+    await setup.data.session.sync("ses_root", { children: true })
+    expect(setup.data.session.get("ses_root")?.parentID).toBe("ses_gone")
+
+    remote.set("ses_root", { ...session(0), id: "ses_root", cost: 3, location: { directory: "/other" } })
+    remote.delete("ses_child")
+    setup.data.session.invalidate("ses_root")
+    await setup.data.session.sync("ses_root")
+
+    const info = setup.data.session.get("ses_root")!
+    expect("parentID" in info).toBe(false)
+    expect(info.cost).toBe(3)
+    expect(info.location.directory).toBe("/other")
+    expect(setup.data.session.get("ses_child")).toBeDefined()
+  } finally {
+    setup.dispose()
+  }
+})
