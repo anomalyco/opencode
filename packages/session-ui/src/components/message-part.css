@@ -1093,7 +1093,6 @@
   display: block;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -1228,6 +1227,36 @@
       height: calc(28px + var(--tool-content-gap));
       padding-bottom: var(--tool-content-gap);
       background-color: var(--v2-background-bg-base);
+      container-type: scroll-state;
+
+      /* Matches the open compaction divider: content passing under the stuck row fades out instead of being cut. */
+      &::after {
+        content: "";
+        position: absolute;
+        inset-inline: 0;
+        top: 100%;
+        height: 28px;
+        background-color: var(--v2-background-bg-base);
+        mask-image: linear-gradient(
+          #000,
+          rgb(0 0 0 / 0.74) 19%,
+          rgb(0 0 0 / 0.54) 34%,
+          rgb(0 0 0 / 0.38) 47%,
+          rgb(0 0 0 / 0.19) 65%,
+          rgb(0 0 0 / 0.075) 80%,
+          rgb(0 0 0 / 0.02) 91%,
+          transparent
+        );
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+    }
+
+    @container scroll-state(stuck: top) {
+      > [data-slot="collapsible-trigger"][aria-expanded="true"]::after {
+        opacity: 1;
+      }
     }
 
     /* Nested sticky file headers stop below the open group header. */

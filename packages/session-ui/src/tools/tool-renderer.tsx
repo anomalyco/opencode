@@ -66,6 +66,7 @@ import { AssistantReasoningContent, writeClipboard } from "../message/message-co
 import { stripAnsi } from "./ansi"
 import { followShellOutput } from "./shell-output"
 import { LinkedText } from "../components/linked-text"
+import { scrollParent } from "../components/scroll-parent"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -1057,16 +1058,6 @@ export function CurrentFileToolGroup(props: {
       />
     </div>
   )
-}
-
-function scrollParent(element: HTMLElement): HTMLElement | undefined {
-  const parent = element.parentElement
-
-  if (!parent) return
-
-  if (/auto|scroll/.test(getComputedStyle(parent).overflowY)) return parent
-
-  return scrollParent(parent)
 }
 
 function isFileChangeTool(tool: SessionMessageAssistantTool) {

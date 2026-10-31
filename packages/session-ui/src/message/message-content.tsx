@@ -943,7 +943,14 @@ function CompactionDivider(props: { label: string }) {
   )
 }
 
-export function SessionCompactionMessage(props: { message: SessionMessageCompaction; error: string }) {
+export function SessionCompactionMessage(props: {
+  message: SessionMessageCompaction
+  error: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  /** Called before collapsing from a stuck divider scrolls the timeline, so a timeline following its end stops. */
+  onUnpin?: () => void
+}) {
   const i18n = useI18n()
   const data = useData()
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
@@ -1000,6 +1007,9 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
           running={props.message.status === "running"}
           summary={summary()}
           usage={usage()}
+          open={props.open}
+          onOpenChange={props.onOpenChange}
+          onUnpin={props.onUnpin}
         />
       }
     >
@@ -1046,9 +1056,19 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
  * An automatic compaction, drawn as one divider that reads Compacting, then Compacted. Its height never changes, and
  * clicking it opens the summary.
  */
-function QuietCompaction(props: { id: string; created: number; running: boolean; summary: string; usage: string }) {
+function QuietCompaction(props: {
+  id: string
+  created: number
+  running: boolean
+  summary: string
+  usage: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  onUnpin?: () => void
+}) {
   const i18n = useI18n()
-  const [open, setOpen] = createSignal(false)
+  const [expanded, setExpanded] = createSignal(false)
+  const open = () => props.open ?? expanded()
   // A new one waits out the grace (400 ms, matched in session-compaction.css) before showing Compacting; one that
   // ends inside it, as a precomputed summary does, only fades in as Compacted. One already running or finished when
   // the history loads shows without an entrance.
@@ -1069,9 +1089,34 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
     if (!props.running && enter() === "grace" && performance.now() - mounted < 400) setEnter("now")
   })
 
+  let root: HTMLDivElement | undefined
+  let header: HTMLDivElement | undefined
+
+  const toggle = () => {
+    // The open header sticks to the top of the timeline, so collapsing from there would leave the viewport far below
+    // the divider. Scroll it back into place first, before the shorter content clamps the scroll position.
+    const stuck = open() && root && header ? header.getBoundingClientRect().top - root.getBoundingClientRect().top : 0
+
+    if (stuck > 0 && root) {
+      props.onUnpin?.()
+      scrollParent(root)?.scrollBy({ top: -stuck, behavior: "instant" })
+    }
+
+    const next = !open()
+
+    if (props.open === undefined) setExpanded(next)
+    props.onOpenChange?.(next)
+  }
+
   return (
-    <div data-component="session-compaction-message" data-quiet="" data-enter={enter()}>
-      <div class="py-2">
+    <div
+      ref={root}
+      data-component="session-compaction-message"
+      data-quiet=""
+      data-enter={enter()}
+      data-open={expandable() && open() ? "" : undefined}
+    >
+      <div ref={header} data-slot="session-compaction-header" class="py-2">
         <button
           type="button"
           data-slot="session-compaction-divider"
@@ -1082,7 +1127,7 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
           aria-expanded={expandable() ? open() : undefined}
           aria-controls={expandable() && open() ? `${props.id}-summary` : undefined}
           aria-label={props.running ? label().running : label().done}
-          onClick={() => setOpen((value) => !value)}
+          onClick={toggle}
         >
           <span data-slot="session-compaction-line" data-side="start" class="h-px min-w-0 flex-1">
             <span data-slot="session-compaction-light" />

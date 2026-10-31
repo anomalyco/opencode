@@ -510,6 +510,134 @@ export const CompactionCancelled = {
   ),
 }
 
+const longShellCommands = [
+  "cd /private/var/folders/4t/_jnrck017r5f_jttbc19b7s40000gn/T/opencode/rune && ls target/debug/build",
+  "cd /private/var/folders/4t/_jnrck017r5f_jttbc19b7s40000gn/T/opencode/rune/crates/rune-core && cargo test --lib",
+  'cd ~/code/worktrees/notes-app/mac/crates/notes-core/src && rg -n "pub enum Block" --type rust',
+  "cd /private/var/folders/4t/_jnrck017r5f_jttbc19b7s40000gn/T/opencode/rune/crates/rune-view && cargo check",
+]
+
+const longSummary = Array.from(
+  { length: 6 },
+  (_, section) =>
+    `## Step ${section + 1}\n\n- The feed's seq also bumps on pending and refused changes, so \`changes\` can return an empty notes list with a new seq.\n- Writes need \`--base rN\` from \`read\`. After a write, \`read\` returns a new receipt name.\n- \`tx.instant()\`, \`settle()\`, \`motion(Spring)\` and \`scroll_into_view(key)\` keep the list stable while it streams.\n- Markdown blocks are keyed by index, with no caller keys, so per-block rendering loses list numbering across blocks.`,
+).join("\n\n")
+
+function shellTools(prefix: string, offset: number, count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    type: "tool" as const,
+    id: `${prefix}_${index}`,
+    name: "shell",
+    state: {
+      status: "completed" as const,
+      input: { command: longShellCommands[index % longShellCommands.length]! },
+      content: [{ type: "text" as const, text: "ok" }],
+      metadata: {},
+    },
+    time: {
+      created: STORY_TIME + offset + index * 1_000,
+      ran: STORY_TIME + offset + index * 1_000 + 100,
+      completed: STORY_TIME + offset + index * 1_000 + 900,
+    },
+  }))
+}
+
+const longCompactionDocument = {
+  sessionID: CURRENT_SESSION_ID,
+  messages: [
+    {
+      id: "msg_long_compaction_user",
+      type: "user",
+      text: "Build the notes Mac UI in Rune.",
+      time: { created: STORY_TIME },
+      metadata: { agent: "build", model: STORY_MODEL },
+    },
+    {
+      id: "msg_long_compaction_before",
+      type: "assistant",
+      agent: "build",
+      model: STORY_MODEL,
+      content: [
+        ...shellTools("tool_long_before", 1_000, 8),
+        { type: "text", text: "Now the daemon." },
+        {
+          type: "tool",
+          id: "tool_long_search",
+          name: "websearch",
+          state: {
+            status: "completed",
+            input: {
+              query:
+                "tokio unix socket daemon graceful shutdown with in-flight requests and launchd keepalive restart semantics on macOS",
+            },
+            content: [{ type: "text", text: "https://docs.rs/tokio/latest/tokio/net/struct.UnixListener.html" }],
+            metadata: {},
+          },
+          time: { created: STORY_TIME + 9_000, ran: STORY_TIME + 9_100, completed: STORY_TIME + 9_800 },
+        },
+      ],
+      time: { created: STORY_TIME + 1_000, completed: STORY_TIME + 10_000 },
+    },
+    {
+      id: "msg_long_compaction",
+      type: "compaction",
+      status: "completed",
+      reason: "auto",
+      summary: longSummary,
+      cost: 0.0142,
+      tokens: { input: 161_500, output: 6_100, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: STORY_TIME + 11_000 },
+    },
+    {
+      id: "msg_long_compaction_after",
+      type: "assistant",
+      agent: "build",
+      model: STORY_MODEL,
+      content: [
+        { type: "text", text: "Context restored. The daemon test is next." },
+        {
+          type: "tool",
+          id: "tool_long_after_short",
+          name: "shell",
+          state: {
+            status: "completed",
+            input: { command: "ls" },
+            content: [{ type: "text", text: "Cargo.toml" }],
+            metadata: {},
+          },
+          time: { created: STORY_TIME + 14_000, ran: STORY_TIME + 14_100, completed: STORY_TIME + 14_200 },
+        },
+        ...shellTools("tool_long_after", 15_000, 6),
+      ],
+      time: { created: STORY_TIME + 12_000, completed: STORY_TIME + 30_000 },
+    },
+  ],
+  status: { type: "idle" },
+  diffs: [],
+} satisfies SessionDocument
+
+/** A long summary inside a scrolling timeline, so its open divider sticks under the 48 px session title. */
+export const CompactionLongSummary = {
+  args: { height: 640 },
+  argTypes: { height: { control: { type: "range", min: 320, max: 1200, step: 20 } } },
+  render: (args: { height: number }) => (
+    <section
+      data-story="compaction-scroll"
+      class="relative mx-auto w-full max-w-[640px] overflow-y-auto bg-v2-background-bg-base"
+      style={{ height: `${args.height}px`, "--sticky-accordion-top": "48px" }}
+    >
+      <div class="sticky top-0 z-30 flex h-12 w-full items-center bg-v2-background-bg-base px-6 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base">
+        Build notes Mac UI in Rune
+      </div>
+      <div class="px-6" style={{ "padding-bottom": `${args.height}px` }}>
+        <CurrentSessionProviders document={longCompactionDocument} backgroundCompaction>
+          <SessionTimeline document={longCompactionDocument} />
+        </CurrentSessionProviders>
+      </div>
+    </section>
+  ),
+}
+
 export const AnsweredQuestionAndDeclinedCommand = {
   render: () => (
     <CurrentSessionTimelineStory

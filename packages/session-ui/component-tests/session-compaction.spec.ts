@@ -213,3 +213,73 @@ story("holds the lines still under reduced motion", async ({ mount, page }) => {
   await expect.poll(() => line.evaluate((element) => getComputedStyle(element, "::before").opacity)).toBe("1")
   await expect(message.locator('[data-slot="session-compaction-running"]')).toHaveCSS("opacity", "1")
 })
+
+story("keeps an open summary's divider stuck under the title and collapses it in place", async ({ mount }) => {
+  const timeline = await mount(`${rows}--compaction-long-summary`)
+  const scroller = timeline.locator('[data-story="compaction-scroll"]')
+  const message = timeline.locator('[data-component="session-compaction-message"]')
+  const divider = message.locator('[data-slot="session-compaction-divider"]')
+  const summary = message.locator('[data-slot="session-compaction-summary"]')
+
+  const top = () =>
+    divider.evaluate((node) => {
+      const scroller = node.closest('[data-story="compaction-scroll"]')!
+
+      return Math.round(node.getBoundingClientRect().top - scroller.getBoundingClientRect().top)
+    })
+
+  const fade = () =>
+    message
+      .locator('[data-slot="session-compaction-header"]')
+      .evaluate((node) => getComputedStyle(node, "::after").opacity)
+
+  await divider.click()
+  await expect(summary).toContainText("Step 6")
+  // The soft edge below the header shows only once it is stuck, so the summary's first lines stay clear.
+  await expect.poll(fade).toBe("0")
+
+  // Deep inside the summary, the divider holds below the 48 px title, 8 px under its header's top padding.
+  await scroller.evaluate((node) => {
+    const message = node.querySelector<HTMLElement>('[data-component="session-compaction-message"]')!
+    node.scrollTop += message.getBoundingClientRect().top - node.getBoundingClientRect().top + 600
+  })
+  await expect.poll(top).toBe(56)
+  await expect.poll(fade).toBe("1")
+  expect(
+    await message
+      .locator('[data-slot="session-compaction-header"]')
+      .evaluate((node) => getComputedStyle(node, "::after").pointerEvents),
+  ).toBe("none")
+
+  await divider.click()
+  await expect(divider).toHaveAttribute("aria-expanded", "false")
+  await expect(summary).toHaveCount(0)
+  // Collapsing from the stuck header keeps the divider where it was clicked.
+  await expect.poll(top).toBe(56)
+})
+
+story("fades a tool row summary that overflows its row and leaves one that fits alone", async ({ mount }) => {
+  const timeline = await mount(`${rows}--compaction-long-summary`)
+
+  await timeline.getByRole("button", { name: /^Used \d+ Shell/ }).last().click()
+
+  const subtitle = (text: string | RegExp) =>
+    timeline
+      .locator('[data-component="shell-submessage"] [data-slot="basic-tool-tool-subtitle"]')
+      .filter({ hasText: text })
+      .first()
+
+  const mask = (text: string | RegExp) => subtitle(text).evaluate((node) => getComputedStyle(node).maskImage)
+
+  await expect.poll(() => mask("cargo test --lib")).toContain("linear-gradient(90deg")
+  await expect.poll(() => mask(/^ls$/)).toBe("none")
+})
+
+story("fades an overflowing web search query without an ellipsis", async ({ mount }) => {
+  const timeline = await mount(`${rows}--compaction-long-summary`)
+  const query = timeline.locator(".exa-tool-query").first()
+
+  await timeline.getByRole("button", { name: /^Used 1 (?!Shell)/ }).click()
+  await expect(query).toHaveCSS("text-overflow", "clip")
+  await expect.poll(() => query.evaluate((node) => getComputedStyle(node).maskImage)).toContain("linear-gradient")
+})
