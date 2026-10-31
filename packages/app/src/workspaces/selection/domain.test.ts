@@ -21,9 +21,19 @@ import {
 
 type Sdk = Parameters<typeof listPickerDirectory>[0]
 
+type PickerResponse = {
+  location?: { directory: string; workspace?: string }
+  data: Array<{ path: string; type: "file" | "directory" }>
+}
+
 // The picker only reads `api.file.find` and `api.file.list`.
-const sdk = (file: { find?: (input: never) => Promise<unknown>; list?: (input: never) => Promise<unknown> }) =>
-  ({ api: { file } }) as unknown as Sdk
+const sdk = (file: {
+  find?: (input: never) => Promise<PickerResponse>
+  list?: (input: never) => Promise<PickerResponse>
+}): Sdk => {
+  // SAFETY: these tests only read api.file.find and api.file.list; the stub is narrowed to the SDK surface.
+  return { api: { file } } as Sdk
+}
 
 test("maps server directory entries into Pierre paths", () => {
   expect(
@@ -330,8 +340,8 @@ const projects = Array.from({ length: 60 }, (_, index) => ({ path: `project-${in
 const fallbacks: {
   name: string
   query: string
-  find: () => Promise<unknown>
-  list: () => Promise<unknown>
+  find: () => Promise<PickerResponse>
+  list: () => Promise<PickerResponse>
   expected: string[]
   listed: string[]
 }[] = [
@@ -339,16 +349,16 @@ const fallbacks: {
     name: "keeps indexed results for servers that support empty search",
     query: "",
     find: () => Promise.resolve({ location: home, data: [{ path: "projects/", type: "directory" }] }),
-    list: () => Promise.reject(new Error("listing should not run when search returns results")),
+    list: () => Promise.resolve({ location: home, data: [] }),
     expected: ["/home/luke/projects"],
-    listed: [],
+    listed: ["/home/luke"],
   },
   {
     name: "lists the default directory when empty search is unsupported",
     query: "",
     find: () => Promise.resolve({ data: [] }),
     list: () => Promise.resolve({ location: home, data: [...projects, { path: "README.md", type: "file" }] }),
-    expected: projects.map((item) => `/home/luke/${item.path.slice(0, -1)}`),
+    expected: projects.slice(0, 50).map((item) => `/home/luke/${item.path.slice(0, -1)}`),
     listed: ["/home/luke"],
   },
   {
@@ -389,6 +399,145 @@ test.each(fallbacks)("directory search $name", async (row) => {
 
   expect(await search(row.query)).toEqual(row.expected)
   expect(listed).toEqual(row.listed)
+})
+
+test("merges listed empty directories ahead of search results", async () => {
+  const location = { directory: "/repo" }
+
+  const api = sdk({
+    find: async () => ({ location, data: [{ path: "other/emptydir/", type: "directory" }] }),
+    list: async () => ({ location, data: [{ path: "emptydir/", type: "directory" }] }),
+  })
+
+  const search = createDirectorySearch({
+    sdk: api,
+    home: () => "/home/luke",
+    base: () => "/repo",
+    location: () => location,
+  })
+
+  expect(await search("empty")).toEqual(["/repo/emptydir", "/repo/other/emptydir"])
+})
+
+test("dedupes directories returned by both search and listing", async () => {
+  const location = { directory: "/repo" }
+
+  const api = sdk({
+    find: async () => ({ location, data: [{ path: "src/", type: "directory" }] }),
+    list: async () => ({ location, data: [{ path: "./src/", type: "directory" }] }),
+  })
+
+  const search = createDirectorySearch({
+    sdk: api,
+    home: () => "/home/luke",
+    base: () => "/repo",
+    location: () => location,
+  })
+
+  expect(await search("")).toEqual(["/repo/src"])
+})
+
+test("dedupes Windows drive paths case-insensitively", async () => {
+  const location = { directory: "C:\\Repo" }
+
+  const api = sdk({
+    find: async () => ({ location, data: [{ path: "src/", type: "directory" }] }),
+    list: async () => ({ location, data: [{ path: "Src/", type: "directory" }] }),
+  })
+
+  const search = createDirectorySearch({
+    sdk: api,
+    home: () => "C:/Users/luke",
+    base: () => "C:/Repo",
+    location: () => location,
+  })
+
+  expect(await search("")).toEqual(["C:/Repo/Src"])
+})
+
+test("keeps listed directories when search fails", async () => {
+  const location = { directory: "/repo" }
+
+  const api = sdk({
+    find: () => Promise.reject(new Error("search is unavailable")),
+    list: async () => ({ location, data: [{ path: "emptydir/", type: "directory" }] }),
+  })
+
+  const search = createDirectorySearch({
+    sdk: api,
+    home: () => "/home/luke",
+    base: () => "/repo",
+    location: () => location,
+  })
+
+  expect(await search("")).toEqual(["/repo/emptydir"])
+})
+
+test("keeps search results when the listing fails", async () => {
+  const location = { directory: "/repo" }
+
+  const api = sdk({
+    find: async () => ({ location, data: [{ path: "src/", type: "directory" }] }),
+    list: () => Promise.reject(new Error("listing is unavailable")),
+  })
+
+  const search = createDirectorySearch({
+    sdk: api,
+    home: () => "/home/luke",
+    base: () => "/repo",
+    location: () => location,
+  })
+
+  expect(await search("")).toEqual(["/repo/src"])
+})
+
+test("discards a stale non-path search when the listing finishes last", async () => {
+  const location = { directory: "/repo" }
+
+  const pending = Promise.withResolvers<{
+    location: typeof location
+    data: Array<{ path: string; type: "directory" }>
+  }>()
+
+  const api = sdk({
+    find: async () => ({ location, data: [{ path: "old/", type: "directory" }] }),
+    list: async (input: { path: string }) => (input.path === "/repo" ? pending.promise : { location, data: [] }),
+  })
+
+  const search = createDirectorySearch({
+    sdk: api,
+    home: () => "/home/luke",
+    base: () => "/repo",
+    location: () => location,
+  })
+
+  const stale = search("old")
+  expect(await search("/tmp")).toEqual([])
+  pending.resolve({ location, data: [{ path: "old/", type: "directory" }] })
+  expect(await stale).toEqual([])
+})
+
+test("caps merged directory search results at 50", async () => {
+  const location = { directory: "/repo" }
+  const listed = Array.from({ length: 30 }, (_, index) => ({ path: `listed-${index}/`, type: "directory" as const }))
+  const found = Array.from({ length: 30 }, (_, index) => ({ path: `found-${index}/`, type: "directory" as const }))
+
+  const api = sdk({
+    find: async () => ({ location, data: found }),
+    list: async () => ({ location, data: listed }),
+  })
+
+  const search = createDirectorySearch({
+    sdk: api,
+    home: () => "/home/luke",
+    base: () => "/repo",
+    location: () => location,
+  })
+
+  expect(await search("")).toEqual([
+    ...listed.map((item) => `/repo/${item.path.slice(0, -1)}`),
+    ...found.slice(0, 20).map((item) => `/repo/${item.path.slice(0, -1)}`),
+  ])
 })
 
 test("searches from an absolute root without a default base", async () => {

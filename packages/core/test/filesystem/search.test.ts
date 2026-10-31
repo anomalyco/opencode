@@ -1,11 +1,12 @@
 import { describe, expect, spyOn } from "bun:test"
 import fuzzysort from "fuzzysort"
-import { mkdir } from "node:fs/promises"
+import { mkdir, symlink } from "node:fs/promises"
 import os from "os"
 import path from "path"
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Environment } from "@opencode/core/environment/index"
 import { FileSystem } from "@opencode/core/filesystem"
 import { Protected } from "@opencode/core/filesystem/protected"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
@@ -13,6 +14,7 @@ import { Location } from "@opencode/core/location"
 import { Ripgrep } from "@opencode/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Workspace } from "@opencode/core/workspace"
+import { initGit } from "../fixture/git"
 import { location } from "../fixture/location"
 import { tmpdir } from "../fixture/tmpdir"
 import { it } from "../lib/effect"
@@ -200,6 +202,97 @@ describe("FileSystemSearch", () => {
     }),
   )
 
+  it.live("discovers empty directories in a git repository", () =>
+    Effect.gen(function* () {
+      const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-search-empty-")))).path
+      const linkType = process.platform === "win32" ? ("junction" as const) : undefined
+      yield* Effect.promise(() =>
+        Promise.all([
+          mkdir(path.join(directory, "emptydir")),
+          mkdir(path.join(directory, "keepdir")),
+          mkdir(path.join(directory, "nonempty")),
+          mkdir(path.join(directory, "src/empty-child"), { recursive: true }),
+          mkdir(path.join(directory, "ignored/nested"), { recursive: true }),
+          mkdir(path.join(directory, "ignored/empty"), { recursive: true }),
+          // Ignored trees that look structurally empty to a listing: only symlinks, hidden entries,
+          // or empty scope folders.
+          mkdir(path.join(directory, "node_modules/@scope"), { recursive: true }),
+          mkdir(path.join(directory, "node_modules/empty"), { recursive: true }),
+          mkdir(path.join(directory, "build/empty"), { recursive: true }),
+          mkdir(path.join(directory, "linked")),
+          mkdir(path.join(directory, "hiddenonly/.cache/store"), { recursive: true }),
+        ]),
+      )
+      yield* Effect.promise(() =>
+        Promise.all([
+          Bun.write(path.join(directory, ".gitignore"), "ignored/\nnode_modules/\nlinked/\nhiddenonly/\nbuild/\n"),
+          Bun.write(path.join(directory, "keepdir/.gitkeep"), ""),
+          Bun.write(path.join(directory, "nonempty/file.txt"), "content"),
+          Bun.write(path.join(directory, "src/index.ts"), "content"),
+          Bun.write(path.join(directory, "ignored/nested/file.txt"), "content"),
+          Bun.write(path.join(directory, "hiddenonly/.hidden"), "content"),
+          symlink(path.join(directory, "nonempty"), path.join(directory, "linked/symlink"), linkType),
+          symlink(
+            path.join(directory, "node_modules/empty"),
+            path.join(directory, "node_modules/@scope/symlinked"),
+            linkType,
+          ),
+        ]),
+      )
+      yield* Effect.promise(() => initGit(directory))
+
+      const layer = AppNodeBuilder.build(FileSystemSearch.configured({ fff: false }), [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location(
+                { directory: AbsolutePath.make(directory) },
+                { vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) } },
+              ),
+            ),
+          ),
+        ),
+      ])
+
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        expect((yield* search.find({ query: "emptydir", type: "directory" })).map((entry) => entry.path)).toContain(
+          RelativePath.make(`emptydir${path.sep}`),
+        )
+        // keepdir only holds a hidden file, so it must be empty to the directory index.
+        expect((yield* search.find({ query: "keepdir", type: "directory" })).map((entry) => entry.path)).toContain(
+          RelativePath.make(`keepdir${path.sep}`),
+        )
+        expect((yield* search.find({ query: "empty-child", type: "directory" })).map((entry) => entry.path)).toContain(
+          RelativePath.make(`src/empty-child${path.sep}`),
+        )
+        expect((yield* search.find({ query: "ignored", type: "directory" })).map((entry) => entry.path)).not.toContain(
+          RelativePath.make(`ignored${path.sep}`),
+        )
+        // The ignored subtree is pruned, so its empty descendant must not leak into the index.
+        expect((yield* search.find({ query: "ignored", type: "directory" })).map((entry) => entry.path)).not.toContain(
+          RelativePath.make(`ignored/empty${path.sep}`),
+        )
+        const directories = (query: string) =>
+          Effect.map(search.find({ query, type: "directory" }), (entries) => entries.map((entry) => entry.path))
+        // Ignored trees that look structurally empty must not be searchable directories.
+        const nodeModules = yield* directories("node_modules")
+        expect(nodeModules).not.toContain(RelativePath.make(`node_modules${path.sep}`))
+        expect(nodeModules).not.toContain(RelativePath.make(`node_modules/@scope${path.sep}`))
+        expect(nodeModules).not.toContain(RelativePath.make(`node_modules/empty${path.sep}`))
+        const build = yield* directories("build")
+        expect(build).not.toContain(RelativePath.make(`build${path.sep}`))
+        expect(build).not.toContain(RelativePath.make(`build/empty${path.sep}`))
+        expect(yield* directories("linked")).not.toContain(RelativePath.make(`linked${path.sep}`))
+        expect(yield* directories("hiddenonly")).not.toContain(RelativePath.make(`hiddenonly${path.sep}`))
+        const mixed = yield* search.find({ query: "emptydir" })
+        expect(mixed.map((entry) => entry.path)).toContain(RelativePath.make(`emptydir${path.sep}`))
+        expect(mixed.every((entry) => entry.type === "directory")).toBe(true)
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
   it.live("selects the ripgrep layer for workspace-backed locations even when vcs would pick fff", () =>
     Effect.gen(function* () {
       const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-search-workspace-"))))
@@ -213,6 +306,7 @@ describe("FileSystemSearch", () => {
         directory: AbsolutePath.make(directory),
         workspaceID: Workspace.ID.make("wrk_test"),
       })
+      const driver = Environment.makeMemoryDriver()
       const layer = AppNodeBuilder.build(FileSystemSearch.node, [
         Location.node.replace(
           Layer.succeed(
@@ -223,6 +317,15 @@ describe("FileSystemSearch", () => {
           ),
         ),
         Ripgrep.node.replace(ripgrepStub("remote.ts", (input) => (observed = input))),
+        Environment.node.replace(
+          Layer.succeed(
+            Environment.Service,
+            Environment.Service.of({
+              files: { ...Environment.makeFiles(driver), list: () => Effect.succeed([]) },
+              spawner: driver.spawner,
+            }),
+          ),
+        ),
       ])
 
       yield* Effect.gen(function* () {
@@ -238,6 +341,7 @@ describe("FileSystemSearch", () => {
     Effect.gen(function* () {
       let observed: Ripgrep.FindInput | undefined
       const home = AbsolutePath.make(os.homedir())
+      const driver = Environment.makeMemoryDriver()
       const layer = AppNodeBuilder.build(FileSystemSearch.node, [
         Location.node.replace(
           Layer.succeed(
@@ -251,6 +355,16 @@ describe("FileSystemSearch", () => {
           ),
         ),
         Ripgrep.node.replace(ripgrepStub("src/index.ts", (input) => (observed = input))),
+        // Keep the directory walk off the real home directory; this test only covers the ripgrep bounds.
+        Environment.node.replace(
+          Layer.succeed(
+            Environment.Service,
+            Environment.Service.of({
+              files: { ...Environment.makeFiles(driver), list: () => Effect.succeed([]) },
+              spawner: driver.spawner,
+            }),
+          ),
+        ),
       ])
       yield* Effect.gen(function* () {
         const search = yield* FileSystemSearch.Service
@@ -262,6 +376,144 @@ describe("FileSystemSearch", () => {
         expect((yield* search.find({ query: "src", type: "directory" }))[0]?.path).toBe(
           RelativePath.make(`src${path.sep}`),
         )
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.live("finds empty directories through the location environment without protected home names", () => {
+    // The memory driver resolves POSIX paths, so it cannot mirror a native Windows home path.
+    if (process.platform === "win32") return Effect.void
+    const driver = Environment.makeMemoryDriver()
+    const files = Environment.makeFiles(driver)
+    const home = os.homedir()
+    return Effect.gen(function* () {
+      yield* files.mkdir(path.join(home, "Documents"))
+      yield* files.mkdir(path.join(home, "code", "emptydir"))
+      const layer = AppNodeBuilder.build(FileSystemSearch.configured({ fff: false }), [
+        Location.node.replace(
+          Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(home) }))),
+        ),
+        Ripgrep.node.replace(ripgrepStub("src/index.ts", () => {})),
+        Environment.node.replace(
+          Layer.succeed(Environment.Service, Environment.Service.of({ files, spawner: driver.spawner })),
+        ),
+      ])
+
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        expect((yield* search.find({ query: "emptydir", type: "directory" })).map((entry) => entry.path)).toContain(
+          RelativePath.make(`code/emptydir${path.sep}`),
+        )
+        if (Protected.names().has("Documents"))
+          expect((yield* search.find({ query: "Documents", type: "directory" })).map((entry) => entry.path)).toEqual([])
+      }).pipe(Effect.provide(layer))
+    })
+  })
+
+  it.live("keeps the scan alive when a directory listing fails", () =>
+    Effect.gen(function* () {
+      const directory = path.join(os.tmpdir(), "opencode-search-unreadable")
+      const driver = Environment.makeMemoryDriver()
+      const files = Environment.makeFiles(driver)
+      const layer = AppNodeBuilder.build(FileSystemSearch.configured({ fff: false }), [
+        Location.node.replace(
+          Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+        ),
+        Ripgrep.node.replace(ripgrepStub("src/index.ts", () => {})),
+        Environment.node.replace(
+          Layer.succeed(
+            Environment.Service,
+            Environment.Service.of({
+              files: {
+                ...files,
+                // One empty candidate child next to an unknown one: the parent is content, so neither
+                // the parent nor the empty child may be published.
+                list: (target) => {
+                  if (target === directory) return Effect.succeed([{ name: "candidate", type: "directory" as const }])
+                  if (target === path.join(directory, "candidate"))
+                    return Effect.succeed([
+                      { name: "empty", type: "directory" as const },
+                      { name: "unreadable", type: "directory" as const },
+                    ])
+                  if (target === path.join(directory, "candidate", "empty")) return Effect.succeed([])
+                  return Effect.fail(new Environment.Failed({ path: target, cause: undefined }))
+                },
+              },
+              spawner: driver.spawner,
+            }),
+          ),
+        ),
+      ])
+
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        expect((yield* search.find({ query: "index", type: "file" })).map((entry) => entry.path)).toEqual([
+          RelativePath.make("src/index.ts"),
+        ])
+        expect(
+          (yield* search.find({ query: "candidate", type: "directory" })).map((entry) => entry.path),
+        ).not.toContain(RelativePath.make(`candidate/empty${path.sep}`))
+        expect(
+          (yield* search.find({ query: "candidate", type: "directory" })).map((entry) => entry.path),
+        ).not.toContain(RelativePath.make(`candidate${path.sep}`))
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.live("finds empty directories in non-git locations without ignore filtering", () =>
+    Effect.gen(function* () {
+      const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-search-nongit-")))).path
+      yield* Effect.promise(() => mkdir(path.join(directory, "emptydir")))
+      const layer = AppNodeBuilder.build(FileSystemSearch.configured({ fff: false }), [
+        Location.node.replace(
+          Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+        ),
+        Ripgrep.node.replace(ripgrepStub("src/index.ts", () => {})),
+      ])
+
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        expect((yield* search.find({ query: "emptydir", type: "directory" })).map((entry) => entry.path)).toContain(
+          RelativePath.make(`emptydir${path.sep}`),
+        )
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.live("does not publish discovered directories when ignore rules cannot be evaluated", () =>
+    Effect.gen(function* () {
+      const directory = (yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-search-ignore-")))).path
+      yield* Effect.promise(() => mkdir(path.join(directory, "emptydir")))
+      const driver = Environment.makeMemoryDriver()
+      // Real host files with the memory driver's spawner, which always fails to spawn git.
+      const local = Environment.makeLocalDriver(driver.spawner)
+      const layer = AppNodeBuilder.build(FileSystemSearch.configured({ fff: false }), [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location(
+                { directory: AbsolutePath.make(directory) },
+                { vcs: { type: "git", store: AbsolutePath.make(path.join(directory, ".git")) } },
+              ),
+            ),
+          ),
+        ),
+        Ripgrep.node.replace(ripgrepStub("src/index.ts", () => {})),
+        Environment.node.replace(
+          Layer.succeed(
+            Environment.Service,
+            Environment.Service.of({ files: Environment.makeFiles(local), spawner: local.spawner }),
+          ),
+        ),
+      ])
+
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        expect((yield* search.find({ query: "index", type: "file" })).map((entry) => entry.path)).toEqual([
+          RelativePath.make("src/index.ts"),
+        ])
+        expect((yield* search.find({ query: "emptydir", type: "directory" })).map((entry) => entry.path)).toEqual([])
       }).pipe(Effect.provide(layer))
     }),
   )
