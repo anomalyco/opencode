@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { keypadKeyName } from "../util/keypad"
 import "../component/spinner-renderable"
 import { Show, createMemo, createSignal, indexArray } from "solid-js"
 import { SPINNER_FRAMES } from "../component/spinner-frames"
@@ -113,37 +114,38 @@ export function RunFooterSubagentBody(props: {
   const titleWidth = () => Math.max(1, width() - (compact() ? 2 : 6) - (headerControls() ? headerControlsWidth() : 0))
 
   useKeyboard((event) => {
+    const name = keypadKeyName(event.name)
     if (!props.active()) {
       return
     }
 
-    if (event.name === "escape") {
+    if (name === "escape") {
       event.preventDefault()
       props.onClose()
       return
     }
 
-    if (event.name === "tab" && !event.shift) {
+    if (name === "tab" && !event.shift) {
       event.preventDefault()
       props.onCycle(1)
       return
     }
 
-    if (event.name === "up" || event.name === "k") {
+    if (name === "up" || name === "k") {
       event.preventDefault()
       scroll?.scrollBy(-1)
       return
     }
 
-    if (event.name === "down" || event.name === "j") {
+    if (name === "down" || name === "j") {
       event.preventDefault()
       scroll?.scrollBy(1)
       return
     }
 
-    if (event.name === "pageup" || event.name === "pagedown") {
+    if (name === "pageup" || name === "pagedown") {
       event.preventDefault()
-      scroll?.scrollBy(event.name === "pageup" ? -1 : 1, "viewport")
+      scroll?.scrollBy(name === "pageup" ? -1 : 1, "viewport")
     }
   })
 
