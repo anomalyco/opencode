@@ -22,10 +22,12 @@
   container: settings-screen / inline-size;
 }
 
+/* Spans the whole screen and centers its 1048px layout with padding, so the gutters belong to the page scroller. */
 .settings-screen > .settings {
   display: flex;
-  width: min(100%, 1048px);
+  width: 100%;
   min-width: 0;
+  padding-inline: max(0px, calc((100% - 1048px) / 2));
 }
 
 @media (max-width: 767px) {
@@ -85,7 +87,6 @@
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
-  overscroll-behavior: contain;
   min-height: 0;
 }
 
@@ -101,7 +102,9 @@
   initial-value: 0px;
 }
 
-/* Each edge fades in once content is hidden behind it. A list that does not overflow has no scroll timeline, so it keeps both lengths at 0. */
+/* Each edge fades in once content is hidden behind it. A list that does not overflow has no scroll timeline, so it keeps both lengths at 0.
+   The same timeline keeps the wheel inside an overflowing list at its edges. Chromium contains even a list that fits,
+   which would stop a wheel over the page list from scrolling the page. */
 @supports (animation-timeline: scroll()) {
   .settings-nav-groups {
     mask-image: linear-gradient(
@@ -113,11 +116,20 @@
     );
     animation:
       settings-nav-fade-start linear both,
-      settings-nav-fade-end linear both;
-    animation-timeline: scroll(self), scroll(self);
+      settings-nav-fade-end linear both,
+      settings-nav-contain linear both;
+    animation-timeline: scroll(self), scroll(self), scroll(self);
     animation-range:
       0 24px,
-      calc(100% - 24px) 100%;
+      calc(100% - 24px) 100%,
+      normal;
+  }
+}
+
+@keyframes settings-nav-contain {
+  from,
+  to {
+    overscroll-behavior: contain;
   }
 }
 
@@ -894,6 +906,31 @@
   background-color: var(--v2-background-bg-layer-01);
 }
 
+/* The whole view scrolls and the sidebar sticks, so a wheel over the gutters or the page list scrolls the page natively. */
+@container settings-screen (min-width: 800px) {
+  .settings-screen > .settings {
+    align-items: flex-start;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .settings-screen > .settings > .settings-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100%;
+  }
+
+  .settings-screen > .settings > .settings-content {
+    min-height: 100%;
+  }
+
+  .settings-screen > .settings > .settings-content > .settings-panel {
+    flex: 1 0 auto;
+    height: auto;
+    overflow: visible;
+  }
+}
+
 @container settings-screen (min-width: 800px) and (max-width: 1047px) {
   .settings-screen > .settings {
     padding-inline: 24px;
@@ -1370,11 +1407,7 @@
 .settings-project-empty-card {
   width: 100%;
   border-radius: 8px;
-  background: color-mix(
-    in oklab,
-    var(--v2-background-bg-base) 50%,
-    var(--v2-background-bg-layer-01)
-  );
+  background: color-mix(in oklab, var(--v2-background-bg-base) 50%, var(--v2-background-bg-layer-01));
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
 }
 
