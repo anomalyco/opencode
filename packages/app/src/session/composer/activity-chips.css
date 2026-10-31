@@ -8,7 +8,7 @@
 
 /*
  * The open panel sits just above the capsule, with their inline-start edges aligned, and its rows share the capsule's
- * grid: the same hairline and 10px inset put row glyphs on the capsule's glyph, and the same 16px glyph and 8px gap put
+ * grid: the same hairline and 8px inset put row glyphs on the capsule's glyph, and the same 16px glyph and 6px gap put
  * row text on the capsule's label. Rows are subgrids of one table, so agent names, descriptions and run times each
  * line up in a column; descriptions take the remaining width and truncate only when the panel reaches its maximum.
  */
@@ -21,7 +21,7 @@
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-content: start;
-  column-gap: 8px;
+  column-gap: 6px;
   padding: 4px;
   scroll-padding-block: 4px;
   /* The capsule's hairline, so both insets round to the same device pixels. */
@@ -39,7 +39,7 @@
     unicode-bidi: isolate;
   }
 
-  /* With the panel's 4px padding, rows inset 10px like the capsule's content, at the end as at the start. */
+  /* With the panel's 4px padding, rows inset 8px like the capsule's content, at the end as at the start. */
   [data-component="menu-v2-item"],
   [data-slot="menu-v2-item-content"] {
     display: grid;
@@ -49,7 +49,7 @@
   }
 
   [data-component="menu-v2-item"] {
-    padding-inline: 6px;
+    padding-inline: 4px;
     border-radius: 4px;
   }
 

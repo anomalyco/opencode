@@ -58,6 +58,12 @@
   }
 }
 
+/* A leading icon sits closer to the edge and to its label than text does. */
+[data-composer-pill]:has(> [data-composer-pill-icon]:first-child) {
+  gap: 6px;
+  padding-inline-start: 8px;
+}
+
 /* The popover a pill opens, just above it. */
 [data-composer-pill-panel] {
   max-width: calc(100vw - 56px);
