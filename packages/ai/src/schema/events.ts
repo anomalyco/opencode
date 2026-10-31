@@ -289,6 +289,8 @@ export const Finish = Schema.Struct({
   type: Schema.tag("finish"),
   reason: FinishReasonDetails,
   usage: Schema.optional(Usage),
+  /** The final assistant message, set by `ai.stream` and `ai.loop`. */
+  message: Schema.optional(Message),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.Finish" })
 export type Finish = Schema.Schema.Type<typeof Finish>

@@ -11,6 +11,7 @@ export const ai = {
   generate: LLM.generate,
   stream: LLM.stream,
   loop: LLM.loop,
+  collect: LLM.collect,
   compact: LLM.compact,
   canCompact: LLM.canCompact,
   image: Image,

@@ -151,6 +151,10 @@ export const make = (options: Options = {}) => {
     return iterate(LLM.loop(input, options), options)
   }
 
+  /** Read `events` from `stream` or `loop` to the end and fold them into the final result. */
+  const collect = <Event extends LLMEvent>(events: AsyncIterable<Event>, options?: RunOptions) =>
+    run(LLM.collect(Stream.fromAsyncIterable(events, (error) => error)), options)
+
   function compact(
     request: CheckpointRequest,
     options: TriggerCompactOptions & RunOptions,
@@ -224,6 +228,7 @@ export const make = (options: Options = {}) => {
     stream,
     /** Stream model calls, running their tool calls, until the model stops calling tools or `until` is true. */
     loop,
+    collect,
     /** Compact a Responses request: a replacement window, or a checkpoint with `mechanism: "trigger"`. */
     compact,
     canCompact: LLM.canCompact,
