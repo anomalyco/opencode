@@ -42,10 +42,12 @@ export class MediaIngestLimitError extends Schema.TaggedError<MediaIngestLimitEr
 
 export class OffsetOutOfRangeError extends Schema.TaggedError<OffsetOutOfRangeError>()(
   "ReadTool.OffsetOutOfRangeError",
-  { offset: Schema.Number, lines: Schema.Number },
+  { offset: Schema.Number, total: Schema.Number, kind: Schema.Literals(["file", "directory"]) },
 ) {
   override get message() {
-    return `Offset ${this.offset} is out of range for this file (${this.lines} ${this.lines === 1 ? "line" : "lines"})`
+    const unit =
+      this.kind === "directory" ? (this.total === 1 ? "entry" : "entries") : this.total === 1 ? "line" : "lines"
+    return `Offset ${this.offset} is out of range for this ${this.kind} (${this.total} ${unit})`
   }
 }
 
@@ -124,7 +126,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
       if (error.actual !== "directory")
         return Effect.fail(new PathKindError({ resource, expected: "a file or directory" }))
       return files.list(input).pipe(
-        Effect.map((entries) => list(entries, page)),
+        Effect.flatMap((entries) => list(entries, page)),
         Effect.catchTag("Environment.WrongKind", () =>
           Effect.fail(new PathKindError({ resource, expected: "a file or directory" })),
         ),
@@ -244,7 +246,7 @@ const makeTextPage = Effect.fnUntraced(function* (
 ) {
   if (binary) return yield* new BinaryFileError({ resource })
   if (result.entries.length === 0 && result.offset !== 1)
-    return yield* new OffsetOutOfRangeError({ offset: result.offset, lines })
+    return yield* new OffsetOutOfRangeError({ offset: result.offset, total: lines, kind: "file" })
   return new TextPage({
     type: "text-page",
     content: result.entries.join("\n"),
@@ -255,7 +257,7 @@ const makeTextPage = Effect.fnUntraced(function* (
   })
 })
 
-const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput) => {
+const list = Effect.fnUntraced(function* (items: ReadonlyArray<Environment.DirEntry>, page: PageInput) {
   const offset = page.offset || 1
   const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
   const visible = items
@@ -279,6 +281,8 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput) => {
           : a.path.localeCompare(b.path),
     )
   const selected = visible.slice(offset - 1, offset - 1 + limit)
+  if (selected.length === 0 && offset !== 1)
+    return yield* new OffsetOutOfRangeError({ offset, total: visible.length, kind: "directory" })
   const truncated = offset - 1 + selected.length < visible.length
   return new ListPage({
     type: "list-page",
@@ -286,7 +290,7 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput) => {
     truncated,
     ...(truncated ? { next: offset + selected.length } : {}),
   })
-}
+})
 
 const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
   const offset = page.offset || 1

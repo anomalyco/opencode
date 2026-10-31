@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Environment } from "@opencode/core/environment/index"
-import { AbsolutePath } from "@opencode/core/schema"
+import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
@@ -227,6 +227,42 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  const offsets = [
+    { entries: 0, offset: 2, message: "Offset 2 is out of range for this directory (0 entries)" },
+    { entries: 1, offset: 2, message: "Offset 2 is out of range for this directory (1 entry)" },
+    { entries: 2, offset: 3, message: "Offset 3 is out of range for this directory (2 entries)" },
+    { entries: 2, offset: 100, message: "Offset 100 is out of range for this directory (2 entries)" },
+  ]
+  offsets.forEach((input) => {
+    it.live(`rejects directory offset ${input.offset} with ${input.entries} entries`, () =>
+      Effect.gen(function* () {
+        const current = yield* fixture
+        yield* Effect.forEach(Array.from({ length: input.entries }), (_, index) =>
+          current.files.writeFileString(path.join(current.directory, `${index}.txt`), ""),
+        )
+
+        const error = yield* ReadToolFileSystem.read(current.environment, absolute(current.directory), "folder", {
+          offset: input.offset,
+        }).pipe(Effect.flip)
+
+        expect(error).toBeInstanceOf(ReadToolFileSystem.OffsetOutOfRangeError)
+        expect(error.message).toBe(input.message)
+      }),
+    )
+  })
+
+  it.live("returns an empty directory page at the initial offset", () =>
+    Effect.gen(function* () {
+      const current = yield* fixture
+
+      for (const page of [{}, { offset: 0 }, { offset: 1 }]) {
+        const result = yield* ReadToolFileSystem.read(current.environment, absolute(current.directory), "folder", page)
+
+        expect(result).toEqual(new ReadToolFileSystem.ListPage({ type: "list-page", entries: [], truncated: false }))
+      }
+    }),
+  )
+
   it.effect("pages text with one-based offsets", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
@@ -303,6 +339,19 @@ describe("ReadToolFileSystem", () => {
         truncated: true,
         next: 3,
       })
+
+      const last = yield* ReadToolFileSystem.read(environment, absolute(directory), "folder", {
+        offset: 3,
+        limit: 1,
+      })
+
+      expect(last).toEqual(
+        new ReadToolFileSystem.ListPage({
+          type: "list-page",
+          entries: [{ path: RelativePath.make("b.txt"), type: "file" }],
+          truncated: false,
+        }),
+      )
     }),
   )
 
