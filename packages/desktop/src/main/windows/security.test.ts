@@ -1,7 +1,15 @@
 import { expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
-import type { BrowserWindow, Session, WebContents } from "electron"
-import { allowRendererPermissions } from "./security"
+import type {
+  BeforeSendResponse,
+  BrowserWindow,
+  OnBeforeSendHeadersListenerDetails,
+  Session,
+  WebContents,
+  WebRequestFilter,
+} from "electron"
+import { SidecarCredentials } from "../service/sidecar-credentials"
+import { allowRendererPermissions, wireRendererHeaders } from "./security"
 
 type RequestHandler = NonNullable<Parameters<Session["setPermissionRequestHandler"]>[0]>
 
@@ -121,3 +129,52 @@ test("retains permissions across all live windows on a shared session and revoke
   expect(await shared.ask(1, "notifications")).toBe(false)
   expect(shared.check(null, "notifications", { isMainFrame: false })).toBe(false)
 })
+
+test.each([
+  ["on loopback", "http://127.0.0.1:4096", "http://127.0.0.1/*"],
+  ["on a Tailscale address", "http://100.87.251.43:45278", "http://100.87.251.43/*"],
+  ["on a LAN name", "http://devbox.local:4096", "http://devbox.local/*"],
+])("credentials the renderer's requests to a sidecar %s", async (_name, url, pattern) => {
+  const registered: Registration = { urls: [] }
+
+  // SAFETY: wireRendererHeaders touches only webRequest.onBeforeSendHeaders and webRequest.onHeadersReceived.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const session = {
+    webRequest: {
+      onBeforeSendHeaders(filter: WebRequestFilter, listener: Listener) {
+        registered.urls = filter.urls
+        registered.listener = listener
+      },
+      onHeadersReceived() {},
+    },
+  } as unknown as Session
+
+  // SAFETY: wireRendererHeaders reads only `webContents.session`.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  wireRendererHeaders({ webContents: { session } } as unknown as BrowserWindow)
+  // The window opens before the service is ready, so the filter has to follow the endpoint published later.
+  SidecarCredentials.set({ url, password: "secret" })
+  expect(registered.urls).toContain(pattern)
+
+  const listener = registered.listener
+
+  if (!listener) throw new Error("Missing onBeforeSendHeaders listener")
+
+  // SAFETY: the listener reads only `url`, `frame.parent`, `frame.url` and `requestHeaders`.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+  const details = {
+    url: `${url}/api/event`,
+    frame: { parent: null, url: "oc://renderer/index.html" },
+    requestHeaders: {},
+  } as unknown as OnBeforeSendHeadersListenerDetails
+
+  const headers = await new Promise<BeforeSendResponse["requestHeaders"]>((resolve) =>
+    listener(details, (response) => resolve(response.requestHeaders)),
+  )
+
+  expect(headers).toEqual({ Authorization: `Basic ${Buffer.from("opencode:secret").toString("base64")}` })
+})
+
+type Listener = (details: OnBeforeSendHeadersListenerDetails, callback: (response: BeforeSendResponse) => void) => void
+
+type Registration = { urls: string[]; listener?: Listener }
