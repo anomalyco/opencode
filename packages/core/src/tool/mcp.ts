@@ -52,7 +52,13 @@ export const layer = Layer.effect(
                 options: { namespace: namespace(tool.server), codemode: tool.codemode !== false },
                 description: tool.description ?? "",
                 input: (tool.inputSchema ?? { type: "object", properties: {} }) as JsonSchema.JsonSchema,
-                output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
+                // Without a declared output schema the tool returns flattened text content —
+                // or a parsed JSON object/array when that text looks like JSON (see the
+                // output() closure below). An empty schema renders as `unknown` in the Code
+                // Mode catalog and hides that contract from the model.
+                output: (tool.outputSchema ?? {
+                  type: ["string", "object", "array", "null"],
+                }) as JsonSchema.JsonSchema,
                 execute: (input, context) =>
                   Effect.gen(function* () {
                     yield* permission.assert({

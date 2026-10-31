@@ -11,6 +11,7 @@ import {
 
 // A raw JSON Schema tool in the shape an MCP adapter produces: render-only input schema
 // whose property descriptions and constraints must surface as JSDoc in pretty signatures.
+// The output type-array is the adapter's fallback for servers that declare no output schema.
 const listIssues = Tool.make({
   description: "List issues in a repository",
   input: {
@@ -24,7 +25,7 @@ const listIssues = Tool.make({
     },
     required: ["owner"],
   },
-  output: {},
+  output: { type: ["string", "object", "array", "null"] },
   execute: () => Effect.succeed("[]"),
 })
 
@@ -893,7 +894,7 @@ describe("JSDoc signatures in catalogs and search results", () => {
         "  /** Filter by labels. @minItems 1 @maxItems 10 */",
         "  labels?: Array<string>,",
         '  state?: "open" | "closed",',
-        "}): Promise<unknown>",
+        "}): Promise<string | {} | Array<unknown> | null>",
       ].join("\n"),
     )
   })
@@ -1043,6 +1044,7 @@ describe("empty object signatures", () => {
   })
 
   test("raw schemas render only the exact empty-struct shapes as {}", () => {
+    expect(jsonSchemaToTypeScript({})).toBe("unknown")
     expect(jsonSchemaToTypeScript({ not: { type: "null" } })).toBe("{}")
     expect(jsonSchemaToTypeScript({ anyOf: [{ type: "object" }, { type: "array" }] })).toBe("{}")
     expect(jsonSchemaToTypeScript({ type: "string", not: { type: "null" } })).toBe("string")
@@ -1062,14 +1064,14 @@ describe("non-identifier tool paths", () => {
       },
       required: ["query", "libraryName"],
     } as const,
-    output: {},
+    output: { type: ["string", "object", "array", "null"] },
     execute: () => Effect.succeed("/reactjs/react.dev"),
   })
   const runtime = CodeMode.make({ tools: { context7: { "resolve-library-id": resolveLibrary } } })
 
   test("catalog signatures use bracket notation for dashed tool names", () => {
     expect(runtime.catalog[0]?.signature).toBe(
-      'tools.context7["resolve-library-id"]({\n  query: string,\n  libraryName: string,\n}): Promise<unknown>',
+      'tools.context7["resolve-library-id"]({\n  query: string,\n  libraryName: string,\n}): Promise<string | {} | Array<unknown> | null>',
     )
   })
 
