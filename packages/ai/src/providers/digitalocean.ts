@@ -1,4 +1,5 @@
 import type { ProviderPackage } from "../provider-package.js"
+import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
 import { OpenResponses } from "../protocols/open-responses.js"
@@ -19,7 +20,10 @@ const baseURL = "https://inference.do-ai.run/v1"
 export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
-    readonly providerOptions?: OpenAIProviderOptionsInput | OpenResponsesProviderOptionsInput
+    readonly providerOptions?:
+      | OpenAIProviderOptionsInput
+      | OpenResponsesProviderOptionsInput
+      | AnthropicMessages.ProviderOptionsInput
   }
 
 export type Settings<Options = OpenAIProviderOptionsInput> = ProviderPackage.Settings &
@@ -53,7 +57,13 @@ const responsesRoute = Route.make({
   defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
-export const routes = [route, responsesRoute]
+const messagesRoute = AnthropicMessages.route.with({
+  id: "digitalocean-messages",
+  provider: id,
+  endpoint: { baseURL },
+})
+
+export const routes = [route, responsesRoute, messagesRoute]
 
 export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
@@ -61,6 +71,7 @@ export const configure = (input: Config = {}) => {
   const options = { ...defaults, endpoint: { baseURL: endpoint ?? baseURL }, auth }
   const configured = route.with(options)
   const configuredResponses = responsesRoute.with(options)
+  const configuredMessages = messagesRoute.with(options)
   const decisionRoute = SystemOne.route.with({
     provider: id,
     providerMetadataKey: "digitalocean",
@@ -86,6 +97,11 @@ export const configure = (input: Config = {}) => {
       }),
     responses: (modelID: string | ModelID) =>
       configuredResponses.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
+    messages: (modelID: string | ModelID) =>
+      configuredMessages.model<AnthropicMessages.ProviderOptionsInput>({
+        id: modelID,
+        compatibility: { requireSignature: modelID.startsWith("anthropic-") },
+      }),
     image,
     decision,
     configure,
@@ -96,6 +112,7 @@ export const provider = configure()
 export const decision = provider.decision
 export const image = provider.image
 export const responses = provider.responses
+export const messages = provider.messages
 
 export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
@@ -103,6 +120,10 @@ export const responsesModel: ProviderPackage.Model<
   Settings<OpenResponsesProviderOptionsInput>,
   OpenResponsesProviderOptionsInput
 > = (modelID, settings) => configure(config(settings)).responses(modelID)
+export const messagesModel: ProviderPackage.Model<
+  Settings<AnthropicMessages.ProviderOptionsInput>,
+  AnthropicMessages.ProviderOptionsInput
+> = (modelID, settings) => configure(config(settings)).messages(modelID)
 export const imageModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)

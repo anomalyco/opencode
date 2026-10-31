@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
+import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { SystemOne } from "../protocols/system-one.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
@@ -15,15 +16,15 @@ const baseURL = "https://inference.baseten.co/v1"
 export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
-    readonly providerOptions?: OpenAIProviderOptionsInput
+    readonly providerOptions?: OpenAIProviderOptionsInput | AnthropicMessages.ProviderOptionsInput
   }
 export interface BasetenDecisionOptions {
   readonly [key: string]: unknown
   readonly max_len?: number
 }
 
-export type Settings = ProviderPackage.Settings &
-  OpenAIProviderOptionsInput & {
+export type Settings<Options = OpenAIProviderOptionsInput> = ProviderPackage.Settings &
+  Options & {
     readonly apiKey?: string | false
     readonly baseURL?: string
   }
@@ -37,7 +38,13 @@ export const route = Route.make({
   framing: OpenAIChat.framing,
 })
 
-export const routes = [route]
+const messagesRoute = AnthropicMessages.route.with({
+  id: "baseten-messages",
+  provider: id,
+  endpoint: { baseURL },
+})
+
+export const routes = [route, messagesRoute]
 
 // Baseten reads media only as parts in a user message inside `state.messages`, not in any of the System One
 // placements models.dev describes, so its decision protocol fixes that placement.
@@ -55,11 +62,9 @@ const decisionProtocol = DecisionRoute.protocol({
 export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const auth = AuthOptions.bearer(input, "BASETEN_API_KEY")
-  const configured = route.with({
-    ...defaults,
-    endpoint: { baseURL: endpoint ?? baseURL },
-    auth,
-  })
+  const options = { ...defaults, endpoint: { baseURL: endpoint ?? baseURL }, auth }
+  const configured = route.with(options)
+  const configuredMessages = messagesRoute.with(options)
   const decisionRoute = DecisionRoute.make({
     id: decisionProtocol.id,
     provider: id,
@@ -75,6 +80,11 @@ export const configure = (input: Config = {}) => {
   return {
     id,
     model: (modelID: string | ModelID) => configured.model<OpenAIProviderOptionsInput>({ id: modelID }),
+    messages: (modelID: string | ModelID) =>
+      configuredMessages.model<AnthropicMessages.ProviderOptionsInput>({
+        id: modelID,
+        compatibility: { requireSignature: false },
+      }),
     decision,
     configure,
   }
@@ -82,15 +92,20 @@ export const configure = (input: Config = {}) => {
 
 export const provider = configure()
 export const decision = provider.decision
+export const messages = provider.messages
 
 export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
+export const messagesModel: ProviderPackage.Model<
+  Settings<AnthropicMessages.ProviderOptionsInput>,
+  AnthropicMessages.ProviderOptionsInput
+> = (modelID, settings) => configure(config(settings)).messages(modelID)
 export const decisionModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).decision(modelID, input.providerOptions)
 }
 
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
+function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings<Config["providerOptions"]> = {}) {
   return {
     apiKey,
     baseURL,
