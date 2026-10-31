@@ -128,7 +128,7 @@ export const frames = (bytes: Stream.Stream<Uint8Array, AIError>, mode: MediaPro
   mode === "stream" ? Framing.sse.frame(bytes) : Framing.document.frame(bytes)
 
 export const toolMedia = (item: Tool.FileContent) =>
-  item.mime.startsWith("video/") && item.uri.startsWith("gs://")
+  (item.mime.startsWith("video/") || item.mime.startsWith("audio/")) && item.uri.startsWith("gs://")
     ? Media.ref(PROVIDER, item.uri, item.mime)
     : ProviderShared.toolFileMedia(item).media
 
@@ -141,7 +141,9 @@ export const mediaPart = (
   AIError
 > => {
   const fileUri =
-    asset.kind === "video" && asset.source.type === "url" && /^https?:\/\//i.test(asset.source.url)
+    (asset.kind === "video" || asset.kind === "audio") &&
+    asset.source.type === "url" &&
+    /^https?:\/\//i.test(asset.source.url)
       ? asset.source.url
       : MediaInput.refID(asset, PROVIDER)
   if (fileUri !== undefined) return Effect.succeed({ fileData: { mimeType: asset.mediaType, fileUri } })
