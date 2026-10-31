@@ -296,7 +296,7 @@ export const dict = {
     "Logger for overvåking av misbruk genereres for all bruk av API-funksjoner og oppbevares i opptil 30 dager.",
   "go.faq.a5.learnMore": "Les mer",
   "go.faq.a5.deepseekRetention":
-    "ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 31. oktober 2026.",
+    "ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 30. november 2026.",
   "go.faq.a5.museRetention":
     "Kraftig rabatterte tokenpriser i bytte mot tillatelse til å bruke ledetekstene og fullføringene dine til å trene fremtidige Meta-modeller.",
 

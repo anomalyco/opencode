@@ -299,7 +299,7 @@ export const dict = {
     "Preços de tokens com grandes descontos em troca da permissão para usar seus prompts e respostas geradas para treinar futuros modelos da Meta.",
   "go.faq.a5.learnMore": "Saiba mais",
   "go.faq.a5.deepseekRetention":
-    "O acordo de ZDR é renovado mensalmente. O acordo atual é válido até 31 de outubro de 2026.",
+    "O acordo de ZDR é renovado mensalmente. O acordo atual é válido até 30 de novembro de 2026.",
   "go.faq.q6": "Posso recarregar crédito?",
   "go.faq.a6": "Se você precisar de mais uso, pode recarregar crédito em sua conta.",
   "go.faq.q7": "Posso cancelar?",

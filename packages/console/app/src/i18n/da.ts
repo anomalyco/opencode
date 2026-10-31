@@ -298,7 +298,7 @@ export const dict = {
     "Kraftigt nedsatte tokenpriser til gengæld for tilladelse til at bruge dine prompts og modelsvar til at træne fremtidige Meta-modeller.",
   "go.faq.a5.learnMore": "Læs mere",
   "go.faq.a5.deepseekRetention":
-    "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 31. oktober 2026.",
+    "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 30. november 2026.",
 
   "go.faq.q6": "Kan jeg tanke kredit op?",
   "go.faq.a6": "Hvis du har brug for mere forbrug, kan du tanke kredit op på din konto.",
