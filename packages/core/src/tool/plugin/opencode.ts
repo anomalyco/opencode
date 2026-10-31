@@ -301,6 +301,6 @@ function removeFailure(directory: string, error: unknown) {
   if (error instanceof Worktree.StrategyUnavailableError)
     return `Unable to remove worktree ${directory}: its worktree strategy ${error.strategy} is not available.`
   if ((error instanceof Git.WorktreeError || error instanceof Worktree.OperationError) && error.forceRequired)
-    return `Unable to remove worktree ${directory}: it has modified or untracked files.`
+    return `Unable to remove worktree ${directory}: it has modified or untracked files, or initialized submodules. Retry with force: true to delete it anyway.`
   return `Unable to remove worktree ${directory}.`
 }

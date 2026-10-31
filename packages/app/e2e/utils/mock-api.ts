@@ -92,6 +92,19 @@ export class MockUnsupported extends Schema.TaggedError<MockUnsupported>()("Mock
   message: Schema.String,
 }) {}
 
+// The server's error when git refuses to remove a worktree without force.
+export class MockWorktreeError extends Schema.TaggedError<MockWorktreeError>()(
+  "WorktreeError",
+  {
+    name: Schema.Literal("WorktreeError"),
+    data: Schema.Struct({
+      message: Schema.String,
+      forceRequired: Schema.optional(Schema.Boolean),
+    }),
+  },
+  { httpApiStatus: 400 },
+) {}
+
 const Unsupported = MockUnsupported.pipe(HttpApiSchema.status(501))
 
 const PersistentPtyUnavailable = MockServiceUnavailable.pipe(HttpApiSchema.status(503))
@@ -219,7 +232,7 @@ const Group = HttpApiGroup.make("mock")
     HttpApiEndpoint.delete("worktreeRemove", "/api/worktree", {
       payload: Worktree.RemoveInput,
       success: NoContent,
-      error: Unsupported,
+      error: [Unsupported, MockWorktreeError],
     }),
   )
   .add(

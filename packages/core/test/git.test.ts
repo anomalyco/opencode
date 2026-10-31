@@ -105,6 +105,52 @@ describe("Git worktrees", () => {
     }),
   )
 
+  it.live("requires force to remove a worktree with initialized submodules", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      const submodule = `${root.path}-submodule`
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => fs.rm(submodule, { recursive: true, force: true })).pipe(Effect.ignore),
+      )
+      yield* Effect.promise(async () => {
+        await initRepo(submodule)
+        await initRepo(root.path)
+        await $`git -c protocol.file.allow=always submodule add ${submodule} modules/submodule`.cwd(root.path).quiet()
+        await $`git add .`.cwd(root.path).quiet()
+        await $`git commit -m "add submodule"`.cwd(root.path).quiet()
+      })
+      const directory = AbsolutePath.make(yield* Effect.promise(() => fs.realpath(root.path)))
+      const worktree = AbsolutePath.make(`${root.path}-git-worktree-submodule`)
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => fs.rm(worktree, { recursive: true, force: true })).pipe(Effect.ignore),
+      )
+      const git = yield* Git.Service
+      const repo = yield* git.repo.discover(directory)
+      if (!repo) throw new Error("Repository not found")
+
+      yield* git.worktree.create({ repository: repo, directory: worktree })
+      yield* Effect.promise(() =>
+        $`git -c protocol.file.allow=always submodule update --init`.cwd(worktree).quiet(),
+      )
+
+      const error = yield* git.worktree
+        .remove({ repository: repo, directory: worktree, force: false })
+        .pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(Git.WorktreeError)
+      if (!(error instanceof Git.WorktreeError)) throw new Error("Expected a worktree error")
+      expect(error.operation).toBe("remove")
+      expect(error.forceRequired).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(path.join(worktree, ".git")).exists())).toBe(true)
+
+      yield* git.worktree.remove({ repository: repo, directory: worktree, force: true })
+      expect(yield* Effect.promise(() => fs.stat(worktree).then(() => true, () => false))).toBe(false)
+    }),
+  )
+
   it.live("reads no remote and no root commits from an unborn repository", () =>
     Effect.gen(function* () {
       const root = yield* Effect.acquireRelease(
