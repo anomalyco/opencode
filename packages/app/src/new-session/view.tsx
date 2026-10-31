@@ -38,6 +38,8 @@ import { NewSessionBranch } from "./workspace/selector"
 import { NewSessionBrickBreaker } from "./brick-breaker"
 import { NewSessionPinBoard, type PinBoardHandle } from "./pin-board"
 import { NewSessionWordmark, type LodgerBall } from "./wordmark"
+import { useVoiceScreen, VoiceCallButton, VoiceCallControls, VoiceComposer } from "@/voice/composer"
+import type { VoiceView } from "@/voice/view"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
 
@@ -65,6 +67,8 @@ export function NewSessionView(props: {
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
   location: ReturnType<typeof useNewSessionLocationDialog>
+  /** What a voice call started here is on; none until the draft has a project. */
+  voice: () => VoiceView | undefined
 }) {
   const [onboarding, setOnboarding, , onboardingReady] = persisted(
     Persist.global("workspace-onboarding"),
@@ -73,6 +77,7 @@ export function NewSessionView(props: {
   )
 
   const settings = useSettings()
+  const voiceActive = useVoiceScreen(props.voice)
 
   const [wordmark, setWordmark] = createStore<WordmarkState>({ mode: "flat", game: false })
 
@@ -115,7 +120,14 @@ export function NewSessionView(props: {
             <div class="mt-8 flex flex-col gap-3">
               <div data-slot="new-session-composer" class="flex flex-col gap-1">
                 <div class="relative z-10">
-                  <Composer model={props.composer} />
+                  <VoiceComposer>
+                    <Composer
+                      model={props.composer}
+                      // Without a project yet, the voice button asks for one first, as on iOS.
+                      action={<VoiceCallButton view={props.voice()} onUnavailable={() => location()} />}
+                      controls={voiceActive() ? VoiceCallControls : undefined}
+                    />
+                  </VoiceComposer>
                 </div>
                 <Show when={props.project.selected()}>
                   {(project) => (

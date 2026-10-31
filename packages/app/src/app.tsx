@@ -1,6 +1,6 @@
 import "@/index.css"
 import { VoiceProvider } from "@/voice/context"
-import { VoiceOverlay } from "@/voice/composer"
+import { VoiceCallPill } from "@/voice/composer"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { FileComponentProvider } from "@opencode/ui/context/file"
 import { Font } from "@opencode/ui/font"
@@ -107,7 +107,7 @@ export function AppInterface(props: {
             <VoiceProvider>
               {props.children}
               {rootProps.children}
-              <VoiceOverlay />
+              <VoiceCallPill />
             </VoiceProvider>
           </CommandProvider>
         </ProjectIconsProvider>

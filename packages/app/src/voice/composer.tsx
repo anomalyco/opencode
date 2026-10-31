@@ -1,250 +1,352 @@
-import { motionTuning } from "@opencode/ui/motion-tuning"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
-import { Loader } from "@opencode/ui/loader"
-import { Schema } from "effect"
-import { createEffect, For, onCleanup, onMount, Show, untrack, type ParentProps } from "solid-js"
-import { createStore } from "solid-js/store"
-import type { SessionInfo } from "@opencode/client/promise"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { createEffect, createSignal, For, onCleanup, Show, type ParentProps } from "solid-js"
 import { useServer } from "@/runtime/server/current"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
-import { Persist, persisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
-import en from "@/runtime/i18n/en"
+import { useSettings } from "@/settings/model"
 import { useVoice } from "./context"
+import type { CallState } from "./call"
+import { VoiceScope } from "./scope"
+import type { VoiceView } from "./view"
 import "./voice.css"
 
-const toggle = motionTuning.toggle("voice.calls", {
-  label: en["experiment.voiceCalls"],
-  group: "Voice",
-  description: "Call button in the composer",
-  target: ".voice-call-action",
-  experiment: true,
-  value: false,
-})
-
-// Where the panel was dragged to, as an offset from its bottom-right home.
-const PanelState = Persistence.struct({
-  x: Schema.Number,
-  y: Schema.Number,
-  expanded: Schema.Boolean,
-})
-
-export function VoiceComposer(props: ParentProps<{ session: SessionInfo | undefined }>) {
+/** Whether this server has a call to show, connecting, live or dropped. */
+export function useVoiceCallActive() {
   const voice = useVoice()
   const server = useServer()
-  const language = useLanguage()
-  const platform = usePlatform()
-  const [state, setState] = createStore({ enabled: toggle() })
-  onCleanup(motionTuning.subscribe(() => setState("enabled", toggle())))
 
-  const enabled = () =>
-    platform.platform === "desktop" && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod" && state.enabled
+  return () => voice.state.status !== "idle" && voice.state.server === server.key
+}
+
+/**
+ * A screen's part in a call on its server, a session's or a new-session draft's: the call follows what's on screen
+ * (subagents, sessions waiting on a request and drafts included), and while this screen is up the floating call steps
+ * aside.
+ */
+export function useVoiceScreen(view: () => VoiceView | undefined) {
+  const voice = useVoice()
+  const server = useServer()
+  const active = useVoiceCallActive()
 
   createEffect(() => {
-    const session = props.session
+    const current = view()
 
-    if (session && voice.state.server === server.key) voice.view(server.key, session)
+    if (current && voice.state.server === server.key) voice.view(server.key, current)
   })
+
+  createEffect(() => {
+    if (active()) voice.attach()
+  })
+
+  return active
+}
+
+/** Opens the call's captions above the composer. */
+export function VoiceComposer(props: ParentProps) {
+  const voice = useVoice()
+  const active = useVoiceCallActive()
 
   return (
     <>
-      {props.children}
-      <Show when={enabled() && props.session && voice.state.status === "idle"}>
-        <div class="voice-call-action">
-          <Button
-            size="small"
-            variant="ghost"
-            onClick={() => {
-              const session = props.session
-
-              if (session) void voice.start(server.key, server.ctx, session)
-            }}
-          >
-            {language.t("voice.call")}
-          </Button>
-        </div>
+      <Show when={active() && voice.state.transcript}>
+        <VoiceTranscript />
       </Show>
+      {props.children}
     </>
   )
 }
 
-/** The call's floating panel. It sits beside the composer, never replaces it, and can be dragged anywhere. */
-export function VoiceOverlay() {
+/**
+ * The call's row on its own, for a session screen whose composer is away: a request docked in its place, a
+ * subagent, or a missing location.
+ */
+export function VoiceCallStrip() {
   const voice = useVoice()
 
   return (
-    <Show when={voice.state.status !== "idle"}>
-      <VoicePanel />
+    <div class="voice-call-strip">
+      <Show when={voice.state.transcript}>
+        <VoiceTranscript />
+      </Show>
+      <div class="voice-call-strip-row">
+        <VoiceCallControls />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A live call when no session screen on its server is up (Home, settings, the new-session page, another server): what
+ * it's following, the time, Mute and End, and a way back to its session.
+ */
+export function VoiceCallPill() {
+  const voice = useVoice()
+  const language = useLanguage()
+  const muteLabel = () => language.t(voice.state.muted ? "voice.unmute" : "voice.mute")
+  const dropped = () => voice.state.status === "dropped"
+
+  return (
+    <Show when={voice.state.status !== "idle" && voice.state.screens === 0}>
+      <section class="voice-call-pill" role="group" aria-label={language.t("voice.panel")}>
+        <button
+          type="button"
+          class="voice-call-pill-return"
+          aria-label={language.t("voice.return")}
+          onClick={() => voice.reopen()}
+        >
+          <span class="voice-call-pill-scope">
+            <VoiceScope meter={voice.meter} status={voice.state.status} muted={voice.state.muted} />
+          </span>
+          <span class="voice-call-pill-title">
+            {dropped() ? language.t(`voice.failure.${voice.state.failure ?? "dropped"}`) : voice.state.title}
+          </span>
+        </button>
+        <span class="voice-call-time" role="status">
+          <Show when={voice.state.status === "connecting"}>{language.t("voice.connecting")}</Show>
+          <Show when={voice.state.status === "connected" && voice.state.since} keyed>
+            {(since) => <Elapsed since={since} />}
+          </Show>
+        </span>
+        <Tooltip placement="top" value={muteLabel()}>
+          <IconButton
+            type="button"
+            size="large"
+            variant="ghost"
+            class="voice-call-toggle"
+            data-muted={voice.state.muted ? "" : undefined}
+            disabled={voice.state.status !== "connected"}
+            aria-pressed={voice.state.muted}
+            aria-label={muteLabel()}
+            icon={<Icon name={voice.state.muted ? "microphone-off" : "microphone"} />}
+            onClick={voice.mute}
+          />
+        </Tooltip>
+        <Tooltip placement="top" value={language.t(dropped() ? "voice.close" : "voice.end")}>
+          <IconButton
+            type="button"
+            size="large"
+            variant="ghost"
+            class="voice-call-end"
+            data-dropped={dropped() ? "" : undefined}
+            aria-label={language.t(dropped() ? "voice.close" : "voice.end")}
+            icon={<Icon name={dropped() ? "close" : "phone-hangup"} />}
+            onClick={() => void voice.end()}
+          />
+        </Tooltip>
+      </section>
     </Show>
   )
 }
 
-function VoicePanel() {
+/**
+ * The composer's call button, beside Send. Without a view (a draft with no project yet), `onUnavailable` runs instead,
+ * such as opening the project picker.
+ */
+export function VoiceCallButton(props: { view: VoiceView | undefined; onUnavailable?: () => void }) {
   const voice = useVoice()
+  const server = useServer()
+  const settings = useSettings()
   const language = useLanguage()
-  let panel!: HTMLElement
-
-  const [position, setPosition, , ready] = persisted(Persist.global("voice.panel"), PanelState, {
-    x: 0,
-    y: 0,
-    expanded: false,
-  })
-
-  // How far the panel can move while staying inside the window, read once per drag rather than every frame.
-  const bounds = () => {
-    const rect = panel.getBoundingClientRect()
-
-    return {
-      x: [position.x - rect.left, position.x + window.innerWidth - rect.right],
-      y: [position.y - rect.top, position.y + window.innerHeight - rect.bottom],
-    }
-  }
-
-  const clamp = (limits: ReturnType<typeof bounds>, x: number, y: number) => ({
-    x: Math.min(Math.max(x, limits.x[0]), Math.max(limits.x[0], limits.x[1])),
-    y: Math.min(Math.max(y, limits.y[0]), Math.max(limits.y[0], limits.y[1])),
-  })
-
-  // Before stored state loads, a write would mark the store edited and drop the saved position.
-  const settle = () => {
-    if (!ready()) return
-    const next = clamp(bounds(), position.x, position.y)
-
-    if (next.x !== position.x || next.y !== position.y) setPosition(next)
-  }
-
-  const grab = (event: PointerEvent) => {
-    if (
-      event.button !== 0 ||
-      !(event.target instanceof Element) ||
-      event.target.closest("button") ||
-      onScrollbar(event)
-    )
-      return
-    event.preventDefault()
-    const limits = bounds()
-    const start = { x: event.clientX - position.x, y: event.clientY - position.y }
-    panel.setPointerCapture(event.pointerId)
-
-    const move = (moved: PointerEvent) => setPosition(clamp(limits, moved.clientX - start.x, moved.clientY - start.y))
-
-    const drop = () => {
-      panel.removeEventListener("pointermove", move)
-      panel.removeEventListener("pointerup", drop)
-      panel.removeEventListener("pointercancel", drop)
-      panel.removeEventListener("lostpointercapture", drop)
-    }
-
-    panel.addEventListener("pointermove", move)
-    panel.addEventListener("pointerup", drop)
-    panel.addEventListener("pointercancel", drop)
-    panel.addEventListener("lostpointercapture", drop)
-  }
-
-  onMount(() => {
-    const observer = new ResizeObserver(settle)
-    observer.observe(panel)
-    window.addEventListener("resize", settle)
-    onCleanup(() => {
-      observer.disconnect()
-      window.removeEventListener("resize", settle)
-    })
-  })
-
-  // A saved position from a larger window is pulled back on screen once storage has loaded.
-  createEffect(() => {
-    if (ready()) untrack(settle)
-  })
-
-  const speaker = (value: "user" | "assistant") => language.t(value === "user" ? "voice.you" : "voice.assistant")
 
   return (
-    <section
-      ref={panel}
-      class="voice-panel"
+    <Show when={settings.general.voice() && (props.view || props.onUnavailable) && voice.state.status === "idle"}>
+      <Tooltip placement="top" value={language.t("voice.call")}>
+        <IconButton
+          data-action="composer-voice-call"
+          type="button"
+          size="large"
+          variant="ghost"
+          class="voice-call-start"
+          icon={<Icon name="voice" />}
+          aria-label={language.t("voice.call")}
+          onMouseDown={(event: MouseEvent) => event.preventDefault()}
+          onClick={() => {
+            const view = props.view
+
+            if (view) voice.begin(server.key, server.ctx, view)
+            else props.onUnavailable?.()
+          }}
+        />
+      </Tooltip>
+    </Show>
+  )
+}
+
+/** A live call in the composer's controls row, on the call this server has. */
+export function VoiceCallControls() {
+  const voice = useVoice()
+
+  return (
+    <VoiceCallBar
+      call={voice.state}
+      meter={voice.meter}
+      onMute={voice.mute}
+      onCaptions={voice.toggleTranscript}
+      onRejoin={() => void voice.rejoin()}
+      onSetup={voice.setup}
+      onEnd={() => void voice.end()}
+    />
+  )
+}
+
+/** The captions above the composer, on the call this server has. */
+function VoiceTranscript() {
+  const voice = useVoice()
+
+  return <VoiceCaptions captions={voice.state.captions} />
+}
+
+type Caption = { utterance: number; speaker: CallState["speaker"]; text: string }
+
+/** The call row: Mute and Captions, the voices' picture, then the time and End. */
+export function VoiceCallBar(props: {
+  call: Pick<CallState, "status" | "failure" | "muted" | "since"> & { transcript: boolean }
+  meter: { mic: number; speaker: number }
+  onMute: () => void
+  onCaptions: () => void
+  onRejoin: () => void
+  onSetup: () => void
+  onEnd: () => void
+}) {
+  const language = useLanguage()
+  const dropped = () => props.call.status === "dropped"
+  const muteLabel = () => language.t(props.call.muted ? "voice.unmute" : "voice.mute")
+  const captionsLabel = () => language.t(props.call.transcript ? "voice.captions.hide" : "voice.captions.show")
+  const endLabel = () => language.t(dropped() ? "voice.close" : "voice.end")
+
+  return (
+    <div
+      class="voice-call-controls"
+      data-status={props.call.status}
+      role="group"
       aria-label={language.t("voice.panel")}
-      style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
-      onPointerDown={grab}
-      // Pointer presses never move focus, so typing in the composer carries on while the call is controlled.
+      // Presses keep focus in the editor, so typing carries on while the call is controlled.
       onMouseDown={(event) => {
-        if (!onScrollbar(event)) event.preventDefault()
+        if (event.target instanceof Element && event.target.closest("button")) event.preventDefault()
       }}
     >
-      <div class="voice-controls">
-        <meter class="voice-level" min={0} max={1} value={voice.state.level} aria-label={language.t("voice.level")} />
-        <span class="voice-title">{voice.state.title}</span>
-        <Show when={voice.state.status === "dropped"}>
-          <Button size="small" variant="outline" onClick={() => void voice.rejoin()}>
-            {language.t("voice.rejoin")}
-          </Button>
-        </Show>
-        <Button
-          size="small"
-          variant="ghost"
-          disabled={voice.state.status !== "connected"}
-          aria-pressed={voice.state.muted}
-          onClick={voice.mute}
-        >
-          {language.t(voice.state.muted ? "voice.unmute" : "voice.mute")}
-        </Button>
-        <Button size="small" variant="ghost" onClick={() => void voice.end()}>
-          {language.t("voice.end")}
-        </Button>
+      <Tooltip placement="top" value={muteLabel()}>
         <IconButton
           type="button"
-          size="small"
-          variant="ghost-muted"
-          icon={<Icon name={position.expanded ? "chevron-down" : "chevron-up"} />}
-          aria-expanded={position.expanded}
-          aria-label={language.t(position.expanded ? "voice.captions.hide" : "voice.captions.show")}
-          onClick={() => setPosition("expanded", !position.expanded)}
+          size="large"
+          variant="ghost"
+          class="voice-call-toggle"
+          data-muted={props.call.muted ? "" : undefined}
+          disabled={props.call.status !== "connected"}
+          aria-pressed={props.call.muted}
+          aria-label={muteLabel()}
+          icon={<Icon name={props.call.muted ? "microphone-off" : "microphone"} />}
+          onClick={() => props.onMute()}
         />
+      </Tooltip>
+      <Tooltip placement="top" value={captionsLabel()}>
+        <IconButton
+          type="button"
+          size="large"
+          variant="ghost"
+          class="voice-call-toggle"
+          aria-pressed={props.call.transcript}
+          aria-label={captionsLabel()}
+          icon={<Icon name="transcript" />}
+          onClick={() => props.onCaptions()}
+        />
+      </Tooltip>
+      <div class="voice-call-wave">
+        <Show
+          when={!dropped()}
+          fallback={
+            <span class="voice-call-note" role="alert">
+              {language.t(`voice.failure.${props.call.failure ?? "dropped"}`)}
+            </span>
+          }
+        >
+          <VoiceScope meter={props.meter} status={props.call.status} muted={props.call.muted} />
+        </Show>
       </div>
-      <Show when={voice.state.status === "connecting"}>
-        <p class="voice-status" role="status">
-          <Loader class="size-3.5 shrink-0" />
-          {language.t("voice.connecting")}
-        </p>
+      <span class="voice-call-time" role="status">
+        <Show when={props.call.status === "connecting"}>{language.t("voice.connecting")}</Show>
+        <Show when={props.call.status === "connected" && props.call.since} keyed>
+          {(since) => <Elapsed since={since} />}
+        </Show>
+      </span>
+      <Show when={dropped()}>
+        <Show
+          when={props.call.failure === "unavailable"}
+          fallback={
+            <Button type="button" variant="neutral" onClick={() => props.onRejoin()}>
+              {language.t("voice.rejoin")}
+            </Button>
+          }
+        >
+          <Button type="button" variant="neutral" onClick={() => props.onSetup()}>
+            {language.t("voice.setup")}
+          </Button>
+        </Show>
       </Show>
-      <Show when={voice.state.status === "dropped"}>
-        <p class="voice-status" role="alert">
-          {language.t(`voice.failure.${voice.state.failure ?? "dropped"}`)}
-        </p>
-      </Show>
-      <Show
-        when={position.expanded}
-        fallback={
-          <Show when={voice.state.caption}>
-            <p class="voice-caption voice-latest">
-              <span>{speaker(voice.state.speaker)}</span> {voice.state.caption}
-            </p>
-          </Show>
-        }
-      >
-        <div class="voice-captions" data-scrollable>
-          <For each={voice.state.captions}>
+      <Tooltip placement="top" value={endLabel()}>
+        <IconButton
+          type="button"
+          size="large"
+          variant="ghost"
+          class="voice-call-end"
+          data-dropped={dropped() ? "" : undefined}
+          aria-label={endLabel()}
+          icon={<Icon name={dropped() ? "close" : "phone-hangup"} />}
+          onClick={() => props.onEnd()}
+        />
+      </Tooltip>
+    </div>
+  )
+}
+
+/** The call's captions, newest at the bottom: the agent's lines in the primary colour, yours muted. */
+export function VoiceCaptions(props: { captions: readonly Caption[] }) {
+  const language = useLanguage()
+  let list!: HTMLDivElement
+
+  // Stays at the newest line while it grows, unless the reader scrolled up.
+  createEffect(() => {
+    const last = props.captions.at(-1)
+
+    if (!last?.text || !list) return
+
+    if (list.scrollHeight - list.clientHeight - list.scrollTop < 48) list.scrollTop = list.scrollHeight
+  })
+
+  return (
+    <section class="voice-transcript" aria-label={language.t("voice.captions")} aria-live="polite">
+      <div ref={list} class="voice-transcript-list" data-scrollable>
+        <Show
+          when={props.captions.length}
+          fallback={<p class="voice-transcript-empty">{language.t("voice.transcript.empty")}</p>}
+        >
+          <For each={props.captions}>
             {(caption) => (
-              <p class="voice-caption">
-                <span>{speaker(caption.speaker)}</span> {caption.text}
+              <p class="voice-transcript-line" data-speaker={caption.speaker}>
+                <span class="sr-only">{language.t(caption.speaker === "user" ? "voice.you" : "voice.assistant")} </span>
+                {caption.text}
               </p>
             )}
           </For>
-        </div>
-      </Show>
+        </Show>
+      </div>
     </section>
   )
 }
 
-// A press on a scroll container's own scrollbar lands outside its client box; it scrolls rather than drags.
-function onScrollbar(event: MouseEvent) {
-  const target = event.target
+function Elapsed(props: { since: number }) {
+  const [now, setNow] = createSignal(Date.now())
+  const timer = setInterval(() => setNow(Date.now()), 1000)
+  onCleanup(() => clearInterval(timer))
 
-  return (
-    target instanceof HTMLElement &&
-    target.hasAttribute("data-scrollable") &&
-    (event.offsetX >= target.clientWidth || event.offsetY >= target.clientHeight)
-  )
+  const text = () => {
+    const seconds = Math.max(0, Math.floor((now() - props.since) / 1000))
+    const minutes = Math.floor(seconds / 60)
+
+    return `${minutes}:${String(seconds % 60).padStart(2, "0")}`
+  }
+
+  return <>{text()}</>
 }

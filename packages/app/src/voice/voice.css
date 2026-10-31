@@ -1,84 +1,505 @@
-.voice-call-action {
+/* The call button beside Send. */
+.voice-call-start {
+  margin-inline-end: 4px;
+  border-radius: 8px;
+  color: var(--v2-text-text-muted);
+}
+
+.voice-call-start:hover {
+  color: var(--v2-text-text-base);
+}
+
+/* A live call takes over the composer's controls row; the editor above it stays usable. */
+.voice-call-controls {
   display: flex;
-  justify-content: flex-end;
-  padding-block-start: 4px;
-}
-/* Home is the bottom-right corner, above the composer; a drag offsets it with a transform. */
-.voice-panel {
-  position: fixed;
-  right: 16px;
-  bottom: 168px;
-  z-index: 50;
-  width: min(340px, calc(100vw - 32px));
-  padding: 6px 6px 6px 12px;
-  border-radius: 10px;
-  background: var(--v2-background-bg-layer-01);
-  box-shadow: var(--v2-elevation-floating);
-  font-size: 13px;
-  line-height: var(--line-height-compact);
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-}
-.voice-panel:active {
-  cursor: grabbing;
-}
-.voice-controls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 28px;
-}
-.voice-title {
   flex: 1;
   min-width: 0;
-  margin-inline-start: 4px;
+  height: 100%;
+  align-items: center;
+  gap: 2px;
+  margin-inline-end: 6px;
+  animation: voice-enter 180ms ease-out;
+}
+
+.voice-call-toggle {
+  border-radius: 8px;
+  color: var(--v2-text-text-muted);
+}
+
+.voice-call-toggle:hover:not(:disabled) {
+  color: var(--v2-text-text-base);
+}
+
+.voice-call-toggle[aria-pressed="true"] {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+  color: var(--v2-text-text-base);
+}
+
+/* Muted is the one state the user must not miss. */
+.voice-call-toggle[data-muted] {
+  background-color: var(--v2-state-bg-danger);
+  color: var(--v2-state-fg-danger);
+}
+
+.voice-call-toggle[data-muted]:hover:not(:disabled) {
+  background-color: var(--v2-state-bg-danger);
+  color: var(--v2-state-fg-danger);
+}
+
+.voice-call-wave {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  align-items: center;
+  margin-inline: 8px;
+}
+
+.voice-scope {
+  --voice-scope-you: var(--v2-text-text-muted);
+  --voice-scope-agent: var(--v2-icon-icon-accent);
+  --voice-scope-rest: var(--v2-text-text-faint);
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.voice-call-note {
   overflow: hidden;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--v2-text-text-base);
 }
-.voice-level {
-  width: 32px;
-  height: 4px;
+
+.voice-call-time {
   flex-shrink: 0;
-  appearance: none;
-  border: 0;
-  border-radius: 2px;
+  min-width: 32px;
+  margin-inline-end: 6px;
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--line-height-compact);
+  text-align: end;
+  white-space: nowrap;
+}
+
+.voice-call-time:empty {
+  display: none;
+}
+
+.voice-call-controls [data-component="button-v2"] {
+  flex-shrink: 0;
+  margin-inline-end: 4px;
+}
+
+/* End is a soft red disc, like the call's End on iOS; once a call has dropped it only closes. */
+.voice-call-end {
+  flex-shrink: 0;
+  border-radius: 999px;
+  background-color: var(--v2-state-bg-danger);
+  color: var(--v2-state-fg-danger);
+}
+
+.voice-call-end:hover {
+  background-color: var(--v2-state-bg-danger);
+  background-image: linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover));
+}
+
+.voice-call-end:active {
+  background-image: linear-gradient(var(--v2-overlay-simple-overlay-pressed), var(--v2-overlay-simple-overlay-pressed));
+}
+
+.voice-call-end[data-dropped] {
+  border-radius: 8px;
+  background-color: transparent;
+  color: var(--v2-text-text-muted);
+}
+
+/* Captions open above the composer, newest at the bottom. */
+.voice-transcript {
+  margin-block-end: 8px;
+  border-radius: 12px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-raised);
   overflow: hidden;
-  background: var(--v2-background-bg-layer-03);
+  animation: voice-rise 180ms ease-out;
 }
-.voice-level::-webkit-meter-bar {
-  border: 0;
-  background: var(--v2-background-bg-layer-03);
+
+.voice-transcript-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+  mask-image: linear-gradient(to bottom, transparent, black 12px);
 }
-.voice-level::-webkit-meter-optimum-value {
-  background: var(--v2-icon-icon-accent);
-}
-.voice-status,
-.voice-caption {
-  margin-block: 4px 2px;
-  padding-inline-end: 6px;
+
+.voice-transcript-line,
+.voice-transcript-empty {
+  margin: 0;
   overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.voice-transcript-line {
   color: var(--v2-text-text-base);
 }
-.voice-status {
+
+.voice-transcript-line[data-speaker="user"] {
+  color: var(--v2-text-text-muted);
+}
+
+.voice-transcript-empty {
+  color: var(--v2-text-text-faint);
+}
+
+@keyframes voice-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes voice-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-call-controls,
+  .voice-transcript {
+    animation: none;
+  }
+}
+
+:root[data-motion="reduce"] :is(.voice-call-controls, .voice-transcript) {
+  animation: none;
+}
+
+/* The first-call screen. */
+.voice-onboarding {
   display: flex;
+  max-height: calc(100dvh - 32px);
+  flex-direction: column;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: var(--line-height-base);
+  color: var(--v2-text-text-base);
+}
+
+.voice-onboarding-hero {
+  position: relative;
+  display: flex;
+  height: 104px;
+  flex-shrink: 0;
+  align-items: center;
+  margin: 8px 8px 0;
+  padding-inline: 24px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+.voice-onboarding-hero .voice-scope {
+  height: 56px;
+}
+
+.voice-onboarding-close {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--v2-icon-icon-muted);
+}
+
+.voice-onboarding-close:hover {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+  color: var(--v2-icon-icon-base);
+}
+
+.voice-onboarding-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px 24px 0;
+}
+
+.voice-onboarding-eyebrow {
+  color: var(--v2-text-text-accent);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-compact);
+}
+
+.voice-onboarding-copy [data-slot="dialog-header-title"] {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 530;
+  line-height: 28px;
+  letter-spacing: -0.3px;
+}
+
+.voice-onboarding-copy p {
+  margin: 4px 0 0;
+  color: var(--v2-text-text-muted);
+}
+
+.voice-onboarding-features {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 20px 24px 0;
+  list-style: none;
+}
+
+.voice-onboarding-features li {
+  display: flex;
+  gap: 12px;
+}
+
+.voice-onboarding-features li > span:last-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.voice-onboarding-features strong,
+.voice-onboarding-option strong,
+.voice-onboarding-setup > strong {
+  font-weight: var(--font-weight-medium);
+}
+
+.voice-onboarding-features li > span:last-child > span,
+.voice-onboarding-option span span {
+  color: var(--v2-text-text-muted);
+}
+
+.voice-onboarding-feature-icon {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--v2-overlay-simple-overlay-hover);
+  color: var(--v2-icon-icon-base);
+}
+
+.voice-onboarding-checks {
+  display: flex;
+  flex-direction: column;
+  margin: 24px 24px 8px;
+}
+
+.voice-onboarding-section {
+  margin-block-end: 8px;
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  line-height: var(--line-height-compact);
+}
+
+.voice-onboarding-check {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-inline: 12px;
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+.voice-onboarding-check:first-of-type {
+  border-start-start-radius: 10px;
+  border-start-end-radius: 10px;
+}
+
+.voice-onboarding-check:last-of-type {
+  border-end-start-radius: 10px;
+  border-end-end-radius: 10px;
+}
+
+.voice-onboarding-check + .voice-onboarding-check {
+  border-block-start: 1px solid var(--v2-border-border-muted);
+}
+
+.voice-onboarding-check-label {
+  font-weight: var(--font-weight-medium);
+}
+
+.voice-onboarding-status {
+  display: inline-flex;
+  min-width: 0;
   align-items: center;
   gap: 6px;
+  color: var(--v2-text-text-muted);
+  text-align: end;
 }
-.voice-latest {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
+
+.voice-onboarding-status[data-tone="ready"] {
+  color: var(--v2-state-fg-success);
 }
-.voice-captions {
-  max-height: 160px;
-  overflow-y: auto;
-  cursor: auto;
-  touch-action: pan-y;
+
+.voice-onboarding-status[data-tone="missing"] {
+  color: var(--v2-state-fg-warning);
 }
-.voice-caption span {
+
+.voice-onboarding-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 24px 8px;
+  padding: 14px;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 10px;
+}
+
+.voice-onboarding-setup > p {
+  margin: -6px 0 4px;
+  color: var(--v2-text-text-muted);
+}
+
+.voice-onboarding-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--v2-overlay-simple-overlay-hover);
+}
+
+.voice-onboarding-option > span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.voice-onboarding-footnote {
+  margin: 0;
   color: var(--v2-text-text-faint);
+  font-size: 12px;
+  line-height: var(--line-height-compact);
+}
+
+.voice-onboarding-billing {
+  margin-block-start: 8px;
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  line-height: var(--line-height-compact);
+}
+
+/* The dialog's own footer, inset to line up with the screen's content (the dialog's rule names four slots). */
+[data-component="dialog-v2"]
+  [data-slot="dialog-container"]
+  [data-slot="dialog-content"]
+  .voice-onboarding
+  [data-slot="dialog-footer"] {
+  padding: 16px 24px 20px;
+}
+
+/* The floating call, for when no composer on its server is on screen. */
+.voice-call-pill {
+  position: fixed;
+  inset-inline-end: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  width: min(380px, calc(100vw - 32px));
+  height: 44px;
+  align-items: center;
+  gap: 2px;
+  padding-inline: 4px 6px;
+  border-radius: 12px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-floating);
+  animation: voice-rise 180ms ease-out;
+}
+
+.voice-call-pill-return {
+  display: flex;
+  min-width: 0;
+  height: 36px;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  padding-inline: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.voice-call-pill-return:hover {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+.voice-call-pill-return:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
+}
+
+.voice-call-pill-scope {
+  display: flex;
+  width: 72px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.voice-call-pill-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-call-pill {
+    animation: none;
+  }
+}
+
+:root[data-motion="reduce"] .voice-call-pill {
+  animation: none;
+}
+
+/* The call's row on a session screen whose composer is away. */
+.voice-call-strip {
+  display: flex;
+  flex-direction: column;
+  margin-block-end: 8px;
+  animation: voice-rise 180ms ease-out;
+}
+
+.voice-call-strip-row {
+  display: flex;
+  height: 44px;
+  align-items: center;
+  padding-inline: 8px;
+  border-radius: 12px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-raised);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-call-strip {
+    animation: none;
+  }
+}
+
+:root[data-motion="reduce"] .voice-call-strip {
+  animation: none;
 }

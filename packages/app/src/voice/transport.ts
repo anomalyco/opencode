@@ -1,7 +1,7 @@
 import type { OpenCodeClient } from "@opencode/client/promise"
 import { uuid } from "@opencode/util/uuid"
 import { decodeEvent, type VoiceEvent } from "./protocol"
-import { delegatorInstructions, liveInstructions, tools } from "./spec"
+import { delegatorInstructions, liveInstructions, tools, type VoiceViewing } from "./spec"
 
 export class VoiceFailure extends Error {
   constructor(readonly reason: "unavailable" | "microphone" | "dropped" | "connection") {
@@ -83,7 +83,7 @@ export class VoiceTransport {
     void this.ready.promise.catch(() => undefined)
   }
 
-  async join(viewing: { id: string; title?: string }, tail: string) {
+  async join(viewing: VoiceViewing, tail: string) {
     const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(35_000)])
     await this.context.resume()
     const offered = await this.inputOptions.api.experimental.voice.models({ signal })
@@ -158,7 +158,7 @@ export class VoiceTransport {
     this.stream = stream
     this.input = this.analyser(stream)
     await sender.replaceTrack(stream.getAudioTracks()[0])
-    this.timer = setInterval(() => this.inputOptions.levels(this.level(this.input), this.level(this.output)), 100)
+    this.timer = setInterval(() => this.inputOptions.levels(this.level(this.input), this.level(this.output)), 50)
   }
 
   send(event: VoiceClientEvent) {

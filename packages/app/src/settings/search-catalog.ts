@@ -126,6 +126,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     keywords: "question answers keyboard dock redesign",
   },
   {
+    tab: "experimental",
+    label: "settings.experimental.row.voice.title",
+    target: "settings-voice",
+    description: "settings.experimental.row.voice.description",
+    keywords: "voice call speak talk microphone gpt-live audio",
+  },
+  {
     tab: "appearance",
     label: "settings.general.row.colorScheme.title",
     target: "settings-color-scheme",
