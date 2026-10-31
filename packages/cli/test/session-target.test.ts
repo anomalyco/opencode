@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import path from "node:path"
 import { OpenCode, type LocationGetOutput, type ModelRef, type SessionInfo } from "@opencode/client/promise"
 import { resolveSessionTarget, SessionTargetMutationError } from "../src/session-target"
 
@@ -157,33 +158,47 @@ describe("session target resolver", () => {
 
   test("starts in the same subfolder of the new worktree", async () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const project = path.resolve("/project")
+    const worktree = path.resolve("/worktrees/pr-12")
     spyOn(client.location, "get").mockImplementation(async (input) => ({
-      directory: input?.location?.directory ?? "/project/packages/cli",
-      project: { id: "project", directory: "/project", canonical: "/project" },
+      directory: input?.location?.directory ?? path.join(project, "packages", "cli"),
+      project: { id: "project", directory: project, canonical: project },
     }))
-    spyOn(client.worktree, "create").mockResolvedValue({ directory: "/worktrees/pr-12" })
-    const create = spyOn(client.session, "create").mockResolvedValue(session("ses_fresh", "/worktrees/pr-12"))
+    spyOn(client.worktree, "create").mockResolvedValue({ directory: worktree })
+    const create = spyOn(client.session, "create").mockResolvedValue(session("ses_fresh", worktree))
 
-    await resolveSessionTarget({ client, location: { directory: "/project/packages/cli" }, worktree: "pr-12", prepare })
+    await resolveSessionTarget({
+      client,
+      location: { directory: path.join(project, "packages", "cli") },
+      worktree: "pr-12",
+      prepare,
+    })
     expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ location: { directory: "/worktrees/pr-12/packages/cli" } }),
+      expect.objectContaining({ location: { directory: path.join(worktree, "packages", "cli") } }),
     )
   })
 
   test("starts at the worktree root when the subfolder is not in the worktree", async () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
+    const project = path.resolve("/project")
+    const worktree = path.resolve("/worktrees/pr-12")
     spyOn(client.location, "get").mockImplementation(async (input) => {
-      if (input?.location?.directory === "/worktrees/pr-12/scratch") throw new Error("Location folder is missing")
+      if (input?.location?.directory === path.join(worktree, "scratch")) throw new Error("Location folder is missing")
       return {
-        directory: input?.location?.directory ?? "/project/scratch",
-        project: { id: "project", directory: "/project", canonical: "/project" },
+        directory: input?.location?.directory ?? path.join(project, "scratch"),
+        project: { id: "project", directory: project, canonical: project },
       }
     })
-    spyOn(client.worktree, "create").mockResolvedValue({ directory: "/worktrees/pr-12" })
-    const create = spyOn(client.session, "create").mockResolvedValue(session("ses_fresh", "/worktrees/pr-12"))
+    spyOn(client.worktree, "create").mockResolvedValue({ directory: worktree })
+    const create = spyOn(client.session, "create").mockResolvedValue(session("ses_fresh", worktree))
 
-    await resolveSessionTarget({ client, location: { directory: "/project/scratch" }, worktree: "pr-12", prepare })
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ location: { directory: "/worktrees/pr-12" } }))
+    await resolveSessionTarget({
+      client,
+      location: { directory: path.join(project, "scratch") },
+      worktree: "pr-12",
+      prepare,
+    })
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ location: { directory: worktree } }))
   })
 
   test("lets the server name an unnamed worktree", async () => {
