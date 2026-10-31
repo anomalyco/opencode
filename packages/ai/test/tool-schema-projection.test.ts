@@ -32,15 +32,16 @@ const reversed = Token.pipe(
 describe("tool schema projections", () => {
   test("only normalizes typed empty input structs, preserving raw schemas and output schemas", () => {
     const schema = { not: { type: "null" } }
-    const definitions = toDefinitions({
-      typed: tool({
+    const definitions = toDefinitions([
+      tool({
+        name: "typed",
         description: "Typed",
         parameters: Schema.Struct({}),
         success: Schema.Struct({}),
         execute: () => Effect.succeed({}),
       }),
-      raw: tool({ description: "Raw", jsonSchema: schema, execute: () => Effect.succeed({}) }),
-    })
+      tool({ name: "raw", description: "Raw", jsonSchema: schema, execute: () => Effect.succeed({}) }),
+    ])
     expect(definitions[0]?.inputSchema).toEqual({ type: "object", properties: {}, additionalProperties: false })
     expect(definitions[0]?.outputSchema).toEqual(schema)
     expect(definitions[1]?.inputSchema).toEqual(schema)
@@ -49,10 +50,10 @@ describe("tool schema projections", () => {
   test("retains empty input descriptions and preserves named outputs and explicit raw schemas", () => {
     const parameters = Schema.Struct({}).annotate({ identifier: "Ping", description: "No arguments" })
     const raw = { $ref: "#/$defs/Raw", $defs: { Raw: { not: { type: "null" }, description: "Raw schema" } } }
-    const definitions = toDefinitions({
-      typed: tool({ description: "Ping", parameters, success: parameters, execute: () => Effect.succeed({}) }),
-      raw: tool({ description: "Raw", jsonSchema: raw, execute: () => Effect.succeed({}) }),
-    })
+    const definitions = toDefinitions([
+      tool({ name: "typed", description: "Ping", parameters, success: parameters, execute: () => Effect.succeed({}) }),
+      tool({ name: "raw", description: "Raw", jsonSchema: raw, execute: () => Effect.succeed({}) }),
+    ])
     expect(definitions[0]?.inputSchema).toEqual({
       type: "object",
       properties: {},
@@ -67,38 +68,43 @@ describe("tool schema projections", () => {
   })
 
   test("normalizes inputs whose encoded side is an empty struct", () => {
-    const definitions = toDefinitions({
-      defaulted: tool({ description: "Defaulted", parameters: defaulted, success: defaulted }),
-      named: tool({
+    const definitions = toDefinitions([
+      tool({ name: "defaulted", description: "Defaulted", parameters: defaulted, success: defaulted }),
+      tool({
+        name: "named",
         description: "Named",
         parameters: defaulted.annotate({ identifier: "Defaulted" }),
         success: Schema.String,
       }),
-      encodedMetadata: tool({
+      tool({
+        name: "encodedMetadata",
         description: "Encoded metadata",
         parameters: Schema.Struct({})
           .annotate({ identifier: "Ping", title: "Ping", description: "No arguments" })
           .pipe(Schema.decodeTo(Token, fromEmpty)),
         success: Schema.String,
       }),
-      decodedCheck: tool({
+      tool({
+        name: "decodedCheck",
         description: "Decoded check",
         parameters: defaulted.check(Schema.makeFilter(() => true, { toJsonSchema: () => ({ minProperties: 1 }) })),
         success: Schema.String,
       }),
-      reversed: tool({ description: "Reversed", parameters: reversed, success: Schema.String }),
-      encodedCheck: tool({
+      tool({ name: "reversed", description: "Reversed", parameters: reversed, success: Schema.String }),
+      tool({
+        name: "encodedCheck",
         description: "Encoded check",
         parameters: Schema.Struct({}).check(Schema.isMinProperties(1)),
         success: Schema.String,
       }),
       // A filter without a JSON Schema form emits nothing, so the input still describes an empty object.
-      encodedFilter: tool({
+      tool({
+        name: "encodedFilter",
         description: "Encoded filter",
         parameters: Schema.Struct({}).check(Schema.makeFilter(() => true)),
         success: Schema.String,
       }),
-    })
+    ])
     expect(definitions[0]?.inputSchema).toEqual(empty)
     expect(definitions[0]?.outputSchema).toEqual({ not: { type: "null" } })
     expect(definitions[1]?.inputSchema).toEqual(empty)
@@ -161,33 +167,37 @@ describe("tool schema projections", () => {
           ai.request({
             model: scenario.route.with({ auth: Auth.bearer("test") }).model({ id: "test-model" }),
             prompt: "Use a tool.",
-            tools: toDefinitions({
-              ping: tool({
+            tools: [
+              tool({
+                name: "ping",
                 description: "Ping",
                 parameters: Schema.Struct({}),
                 success: Schema.String,
                 execute: () => Effect.succeed("pong"),
               }),
-              lookup: tool({
+              tool({
+                name: "lookup",
                 description: "Lookup",
                 parameters: Schema.Struct({ query: Schema.String }),
                 success: Schema.String,
                 execute: (input) => Effect.succeed(input.query),
               }),
-              raw: tool({ description: "Raw", jsonSchema: raw, execute: () => Effect.succeed("raw") }),
-              reversed: tool({
+              tool({ name: "raw", description: "Raw", jsonSchema: raw, execute: () => Effect.succeed("raw") }),
+              tool({
+                name: "reversed",
                 description: "Reversed",
                 parameters: reversed,
                 success: Schema.String,
                 execute: () => Effect.succeed("reversed"),
               }),
-              checked: tool({
+              tool({
+                name: "checked",
                 description: "Checked",
                 parameters: Schema.Struct({}).check(Schema.isMinProperties(1)),
                 success: Schema.String,
                 execute: () => Effect.succeed("checked"),
               }),
-            }),
+            ],
           }),
         )
         expect(prepared.body.tools).toMatchObject(scenario.tools)
@@ -288,13 +298,14 @@ describe("tool schema projections", () => {
             tools: [{ name: "lookup", description: "Lookup data.", inputSchema }],
           }),
         ).pipe(Effect.map((prepared) => prepared.body.tools?.[0]?.function.parameters))
-      const parameterless = toDefinitions({
-        lookup: tool({
+      const parameterless = toDefinitions([
+        tool({
+          name: "lookup",
           description: "Lookup data.",
           parameters: Schema.Struct({}).annotate({ description: "No input." }),
           success: Schema.String,
         }),
-      })[0].inputSchema
+      ])[0].inputSchema
       const union = {
         anyOf: [
           { type: "object", properties: { a: { type: "string" } } },

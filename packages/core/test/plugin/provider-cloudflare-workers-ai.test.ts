@@ -6,6 +6,7 @@ import { PluginHost } from "@opencode/core/plugin/host"
 import { CloudflareWorkersAIPlugin } from "@opencode/core/plugin/provider/cloudflare-workers-ai"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
+import { drain } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -117,6 +118,30 @@ describe("CloudflareWorkersAIPlugin", () => {
         })
         yield* addPlugin()
         expect(required(yield* catalog.get(providerID)).settings).toEqual({ accountId: "form-acct" })
+      }),
+    ),
+  )
+
+  it.effect("follows the account ID when another form login becomes active", () =>
+    withEnv({ CLOUDFLARE_ACCOUNT_ID: undefined }, () =>
+      Effect.gen(function* () {
+        const catalog = yield* seed((provider) => {
+          provider.package = "@opencode/ai/providers/cloudflare-workers-ai"
+        })
+        const credentials = yield* Credential.Service
+        const first = yield* credentials.create({
+          integrationID: Integration.ID.make("cloudflare-workers-ai"),
+          value: Credential.Key.make({ type: "key", key: "secret", metadata: { accountId: "first-acct" } }),
+        })
+        yield* credentials.create({
+          integrationID: Integration.ID.make("cloudflare-workers-ai"),
+          value: Credential.Key.make({ type: "key", key: "secret", metadata: { accountId: "second-acct" } }),
+        })
+        yield* addPlugin()
+        expect(required(yield* catalog.get(providerID)).settings).toEqual({ accountId: "second-acct" })
+        yield* credentials.activate(first.id)
+        yield* drain
+        expect(required(yield* catalog.get(providerID)).settings).toEqual({ accountId: "first-acct" })
       }),
     ),
   )

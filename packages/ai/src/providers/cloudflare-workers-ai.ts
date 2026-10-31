@@ -27,7 +27,7 @@ export type Config = WorkersAIURL &
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput &
   WorkersAIURL & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
   }
 
 export type { CloudflareWorkersAIImageOptions } from "../protocols/cloudflare-workers-ai-images.js"

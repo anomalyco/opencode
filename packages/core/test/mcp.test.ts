@@ -2,7 +2,13 @@ import path from "node:path"
 import fs from "node:fs/promises"
 import os from "node:os"
 import { describe, expect, test } from "bun:test"
-import { Client, InMemoryTransport, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
+import {
+  Client,
+  InMemoryTransport,
+  StreamableHTTPClientTransport,
+  isJSONRPCRequest,
+  type ListToolsResult,
+} from "@modelcontextprotocol/client"
 import {
   createMcpHandler,
   inputRequired,
@@ -98,10 +104,13 @@ function resourceServer(
     emptyElicitation?: boolean
     urlElicitation?: boolean
     /**
-     * List a tool whose input schema is not an object, and one whose `required` is a string, which
-     * only the 2026-07-28 schema accepts, ahead of the valid tools.
+     * Ahead of the valid tools, list entries that cannot be used (null, not an object, no name, an input
+     * schema that is not an object), one whose input schema has a string `required`, and one with a
+     * malformed optional field of each kind, then one with every optional field valid.
      */
     malformedTool?: boolean
+    /** Listed after the default tools. A call's `structured` argument comes back as structured content. */
+    tools?: ListToolsResult["tools"]
     /** Legacy servers give up on the URL elicitation after this many milliseconds. */
     elicitationTimeout?: number
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
@@ -154,19 +163,41 @@ function resourceServer(
             tools: [
               // Servers send raw JSON; the cast lets the fixture send a tool the schema rejects.
               ...(input.malformedTool
-                ? [
-                    { name: "malformed", inputSchema: { type: "string" } } as unknown as McpClient.Tool,
+                ? ([
+                    null,
+                    "not-a-tool",
+                    { inputSchema: { type: "object" } },
+                    { name: "no-schema" },
+                    { name: "malformed", inputSchema: { type: "string" } },
+                    { name: "bad-required", inputSchema: { type: "object", required: "text" } },
                     {
-                      name: "modern-only",
-                      inputSchema: { type: "object", required: "text" },
-                    } as unknown as McpClient.Tool,
-                  ]
+                      name: "bad-fields",
+                      title: 1,
+                      description: 42,
+                      outputSchema: "none",
+                      annotations: "read-only",
+                      execution: true,
+                      _meta: [],
+                      inputSchema: { type: "object" },
+                    },
+                    {
+                      name: "full",
+                      title: "Full",
+                      description: "Every field",
+                      inputSchema: { type: "object" },
+                      annotations: { readOnlyHint: true },
+                      execution: { taskSupport: "optional" },
+                      _meta: { "example/key": 1 },
+                      icons: [{ src: "https://example.com/icon.png" }],
+                    },
+                  ] as unknown as ListToolsResult["tools"])
                 : []),
               ...(input.emptyElicitation
                 ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
                 : input.urlElicitation
                   ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
                   : [{ name: "echo", inputSchema: { type: "object" as const, properties: {} } }]),
+              ...(input.tools ?? []),
             ],
           })
         })
@@ -216,7 +247,10 @@ function resourceServer(
               sessionID: request.params._meta?.["ai.opencode/sessionID"],
               progressToken: request.params._meta?.progressToken,
             })
-            return Promise.resolve({ content: [] })
+            const structured = request.params.arguments?.structured
+            return Promise.resolve(
+              structured === undefined ? { content: [] } : { content: [], structuredContent: structured },
+            )
           })
         }
         protocol.setRequestHandler("prompts/list", () => Promise.resolve({ prompts: [{ name: "greet" }] }))
@@ -402,6 +436,7 @@ const settled = (service: Mcp.Interface, name = "resources") =>
   }).pipe(Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }))
 
 const mcp = Layer.mock(Mcp.Service, {
+  awaitStartup: () => Effect.void,
   tools: () =>
     Effect.succeed([
       {
@@ -1199,7 +1234,7 @@ describe.each([
     )
   })
 
-  test("skips tools the SDK rejects and keeps the rest of the server's tools", async () => {
+  test("skips unusable tools and keeps the rest of the server's tools", async () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -1210,16 +1245,111 @@ describe.each([
             import.meta.dir,
           )
 
-          // Only tools the SDK itself would reject for the negotiated era are skipped.
-          expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(
-            era === "modern" ? ["modern-only", "echo"] : ["echo"],
-          )
-          yield* connection.callTool({ name: "echo", args: { text: "hi" } })
-          expect(server.state.toolCalls.at(-1)).toMatchObject({ name: "echo", arguments: { text: "hi" } })
+          const tools = yield* connection.tools()
+          expect(tools.map((tool) => tool.name)).toEqual(["bad-required", "bad-fields", "full", "echo"])
+          // A malformed optional field or top-level `required` is dropped, not the tool. Valid fields are
+          // kept except icons; a modern server's SDK strips `execution` before sending.
+          expect(tools.slice(0, 3)).toEqual([
+            { name: "bad-required", inputSchema: { type: "object" } },
+            { name: "bad-fields", inputSchema: { type: "object" } },
+            {
+              name: "full",
+              title: "Full",
+              description: "Every field",
+              inputSchema: { type: "object" },
+              annotations: { readOnlyHint: true },
+              ...(era === "legacy" ? { execution: { taskSupport: "optional" } } : {}),
+              _meta: { "example/key": 1 },
+            },
+          ])
+          for (const name of ["bad-required", "bad-fields", "full", "echo"]) {
+            yield* connection.callTool({ name, args: { text: "hi" } })
+            expect(server.state.toolCalls.at(-1)).toMatchObject({ name, arguments: { text: "hi" } })
+          }
         }),
       ),
     )
   })
+
+  test("validates structured content against the called tool's output schema", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const server = yield* resourceServer({
+            modern: era === "modern",
+            resources: false,
+            tools: [
+              {
+                name: "typed",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+              },
+            ],
+          })
+          const connection = yield* connect(
+            "typed",
+            new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol }),
+            import.meta.dir,
+          )
+          yield* connection.tools()
+
+          expect(yield* connection.callTool({ name: "typed", args: { structured: { value: "ok" } } })).toMatchObject({
+            structured: { value: "ok" },
+          })
+          expect(
+            (yield* connection.callTool({ name: "typed", args: { structured: { value: 42 } } }).pipe(Effect.flip))
+              .message,
+          ).toContain("Structured content does not match the tool's output schema")
+          expect((yield* connection.callTool({ name: "typed" }).pipe(Effect.flip)).message).toContain(
+            "has an output schema but did not return structured content",
+          )
+          expect(yield* connection.callTool({ name: "echo", args: { structured: { value: 42 } } })).toMatchObject({
+            structured: { value: 42 },
+          })
+        }),
+      ),
+    )
+  })
+})
+
+test("retries a modern MCP tool call whose listed header declaration went stale", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const region = { type: "string" as const, "x-mcp-header": "Region" }
+        const rejected: Array<string | null> = []
+        const server = yield* resourceServer({
+          modern: true,
+          resources: false,
+          tools: [{ name: "regional", inputSchema: { type: "object", properties: { region } } }],
+          // Stands in for the server-side check: the region must arrive in the currently declared header.
+          respond: async (request) => {
+            const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
+            if (!isJSONRPCRequest(body) || body.method !== "tools/call") return undefined
+            if (request.headers.get(`mcp-param-${region["x-mcp-header"]}`) === "eu") return undefined
+            rejected.push(request.headers.get("mcp-param-region"))
+            return Response.json(
+              { jsonrpc: "2.0", id: body.id, error: { code: -32020, message: "Header mismatch" } },
+              { status: 400 },
+            )
+          },
+        })
+        const connection = yield* connect(
+          "regional",
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" }),
+          import.meta.dir,
+        )
+        yield* connection.tools()
+        region["x-mcp-header"] = "Zone"
+
+        expect((yield* connection.callTool({ name: "regional", args: { region: "eu" } })).isError).toBe(false)
+        expect(server.state.toolCalls.map((call) => call.arguments)).toEqual([{ region: "eu" }])
+        // The stale Region header is rejected once; the relisted definition then sends Zone.
+        expect(rejected).toEqual(["eu"])
+        expect(server.state.toolLists).toBe(2)
+      }),
+    ),
+  )
 })
 
 test("lists, reads, and reports MCP resource changes", async () => {
@@ -2391,6 +2521,7 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
           AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
             Mcp.node.replace(
               Layer.mock(Mcp.Service, {
+                awaitStartup: () => Effect.void,
                 tools: () => Ref.get(catalog),
                 callTool: (input) =>
                   Effect.succeed({
@@ -2411,37 +2542,45 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
 )
 
 testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after initial registration", () => {
+  const tool = (name: string) =>
+    ({
+      server: Mcp.ServerName.make("demo"),
+      name,
+      codemode: false,
+      inputSchema: { type: "object", properties: {} },
+    }) satisfies Mcp.Tool
   let reads = 0
+  let catalog = [tool("read_1")]
   return Effect.gen(function* () {
     const registry = yield* Tool.Service
     const registration = yield* McpTool.Service
     const bus = yield* Bus.Service
     yield* registration.flush
-    expect(reads).toBe(1)
+    // Initial registration plus the flush's check that the registry is current.
+    expect(reads).toBe(2)
     expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_1", "execute"])
 
+    catalog = [tool("read_2")]
     yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
-    yield* advance(() => reads >= 2)
-    expect(reads).toBe(2)
-    yield* Effect.forEach(Array.from({ length: 20 }), () => bus.publish(McpEvent.ToolsChanged, { server: "demo" }))
     yield* advance(() => reads >= 3)
-    yield* drain
     expect(reads).toBe(3)
+    catalog = [tool("read_3")]
+    yield* Effect.forEach(Array.from({ length: 20 }), () => bus.publish(McpEvent.ToolsChanged, { server: "demo" }))
+    yield* advance(() => reads >= 4)
+    yield* drain
+    expect(reads).toBe(4)
     expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_3", "execute"])
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
         Mcp.node.replace(
           Layer.mock(Mcp.Service, {
+            awaitStartup: () => Effect.void,
             tools: () =>
-              Effect.sync(() => [
-                {
-                  server: Mcp.ServerName.make("demo"),
-                  name: `read_${++reads}`,
-                  codemode: false,
-                  inputSchema: { type: "object", properties: {} },
-                } satisfies Mcp.Tool,
-              ]),
+              Effect.sync(() => {
+                reads++
+                return catalog
+              }),
           }),
         ),
         Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
@@ -2450,6 +2589,76 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
     ),
   )
 })
+
+// Holds every MCP POST, including the handshake, until the test releases it.
+const gatedServer = Effect.gen(function* () {
+  const started = yield* Deferred.make<void>()
+  const release = yield* Deferred.make<void>()
+  const server = yield* resourceServer({
+    respond: (request) =>
+      request.method !== "POST"
+        ? undefined
+        : Effect.runPromise(
+            Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(undefined)),
+          ),
+  })
+  return { server, started, release }
+})
+
+// The real Mcp layer behind the tool registry; the bus never delivers, so only flush can register tools.
+const startupRegistry = (url: string) =>
+  AppNodeBuilder.build(LayerNode.group([Mcp.node, Tool.node, McpTool.node]), [
+    Mcp.node.replace(resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url, oauth: false, codemode: false }))),
+    Permission.node.replace(permissions),
+    Bus.node.replace(events),
+    Image.node.replace(imagePassthrough),
+    Global.node.replace(Global.layerWith({ data: outputData })),
+  ])
+
+testEffect(Layer.empty).effect("flush waits for a server that connects within its startup window", () =>
+  Effect.gen(function* () {
+    const gated = yield* gatedServer
+    yield* Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const registration = yield* McpTool.Service
+      yield* Deferred.await(gated.started)
+      const flush = yield* registration.flush.pipe(Effect.forkChild({ startImmediately: true }))
+      yield* Effect.yieldNow
+      expect(flush.pollUnsafe()).toBeUndefined()
+
+      yield* Deferred.succeed(gated.release, undefined)
+      yield* Fiber.join(flush)
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toContain("resources_echo")
+    }).pipe(
+      Effect.ensuring(Deferred.succeed(gated.release, undefined)),
+      Effect.provide(startupRegistry(gated.server.url)),
+    )
+  }),
+)
+
+testEffect(Layer.empty).effect("flush stops waiting for a hung server when its startup window ends", () =>
+  Effect.gen(function* () {
+    const gated = yield* gatedServer
+    yield* Effect.gen(function* () {
+      const mcp = yield* Mcp.Service
+      const registration = yield* McpTool.Service
+      yield* Deferred.await(gated.started)
+      const flush = yield* registration.flush.pipe(Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("1999 millis")
+      expect(flush.pollUnsafe()).toBeUndefined()
+
+      yield* TestClock.adjust("1 millis")
+      yield* Fiber.join(flush)
+      // Past its window, the still-pending server no longer holds up a model call.
+      yield* registration.flush
+      expect((yield* mcp.servers())[0]?.status).toEqual({ status: "pending" })
+    }).pipe(
+      // Shutting down mid-handshake would wait on the held request.
+      Effect.ensuring(Deferred.succeed(gated.release, undefined)),
+      Effect.provide(startupRegistry(gated.server.url)),
+    )
+  }),
+)
 
 it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {

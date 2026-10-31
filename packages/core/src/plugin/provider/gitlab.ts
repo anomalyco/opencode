@@ -1,6 +1,6 @@
 import os from "os"
 import { App } from "../../app.js"
-import { Clock, Deferred, Effect, Exit, Option, Schema, Semaphore, Stream } from "effect"
+import { Clock, Deferred, Effect, Equal, Exit, Option, Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { Server, ServerResponse } from "node:http"
 import { define } from "@opencode/plugin/effect/plugin"
@@ -71,9 +71,10 @@ export const GitLabPlugin = define({
         ? yield* ctx.integration.connection.resolve(stored).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
       if (!stored || !credential || credential.type === "external") {
+        const changed = loaded.models !== undefined || loaded.connection !== undefined
         loaded.models = undefined
         loaded.connection = undefined
-        return
+        return changed
       }
 
       const provider = yield* providers.get(providerID)
@@ -118,9 +119,11 @@ export const GitLabPlugin = define({
         IntegrationConnection.key(connection) !==
         IntegrationConnection.key(yield* ctx.integration.connection.active(integrationID))
       )
-        return
+        return false
+      const changed = !Equal.equals(remote?.models, loaded.models) || !Equal.equals(connection, loaded.connection)
       loaded.models = remote?.models
       loaded.connection = connection
+      return changed
     })
 
     yield* ctx.integration.transform((editor) => {
@@ -291,7 +294,7 @@ export const GitLabPlugin = define({
         ],
       })
     })
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
+    const refresh = () => loading.withPermit(load().pipe(Effect.flatMap((changed) => (changed ? ctx.provider.reload() : Effect.void))))
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === integrationID),
       Stream.runForEach(refresh),

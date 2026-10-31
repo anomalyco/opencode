@@ -13,7 +13,7 @@ import {
 } from "../../src/route.js"
 import { configure } from "../../src/providers/openai.js"
 import { decodeJson } from "../../src/protocols/shared.js"
-import { weatherRuntimeTool, weatherTool, weatherToolName } from "../recorded-scenarios.js"
+import { weatherRuntimeTool, weatherTool } from "../recorded-scenarios.js"
 import { recordedTests } from "../recorded-test.js"
 
 const model = configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).responses("gpt-5.5")
@@ -127,7 +127,7 @@ describe("OpenAI Responses WebSocket recorded", () => {
       const first = yield* LLMClient.generate(request, { webSocket: channel.executor })
       const call = first.toolCalls[0]
       if (!call) yield* Effect.die("Expected get_weather tool call")
-      const result = yield* ToolRuntime.dispatch({ [weatherToolName]: weatherRuntimeTool }, call)
+      const result = yield* ToolRuntime.dispatch([weatherRuntimeTool], call)
       const second = yield* LLMClient.generate(
         LLMRequest.update(request, {
           messages: [

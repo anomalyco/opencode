@@ -24,7 +24,7 @@ export interface BasetenDecisionOptions {
 
 export type Settings = ProviderPackage.Settings &
   OpenAIProviderOptionsInput & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
     readonly baseURL?: string
   }
 

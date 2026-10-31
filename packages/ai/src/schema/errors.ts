@@ -164,7 +164,7 @@ export class AIError extends Schema.TaggedError<AIError>()("AI.Error", {
   reason: AIErrorReason,
 }) {
   override readonly cause = this.reason
-  /** Output that arrived before `generate`, `generateObject` or a `loop` step failed. Not in the schema, so encoding omits it. */
+  /** Output that arrived before `generate` (including its `schema` decode) or a `loop` step failed. Not in the schema, so encoding omits it. */
   readonly partial?: LLMResponse
 
   constructor(props: Pick<AIError, "reason" | "partial">) {

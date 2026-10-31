@@ -300,7 +300,7 @@ export const dict = {
     "Stark vergünstigte Tokenpreise im Gegenzug für die Erlaubnis, deine Prompts und Vervollständigungen zum Trainieren zukünftiger Meta-Modelle zu verwenden.",
   "go.faq.a5.learnMore": "Mehr erfahren",
   "go.faq.a5.deepseekRetention":
-    "Die ZDR-Vereinbarung wird monatlich erneuert. Die aktuelle Vereinbarung gilt bis einschließlich 31. Oktober 2026.",
+    "Die ZDR-Vereinbarung wird monatlich erneuert. Die aktuelle Vereinbarung gilt bis einschließlich 30. November 2026.",
   "go.faq.q6": "Kann ich Guthaben aufladen?",
   "go.faq.a6": "Wenn du mehr Nutzung benötigst, kannst du Guthaben in deinem Konto aufladen.",
   "go.faq.q7": "Kann ich kündigen?",

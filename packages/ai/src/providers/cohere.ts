@@ -16,7 +16,7 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
     readonly providerOptions?: ProviderOptions
   }
 export type Settings<Options = CohereChat.ProviderOptionsInput> = ProviderPackage.Settings &
-  Options & { readonly apiKey?: string; readonly baseURL?: string }
+  Options & { readonly apiKey?: string | false; readonly baseURL?: string }
 
 export const route = CohereChat.route
 export const chatRoute = Route.make({
