@@ -65,9 +65,10 @@ const isTransient = (error: unknown) =>
 export type { GetPromptResult, Prompt, ReadResourceResult, Resource }
 export type ResourceTemplate = ResourceTemplateType
 
-/** A listed tool, keeping only the fields opencode and the SDK's `callTool` read. */
+/** A listed tool, keeping the server's fields except `icons`, each only when it has the right type. */
 export interface Tool {
   readonly name: string
+  readonly title?: string
   readonly description?: string
   readonly inputSchema: {
     readonly type: "object"
@@ -76,6 +77,9 @@ export interface Tool {
     readonly [key: string]: unknown
   }
   readonly outputSchema?: Record<string, unknown>
+  readonly annotations?: Record<string, unknown>
+  readonly execution?: Record<string, unknown>
+  readonly _meta?: Record<string, unknown>
 }
 
 export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.NeedsAuthError", {
@@ -377,15 +381,15 @@ export const connect = Effect.fnUntraced(function* (
       // Tool lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
       // re-parses it and compiles an output validator for every listed tool. Each call passes its own
       // checked definition instead, so only that tool's outputSchema is compiled and modern Mcp-Param-*
-      // header mirroring still sees the schema. Tools are relisted only on list_changed, reconnect, or a
-      // stale header declaration, so modern tool list TTLs are not honored.
+      // header mirroring still sees the schema. Tools are relisted on connect, list_changed and a stale
+      // header declaration; the SDK cache never relisted an expired list before a call either.
       tools: () =>
         advertised("tools")
           ? list("list MCP tools", (signal) =>
               client.listTools(undefined, { ...catalog, cacheMode: "bypass", signal }),
             ).pipe(
               // Our SDK patch leaves the listed tools unchecked, so one malformed tool doesn't fail the
-              // whole list; each is checked here and copied with only the fields we read.
+              // whole list; each is checked here and copied, dropping fields of the wrong type.
               Effect.flatMap((result) => {
                 const skipped: Array<{ tool: unknown; reason: string }> = []
                 const tools = result.tools.flatMap((tool: unknown): Tool[] => {
@@ -402,6 +406,7 @@ export const connect = Effect.fnUntraced(function* (
                   return [
                     {
                       name: tool.name,
+                      title: typeof tool.title === "string" ? tool.title : undefined,
                       description: typeof tool.description === "string" ? tool.description : undefined,
                       // Providers that check tool parameters against the JSON Schema metaschema reject the
                       // whole request over a malformed top level. Nested property schemas are left as sent.
@@ -414,6 +419,9 @@ export const connect = Effect.fnUntraced(function* (
                           : {}),
                       },
                       outputSchema: isRecord(tool.outputSchema) ? tool.outputSchema : undefined,
+                      annotations: isRecord(tool.annotations) ? tool.annotations : undefined,
+                      execution: isRecord(tool.execution) ? tool.execution : undefined,
+                      _meta: isRecord(tool._meta) ? tool._meta : undefined,
                     },
                   ]
                 })

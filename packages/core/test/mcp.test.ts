@@ -106,7 +106,7 @@ function resourceServer(
     /**
      * Ahead of the valid tools, list entries that cannot be used (null, not an object, no name, an input
      * schema that is not an object), one whose input schema has a string `required`, and one with a
-     * malformed description and output schema.
+     * malformed optional field of each kind, then one with every optional field valid.
      */
     malformedTool?: boolean
     /** Listed after the default tools. A call's `structured` argument comes back as structured content. */
@@ -170,7 +170,26 @@ function resourceServer(
                     { name: "no-schema" },
                     { name: "malformed", inputSchema: { type: "string" } },
                     { name: "bad-required", inputSchema: { type: "object", required: "text" } },
-                    { name: "bad-fields", description: 42, outputSchema: "none", inputSchema: { type: "object" } },
+                    {
+                      name: "bad-fields",
+                      title: 1,
+                      description: 42,
+                      outputSchema: "none",
+                      annotations: "read-only",
+                      execution: true,
+                      _meta: [],
+                      inputSchema: { type: "object" },
+                    },
+                    {
+                      name: "full",
+                      title: "Full",
+                      description: "Every field",
+                      inputSchema: { type: "object" },
+                      annotations: { readOnlyHint: true },
+                      execution: { taskSupport: "optional" },
+                      _meta: { "example/key": 1 },
+                      icons: [{ src: "https://example.com/icon.png" }],
+                    },
                   ] as unknown as ListToolsResult["tools"])
                 : []),
               ...(input.emptyElicitation
@@ -1226,13 +1245,23 @@ describe.each([
           )
 
           const tools = yield* connection.tools()
-          expect(tools.map((tool) => tool.name)).toEqual(["bad-required", "bad-fields", "echo"])
-          // A malformed optional field or top-level `required` is dropped, not the tool.
-          expect(tools.slice(0, 2)).toEqual([
+          expect(tools.map((tool) => tool.name)).toEqual(["bad-required", "bad-fields", "full", "echo"])
+          // A malformed optional field or top-level `required` is dropped, not the tool. Valid fields are
+          // kept except icons; a modern server's SDK strips `execution` before sending.
+          expect(tools.slice(0, 3)).toEqual([
             { name: "bad-required", inputSchema: { type: "object" } },
             { name: "bad-fields", inputSchema: { type: "object" } },
+            {
+              name: "full",
+              title: "Full",
+              description: "Every field",
+              inputSchema: { type: "object" },
+              annotations: { readOnlyHint: true },
+              ...(era === "legacy" ? { execution: { taskSupport: "optional" } } : {}),
+              _meta: { "example/key": 1 },
+            },
           ])
-          for (const name of ["bad-required", "bad-fields", "echo"]) {
+          for (const name of ["bad-required", "bad-fields", "full", "echo"]) {
             yield* connection.callTool({ name, args: { text: "hi" } })
             expect(server.state.toolCalls.at(-1)).toMatchObject({ name, arguments: { text: "hi" } })
           }
