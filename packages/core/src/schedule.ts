@@ -219,7 +219,7 @@ const layer = Layer.effect(
         if (Option.isNone(config)) return { enabled: false, timezone: undefined }
         const entries = yield* config.value.entries()
         return {
-          enabled: Config.latest(entries, "experimental")?.schedules === true,
+          enabled: Config.latestField(entries, "schedules") === true,
           timezone: Config.latest(entries, "timezone"),
         }
       }).pipe(instances.provide(session))

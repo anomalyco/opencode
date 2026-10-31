@@ -6,6 +6,7 @@ import { Config } from "@opencode/core/config"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { ConfigIntegration } from "@opencode/core/config/integration"
 import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { ConfigModel } from "@opencode/schema/config/model"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -878,6 +879,27 @@ describe("Config", () => {
 
     expect(Config.latest(entries, "model")).toEqual(selection("openrouter/openai/gpt-5.5"))
     expect(Config.latest(entries, "default_agent")).toBeUndefined()
+  })
+
+  test("resolves experimental fields independently across priority-ordered documents", () => {
+    const entries = [
+      new Document({
+        type: "document",
+        info: new Info({
+          experimental: new ConfigExperimental.Info({ todo: true, subagent_depth: 5, media_blob: true }),
+        }),
+      }),
+      new Directory({ type: "directory", path: AbsolutePath.make("/skills") }),
+      new Document({
+        type: "document",
+        info: new Info({ experimental: new ConfigExperimental.Info({ subagent_depth: 8 }) }),
+      }),
+    ]
+
+    expect(Config.latestField(entries, "todo")).toBe(true)
+    expect(Config.latestField(entries, "media_blob")).toBe(true)
+    expect(Config.latestField(entries, "subagent_depth")).toBe(8)
+    expect(Config.latestField(entries, "schedules")).toBeUndefined()
   })
 
   it.live("tolerates unavailable authenticated wellknown config and reloads it later", () =>
