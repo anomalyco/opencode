@@ -209,12 +209,19 @@ export const layer = Layer.effect(
           // Retiring the rows that existed at the decision is the durable mirror of the live
           // rule: `interrupt` claims the wakes recorded so far, while wakes arriving during
           // cleanup belong to a successor. It also stops "user stops it, server restarts, it
-          // runs again on its own".
-          const boundary = yield* SessionInbox.latestEnqueuedSeq(db, sessionID)
-          const interrupted = yield* coordinator.interrupt(sessionID, {
-            reason: "user",
-            boundary,
-          })
+          // runs again on its own". The boundary is read lazily, only once the coordinator has
+          // accepted an interruption and while it still holds that execution, so an idle interrupt
+          // does no work and a boundary read never outlives its owner.
+          const interrupted = yield* coordinator.interrupt(
+            sessionID,
+            Effect.map(SessionInbox.latestEnqueuedSeq(db, sessionID), (through) => ({
+              reason: "user" as const,
+              // No pending row means nothing to retire, so leave the boundary absent and publish no
+              // retirement. Do not substitute 0: `enqueued_seq` is the event's durable seq, and a
+              // Session's first event is 0, so 0 is a real boundary that must retire a first row.
+              boundary: through,
+            })),
+          )
           if (!options?.resume) return interrupted
           // Resume steering input and between-turn control work from the interrupted
           // intent. Queued next-turn prompts stay parked: a steer-scoped drain never
