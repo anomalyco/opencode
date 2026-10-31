@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "gemini-3.5-flash-lite",
+    "tags": [
+      "prefix:opencode-gemini",
+      "provider:opencode",
+      "protocol:gemini",
+      "text",
+      "usage"
+    ],
+    "name": "opencode-gemini/streams-text",
+    "recordedAt": "2026-10-31T17:03:38.095Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://opencode.ai/inference/google/v1beta/models/gemini-3.5-flash-lite:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"What is 173 multiplied by 219? Reply with only the final integer.\"}]}],\"generationConfig\":{\"maxOutputTokens\":2048}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"createTime\":\"2026-10-31T17:03:37.706784Z\",\"responseId\":\"aR_mauCRK5ufw-UPkJDnwA0\",\"modelVersion\":\"gemini-3.5-flash-lite\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"37\"}]}}],\"usageMetadata\":{}}\n\ndata: {\"createTime\":\"2026-10-31T17:03:37.706784Z\",\"responseId\":\"aR_mauCRK5ufw-UPkJDnwA0\",\"modelVersion\":\"gemini-3.5-flash-lite\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"887\"}]}}],\"usageMetadata\":{}}\n\ndata: {\"createTime\":\"2026-10-31T17:03:37.706784Z\",\"responseId\":\"aR_mauCRK5ufw-UPkJDnwA0\",\"modelVersion\":\"gemini-3.5-flash-lite\",\"candidates\":[{\"finishReason\":\"STOP\",\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"\",\"thoughtSignature\":\"AY89a19WCbSOeJenlZQOkHTdTEHB/8UdGtEuB1iztcT/QfSAJZHmZsnMMvYO9AUmXRdIkUe7oG1FSDuab3hSX149trOVvPQPgtny0yEXKk+93PNBeQcw30NoAgE=\"}]}}],\"usageMetadata\":{\"candidatesTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":5}],\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":20}],\"candidatesTokenCount\":5,\"promptTokenCount\":20,\"totalTokenCount\":25,\"cost\":0.0000185,\"opencode\":{\"billing_source\":\"balance\",\"list_cost\":0.0000185,\"tokens\":{\"input\":20,\"output\":5,\"reasoning\":0,\"cache_read\":0,\"cache_write_5m\":0,\"cache_write_1h\":0}}}}\n\n"
+      }
+    }
+  ]
+}

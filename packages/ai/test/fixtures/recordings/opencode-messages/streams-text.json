@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "claude-haiku-5-5",
+    "tags": [
+      "prefix:opencode-messages",
+      "provider:opencode",
+      "protocol:anthropic-messages",
+      "text",
+      "usage"
+    ],
+    "name": "opencode-messages/streams-text",
+    "recordedAt": "2026-10-31T17:03:35.460Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://opencode.ai/inference/anthropic/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"claude-haiku-5-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is 173 multiplied by 219? Reply with only the final integer.\"}]}],\"stream\":true,\"max_tokens\":2048,\"thinking\":{\"type\":\"adaptive\",\"block_binding\":{\"prefix_mismatch_behavior\":\"drop_block\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_011CgagCkmqHSqnksXW96wSy\",\"type\":\"message\",\"role\":\"assistant\",\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"model\":\"claude-haiku-5-5\",\"content\":[],\"usage\":{\"input_tokens\":31,\"output_tokens\":3,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0}}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\nevent: ping\ndata: {\"type\":\"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"CAQSuwUKEAgTGAI4AUIIdGhpbmtpbmcSDNhxUMExzPaA5hY4yxoMl/K9LKIGH2NE8aPVIjDEcN3pmVr9vSfYN2scVX2UN6uiEnL9oZMqj8i8LR2YMR+661AgMDeXgXy7JwV87jwq2ASsUHK+5Uf1XJsnK84ozKN8vPhxS8PBq4EVGO2B/Dlhl0ONgIvjirMUFZ4z92QYjV7xDRjBi5yQFb5lmqZibg3jpFAvxdxeqz8cCaH2+MyTipUnvDupE6HPtH2fUBgnsesgC/VrgUSGXfY7nLuJgRRERDYsD2+2s6zWKDunN9P5jmbuOljYgvuUgVcjez5v4Q5NzLmdoQZCUW/Kuqf+xamH7LQSpNMQefzIdr8GywO+UzaIPhLB39WpFG9UBLz2IBlO1bdKoYfooSfvdPwFIhg7z0Je0enXqB08FYuoCaDcNa3K7aFXqAx4ANdHrRaTz69eM0y80+gTIIX+7iI4u9XarPFUB6E0+kzB9fpv8v64JldM+msVyK4iGdd3YUA5TZVSmFCUNyd4tyfjO639sY7e7OktR/FitH6pTLiPNcSK2NYBSo4WiOZxy0VdDT3DVhahHuxodgljUjTD7ihxgFE0gqN/et/VhKGGyAwdXluQ9ZEKCHYkCuchw0VOHOUEiM6U4btx2eLbFxySnESd1WSagqwWI2yh72UI6q0O2ZCPBEqwOG7HuSofoNOqU83oCNXtYXhs906U3fguolLhsFQgu9LdEPvKYGtzJiYi9AvLzjgFX9SKlakdFWkcXPAPsoUv4x5S+CwxFV5xaT1X3C/y0Mzwgn4b2+vtBoFPPM3m3L3Mi1XBSwao1x50pwMgPB+C7r1PjUj52N3zz9SaMsIGD0DHikPC56pVWfrhzKqJxFFzs1o5Ltvc+tUKaSlxEoo8a1XwMLEwG37XeID+OlnpzcS89gRux/YYAQ==\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"37\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"887\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":31,\"output_tokens\":37,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens_details\":{\"thinking_tokens\":33},\"cost\":0.0000216,\"opencode\":{\"billing_source\":\"balance\",\"list_cost\":0.0000216,\"tokens\":{\"input\":31,\"output\":37,\"reasoning\":0,\"cache_read\":0,\"cache_write_5m\":0,\"cache_write_1h\":0}}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}
