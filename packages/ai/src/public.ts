@@ -13,6 +13,7 @@ export {
   HttpTimeout,
   RequestEncoding,
   GenerationOptions,
+  GENERATION_KEYS,
   LanguageModelDefaults,
   ReasoningEfforts,
   ReasoningEffort,

@@ -110,7 +110,7 @@ describe("native OpenAI-compatible providers", () => {
         expect(selected.route.endpoint.baseURL).toBe(settings.baseURL)
         const input = {
           prompt: "Use a tool.",
-          generation: { maxTokens: 48 },
+          maxTokens: 48,
           tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
         }
         const native = yield* compileRequest(ai.request({ ...input, model: selected }))
@@ -141,7 +141,7 @@ describe("native OpenAI-compatible providers", () => {
         ai.request({
           model: TogetherAI.configure({ apiKey: "fixture", baseURL: "https://gateway.example/v1" }).model("llama"),
           prompt: "Use a tool.",
-          generation: { maxTokens: 32 },
+          maxTokens: 32,
           tools: [
             ToolDefinition.make({ name: "lookup", description: "Look up data", inputSchema: { type: "object" } }),
           ],
@@ -161,7 +161,7 @@ describe("native OpenAI-compatible providers", () => {
       const cerebras = yield* compileRequest(
         ai.request({
           model: Cerebras.configure({ apiKey: "fixture", baseURL: "https://gateway.example/v1" }).model("qwen"),
-          generation: { maxTokens: 48 },
+          maxTokens: 48,
           messages: [
             Message.user("Think first."),
             Message.assistant([
