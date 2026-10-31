@@ -70,9 +70,10 @@ test("inherits only family features from the closest same-org model template", (
   expect(model?.name).toBe("Live GLM-5.3")
   expect(model?.family).toBe(Model.Family.make("catalog-family"))
   expect(model?.compatibility).toEqual({ reasoningField: "reasoning_content" })
-  expect(model?.variants.map((variant) => variant.id)).toEqual([Model.VariantID.make("high")])
-  expect(model?.headers).toEqual({ "x-family": "closest" })
-  expect(model?.body).toEqual({ family: "closest" })
+  expect(model?.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
+  expect(model?.variants).toEqual([])
+  expect(model?.headers).toBeUndefined()
+  expect(model?.body).toBeUndefined()
   expect(model?.settings).toMatchObject({ baseURL: "https://gmi.example/v1" })
   expect(model?.settings).not.toHaveProperty("stale")
   expect(model?.time).toEqual({ released: 0 })
@@ -80,7 +81,19 @@ test("inherits only family features from the closest same-org model template", (
   expect(model?.enabled).toBe(true)
   expect(model?.cost[0]).toMatchObject({ input: 0.3, output: 0.5, cache: { write: 0 } })
   expect(Number(model?.cost[0]?.cache.read)).toBeCloseTo(0.1, 10)
-  expect(model?.limit).toEqual({ context: 1048576, output: 131072 })
+  expect(model?.limit).toEqual({ context: 1048576, output: 0 })
+})
+
+test("does not inherit family variants or input capabilities", () => {
+  const existing = template("openai/gpt-5.5", {
+    capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+    variants: [{ id: Model.VariantID.make("high"), settings: { reasoningEffort: "high" } }],
+  })
+  const models = GmiCloudModels.derive("https://gmi.example/v1", [{ id: "openai/gpt-oss-120b" }], [existing])
+  const model = models.get(Model.ID.make("openai/gpt-oss-120b"))
+
+  expect(model?.variants).toEqual([])
+  expect(model?.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
 })
 
 test("does not use templates from another org or leading model word", () => {

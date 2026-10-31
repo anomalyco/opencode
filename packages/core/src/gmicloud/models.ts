@@ -97,14 +97,9 @@ function limit(value: number | undefined, fallback: number) {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback
 }
 
-function build(
-  id: Model.ID,
-  remote: RemoteModel,
-  baseURL: string,
-  selected?: { model: Model.Info; exact: boolean },
-) {
-  const previous = selected?.model
-  const exact = selected?.exact ? previous : undefined
+function build(id: Model.ID, remote: RemoteModel, baseURL: string, selected?: { model: Model.Info; exact: boolean }) {
+  const family = selected?.model
+  const exact = selected?.exact ? family : undefined
   const cost = exact?.cost[0]
   const input = exact?.limit.input
   return Model.Info.make({
@@ -112,16 +107,16 @@ function build(
     id,
     modelID: Model.ID.make(remote.id),
     providerID,
-    type: previous?.type,
+    type: family?.type,
     name: remote.name ?? exact?.name ?? remote.id,
-    family: previous?.family,
-    compatibility: previous?.compatibility,
+    family: family?.family,
+    compatibility: family?.compatibility,
     package: "@opencode/ai/providers/openai-compatible",
     settings: Provider.mergeOverlay(exact?.settings, { baseURL, provider: providerID }),
-    headers: previous?.headers,
-    body: previous?.body,
-    capabilities: previous?.capabilities ?? { tools: true, input: ["text"], output: ["text"] },
-    variants: previous?.variants ?? [],
+    headers: exact?.headers,
+    body: exact?.body,
+    capabilities: exact?.capabilities ?? { tools: true, input: ["text"], output: ["text"] },
+    variants: exact?.variants ?? [],
     time: exact?.time ?? { released: 0 },
     cost: [
       {
@@ -138,7 +133,7 @@ function build(
     limit: {
       context: limit(remote.context_length, exact?.limit.context ?? 0),
       ...(input === undefined ? {} : { input }),
-      output: previous?.limit.output ?? 0,
+      output: exact?.limit.output ?? 0,
     },
   })
 }
