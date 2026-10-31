@@ -48,37 +48,6 @@ OpenCode CLI には次のコマンドもあります。
 
 ---
 
-### attach
-
-`serve` または `web` コマンドを使用して起動された、すでに実行中の OpenCode バックエンドサーバーにターミナルを接続します。
-
-```bash
-opencode attach [url]
-```
-
-これにより、リモート OpenCode バックエンドで TUI を使用できるようになります。例えば：
-
-```bash
-# Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
-
-# In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
-```
-
-#### フラグ
-
-| フラグ                                   | ショート | 説明                                                                              |
-| ---------------------------------------- | -------- | --------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |          | TUI を開始する作業ディレクトリ                                                    |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`     | 最後のセッションを続行                                                            |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`     | 続行するセッション ID                                                             |
-| <nobr><code>{"--fork"}</code></nobr>     |          | 続行時にセッションをフォーク（`--continue` または `--session` と使用）            |
-| <nobr><code>{"--password"}</code></nobr> | `-p`     | Basic 認証パスワード（デフォルトは `OPENCODE_SERVER_PASSWORD`）                   |
-| <nobr><code>{"--username"}</code></nobr> | `-u`     | Basic 認証ユーザー名（デフォルトは `OPENCODE_SERVER_USERNAME` または `opencode`） |
-
----
-
 ### auth
 
 プロバイダーの資格情報とログインを管理するコマンド。

@@ -48,37 +48,6 @@ OpenCode CLI har også følgende kommandoer.
 
 ---
 
-### attach
-
-Koble en terminal til en allerede kjørende OpenCode-backend-server startet via `serve` eller `web` kommandoer.
-
-```bash
-opencode attach [url]
-```
-
-Dette gjør det mulig å bruke TUI med en ekstern OpenCode-backend. For eksempel:
-
-```bash
-# Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
-
-# In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
-```
-
-#### Flagg
-
-| Flagg                                    | Kort | Beskrivelse                                                                                        |
-| ---------------------------------------- | ---- | -------------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |      | Arbeidskatalog for å starte TUI i                                                                  |
-| <nobr><code>{"--continue"}</code></nobr> | `-c` | Fortsett siste økt                                                                                 |
-| <nobr><code>{"--session"}</code></nobr>  | `-s` | Økt ID for å fortsette                                                                             |
-| <nobr><code>{"--fork"}</code></nobr>     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`)                           |
-| <nobr><code>{"--password"}</code></nobr> | `-p` | Passord for grunnleggende autentisering (standard: `OPENCODE_SERVER_PASSWORD`)                     |
-| <nobr><code>{"--username"}</code></nobr> | `-u` | Brukernavn for grunnleggende autentisering (standard: `OPENCODE_SERVER_USERNAME` eller `opencode`) |
-
----
-
 ### auth
 
 Kommando for administrasjon av påloggingsinformasjon og innlogging for leverandører.
