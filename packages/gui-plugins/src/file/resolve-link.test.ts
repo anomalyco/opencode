@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { checkFileLinkExists, findFileLink, parseFileLink, type FileLinkTarget } from "./resolve-link"
+import {
+  checkFileLinkExists,
+  findFileLink,
+  parseFileLink,
+  parseFileLinkCandidates,
+  type FileLinkTarget,
+} from "./resolve-link"
 
 const workspaceFiles = [
   "src/index.ts",
@@ -65,6 +71,26 @@ describe("parseFileLink", () => {
   })
 })
 
+describe("parseFileLinkCandidates", () => {
+  test.each([
+    ["@packages/app/src/app.tsx", ["@packages/app/src/app.tsx", "packages/app/src/app.tsx"]],
+    ["@session/timeline/interaction.ts:74", ["@session/timeline/interaction.ts", "session/timeline/interaction.ts"]],
+    ["@types/node/index.d.ts", ["@types/node/index.d.ts", "types/node/index.d.ts"]],
+    ["@/lib/utils.ts", ["@/lib/utils.ts"]],
+    ["src/@types/a.ts", ["src/@types/a.ts"]],
+    ["packages/app/src/app.tsx", ["packages/app/src/app.tsx"]],
+  ])("%s", (href, paths) => {
+    expect(parseFileLinkCandidates(href).map((candidate) => candidate.path)).toEqual(paths)
+  })
+
+  test("keeps the line selection on the mention candidate", () => {
+    expect(parseFileLinkCandidates("@session/timeline/interaction.ts:74")[1]).toEqual({
+      path: "session/timeline/interaction.ts",
+      selection: { start: 74, end: 74 },
+    })
+  })
+})
+
 describe("findFileLink", () => {
   test.each<[string, FileLinkTarget | undefined]>([
     ["src/index.ts", { kind: "file", path: "src/index.ts" }],
@@ -78,6 +104,16 @@ describe("findFileLink", () => {
   ])("%s", async (path, expected) => {
     expect(await find(path)).toEqual(expected)
   })
+
+  test("matches a native-separator result", async () => {
+    expect(
+      await findFileLink({
+        files: { search: async () => ["src\\index.ts"] },
+        path: "index.ts",
+        signal: new AbortController().signal,
+      }),
+    ).toEqual({ kind: "file", path: "src\\index.ts" })
+  })
 })
 
 describe("checkFileLinkExists", () => {
@@ -89,10 +125,10 @@ describe("checkFileLinkExists", () => {
       checkFileLinkExists({
         files: {
           ...files,
-          exists: async (path: string) => {
+          kind: async (path: string) => {
             if (path.startsWith("//")) throw new Error(`checked a network share: ${path}`)
 
-            return onDisk.has(path)
+            return onDisk.has(path) ? ("file" as const) : undefined
           },
           resolve: (path: string) => path,
         },
@@ -108,5 +144,111 @@ describe("checkFileLinkExists", () => {
     expect(await check("~/README.md")).toBe(false)
     expect(await check("\\\\host\\share\\x.ts")).toBe(false)
     expect(await check("console.log")).toBe(false)
+  })
+
+  test("matches native separators", async () => {
+    expect(
+      await checkFileLinkExists({
+        files: {
+          search: async () => ["src\\components\\"],
+          resolve: (path: string) => path,
+          kind: async () => undefined,
+        },
+        href: "src/components",
+        signal: new AbortController().signal,
+      }),
+    ).toBe(true)
+  })
+
+  test("accepts a directory from the index", async () => {
+    expect(
+      await checkFileLinkExists({
+        files: {
+          search: async (query: string) => (query === "assets" ? ["assets/"] : []),
+          resolve: (path: string) => path,
+          kind: async () => undefined,
+        },
+        href: "assets",
+        signal: new AbortController().signal,
+      }),
+    ).toBe(true)
+  })
+
+  test("does not list a parent directory when the search misses", async () => {
+    let kindCalls = 0
+
+    expect(
+      await checkFileLinkExists({
+        files: {
+          search: async () => [],
+          resolve: (path: string) => path,
+          kind: async () => {
+            kindCalls++
+            return undefined
+          },
+        },
+        href: "console.log",
+        signal: new AbortController().signal,
+      }),
+    ).toBe(false)
+    expect(kindCalls).toBe(0)
+  })
+
+  test("accepts a path with spaces", async () => {
+    expect(
+      await checkFileLinkExists({
+        files: {
+          search: async (query: string) => (query === "my docs/notes.md" ? ["my docs/notes.md"] : []),
+          resolve: (path: string) => path,
+          kind: async () => undefined,
+        },
+        href: "my docs/notes.md",
+        signal: new AbortController().signal,
+      }),
+    ).toBe(true)
+  })
+
+  test("accepts a unique nested folder by suffix", async () => {
+    expect(
+      await checkFileLinkExists({
+        files: {
+          search: async () => ["packages/app/docs/"],
+          resolve: (path: string) => path,
+          kind: async () => undefined,
+        },
+        href: "docs",
+        signal: new AbortController().signal,
+      }),
+    ).toBe(true)
+  })
+
+  test("matches nested folders returned with a trailing separator", async () => {
+    expect(
+      await checkFileLinkExists({
+        files: {
+          search: async () => ["src/components/", "README.md"],
+          resolve: (path: string) => path,
+          kind: async () => undefined,
+        },
+        href: "src/components",
+        signal: new AbortController().signal,
+      }),
+    ).toBe(true)
+  })
+
+  test("keeps a package scope's literal path", async () => {
+    const href = "@types/node/index.d.ts"
+
+    expect(
+      await checkFileLinkExists({
+        files: {
+          search: async (query: string) => (query === href ? ["node_modules/@types/node/index.d.ts"] : []),
+          resolve: (path: string) => path,
+          kind: async () => undefined,
+        },
+        href,
+        signal: new AbortController().signal,
+      }),
+    ).toBe(true)
   })
 })

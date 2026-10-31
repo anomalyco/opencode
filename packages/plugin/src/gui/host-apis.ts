@@ -221,6 +221,13 @@ export interface Files {
    */
   exists(path: string): Promise<boolean>
   /**
+   * What a path names, checked by listing its directory without reading the file.
+   *
+   * @param path - A workspace-relative or absolute path.
+   * @returns `"file"` or `"directory"`, or undefined when the path is missing or its directory cannot be listed.
+   */
+  kind(path: string): Promise<"file" | "directory" | undefined>
+  /**
    * Searches the workspace by fuzzy path.
    *
    * @param query - The search text.

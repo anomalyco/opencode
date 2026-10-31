@@ -24,9 +24,34 @@ export function parseFileLink(href: string): ParsedFileLink {
   return { path: normalizeRelativeSegments(extracted.path, isFileUrl), selection: extracted.selection }
 }
 
+/**
+ * The path a file link copied from an `@`-mention names. A leading `@/` is a TypeScript alias and keeps its prefix,
+ * as does a path whose `@` is part of a segment (`src/@types/a.ts`). The literal path is tried first, so a real file
+ * named `@types/...` still wins over the mention reading.
+ */
+export function mentionFilePath(parsed: ParsedFileLink): ParsedFileLink | undefined {
+  if (!parsed.path.startsWith("@")) return
+
+  const path = parsed.path.slice(1)
+
+  if (!path || path.startsWith("/") || path.startsWith("\\")) return
+
+  return { path, selection: parsed.selection }
+}
+
+/** The literal path first, then the `@`-mention reading when the href is one. */
+export function parseFileLinkCandidates(href: string): ParsedFileLink[] {
+  const parsed = parseFileLink(href)
+  const mention = mentionFilePath(parsed)
+
+  return mention ? [parsed, mention] : [parsed]
+}
+
 export function isAbsoluteLink(path: string) {
   return /^[a-z]:\//i.test(path) || path.startsWith("/")
 }
+
+const matchPath = (value: string) => value.replaceAll("\\", "/").replace(/\/+$/, "")
 
 /**
  * The workspace files a relative path names: the literal path when it exists, else every file whose path ends with
@@ -37,13 +62,17 @@ export async function findFileLink(input: {
   readonly path: string
   readonly signal: AbortSignal
 }): Promise<FileLinkTarget | undefined> {
-  const query = input.path.replace(/^(?:\.\.\/)+/, "")
+  const query = matchPath(input.path.replace(/^(?:\.\.\/)+/, ""))
 
   if (!query) return
 
   const results = await input.files.search(query, { limit: 200, signal: input.signal }).catch(() => [])
-  const matches = [...new Set(results)].filter((file) => file === query || file.endsWith(`/${query}`))
-  const literal = matches.find((file) => file === query)
+  const matches = [...new Set(results)].filter((file) => {
+    const path = matchPath(file)
+
+    return path === query || path.endsWith(`/${query}`)
+  })
+  const literal = matches.find((file) => matchPath(file) === query)
 
   if (literal) return { kind: "file", path: literal }
 
@@ -53,23 +82,49 @@ export async function findFileLink(input: {
 }
 
 /**
- * Whether a path named in a message is a file, without reading it: absolute paths by listing their directory,
- * workspace paths by the search index.
+ * The indexed path matching a relative link, as a file or a directory. One search, no parent listing.
+ */
+export async function findAnyFileLink(input: {
+  readonly files: Pick<Files, "search">
+  readonly path: string
+  readonly signal: AbortSignal
+}) {
+  const query = matchPath(input.path.replace(/^(?:\.\.\/)+/, ""))
+
+  if (!query) return
+
+  const results = await input.files.search(query, { kind: "any", limit: 200, signal: input.signal }).catch(() => [])
+  // The server marks folders with a trailing separator, so `assets/` has to match a query of `assets`.
+  const normalized = results.map(matchPath)
+  const index = normalized.findIndex((file) => file === query || file.endsWith(`/${query}`))
+
+  return index === -1 ? undefined : results[index]
+}
+
+/**
+ * Whether a path named in a message is a file or a folder, without reading it: absolute paths by listing their
+ * directory, workspace paths by the search index.
  */
 export async function checkFileLinkExists(input: {
-  readonly files: Pick<Files, "search" | "resolve" | "exists">
+  readonly files: Pick<Files, "search" | "resolve" | "kind">
   readonly href: string
   readonly signal: AbortSignal
 }): Promise<boolean> {
-  const parsed = parseFileLink(input.href)
+  for (const parsed of parseFileLinkCandidates(input.href)) {
+    // `~` is the server's home folder, which the app cannot expand. A network share (`//host/share`) would make the
+    // server connect to the host just to answer.
+    if (!parsed.path || parsed.path.startsWith("~") || parsed.path.startsWith("//")) continue
 
-  // `~` is the server's home folder, which the app cannot expand. A network share (`//host/share`) would make the
-  // server connect to the host just to answer.
-  if (!parsed.path || parsed.path.startsWith("~") || parsed.path.startsWith("//")) return false
+    if (isAbsoluteLink(parsed.path)) {
+      if ((await input.files.kind(input.files.resolve(parsed.path))) !== undefined) return true
 
-  if (isAbsoluteLink(parsed.path)) return input.files.exists(input.files.resolve(parsed.path))
+      continue
+    }
 
-  return !!(await findFileLink({ files: input.files, path: parsed.path, signal: input.signal }))
+    if (await findAnyFileLink({ files: input.files, path: parsed.path, signal: input.signal })) return true
+  }
+
+  return false
 }
 
 function extractLineSelection(input: string, isFileUrl: boolean) {
