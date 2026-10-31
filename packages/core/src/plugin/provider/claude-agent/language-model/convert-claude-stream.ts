@@ -14,7 +14,14 @@ export function make(tools: readonly LanguageModelV3FunctionTool[]) {
   const blocks = new Map<number, "text" | "reasoning">()
   let messageID = ""
   let calledTools = false
+  let streaming: string | undefined
   let metadata: Record<string, { sessionID: string; messageID: string }> | undefined
+
+  const finishTools = (): LanguageModelV3StreamPart => ({
+    type: "finish",
+    finishReason: { unified: "tool-calls", raw: "tool_use" },
+    usage: usage.snapshot(),
+  })
 
   return (message: SDKMessage): LanguageModelV3StreamPart[] => {
     const parts: LanguageModelV3StreamPart[] = []
@@ -25,6 +32,7 @@ export function make(tools: readonly LanguageModelV3FunctionTool[]) {
       switch (event.type) {
         case "message_start":
           messageID = event.message.id
+          streaming = messageID
           metadata = undefined
           streamed.add(messageID)
           usage.update(messageID, event.message.usage)
@@ -68,14 +76,9 @@ export function make(tools: readonly LanguageModelV3FunctionTool[]) {
           usage.update(messageID, event.usage)
           break
         case "message_stop":
+          streaming = undefined
           // Must match ClaudeSession.readStep's tool boundary, or OpenCode's step ends without a finish event.
-          if (calledTools) {
-            parts.push({
-              type: "finish",
-              finishReason: { unified: "tool-calls", raw: "tool_use" },
-              usage: usage.snapshot(),
-            })
-          }
+          if (calledTools) parts.push(finishTools())
           break
       }
     }
@@ -116,6 +119,8 @@ export function make(tools: readonly LanguageModelV3FunctionTool[]) {
           }
         }
       }
+      // A non-streaming fallback delivers the complete reply with no message_stop after it.
+      if (calledTools && message.message.id !== streaming) parts.push(finishTools())
     }
     if (message.type === "result") {
       if (message.num_turns === 1) usage.result(message.usage)

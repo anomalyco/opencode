@@ -108,6 +108,7 @@ export async function start(options: Options) {
     const active = turn
     if (!active) throw new Error("No Claude turn to read")
     let calledTools = false
+    let streaming: string | undefined
     while (true) {
       const message = active.messages.shift()
       if (!message) {
@@ -118,14 +119,22 @@ export async function start(options: Options) {
         continue
       }
       emit(message)
+      let replyEnded = false
+      if (message.type === "stream_event" && message.parent_tool_use_id === null) {
+        if (message.event.type === "message_start") streaming = message.event.message.id
+        if (message.event.type === "message_stop") {
+          streaming = undefined
+          replyEnded = true
+        }
+      }
       if (message.type === "assistant" && message.parent_tool_use_id === null) {
         for (const part of message.message.content) {
           // Calls to tools we did not offer get Claude Code's own error, and the turn continues without OpenCode.
           if (part.type === "tool_use" && ToolNames.original(part.name, tools)) calledTools = true
         }
+        // A non-streaming fallback delivers the complete reply with no message_stop after it.
+        replyEnded = !message.error && message.message.id !== streaming
       }
-      const replyEnded =
-        message.type === "stream_event" && message.parent_tool_use_id === null && message.event.type === "message_stop"
       if (calledTools && replyEnded) return "tools"
       if (message.type === "result") return message
     }

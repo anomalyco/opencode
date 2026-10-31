@@ -28,6 +28,33 @@ describe("Claude conversions", () => {
     expect(unknown.some((part) => part.type === "tool-call" || part.type === "finish")).toBe(false)
   })
 
+  test("a tool call from a non-streaming fallback finishes the step once", () => {
+    const stream = (event: object) =>
+      ({ type: "stream_event", parent_tool_use_id: null, event }) as unknown as SDKMessage
+    const reply = {
+      type: "assistant",
+      parent_tool_use_id: null,
+      session_id: "s",
+      uuid: "u",
+      message: {
+        id: "msg_fallback",
+        usage: { input_tokens: 1, output_tokens: 1 },
+        content: [{ type: "tool_use", id: "toolu_1", name: "mcp__opencode__lookup", input: { key: "a" } }],
+      },
+    } as unknown as SDKMessage
+    const cut = [
+      stream({ type: "message_start", message: { id: "msg_cut", model: "m", usage: {} } }),
+      stream({ type: "message_stop" }),
+    ]
+    for (const messages of [[reply], [...cut, reply]]) {
+      const convert = ConvertClaudeStream.make(TestTools.tools)
+      const parts = messages.flatMap((message) => convert(message))
+      expect(parts.filter((part) => part.type === "tool-call")).toHaveLength(1)
+      expect(parts.filter((part) => part.type === "finish")).toHaveLength(1)
+      expect(parts.at(-1)).toMatchObject({ type: "finish", finishReason: { unified: "tool-calls" } })
+    }
+  })
+
   test("utility calls keep system instructions separate from conversation content and omit thinking", () => {
     const prompt: LanguageModelV3Prompt = [
       { role: "system", content: "Summarize this conversation." },
