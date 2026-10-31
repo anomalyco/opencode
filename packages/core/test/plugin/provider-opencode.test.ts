@@ -1,22 +1,32 @@
+import path from "path"
 import { describe, expect } from "bun:test"
 import { ai } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Money } from "@opencode/schema/money"
-import { Effect, Layer, Schema, Stream } from "effect"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { Effect, Equal, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Agent } from "@opencode/core/agent"
 import { App } from "@opencode/core/app"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { ConfigIntegration } from "@opencode/core/config/integration"
+import { ConfigInstructionPlugin } from "@opencode/core/config/plugin/instruction"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
+import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
 import { ConfigWebSearchPlugin } from "@opencode/core/config/plugin/websearch"
 import { Credential } from "@opencode/core/credential"
+import { Watcher } from "@opencode/core/filesystem/watcher"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Integration } from "@opencode/core/integration"
+import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
@@ -25,11 +35,20 @@ import { PluginHost } from "@opencode/core/plugin/host"
 import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { Provider } from "@opencode/core/provider"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionInstructions } from "@opencode/core/session/instructions"
+import { Skill } from "@opencode/core/skill"
+import { Tool } from "@opencode/core/tool"
+import { ReadTool } from "@opencode/core/tool/plugin/read"
+import { SkillTool } from "@opencode/core/tool/plugin/skill"
+import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
 import { drain } from "../lib/clock"
 import { testEffect } from "../lib/effect"
+import { readInitial, readUpdate } from "../lib/instructions"
+import { executeTool, toolIdentity } from "../lib/tool"
 import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
@@ -1836,6 +1855,11 @@ describe("OpencodePlugin with a Console config", () => {
                 permissions: [{ action: "shell", resource: "*", effect: "allow" }],
                 formatter: { console: { command: ["/tmp/console-formatter"] } },
                 instructions: ["/tmp/console-instructions.md"],
+                skills: ["/tmp/console-skills"],
+                library: {
+                  instructions: [{ id: "ins_1", name: "Standards", content: "Be kind", future: true }],
+                  future: [],
+                },
               }),
           }),
         ),
@@ -1845,17 +1869,23 @@ describe("OpencodePlugin with a Console config", () => {
             const config = yield* Config.Service
             yield* credentials.create({
               integrationID: Integration.ID.make("opencode"),
-              value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+              value: Credential.Key.make({
+                type: "key",
+                key: "secret",
+                metadata: { server: server.url.origin, orgID: "org_acme" },
+              }),
             })
             yield* addPlugin().pipe(inProcess(server))
 
-            const info = required(yield* consoleDocument(config)).info
+            const document = required(yield* consoleDocument(config))
+            const info = document.info
             expect(Object.keys(Schema.encodeSync(Info)(info)).toSorted()).toEqual([
               "mcp",
               "policies",
               "providers",
               "websearch",
             ])
+            expect("library" in document).toBe(false)
             expect(Object.keys(info.mcp?.servers ?? {})).toEqual(["remote"])
             const remote = required(info.providers?.remote)
             expect(remote.env).toBeUndefined()
@@ -1877,6 +1907,7 @@ describe("OpencodePlugin with a Console config", () => {
               $schema,
               providers: { remote: { name: "Remote" } },
               policies: [{ action: "future.use", resource: "anything", effect: "deny" }, deny],
+              library: { instructions: [{ id: "ins_1" }], skills: "all" },
               shell: 123,
               future: { shape: 42 },
             }),
@@ -1886,15 +1917,19 @@ describe("OpencodePlugin with a Console config", () => {
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
           const config = yield* Config.Service
+          const discovery = yield* InstructionDiscovery.Service
+          const skills = yield* Skill.Service
           yield* credentials.create({
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
           yield* addPlugin().pipe(inProcess(server))
 
-          const info = required(yield* consoleDocument(config)).info
-          expect(info.providers?.remote?.name).toBe("Remote")
-          expect(info.policies).toEqual([deny])
+          const document = required(yield* consoleDocument(config))
+          expect(document.info.providers?.remote?.name).toBe("Remote")
+          expect(document.info.policies).toEqual([deny])
+          expect(yield* discovery.list()).toEqual([])
+          expect(yield* skills.list()).toEqual([])
         }),
       (server) => Effect.promise(() => server.stop(true)),
     ),
@@ -2082,13 +2117,26 @@ describe("OpencodePlugin with a Console config", () => {
         Bun.serve({
           port: 0,
           fetch: (request) => {
+            const pathname = new URL(request.url).pathname
             const orgID = request.headers.get("x-org-id") ?? "none"
+            if (pathname.startsWith("/api/v2/library/skills/")) {
+              const slug = path.basename(pathname)
+              return Response.json({
+                slug,
+                version: `${slug}:1`,
+                files: [{ path: "SKILL.md", content: `---\nname: ${slug}\ndescription: ${slug}\n---\n# ${slug}` }],
+              })
+            }
             return Response.json({
               $schema,
               providers: { [orgID]: {} },
               mcp: { servers: { [orgID]: { type: "remote", url: `https://${orgID}/mcp` } } },
               policies: [{ action: "tool.use", resource: `shell:${orgID}`, effect: "deny" }],
               websearch: { provider: "opencode" },
+              library: {
+                instructions: [{ id: `ins_${orgID}`, name: orgID, content: orgID }],
+                skills: [{ slug: orgID, version: `${orgID}:1` }],
+              },
             })
           },
         }),
@@ -2097,6 +2145,8 @@ describe("OpencodePlugin with a Console config", () => {
         Effect.gen(function* () {
           const credentials = yield* Credential.Service
           const config = yield* Config.Service
+          const discovery = yield* InstructionDiscovery.Service
+          const skills = yield* Skill.Service
           const account = (orgID: string) =>
             credentials.create({
               integrationID: Integration.ID.make("opencode"),
@@ -2106,40 +2156,394 @@ describe("OpencodePlugin with a Console config", () => {
                 metadata: { server: server.url.origin, orgID, orgName: orgID },
               }),
             })
-          const contents = consoleDocument(config).pipe(
-            Effect.map(
-              (document) =>
-                document && {
-                  organization: document.organization,
-                  providers: Object.keys(document.info.providers ?? {}),
-                  mcp: Object.keys(document.info.mcp?.servers ?? {}),
-                  policies: document.info.policies?.map((policy) => policy.resource),
-                  websearch: document.info.websearch && String(document.info.websearch.provider),
-                },
-            ),
+          const contents = Effect.all([consoleDocument(config), discovery.list(), skills.list()]).pipe(
+            Effect.map(([document, files, loadedSkills]) => ({
+              document: document && {
+                organization: document.organization,
+                providers: Object.keys(document.info.providers ?? {}),
+                mcp: Object.keys(document.info.mcp?.servers ?? {}),
+                policies: document.info.policies?.map((policy) => policy.resource),
+                websearch: document.info.websearch && String(document.info.websearch.provider),
+              },
+              instructions: Array.isArray(files) ? files.map((file) => file.content) : [],
+              skills: loadedSkills.map((skill) => String(skill.id)),
+            })),
           )
           const expected = (orgID: string) => ({
-            organization: orgID,
-            providers: [orgID],
-            mcp: [orgID],
-            policies: [`shell:${orgID}`],
-            websearch: "opencode",
+            document: {
+              organization: orgID,
+              providers: [orgID],
+              mcp: [orgID],
+              policies: [`shell:${orgID}`],
+              websearch: "opencode",
+            },
+            instructions: [orgID],
+            skills: [orgID],
           })
           const alpha = yield* account("alpha")
           yield* addPlugin().pipe(inProcess(server))
           expect(yield* contents).toEqual(expected("alpha"))
 
           const beta = yield* account("beta")
-          expect(yield* eventually(contents, (value) => value?.organization === "beta")).toEqual(expected("beta"))
+          expect(yield* eventually(contents, (value) => Equal.equals(value, expected("beta")))).toEqual(
+            expected("beta"),
+          )
 
           yield* credentials.remove(beta.id)
-          expect(yield* eventually(contents, (value) => value?.organization === "alpha")).toEqual(expected("alpha"))
+          expect(yield* eventually(contents, (value) => Equal.equals(value, expected("alpha")))).toEqual(
+            expected("alpha"),
+          )
 
           yield* credentials.remove(alpha.id)
-          expect(yield* eventually(contents, (value) => value === undefined)).toBeUndefined()
+          const empty = { document: undefined, instructions: [], skills: [] }
+          expect(yield* eventually(contents, (value) => Equal.equals(value, empty))).toEqual(empty)
         }),
       (server) => Effect.promise(() => server.stop(true)),
     ),
+  )
+
+  const skillBundle = (slug: string, version: string, description: string, extra: Record<string, string> = {}) =>
+    Response.json({
+      slug,
+      version,
+      files: Object.entries({
+        "SKILL.md": `---\nname: ${slug}\ndescription: ${description}\n---\n# ${slug}`,
+        ...extra,
+      }).map(([filepath, content]) => ({ path: filepath, content })),
+    })
+  const consoleKey = (server: string, orgID = "org_acme") =>
+    Credential.Key.make({ type: "key", key: "secret", metadata: { server, orgID, orgName: orgID } })
+  const withServer = <A, E, R>(
+    fetch: (request: Request) => Response | Promise<Response>,
+    run: (origin: string) => Effect.Effect<A, E, R>,
+  ) =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => Bun.serve({ port: 0, fetch })),
+      (server) => run(server.url.origin),
+      (server) => Effect.promise(() => server.stop(true)),
+    )
+
+  it.effect(
+    "orders Console instructions ahead of AGENTS.md, diffs edits, and layers skills between built-ins and local config",
+    () => {
+      const lines = (lead: string) => [lead, ...Array.from({ length: 20 }, (_, i) => `keep ${i}`)].join("\n")
+      const state = { lead: "required", title: "Standards", flakyOk: false }
+      const server = {
+        fetch: (req: Request) => {
+          const pathname = new URL(req.url).pathname
+          if (pathname.startsWith("/api/v2/library/skills/")) {
+            const slug = path.basename(pathname)
+            if (slug === "flaky" && !state.flakyOk) return new Response("unavailable", { status: 503 })
+            return skillBundle(slug, "1", "Console", { "references/style.md": "Style" })
+          }
+          return Response.json({
+            $schema,
+            policies: [{ action: "skill.use", resource: "denied", effect: "deny" }],
+            library: {
+              instructions: [
+                { id: "ins_2", name: state.title, content: lines(state.lead) },
+                { id: "ins_1", name: "Standards", content: "optional" },
+              ],
+              skills: ["builtin", "shared", "denied", "flaky"].map((slug) => ({ slug, version: "1" })),
+            },
+          })
+        },
+      }
+      return Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const config = yield* Config.Test
+        const discovery = yield* InstructionDiscovery.Service
+        const skills = yield* Skill.Service
+        const tools = yield* Tool.Service
+        const fs = yield* FSUtil.Service
+        const global = yield* Global.Service
+        const location = yield* Location.Service
+        const local = path.join(location.directory, "local-skills")
+        yield* fs.writeWithDirs(path.join(global.config, "AGENTS.md"), "global")
+        yield* fs.writeWithDirs(
+          path.join(local, "shared", "SKILL.md"),
+          "---\nname: shared\ndescription: Local\n---\n# s",
+        )
+        yield* config.setEntries([
+          new Document({ type: "document", info: Schema.decodeUnknownSync(Info)({ skills: [local] }) }),
+        ])
+        yield* skills.transform((editor) =>
+          editor.add({
+            id: Skill.ID.make("builtin"),
+            name: Skill.Name.make("builtin"),
+            description: "Built-in",
+            path: AbsolutePath.make("skill://builtin/SKILL.md"),
+            content: "# builtin",
+          }),
+        )
+        yield* credentials.create({
+          integrationID: Integration.ID.make("opencode"),
+          value: consoleKey("https://console.example"),
+        })
+        const host = yield* PluginHost.make(yield* Plugin.Service)
+        yield* OpencodePlugin.effect(host).pipe(inProcess(server))
+        yield* SkillTool.Plugin.effect(host)
+        yield* ReadTool.Plugin.effect(host).pipe(
+          Effect.provide(
+            AppNodeBuilder.build(LayerNode.group([ReadToolFileSystem.node, SessionInstructions.node]), [
+              Location.node.replace(Layer.succeed(Location.Service, location)),
+            ]),
+          ),
+        )
+        yield* ConfigInstructionPlugin.Plugin.effect(host)
+        yield* ConfigSkillPlugin.Plugin.effect(host)
+        yield* ConfigPolicyPlugin.Plugin.effect(host)
+
+        const initial = yield* readInitial(yield* discovery.load())
+        expect(initial.text).toContain("Instructions from: OpenCode Console instruction ins_2\nrequired")
+        expect(initial.text.indexOf("ins_2")).toBeLessThan(initial.text.indexOf("ins_1"))
+        expect(initial.text.indexOf("ins_1")).toBeLessThan(initial.text.indexOf("AGENTS.md"))
+
+        state.lead = "updated"
+        state.title = "Renamed"
+        yield* TestClock.adjust("1 minute")
+        yield* drain
+        const update = (yield* readUpdate(yield* discovery.load(), initial)).text
+        expect(update).toContain("The instructions from OpenCode Console instruction ins_2 changed. Here's the diff:")
+        expect(update).toContain("-required\n+updated")
+
+        const listed = yield* skills.list()
+        expect(listed.map((s) => [s.id, s.description, s.path])).toEqual([
+          [Skill.ID.make("builtin"), "Console", AbsolutePath.make("skill://builtin/SKILL.md")],
+          [Skill.ID.make("shared"), "Local", AbsolutePath.make(path.join(local, "shared", "SKILL.md"))],
+        ])
+        expect(yield* skills.files(Skill.ID.make("denied"))).toBeUndefined()
+        expect(yield* skills.files(Skill.ID.make("shared"))).toBeUndefined()
+        expect(yield* fs.exists(path.join(global.cache, "skills"))).toBe(false)
+
+        const sessionID = Session.ID.make("ses_console_skill")
+        expect(
+          yield* executeTool(tools, {
+            sessionID,
+            ...toolIdentity,
+            call: { type: "tool-call", id: "call-skill", name: "skill", input: { id: "builtin" } },
+          }),
+        ).toMatchObject({
+          status: "completed",
+          metadata: { name: "builtin", directory: "skill://builtin" },
+          content: [
+            { type: "text", text: expect.stringContaining("<file>skill://builtin/references/style.md</file>") },
+          ],
+        })
+        expect(
+          yield* executeTool(tools, {
+            sessionID,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-read",
+              name: "read",
+              input: { path: "skill://builtin/references/style.md" },
+            },
+          }),
+        ).toMatchObject({
+          status: "completed",
+          content: [{ type: "text", text: "Read file skill://builtin/references/style.md, lines 1-1\n1: Style" }],
+        })
+
+        // A failed skill download retries on the next poll even when the Console config itself is unchanged.
+        state.flakyOk = true
+        yield* TestClock.adjust("1 minute")
+        yield* drain
+        expect((yield* skills.list()).map((s) => s.id)).toEqual([
+          Skill.ID.make("builtin"),
+          Skill.ID.make("shared"),
+          Skill.ID.make("flaky"),
+        ])
+      }).pipe(Effect.provide(Watcher.testLayer))
+    },
+  )
+
+  it.live("deduplicates concurrent skill downloads, reuses cached bundles, and survives failed refreshes", () => {
+    const entered = Promise.withResolvers<void>()
+    const gate = Promise.withResolvers<void>()
+    const state = {
+      listed: [
+        { slug: "review", version: "skl_1:1" },
+        { slug: "deploy", version: "skl_2:1" },
+      ],
+      requests: [] as { path: string; headers: Headers }[],
+      configGate: undefined as { entered: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined,
+      respond: async (req: Request) => {
+        if (!req.url.endsWith("/review")) return skillBundle("deploy", "skl_2:1", "Deploy")
+        entered.resolve()
+        await gate.promise
+        return skillBundle("review", "skl_1:1", "Console")
+      },
+    }
+    return withServer(
+      async (req) => {
+        const pathname = new URL(req.url).pathname
+        if (pathname === "/api/v2/config") {
+          const res = Response.json({ $schema, library: { skills: state.listed } })
+          if (state.configGate) {
+            state.configGate.entered.resolve()
+            await state.configGate.release.promise
+          }
+          return res
+        }
+        state.requests.push({ path: pathname, headers: new Headers(req.headers) })
+        return state.respond(req)
+      },
+      (origin) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const app = yield* App.Metadata
+          const stored = yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: consoleKey(origin),
+          })
+          const loadSkills = Effect.scoped(
+            Effect.gen(function* () {
+              const localSkills = yield* Skill.Service
+              const host = yield* PluginHost.make(yield* Plugin.Service)
+              yield* OpencodePlugin.effect(host)
+              return yield* localSkills.list()
+            }).pipe(Effect.provide(AppNodeBuilder.build(LayerNode.group([Skill.node, Bus.node])))),
+          )
+
+          const first = yield* Effect.forkScoped(loadSkills)
+          const second = yield* Effect.forkScoped(loadSkills)
+          yield* Effect.promise(() => entered.promise)
+          gate.resolve()
+          const [one, two] = [yield* Fiber.join(first), yield* Fiber.join(second)]
+          expect(one.map((s) => s.id).toSorted()).toEqual([Skill.ID.make("deploy"), Skill.ID.make("review")])
+          expect(two.map((s) => s.id).toSorted()).toEqual([Skill.ID.make("deploy"), Skill.ID.make("review")])
+          expect(state.requests.filter((r) => r.path.endsWith("/review"))).toHaveLength(1)
+          const req = required(state.requests.find((r) => r.path.endsWith("/review")))
+          expect([
+            req.path,
+            req.headers.get("authorization"),
+            req.headers.get("x-org-id"),
+            req.headers.get("user-agent"),
+          ]).toEqual(["/api/v2/library/skills/review", "Bearer secret", "org_acme", App.useragent(app)])
+
+          state.requests = []
+          state.listed = [{ slug: "review", version: "skl_1:1" }]
+          const cached = yield* loadSkills
+          expect(cached.map((s) => [s.id, s.path])).toEqual([
+            [Skill.ID.make("review"), AbsolutePath.make("skill://review/SKILL.md")],
+          ])
+          expect(state.requests).toEqual([])
+
+          state.respond = async () => skillBundle("review", "skl_1:2", "Updated")
+          state.listed = [{ slug: "review", version: "skl_1:2" }]
+          expect((yield* loadSkills).map((s) => s.description)).toEqual(["Updated"])
+          expect(state.requests).toHaveLength(1)
+
+          state.respond = async () => new Response("unavailable", { status: 503 })
+          state.listed = [{ slug: "review", version: "skl_1:3" }]
+          expect((yield* loadSkills).map((s) => s.description)).toEqual(["Updated"])
+
+          // Switching workspaces mid-pass keeps cached skills from this workspace's cache without downloading another's.
+          state.requests = []
+          state.listed = [
+            { slug: "review", version: "skl_1:2" },
+            { slug: "fresh", version: "skl_3:1" },
+          ]
+          state.configGate = { entered: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() }
+          const fiber = yield* Effect.forkScoped(loadSkills)
+          yield* Effect.promise(() => state.configGate!.entered.promise)
+          yield* credentials.update(stored.id, { value: consoleKey(origin, "org_other") })
+          state.configGate.release.resolve()
+          expect((yield* Fiber.join(fiber)).map((s) => s.id)).toEqual([Skill.ID.make("review")])
+          expect(state.requests).toEqual([])
+        }),
+    )
+  })
+
+  it.live(
+    "withholds Console Library under managed integration.use deny while keeping policies, and rejects unsafe or redirected bundles",
+    () => {
+      const requests: string[] = []
+      const unsafe: Record<string, string> = {
+        parent: "../escape.md",
+        nested: "references/../../escape.md",
+        backslash: "references\\..\\..\\escape.md",
+      }
+      return withServer(
+        (req) => {
+          const pathname = new URL(req.url).pathname
+          requests.push(pathname)
+          if (pathname === "/api/v2/config") {
+            return Response.json({
+              $schema,
+              providers: { remote: { name: "Remote" } },
+              policies: [deny],
+              library: {
+                instructions: [{ id: "ins_1", name: "Standards", content: "Console" }],
+                skills: ["good", "../bad", "redirect", ...Object.keys(unsafe)].map((slug) => ({ slug, version: "1" })),
+              },
+            })
+          }
+          if (pathname === "/elsewhere") return skillBundle("redirect", "1", "Redirected")
+          if (pathname.endsWith("/redirect"))
+            return new Response(null, { status: 302, headers: { location: "/elsewhere" } })
+          if (pathname.endsWith("/good")) return skillBundle("good", "1", "Good")
+          const slug = path.basename(pathname)
+          return skillBundle(slug, "1", "Unsafe", { [unsafe[slug]!]: "escaped" })
+        },
+        (origin) =>
+          Effect.scoped(
+            Effect.gen(function* () {
+              const fs = yield* FSUtil.Service
+              const location = yield* Location.Service
+              const system = path.join(location.directory, "system")
+              const writeSystem = (allowedOrg: string) =>
+                fs.writeWithDirs(
+                  path.join(system, "opencode.json"),
+                  JSON.stringify({
+                    policies: [
+                      { action: "integration.use", resource: "*", effect: "deny" },
+                      { action: "integration.use", resource: `opencode#${allowedOrg}`, effect: "allow" },
+                    ],
+                  }),
+                )
+              yield* writeSystem("org_allowed")
+              yield* Effect.gen(function* () {
+                const credentials = yield* Credential.Service
+                const config = yield* Config.Service
+                const providers = yield* Provider.Service
+                const discovery = yield* InstructionDiscovery.Service
+                const skills = yield* Skill.Service
+                const bus = yield* Bus.Service
+                yield* credentials.create({
+                  integrationID: Integration.ID.make("opencode"),
+                  value: consoleKey(origin, "org_personal"),
+                })
+                const host = yield* PluginHost.make(yield* Plugin.Service)
+                yield* OpencodePlugin.effect(host)
+                yield* ConfigPolicyPlugin.Plugin.effect(host)
+
+                expect(yield* consolePolicies(config)).toEqual([deny])
+                expect(yield* providers.get(Provider.ID.make("remote"))).toBeUndefined()
+                expect(yield* discovery.list()).toEqual([])
+                expect(yield* skills.list()).toEqual([])
+                expect(requests).toEqual(["/api/v2/config"])
+
+                const reloaded = yield* bus
+                  .subscribe(Skill.Event.Updated)
+                  .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped)
+                yield* writeSystem("org_personal")
+                yield* Fiber.join(reloaded)
+
+                expect(required(yield* providers.get(Provider.ID.make("remote"))).name).toBe("Remote")
+                expect(yield* discovery.list()).toEqual([
+                  new InstructionDiscovery.File({ path: "OpenCode Console instruction ins_1", content: "Console" }),
+                ])
+                expect((yield* skills.list()).map((s) => s.id)).toEqual([Skill.ID.make("good")])
+                expect(requests).not.toContain("/elsewhere")
+                expect(requests.some((r) => r.includes("bad"))).toBe(false)
+              }).pipe(Effect.provide(Config.layer({ system, project: false })))
+            }),
+          ),
+      )
+    },
   )
 })
 

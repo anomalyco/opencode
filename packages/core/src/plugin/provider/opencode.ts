@@ -1,4 +1,20 @@
-import { Clock, Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { isDeepStrictEqual } from "node:util"
+import {
+  Cause,
+  Clock,
+  Deferred,
+  Duration,
+  Effect,
+  Equal,
+  Exit,
+  FiberHandle,
+  Option,
+  Schema,
+  SchemaGetter,
+  Scope,
+  Semaphore,
+  Stream,
+} from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
@@ -8,11 +24,16 @@ import { Bus } from "../../bus.js"
 import { Config } from "../../config.js"
 import { ConfigIntegration } from "../../config/integration.js"
 import { ConfigProviderPlugin } from "../../config/plugin/provider.js"
+import { SkillFile } from "../../config/plugin/skill-file.js"
 import { ConsoleAccess } from "../../console-access.js"
 import { Credential } from "../../credential.js"
+import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Provider } from "../../provider.js"
+import { AbsolutePath } from "../../schema.js"
+import { Skill } from "../../skill.js"
+import { SkillDiscovery } from "../../skill/discovery.js"
 import { WebSearch } from "../../websearch.js"
 
 const clientID = "opencode-cli"
@@ -43,6 +64,29 @@ const SsoRequired = Schema.Struct({
 const InvalidGrant = Schema.Struct({ error: Schema.Literal("invalid_grant") })
 // Console's 401 when the session behind the access token was revoked or expired.
 const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
+const Library = Schema.Struct({
+  instructions: Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String, content: Schema.String })).pipe(
+    Schema.optional,
+  ),
+  skills: Schema.Array(Schema.Struct({ slug: Schema.String, version: Schema.String })).pipe(Schema.optional),
+})
+// A malformed library is dropped instead of failing the whole Console config, which would drop its policies too.
+const RemoteLibrary = Schema.Unknown.pipe(
+  Schema.decodeTo(Schema.UndefinedOr(Library), {
+    decode: SchemaGetter.transform((library) => Option.getOrUndefined(Schema.decodeUnknownOption(Library)(library))),
+    encode: SchemaGetter.passthrough({ strict: false }),
+  }),
+)
+const ConsoleConfig = Schema.Struct({
+  ...ConfigIntegration.Remote.fields,
+  library: RemoteLibrary.pipe(Schema.optional),
+})
+type ConsoleConfig = typeof ConsoleConfig.Type
+const SkillBundle = Schema.Struct({
+  slug: Schema.String,
+  version: Schema.String,
+  files: Schema.Array(Schema.Struct({ path: Schema.String, content: Schema.String })),
+})
 const signedOutMessage = "Reconnect OpenCode Console to continue"
 const ssoMessage = (organization: string | undefined) =>
   `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
@@ -142,7 +186,16 @@ function oauth(http: HttpClient.HttpClient) {
   } satisfies IntegrationOAuthMethodRegistration
 }
 
-export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Config.Service | Scope.Scope>({
+type LoadedSkill = {
+  readonly skill: Skill.Info
+  readonly files: Readonly<Record<string, string>>
+}
+const skillCache = new Map<string, { readonly version: string; readonly value: LoadedSkill | undefined }>()
+const pendingSkills = new Map<string, Deferred.Deferred<LoadedSkill | undefined, unknown>>()
+
+export const OpencodePlugin = define<
+  HttpClient.HttpClient | Bus.Service | Config.Service | InstructionDiscovery.Service | Skill.Service | Scope.Scope
+>({
   id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
     const disableFree = ["1", "true"].includes(process.env.OPENCODE_DISABLE_FREE_MODELS?.toLowerCase() ?? "")
@@ -152,27 +205,35 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Confi
     // and whether it evaluates the policies it is being sent.
     const http = HttpClient.mapRequest(client, HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)))
     const config = yield* Config.Service
+    const discovery = yield* InstructionDiscovery.Service
+    const skills = yield* Skill.Service
     const scope = yield* Scope.Scope
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     let snapshot: {
-      // The Console's regular OpenCode config, merged as an integration config layer.
-      remote: ConfigIntegration.Remote | undefined
+      // The Console's config: standard fields merge as an integration config layer while Library stays here.
+      remote: ConsoleConfig | undefined
       connection: ActiveConnection
       organization: string | undefined
-    } = { remote: undefined, connection: undefined, organization: undefined }
+      // The Console server the config came from, which serves its Library's skill files.
+      origin: string | undefined
+      orgID: string | undefined
+    } = { remote: undefined, connection: undefined, organization: undefined, origin: undefined, orgID: undefined }
     // Status last reported for the active connection, so inference failures can name the fix.
     let reported: IntegrationConnection.Status | undefined
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
     // When the last Console config load started, so rejected inference can reuse a recent status.
     let checked = Number.NEGATIVE_INFINITY
+    let currentInstructions: InstructionDiscovery.File[] = []
+    let currentSkills: LoadedSkill[] = []
+    let skillsKey: string | undefined = "none"
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
       checked = yield* Clock.currentTimeMillis
       const connection = yield* ctx.integration.connection.active("opencode")
       if (!connection) {
         reported = undefined
-        return { remote: undefined, connection, organization: undefined }
+        return { remote: undefined, connection, organization: undefined, origin: undefined, orgID: undefined }
       }
       const status = (status: IntegrationConnection.Status | undefined) => {
         reported = status
@@ -181,12 +242,20 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Confi
       return yield* ctx.integration.connection.resolve(connection).pipe(
         Effect.flatMap((credential) => {
           if (!credential || credential.type === "external")
-            return Effect.succeed({ remote: undefined, connection, organization: undefined })
-          return fetchConfig(http, credential).pipe(
-            Effect.map((remote) => ({
+            return Effect.succeed<typeof snapshot>({
+              remote: undefined,
+              connection,
+              organization: undefined,
+              origin: undefined,
+              orgID: undefined,
+            })
+          return Effect.all([fetchConfig(http, credential), normalizeServer(ConsoleAccess.server(credential))]).pipe(
+            Effect.map(([remote, origin]) => ({
               remote,
               connection,
               organization: organizationName(credential),
+              origin,
+              orgID: typeof credential.metadata?.orgID === "string" ? credential.metadata.orgID : undefined,
             })),
           )
         }),
@@ -200,38 +269,167 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Confi
             // A load that fails for the connection already in place keeps its last config: dropping it
             // would lift organization policy while personal credentials keep working.
             return IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
-              ? { remote: snapshot.remote, connection, organization: snapshot.organization }
-              : { remote: undefined, connection, organization: undefined }
+              ? {
+                  remote: snapshot.remote,
+                  connection,
+                  organization: snapshot.organization,
+                  origin: snapshot.origin,
+                  orgID: snapshot.orgID,
+                }
+              : { remote: undefined, connection, organization: undefined, origin: undefined, orgID: undefined }
           }),
         ),
       )
     })
-    // The Console document as config layered it. Its providers apply at this plugin's position in the provider chain,
-    // while the rest of the document merges through config.
+    // The Console document submitted to config, and the document config layered back. Managed `integration.use: deny`
+    // replaces `submitted` with a policies-only document (`integrated !== submitted`), withholding everything else.
+    let submitted: ConfigIntegration.Document | undefined
     let integrated: ConfigIntegration.Document | undefined
-    const integrate = Effect.fnUntraced(function* (document: ConfigIntegration.Document | undefined) {
-      yield* config.integration?.(Integration.ID.make("opencode"), document) ?? Effect.void
-      integrated = (yield* config.entries()).find(
-        (entry): entry is ConfigIntegration.Document =>
-          entry instanceof ConfigIntegration.Document && entry.integrationID === Integration.ID.make("opencode"),
-      )
-    })
+    const allowed = () => Boolean(submitted && (!config.integration || integrated === submitted))
+    const readIntegrated = () =>
+      config
+        .entries()
+        .pipe(
+          Effect.map((entries) =>
+            entries.find(
+              (entry): entry is ConfigIntegration.Document =>
+                entry instanceof ConfigIntegration.Document && entry.integrationID === Integration.ID.make("opencode"),
+            ),
+          ),
+        )
     // Policies and providers ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
     const publish = Effect.fnUntraced(function* (next: typeof snapshot) {
-      // The config merges as one integration document, which config loads right after managed policies.
-      yield* integrate(
+      const document =
         next.remote &&
-          next.connection &&
-          ConfigIntegration.make({
-            integrationID: Integration.ID.make("opencode"),
-            connection:
-              next.connection.type === "credential"
-                ? { ...next.connection, id: Credential.ID.make(next.connection.id) }
-                : next.connection,
-            organization: next.organization,
-            info: next.remote,
+        next.connection &&
+        ConfigIntegration.make({
+          integrationID: Integration.ID.make("opencode"),
+          connection:
+            next.connection.type === "credential"
+              ? { ...next.connection, id: Credential.ID.make(next.connection.id) }
+              : next.connection,
+          organization: next.organization,
+          info: {
+            providers: next.remote.providers,
+            mcp: next.remote.mcp,
+            policies: next.remote.policies,
+            websearch: next.remote.websearch,
+          },
+        })
+      if (!isDeepStrictEqual(submitted, document)) {
+        submitted = document
+        yield* config.integration?.(Integration.ID.make("opencode"), submitted) ?? Effect.void
+      }
+      integrated = yield* readIntegrated()
+    })
+
+    // A version already cached in memory costs no request; a failed download keeps the previous version.
+    const librarySkill = Effect.fnUntraced(function* (input: {
+      url: string
+      headers: Effect.Effect<Record<string, string>, unknown>
+      scope: readonly [string, string, string]
+      slug: string
+      version: string
+    }) {
+      const slugKey = JSON.stringify([...input.scope, input.slug])
+      const cached = skillCache.get(slugKey)
+      if (cached?.version === input.version) return { item: cached.value, fresh: true }
+      const versionKey = JSON.stringify([...input.scope, input.slug, input.version])
+      return yield* Effect.gen(function* () {
+        const pending = pendingSkills.get(versionKey)
+        if (pending) {
+          const exit = yield* Effect.exit(Deferred.await(pending))
+          if (Exit.isSuccess(exit)) return { item: exit.value, fresh: true }
+          if (!Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
+        }
+        const deferred = Deferred.makeUnsafe<LoadedSkill | undefined, unknown>()
+        const value = yield* Effect.uninterruptibleMask((restore) => {
+          pendingSkills.set(versionKey, deferred)
+          return restore(downloadSkill(http, input)).pipe(
+            Effect.tap((loaded) =>
+              Effect.sync(() => {
+                skillCache.set(slugKey, { version: input.version, value: loaded })
+              }),
+            ),
+            Effect.onExit((exit) => {
+              if (pendingSkills.get(versionKey) === deferred) pendingSkills.delete(versionKey)
+              return Deferred.done(deferred, exit)
+            }),
+          )
+        })
+        return { item: value, fresh: true }
+      }).pipe(
+        Effect.catchCause((cause) => {
+          if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
+          return Effect.logWarning("failed to download Console skill", {
+            slug: input.slug,
+            version: input.version,
+            cause,
+          }).pipe(Effect.as({ item: skillCache.get(slugKey)?.value, fresh: false }))
+        }),
+      )
+    })
+
+    const syncLibrary = Effect.fnUntraced(function* (next: typeof snapshot) {
+      if (!allowed()) {
+        currentInstructions = []
+        currentSkills = []
+        skillsKey = "none"
+        return
+      }
+      // Keyed by ID, which stays put across renames and edits, so changes render as diffs.
+      currentInstructions = (next.remote?.library?.instructions ?? []).map(
+        (instruction) =>
+          new InstructionDiscovery.File({
+            path: `OpenCode Console instruction ${instruction.id}`,
+            content: instruction.content,
           }),
       )
+      const origin = next.origin
+      const connection = next.connection
+      const listed = next.remote?.library?.skills ?? []
+      if (!origin || !connection || listed.length === 0) {
+        currentSkills = []
+        skillsKey = "none"
+        return
+      }
+      const scope = [origin, IntegrationConnection.key(connection) ?? "", next.orgID ?? ""] as const
+      const key = JSON.stringify([...scope, listed])
+      if (key === skillsKey) return
+      // Only a download needs the credential, so cached skills cost no token refresh and survive a failed one.
+      const headers = yield* Effect.cached(
+        Effect.gen(function* () {
+          const credential = yield* ctx.integration.connection.resolve(connection)
+          if (!credential || credential.type === "external")
+            return yield* Effect.fail(new Error("OpenCode Console is not connected"))
+          const orgID = typeof credential.metadata?.orgID === "string" ? credential.metadata.orgID : undefined
+          if (orgID !== next.orgID) return yield* Effect.fail(new Error("OpenCode Console switched workspaces"))
+          return ConsoleAccess.headers(credential)
+        }),
+      )
+      const loaded = yield* Effect.forEach(
+        listed.filter((skill) => SkillDiscovery.isSafeSegment(skill.slug)),
+        (skill) =>
+          librarySkill({
+            url: `${origin}/api/v2/library/skills/${encodeURIComponent(skill.slug)}`,
+            headers,
+            scope,
+            slug: skill.slug,
+            version: skill.version,
+          }),
+        { concurrency: 4 },
+      ).pipe(
+        Effect.catchCause((cause) => {
+          if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
+          return Effect.logWarning("failed to load Console skills", { cause }).pipe(Effect.as(undefined))
+        }),
+      )
+      currentSkills = Array.from(
+        new Map(
+          (loaded ?? []).flatMap((entry) => (entry.item ? [[entry.item.skill.id, entry.item] as const] : [])),
+        ).values(),
+      )
+      skillsKey = loaded?.every((item) => item.fresh) ? key : undefined
     })
     const search = (providerID: WebSearch.ID, connection: NonNullable<ActiveConnection>) => ({
       id: providerID,
@@ -291,8 +489,31 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Confi
       editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
-    snapshot = yield* load()
-    yield* publish(snapshot)
+    yield* ctx.event.subscribe({ types: ["config.updated"] }).pipe(
+      Stream.runForEach(() =>
+        loading.withPermit(
+          Effect.gen(function* () {
+            const wasAllowed = allowed()
+            integrated = yield* readIntegrated()
+            if (allowed() === wasAllowed) return
+            yield* syncLibrary(snapshot)
+            yield* Effect.all([ctx.provider.reload(), ctx.websearch.reload(), discovery.reload(), skills.reload()], {
+              concurrency: 4,
+              discard: true,
+            })
+          }),
+        ),
+      ),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+
+    yield* loading.withPermit(
+      Effect.gen(function* () {
+        snapshot = yield* load()
+        yield* publish(snapshot)
+        yield* syncLibrary(snapshot)
+      }),
+    )
     yield* ctx.provider.transform((providers) => {
       if (integrated) ConfigProviderPlugin.integrate(providers, integrated)
     })
@@ -328,18 +549,30 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Confi
     // config, where the user's own choice wins.
     yield* ctx.websearch.transform((editor) => {
       const provider = WebSearch.ID.make("opencode")
-      if (snapshot.remote?.websearch && snapshot.remote.websearch.provider === provider && snapshot.connection)
+      if (
+        allowed() &&
+        snapshot.remote?.websearch &&
+        snapshot.remote.websearch.provider === provider &&
+        snapshot.connection
+      )
         editor.add(search(provider, snapshot.connection))
+    })
+    yield* discovery.transform((editor) => {
+      currentInstructions.forEach((file) => editor.add(file))
+    })
+    yield* skills.transform((editor) => {
+      currentSkills.forEach((item) => editor.add(item.skill, item.files))
     })
 
     const apply = Effect.fn("OpencodePlugin.apply")(function* (next: typeof snapshot) {
       snapshot = next
       yield* publish(next)
+      yield* syncLibrary(next)
       yield* guard(next)
-      yield* Effect.all([ctx.provider.reload(), ctx.websearch.reload(), ctx.mcp.reload()], {
-        concurrency: 3,
-        discard: true,
-      })
+      yield* Effect.all(
+        [ctx.provider.reload(), ctx.websearch.reload(), ctx.mcp.reload(), discovery.reload(), skills.reload()],
+        { concurrency: 5, discard: true },
+      )
     })
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(apply)))
     // Annotated: `apply` re-registers the hooks that call `check`, which would otherwise make inference circular.
@@ -350,7 +583,11 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Confi
         Effect.gen(function* () {
           if ((yield* Clock.currentTimeMillis) - checked < Duration.toMillis(maxAge)) return
           const next = yield* load()
-          if (!Equal.equals(snapshot, next)) yield* apply(next)
+          if (!Equal.equals(snapshot, next)) return yield* apply(next)
+          if (skillsKey !== undefined) return
+          const before = currentSkills
+          yield* syncLibrary(snapshot)
+          if (!isDeepStrictEqual(before, currentSkills)) yield* skills.reload()
         }),
       )
 
@@ -378,12 +615,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Confi
     const guard = Effect.fn("OpencodePlugin.guard")(function* (next: typeof snapshot) {
       yield* Effect.forEach(explainers, (registration) => registration.dispose, { discard: true })
       explainers = yield* Effect.forEach(
-        next.connection
-          ? new Set([
-              Provider.ID.opencode,
-              ...Object.keys(next.remote?.providers ?? {}),
-            ])
-          : [],
+        next.connection ? new Set([Provider.ID.opencode, ...Object.keys(next.remote?.providers ?? {})]) : [],
         (providerID) => ctx.session.hook("http.response", explain, { providerID }).pipe(Scope.provide(scope)),
       )
     })
@@ -434,11 +666,58 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
               })
           }
           const body = yield* HttpClientResponse.filterStatusOk(response).pipe(Effect.flatMap((ok) => ok.json))
-          return yield* Schema.decodeUnknownEffect(ConfigIntegration.Remote)(body)
+          return yield* Schema.decodeUnknownEffect(ConsoleConfig)(body)
         }),
       ),
       Effect.scoped,
     )
+}
+
+function downloadSkill(
+  http: HttpClient.HttpClient,
+  input: {
+    url: string
+    headers: Effect.Effect<Record<string, string>, unknown>
+    slug: string
+  },
+) {
+  return Effect.gen(function* () {
+    const headers = yield* input.headers
+    const bundle = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
+      .execute(
+        HttpClientRequest.get(input.url).pipe(HttpClientRequest.acceptJson, HttpClientRequest.setHeaders(headers)),
+      )
+      .pipe(
+        // The connection's credentials must not follow a redirect to another server.
+        Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
+        Effect.flatMap(HttpClientResponse.schemaBodyJson(SkillBundle)),
+        Effect.scoped,
+        Effect.timeout("30 seconds"),
+      )
+    if (bundle.slug !== input.slug)
+      return yield* Effect.fail(new Error(`expected skill ${input.slug}, received ${bundle.slug}`))
+    const unsafe = bundle.files.find((file) => !SkillDiscovery.isSafeRelativePath(file.path))
+    if (unsafe) return yield* Effect.fail(new Error(`unsafe skill file path: ${unsafe.path}`))
+    const main = bundle.files.find((file) => file.path === "SKILL.md")
+    if (!main) return yield* Effect.fail(new Error(`skill ${input.slug} has no SKILL.md`))
+    const filepath = Skill.uri(input.slug, "SKILL.md")
+    const parsed = SkillFile.parse(`/${input.slug}`, `/${input.slug}/SKILL.md`, main.content)
+    if (parsed._tag !== "Parsed") {
+      yield* Effect.logDebug("skill file skipped", {
+        filepath,
+        reason: parsed.reason,
+        ...(parsed.reason === "frontmatter" ? { issue: parsed.issue } : {}),
+      })
+      return undefined
+    }
+    const files = Object.fromEntries(
+      bundle.files.filter((file) => file.path !== "SKILL.md").map((file) => [file.path, file.content]),
+    )
+    return {
+      skill: { ...parsed.skill, path: AbsolutePath.make(filepath) },
+      files,
+    } satisfies LoadedSkill
+  })
 }
 
 function ssoUrl(server: string, connectionID: string) {
