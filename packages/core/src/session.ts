@@ -217,6 +217,7 @@ export interface Interface {
   }) => Effect.Effect<string, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
     sessionID: SessionSchema.ID
+    id?: SessionMessage.ID
     command: string
     text: string
     files?: PromptInput.Prompt["files"]

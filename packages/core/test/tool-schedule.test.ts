@@ -304,6 +304,56 @@ describe("ScheduleTools", () => {
       ).toMatchObject({ metadata: { error: true } })
     }),
   )
+
+  it.effect("supports subagent, dedicated, command, shell and code actions and rejects invalid combinations cleanly", () =>
+    Effect.gen(function* () {
+      const { registry, rows } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
+
+      const subagent = yield* run(registry, "schedule_create", {
+        name: "triage",
+        when: { every: "1 hour" },
+        prompt: "triage issues",
+        target: "subagent",
+        agent: "explore",
+        deliver: "silent",
+      })
+      expect(subagent).toMatchObject({
+        action: { type: "subagent", prompt: "triage issues", agent: "explore", deliver: "silent" },
+      })
+
+      const command = yield* direct(registry, "schedule_create", {
+        when: { cron: "0 9 * * 1-5" },
+        command: "/morning-brief",
+        arguments: "team",
+      })
+      expect(command).toContain('command (subagent): "/morning-brief team"')
+
+      const shell = yield* direct(registry, "schedule_create", {
+        when: { in: "10 minutes" },
+        run: "git fetch origin",
+      })
+      expect(shell).toContain('run: "git fetch origin"')
+
+      const code = yield* direct(registry, "schedule_create", {
+        when: { in: "15 minutes" },
+        code: "await tools.slack.read_thread({}); return 'ok'",
+      })
+      expect(code).toContain("code: \"await tools.slack.read_thread({}); return 'ok'\"")
+      expect(rows.size).toBe(4)
+
+      for (const bad of [
+        { when: { in: "5 minutes" } },
+        { when: { in: "5 minutes" }, prompt: "a", run: "b" },
+        { when: { in: "5 minutes" }, prompt: "a", deliver: "silent" },
+        { when: { in: "5 minutes" }, command: "brief", target: "same", deliver: "silent" },
+        { when: { in: "5 minutes" }, run: "ls", arguments: "extra" },
+        { when: { in: "5 minutes" }, prompt: "a", agent: "explore" },
+      ]) {
+        expect(yield* call(registry, "schedule_create", bad)).toMatchObject({ metadata: { error: true } })
+      }
+      expect(rows.size).toBe(4)
+    }),
+  )
 })
 
 function document(experimental: ConfigExperimental.Info | undefined): Entry {

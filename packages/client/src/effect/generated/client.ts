@@ -1592,6 +1592,13 @@ const EndpointExperimentalScheduleCreate =
           until: input["until"],
           ends: input["ends"],
           prompt: input["prompt"],
+          command: input["command"],
+          arguments: input["arguments"],
+          run: input["run"],
+          code: input["code"],
+          target: input["target"],
+          agent: input["agent"],
+          deliver: input["deliver"],
         },
       }).pipe(
         Effect.mapError(mapClientError),

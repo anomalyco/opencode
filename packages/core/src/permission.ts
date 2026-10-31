@@ -162,7 +162,13 @@ const layer = Layer.effect(
       const session = yield* sessions.get(sessionID)
       if (!session) return yield* new SessionErrors.NotFoundError({ sessionID })
       const agent = yield* agents.resolve(agentID ?? session.agent)
-      return merge(agent?.permissions ?? missingAgentPermissions, session.permissions ?? [])
+      const unattendedSession =
+        typeof (session.metadata as Record<string, unknown> | undefined)?.schedule === "object" &&
+        ((session.metadata as Record<string, unknown>).schedule as { unattended?: unknown } | null)?.unattended === true
+      return {
+        rules: merge(agent?.permissions ?? missingAgentPermissions, session.permissions ?? []),
+        unattendedSession,
+      }
     })
 
     function denied(input: Pick<Request, "action" | "resources">, rules: Permission.Ruleset) {
@@ -174,7 +180,7 @@ const layer = Layer.effect(
     }
 
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
-      const rules = yield* configured(input.sessionID, input.agent)
+      const { rules, unattendedSession } = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
@@ -189,9 +195,9 @@ const layer = Layer.effect(
         effect,
       })
       const unattended = yield* Unattended
-      if (event.effect !== "ask" || unattended === undefined)
+      if (event.effect !== "ask" || (unattended === undefined && !unattendedSession))
         return { effect: event.effect, message: event.message, rules: all }
-      const settled = [...all, ...unattended]
+      const settled = [...all, ...(unattended ?? [])]
       const allowed = input.resources.every((resource) => evaluate(input.action, resource, settled).effect === "allow")
       if (allowed) return { effect: "allow" as const, rules: all }
       return {

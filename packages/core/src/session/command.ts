@@ -3,6 +3,7 @@ export * as SessionCommand from "./command.js"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
+import type { SessionMessage } from "@opencode/schema/session-message"
 import { Effect } from "effect"
 import { Command } from "../command.js"
 import { Instance } from "../instance/service.js"
@@ -10,6 +11,7 @@ import { Plugin } from "../plugin/service.js"
 
 export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
   session: Session.Info
+  id?: SessionMessage.ID
   command: string
   text: string
   files?: PromptInput.Prompt["files"]
@@ -25,6 +27,7 @@ export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
       name: input.command,
       invocation: {
         sessionID: input.session.id,
+        messageID: input.id,
         prompt: {
           text: input.text,
           files: input.files,

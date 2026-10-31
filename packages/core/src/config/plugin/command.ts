@@ -69,12 +69,16 @@ export const Plugin = define({
       for (const document of loaded.documents) {
         for (const [name, command] of Object.entries(document.commands ?? {})) {
           const subagent = command.subagent ?? command.subtask
+          const configuredAgent = command.agent === undefined ? undefined : Agent.ID.make(command.agent)
+          const shellSnippets = Array.from(command.template.matchAll(shellRegex), (match) => match[1] ?? "")
           editor.add({
             name,
             description: command.description,
+            ...(configuredAgent === undefined ? {} : { agent: configuredAgent }),
+            ...(shellSnippets.length === 0 ? {} : { shell: shellSnippets }),
             execute: (input) =>
               Effect.gen(function* () {
-                const agent = command.agent === undefined ? undefined : Agent.ID.make(command.agent)
+                const agent = configuredAgent
                 const commandAgent = agent === undefined ? undefined : (yield* ctx.agent.get({ agentID: agent })).data
                 const model =
                   command.model === undefined
@@ -91,35 +95,50 @@ export const Plugin = define({
                 })
                 if (subagent ?? commandAgent?.mode === "subagent") {
                   const parent = yield* sessions.get(input.sessionID)
-                  const selected = yield* agents.select(agent ?? parent.agent)
-                  const child = yield* sessions.create({
-                    parentID: parent.id,
-                    title: command.description ?? name,
-                    agent: selected.id,
-                    model: model ?? selected.info?.model ?? parent.model,
-                  })
-                  yield* sessions.prompt({
-                    ...input.prompt,
-                    sessionID: child.id,
-                    text: ["You are a subagent spawned by another session.", text].join("\n"),
-                    resume: false,
-                  })
-                  const recovery = {
-                    kind: "subagent" as const,
-                    parentSessionID: parent.id,
-                    childSessionID: child.id,
-                    agent: selected.id,
-                    description: command.description ?? name,
+                  const scheduledChild =
+                    parent.parentID !== undefined &&
+                    typeof (parent.metadata as Record<string, unknown> | undefined)?.schedule === "object"
+                  if (!scheduledChild) {
+                    const selected = yield* agents.select(agent ?? parent.agent)
+                    const child = yield* sessions.create({
+                      parentID: parent.id,
+                      title: command.description ?? name,
+                      agent: selected.id,
+                      model: model ?? selected.info?.model ?? parent.model,
+                    })
+                    yield* sessions.prompt({
+                      ...input.prompt,
+                      sessionID: child.id,
+                      text: ["You are a subagent spawned by another session.", text].join("\n"),
+                      resume: false,
+                    })
+                    const recovery = {
+                      kind: "subagent" as const,
+                      parentSessionID: parent.id,
+                      childSessionID: child.id,
+                      agent: selected.id,
+                      description: command.description ?? name,
+                    }
+                    yield* subagents.start(recovery)
+                    yield* subagents.background(recovery)
+                    return
                   }
-                  yield* subagents.start(recovery)
-                  yield* subagents.background(recovery)
-                  return
                 }
                 if (agent !== undefined) {
                   const session = yield* ctx.session.get({ sessionID: input.sessionID })
                   if (session.agent !== agent) yield* ctx.session.switchAgent({ sessionID: input.sessionID, agent })
                 }
                 if (model !== undefined) yield* ctx.session.switchModel({ sessionID: input.sessionID, model })
+                if (input.messageID !== undefined) {
+                  yield* sessions.prompt({
+                    ...input.prompt,
+                    id: input.messageID,
+                    sessionID: input.sessionID,
+                    text,
+                    delivery: input.delivery,
+                  })
+                  return
+                }
                 yield* ctx.session.prompt({
                   ...input.prompt,
                   sessionID: input.sessionID,
@@ -190,10 +209,46 @@ function evaluateTemplate(
   },
 ) {
   return Effect.gen(function* () {
+    // Expand !`...` shell snippets from the authored template BEFORE substituting arguments or appending input so
+    // caller-supplied arguments and external check output are never executed as shell commands.
+    const matches = Array.from(template.matchAll(shellRegex))
+    const expandedTemplate =
+      matches.length === 0
+        ? template
+        : yield* Effect.gen(function* () {
+            const shell = yield* services.shell.resolve({ priority: "config" })
+            const outputs = yield* Effect.forEach(
+              matches,
+              (match) => {
+                const source = match[1] ?? ""
+                return services.processes
+                  .run(
+                    ChildProcess.make(shell, ShellSelect.args(shell, source), {
+                      cwd: services.location.directory,
+                      stdin: "ignore",
+                    }),
+                    { combineOutput: true },
+                  )
+                  .pipe(
+                    Effect.map((result) =>
+                      (result.output ?? Buffer.concat([result.stdout, result.stderr])).toString("utf8"),
+                    ),
+                    Effect.mapError(
+                      (error) =>
+                        new Error(`Shell interpolation failed for ${JSON.stringify(source)}: ${error.message}`),
+                    ),
+                  )
+              },
+              { concurrency: 2 },
+            )
+            const iterator = outputs[Symbol.iterator]()
+            return template.replace(shellRegex, () => iterator.next().value ?? "")
+          })
+
     const args = parseArguments(input)
-    const placeholders = template.match(placeholderRegex) ?? []
+    const placeholders = expandedTemplate.match(placeholderRegex) ?? []
     const last = Math.max(0, ...placeholders.map((item) => Number(item.slice(1))))
-    const withArguments = template.replaceAll(argumentRegex, (match, index) => {
+    const withArguments = expandedTemplate.replaceAll(argumentRegex, (match, index) => {
       if (match === "$ARGUMENTS") return input
       const position = Number(index)
       const argIndex = position - 1
@@ -201,36 +256,9 @@ function evaluateTemplate(
       if (position === last) return args.slice(argIndex).join(" ")
       return args[argIndex]
     })
-    const text =
-      placeholders.length === 0 && !template.includes("$ARGUMENTS") && input.trim()
-        ? `${withArguments}\n\n${input}`.trim()
-        : withArguments.trim()
-    const matches = Array.from(text.matchAll(shellRegex))
-    if (matches.length === 0) return text
-    const shell = yield* services.shell.resolve({ priority: "config" })
-    const outputs = yield* Effect.forEach(
-      matches,
-      (match) => {
-        const source = match[1] ?? ""
-        return services.processes
-          .run(
-            ChildProcess.make(shell, ShellSelect.args(shell, source), {
-              cwd: services.location.directory,
-              stdin: "ignore",
-            }),
-            { combineOutput: true },
-          )
-          .pipe(
-            Effect.map((result) => (result.output ?? Buffer.concat([result.stdout, result.stderr])).toString("utf8")),
-            Effect.mapError(
-              (error) => new Error(`Shell interpolation failed for ${JSON.stringify(source)}: ${error.message}`),
-            ),
-          )
-      },
-      { concurrency: 2 },
-    )
-    const iterator = outputs[Symbol.iterator]()
-    return text.replace(shellRegex, () => iterator.next().value ?? "")
+    return placeholders.length === 0 && !expandedTemplate.includes("$ARGUMENTS") && input.trim()
+      ? `${withArguments}\n\n${input}`.trim()
+      : withArguments.trim()
   })
 }
 

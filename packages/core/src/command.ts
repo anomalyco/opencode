@@ -1,9 +1,11 @@
 export * as Command from "./command.js"
 
+import type { Agent } from "@opencode/schema/agent"
 import { Command } from "@opencode/schema/command"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
+import type { SessionMessage } from "@opencode/schema/session-message"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Bus } from "./bus.js"
@@ -15,6 +17,7 @@ export { Event } from "@opencode/schema/command"
 
 export interface Invocation {
   readonly sessionID: Session.ID
+  readonly messageID?: SessionMessage.ID
   readonly prompt: PromptInput.Prompt
   readonly delivery: SessionInbox.Delivery
 }
@@ -22,6 +25,8 @@ export interface Invocation {
 export interface Definition {
   readonly name: string
   readonly description?: string
+  readonly agent?: Agent.ID
+  readonly shell?: readonly string[]
   readonly execute: (input: Invocation) => Effect.Effect<void, unknown>
 }
 
@@ -41,6 +46,7 @@ export class ExecutionError extends Schema.TaggedError<ExecutionError>()("Comman
 
 export interface Interface extends State.Transformable<Editor> {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
+  readonly definition: (name: string) => Effect.Effect<Definition | undefined>
   readonly list: () => Effect.Effect<Info[]>
   readonly execute: (input: {
     readonly name: string
@@ -80,6 +86,7 @@ export const layer = Layer.effect(
           return definition ? info(definition) : undefined
         }),
       ),
+      definition: Effect.fn("Command.definition")((name) => Effect.sync(() => state.get().get(name))),
       list: Effect.fn("Command.list")(() => Effect.sync(() => Array.from(state.get().values(), info))),
       execute: Effect.fn("Command.execute")(function* (input) {
         const definition = state.get().get(input.name)

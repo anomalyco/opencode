@@ -2387,7 +2387,14 @@ export type ExperimentalScheduleCreateInput = {
   readonly if?: Schedule.ConditionInput | undefined
   readonly until?: Schedule.ConditionInput | undefined
   readonly ends?: Schedule.Ends | undefined
-  readonly prompt: string
+  readonly prompt?: string | undefined
+  readonly command?: string | undefined
+  readonly arguments?: string | undefined
+  readonly run?: string | undefined
+  readonly code?: string | undefined
+  readonly target?: Schedule.Target | undefined
+  readonly agent?: string | undefined
+  readonly deliver?: Schedule.Delivery | undefined
 }
 export type ExperimentalScheduleCreateOutput = Schedule.Info
 export type ExperimentalScheduleCreateOperation<E = never> = (

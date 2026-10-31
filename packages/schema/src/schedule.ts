@@ -1,6 +1,6 @@
 export * as Schedule from "./schedule.js"
 
-import { Duration, Option, Schema } from "effect"
+import { Duration, Option, Result, Schema } from "effect"
 import { ascending } from "./identifier.js"
 import { DateTimeUtcFromMillis, NonNegativeInt, PositiveInt, optional, statics } from "./schema.js"
 import { SessionID } from "./session-id.js"
@@ -59,11 +59,71 @@ export const Ends = Schema.Struct({
 }).annotate({ identifier: "Schedule.Ends" })
 export type Ends = typeof Ends.Type
 
-export const PromptAction = Schema.Struct({ type: Schema.tag("prompt"), prompt: Schema.String }).annotate({
+export const Thread = Schema.Literals(["same", "dedicated"]).annotate({
+  identifier: "Schedule.Thread",
+})
+export type Thread = typeof Thread.Type
+
+export const Target = Schema.Literals(["same", "dedicated", "subagent"]).annotate({
+  identifier: "Schedule.Target",
+})
+export type Target = typeof Target.Type
+
+export const Delivery = Schema.Literals(["session", "silent"]).annotate({
+  identifier: "Schedule.Delivery",
+})
+export type Delivery = typeof Delivery.Type
+
+export const PromptAction = Schema.Struct({
+  type: Schema.tag("prompt"),
+  prompt: Schema.String,
+  thread: Thread.pipe(optional),
+  deliver: Delivery.pipe(optional),
+}).annotate({
   identifier: "Schedule.Action.Prompt",
 })
+export type PromptAction = typeof PromptAction.Type
 
-export const Action = Schema.Union([PromptAction]).pipe(
+export const SubagentAction = Schema.Struct({
+  type: Schema.tag("subagent"),
+  prompt: Schema.String,
+  agent: Schema.String.pipe(optional),
+  deliver: Delivery.pipe(optional),
+}).annotate({
+  identifier: "Schedule.Action.Subagent",
+})
+export type SubagentAction = typeof SubagentAction.Type
+
+export const CommandAction = Schema.Struct({
+  type: Schema.tag("command"),
+  command: Schema.String,
+  arguments: Schema.String.pipe(optional),
+  target: Target.pipe(optional),
+  deliver: Delivery.pipe(optional),
+}).annotate({
+  identifier: "Schedule.Action.Command",
+})
+export type CommandAction = typeof CommandAction.Type
+
+export const ShellAction = Schema.Struct({
+  type: Schema.tag("shell"),
+  run: Schema.String,
+  deliver: Delivery.pipe(optional),
+}).annotate({
+  identifier: "Schedule.Action.Shell",
+})
+export type ShellAction = typeof ShellAction.Type
+
+export const CodeAction = Schema.Struct({
+  type: Schema.tag("code"),
+  code: Schema.String,
+  deliver: Delivery.pipe(optional),
+}).annotate({
+  identifier: "Schedule.Action.Code",
+})
+export type CodeAction = typeof CodeAction.Type
+
+export const Action = Schema.Union([PromptAction, SubagentAction, CommandAction, ShellAction, CodeAction]).pipe(
   Schema.toTaggedUnion("type"),
   Schema.annotate({ identifier: "Schedule.Action" }),
 )
@@ -130,6 +190,8 @@ export type Outcome = typeof Outcome.Type
 export const Info = Schema.Struct({
   id: ID,
   sessionID: SessionID.pipe(optional),
+  dedicatedSessionID: SessionID.pipe(optional),
+  activeJobID: Schema.String.pipe(optional),
   name: Schema.String.pipe(optional),
   when: When,
   tz: Schema.String,
@@ -210,7 +272,7 @@ export const ConditionInput = Schema.Union([
 ]).annotate({ identifier: "Schedule.ConditionInput" })
 export type ConditionInput = typeof ConditionInput.Type
 
-/** A schedule as callers describe it: when it fires, optional condition, when it stops, and the prompt it sends. */
+/** A schedule as callers describe it: when it fires, optional condition, when it stops, and the action it runs. */
 export const Request = Schema.Struct({
   name: Schema.String.pipe(optional).annotate({ description: "A short label for the schedule." }),
   when: WhenInput.pipe(optional).annotate({
@@ -219,30 +281,138 @@ export const Request = Schema.Struct({
   }),
   if: ConditionInput.pipe(optional).annotate({
     description:
-      "Recurring gate ({ run } shell command or { code } Code Mode script): check on each slot with no model call, and wake on every slot where it passes.",
+      "Recurring gate ({ run } shell command or { code } Code Mode script): check on each slot with no model call, and run the action on every slot where it passes.",
   }),
   until: ConditionInput.pipe(optional).annotate({
     description:
-      'One-shot gate ({ run } shell command or { code } Code Mode script): poll with no model call, wake once when it passes, and stop. Defaults ends.after to "24 hours".',
+      'One-shot gate ({ run } shell command or { code } Code Mode script): poll with no model call, run once when it passes, and stop. Defaults ends.after to "24 hours".',
   }),
   ends: Ends.pipe(optional).annotate({
     description: 'Stops a repeating schedule at the first limit reached: { after: "8 hours" }, { at }, { times: 3 }.',
   }),
-  prompt: Schema.String.check(Schema.isMinLength(1)).annotate({
-    description: "The message the Session receives when the schedule wakes.",
+  prompt: Schema.String.check(Schema.isMinLength(1)).pipe(optional).annotate({
+    description:
+      'Instruction for a model turn. Runs in this session by default (`target: "same"`), in one persistent background session owned by the schedule (`target: "dedicated"`), or in an isolated background subagent (`target: "subagent"`). Reply "NO_REPLY" in a subagent to finish quietly.',
+  }),
+  command: Schema.String.check(Schema.isMinLength(1)).pipe(optional).annotate({
+    description:
+      'Slash command name (without leading `/`, e.g. "morning-brief") to run on each firing. Defaults to `target: "subagent"` so no kickoff prompt enters this chat.',
+  }),
+  arguments: Schema.String.pipe(optional).annotate({
+    description: "Arguments passed to `command`.",
+  }),
+  run: Schema.String.check(Schema.isMinLength(1)).pipe(optional).annotate({
+    description:
+      "Deterministic shell command to execute in the Session's directory with no model call (authorized once at creation).",
+  }),
+  code: Schema.String.check(Schema.isMinLength(1)).pipe(optional).annotate({
+    description:
+      "Deterministic Code Mode JavaScript script to execute with no model call (no fetch; static tools.<ns>.<tool> calls authorized once at creation).",
+  }),
+  target: Target.pipe(optional).annotate({
+    description:
+      'Where `prompt` or `command` runs: `"subagent"` (isolated child session), `"dedicated"` (one persistent session reused across runs), or `"same"` (this session).',
+  }),
+  agent: Schema.String.check(Schema.isMinLength(1)).pipe(optional).annotate({
+    description: 'Optional agent name when `target` is `"subagent"`.',
+  }),
+  deliver: Delivery.pipe(optional).annotate({
+    description:
+      'Whether background runs post a completion notice to this session (`"session"`) or stay quiet unless inspected (`"silent"`).',
   }),
 }).annotate({ identifier: "Schedule.Request" })
 export type Request = typeof Request.Type
 
-export const toCreateInput = (sessionID: SessionID, request: Request): CreateInput => ({
-  sessionID,
-  name: request.name,
-  when: request.when === undefined ? undefined : toWhen(request.when),
-  if: request.if === undefined ? undefined : toCondition(request.if),
-  until: request.until === undefined ? undefined : toCondition(request.until),
-  ends: request.ends,
-  action: { type: "prompt", prompt: request.prompt },
-})
+export const parseRequest = (sessionID: SessionID, request: Request): Result.Result<CreateInput, string> => {
+  const kinds = [
+    request.prompt !== undefined,
+    request.command !== undefined,
+    request.run !== undefined,
+    request.code !== undefined,
+  ].filter(Boolean).length
+  if (kinds !== 1) return Result.fail("Choose exactly one of prompt, command, run or code")
+  if (request.arguments !== undefined && request.command === undefined)
+    return Result.fail("arguments can only be used with command")
+  if (request.target !== undefined && request.prompt === undefined && request.command === undefined)
+    return Result.fail("target can only be used with prompt or command")
+  if (request.agent !== undefined) {
+    const effectiveTarget = request.target ?? (request.command !== undefined ? "subagent" : "same")
+    if (effectiveTarget !== "subagent" || request.prompt === undefined)
+      return Result.fail('agent can only be used with prompt and target: "subagent"')
+  }
+  const action = resolveRequestAction(request)
+  if (Result.isFailure(action)) return Result.fail(action.failure)
+  return Result.succeed({
+    sessionID,
+    name: request.name,
+    when: request.when === undefined ? undefined : toWhen(request.when),
+    if: request.if === undefined ? undefined : toCondition(request.if),
+    until: request.until === undefined ? undefined : toCondition(request.until),
+    ends: request.ends,
+    action: action.success,
+  })
+}
+
+export const toCreateInput = (sessionID: SessionID, request: Request): CreateInput =>
+  Result.match(parseRequest(sessionID, request), {
+    onSuccess: (value) => value,
+    onFailure: () => ({
+      sessionID,
+      name: request.name,
+      when: request.when === undefined ? undefined : toWhen(request.when),
+      if: request.if === undefined ? undefined : toCondition(request.if),
+      until: request.until === undefined ? undefined : toCondition(request.until),
+      ends: request.ends,
+      action: { type: "prompt", prompt: "" },
+    }),
+  })
+
+const resolveRequestAction = (request: Request): Result.Result<Action, string> => {
+  if (request.prompt !== undefined) {
+    if (request.target === "subagent") {
+      return Result.succeed({
+        type: "subagent",
+        prompt: request.prompt,
+        agent: request.agent,
+        deliver: request.deliver,
+      })
+    }
+    const thread = request.target === "dedicated" ? "dedicated" : undefined
+    if (thread === undefined && request.deliver === "silent")
+      return Result.fail('deliver: "silent" requires a background action (subagent, dedicated, command, run or code)')
+    return Result.succeed({
+      type: "prompt",
+      prompt: request.prompt,
+      ...(thread === undefined ? {} : { thread }),
+      ...(thread !== undefined && request.deliver !== undefined ? { deliver: request.deliver } : {}),
+    })
+  }
+  if (request.command !== undefined) {
+    const command = request.command.replace(/^\//, "").trim()
+    if (command === "") return Result.fail("A command action needs a command name")
+    if (request.target === "same" && request.deliver === "silent")
+      return Result.fail('deliver: "silent" cannot be combined with target: "same"')
+    return Result.succeed({
+      type: "command",
+      command,
+      arguments: request.arguments,
+      target: request.target,
+      deliver: request.deliver,
+    })
+  }
+  if (request.run !== undefined) {
+    return Result.succeed({
+      type: "shell",
+      run: request.run,
+      deliver: request.deliver,
+    })
+  }
+  return Result.succeed({
+    type: "code",
+    code: request.code!,
+    deliver: request.deliver,
+  })
+}
 
 const toCondition = (condition: ConditionInput): Condition => {
   if (condition.code !== undefined) return { type: "code", code: condition.code }

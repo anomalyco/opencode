@@ -331,7 +331,11 @@ export type ScheduleConditionShell = { type: "shell"; run: string; is?: string; 
 
 export type ScheduleConditionCode = { type: "code"; code: string }
 
-export type ScheduleActionPrompt = { type: "prompt"; prompt: string }
+export type ScheduleThread = "same" | "dedicated"
+
+export type ScheduleDelivery = "session" | "silent"
+
+export type ScheduleTarget = "same" | "dedicated" | "subagent"
 
 export type ScheduleStatus = "active" | "paused" | "done"
 
@@ -920,7 +924,26 @@ export type ScheduleWhenEvery = { type: "every"; every: ScheduleDuration; tz?: s
 
 export type ScheduleCondition = ScheduleConditionShell | ScheduleConditionCode
 
-export type ScheduleAction = ScheduleActionPrompt
+export type ScheduleActionPrompt = {
+  type: "prompt"
+  prompt: string
+  thread?: ScheduleThread
+  deliver?: ScheduleDelivery
+}
+
+export type ScheduleActionSubagent = { type: "subagent"; prompt: string; agent?: string; deliver?: ScheduleDelivery }
+
+export type ScheduleActionShell = { type: "shell"; run: string; deliver?: ScheduleDelivery }
+
+export type ScheduleActionCode = { type: "code"; code: string; deliver?: ScheduleDelivery }
+
+export type ScheduleActionCommand = {
+  type: "command"
+  command: string
+  arguments?: string
+  target?: ScheduleTarget
+  deliver?: ScheduleDelivery
+}
 
 export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
 
@@ -2189,6 +2212,13 @@ export type FormReplied = {
 
 export type ScheduleWhen = ScheduleWhenIn | ScheduleWhenAt | ScheduleWhenEvery | ScheduleWhenCron
 
+export type ScheduleAction =
+  | ScheduleActionPrompt
+  | ScheduleActionSubagent
+  | ScheduleActionCommand
+  | ScheduleActionShell
+  | ScheduleActionCode
+
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
 export type SessionInboxMove = {
@@ -2597,6 +2627,8 @@ export type FormFields1 = [FormField1, ...Array<FormField1>]
 export type ScheduleInfo = {
   id: ScheduleID
   sessionID?: SessionID
+  dedicatedSessionID?: SessionID
+  activeJobID?: string
   name?: string
   when: ScheduleWhen
   tz: string
@@ -4560,7 +4592,14 @@ export type ExperimentalScheduleCreateInput = {
       )
     | undefined
   readonly ends?: { readonly after?: string; readonly at?: string; readonly times?: number } | undefined
-  readonly prompt: string
+  readonly prompt?: string | undefined
+  readonly command?: string | undefined
+  readonly arguments?: string | undefined
+  readonly run?: string | undefined
+  readonly code?: string | undefined
+  readonly target?: ("same" | "dedicated" | "subagent") | undefined
+  readonly agent?: string | undefined
+  readonly deliver?: ("session" | "silent") | undefined
 }
 
 export type ExperimentalScheduleCreateOutput = { data: ScheduleInfo }["data"]

@@ -12157,7 +12157,7 @@
             }
           }
         },
-        "description": "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "description": "Schedule a prompt, subagent, slash command, shell command, or Code Mode script to run once after a delay, at a time, every interval, or on a cron. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
         "summary": "Create schedule",
         "requestBody": {
           "content": {
@@ -21982,8 +21982,60 @@
         "anyOf": [
           {
             "$ref": "#/components/schemas/Schedule.Action.Prompt"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Subagent"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Command"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Shell"
+          },
+          {
+            "$ref": "#/components/schemas/Schedule.Action.Code"
           }
         ]
+      },
+      "Schedule.Action.Code": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["code"]
+          },
+          "code": {
+            "type": "string"
+          },
+          "deliver": {
+            "$ref": "#/components/schemas/Schedule.Delivery"
+          }
+        },
+        "required": ["type", "code"],
+        "additionalProperties": false
+      },
+      "Schedule.Action.Command": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["command"]
+          },
+          "command": {
+            "type": "string"
+          },
+          "arguments": {
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/Schedule.Target"
+          },
+          "deliver": {
+            "$ref": "#/components/schemas/Schedule.Delivery"
+          }
+        },
+        "required": ["type", "command"],
+        "additionalProperties": false
       },
       "Schedule.Action.Prompt": {
         "type": "object",
@@ -21994,6 +22046,49 @@
           },
           "prompt": {
             "type": "string"
+          },
+          "thread": {
+            "$ref": "#/components/schemas/Schedule.Thread"
+          },
+          "deliver": {
+            "$ref": "#/components/schemas/Schedule.Delivery"
+          }
+        },
+        "required": ["type", "prompt"],
+        "additionalProperties": false
+      },
+      "Schedule.Action.Shell": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "run": {
+            "type": "string"
+          },
+          "deliver": {
+            "$ref": "#/components/schemas/Schedule.Delivery"
+          }
+        },
+        "required": ["type", "run"],
+        "additionalProperties": false
+      },
+      "Schedule.Action.Subagent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["subagent"]
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "deliver": {
+            "$ref": "#/components/schemas/Schedule.Delivery"
           }
         },
         "required": ["type", "prompt"],
@@ -22121,12 +22216,40 @@
           },
           "prompt": {
             "type": "string",
-            "minLength": 1,
-            "description": "The message the Session receives when the schedule wakes."
+            "minLength": 1
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1
+          },
+          "arguments": {
+            "type": "string"
+          },
+          "run": {
+            "type": "string",
+            "minLength": 1
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "$ref": "#/components/schemas/Schedule.Target"
+          },
+          "agent": {
+            "type": "string",
+            "minLength": 1
+          },
+          "deliver": {
+            "$ref": "#/components/schemas/Schedule.Delivery"
           }
         },
-        "required": ["sessionID", "prompt"],
+        "required": ["sessionID"],
         "additionalProperties": false
+      },
+      "Schedule.Delivery": {
+        "type": "string",
+        "enum": ["session", "silent"]
       },
       "Schedule.Duration": {
         "type": "string",
@@ -22161,6 +22284,12 @@
           },
           "sessionID": {
             "$ref": "#/components/schemas/Session.ID"
+          },
+          "dedicatedSessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "activeJobID": {
+            "type": "string"
           },
           "name": {
             "type": "string"
@@ -22232,6 +22361,14 @@
       "Schedule.Status": {
         "type": "string",
         "enum": ["active", "paused", "done"]
+      },
+      "Schedule.Target": {
+        "type": "string",
+        "enum": ["same", "dedicated", "subagent"]
+      },
+      "Schedule.Thread": {
+        "type": "string",
+        "enum": ["same", "dedicated"]
       },
       "Schedule.When": {
         "anyOf": [

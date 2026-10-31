@@ -3,7 +3,7 @@ export * as ScheduleTools from "./schedule.js"
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { optional } from "@opencode/schema/schema"
-import type { Session } from "@opencode/schema/session"
+import { Session } from "@opencode/schema/session"
 import { DateTime, Effect, Option, Schema } from "effect"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
@@ -18,7 +18,10 @@ export const View = Schema.Struct({
   tz: Schema.String,
   if: Schedule.Condition.pipe(optional),
   until: Schedule.Condition.pipe(optional),
-  prompt: Schema.String,
+  prompt: Schema.String.pipe(optional),
+  action: Schedule.Action,
+  dedicatedSessionID: Session.ID.pipe(optional),
+  activeJobID: Schema.String.pipe(optional),
   status: Schedule.Status,
   nextDueAt: Schema.String.pipe(optional),
   endsAt: Schema.String.pipe(optional),
@@ -76,12 +79,13 @@ export const Plugin = {
         editor.add({
           name: "schedule_create",
           description:
-            "Schedule a prompt that wakes this session later: once after a delay, at a time, every interval, on a cron, or gated by an `if` / `until` shell (`{ run }`) or Code Mode (`{ code }`) check. Returns the schedule with its next run (or `done` immediately if `until` already matches).",
+            "Schedule future or recurring work for this session: a prompt (`target`: `\"same\"`, `\"dedicated\"`, or `\"subagent\"`), a slash `command`, a deterministic shell `run` command, or a Code Mode `code` script, optionally gated by an `if` / `until` check. Returns the schedule with its next run (or `done` immediately if `until` already matches).",
           input: Schedule.Request,
           output: View,
           options: { namespace: "opencode", codemode: true },
           execute: (input, context) =>
-            schedules.create(Schedule.toCreateInput(context.sessionID, input)).pipe(
+            Schedule.fromRequest(context.sessionID, input).pipe(
+              Effect.flatMap((parsed) => schedules.create(parsed)),
               Effect.map((info) => {
                 const view = toView(info)
                 const prefix =
@@ -155,7 +159,7 @@ export const Plugin = {
       if (!enabled()) return
       editor.add({
         name: "schedule",
-        description: "schedule a prompt for later, or list, pause and delete this session's schedules",
+        description: "schedule work for later, or list, pause and delete this session's schedules",
         execute: (input) =>
           ctx.session
             .prompt({
@@ -170,6 +174,10 @@ export const Plugin = {
   }),
 }
 
+function clip(value: string, max = 80) {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value
+}
+
 function formatCondition(condition: Schedule.Condition): string {
   switch (condition.type) {
     case "shell":
@@ -180,6 +188,31 @@ function formatCondition(condition: Schedule.Condition): string {
         .map((line) => line.trim())
         .find((line) => line.length > 0)
       return `code ${JSON.stringify(first ? first.slice(0, 60) : "")}`
+    }
+  }
+}
+
+function formatAction(action: Schedule.Action): string {
+  switch (action.type) {
+    case "prompt":
+      return action.thread === "dedicated"
+        ? `dedicated prompt: ${JSON.stringify(clip(action.prompt))}`
+        : `prompt: ${JSON.stringify(clip(action.prompt))}`
+    case "subagent":
+      return `subagent${action.agent ? ` (${action.agent})` : ""}: ${JSON.stringify(clip(action.prompt))}`
+    case "command": {
+      const target = action.target ?? "subagent"
+      const text = action.arguments?.trim() ? `/${action.command} ${action.arguments.trim()}` : `/${action.command}`
+      return `command (${target}): ${JSON.stringify(clip(text))}`
+    }
+    case "shell":
+      return `run: ${JSON.stringify(clip(action.run))}`
+    case "code": {
+      const first = action.code
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+      return `code: ${JSON.stringify(clip(first ?? "", 60))}`
     }
   }
 }
@@ -201,13 +234,12 @@ function summary(view: View) {
       : view.if !== undefined
         ? `if ${formatCondition(view.if)}`
         : undefined
-  const prompt = view.prompt.length > 80 ? `${view.prompt.slice(0, 79)}…` : view.prompt
   return [
     `${view.id}${view.name ? ` "${view.name}"` : ""}: ${trigger} (${view.tz})`,
     gate,
     view.status,
     view.nextDueAt && `next ${view.nextDueAt}`,
-    `prompt: ${JSON.stringify(prompt)}`,
+    formatAction(view.action),
     view.lastOutput && `output: ${JSON.stringify(view.lastOutput)}`,
   ]
     .filter(Boolean)
@@ -222,6 +254,8 @@ function toView(info: Schedule.Info): View {
       onSome: (zone) => DateTime.formatIsoOffset(DateTime.setZone(time, zone)),
     })
   }
+  const prompt =
+    info.action.type === "prompt" || info.action.type === "subagent" ? info.action.prompt : undefined
   return {
     id: info.id,
     name: info.name,
@@ -229,7 +263,10 @@ function toView(info: Schedule.Info): View {
     tz: info.tz,
     if: info.if,
     until: info.until,
-    prompt: info.action.prompt,
+    ...(prompt === undefined ? {} : { prompt }),
+    action: info.action,
+    dedicatedSessionID: info.dedicatedSessionID,
+    activeJobID: info.activeJobID,
     status: info.status,
     nextDueAt: local(info.nextDueAt),
     endsAt: local(info.endsAt),

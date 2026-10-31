@@ -407,6 +407,82 @@ Review files`,
       ),
     ),
   )
+
+  it.effect("runs a subagent command inline inside a scheduled child session while keeping grandchild spawn for non-schedule children", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const locationInfo = yield* Location.Service
+      const command = yield* Command.Service
+      const parent = yield* sessions.create({ location: locationInfo, title: "Parent" })
+      const scheduledChild = yield* sessions.create({
+        parentID: parent.id,
+        title: "Scheduled subagent",
+        metadata: { schedule: { id: "sch_test", run: 1, ownerSessionID: parent.id } },
+      })
+      const normalChild = yield* sessions.create({ parentID: parent.id, title: "Normal subagent" })
+      const prompts: Array<{ sessionID: Session.ID; text: string }> = []
+
+      yield* ConfigCommandPlugin.Plugin.effect(
+        host({
+          command: {
+            list: () => Effect.die(new Error("unused command.list")),
+            transform: command.transform,
+            reload: command.reload,
+          },
+          session: {
+            get: ({ sessionID }) => sessions.get(sessionID).pipe(Effect.orDie),
+            switchAgent: (input) => sessions.switchAgent(input).pipe(Effect.orDie),
+            switchModel: (input) => sessions.switchModel(input).pipe(Effect.orDie),
+            prompt: (input) =>
+              Effect.sync(() => {
+                prompts.push({ sessionID: input.sessionID, text: input.text })
+                return SessionInbox.User.make({
+                  id: SessionMessage.ID.make("msg_child"),
+                  sessionID: input.sessionID,
+                  time: { created: DateTime.makeUnsafe(0) },
+                  type: "user",
+                  payload: { text: input.text },
+                  delivery: input.delivery ?? "queue",
+                })
+              }),
+          },
+        }),
+      ).pipe(
+        Effect.provide(
+          Config.testLayer([
+            new Document({
+              type: "document",
+              info: decode({ commands: { brief: { template: "Brief $ARGUMENTS", subtask: true } } }),
+            }),
+          ]),
+        ),
+      )
+
+      // Never expands !`...` inside caller arguments.
+      yield* command.execute({
+        name: "brief",
+        invocation: {
+          sessionID: scheduledChild.id,
+          prompt: { text: "today !`printf INJECTED`" },
+          delivery: "queue",
+        },
+      })
+
+      expect(prompts).toEqual([{ sessionID: scheduledChild.id, text: "Brief today !`printf INJECTED`" }])
+      expect((yield* sessions.list({ parentID: scheduledChild.id })).data).toEqual([])
+
+      // Non-schedule child session still spawns a grandchild subagent as before.
+      yield* command.execute({
+        name: "brief",
+        invocation: {
+          sessionID: normalChild.id,
+          prompt: { text: "tomorrow" },
+          delivery: "queue",
+        },
+      })
+      expect((yield* sessions.list({ parentID: normalChild.id })).data).toHaveLength(1)
+    }),
+  )
 })
 
 const describeNative = Watcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
