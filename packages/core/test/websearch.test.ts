@@ -216,6 +216,39 @@ describe("WebSearch", () => {
       expect((yield* websearch.query({ query: "recovered" })).providerID).toBe(limited.providerID)
     }),
   )
+  ;[402, 432].forEach((status) => {
+    it.effect(`fails over on HTTP ${status} with random and cools the depleted provider down`, () =>
+      Effect.gen(function* () {
+        const exa = yield* register("exa")
+        const parallel = yield* register("parallel")
+        const websearch = yield* WebSearch.Service
+        yield* websearch.transform((editor) => editor.default.set("random"))
+        const first = yield* websearch.query({ query: "first" })
+        const limited = first.providerID === exa.providerID ? exa : parallel
+        const replacement = first.providerID === exa.providerID ? parallel : exa
+        limited.failure.cause = TestWebSearch.httpError(status)
+        const progress: WebSearch.ID[] = []
+        expect(
+          (yield* websearch.query(
+            { query: "retried" },
+            {
+              onProvider: (provider) =>
+                Effect.sync(() => {
+                  progress.push(provider.id)
+                }),
+            },
+          )).providerID,
+        ).toBe(replacement.providerID)
+        expect(progress).toEqual([limited.providerID, replacement.providerID])
+        expect(limited.calls.at(-1)).toEqual({ query: "retried" })
+        expect(replacement.calls).toEqual([{ query: "retried" }])
+
+        limited.failure.cause = undefined
+        expect((yield* websearch.query({ query: "cooling" })).providerID).toBe(replacement.providerID)
+        expect(limited.calls).toHaveLength(2)
+      }),
+    )
+  })
 
   it.effect("reselects when a concurrent query cools down the provider while progress is pending", () =>
     Effect.gen(function* () {

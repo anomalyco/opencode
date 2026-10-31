@@ -41,7 +41,7 @@ Set a provider in `opencode.jsonc` to skip the selection prompt.
 }
 ```
 
-Use `"random"` to choose an available provider automatically. Each session keeps using its selected provider until that provider is rate limited.
+Use `"random"` to choose an available provider automatically. Each session keeps using its selected provider until that provider is rate limited or its quota or plan is exhausted.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -54,7 +54,7 @@ Use `"random"` to choose an available provider automatically. Each session keeps
 
 ## Limits
 
-When a provider returns HTTP 429, random selection retries the search with another available provider. The rate-limited provider waits for its `Retry-After` period, or 60 seconds when the response does not include a valid period.
+When a provider returns HTTP 429, or its quota or plan is exhausted (HTTP 402 or HTTP 432), random selection retries the search with another available provider. The rate-limited provider waits for its `Retry-After` period, or 60 seconds when the response does not include a valid period.
 
 ```text
 Exa returns HTTP 429
