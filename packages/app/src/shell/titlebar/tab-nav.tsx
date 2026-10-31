@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, Show, type Ref } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, type Ref } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -49,6 +49,7 @@ export function TabNavItem(props: {
   let tabRoot!: HTMLDivElement
   let titleEl!: HTMLSpanElement
   let measureFrame: number | undefined
+  let onScreen = false
 
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
@@ -142,6 +143,8 @@ export function TabNavItem(props: {
       return
     }
 
+    // A closed vertical sidebar skips its tabs with content-visibility, and reading their layout would force it.
+    if (!onScreen) return
     setTitleOverflowing(titleEl.scrollWidth > titleEl.clientWidth)
   }
 
@@ -163,6 +166,15 @@ export function TabNavItem(props: {
 
   // The overflow fade changes title padding; observe the stable tab box, not that feedback.
   createResizeObserver(() => tabRoot, scheduleTitleOverflow)
+  onMount(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      onScreen = entry.isIntersecting
+
+      if (onScreen) scheduleTitleOverflow()
+    })
+    observer.observe(tabRoot)
+    onCleanup(() => observer.disconnect())
+  })
   onCleanup(() => {
     if (measureFrame !== undefined) cancelAnimationFrame(measureFrame)
   })
