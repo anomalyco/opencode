@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { Headers } from "effect/http"
 import { Auth, type AuthInput } from "../../route/auth.js"
 import { AIError, AuthenticationError } from "../../schema/index.js"
+import { isMissingPackage } from "../../utils/optional-peer.js"
 import { ProviderShared } from "../shared.js"
 
 /**
@@ -49,7 +50,9 @@ export const defaultChain = (options: DefaultChainOptions): Effect.Effect<Creden
     catch: (error) =>
       new AIError({
         reason: new AuthenticationError({
-          message: `AWS default credential chain failed: ${ProviderShared.errorText(error)}`,
+          message: isMissingPackage(error, "@aws-sdk/credential-providers")
+            ? "Bedrock SigV4 signing with the AWS default credential chain needs @aws-sdk/credential-providers; install it, or pass an apiKey (bearer token) or explicit credentials"
+            : `AWS default credential chain failed: ${ProviderShared.errorText(error)}`,
           cause: error,
         }),
       }),

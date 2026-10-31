@@ -1484,6 +1484,8 @@ const gateway = CloudflareAIGateway.configure({
 
 For a provider that needs no key, such as a local server, pass `apiKey: false`: the package skips the environment lookup and sends no auth header (Amazon Bedrock and Google Vertex keep their own auth).
 
+Amazon Bedrock's AWS default credential chain needs `@aws-sdk/credential-providers`, and Google Vertex Application Default Credentials need `google-auth-library`. Both are optional peer dependencies: install the one you use, or pass a Bedrock `apiKey` (bearer token) or explicit `credentials`, or a Vertex `accessToken` or `apiKey`, which need neither.
+
 Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock (Converse and Mantle), Azure OpenAI, Alibaba, Baseten, Cerebras, Cohere, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, DigitalOcean, Fireworks, Groq, Meta, MiniMax, Mistral, Moonshot, OpenRouter, TogetherAI, Venice, Vercel AI Gateway, xAI, Z.ai, and Z.ai Coding Plan. TypeSafe AI and OpenCode expose decision models only. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
 
 Each named provider owns its module, endpoint, authentication, and route setup. Providers with the same wire format compose the shared protocol directly:

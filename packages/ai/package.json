@@ -142,22 +142,34 @@
     "./protocols/zai-images": "./src/protocols/zai-images.ts"
   },
   "devDependencies": {
+    "@aws-sdk/credential-providers": "3.1057.0",
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",
     "@opencode/http-recorder": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:",
+    "google-auth-library": "10.5.0",
     "typescript": "catalog:"
   },
   "dependencies": {
-    "@aws-sdk/credential-providers": "3.1057.0",
     "@smithy/eventstream-codec": "4.2.14",
     "@smithy/util-utf8": "4.2.2",
     "@opencode/schema": "workspace:*",
     "aws4fetch": "1.0.20",
-    "effect": "catalog:",
-    "google-auth-library": "10.5.0"
+    "effect": "catalog:"
+  },
+  "peerDependencies": {
+    "@aws-sdk/credential-providers": "^3.1057.0",
+    "google-auth-library": "^10.5.0"
+  },
+  "peerDependenciesMeta": {
+    "@aws-sdk/credential-providers": {
+      "optional": true
+    },
+    "google-auth-library": {
+      "optional": true
+    }
   },
   "repository": {
     "type": "git",
