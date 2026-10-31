@@ -156,6 +156,7 @@ const BUILDS_OWN_URL = new Set([
   "@opencode/ai/providers/amazon-bedrock",
   "@opencode/ai/providers/azure/chat",
   "@opencode/ai/providers/azure/images",
+  "@opencode/ai/providers/azure/messages",
   "@opencode/ai/providers/azure/responses",
   "@opencode/ai/providers/cloudflare-ai-gateway",
   "@opencode/ai/providers/cloudflare-ai-gateway/decisions",
