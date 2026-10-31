@@ -46,12 +46,27 @@ strobe query <rec_…> heap              # live objects by class, retained sizes
 strobe query <base rec>..<head rec> heap   # which classes grew or shrank
 ```
 
-Is something leaking? Three heap snapshots over a recording (start, middle, end); the suspects are objects from the
-first half that are still alive at the end, with what keeps them alive:
+Is something leaking? A leak run repeats one case (10 runs to a middle snapshot, 10 more to the last) with a census
+after every run, and says how much the JS heap and DOM grow per run, with an interval. It separates the app's objects
+from V8's compiled code, which grows while the JIT warms up:
 
 ```sh
-strobe record app:opencode --probes memory --for 60s
-strobe query <rec_…> leaks
+strobe bench packages/app/perf/timeline.bench.ts --filter "scroll*" --head . --probes memory --repeat 10
+strobe query <rec_…> leaks                  # objects from the first half still alive at the end, and what holds them
+strobe record app:opencode --probes memory --for 60s   # the same over time, for an app left running
+```
+
+Which commit moved it? `--bisect` walks the first-parent line, one full experiment per step:
+
+```sh
+strobe bench packages/app/perf/timeline.bench.ts --filter "scroll*" --bisect <good>..<bad>
+```
+
+What stands out, and where is the memory?
+
+```sh
+strobe query <exp_… or rec_…> insights     # forced layout, GC pressure, long tasks, detached DOM, biggest base/head movers
+strobe query <rec_…> memory --by process    # or --by layer / --by allocator: Chromium's own accounting
 ```
 
 Every timed pair also records `main.script`, `main.style` and `main.layout`, so "where main-thread time went" has
