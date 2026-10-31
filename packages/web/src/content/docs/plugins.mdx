@@ -66,8 +66,10 @@ Duplicate npm packages with the same name and version are loaded once. However, 
 
 ## Create a plugin
 
-A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
-functions. Each function receives a context object and returns a hooks object.
+OpenCode v2 loads a plugin that exports a default definition with an `id` and
+either a `setup` (Promise) or an `effect` (Effect) function. The 1.x plugin
+function, which returned a hooks object, is not loaded by v2; its reference is
+kept at the end of this page for migrations.
 
 ---
 
@@ -83,25 +85,136 @@ Local plugins and custom tools can use external npm packages. Add a `package.jso
 }
 ```
 
-OpenCode runs `bun install` at startup to install these. Your plugins and tools can then import them.
+OpenCode runs `bun install` at startup to install these, so a plugin can import them directly.
 
-```ts title=".opencode/plugins/my-plugin.ts"
-import { escape } from "shescape"
+---
 
-export const MyPlugin = async (ctx) => {
-  return {
-    "tool.execute.before": async (input, output) => {
-      if (input.tool === "bash") {
-        output.args.command = escape(output.args.command)
-      }
-    },
-  }
+### Define a plugin (v2)
+
+```ts title=".opencode/plugins/example.ts"
+import { Schema } from "effect"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  setup: async (ctx) => {
+    await ctx.tool.transform((tools) => {
+      tools.add({
+        name: "echo",
+        options: { codemode: false },
+        description: "Echo text",
+        input: Schema.Struct({ text: Schema.String }),
+        output: Schema.Struct({ text: Schema.String }),
+        execute: async ({ text }) => ({ output: { text }, content: text }),
+      })
+    })
+  },
+})
+```
+
+Add `@opencode/plugin` as a dev dependency for type checking. OpenCode provides
+the runtime, so it does not need to be a production dependency. The same applies
+to `effect`, which provides `Schema` for tool and hook inputs.
+
+`setup` may return a cleanup function. OpenCode runs it when the plugin is
+unloaded or replaced.
+
+---
+
+### Transform hooks (v2)
+
+Transform hooks contribute state to a domain. The callback runs synchronously
+against an editor, so load asynchronous data before registering the hook or
+calling `reload()`:
+
+```ts
+ctx.agent.transform
+ctx.command.transform
+ctx.integration.transform
+ctx.mcp.transform
+ctx.model.transform
+ctx.provider.transform
+ctx.reference.transform
+ctx.skill.transform
+ctx.tool.transform
+ctx.vcs.transform
+ctx.websearch.transform
+```
+
+```ts
+const registration = await ctx.model.transform((editor) => {
+  editor
+    .list()
+    .filter((model) => model.cost.some((tier) => tier.output > 20))
+    .forEach((model) => editor.remove(model.providerID, model.id))
+})
+
+await registration.dispose()
+```
+
+After the source data changes, reload the affected domain so every transform
+runs again:
+
+```ts
+await ctx.provider.reload()
+```
+
+---
+
+### Runtime hooks (v2)
+
+Runtime hooks intercept live work. Replace the provider package or language
+model for a request:
+
+```ts
+await ctx.aisdk.hook("sdk", async (event) => {
+  if (event.package !== "@ai-sdk/xai") return
+  const mod = await import("@ai-sdk/xai")
+  event.sdk = mod.createXai(event.options)
+})
+```
+
+Edit the context immediately before it is sent to the provider, or influence
+retry decisions:
+
+```ts
+await ctx.session.hook("context", (event) => {
+  event.tools.read.description = "Read a file using narrow line ranges."
+  delete event.tools.write
+})
+
+await ctx.session.hook("retry", (event) => {
+  if (event.attempt >= 3) event.decision = { retry: false }
+})
+```
+
+Tool calls can be observed with `ctx.tool.hook("execute.before")` and
+`ctx.tool.hook("execute.after")`.
+
+---
+
+### Events (v2)
+
+`ctx.event.subscribe` returns an async iterable of runtime events:
+
+```ts
+for await (const event of ctx.event.subscribe({ types: ["session.created"] })) {
+  console.log(event.type)
 }
 ```
 
 ---
 
-### Basic structure
+## 1.x plugin API
+
+OpenCode 1.x loaded a plugin function that returned a hooks object. OpenCode v2
+does not load these plugins; the reference below documents them for projects
+that are migrating.
+
+### Basic structure (v1)
+
+The v1 API is a plugin function: it receives a context and returns a hooks
+object.
 
 ```js title=".opencode/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
@@ -123,9 +236,9 @@ The plugin function receives:
 
 ---
 
-### TypeScript support
+### TypeScript support (v1)
 
-For TypeScript plugins, you can import types from the plugin package:
+The v1 hooks are typed by `@opencode-ai/plugin`:
 
 ```ts title="my-plugin.ts" {1}
 import type { Plugin } from "@opencode-ai/plugin"
@@ -139,9 +252,11 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ---
 
-### Events
+### Events (1.x)
 
-Plugins can subscribe to events as seen below in the Examples section. Here is a list of the different events available.
+The 1.x plugin function subscribed to these events by returning handlers from the
+hooks object. In v2, use `ctx.event.subscribe`; the `OpenCodeEvent` union in
+`@opencode/client` lists the events v2 emits.
 
 #### Command Events
 
@@ -209,7 +324,9 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 
 ---
 
-## Examples
+## Examples (1.x)
+
+The examples below use the 1.x hook names and only apply to OpenCode 1.x.
 
 Here are some examples of plugins you can use to extend opencode.
 
