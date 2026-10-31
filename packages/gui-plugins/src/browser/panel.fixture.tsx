@@ -1,5 +1,6 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { DialogProvider } from "@opencode/ui/context/dialog"
+import { ResizeHandle } from "@opencode/ui/resize-handle"
 import {
   batch,
   createSignal,
@@ -63,6 +64,8 @@ type PaneHost = {
     dialog: () => boolean
     moving: () => boolean
   }): Embeds
+  /** The host's panel motion, whose resize drags hide native views like flights do. */
+  panelMotion: { panelsMoving(): boolean; setPanelResizing(dragging: boolean): void }
   LanguageProvider: Component<{ locale: string; children: JSX.Element }>
   UiI18nBridge: ParentComponent
   useLanguage(): { t(key: string): string }
@@ -83,6 +86,8 @@ type PaneFixtureState = {
   covered: boolean
   /** A panel is in flight, as the host's panel motion reports it. */
   moving: boolean
+  /** The pane box's width, which its resize handle drags. */
+  width: number
   /** Whether a host dialog is open over the app. */
   dialog: boolean
   captures: number
@@ -146,6 +151,7 @@ export function mountBrowserPane(input: PaneHost) {
       layouts: {},
       covered: false,
       moving: false,
+      width: 640,
       dialog: false,
       captures: 0,
       holdCapture: false,
@@ -213,7 +219,7 @@ export function mountBrowserPane(input: PaneHost) {
       bridge: bridge as Bridge,
       zoom: () => (store.selection === "zoomed" ? 1.25 : 1),
       dialog: () => store.dialog,
-      moving: () => store.moving,
+      moving: () => store.moving || input.panelMotion.panelsMoving(),
     })
 
     const t = (key: string, params?: Readonly<Partial<Record<string, string | number>>>) =>
@@ -552,10 +558,19 @@ export function mountBrowserPane(input: PaneHost) {
           </For>
           <p>Highlights: {store.highlights.map((item) => item.ref ?? "clear").join(",")}</p>
           <p>Highlight owners: {store.highlights.map((item) => item.sessionKey).join(",")}</p>
-          <div style={{ position: "relative", width: "640px", height: "360px", border: "1px solid #555" }}>
+          <div style={{ position: "relative", width: `${store.width}px`, height: "360px", border: "1px solid #555" }}>
             <Show when={store.mounted && session()}>
               {(view) => <SessionBrowserPane tab={() => current()} session={view()} screen={screen} model={model} />}
             </Show>
+            <ResizeHandle
+              data-testid="pane-resize-handle"
+              direction="horizontal"
+              size={store.width}
+              min={320}
+              max={800}
+              onResize={(width) => setStore("width", width)}
+              onDraggingChange={input.panelMotion.setPanelResizing}
+            />
           </div>
           <ul data-testid="fixture-comments">
             <For each={store.comments}>

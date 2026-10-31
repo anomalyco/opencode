@@ -48,7 +48,7 @@ const readCalls: {
 }[] = []
 const listCalls: AbsolutePath[] = []
 let readDefect: unknown
-let directoryEntries: string[] = []
+let missingDirectories: string[] = []
 let directoryEntryDetails: Environment.DirEntry[] = []
 let readResult: ReadToolFileSystem.FileContent | ReadToolFileSystem.TextPage | ReadToolFileSystem.ListPage = {
   type: "file",
@@ -65,6 +65,7 @@ const reader = Layer.succeed(
   ReadToolFileSystem.Service.of({
     list: (input) => {
       listCalls.push(input)
+      if (missingDirectories.includes(input)) return Effect.fail(new Environment.NotFound({ path: input }))
       return Effect.succeed(directoryEntryDetails)
     },
     read: (input, resource, page = {}) => {
@@ -98,17 +99,6 @@ const permission = permissionLayer({
 })
 const config = Config.testLayer()
 const imageLayer = AppNodeBuilder.build(Image.node)
-const testFileSystem = Layer.effect(
-  FSUtil.Service,
-  FSUtil.Service.use((fs) =>
-    Effect.succeed(
-      FSUtil.Service.of({
-        ...fs,
-        readDirectory: () => Effect.succeed(directoryEntries),
-      }),
-    ),
-  ),
-).pipe(Layer.provide(LayerNode.compile(FSUtil.node)))
 const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(process.cwd()) })),
@@ -123,7 +113,6 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
       Permission.node.replace(permission),
       Config.node.replace(config),
       Image.node.replace(imageLayer),
-      FSUtil.node.replace(testFileSystem),
       Location.node.replace(locationLayer),
       Global.node.replace(Global.layerWith({ data: Global.Path.data })),
     ]),
@@ -143,7 +132,7 @@ describe("ReadTool", () => {
     allow = true
     deniedResource = undefined
     readDefect = undefined
-    directoryEntries = []
+    missingDirectories = []
     directoryEntryDetails = []
     readResult = {
       type: "file",
@@ -714,13 +703,13 @@ describe("ReadTool", () => {
   it.effect("returns missing paths as model-visible tool failures", () =>
     Effect.gen(function* () {
       readFailure = new Environment.NotFound({ path: missingAbsolutePath })
-      directoryEntries = [
+      directoryEntryDetails = [
         "__missing_read_target__.txt.bak",
         "copy___missing_read_target__.txt",
         "old___missing_read_target__.txt",
         "other___missing_read_target__.txt",
         "unrelated.txt",
-      ]
+      ].map((name) => ({ name, type: "file" as const }))
       const registry = yield* Tool.Service
 
       expect(
@@ -743,6 +732,63 @@ describe("ReadTool", () => {
           page: { offset: undefined, limit: undefined },
         },
       ])
+    }),
+  )
+
+  it.effect("names the first missing folder and its nearest existing parent", () =>
+    Effect.gen(function* () {
+      const requested = "__missing_read_folder__/src/file.ts"
+      readFailure = new Environment.NotFound({ path: path.join(process.cwd(), requested) })
+      missingDirectories = [
+        path.join(process.cwd(), "__missing_read_folder__", "src"),
+        path.join(process.cwd(), "__missing_read_folder__"),
+      ]
+      directoryEntryDetails = [
+        { name: "__missing_read_folder__-old", type: "directory" },
+        { name: "unrelated", type: "file" },
+      ]
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-missing-folder", name: "read", input: { path: requested } },
+        }),
+      ).toEqual({
+        status: "error",
+        error: {
+          type: "tool.execution",
+          message: [
+            `File not found: ${requested}`,
+            `The folder ${path.join(process.cwd(), "__missing_read_folder__")} does not exist. The nearest folder that does is ${process.cwd()}.`,
+            `Did you mean one of these?\n${path.join(process.cwd(), "__missing_read_folder__-old")}`,
+          ].join("\n\n"),
+        },
+      })
+    }),
+  )
+
+  it.effect("trusts the environment, not this host, about which folders exist", () =>
+    Effect.gen(function* () {
+      const requested = path.join(process.cwd(), "__only_in_workspace__", "file.ts")
+      readFailure = new Environment.NotFound({ path: requested })
+      directoryEntryDetails = [{ name: "file.tsx", type: "file" }]
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-workspace-folder", name: "read", input: { path: requested } },
+        }),
+      ).toEqual({
+        status: "error",
+        error: {
+          type: "tool.execution",
+          message: `File not found: ${requested}\n\nDid you mean one of these?\n${path.join(process.cwd(), "__only_in_workspace__", "file.tsx")}`,
+        },
+      })
     }),
   )
 

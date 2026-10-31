@@ -114,8 +114,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "さらに、",
   "home.faq.a3.p4.localLink": "ローカルモデル",
   "home.faq.q4": "既存のAIサブスクリプションをOpenCodeで使えますか？",
-  "home.faq.a4.p1":
-    "はい、ChatGPT Plus/ProまたはGitHub Copilotのサブスクリプション、またはClaude Code経由でClaudeのサブスクリプションを利用できます。",
+  "home.faq.a4.p1": "はい、ChatGPT Plus/ProまたはGitHub Copilotのサブスクリプションを利用できます。",
   "home.faq.q5": "ターミナルだけで使えますか？",
   "home.faq.a5.beforeDesktop": "もう違います！OpenCodeは今は",
   "home.faq.a5.desktop": "デスクトップ",
@@ -296,7 +295,7 @@ export const dict = {
   "go.faq.a5.museRetention":
     "将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。",
   "go.faq.a5.learnMore": "詳しく見る",
-  "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年10月31日まで有効です。",
+  "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年11月30日まで有効です。",
   "go.faq.q6": "クレジットをチャージできますか？",
   "go.faq.a6": "利用枠を追加したい場合は、アカウントでクレジットをチャージできます。",
   "go.faq.q7": "キャンセルできますか？",

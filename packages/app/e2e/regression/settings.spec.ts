@@ -885,7 +885,13 @@ test.describe("pages open before slow data", () => {
         { name: "stripe", integrationID: "stripe-oauth", status: { status: "needs_auth", error: "Sign in required" } },
       ],
       integrations: [
-        { id: "stripe-oauth", name: "Stripe", methods: [{ id: "oauth", type: "oauth" }], connections: [] },
+        {
+          id: "stripe-oauth",
+          name: "Stripe",
+          methods: [{ id: "oauth", type: "oauth" }],
+          connections: [],
+          metadata: { source: "mcp" },
+        },
       ],
       onIntegrationOAuth: (input) => {
         signIns.push(input.integrationID)
@@ -1369,6 +1375,13 @@ test("providers: the connect dialog lists connected providers and manages their 
         connections: accounts.toSorted((a, b) => Number(b.id === state.active) - Number(a.id === state.active)),
       },
       { id: "anthropic", name: "Anthropic", methods: [{ type: "key", label: "API key" }], connections: [] },
+      {
+        id: "linear",
+        name: "Linear",
+        methods: [{ id: "oauth", type: "oauth", label: "Sign in" }],
+        connections: [],
+        metadata: { source: "mcp" },
+      },
     ],
     onCredentialActivate: (credentialID) => {
       activated.push(credentialID)
@@ -1389,6 +1402,9 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(
     dialog.locator('[data-provider-id="anthropic"]').locator('[data-slot="provider-connected"]'),
   ).toHaveCount(0)
+  // MCP servers connect from the MCPs dialog and settings, not here.
+  await expect(dialog.locator('[data-provider-id="linear"]')).toHaveCount(0)
+  await expect(dialog.getByText("MCP", { exact: true })).toHaveCount(0)
   const container = page.locator('[data-slot="dialog-container"]')
   await expect.poll(async () => (await container.boundingBox())?.height).toBe(512)
   const picker = await container.boundingBox()
@@ -1862,13 +1878,15 @@ for (const viewport of [
   { name: "desktop", width: 1280, height: 720, bottom: false },
   { name: "mobile", width: 390, height: 844, bottom: true },
 ]) {
-  test(`settings layout (${viewport.name}): every page scrolls inside its panel with room below`, async ({ page }) => {
+  test(`settings layout (${viewport.name}): every page scrolls inside settings with room below`, async ({ page }) => {
     await page.route("https://api.github.com/repos/anomalyco/opencode/contributors?*", (route) =>
       route.fulfill({ json: [] }),
     )
     const { settings } = await open(page)
     await page.setViewportSize(viewport)
     const panel = settings.locator(".settings-content > .settings-panel:visible")
+    // The wide layout scrolls the whole view beside a sticky sidebar; the narrow one scrolls the page's own panel.
+    const scroller = viewport.name === "desktop" ? settings.locator(":scope > .settings") : panel
     const main = page.getByRole("main")
 
     if (viewport.bottom) {
@@ -1883,10 +1901,15 @@ for (const viewport of [
     await expect(main).toHaveJSProperty("scrollTop", 0)
 
     if (viewport.name === "desktop") {
-      // Wheel over the settings gutter scrolls the page beside it.
+      // Wheel over the settings gutter or the page list scrolls the page beside it.
       await settings.hover({ position: { x: 16, y: 200 } })
       await page.mouse.wheel(0, 200)
-      await expect.poll(() => panel.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      const top = await scroller.evaluate((element) => element.scrollTop)
+      await settings.getByRole("tab", { name: "Preferences", exact: true }).hover()
+      await page.mouse.wheel(0, 200)
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(top)
+      await expect(settings.getByRole("button", { name: "Back to app" })).toBeInViewport()
     }
 
     const pages = [
@@ -1929,7 +1952,7 @@ for (const viewport of [
       await panel.hover()
       await page.mouse.wheel(0, 10000)
       await expect
-        .poll(() => panel.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+        .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
         .toBeLessThanOrEqual(1)
       await expect
         .poll(

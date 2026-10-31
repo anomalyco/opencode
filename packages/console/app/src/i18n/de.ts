@@ -115,8 +115,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Du kannst sogar deine",
   "home.faq.a3.p4.localLink": "lokalen Modelle verbinden",
   "home.faq.q4": "Kann ich meine bestehenden AI-Abos mit OpenCode nutzen?",
-  "home.faq.a4.p1":
-    "Ja, du kannst deine ChatGPT Plus/Pro- oder GitHub Copilot-Abos sowie dein Claude-Abo über Claude Code nutzen.",
+  "home.faq.a4.p1": "Ja, du kannst deine ChatGPT Plus/Pro- oder GitHub Copilot-Abos nutzen.",
   "home.faq.q5": "Kann ich OpenCode nur im Terminal nutzen?",
   "home.faq.a5.beforeDesktop": "Nicht mehr! OpenCode ist jetzt als App für",
   "home.faq.a5.desktop": "Desktop",
@@ -301,7 +300,7 @@ export const dict = {
     "Stark vergünstigte Tokenpreise im Gegenzug für die Erlaubnis, deine Prompts und Vervollständigungen zum Trainieren zukünftiger Meta-Modelle zu verwenden.",
   "go.faq.a5.learnMore": "Mehr erfahren",
   "go.faq.a5.deepseekRetention":
-    "Die ZDR-Vereinbarung wird monatlich erneuert. Die aktuelle Vereinbarung gilt bis einschließlich 31. Oktober 2026.",
+    "Die ZDR-Vereinbarung wird monatlich erneuert. Die aktuelle Vereinbarung gilt bis einschließlich 30. November 2026.",
   "go.faq.q6": "Kann ich Guthaben aufladen?",
   "go.faq.a6": "Wenn du mehr Nutzung benötigst, kannst du Guthaben in deinem Konto aufladen.",
   "go.faq.q7": "Kann ich kündigen?",

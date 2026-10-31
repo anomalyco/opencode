@@ -113,8 +113,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Hatta",
   "home.faq.a3.p4.localLink": "yerel modellerinizi bağlayabilirsiniz",
   "home.faq.q4": "Mevcut AI aboneliklerimi OpenCode ile kullanabilir miyim?",
-  "home.faq.a4.p1":
-    "Evet, ChatGPT Plus/Pro veya GitHub Copilot aboneliklerinizi ya da Claude Code üzerinden Claude aboneliğinizi kullanabilirsiniz.",
+  "home.faq.a4.p1": "Evet, ChatGPT Plus/Pro veya GitHub Copilot aboneliklerinizi kullanabilirsiniz.",
   "home.faq.q5": "OpenCode'u sadece terminalde mi kullanabilirim?",
   "home.faq.a5.beforeDesktop": "Artık hayır! OpenCode artık sizin bu cihazlarınıza",
   "home.faq.a5.desktop": "masaüstü",
@@ -298,7 +297,7 @@ export const dict = {
     "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
   "go.faq.a5.learnMore": "Daha fazla bilgi",
   "go.faq.a5.deepseekRetention":
-    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ekim 2026 tarihine kadar geçerlidir.",
+    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 30 Kasım 2026 tarihine kadar geçerlidir.",
   "go.faq.a5.museRetention":
     "İstemlerinizi ve tamamlamalarınızı gelecekteki Meta modellerini eğitmek için kullanma izni karşılığında büyük ölçüde indirimli token fiyatları.",
 

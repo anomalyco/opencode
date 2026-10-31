@@ -40,6 +40,7 @@ const weatherFailureCause = new Error("weather lookup denied")
 test("dispatches namespaced calls by qualified identity", async () => {
   let context: ToolExecuteContext | undefined
   const lookup = tool({
+    name: "crm.lookup",
     description: "Look up a customer.",
     parameters: Schema.Struct({}),
     success: Schema.String,
@@ -50,7 +51,10 @@ test("dispatches namespaced calls by qualified identity", async () => {
   })
   const call = ToolCallPart.make({ id: "call_1", namespace: "crm", name: "lookup", input: {} })
   const result = await Effect.runPromise(
-    ToolRuntime.dispatch({ "crm.lookup": lookup, lookup: schema_only_weather }, call),
+    ToolRuntime.dispatch(
+      [lookup, tool({ name: "lookup", description: "Unqualified lookup.", parameters: Schema.Struct({}) })],
+      call,
+    ),
   )
 
   expect(result.result).toEqual({ type: "text", value: "customer" })
@@ -59,6 +63,7 @@ test("dispatches namespaced calls by qualified identity", async () => {
 })
 
 const get_weather = tool({
+  name: "get_weather",
   description: "Get current weather for a city.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
@@ -71,6 +76,7 @@ const get_weather = tool({
 })
 
 const schema_only_weather = tool({
+  name: "get_weather",
   description: "Get current weather for a city.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
@@ -84,7 +90,7 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: [get_weather] }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -115,7 +121,7 @@ describe("LLMClient tools", () => {
           generation: GenerationOptions.make({ maxTokens: 50 }),
           toolChoice: ToolChoice.make("auto"),
         }),
-        tools: { get_weather },
+        tools: [get_weather],
       }).pipe(Stream.runCollect, Effect.provide(layer))
 
       const second = bodies[1]
@@ -154,7 +160,7 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: [get_weather] }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -176,6 +182,7 @@ describe("LLMClient tools", () => {
     Effect.gen(function* () {
       const calls: unknown[] = []
       const projected = tool({
+        name: "projected",
         description: "Project an encoded success.",
         parameters: Schema.Struct({ prefix: Schema.String }),
         success: Schema.Struct({ count: Schema.NumberFromString }),
@@ -187,7 +194,7 @@ describe("LLMClient tools", () => {
       })
 
       const dispatched = yield* ToolRuntime.dispatch(
-        { projected },
+        [projected],
         LLMEvent.toolCall({ id: "call_projected", name: "projected", input: { prefix: "count" } }),
       )
 
@@ -208,6 +215,7 @@ describe("LLMClient tools", () => {
   it.effect("preserves provider metadata on dispatched tool results", () =>
     Effect.gen(function* () {
       const text = tool({
+        name: "text",
         description: "Return text.",
         parameters: Schema.Struct({}),
         success: Schema.String,
@@ -215,7 +223,7 @@ describe("LLMClient tools", () => {
       })
       const providerMetadata = { google: { thoughtSignature: "provider_sig" } }
       const dispatched = yield* ToolRuntime.dispatch(
-        { text },
+        [text],
         LLMEvent.toolCall({ id: "call_1", name: "text", input: {}, providerMetadata }),
       )
 
@@ -230,7 +238,7 @@ describe("LLMClient tools", () => {
       ])
 
       const failed = yield* ToolRuntime.dispatch(
-        {},
+        [],
         LLMEvent.toolCall({ id: "call_2", name: "missing", input: {}, providerMetadata }),
       )
       expect(failed.events).toEqual([
@@ -256,12 +264,14 @@ describe("LLMClient tools", () => {
   it.effect("uses the narrow default projection for encoded typed success", () =>
     Effect.gen(function* () {
       const text = tool({
+        name: "text",
         description: "Return text.",
         parameters: Schema.Struct({}),
         success: Schema.String,
         execute: () => Effect.succeed("hello"),
       })
       const json = tool({
+        name: "json",
         description: "Return JSON.",
         parameters: Schema.Struct({}),
         success: Schema.Struct({ ok: Schema.Boolean }),
@@ -269,10 +279,10 @@ describe("LLMClient tools", () => {
       })
 
       expect(
-        (yield* ToolRuntime.dispatch({ text }, LLMEvent.toolCall({ id: "call_text", name: "text", input: {} }))).output,
+        (yield* ToolRuntime.dispatch([text], LLMEvent.toolCall({ id: "call_text", name: "text", input: {} }))).output,
       ).toEqual({ structured: "hello", content: [{ type: "text", text: "hello" }] })
       expect(
-        (yield* ToolRuntime.dispatch({ json }, LLMEvent.toolCall({ id: "call_json", name: "json", input: {} }))).output,
+        (yield* ToolRuntime.dispatch([json], LLMEvent.toolCall({ id: "call_json", name: "json", input: {} }))).output,
       ).toEqual({ structured: { ok: true }, content: [] })
     }),
   )
@@ -280,6 +290,7 @@ describe("LLMClient tools", () => {
   it.effect("can retain model media while redacting duplicated structured payloads", () =>
     Effect.gen(function* () {
       const image = tool({
+        name: "image",
         description: "Return an image.",
         parameters: Schema.Struct({}),
         success: Schema.Struct({ mime: Schema.String, data: Schema.String }),
@@ -291,7 +302,7 @@ describe("LLMClient tools", () => {
       })
 
       const dispatched = yield* ToolRuntime.dispatch(
-        { image },
+        [image],
         LLMEvent.toolCall({ id: "call_image", name: "image", input: {} }),
       )
 
@@ -361,6 +372,7 @@ describe("LLMClient tools", () => {
   it.effect("settles projected URL files as canonical tool results", () =>
     Effect.gen(function* () {
       const remote = tool({
+        name: "remote",
         description: "Return a remote file.",
         parameters: Schema.Struct({}),
         success: Schema.Struct({ ok: Schema.Boolean }),
@@ -369,7 +381,7 @@ describe("LLMClient tools", () => {
       })
 
       const dispatched = yield* ToolRuntime.dispatch(
-        { remote },
+        [remote],
         LLMEvent.toolCall({ id: "call_remote", name: "remote", input: {} }),
       )
 
@@ -386,11 +398,11 @@ describe("LLMClient tools", () => {
   )
 
   test("derives typed output schemas and preserves dynamic output schemas", () => {
-    const [typed] = toDefinitions({ get_weather })
+    const [typed] = toDefinitions([get_weather])
     const schema = { type: "object", properties: { result: { type: "string" } } } as const
-    const [dynamic] = toDefinitions({
-      dynamic: tool({ description: "Dynamic tool.", jsonSchema: { type: "object" }, outputSchema: schema }),
-    })
+    const [dynamic] = toDefinitions([
+      tool({ name: "dynamic", description: "Dynamic tool.", jsonSchema: { type: "object" }, outputSchema: schema }),
+    ])
 
     expect(typed?.outputSchema).toMatchObject({
       type: "object",
@@ -407,6 +419,7 @@ describe("LLMClient tools", () => {
   it.effect("preserves content tool results from dynamic tools", () =>
     Effect.gen(function* () {
       const screenshot = tool({
+        name: "screenshot",
         description: "Capture a screenshot.",
         jsonSchema: { type: "object", properties: {} },
         execute: () =>
@@ -420,7 +433,7 @@ describe("LLMClient tools", () => {
       })
 
       const events = Array.from(
-        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { screenshot }, maxSteps: 1 }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: [screenshot], maxSteps: 1 }).pipe(
           Stream.runCollect,
           Effect.provide(
             scriptedResponses([sseEvents(toolCallChunk("call_1", "screenshot", "{}"), finishChunk("tool_calls"))]),
@@ -447,13 +460,14 @@ describe("LLMClient tools", () => {
     Effect.gen(function* () {
       const callerOwned = { type: "json" as const, value: { ok: true }, events: ["caller-owned"] }
       const eventful = tool({
+        name: "eventful",
         description: "Return an events field.",
         jsonSchema: { type: "object", properties: {} },
         execute: () => Effect.succeed(callerOwned),
       })
 
       const dispatched = yield* ToolRuntime.dispatch(
-        { eventful },
+        [eventful],
         LLMEvent.toolCall({ id: "call_1", name: "eventful", input: {} }),
       )
 
@@ -473,13 +487,14 @@ describe("LLMClient tools", () => {
     Effect.gen(function* () {
       const malformed = { type: "content", value: [{ type: "text" }] }
       const dynamic = tool({
+        name: "dynamic",
         description: "Return caller-defined JSON.",
         jsonSchema: { type: "object", properties: {} },
         execute: () => Effect.succeed(malformed),
       })
 
       const dispatched = yield* ToolRuntime.dispatch(
-        { dynamic },
+        [dynamic],
         LLMEvent.toolCall({ id: "call_1", name: "dynamic", input: {} }),
       )
 
@@ -504,7 +519,7 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather }, maxSteps: 1 }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: [get_weather], maxSteps: 1 }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -519,6 +534,7 @@ describe("LLMClient tools", () => {
     Effect.gen(function* () {
       let context: ToolExecuteContext | undefined
       const contextual = tool({
+        name: "contextual",
         description: "Capture tool context.",
         parameters: Schema.Struct({ value: Schema.String }),
         success: Schema.Struct({ ok: Schema.Boolean }),
@@ -529,7 +545,7 @@ describe("LLMClient tools", () => {
           }),
       })
       const events = Array.from(
-        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { contextual } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: [contextual] }).pipe(
           Stream.runCollect,
           Effect.provide(
             scriptedResponses([
@@ -551,9 +567,10 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* LLMClient.stream(
-          LLMRequest.update(baseRequest, { tools: toDefinitions({ get_weather: schema_only_weather }) }),
-        ).pipe(Stream.runCollect, Effect.provide(layer)),
+        yield* LLMClient.stream(LLMRequest.update(baseRequest, { tools: toDefinitions([schema_only_weather]) })).pipe(
+          Stream.runCollect,
+          Effect.provide(layer),
+        ),
       )
 
       expect(events.find(LLMEvent.is.toolCall)).toMatchObject({ type: "tool-call", id: "call_1" })
@@ -608,7 +625,7 @@ describe("LLMClient tools", () => {
             .with({ auth: Auth.header("x-api-key", "test") })
             .model({ id: "claude-sonnet-4-5" }),
         }),
-        tools: { get_weather },
+        tools: [get_weather],
       }).pipe(Stream.runCollect, Effect.provide(layer))
 
       expect(bodies[1]).toMatchObject({
@@ -686,7 +703,7 @@ describe("LLMClient tools", () => {
           prompt: "Use the tool.",
           providerOptions: { store: false, include: ["reasoning.encrypted_content"] },
         }),
-        tools: { get_weather },
+        tools: [get_weather],
       }).pipe(Stream.runCollect, Effect.provide(layer))
 
       expect(bodies[1]).toMatchObject({
@@ -709,7 +726,7 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: [get_weather] }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -740,7 +757,7 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: [get_weather] }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -760,7 +777,7 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: [get_weather] }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -780,7 +797,7 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: [get_weather] }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -810,7 +827,7 @@ describe("LLMClient tools", () => {
       const layer = scriptedResponses([toolCallStep, toolCallStep, toolCallStep])
 
       const events = Array.from(
-        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather }, maxSteps: 2 }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: [get_weather], maxSteps: 2 }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -869,7 +886,7 @@ describe("LLMClient tools", () => {
               .with({ auth: Auth.header("x-api-key", "test") })
               .model({ id: "claude-sonnet-4-5" }),
           }),
-          tools: {},
+          tools: [],
         }).pipe(Stream.runCollect, Effect.provide(layer)),
       )
 
@@ -905,7 +922,7 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* TestToolRuntime.runTools({ request: baseRequest, tools: { get_weather } }).pipe(
+        yield* TestToolRuntime.runTools({ request: baseRequest, tools: [get_weather] }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),

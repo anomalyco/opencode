@@ -115,8 +115,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Du kan til og med koble til dine",
   "home.faq.a3.p4.localLink": "lokale modeller",
   "home.faq.q4": "Kan jeg bruke mine eksisterende AI-abonnementer med OpenCode?",
-  "home.faq.a4.p1":
-    "Ja, du kan bruke ChatGPT Plus/Pro- eller GitHub Copilot-abonnementene dine, eller Claude-abonnementet ditt via Claude Code.",
+  "home.faq.a4.p1": "Ja, du kan bruke ChatGPT Plus/Pro- eller GitHub Copilot-abonnementene dine.",
   "home.faq.q5": "Kan jeg bare bruke OpenCode i terminalen?",
   "home.faq.a5.beforeDesktop": "Ikke lenger! OpenCode er nå tilgjengelig som en app for",
   "home.faq.a5.desktop": "desktop",
@@ -297,7 +296,7 @@ export const dict = {
     "Logger for overvåking av misbruk genereres for all bruk av API-funksjoner og oppbevares i opptil 30 dager.",
   "go.faq.a5.learnMore": "Les mer",
   "go.faq.a5.deepseekRetention":
-    "ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 31. oktober 2026.",
+    "ZDR-avtalen fornyes månedlig. Den gjeldende avtalen er gyldig til og med 30. november 2026.",
   "go.faq.a5.museRetention":
     "Kraftig rabatterte tokenpriser i bytte mot tillatelse til å bruke ledetekstene og fullføringene dine til å trene fremtidige Meta-modeller.",
 

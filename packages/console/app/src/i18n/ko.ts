@@ -113,8 +113,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "또한",
   "home.faq.a3.p4.localLink": "로컬 모델",
   "home.faq.q4": "기존 AI 구독을 OpenCode에서 사용할 수 있나요?",
-  "home.faq.a4.p1":
-    "네, ChatGPT Plus/Pro 또는 GitHub Copilot 구독을 사용할 수 있으며, Claude Code를 통해 Claude 구독도 사용할 수 있습니다.",
+  "home.faq.a4.p1": "네, ChatGPT Plus/Pro 또는 GitHub Copilot 구독을 사용할 수 있습니다.",
   "home.faq.q5": "OpenCode는 터미널에서만 사용할 수 있나요?",
   "home.faq.a5.beforeDesktop": "이제 아닙니다! OpenCode는 이제",
   "home.faq.a5.desktop": "데스크톱",
@@ -291,7 +290,7 @@ export const dict = {
   "go.faq.a5.museRetention":
     "향후 Meta 모델 학습에 사용자의 프롬프트와 생성 결과를 사용할 수 있도록 허용하는 대신 토큰 가격이 대폭 할인됩니다.",
   "go.faq.a5.learnMore": "자세히 알아보기",
-  "go.faq.a5.deepseekRetention": "ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 10월 31일까지 유효합니다.",
+  "go.faq.a5.deepseekRetention": "ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 11월 30일까지 유효합니다.",
   "go.faq.q6": "크레딧을 충전할 수 있나요?",
   "go.faq.a6": "사용량이 더 필요한 경우 계정에서 크레딧을 충전할 수 있습니다.",
   "go.faq.q7": "취소할 수 있나요?",

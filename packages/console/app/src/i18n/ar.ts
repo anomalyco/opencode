@@ -112,7 +112,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "ويمكنك أيضًا ربط",
   "home.faq.a3.p4.localLink": "النماذج المحلية",
   "home.faq.q4": "هل يمكنني استخدام اشتراكاتي الحالية مع OpenCode؟",
-  "home.faq.a4.p1": "نعم، يمكنك استخدام اشتراكات ChatGPT Plus/Pro أو GitHub Copilot، أو اشتراك Claude عبر Claude Code.",
+  "home.faq.a4.p1": "نعم، يمكنك استخدام اشتراكات ChatGPT Plus/Pro أو GitHub Copilot.",
   "home.faq.q5": "هل يمكنني استخدام OpenCode في الطرفية فقط؟",
   "home.faq.a5.beforeDesktop": "ليس بعد الآن! OpenCode متاح الآن كتطبيق لـ",
   "home.faq.a5.desktop": "سطح المكتب",
@@ -292,7 +292,7 @@ export const dict = {
   "go.faq.a5.museRetention":
     "أسعار توكنات مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية.",
   "go.faq.a5.learnMore": "اعرف المزيد",
-  "go.faq.a5.deepseekRetention": "تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 31 أكتوبر 2026.",
+  "go.faq.a5.deepseekRetention": "تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 30 نوفمبر 2026.",
   "go.faq.q6": "هل يمكنني شحن رصيد إضافي؟",
   "go.faq.a6": "إذا كنت بحاجة إلى مزيد من الاستخدام، يمكنك شحن رصيد في حسابك.",
   "go.faq.q7": "هل يمكنني الإلغاء؟",

@@ -10,6 +10,7 @@ const request = ai.request({
 })
 
 const executable = tool({
+  name: "executable",
   description: "Get weather.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ forecast: Schema.String }),
@@ -17,12 +18,14 @@ const executable = tool({
 })
 
 const schemaOnly = tool({
+  name: "schemaOnly",
   description: "Get weather.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ forecast: Schema.String }),
 })
 
 tool({
+  name: "forecast",
   description: "Encode success before projection.",
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ forecast: Schema.NumberFromString }),
@@ -33,15 +36,24 @@ tool({
 })
 
 ai.stream(request)
-ai.generate(LLMRequest.update(request, { tools: toDefinitions({ schemaOnly }) }))
-ToolRuntime.dispatch({ executable }, { type: "tool-call", id: "call_1", name: "executable", input: { city: "Paris" } })
+ai.generate(LLMRequest.update(request, { tools: toDefinitions([schemaOnly]) }))
+ToolRuntime.dispatch([executable], { type: "tool-call", id: "call_1", name: "executable", input: { city: "Paris" } })
 
-// @ts-expect-error High-level tool orchestration overloads are intentionally not supported.
-ai.stream({ request, tools: { schemaOnly } })
+ai.stream({ model: request.model, prompt: "Use the tool.", tools: [schemaOnly, executable] })
+ai.generate({
+  model: request.model,
+  prompt: "Use the tool.",
+  tools: [schemaOnly, { name: "raw", description: "Raw.", inputSchema: {} }],
+})
+// @ts-expect-error A tool needs a name.
+tool({ description: "Unnamed.", parameters: Schema.String })
+// @ts-expect-error Tools are an array, not a record.
+ai.loop({ model: request.model, prompt: "Use the tool.", tools: { executable } })
 
 const code = Schema.Struct({ code: Schema.String })
 
 tool({
+  name: "run_code",
   description: "Run JavaScript.",
   parameters: code,
   success: Schema.String,
@@ -50,6 +62,7 @@ tool({
 })
 
 AI.tool({
+  name: "run_code",
   description: "Run JavaScript.",
   parameters: code,
   freeform: { type: "regex", pattern: "ZZ[0-9]{3}" },
@@ -57,6 +70,7 @@ AI.tool({
 })
 
 tool({
+  name: "run_code",
   description: "Run JavaScript.",
   parameters: Schema.Struct({ code: Schema.Number }),
   success: Schema.String,
@@ -65,6 +79,7 @@ tool({
 })
 
 AI.tool({
+  name: "run_code",
   description: "Run JavaScript.",
   parameters: Schema.Struct({ code: Schema.String, language: Schema.String }),
   // @ts-expect-error A freeform tool takes exactly one parameter.
@@ -73,6 +88,7 @@ AI.tool({
 })
 
 AI.tool({
+  name: "run_code",
   description: "Run JavaScript.",
   parameters: Schema.Struct({ code: Schema.optional(Schema.String) }),
   // @ts-expect-error A freeform tool's parameter must be required.
@@ -81,6 +97,7 @@ AI.tool({
 })
 
 const sum = {
+  name: "sum",
   description: "Add two numbers.",
   parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
   success: Schema.Number,
@@ -89,7 +106,7 @@ const sum = {
 const declared: AI.Tool<typeof sum.parameters, typeof Schema.Number> = AI.tool(sum)
 const effectSum: ExecutableTool = tool({ ...sum, execute: ({ a, b }) => Effect.succeed(a + b) })
 const promiseSum: AI.ExecutableTool = AI.tool({ ...sum, execute: async ({ a, b }) => a + b })
-toDefinitions({ declared, effectSum, promiseSum, dynamic: AI.tool({ description: "Look up.", jsonSchema: {} }) })
+toDefinitions([declared, effectSum, promiseSum, AI.tool({ name: "dynamic", description: "Look up.", jsonSchema: {} })])
 
 // @ts-expect-error The Effect tool's execute returns an Effect.
 tool({ ...sum, execute: ({ a, b }) => a + b })

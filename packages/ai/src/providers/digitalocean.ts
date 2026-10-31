@@ -23,7 +23,7 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   }
 
 export type Settings<Options = OpenAIProviderOptionsInput> = ProviderPackage.Settings &
-  Options & { readonly apiKey?: string }
+  Options & { readonly apiKey?: string | false }
 
 export const protocol = Protocol.make({
   id: "digitalocean-chat",

@@ -114,8 +114,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Możesz nawet podłączyć swoje",
   "home.faq.a3.p4.localLink": "lokalne modele",
   "home.faq.q4": "Czy mogę używać moich istniejących subskrypcji AI z OpenCode?",
-  "home.faq.a4.p1":
-    "Tak, możesz używać swoich subskrypcji ChatGPT Plus/Pro lub GitHub Copilot albo subskrypcji Claude przez Claude Code.",
+  "home.faq.a4.p1": "Tak, możesz używać swoich subskrypcji ChatGPT Plus/Pro lub GitHub Copilot.",
   "home.faq.q5": "Czy mogę używać OpenCode tylko w terminalu?",
   "home.faq.a5.beforeDesktop": "Już nie! OpenCode jest teraz dostępny jako aplikacja na",
   "home.faq.a5.desktop": "pulpit (desktop)",
@@ -296,8 +295,7 @@ export const dict = {
   "go.faq.a5.gptRetention":
     "Dzienniki monitorowania nadużyć są generowane dla każdego użycia funkcji API i przechowywane przez maksymalnie 30 dni.",
   "go.faq.a5.learnMore": "Dowiedz się więcej",
-  "go.faq.a5.deepseekRetention":
-    "Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 31 października 2026 r.",
+  "go.faq.a5.deepseekRetention": "Umowa ZDR jest odnawiana co miesiąc. Obecna umowa obowiązuje do 30 listopada 2026 r.",
   "go.faq.a5.museRetention":
     "Znacznie obniżone ceny tokenów w zamian za zgodę na wykorzystanie Twoich promptów i odpowiedzi do trenowania przyszłych modeli Meta.",
 

@@ -144,7 +144,12 @@ export const make = Effect.gen(function* () {
         const streamFailure = Option.getOrUndefined(Exit.findErrorOption(stream))
         const streamInterrupted = Exit.hasInterrupts(stream)
         // Cancelled before the start snapshot existed: record nothing, as when the capture preceded the request.
-        if (streamInterrupted && !publisher.hasStarted() && !pendingStartSnapshot.pollUnsafe())
+        if (
+          Exit.isFailure(stream) &&
+          streamInterrupted &&
+          !publisher.hasStarted() &&
+          !pendingStartSnapshot.pollUnsafe()
+        )
           return yield* Effect.failCause(stream.cause)
         if (!overflowFailure && publisher.hasStarted()) yield* publisher.streamed()
         if (streamInterrupted) yield* interruptTools
