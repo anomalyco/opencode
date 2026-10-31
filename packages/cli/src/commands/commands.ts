@@ -64,6 +64,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       Flag.withDescription("Session ID to continue, or to create if it does not exist"),
       Flag.optional,
     ),
+    agent: Flag.String("agent").pipe(Flag.withDescription("Agent to use"), Flag.optional),
     prompt: Flag.String("prompt").pipe(Flag.withDescription("Prompt to use"), Flag.optional),
   },
   commands: [

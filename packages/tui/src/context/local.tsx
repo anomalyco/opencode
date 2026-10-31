@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
-import { batch, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
@@ -64,6 +64,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       )
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
+        // Only a CLI agent validated against the launch location's agents takes part in session precedence.
+        cli: undefined as string | undefined,
         draftBySession: {} as Record<string, { agent?: string } | undefined>,
       })
       onCleanup(event.on("session.deleted", (evt) => setAgentStore("draftBySession", evt.data.sessionID, undefined)))
@@ -74,6 +76,23 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             setAgentStore("draftBySession", evt.data.sessionID, { agent: undefined })
         }),
       )
+      // The CLI agent belongs to the launch location; validating before its agents load would report a valid name as missing.
+      let startupAgent = args.agent
+      createEffect(() => {
+        const launch = data.location.agent.list()
+        if (!startupAgent || !launch) return
+        const id = startupAgent
+        startupAgent = undefined
+        if (!launch.some((agent) => agent.id === id && agent.mode !== "subagent" && !agent.hidden)) return notFound(id)
+        setAgentStore({ current: id, cli: id })
+      })
+      function notFound(id: string) {
+        toast.show({
+          variant: "warning",
+          message: `Agent not found: ${id}`,
+          duration: 3000,
+        })
+      }
       const colors = createMemo(() => {
         // The new designs palette keeps its vivid accent at 400; 200 there is a muted tint.
         const step = newDesigns() ? 400 : 200
@@ -91,19 +110,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const selected =
             route.data.type === "session"
               ? (draft?.agent ??
-                (draft ? undefined : args.agent) ??
+                (draft ? undefined : agentStore.cli) ??
                 data.session.get(route.data.sessionID)?.agent ??
                 agentStore.current)
               : agentStore.current
           return agents().find((agent) => agent.id === selected) ?? agents().at(0)
         },
         set(id: string) {
-          if (!agents().some((agent) => agent.id === id))
-            return toast.show({
-              variant: "warning",
-              message: `Agent not found: ${id}`,
-              duration: 3000,
-            })
+          if (!agents().some((agent) => agent.id === id)) return notFound(id)
           batch(() => {
             const changed = this.current()?.id !== id
             if (changed) model.remember()

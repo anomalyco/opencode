@@ -109,6 +109,50 @@ test("new-session fallback still skips unavailable CLI and recent models", async
   expect(setup.local.model.available()).toBe(true)
 })
 
+test("the CLI agent applies on home after agents load and outranks a saved session agent", async () => {
+  await using setup = await renderLocal({
+    args: { agent: "plan" },
+    agents: [agent("build"), agent("plan")],
+    sessions: [session("ses_first", { providerID: "provider", id: "first" }, "build")],
+  })
+  expect(setup.local.agent.current()?.id).toBe("plan")
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  expect(setup.local.agent.current()?.id).toBe("plan")
+})
+
+test.each([
+  { name: "missing", agents: [] },
+  { name: "secret", agents: [{ ...agent("secret"), hidden: true }] },
+  { name: "helper", agents: [{ ...agent("helper"), mode: "subagent" as const }] },
+])("a rejected CLI agent $name keeps the saved session agent", async (input) => {
+  await using setup = await renderLocal({
+    args: { agent: input.name },
+    agents: [agent("build"), agent("plan"), ...input.agents],
+    sessions: [session("ses_first", { providerID: "provider", id: "first" }, "plan")],
+  })
+  expect(setup.local.agent.current()?.id).toBe("build")
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  expect(setup.local.agent.current()?.id).toBe("plan")
+})
+
+test("a deferred CLI agent selects its own model on resume and keeps the saved selection for the saved agent", async () => {
+  await using setup = await renderLocal({
+    args: { agent: "plan" },
+    models: [model("first"), model("second"), model("third")],
+    agents: [agent("build"), agent("plan", { providerID: "provider", id: "second" })],
+    sessions: [session("ses_first", { providerID: "provider", id: "first" }, "build")],
+    preferences: { recent: [{ providerID: "provider", modelID: "third" }] },
+  })
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  expect(setup.local.agent.current()?.id).toBe("plan")
+  expect(setup.local.model.current()).toEqual({ providerID: "provider", modelID: "second" })
+  setup.local.agent.set("build")
+  expect(setup.local.model.current()).toEqual({ providerID: "provider", modelID: "first" })
+})
+
 test("a manual agent switch supersedes the CLI agent after its commit", async () => {
   await using setup = await renderLocal({
     args: { agent: "build" },
