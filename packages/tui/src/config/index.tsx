@@ -180,6 +180,16 @@ export const Info = Schema.Struct({
       permissions: Schema.optional(Schema.Literals(["prompt", "autoaccept"])).annotate({
         description: "Prompt for permission requests or accept them automatically",
       }),
+      permission_prompt: Schema.optional(
+        Schema.Struct({
+          max_height: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))).annotate({
+            description: "Maximum height in rows when not fullscreen (default: 15)",
+          }),
+          default_expanded: Schema.optional(Schema.Boolean).annotate({
+            description: "Open in fullscreen mode by default (default: false)",
+          }),
+        }),
+      ).annotate({ description: "Permission prompt presentation settings" }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
   tabs: Schema.optional(
