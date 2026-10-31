@@ -16,6 +16,7 @@ export const AgentHandler = HttpApiBuilder.group(Api, "server.agent", (handlers)
     .handle(
       "agent.get",
       Effect.fn(function* (ctx) {
+        yield* awaitPlugins
         const agent = yield* Agent.Service.use((service) => service.get(ctx.params.agentID))
         if (!agent)
           return yield* new AgentNotFoundError({
