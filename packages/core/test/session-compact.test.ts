@@ -62,13 +62,27 @@ const locations = Layer.effect(
       ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
   ),
 )
+const wakeups: Session.ID[] = []
+const execution = Layer.effect(
+  SessionExecution.Service,
+  Effect.gen(function* () {
+    const base = yield* SessionExecution.Service
+    return {
+      ...base,
+      wake: (sessionID: Session.ID) =>
+        Effect.sync(() => {
+          wakeups.push(sessionID)
+        }),
+    }
+  }),
+).pipe(Layer.provide(SessionExecution.noopLayer))
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
     [
       LocationServiceMap.node.replace(locations),
       Project.node.replace(globalProjectNode),
-      SessionExecution.node.replace(SessionExecution.noopLayer),
+      SessionExecution.node.replace(execution),
     ],
   ),
 )
@@ -129,6 +143,110 @@ describe("Session.compact", () => {
 
       expect(admitted[1]?.id).toBe(admitted[0]?.id)
       expect(yield* session.inbox(created.id)).toHaveLength(1)
+    }),
+  )
+
+  for (const position of ["before", "at"] as const) {
+    it.effect(`preserves a staged revert when the conflicting ID is ${position} its boundary`, () =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const bus = yield* Bus.Service
+        const created = yield* session.create({ location })
+        const ids = [SessionMessage.ID.create(), SessionMessage.ID.create(), SessionMessage.ID.create()] as const
+        for (const id of ids) {
+          yield* bus.publish(SessionEvent.InboxEnqueued, {
+            sessionID: created.id,
+            inboxID: id,
+            item: { type: "user", payload: { text: "Keep this message available for redo." }, delivery: "steer" },
+          })
+          yield* bus.publish(SessionEvent.InboxDelivered, { sessionID: created.id, inboxID: id })
+        }
+        const boundary = ids[1]
+        yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+          sessionID: created.id,
+          revert: { messageID: boundary, files: [] },
+        })
+        const before = {
+          messages: yield* session.messages({ sessionID: created.id }),
+          revert: (yield* session.get(created.id)).revert,
+        }
+        const id = position === "before" ? ids[0] : boundary
+
+        expect(yield* session.compact({ sessionID: created.id, id }).pipe(Effect.flip)).toMatchObject({
+          _tag: "Session.CompactionConflictError",
+          inputID: id,
+        })
+        expect({
+          messages: yield* session.messages({ sessionID: created.id }),
+          revert: (yield* session.get(created.id)).revert,
+        }).toEqual(before)
+        expect(yield* session.inbox(created.id)).toEqual([])
+        expect(wakeups.filter((id) => id === created.id)).toEqual([])
+      }),
+    )
+  }
+
+  it.effect("replaces a pending compaction removed by committing a staged revert", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const created = yield* session.create({ location })
+      const boundary = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.InboxEnqueued, {
+        sessionID: created.id,
+        inboxID: boundary,
+        item: { type: "user", payload: { text: "Undo this prompt." }, delivery: "steer" },
+      })
+      yield* bus.publish(SessionEvent.InboxDelivered, { sessionID: created.id, inboxID: boundary })
+      const removed = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.InboxEnqueued, {
+        sessionID: created.id,
+        inboxID: removed,
+        item: { type: "compaction", payload: {}, delivery: "steer" },
+      })
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID: created.id,
+        revert: { messageID: boundary, files: [] },
+      })
+      const id = SessionMessage.ID.create()
+
+      expect(yield* session.compact({ sessionID: created.id, id })).toMatchObject({ id, type: "compaction" })
+      expect((yield* session.get(created.id)).revert).toBeUndefined()
+      expect(yield* session.inbox(created.id)).toEqual([expect.objectContaining({ id, type: "compaction" })])
+      expect(wakeups.filter((id) => id === created.id)).toEqual([created.id])
+    }),
+  )
+
+  it.effect("does not commit a staged revert when retrying an admitted compaction", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const created = yield* session.create({ location })
+      const first = yield* session.compact({ sessionID: created.id, delivery: "queue" })
+      const boundary = SessionMessage.ID.create()
+      yield* bus.publish(SessionEvent.InboxEnqueued, {
+        sessionID: created.id,
+        inboxID: boundary,
+        item: { type: "user", payload: { text: "Keep this prompt available for redo." }, delivery: "steer" },
+      })
+      yield* bus.publish(SessionEvent.InboxDelivered, { sessionID: created.id, inboxID: boundary })
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID: created.id,
+        revert: { messageID: boundary, files: [] },
+      })
+      const before = {
+        messages: yield* session.messages({ sessionID: created.id }),
+        revert: (yield* session.get(created.id)).revert,
+      }
+      const beforeWakeups = wakeups.filter((id) => id === created.id)
+
+      expect(yield* session.compact({ sessionID: created.id, id: first.id })).toEqual(first)
+      expect(wakeups.filter((id) => id === created.id)).toEqual(beforeWakeups)
+      expect({
+        messages: yield* session.messages({ sessionID: created.id }),
+        revert: (yield* session.get(created.id)).revert,
+      }).toEqual(before)
+      expect(yield* session.inbox(created.id)).toEqual([first])
     }),
   )
 
