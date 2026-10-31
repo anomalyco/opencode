@@ -67,10 +67,10 @@ runtime package, endpoint, and first model together.
   "providers": {
     "acme": {
       "name": "Acme",
-      "env": ["ACME_API_KEY"],
       "package": "@opencode/ai/providers/openai-compatible",
       "settings": {
         "baseURL": "https://llm.acme.example/v1",
+        "apiKey": "{env:ACME_API_KEY}",
       },
       "models": {
         "qwen3-coder": {
@@ -81,6 +81,9 @@ runtime package, endpoint, and first model together.
   },
 }
 ```
+
+Set `ACME_API_KEY` in the OpenCode server's environment; `{env:ACME_API_KEY}` reads its value.
+Avoid committing literal API keys.
 
 The `providers` object is keyed by the provider ID used in model references, such as `acme/qwen3-coder`.
 
@@ -95,6 +98,48 @@ The `providers` object is keyed by the provider ID used in model references, suc
 | `headers` | String-valued HTTP headers added to requests. |
 | `body` | JSON fields merged into request bodies. |
 | `models` | Models to add or override, keyed by the OpenCode model ID. |
+
+### API keys
+
+To read the key from a file, use:
+
+```jsonc
+"settings": {
+  "baseURL": "https://llm.acme.example/v1",
+  "apiKey": "{file:~/.secrets/acme-key}",
+}
+```
+
+Store the key in that file. See [config variables](/config#variables) for substitution syntax and file paths.
+
+You can also omit `settings.apiKey` and list credential environment variables under `env`:
+
+```jsonc
+"env": ["ACME_API_KEY"]
+```
+
+Set these variables in the server's environment. OpenCode can use their values as provider credentials.
+The selected connection's key, supplied through `/connect` or `env`, takes precedence over `settings.apiKey`.
+The runtime package may also read its own environment variables for authentication or other settings.
+
+### Settings
+
+For the OpenAI-compatible package used above, connection settings go inside `providers.acme.settings`:
+
+```jsonc
+"settings": {
+  "baseURL": "https://llm.acme.example/v1",
+  "apiKey": "{env:ACME_API_KEY}",
+}
+```
+
+| Setting | Purpose |
+| --- | --- |
+| `baseURL` | API endpoint, usually including `/v1`. Required by this package. |
+| `apiKey` | API key, if the endpoint requires authentication. Supports environment and file substitution. |
+
+Check the selected package's reference for supported settings, environment variables, and authentication requirements.
+See also [timeouts](#timeouts), [request encoding](#request-encoding), and [transport controls](#websockets).
 
 ## Endpoint
 
