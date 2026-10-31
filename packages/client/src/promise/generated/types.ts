@@ -689,6 +689,7 @@ export type ModelCompatibility = {
   requireAssistantAfterTool?: boolean
   supportsPromptCacheKey?: boolean
   streamUsage?: boolean
+  omitEmptyTools?: boolean
   cacheFormat?: ModelCacheFormat
   supportsThinkingBlockBinding?: boolean
   supportsEffortUpdates?: boolean
@@ -703,6 +704,7 @@ export type ProviderCompatibility = {
   requireAssistantAfterTool?: boolean
   supportsPromptCacheKey?: boolean
   streamUsage?: boolean
+  omitEmptyTools?: boolean
   cacheFormat?: ModelCacheFormat
   mediaInput?: ModelMediaInput
 }

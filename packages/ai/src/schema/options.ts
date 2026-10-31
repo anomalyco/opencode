@@ -224,6 +224,9 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   /** Request usage in the stream with `stream_options.include_usage`. Defaults to true. */
   streamUsage: Schema.optional(Schema.Boolean),
   supportsStrictMode: Schema.optional(Schema.Boolean),
+  /** Omit the `tools` field when the active tool set is empty instead of sending an
+   * explicit empty array. Strict OpenAI-compatible upstreams reject `"tools": []` with 400. */
+  omitEmptyTools: Schema.optional(Schema.Boolean),
   // Accepts `prompt_cache_key` in the request body. Chat omits the key unless
   // this is true; other protocols omit it only when this is false.
   // Session-affinity headers still flow regardless.
