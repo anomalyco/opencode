@@ -1,8 +1,15 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { testRender } from "@opentui/solid"
+import { EmbeddedTerminalRenderable } from "@opentui/core"
+import { extend, testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
-import { ToastProvider, useToast, type ToastContext } from "../../../src/ui/toast"
+import { ConfigProvider } from "../../../src/config"
+import { ThemeProvider } from "../../../src/context/theme"
+import { Toast, ToastProvider, useToast, type ToastContext } from "../../../src/ui/toast"
+import { emptyThemeSource } from "../../fixture/fixture"
+import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
+
+extend({ embeddedTerminal: EmbeddedTerminalRenderable })
 
 function captureToast(setToast: (toast: ToastContext) => void) {
   return function Capture() {
@@ -66,6 +73,48 @@ test("activation dismisses a toast without an action", async () => {
     toast!.show({ message: "Copied", variant: "success", duration: 5 })
     toast!.activate()
     expect(toast!.currentToast).toBeNull()
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test.each([44, 100])("toast hides only a covered cursor and restores it at width %i", async (width) => {
+  let toast!: ToastContext
+  let terminal!: EmbeddedTerminalRenderable
+  const Capture = captureToast((value) => (toast = value))
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig()}>
+        <ThemeProvider mode="dark" source={emptyThemeSource}>
+          <ToastProvider>
+            <Capture />
+            <embeddedTerminal ref={(value) => (terminal = value)} width="100%" height="100%" />
+            <Toast />
+          </ToastProvider>
+        </ThemeProvider>
+      </ConfigProvider>
+    ),
+    { width, height: 12 },
+  )
+  try {
+    await app.renderOnce()
+    terminal.focus()
+    terminal.write("\x1b[?25h\x1b[2;1H")
+    toast.show({ message: "Copied to clipboard", variant: "info", duration: 60_000 })
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("Copied to clipboard")
+    expect(app.renderer.getCursorState().visible).toBe(true)
+
+    terminal.write(`\x1b[2;${width - 8}H`)
+    await app.renderOnce()
+    expect(app.renderer.getCursorState().visible).toBe(false)
+    expect(app.renderer.currentFocusedRenderable).toBe(terminal)
+    await app.renderOnce()
+    expect(app.renderer.getCursorState().visible).toBe(false)
+
+    toast.dismiss()
+    await app.renderOnce()
+    expect(app.renderer.getCursorState()).toMatchObject({ x: width - 8, y: 2, visible: true })
   } finally {
     app.renderer.destroy()
   }
