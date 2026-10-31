@@ -104,7 +104,12 @@ export const withCompletedDiffs = Effect.fnUntraced(function* (
         )
         if (hunk?.type !== "update" || hunk.chunks.some((chunk) => !chunk.oldLines.length || !chunk.newLines.length))
           return []
-        const chunks = hunk.chunks.map((chunk) => ({ ...chunk, oldLines: chunk.newLines, newLines: chunk.oldLines }))
+        const chunks = hunk.chunks.map((chunk) => ({
+          ...chunk,
+          oldLines: chunk.newLines,
+          newLines: chunk.oldLines,
+          contextIndices: chunk.contextIndices?.map(([old, next]) => [next, old] as const),
+        }))
         const rebuilt = (yield* Effect.try(() => Patch.derive(hunk.path, chunks, newText))).content
         return ranges(structuredPatch(path, path, rebuilt, newText)) === ranges(recorded)
           ? [diff(path, rebuilt, newText)]
