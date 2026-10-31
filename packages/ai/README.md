@@ -266,30 +266,30 @@ const program = ai.decision.generate({
     { type: "text", text: "I was charged twice. Please refund the duplicate payment." },
     { type: "media", media: Media.url("https://example.com/receipt.png", { mediaType: "image/png" }) },
   ],
-  questions: [
-    { name: "refund", type: "predicate", instructions: "Is the customer asking for a refund?" },
-    {
-      name: "department",
+  questions: {
+    refund: { type: "predicate", instructions: "Is the customer asking for a refund?" },
+    department: {
       type: "choice",
       instructions: "Which team should handle this?",
       choices: [{ value: "billing", description: "Payments and refunds" }, { value: "technical" }],
     },
-    {
-      name: "urgency",
+    urgency: {
       type: "score",
       instructions: "How urgent is this?",
       levels: [{ label: "Can wait" }, { label: "Needs prompt attention" }, { label: "Blocking revenue" }],
     },
-  ],
+  },
 })
 
 const response = await Effect.runPromise(program.pipe(Effect.provide(DecisionClient.fetchLayer)))
-const [refund, department] = response.answers
+const department = response.answers.department
+if (department.type === "choice") department.choice // "billing" | "technical"
 ```
 
-`input` is a JSON object or an ordered list of `text`, `json` and `media` parts. Answers come back in question order.
-A question the host declines is `{ name, type: "error", reason, message? }`, with `reason` such as `"refusal"`; the
-other answers still come back.
+`input` is a JSON object or an ordered list of `text`, `json` and `media` parts. Questions are keyed by name, and
+answers come back under the same names; key order is the order sent to the host.
+A question the host declines is `{ type: "error", reason, message? }`, with `reason` such as `"refusal"`; the other
+answers still come back.
 `response.usage` has `inputTokens`, `outputTokens`, `totalTokens` and the host's reported `cost` when it sends one;
 the host's raw usage stays in `providerMetadata`.
 Media goes wherever the host reads it, and a kind the host has no place for fails the call. Host-specific fields go in

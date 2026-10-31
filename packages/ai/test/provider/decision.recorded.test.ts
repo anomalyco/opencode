@@ -13,9 +13,8 @@ import {
 } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
-const questions = [
-  {
-    name: "department",
+const questions = {
+  department: {
     type: "choice",
     instructions: "Which team should handle this support request?",
     choices: [
@@ -24,8 +23,7 @@ const questions = [
       { value: "sales", description: "Pricing, upgrades, or new accounts" },
     ],
   },
-  {
-    name: "urgency",
+  urgency: {
     type: "score",
     instructions: "How urgent is this support request?",
     levels: [
@@ -34,8 +32,8 @@ const questions = [
       { label: "Actively blocking revenue" },
     ],
   },
-  { name: "refund", type: "predicate", instructions: "Is the customer asking for a refund?" },
-] as const
+  refund: { type: "predicate", instructions: "Is the customer asking for a refund?" },
+} as const
 
 const ticket = "I was charged twice for the same invoice. Please refund the duplicate payment today."
 
@@ -175,13 +173,17 @@ const assertDecision = <Options extends DecisionOptions>(
 ) =>
   Effect.gen(function* () {
     const response = yield* ai.decision.generate({ model, input, questions })
-    const [department, urgency, refund] = response.answers
+    const department = response.answers.department
+    const urgency = response.answers.urgency
+    const refund = response.answers.refund
     if (department.type === "error" || urgency.type === "error" || refund.type === "error")
       throw new Error("expected every question to be answered")
     expect(department.choice).toBe("billing")
     expect(department.probabilities.find((item) => item.value === "billing")?.probability).toBeGreaterThan(0.5)
     expect(department.confidence).toBeGreaterThan(0)
-    expect(urgency.probabilities.map((item) => item.label)).toEqual(questions[1].levels.map((level) => level.label))
+    expect(urgency.probabilities.map((item) => item.label)).toEqual(
+      questions.urgency.levels.map((level) => level.label),
+    )
     expect(urgency.score).toBeGreaterThanOrEqual(0)
     expect(urgency.score).toBeLessThanOrEqual(2)
     expect(urgency.confidence).toBeGreaterThan(0)

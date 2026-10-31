@@ -26,7 +26,7 @@ const sentDecision = (model: DecisionModel) =>
       .generate({
         model,
         input: [{ type: "text", text: "The sky is red." }],
-        questions: [{ name: "red", type: "predicate", instructions: "Is the sky red?" }],
+        questions: { red: { type: "predicate", instructions: "Is the sky red?" } },
       })
       .pipe(Effect.exit, Effect.provide(DecisionClient.layer.pipe(Layer.provide(record(calls)))))
     return calls

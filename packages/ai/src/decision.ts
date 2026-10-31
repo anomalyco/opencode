@@ -40,14 +40,12 @@ export const ChoiceValue = Schema.Union([Schema.String, Schema.Boolean])
 export type ChoiceValue = Schema.Schema.Type<typeof ChoiceValue>
 
 export const PredicateQuestion = Schema.Struct({
-  name: Schema.String,
   type: Schema.Literal("predicate"),
   instructions: Schema.String,
 })
 export type PredicateQuestion = Schema.Schema.Type<typeof PredicateQuestion>
 
 export const ChoiceQuestion = Schema.Struct({
-  name: Schema.String,
   type: Schema.Literal("choice"),
   instructions: Schema.String,
   choices: Schema.Array(Schema.Struct({ value: ChoiceValue, description: Schema.optional(Schema.String) })),
@@ -55,7 +53,6 @@ export const ChoiceQuestion = Schema.Struct({
 export type ChoiceQuestion = Schema.Schema.Type<typeof ChoiceQuestion>
 
 export const ScoreQuestion = Schema.Struct({
-  name: Schema.String,
   type: Schema.Literal("score"),
   instructions: Schema.String,
   levels: Schema.Array(Schema.Struct({ label: Schema.String, description: Schema.optional(Schema.String) })),
@@ -66,14 +63,12 @@ export const DecisionQuestion = Schema.Union([PredicateQuestion, ChoiceQuestion,
   Schema.toTaggedUnion("type"),
 )
 export type DecisionQuestion = Schema.Schema.Type<typeof DecisionQuestion>
-export type DecisionQuestions = ReadonlyArray<DecisionQuestion>
+/** Questions keyed by name; key order is the order sent to the host. */
+export type DecisionQuestions = Readonly<Record<string, DecisionQuestion>>
 
 // Only what makes a request meaningless is checked here; counts and sizes are the host's to enforce.
-const DecisionQuestionList = Schema.Array(DecisionQuestion).pipe(
-  Schema.refine((x): x is typeof x => x.length > 0, { message: "Decision questions must not be empty" }),
-  Schema.refine((x): x is typeof x => new Set(x.map((question) => question.name)).size === x.length, {
-    message: "Decision question names must be unique",
-  }),
+const DecisionQuestionRecord = Schema.Record(Schema.String, DecisionQuestion).pipe(
+  Schema.refine((x): x is typeof x => Object.keys(x).length > 0, { message: "Decision questions must not be empty" }),
 )
 
 // ---------------------------------------------------------------------------
@@ -83,14 +78,12 @@ const DecisionQuestionList = Schema.Array(DecisionQuestion).pipe(
 const Probability = Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 }))
 
 export const PredicateAnswer = Schema.Struct({
-  name: Schema.String,
   type: Schema.Literal("predicate"),
   probability: Probability,
 })
 export type PredicateAnswer = Schema.Schema.Type<typeof PredicateAnswer>
 
 export const ChoiceAnswer = Schema.Struct({
-  name: Schema.String,
   type: Schema.Literal("choice"),
   choice: ChoiceValue,
   probabilities: Schema.Array(Schema.Struct({ value: ChoiceValue, probability: Probability })),
@@ -100,7 +93,6 @@ export type ChoiceAnswer = Schema.Schema.Type<typeof ChoiceAnswer>
 
 /** `score` is the probability-weighted level index; `probabilities` has one entry per level. */
 export const ScoreAnswer = Schema.Struct({
-  name: Schema.String,
   type: Schema.Literal("score"),
   score: Schema.Number,
   probabilities: Schema.Array(Schema.Struct({ value: Schema.Int, label: Schema.String, probability: Probability })),
@@ -114,7 +106,6 @@ export const ErrorReason: Schema.Codec<ErrorReason> = Schema.Union([Schema.Liter
 
 /** This one question has no answer; the other answers still came back. */
 export const ErrorAnswer = Schema.Struct({
-  name: Schema.String,
   type: Schema.Literal("error"),
   reason: ErrorReason,
   message: Schema.optional(Schema.String),
@@ -132,10 +123,9 @@ type ChoiceValueOf<Question> = Question extends { readonly choices: ReadonlyArra
 
 export type AnswerFor<Question extends DecisionQuestion> =
   | (Question extends { readonly type: "predicate" }
-      ? PredicateAnswer & { readonly name: Question["name"] }
+      ? PredicateAnswer
       : Question extends { readonly type: "choice" }
         ? {
-            readonly name: Question["name"]
             readonly type: "choice"
             readonly choice: ChoiceValueOf<Question>
             readonly probabilities: ReadonlyArray<{
@@ -144,12 +134,12 @@ export type AnswerFor<Question extends DecisionQuestion> =
             }>
             readonly confidence: number
           }
-        : ScoreAnswer & { readonly name: Question["name"] })
-  | (ErrorAnswer & { readonly name: Question["name"] })
+        : ScoreAnswer)
+  | ErrorAnswer
 
-/** One answer per question, in question order. */
+/** One answer per question, keyed by question name. */
 export type AnswersFor<Questions extends DecisionQuestions> = {
-  readonly [Index in keyof Questions]: AnswerFor<Questions[Index]>
+  readonly [Name in keyof Questions]: AnswerFor<Questions[Name]>
 }
 
 // ---------------------------------------------------------------------------
@@ -241,7 +231,7 @@ export type DecisionModelOptions<Model> = Model extends DecisionModel<infer Opti
 export class DecisionRequest extends Schema.Class<DecisionRequest>("Decision.Request")({
   model: DecisionModelSchema,
   input: Schema.Array(DecisionPart),
-  questions: DecisionQuestionList,
+  questions: DecisionQuestionRecord,
   providerOptions: Schema.optional(ProviderOptions),
   http: Schema.optional(HttpOptions),
 }) {
@@ -278,7 +268,7 @@ export class DecisionUsage extends Schema.Class<DecisionUsage>("Decision.Usage")
 }) {}
 
 export class DecisionResponse extends Schema.Class<DecisionResponse>("Decision.Response")({
-  answers: Schema.Array(DecisionAnswer),
+  answers: Schema.Record(Schema.String, DecisionAnswer),
   usage: Schema.optional(DecisionUsage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {}

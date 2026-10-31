@@ -6,6 +6,7 @@ import {
   type DecisionModelCompatibility,
   type DecisionPart,
   type DecisionQuestion,
+  type DecisionQuestions,
   type DecisionRequestFor,
 } from "../decision.js"
 import type { Media } from "../media.js"
@@ -70,13 +71,13 @@ export const encodeBody = Effect.fn("SystemOne.encodeBody")(function* (
   return { ...mergeJsonRecords(request.providerOptions, request.http?.body), ...placed, questions }
 })
 
-const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
-  Effect.forEach(questions, (question): Effect.Effect<readonly [string, unknown], AIError> => {
+const encodeQuestions = (questions: DecisionQuestions) =>
+  Effect.forEach(Object.entries(questions), ([name, question]): Effect.Effect<readonly [string, unknown], AIError> => {
     if (question.type === "predicate")
-      return Effect.succeed([question.name, { type: "noul", instructions: question.instructions }] as const)
+      return Effect.succeed([name, { type: "noul", instructions: question.instructions }] as const)
     if (question.type === "score")
       return Effect.succeed([
-        question.name,
+        name,
         {
           type: "score",
           instructions: question.instructions,
@@ -90,11 +91,11 @@ const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
     if (new Set(keys).size !== keys.length)
       return Effect.fail(
         ProviderShared.invalidRequest(
-          `System One choice options are strings; "${question.name}" has a boolean and a string with the same text`,
+          `System One choice options are strings; "${name}" has a boolean and a string with the same text`,
         ),
       )
     return Effect.succeed([
-      question.name,
+      name,
       {
         type: "choice",
         instructions: question.instructions,
@@ -197,19 +198,21 @@ const stateItem = (
   )
 }
 
-/** Map System One's answers, keyed by question name, back to the request's question order. */
+/** Map System One's answers, keyed by question name, to the request's question order. */
 export const toResponse = (
   data: Response,
   request: DecisionRequestFor,
   providerMetadataKey: string,
   invalid: (message: string) => AIError,
 ) => {
-  const names = request.questions.map((question) => question.name)
+  const names = Object.keys(request.questions)
   if (Object.keys(data.answers).length !== names.length || !names.every((name) => Object.hasOwn(data.answers, name)))
     return Effect.fail(invalid("System One answers do not match the requested questions"))
   return Effect.succeed(
     new DecisionResponse({
-      answers: request.questions.map((question) => toAnswer(question, data.answers[question.name])),
+      answers: Object.fromEntries(
+        Object.entries(request.questions).map(([name, question]) => [name, toAnswer(question, data.answers[name])]),
+      ),
       usage:
         data.usage === undefined
           ? undefined
@@ -233,7 +236,7 @@ export const toResponse = (
 }
 
 const toAnswer = (question: DecisionQuestion, answer: typeof Answer.Type): DecisionAnswer => {
-  if (answer.type === "noul") return { name: question.name, type: "predicate", probability: answer.noul }
+  if (answer.type === "noul") return { type: "predicate", probability: answer.noul }
   if (answer.type === "choice") {
     const choices = question.type === "choice" ? question.choices : []
     const value = (key: string) => choices.find((choice) => String(choice.value) === key)?.value ?? key
@@ -242,7 +245,6 @@ const toAnswer = (question: DecisionQuestion, answer: typeof Answer.Type): Decis
       return index === -1 ? choices.length : index
     }
     return {
-      name: question.name,
       type: "choice",
       choice: value(answer.choice),
       probabilities: Object.entries(answer.probabilities)
@@ -253,7 +255,6 @@ const toAnswer = (question: DecisionQuestion, answer: typeof Answer.Type): Decis
   }
   const levels = question.type === "score" ? question.levels : []
   return {
-    name: question.name,
     type: "score",
     score: answer.score,
     probabilities: Object.entries(answer.probabilities)

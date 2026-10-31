@@ -1,5 +1,11 @@
 import { Effect, Schema } from "effect"
-import { DecisionResponse, DecisionUsage, type DecisionAnswer, type DecisionPart, type DecisionRequestFor } from "../decision.js"
+import {
+  DecisionResponse,
+  DecisionUsage,
+  type DecisionAnswer,
+  type DecisionPart,
+  type DecisionRequestFor,
+} from "../decision.js"
 import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaProtocol } from "../route/media-protocol.js"
@@ -66,7 +72,7 @@ const fromRequest = Effect.fn("OpenAIDecisions.fromRequest")(function* (request:
     ),
     model: request.model.id,
     input: [{ role: "user", content: yield* Effect.forEach(request.input, (part) => inputPart(request, part)) }],
-    questions: request.questions,
+    questions: Object.entries(request.questions).map(([name, question]) => ({ name, ...question })),
   }
 })
 
@@ -100,6 +106,13 @@ const inputPart = (
 
 const isObject = (value: unknown) => typeof value === "object" && value !== null && !Array.isArray(value)
 
+const toAnswer = (answer: typeof Answer.Type): DecisionAnswer => {
+  if (answer.type === "refusal")
+    return { type: "error", reason: "refusal", ...(answer.message === undefined ? {} : { message: answer.message }) }
+  const { name: _, ...rest } = answer
+  return rest
+}
+
 const decodeDocument = MediaProtocol.identity({ id: ID, name: NAME, provider: "openai" }).decodeJson(Response)
 
 export const protocol = DecisionRoute.protocol({
@@ -109,22 +122,20 @@ export const protocol = DecisionRoute.protocol({
   response: {
     decode: Effect.fn("OpenAIDecisions.decodeResponse")(function* (response, context) {
       const output = yield* decodeDocument(response)
-      const answers = output.value.answers.map(
-        (answer): DecisionAnswer =>
-          answer.type === "refusal"
-            ? {
-                name: answer.name,
-                type: "error",
-                reason: "refusal",
-                ...(answer.message === undefined ? {} : { message: answer.message }),
-              }
-            : answer,
+      // Answers come back as a list in any order; key them by name in question order.
+      const byName = new Map(output.value.answers.map((answer) => [answer.name, toAnswer(answer)]))
+      const names = Object.keys(context.request.questions)
+      if (byName.size !== output.value.answers.length || byName.size !== names.length)
+        return yield* output.invalid(`${NAME} answers do not match the requested questions`, output.value.answers)
+      const answers = Object.fromEntries(
+        names.flatMap((name) => {
+          const answer = byName.get(name)
+          return answer === undefined ? [] : [[name, answer] as const]
+        }),
       )
-      const byName = new Map(answers.map((answer) => [answer.name, answer]))
-      const ordered = context.request.questions.flatMap((question) => byName.get(question.name) ?? [])
       const usage = OpenResponses.mapUsage(output.value.usage, context.providerMetadataKey)
       return new DecisionResponse({
-        answers: ordered.length === answers.length ? ordered : answers,
+        answers,
         usage:
           usage === undefined
             ? undefined

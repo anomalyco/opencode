@@ -19,21 +19,19 @@ const offline = client(() => Effect.die("an invalid decision request reached the
 
 const png = Media.bytes(new Uint8Array([1, 2, 3]), "image/png")
 
-const questions = [
-  {
-    name: "department",
+const questions = {
+  department: {
     type: "choice",
     instructions: "Which team should handle this?",
     choices: [{ value: "billing", description: "Payments and refunds" }, { value: "technical" }],
   },
-  {
-    name: "urgency",
+  urgency: {
     type: "score",
     instructions: "How urgent is this?",
     levels: [{ label: "Can wait" }, { label: "Needs attention", description: "Same day" }, { label: "Blocking" }],
   },
-  { name: "refund", type: "predicate", instructions: "Is the customer asking for a refund?" },
-] as const
+  refund: { type: "predicate", instructions: "Is the customer asking for a refund?" },
+} as const
 
 const systemOneAnswers = {
   department: { type: "choice", choice: "billing", probabilities: { technical: 0.1, billing: 0.9 }, confidence: 0.8 },
@@ -47,9 +45,8 @@ const systemOneAnswers = {
   refund: { type: "noul", noul: 0.97 },
 }
 
-const expectedAnswers = [
-  {
-    name: "department",
+const expectedAnswers = {
+  department: {
     type: "choice",
     choice: "billing",
     probabilities: [
@@ -58,8 +55,7 @@ const expectedAnswers = [
     ],
     confidence: 0.8,
   },
-  {
-    name: "urgency",
+  urgency: {
     type: "score",
     score: 1.2,
     probabilities: [
@@ -69,8 +65,8 @@ const expectedAnswers = [
     ],
     confidence: 0.6,
   },
-  { name: "refund", type: "predicate", probability: 0.97 },
-]
+  refund: { type: "predicate", probability: 0.97 },
+}
 
 describe("Decision", () => {
   it.effect("decides through System One with TypeSafe image assets", () =>
@@ -144,19 +140,18 @@ describe("Decision", () => {
       .generate({
         model: OpenCode.configure({ apiKey: "opencode-key", baseURL: "https://opencode.test/v1" }).decision("jev-1.13"),
         input: { ticket: "hello" },
-        questions: [
-          {
-            name: "greeting",
+        questions: {
+          greeting: {
             type: "choice",
             instructions: "Is this a greeting?",
             choices: [{ value: true }, { value: false }],
           },
-        ],
+        },
       })
       .pipe(
         Effect.tap((response) =>
           Effect.sync(() => {
-            const answer = response.answers[0]
+            const answer = response.answers.greeting
             if (answer.type !== "choice") throw new Error("expected a choice answer")
             expect(answer.choice).toBe(true)
             expect(answer.probabilities).toEqual([
@@ -212,9 +207,7 @@ describe("Decision", () => {
         .generate({
           model: TypeSafeAI.decision("jev-latest"),
           input: { ticket: "hello" },
-          questions: [
-            { name: "ok", type: "choice", instructions: "OK?", choices: [{ value: true }, { value: "true" }] },
-          ],
+          questions: { ok: { type: "choice", instructions: "OK?", choices: [{ value: true }, { value: "true" }] } },
         })
         .pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
@@ -233,13 +226,13 @@ describe("Decision", () => {
           { type: "media", media: Media.url("https://assets.test/before.png", { mediaType: "image/png" }) },
           { type: "media", media: Media.base64("AAAA", "audio/wav") },
         ],
-        questions: [{ name: "red", type: "predicate", instructions: "Is the image mostly red?" }],
+        questions: { red: { type: "predicate", instructions: "Is the image mostly red?" } },
         providerOptions: { user: "user-1", session_id: "session-1" },
       })
       .pipe(
         Effect.tap((response) =>
           Effect.sync(() => {
-            expect(response.answers).toEqual([{ name: "red", type: "predicate", probability: 0.98 }])
+            expect(response.answers).toEqual({ red: { type: "predicate", probability: 0.98 } })
             expect(response.providerMetadata?.openrouter).toEqual({
               model: "cloudflare/clef-omni-20261001",
               responseId: "gen-1",
@@ -289,11 +282,11 @@ describe("Decision", () => {
           { type: "media", media: png },
           { type: "json", value: { source: "upload" } },
         ],
-        questions: [{ name: "red", type: "predicate", instructions: "Is the photo mostly red?" }],
+        questions: { red: { type: "predicate", instructions: "Is the photo mostly red?" } },
       })
       .pipe(
         Effect.tap((response) =>
-          Effect.sync(() => expect(response.answers).toEqual([{ name: "red", type: "predicate", probability: 0.99 }])),
+          Effect.sync(() => expect(response.answers).toEqual({ red: { type: "predicate", probability: 0.99 } })),
         ),
         Effect.provide(
           client((input) => {
@@ -342,6 +335,7 @@ describe("Decision", () => {
         Effect.tap((response) =>
           Effect.sync(() => {
             expect(response.answers).toEqual(expectedAnswers)
+            expect(Object.keys(response.answers)).toEqual(["department", "urgency", "refund"])
             expect(response.usage?.inputTokens).toBe(40)
             expect(response.providerMetadata).toEqual({
               openai: { model: "gpt-6-luna", usage: { input_tokens: 40, output_tokens: 0, total_tokens: 40 } },
@@ -388,7 +382,7 @@ describe("Decision", () => {
                 { name: "refund", type: "predicate", instructions: "Is the customer asking for a refund?" },
               ],
             })
-            // Answers come back out of order; the protocol restores question order by name.
+            // Answers come back out of order; the protocol keys them in question order.
             return Effect.succeed(
               json(input, {
                 model: "gpt-6-luna",
@@ -429,20 +423,20 @@ describe("Decision", () => {
       .generate({
         model: OpenAI.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
         input: [{ type: "text", text: "hello" }],
-        questions: [
-          { name: "greeting", type: "predicate", instructions: "Is this a greeting?" },
-          { name: "unsafe", type: "predicate", instructions: "Something the model declines" },
-          { name: "explained", type: "predicate", instructions: "Something the model declines with a reason" },
-        ],
+        questions: {
+          greeting: { type: "predicate", instructions: "Is this a greeting?" },
+          unsafe: { type: "predicate", instructions: "Something the model declines" },
+          explained: { type: "predicate", instructions: "Something the model declines with a reason" },
+        },
       })
       .pipe(
         Effect.tap((response) =>
           Effect.sync(() =>
-            expect(response.answers).toEqual([
-              { name: "greeting", type: "predicate", probability: 0.99 },
-              { name: "unsafe", type: "error", reason: "refusal" },
-              { name: "explained", type: "error", reason: "refusal", message: "I can't help with that." },
-            ]),
+            expect(response.answers).toEqual({
+              greeting: { type: "predicate", probability: 0.99 },
+              unsafe: { type: "error", reason: "refusal" },
+              explained: { type: "error", reason: "refusal", message: "I can't help with that." },
+            }),
           ),
         ),
         Effect.provide(
@@ -468,7 +462,7 @@ describe("Decision", () => {
         .generate({
           model: OpenAI.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
           input: [{ type: "media", media: Media.base64("AAAA", "audio/wav") }],
-          questions: [{ name: "speech", type: "predicate", instructions: "Is someone speaking?" }],
+          questions: { speech: { type: "predicate", instructions: "Is someone speaking?" } },
         })
         .pipe(Effect.flip)
       expect(error.reason._tag).toBe("UnsupportedOperation")
@@ -483,12 +477,12 @@ describe("Decision", () => {
           "typesafe-ai/jev",
         ),
         input: [{ type: "text", text: "refund" }],
-        questions: [{ name: "refund", type: "predicate", instructions: "Is a refund requested?" }],
+        questions: { refund: { type: "predicate", instructions: "Is a refund requested?" } },
       })
       .pipe(
         Effect.tap((response) =>
           Effect.sync(() => {
-            expect(response.answers).toEqual([{ name: "refund", type: "predicate", probability: 0.98 }])
+            expect(response.answers).toEqual({ refund: { type: "predicate", probability: 0.98 } })
             expect(response.providerMetadata).toEqual({
               "vercel-ai-gateway": { model: "typesafe-ai/jev", usage: { input_tokens: 10, output_tokens: 0 } },
             })
@@ -526,12 +520,12 @@ describe("Decision", () => {
           { type: "media", media: png },
           { type: "media", media: Media.base64("AAAA", "audio/wav") },
         ],
-        questions: [{ name: "red", type: "predicate", instructions: "Is the image mostly red?" }],
+        questions: { red: { type: "predicate", instructions: "Is the image mostly red?" } },
       })
       .pipe(
         Effect.tap((response) =>
           Effect.sync(() => {
-            expect(response.answers).toEqual([{ name: "red", type: "predicate", probability: 0.9 }])
+            expect(response.answers).toEqual({ red: { type: "predicate", probability: 0.9 } })
             expect(response.providerMetadata).toEqual({ "cloudflare-workers-ai": { model: "clef-omni" } })
           }),
         ),
@@ -562,7 +556,7 @@ describe("Decision", () => {
           "@cf/cloudflare/clef",
         ),
         input: [{ type: "text", text: "refund" }],
-        questions: [{ name: "refund", type: "predicate", instructions: "Is a refund requested?" }],
+        questions: { refund: { type: "predicate", instructions: "Is a refund requested?" } },
       })
       .pipe(
         Effect.flip,
@@ -602,7 +596,7 @@ describe("Decision", () => {
       .generate({
         model: OpenAI.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
         input: [{ type: "text", text: "refund" }],
-        questions: [{ name: "tone", type: "choice", instructions: "Tone?", choices: [{ value: "calm" }] }],
+        questions: { tone: { type: "choice", instructions: "Tone?", choices: [{ value: "calm" }] } },
       })
       .pipe(
         Effect.flip,
@@ -633,10 +627,10 @@ describe("Decision", () => {
       .generate({
         model: TypeSafeAI.configure({ apiKey: "test" }).decision("jev-latest"),
         input: [{ type: "text", text: "refund" }],
-        questions: [
-          { name: "refund", type: "predicate", instructions: "Refund?" },
-          { name: "angry", type: "predicate", instructions: "Angry?" },
-        ],
+        questions: {
+          refund: { type: "predicate", instructions: "Refund?" },
+          angry: { type: "predicate", instructions: "Angry?" },
+        },
       })
       .pipe(
         Effect.flip,
@@ -649,19 +643,38 @@ describe("Decision", () => {
       ),
   )
 
-  it.effect("rejects duplicate question names before network I/O", () =>
+  it.effect("rejects an empty question record before network I/O", () =>
     Effect.gen(function* () {
       const error = yield* ai.decision
-        .generate({
-          model: TypeSafeAI.decision("jev-latest"),
-          input: [{ type: "text", text: "hello" }],
-          questions: [
-            { name: "same", type: "predicate", instructions: "One?" },
-            { name: "same", type: "predicate", instructions: "Two?" },
-          ],
-        })
+        .generate({ model: TypeSafeAI.decision("jev-latest"), input: [{ type: "text", text: "hello" }], questions: {} })
         .pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
     }).pipe(Effect.provide(offline)),
+  )
+
+  it.effect("fails the call when OpenAI Decisions answers a question twice", () =>
+    ai.decision
+      .generate({
+        model: OpenAI.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
+        input: [{ type: "text", text: "refund" }],
+        questions: { refund: { type: "predicate", instructions: "Refund?" } },
+      })
+      .pipe(
+        Effect.flip,
+        Effect.tap((error) => Effect.sync(() => expect(error.reason._tag).toBe("InvalidProviderOutput"))),
+        Effect.provide(
+          client((input) =>
+            Effect.succeed(
+              json(input, {
+                model: "gpt-6-luna",
+                answers: [
+                  { type: "predicate", name: "refund", probability: 0.9 },
+                  { type: "predicate", name: "refund", probability: 0.1 },
+                ],
+              }),
+            ),
+          ),
+        ),
+      ),
   )
 })

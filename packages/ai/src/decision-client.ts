@@ -2,7 +2,6 @@ import { Context, Effect, Layer } from "effect"
 import type {
   DecisionAnswer,
   DecisionOptions,
-  DecisionQuestion,
   DecisionQuestions,
   DecisionRequestFor,
   DecisionResponseFor,
@@ -49,11 +48,11 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
 export const fetchLayer = layer.pipe(Layer.provideMerge(RequestExecutor.fetchLayer))
 
 /** Host bugs (a missing or extra answer, an option that wasn't offered, a score off the scale) fail the whole call. */
-const answersMatch = (questions: ReadonlyArray<DecisionQuestion>, answers: ReadonlyArray<DecisionAnswer>) =>
-  questions.length === answers.length &&
-  questions.every((question, index) => {
-    const answer = answers[index]
-    if (answer.name !== question.name) return false
+const answersMatch = (questions: DecisionQuestions, answers: Readonly<Record<string, DecisionAnswer>>) =>
+  Object.keys(questions).length === Object.keys(answers).length &&
+  Object.entries(questions).every(([name, question]) => {
+    if (!Object.hasOwn(answers, name)) return false
+    const answer = answers[name]
     if (answer.type === "error") return true
     if (question.type === "predicate") return answer.type === "predicate"
     if (question.type === "choice") {
