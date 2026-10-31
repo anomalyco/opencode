@@ -69,6 +69,15 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
     preloadRoute,
   )
 
+  // The trading section's lazy chunks are prefetched at idle so the first switch to it is as
+  // fast as a Home tab switch: the chunk load never sits between the titlebar click and the
+  // dashboard. Idle, so the boot's own first paint and the initial route stay unblocked.
+  createEffect(() => {
+    if (firstLaunch.loading || sidecar.loading) return
+
+    window.requestIdleCallback(() => void preloadRoute("/trading"))
+  })
+
   const router = (routerProps: BaseRouterProps) => <DesktopMemoryRouter {...routerProps} windowID={windowState.id} />
 
   const readyToReveal = () =>

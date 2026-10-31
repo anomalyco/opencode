@@ -234,7 +234,12 @@ function createServerController(
     current: () => {
       const route = currentRoute()
 
-      return route.type === "session" && route.server === connKey ? route.sessionId : undefined
+      if (route.type === "session" && route.server === connKey) return route.sessionId
+
+      // The embedded trading chat keeps its transcript like any open chat even though the route is not a tab.
+      if (route.type === "trading") return route.sessionId
+
+      return undefined
     },
     // Until the stored tabs load, keep every transcript so startup never evicts a tab's session.
     keep: () =>

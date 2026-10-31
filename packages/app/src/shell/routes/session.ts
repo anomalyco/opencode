@@ -6,6 +6,18 @@ export function sessionHref(server: ServerConnection.Key, sessionID: string) {
   return `/server/${base64Encode(server)}/session/${sessionID}`
 }
 
+// Same encoding rule as sessionHref: the raw key can contain path characters, so the
+// URL segment must be the base64 form that requireServerKey decodes back.
+export function tradingHref(server: ServerConnection.Key, sessionID: string) {
+  return `/trading/${base64Encode(server)}/${sessionID}`
+}
+
+// `/trading`'s starting point: the view resolves its own dedicated chat there, which
+// starts empty on every app or window restart.
+export function tradingNewHref(server: ServerConnection.Key) {
+  return `/trading/${base64Encode(server)}/new`
+}
+
 export function requireServerKey(segment: string | undefined) {
   const key = decode64(segment)
 

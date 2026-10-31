@@ -38,6 +38,7 @@ import type { Command } from "@opencode/schema/command"
 import type { OpenCodeEvent } from "@opencode/protocol/groups/event"
 import type { Pty } from "@opencode/schema/pty"
 import type { Schedule } from "@opencode/schema/schedule"
+import type { Trading } from "@opencode/schema/trading"
 import type { Artifact } from "@opencode/schema/artifact"
 import type { Reference } from "@opencode/schema/reference"
 import type { Worktree } from "@opencode/schema/worktree"
@@ -2424,6 +2425,71 @@ export type ExperimentalScheduleDeleteOperation<E = never> = (
   input: ExperimentalScheduleDeleteInput,
 ) => Effect.Effect<ExperimentalScheduleDeleteOutput, E>
 
+export type ExperimentalTradingSnapshotOutput = Trading.Snapshot
+export type ExperimentalTradingSnapshotOperation<E = never> = () => Effect.Effect<ExperimentalTradingSnapshotOutput, E>
+
+export type ExperimentalTradingSystemActivateInput = { readonly systemID: string }
+export type ExperimentalTradingSystemActivateOutput = Trading.System
+export type ExperimentalTradingSystemActivateOperation<E = never> = (
+  input: ExperimentalTradingSystemActivateInput,
+) => Effect.Effect<ExperimentalTradingSystemActivateOutput, E>
+
+export type ExperimentalTradingSystemPauseInput = { readonly systemID: string }
+export type ExperimentalTradingSystemPauseOutput = Trading.System
+export type ExperimentalTradingSystemPauseOperation<E = never> = (
+  input: ExperimentalTradingSystemPauseInput,
+) => Effect.Effect<ExperimentalTradingSystemPauseOutput, E>
+
+export type ExperimentalTradingPositionCloseInput = { readonly symbol: string }
+export type ExperimentalTradingPositionCloseOutput = Trading.PositionCloseResult
+export type ExperimentalTradingPositionCloseOperation<E = never> = (
+  input: ExperimentalTradingPositionCloseInput,
+) => Effect.Effect<ExperimentalTradingPositionCloseOutput, E>
+
+export type ExperimentalTradingPositionsCloseAllOutput = Trading.PositionCloseResult
+export type ExperimentalTradingPositionsCloseAllOperation<E = never> = () => Effect.Effect<
+  ExperimentalTradingPositionsCloseAllOutput,
+  E
+>
+
+export type ExperimentalTradingTaskListOutput = ReadonlyArray<Trading.Task>
+export type ExperimentalTradingTaskListOperation<E = never> = () => Effect.Effect<ExperimentalTradingTaskListOutput, E>
+
+export type ExperimentalTradingTaskAddInput = {
+  readonly kind: Trading.TaskKind
+  readonly systemIDs?: ReadonlyArray<string> | undefined
+  readonly delayMinutes?: number | undefined
+  readonly atTime?: string | undefined
+}
+export type ExperimentalTradingTaskAddOutput = Trading.Task
+export type ExperimentalTradingTaskAddOperation<E = never> = (
+  input: ExperimentalTradingTaskAddInput,
+) => Effect.Effect<ExperimentalTradingTaskAddOutput, E>
+
+export type ExperimentalTradingTaskCancelInput = { readonly taskID: Trading.TaskID }
+export type ExperimentalTradingTaskCancelOutput = Trading.Task
+export type ExperimentalTradingTaskCancelOperation<E = never> = (
+  input: ExperimentalTradingTaskCancelInput,
+) => Effect.Effect<ExperimentalTradingTaskCancelOutput, E>
+
+export type ExperimentalTradingConnectOutput = Trading.Account | null
+export type ExperimentalTradingConnectOperation<E = never> = () => Effect.Effect<ExperimentalTradingConnectOutput, E>
+
+export type ExperimentalTradingDisconnectOutput = Trading.Account | null
+export type ExperimentalTradingDisconnectOperation<E = never> = () => Effect.Effect<
+  ExperimentalTradingDisconnectOutput,
+  E
+>
+
+export type ExperimentalTradingPanicOutput = Trading.PanicResult
+export type ExperimentalTradingPanicOperation<E = never> = () => Effect.Effect<ExperimentalTradingPanicOutput, E>
+
+export type ExperimentalTradingRiskUpdateInput = { readonly lossDayLimit: number }
+export type ExperimentalTradingRiskUpdateOutput = Trading.Risk
+export type ExperimentalTradingRiskUpdateOperation<E = never> = (
+  input: ExperimentalTradingRiskUpdateInput,
+) => Effect.Effect<ExperimentalTradingRiskUpdateOutput, E>
+
 export type ExperimentalArtifactsProvidersInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
 }
@@ -2512,6 +2578,24 @@ export interface ExperimentalApi<E = never> {
     readonly pause: ExperimentalSchedulePauseOperation<E>
     readonly resume: ExperimentalScheduleResumeOperation<E>
     readonly delete: ExperimentalScheduleDeleteOperation<E>
+  }
+  readonly trading: {
+    readonly snapshot: ExperimentalTradingSnapshotOperation<E>
+    readonly system: {
+      readonly activate: ExperimentalTradingSystemActivateOperation<E>
+      readonly pause: ExperimentalTradingSystemPauseOperation<E>
+    }
+    readonly position: { readonly close: ExperimentalTradingPositionCloseOperation<E> }
+    readonly positions: { readonly closeAll: ExperimentalTradingPositionsCloseAllOperation<E> }
+    readonly task: {
+      readonly list: ExperimentalTradingTaskListOperation<E>
+      readonly add: ExperimentalTradingTaskAddOperation<E>
+      readonly cancel: ExperimentalTradingTaskCancelOperation<E>
+    }
+    readonly connect: ExperimentalTradingConnectOperation<E>
+    readonly disconnect: ExperimentalTradingDisconnectOperation<E>
+    readonly panic: ExperimentalTradingPanicOperation<E>
+    readonly risk: { readonly update: ExperimentalTradingRiskUpdateOperation<E> }
   }
   readonly artifacts: {
     readonly providers: ExperimentalArtifactsProvidersOperation<E>

@@ -255,6 +255,24 @@ import type {
   ExperimentalScheduleResumeOutput,
   ExperimentalScheduleDeleteInput,
   ExperimentalScheduleDeleteOutput,
+  ExperimentalTradingSnapshotOutput,
+  ExperimentalTradingSystemActivateInput,
+  ExperimentalTradingSystemActivateOutput,
+  ExperimentalTradingSystemPauseInput,
+  ExperimentalTradingSystemPauseOutput,
+  ExperimentalTradingPositionCloseInput,
+  ExperimentalTradingPositionCloseOutput,
+  ExperimentalTradingPositionsCloseAllOutput,
+  ExperimentalTradingTaskListOutput,
+  ExperimentalTradingTaskAddInput,
+  ExperimentalTradingTaskAddOutput,
+  ExperimentalTradingTaskCancelInput,
+  ExperimentalTradingTaskCancelOutput,
+  ExperimentalTradingConnectOutput,
+  ExperimentalTradingDisconnectOutput,
+  ExperimentalTradingPanicOutput,
+  ExperimentalTradingRiskUpdateInput,
+  ExperimentalTradingRiskUpdateOutput,
   ExperimentalArtifactsProvidersInput,
   ExperimentalArtifactsProvidersOutput,
   ExperimentalArtifactsListInput,
@@ -1580,6 +1598,157 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+      },
+      trading: {
+        snapshot: (requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalTradingSnapshotOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/trading/snapshot`,
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        system: {
+          activate: (input: ExperimentalTradingSystemActivateInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalTradingSystemActivateOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/trading/system/${encodeURIComponent(input.systemID)}/activate`,
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          pause: (input: ExperimentalTradingSystemPauseInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalTradingSystemPauseOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/trading/system/${encodeURIComponent(input.systemID)}/pause`,
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
+        position: {
+          close: (input: ExperimentalTradingPositionCloseInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalTradingPositionCloseOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/trading/position/${encodeURIComponent(input.symbol)}/close`,
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
+        positions: {
+          closeAll: (requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalTradingPositionsCloseAllOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/trading/positions/close-all`,
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
+        task: {
+          list: (requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalTradingTaskListOutput }>(
+              {
+                method: "GET",
+                path: `/api/experimental/trading/task`,
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          add: (input: ExperimentalTradingTaskAddInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalTradingTaskAddOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/trading/task`,
+                body: {
+                  kind: input["kind"],
+                  systemIDs: input["systemIDs"],
+                  delayMinutes: input["delayMinutes"],
+                  atTime: input["atTime"],
+                },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          cancel: (input: ExperimentalTradingTaskCancelInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalTradingTaskCancelOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/trading/task/${encodeURIComponent(input.taskID)}/cancel`,
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
+        connect: (requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalTradingConnectOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/trading/connect`,
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        disconnect: (requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalTradingDisconnectOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/trading/disconnect`,
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        panic: (requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalTradingPanicOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/trading/panic`,
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        risk: {
+          update: (input: ExperimentalTradingRiskUpdateInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalTradingRiskUpdateOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/trading/risk`,
+                body: { lossDayLimit: input["lossDayLimit"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
       },
       artifacts: {
         providers: (input?: ExperimentalArtifactsProvidersInput, requestOptions?: RequestOptions) =>

@@ -32,6 +32,8 @@ import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { ActivityRing } from "@opencode/ui/activity-ring"
 import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
+import { ProductSwitcher } from "./product-switcher"
+import { TradingSidebarNav } from "@/trading/nav"
 import { useSettingsDialog } from "@/settings/command"
 import { rootSession } from "@/shell/routes/session"
 import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
@@ -388,6 +390,26 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   return true
                 }
 
+                case "trading": {
+                  // The trading section runs on its own server, so "New session" drafts there: the
+                  // project is the last one used on that server (the same rule the Home branch follows).
+                  const conn =
+                    (route.server && global.servers.list().find((item) => ServerConnection.key(item) === route.server)) ??
+                    global.servers.list()[0]
+
+                  const projects = conn ? global.ensureServerCtx(conn).projects : undefined
+
+                  const project = projects?.last() ?? projects?.list()[0]
+
+                  if (conn && project) {
+                    void tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+
+                    return true
+                  }
+
+                  return false
+                }
+
                 case "settings":
                 case "connect":
                 case "components":
@@ -417,6 +439,20 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             }
 
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
+
+            const toggleTrading = () => tabs.toggleTrading({ trading: layout.route().type === "trading", current: currentTab() })
+
+            // The product switcher's asks: a move is ignored when the shell already sits on the target
+            // product, so marking the active entry never trips the toggles' swap into the other surface.
+            const goToOpenCode = () => {
+              if (layout.route().type !== "trading") return
+              toggleHome()
+            }
+
+            const goToTrading = () => {
+              if (layout.route().type === "trading") return
+              toggleTrading()
+            }
 
             const homeButton = (vertical = false) => (
               <Show
@@ -639,6 +675,13 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 <Show when={windows() && props.verticalTabs}>
                   <SidebarToggle />
                 </Show>
+                <Show when={!mobile()}>
+                  <ProductSwitcher
+                    trading={layout.route().type === "trading"}
+                    aOpenCode={goToOpenCode}
+                    aTrading={goToTrading}
+                  />
+                </Show>
                 <Show when={!mobile() && !props.verticalTabs}>
                   <div class="flex shrink-0 items-center gap-0.5">
                     {homeButton()}
@@ -851,40 +894,50 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 </div>
                               </div>
                             </Show>
-                            <div class="flex w-full shrink-0 flex-col gap-1">
-                              <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>
-                              {searchButton(true)}
-                              <RecentlyClosedTabsMenu
-                                vertical
-                                onNewTab={openNewTab}
-                                keybind={command.keybind("tab.new")}
-                              />
-                            </div>
-                            <div class="h-4 w-full shrink-0" aria-hidden="true" />
-                            <div class="flex min-h-0 flex-1 flex-col gap-1">
-                              <Show
-                                when={settings.appearance.tabLayout() === "inbox"}
-                                fallback={
-                                  <TitlebarTabStrip
-                                    orientation="vertical"
-                                    tabs={tabsStore}
-                                    currentTab={currentTab()}
-                                    onNavigate={(tab, el) => {
-                                      tabs.select(tab)
-                                      el?.scrollIntoView({ behavior: "instant", block: "nearest" })
-                                    }}
-                                    onClose={(tab) => {
-                                      const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                            <Show
+                              when={layout.route().type !== "trading"}
+                              fallback={
+                                <div class="flex w-full min-h-0 flex-1 shrink-0 flex-col gap-1">
+                                  {/* The trading product's own sidebar: one row per dashboard section. */}
+                                  <TradingSidebarNav />
+                                </div>
+                              }
+                            >
+                              <div class="flex w-full shrink-0 flex-col gap-1">
+                                <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>
+                                {searchButton(true)}
+                                <RecentlyClosedTabsMenu
+                                  vertical
+                                  onNewTab={openNewTab}
+                                  keybind={command.keybind("tab.new")}
+                                />
+                              </div>
+                              <div class="h-4 w-full shrink-0" aria-hidden="true" />
+                              <div class="flex min-h-0 flex-1 flex-col gap-1">
+                                <Show
+                                  when={settings.appearance.tabLayout() === "inbox"}
+                                  fallback={
+                                    <TitlebarTabStrip
+                                      orientation="vertical"
+                                      tabs={tabsStore}
+                                      currentTab={currentTab()}
+                                      onNavigate={(tab, el) => {
+                                        tabs.select(tab)
+                                        el?.scrollIntoView({ behavior: "instant", block: "nearest" })
+                                      }}
+                                      onClose={(tab) => {
+                                        const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
 
-                                      if (index !== -1) tabsStoreActions.closeTab(index)
-                                    }}
-                                    onReorder={(keys) => tabsStoreActions.reorder(keys)}
-                                  />
-                                }
-                              >
-                                <SidebarInbox />
-                              </Show>
-                            </div>
+                                        if (index !== -1) tabsStoreActions.closeTab(index)
+                                      }}
+                                      onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                                    />
+                                  }
+                                >
+                                  <SidebarInbox />
+                                </Show>
+                              </div>
+                            </Show>
                             <Show when={titlebarItems.ids().length > 0}>
                               <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col">
                                 <TitlebarItems items={titlebarItems} vertical />

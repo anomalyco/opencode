@@ -1,0 +1,71 @@
+/* Trading chat pane.
+
+   The chat card reuses the session screen, whose native sticky title bar would
+   show the project/title/cost header content. Trading keeps that native bar —
+   the same surface as the side panel's tabs bar, whose corner spacer hosts the
+   floating chat buttons (prompt editor and toggle) — and hides only its inner
+   header content, plus the session review toggle which has no meaning here. */
+[data-slot="trading-chat-panel"] [data-slot="session-review-toggle"],
+[data-slot="trading-chat-panel"] .session-header-location,
+[data-slot="trading-chat-panel"] .session-header-title,
+[data-slot="trading-chat-panel"] [data-session-title] .session-header-actions > *:not(:last-child) {
+  display: none;
+}
+
+/* The chat's header row occupies the app's native header height; define it locally because
+   `--tabs-bar-height` only exists inside `[data-component="tabs"]`, which the chat is not. */
+[data-slot="trading-chat-panel"] {
+  --trading-header-row: 48px;
+}
+
+/* Keep the bar's height while its content stays hidden. */
+[data-slot="trading-chat-panel"] [data-session-title] > div:first-child {
+  height: var(--trading-header-row);
+}
+
+/* Align the timeline's thumb track with the dashboard's own scrollbar strip: it starts
+   below the emptied header row and reaches the card's bottom, instead of running behind
+   the header and stopping above the composer. */
+[data-slot="trading-chat-panel"] [data-slot="session-timeline-visible"] {
+  top: var(--trading-header-row);
+  /* The timeline sets `bottom` inline; trading extends the track over the composer zone. */
+  bottom: 0 !important;
+}
+
+/* The chat's face is the frame the native side panels draw; the shell's bands now live on
+   the trading root wrapper, so the face owns no insets of its own. On desktop everything
+   inside sits flush with it: the session screen's wrapper reads its padding from the shell
+   inset variables, so zeroing them here removes the second round of insets it would
+   otherwise stack inside the face. On the stacked layout the face is full-bleed and the
+   wrapper keeps the insets, matching the mobile session. */
+@media (min-width: 768px) {
+  /* The zeroing lives on the card, not on the content wrapper: the face is a descendant of
+     the wrapper and would inherit the zeroed vars. The card holds everything the chat
+     renders, so everything inside sits flush with the face and, through it, the row. */
+  [data-slot="trading-chat-panel"] {
+    --shell-inline-inset: 0px;
+    --shell-top-inset: 0px;
+    --shell-bottom-inset: 0px;
+  }
+
+  /* The chat's handle rides the presence (outside the clipping face), so its root anchors
+     to the presence's start edge — the seam. The session's own pill centers on its panel
+     because the session's persisted width is its carrier's; this chat's persisted width
+     trails the seam by the gap. Shift the root half a root left, so the pill floats
+     centered in the 8px gap instead of on the chat's edge. The attribute selectors keep
+     the edge/direction scoping so the embedded session screen's own handles stay
+     untouched. */
+  [data-slot="trading-chat-resizer"] > [data-component="resize-handle"][data-direction="horizontal"][data-edge="start"] {
+    inset-inline-start: -4px;
+  }
+}
+
+/* The session screens the chat embeds draw their own raised panel frames; here the chat's
+   face is that frame, so the inner ones collapse to plain boxes and the face's bg shows
+   through them. */
+[data-slot="trading-chat-panel-content"]
+  [class*="rounded-[10px]"][class*="bg-v2-background-bg-base"]:not([data-slot="trading-chat-face"]) {
+  background-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}

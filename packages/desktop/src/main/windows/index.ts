@@ -27,6 +27,7 @@ import {
 import { registerRendererProtocol, setProtocolReporter } from "./protocol"
 import { loadWindow } from "./scheme"
 import { createWindowRegistry } from "./registry"
+import { confirmTradingClose } from "./trading-close"
 import { windowRecovery } from "./recovery"
 import { takeEarlyWindow, type EarlyWindow } from "./early"
 import { manageWindowState, readWindowState, resolveWindowState, windowStateFile } from "./window-state"
@@ -174,6 +175,19 @@ export const mainWindows = Effect.fn("Window.make")(function* () {
     register(win, id)
     wireFullscreen(win)
     wireFocus(win)
+
+    // The renderer keeps no say in a frame close; the bots' notice lives here in main, where
+    // the sidecar credential is. A confirmed close sets the flag so the next event passes.
+    let closingConfirmed = false
+    win.on("close", (event) => {
+      if (closingConfirmed || registry.quitting()) return
+      event.preventDefault()
+      void confirmTradingClose(win).then((allow) => {
+        if (!allow) return
+        closingConfirmed = true
+        win.close()
+      })
+    })
 
     if (!early) loadWindow(win, "index.html")
     wireZoom(win)

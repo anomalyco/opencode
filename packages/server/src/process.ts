@@ -4,6 +4,7 @@ import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode/core/bus"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Schedule } from "@opencode/core/schedule"
+import { TradingEngine } from "@opencode/core/trading"
 import { InstallationEvent } from "@opencode/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
@@ -113,6 +114,8 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     }
     // Schedules fire from any server process (`service`, `opencode serve`, or `--standalone`); the table holds all their state.
     yield* Effect.forkIn(Context.get(context, Schedule.Service).run, applicationScope)
+    // Trading tasks join the schedules: their state is in the table, so any server process can run them.
+    yield* Effect.forkIn(Context.get(context, TradingEngine.Service).run, applicationScope)
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
     yield* status.ready
     const bus = Context.get(context, Bus.Service)

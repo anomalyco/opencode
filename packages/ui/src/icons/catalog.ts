@@ -186,6 +186,18 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M12.3327 7.50065V11.0007L7.99935 13.6673L3.66602 11.0007V7.50065M14.3327 9.83398V6.16732M7.99935 2.33398L1.66602 6.00065L7.99935 10.0007L14.3327 6.00065L7.99935 2.33398Z" stroke="currentColor" stroke-linecap="square"/>`,
   },
+  "trading-chart": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M4.7 2.5v3.5M4.7 11v2.5M11.3 2.5v1.5M11.3 9.5v4" stroke="currentColor" stroke-linecap="square"/><path d="M3.2 6h3v5h-3zM9.8 4h3v5.5h-3z" stroke="currentColor" stroke-linecap="square"/>`,
+  },
+  play: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M5.16724 2.93041C5.16724 2.5163 5.62157 2.27149 5.96399 2.50533L12.7855 7.17339C13.1097 7.39973 13.1097 7.88697 12.7855 8.11331L5.96399 12.7814C5.62157 13.0152 5.16724 12.7704 5.16724 12.3563V2.93041Z" stroke="currentColor" stroke-linejoin="round"/>`,
+  },
+  stop: {
+    viewBox: "0 0 16 16",
+    body: `<rect x="3.5" y="3.5" width="9" height="9" rx="1.5" stroke="currentColor"/>`,
+  },
   "code-slash": {
     viewBox: "0 0 16 16",
     body: `<path fill-rule="evenodd" clip-rule="evenodd" d="M10.0812 2.10803L6.55974 14.0809L5.92016 13.8928L9.44161 1.91992L10.0812 2.10803ZM4.13793 4.97275L1.44666 8.00045L4.13793 11.0281L3.63966 11.471L0.554688 8.00045L3.63966 4.52984L4.13793 4.97275ZM12.3617 4.52984L15.4467 8.00045L12.3617 11.471L11.8634 11.0281L14.5547 8.00045L11.8634 4.97275L12.3617 4.52984Z" fill="currentColor"/>`,

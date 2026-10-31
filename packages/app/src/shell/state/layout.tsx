@@ -55,6 +55,7 @@ export type TabRegions = {
 
 export type LayoutRoute =
   | { type: "home" }
+  | { type: "trading"; sessionId?: string; server?: ServerConnection.Key }
   | { type: "settings" }
   | { type: "connect" }
   | { type: "components" }
@@ -65,6 +66,13 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
 
   if (parts.length === 0) return { type: "home" }
+
+  if (parts[0] === "trading")
+    return {
+      type: "trading",
+      server: parts.length >= 2 ? requireServerKey(parts[1]) : undefined,
+      sessionId: parts.length >= 3 ? parts[2] : undefined,
+    }
 
   if (parts[0] === "settings") return { type: "settings" }
 
@@ -166,6 +174,20 @@ export const layoutSchema = Persistence.struct({
   }),
 })
 
+/** The trading product's window-local state: which panel section shows. The product switcher swaps
+ * the whole surface between OpenCode (the session UI) and Trading without touching OpenCode's state;
+ * the section itself persists per window so the desk comes back where it was left. */
+const productoSchema = Persistence.struct({
+  section: Persistence.optional(Schema.Literals(["account", "systems", "positions", "log", "tasks"])),
+})
+
+type TradingSection = NonNullable<typeof productoSchema.Type.section>
+
+export type { TradingSection }
+
+/** The section the trading product shows when nothing has been picked yet this window session. */
+const PRODUCTO_SECCION_DEFECTO: TradingSection = "account"
+
 export const layoutPersistence = Persistence.migrate(
   layoutSchema,
   Persistence.legacy({
@@ -255,6 +277,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       sessionTabPreview: {},
       sessionTabTarget: {},
     })
+
+    // The trading product's section, persisted per window. One owner here (the layout provider feeds
+    // the switcher's sidebar rows and the trading panel alike), never a second reactive copy.
+    const [producto, setProducto] = persisted(
+      Persist.window("trading.product"),
+      productoSchema,
+      {},
+    )
 
     /** Writes a session's strip and selection, carrying pane placement over from the stored strip. */
     const writeTabs = (session: string, next: SessionTabs, preview?: { value: string | undefined }) =>
@@ -439,6 +469,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     return {
       route: useCurrentRoute(),
       ready,
+      /** The trading product's panel section and the one-way setter its sidebar rows use. */
+      producto: {
+        section: createMemo(() => producto.section ?? PRODUCTO_SECCION_DEFECTO),
+        setSection(section: TradingSection) {
+          setProducto("section", section)
+        },
+      },
       home: {
         selection: createMemo(() => store.home.selection),
         setSelection(selection: HomeProjectSelection) {

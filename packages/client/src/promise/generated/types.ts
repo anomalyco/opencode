@@ -337,6 +337,90 @@ export type ScheduleStatus = "active" | "paused" | "done"
 
 export type ScheduleOutcome = "fired" | "late" | "checked" | "expired" | "skipped" | "disabled" | "failed"
 
+export type TradingAccount = {
+  id: string
+  type: string
+  cash: number | "Infinity" | "-Infinity" | "NaN" | null
+  equity: number | "Infinity" | "-Infinity" | "NaN" | null
+  pnl_day: number | "Infinity" | "-Infinity" | "NaN" | null
+  pnl_realized: number | "Infinity" | "-Infinity" | "NaN" | null
+}
+
+export type TradingSystem = {
+  id: string
+  name: string
+  running: boolean
+  active: boolean
+  pid: number | "Infinity" | "-Infinity" | "NaN" | null
+  started_at: number | "Infinity" | "-Infinity" | "NaN" | null
+  symbol: string
+  timeframe: string
+  pnl_day: number | "Infinity" | "-Infinity" | "NaN" | null
+}
+
+export type TradingPosition = {
+  symbol: string
+  side: "long" | "short"
+  size: number | "Infinity" | "-Infinity" | "NaN"
+  entry: number | "Infinity" | "-Infinity" | "NaN" | null
+  current: number | "Infinity" | "-Infinity" | "NaN" | null
+  pnl: number | "Infinity" | "-Infinity" | "NaN" | null
+  pnl_pct: number | "Infinity" | "-Infinity" | "NaN" | null
+}
+
+export type TradingLogLevel = "info" | "warning" | "error"
+
+export type TradingLogEvent = "open" | "close" | "signal"
+
+export type TradingTaskID = string
+
+export type TradingTaskKind = "start-systems" | "stop-systems"
+
+export type TradingTaskStatus = "pending" | "ran" | "missed" | "cancelled"
+
+export type TradingTrade = {
+  system: string
+  ts: number | "Infinity" | "-Infinity" | "NaN"
+  pnl: number | "Infinity" | "-Infinity" | "NaN" | null
+  message: string
+}
+
+export type TradingEquityPoint = {
+  ts: number | "Infinity" | "-Infinity" | "NaN"
+  equity: number | "Infinity" | "-Infinity" | "NaN" | null
+  pnl_day: number | "Infinity" | "-Infinity" | "NaN" | null
+}
+
+export type TradingRisk = {
+  loss_day_limit: number | "Infinity" | "-Infinity" | "NaN"
+  triggered_at: number | "Infinity" | "-Infinity" | "NaN" | null
+}
+
+export type TradingSystem1 = {
+  id: string
+  name: string
+  running: boolean
+  active: boolean
+  pid: number | null
+  started_at: number | null
+  symbol: string
+  timeframe: string
+  pnl_day: number | null
+}
+
+export type TradingPositionCloseResult = { ok: boolean; message: string }
+
+export type TradingAccount1 = {
+  id: string
+  type: string
+  cash: number | null
+  equity: number | null
+  pnl_day: number | null
+  pnl_realized: number | null
+}
+
+export type TradingRisk1 = { loss_day_limit: number; triggered_at: number | null }
+
 export type ArtifactCapability = "static" | "server-code" | "sqlite" | "durable-objects"
 
 export type ArtifactID = string
@@ -921,6 +1005,38 @@ export type ScheduleWhenEvery = { type: "every"; every: ScheduleDuration; tz?: s
 export type ScheduleCondition = ScheduleConditionShell | ScheduleConditionCode
 
 export type ScheduleAction = ScheduleActionPrompt
+
+export type TradingLog = {
+  ts: number | "Infinity" | "-Infinity" | "NaN"
+  level: TradingLogLevel
+  system: string
+  message: string
+  event?: TradingLogEvent
+}
+
+export type TradingTask = {
+  id: TradingTaskID
+  kind: TradingTaskKind
+  system_ids: Array<string>
+  run_at: number | "Infinity" | "-Infinity" | "NaN"
+  status: TradingTaskStatus
+  resolved_at: number | "Infinity" | "-Infinity" | "NaN" | null
+  time_created: number | "Infinity" | "-Infinity" | "NaN"
+  time_updated: number | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type TradingTask1 = {
+  id: TradingTaskID
+  kind: TradingTaskKind
+  system_ids: Array<string>
+  run_at: number
+  status: TradingTaskStatus
+  resolved_at: number | null
+  time_created: number
+  time_updated: number
+}
+
+export type TradingPanicResult = { stopped: Array<string>; close: TradingPositionCloseResult; message: string }
 
 export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
 
@@ -2189,6 +2305,19 @@ export type FormReplied = {
 
 export type ScheduleWhen = ScheduleWhenIn | ScheduleWhenAt | ScheduleWhenEvery | ScheduleWhenCron
 
+export type TradingSnapshot = {
+  version: string
+  connected: boolean
+  account: TradingAccount | null
+  systems: Array<TradingSystem>
+  positions: Array<TradingPosition>
+  logs: Array<TradingLog>
+  tasks: Array<TradingTask>
+  trades?: Array<TradingTrade>
+  equity?: Array<TradingEquityPoint>
+  risk?: TradingRisk
+}
+
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
 export type SessionInboxMove = {
@@ -3181,6 +3310,22 @@ export type ScheduleNotFoundError = {
 }
 export const isScheduleNotFoundError = (value: unknown): value is ScheduleNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ScheduleNotFoundError"
+
+export type TradingSystemNotFoundError = {
+  readonly _tag: "TradingSystemNotFoundError"
+  readonly systemID: string
+  readonly message: string
+}
+export const isTradingSystemNotFoundError = (value: unknown): value is TradingSystemNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "TradingSystemNotFoundError"
+
+export type TradingTaskNotFoundError = {
+  readonly _tag: "TradingTaskNotFoundError"
+  readonly taskID: string
+  readonly message: string
+}
+export const isTradingTaskNotFoundError = (value: unknown): value is TradingTaskNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "TradingTaskNotFoundError"
 
 export type ArtifactNotFoundError = {
   readonly _tag: "ArtifactNotFoundError"
@@ -4584,6 +4729,47 @@ export type ExperimentalScheduleResumeOutput = { data: ScheduleInfo }["data"]
 export type ExperimentalScheduleDeleteInput = { readonly scheduleID: string }
 
 export type ExperimentalScheduleDeleteOutput = void
+
+export type ExperimentalTradingSnapshotOutput = { data: TradingSnapshot }["data"]
+
+export type ExperimentalTradingSystemActivateInput = { readonly systemID: string }
+
+export type ExperimentalTradingSystemActivateOutput = { data: TradingSystem1 }["data"]
+
+export type ExperimentalTradingSystemPauseInput = { readonly systemID: string }
+
+export type ExperimentalTradingSystemPauseOutput = { data: TradingSystem1 }["data"]
+
+export type ExperimentalTradingPositionCloseInput = { readonly symbol: string }
+
+export type ExperimentalTradingPositionCloseOutput = { data: TradingPositionCloseResult }["data"]
+
+export type ExperimentalTradingPositionsCloseAllOutput = { data: TradingPositionCloseResult }["data"]
+
+export type ExperimentalTradingTaskListOutput = { data: Array<TradingTask1> }["data"]
+
+export type ExperimentalTradingTaskAddInput = {
+  readonly kind: "start-systems" | "stop-systems"
+  readonly systemIDs?: ReadonlyArray<string> | undefined
+  readonly delayMinutes?: number | undefined
+  readonly atTime?: string | undefined
+}
+
+export type ExperimentalTradingTaskAddOutput = { data: TradingTask1 }["data"]
+
+export type ExperimentalTradingTaskCancelInput = { readonly taskID: string }
+
+export type ExperimentalTradingTaskCancelOutput = { data: TradingTask1 }["data"]
+
+export type ExperimentalTradingConnectOutput = { data: TradingAccount1 | null }["data"]
+
+export type ExperimentalTradingDisconnectOutput = { data: TradingAccount1 | null }["data"]
+
+export type ExperimentalTradingPanicOutput = { data: TradingPanicResult }["data"]
+
+export type ExperimentalTradingRiskUpdateInput = { readonly lossDayLimit: number }
+
+export type ExperimentalTradingRiskUpdateOutput = { data: TradingRisk1 }["data"]
 
 export type ExperimentalArtifactsProvidersInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
