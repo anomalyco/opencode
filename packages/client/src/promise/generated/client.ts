@@ -273,6 +273,12 @@ import type {
   ExperimentalTradingPanicOutput,
   ExperimentalTradingRiskUpdateInput,
   ExperimentalTradingRiskUpdateOutput,
+  ExperimentalTradingAccountSelectInput,
+  ExperimentalTradingAccountSelectOutput,
+  ExperimentalTradingLinkAddInput,
+  ExperimentalTradingLinkAddOutput,
+  ExperimentalTradingLinkRemoveInput,
+  ExperimentalTradingLinkRemoveOutput,
   ExperimentalArtifactsProvidersInput,
   ExperimentalArtifactsProvidersOutput,
   ExperimentalArtifactsListInput,
@@ -1742,6 +1748,44 @@ export function make(options: ClientOptions) {
                 method: "POST",
                 path: `/api/experimental/trading/risk`,
                 body: { lossDayLimit: input["lossDayLimit"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
+        account: {
+          select: (input: ExperimentalTradingAccountSelectInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalTradingAccountSelectOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/trading/account/${encodeURIComponent(input.accountID)}/select`,
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
+        link: {
+          add: (input: ExperimentalTradingLinkAddInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalTradingLinkAddOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/trading/link`,
+                body: { host: input["host"], port: input["port"], label: input["label"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          remove: (input: ExperimentalTradingLinkRemoveInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalTradingLinkRemoveOutput }>(
+              {
+                method: "DELETE",
+                path: `/api/experimental/trading/link/${encodeURIComponent(input.linkID)}`,
                 successStatus: 200,
                 declaredStatuses: [400, 401],
                 empty: false,

@@ -1,6 +1,6 @@
 export * as TradingEngine from "./trading.js"
 
-import { and, desc, eq, lte } from "drizzle-orm"
+import { and, asc, desc, eq, lte } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
 import { open, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises"
@@ -18,7 +18,7 @@ import {
   type Order,
 } from "@stoqey/ib"
 import { Database } from "./database/database.js"
-import { TradingRiskTable, TradingTaskTable, TradingTradeTable } from "./trading/sql.js"
+import { TradingLinkTable, TradingMetaTable, TradingRiskTable, TradingTaskTable, TradingTradeTable } from "./trading/sql.js"
 
 export class SystemNotFoundError extends Schema.TaggedError<SystemNotFoundError>()("TradingEngine.SystemNotFound", {
   systemID: Schema.String,
@@ -71,6 +71,19 @@ export interface Interface {
   /** Drops the TWS socket and stops the reconnect chase until the next `connect`. */
   readonly disconnect: () => Effect.Effect<Trading.Account | null>
   /**
+   * Switches the dashboard's active account (the one `snapshot.account` shows). The input
+   * must be an account one of the engine's links has discovered. The selection persists in
+   * `trading_meta` and survives restarts while the account appears in any link again.
+   */
+  readonly accountSelect: (accountID: string) => Effect.Effect<Trading.Account | null, InvalidTaskError>
+  /** Registers an extra TWS link: a permanent balance watch over a second TWS address. Its
+   * socket connects right away (its own 5 s chase until TWS accepts) and it never places
+   * orders. Persisted, so it comes back connected on the next boot. */
+  readonly linkAdd: (input: LinkAddInput) => Effect.Effect<Trading.Link, InvalidTaskError>
+  /** Withdraws a registered link: its socket drops and its row leaves the table. The panel's
+   * own primary link is never removable. Returns the remaining links. */
+  readonly linkRemove: (linkID: string) => Effect.Effect<Trading.Link[], InvalidTaskError>
+  /**
    * Stops every running bot (same pid-guarded kill path as the user's stop) and then runs the
    * emergency close-all over the open positions. Nothing is re-armed afterwards; the systems'
    * flags stay off until reactivated. The caller must have confirmed with the user first.
@@ -96,6 +109,15 @@ const STOP_ORIGIN_MESSAGE: Record<StopOrigin, string> = {
 export interface RiskUpdateInput {
   /** USD; 0 disables the guard. */
   readonly loss_day_limit: number
+}
+
+export interface LinkAddInput {
+  /** The TWS host; omitted means the engine's own (the options') host. */
+  readonly host?: string
+  /** The TWS API port (7496 is the live port, 7497 the demo one). */
+  readonly port: number
+  /** The user's own name for the link; shown beside the address. */
+  readonly label?: string
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/TradingEngine") {}
@@ -345,11 +367,100 @@ const layer = (options: Options = {}) =>
         time_updated: row.time_updated,
       })
 
-      const connected = { value: false }
-      const accountId = { value: null as string | null }
-      const accountType = { value: null as string | null }
-      const balances = { value: { cash: null as number | null, equity: null as number | null } }
-      const pnl = { value: { day: null as number | null, realized: null as number | null } }
+      // Per-link account states. The PRIMARY socket (the options' host/port) is itself a
+      // link — the map's first entry always — and every registered link adds its own: each
+      // link's account-summary and ledger streams discover that login's accounts into the
+      // link's own map. Positions, contracts and the equity curve stay the primary link's
+      // own readings (the trading flow trades through it); a link only watches balances.
+      interface EstadoCuenta {
+        tipo: string | null
+        efectivo: number | null
+        equity: number | null
+        fondos: number | null
+        compraPoder: number | null
+        margen: number | null
+        liquidez: number | null
+        pnlDia: number | null
+        pnlRealizado: number | null
+        actualizada: number | null
+        readonly linkID: string
+      }
+
+      interface Enlace {
+        readonly id: string
+        readonly host: string
+        readonly port: number
+        /** The user's own name; null on the primary (unnamed) link. */
+        readonly etiqueta: string | null
+        readonly ib: IBApiNext
+        /** The socket's newest connection state; each socket keeps its own 5 s chase. */
+        conectado: boolean
+        readonly cuentas: Map<string, EstadoCuenta>
+      }
+
+      /** The primary link's map key; registered links key as their own "host:port" too. */
+      const clavePrimario = `${host}:${port}`
+
+      /** Links beyond the primary pick engine-owned client ids in their own range, far from
+       * the bots' configured CLIENT_IDs, so a re-registered link never collides with a bot. */
+      let siguienteClienteEnlace = 71
+
+      const enlaces = new Map<string, Enlace>()
+
+      const enlaceNueva = (id: string, hostEnlace: string, portEnlace: number, etiqueta: string | null, cliente: number): Enlace => ({
+        id,
+        host: hostEnlace,
+        port: portEnlace,
+        etiqueta,
+        ib: new IBApiNext({ host: hostEnlace, port: portEnlace, reconnectInterval: 5_000, connectionWatchdogInterval: 15 }),
+        conectado: false,
+        cuentas: new Map(),
+      })
+
+      const enlacePrimario = () => enlaces.get(clavePrimario)
+
+      /** A link's first discovered account: Map order keeps it stable (the summary stream
+       * inserts once), which makes it the panel's default account and the orders' addressee. */
+      const primeraId = (enlace: Enlace | undefined) => {
+        const primera = enlace?.cuentas.keys().next()
+        return primera === undefined || primera.done ? null : primera.value
+      }
+      const idPrimario = () => primeraId(enlacePrimario())
+      const cuentaPrimaria = (): EstadoCuenta | null => {
+        const id = idPrimario()
+        if (id === null) return null
+        return enlaces.get(clavePrimario)?.cuentas.get(id) ?? null
+      }
+
+      /** The dashboard's active account: the remembered selection while it still exists in
+       * any link, else the primary link's own first account. */
+      let cuentaActiva: string | null = null
+      const cuentaActivaEstado = (): { enlace: Enlace; id: string; estado: EstadoCuenta } | null => {
+        if (cuentaActiva !== null) {
+          for (const enlace of enlaces.values()) {
+            const estado = enlace.cuentas.get(cuentaActiva)
+            if (estado !== undefined) return { enlace, id: cuentaActiva, estado }
+          }
+        }
+        const id = idPrimario()
+        if (id === null) return null
+        return { enlace: enlaces.get(clavePrimario)!, id, estado: enlacePrimario()!.cuentas.get(id)! }
+      }
+
+      const vacioEstado = (enlace: Enlace): EstadoCuenta => ({
+        tipo: null,
+        efectivo: null,
+        equity: null,
+        fondos: null,
+        compraPoder: null,
+        margen: null,
+        liquidez: null,
+        pnlDia: null,
+        pnlRealizado: null,
+        actualizada: null,
+        linkID: enlace.id,
+      })
+
       const positions = { value: [] as Trading.Position[] }
       // The IB contracts behind the tracked positions (keyed by local symbol), stored as they
       // arrive so a close operates on the real contract instead of rebuilding one.
@@ -368,22 +479,10 @@ const layer = (options: Options = {}) =>
       const equity = { value: [] as Trading.EquityPoint[] }
       // The daily-loss guard, persisted in the trading_risk single row.
       const risk = { value: null as Trading.Risk | null }
-      // Per-currency margins from the summary stream (USD tag row) plus the time of the
-      // newest account fact, whatever stream carried it — the honest "how fresh is this".
-      const margenes = {
-        value: {
-          fondos: null as number | null,
-          compraPoder: null as number | null,
-          margen: null as number | null,
-          liquidez: null as number | null,
-        },
-      }
-      const actualizada = { value: null as number | null }
       // Market-data health per tracked family: a portfolio update proves the family's data
       // arrives, a data-farm or subscription notice names the family's stall; never reset
       // on disconnect (same as the equity curve — the staleness read swallows time).
       const datosMercado = { value: new Map<Familia, { actividad: number | null; aviso: string | null }>() }
-      const pnlSubscribed = new Set<string>()
       let positionKey = ""
 
       // Boot state from the DB: the daily-loss guard row (defaulting on a first run) and the
@@ -396,6 +495,12 @@ const layer = (options: Options = {}) =>
       trades.value = (yield* db.select().from(TradingTradeTable).orderBy(desc(TradingTradeTable.ts)).limit(200).all().pipe(Effect.orDie)).map(
         (row) => ({ system: row.system, ts: row.ts, pnl: row.pnl, message: row.message }),
       )
+
+      // The remembered active account: whatever `trading_meta` holds, lazily re-validated —
+      // `cuentaActivaEstado()` falls back to the primary link's first account until that
+      // login's streams re-discover the named account (or forever, if they never do).
+      cuentaActiva =
+        (yield* db.select().from(TradingMetaTable).where(eq(TradingMetaTable.id, "cuenta_activa")).all().pipe(Effect.orDie))[0]?.value ?? null
 
       interface LogExtra {
         readonly ts?: number
@@ -422,8 +527,6 @@ const layer = (options: Options = {}) =>
       }
       pushLog("info", "motor", `Motor nativo arrancado · sin conexión con TWS; pulsa Conectar para enlazar ${host}:${port} (demo)`)
 
-      const ib = new IBApiNext({ host, port, reconnectInterval: 5_000, connectionWatchdogInterval: 15 })
-
       // Subscriber callbacks run on IB socket threads outside the Effect runtime; the only
       // failure surface there is the callback itself, so guarding is the real boundary.
       const guard = (where: string, run: () => void) => {
@@ -434,87 +537,145 @@ const layer = (options: Options = {}) =>
         }
       }
 
-      yield* Effect.addFinalizer(() => Effect.sync(() => ib.disconnect()))
+      /** Per-link stream wiring: the connection state, the summary's per-account rows (one
+       * EstadoCuenta per discovered account, with its own PnL subscription) and the ledger's
+       * cash filler. Every callback touches only its link's own account map. */
+      const asociarCuentas = (enlace: Enlace) => {
+        const primario = enlace.id === clavePrimario
+        const donde = primario ? "" : ` en ${enlace.id}`
+        enlace.ib.connectionState.subscribe((estado) =>
+          guard(`connectionState ${enlace.id}`, () => {
+            if (estado === ConnectionState.Connected && !enlace.conectado) {
+              enlace.conectado = true
+              pushLog("info", "motor", primario ? `Conexión con IBKR establecida (${host}:${port} demo)` : `Conexión del enlace ${enlace.id} establecida`)
+              return
+            }
+            if (estado === ConnectionState.Disconnected && enlace.conectado) {
+              enlace.conectado = false
+              // The positions ride the primary socket's stream; losing it empties them (and
+              // keeps the positions log quiet until a fresh full read names them again).
+              if (primario) {
+                positions.value = []
+                positionKey = ""
+              }
+              pushLog(
+                "warning",
+                "motor",
+                primario ? "Conexión con IBKR perdida · reintentando cada 5 s" : `Conexión del enlace ${enlace.id} perdida · reintentando cada 5 s`,
+              )
+            }
+          }),
+        )
 
-      ib.connectionState.subscribe((state) =>
-        guard("connectionState", () => {
-          if (state === ConnectionState.Connected && !connected.value) {
-            connected.value = true
-            pushLog("info", "motor", `Conexión con IBKR establecida (${host}:${port} demo)`)
-            return
-          }
-          if (state === ConnectionState.Disconnected && connected.value) {
-            connected.value = false
-            accountId.value = null
-            accountType.value = null
-            balances.value = { cash: null, equity: null }
-            positions.value = []
-            positionKey = ""
-            pushLog("warning", "motor", "Conexión con IBKR perdida · reintentando cada 5 s")
-          }
+        // Every row of the summary is a discovered account of that login: each fills its own
+        // facts, and a first-ever row subscribes the account's own PnL stream beside it.
+        enlace.ib.getAccountSummary("All", ACCOUNT_SUMMARY_TAGS).subscribe((update) =>
+          guard(`accountSummary ${enlace.id}`, () => {
+            for (const [id, tags] of update.all) {
+              const previa = enlace.cuentas.get(id)
+              enlace.cuentas.set(id, {
+                tipo: firstTagValue(tags.get("AccountType")) ?? previa?.tipo ?? null,
+                // Same tag repeats per currency; balances come from the USD row, else the first row.
+                efectivo: parseValue(firstTagValue(tags.get("TotalCashBalance") ?? tags.get("CashBalance"))),
+                equity: parseValue(firstTagValue(tags.get("NetLiquidation"))),
+                fondos: parseValue(firstTagValue(tags.get("AvailableFunds"))),
+                compraPoder: parseValue(firstTagValue(tags.get("BuyingPower"))),
+                margen: parseValue(firstTagValue(tags.get("MaintMarginReq"))),
+                liquidez: parseValue(firstTagValue(tags.get("ExcessLiquidity"))),
+                pnlDia: previa?.pnlDia ?? null,
+                pnlRealizado: previa?.pnlRealizado ?? null,
+                actualizada: Date.now(),
+                linkID: enlace.id,
+              })
+              if (previa !== undefined) continue
+              pushLog("info", "motor", `Cuenta ${id} descubierta${donde}`)
+              enlace.ib.getPnL(id).subscribe((updatePnl) =>
+                guard(`pnl ${enlace.id} ${id}`, () => {
+                  const estado = enlace.cuentas.get(id)
+                  if (estado === undefined) return
+                  enlace.cuentas.set(id, {
+                    ...estado,
+                    pnlDia: safeNumber(updatePnl.dailyPnL),
+                    pnlRealizado: safeNumber(updatePnl.realizedPnL),
+                  })
+                }),
+              )
+            }
+          }),
+        )
+
+        // TWS serves only a subset of the requested tags on the summary stream; the
+        // account-updates stream (the Account Window ledger) carries the cash balances, so
+        // it fills its own fact in once it arrives. The ledger refreshes at most every 3 minutes.
+        enlace.ib.getAccountUpdates().subscribe((update) =>
+          guard(`accountUpdates ${enlace.id}`, () => {
+            const summaries = update.all.value
+            if (!summaries) return
+            for (const [id, tags] of summaries) {
+              const previa = enlace.cuentas.get(id)
+              const estado = previa ?? vacioEstado(enlace)
+              if (previa === undefined) pushLog("info", "motor", `Cuenta ${id} descubierta${donde}`)
+              estado.tipo = estado.tipo ?? (firstTagValue(tags.get("AccountType")) ?? null)
+              estado.efectivo = parseValue(
+                firstTagValue(
+                  tags.get("$LEDGER-TotalCashBalance") ??
+                    tags.get("TotalCashBalance") ??
+                    tags.get("CashBalance") ??
+                    tags.get("TotalCashValue"),
+                ),
+              )
+              estado.actualizada = Date.now()
+              enlace.cuentas.set(id, estado)
+            }
+          }),
+        )
+      }
+
+      /** One link from nothing to watching: built, wired and chasing (its socket's own 5 s
+       * retry until TWS accepts). `persistir` writes the DB row (a boot reload has one
+       * already). A link never places orders — it reads balances, nothing else. The layer's
+       * shutdown finalizer below drops every link's socket, so no per-link cleanup here. */
+      const enlazar = Effect.fn("TradingEngine.enlazar")(function* (hostEnlace: string, portEnlace: number, etiqueta: string | null, persistir: boolean) {
+        const id = `${hostEnlace}:${portEnlace}`
+        const cliente = siguienteClienteEnlace
+        siguienteClienteEnlace = cliente + 1
+        const enlace = enlaceNueva(id, hostEnlace, portEnlace, etiqueta, cliente)
+        enlaces.set(id, enlace)
+        asociarCuentas(enlace)
+        if (persistir) {
+          const stamp = Date.now()
+          yield* db
+            .insert(TradingLinkTable)
+            .values({ id, host: hostEnlace, port: portEnlace, label: etiqueta, time_created: stamp, time_updated: stamp })
+            .run()
+            .pipe(Effect.orDie)
+        }
+        yield* Effect.sync(() => enlace.ib.connect(cliente))
+        pushLog("info", "motor", `Enlace ${id} ${persistir ? "registrado" : "recargado de la tabla"} · reintento cada 5 s hasta que TWS acepte (vigila, nunca envía órdenes)`)
+        return enlace
+      })
+
+      // The primary link: the socket the dashboard's Conectar button drives. It never
+      // boot-connects; registered links below do chase at boot — the user registered them
+      // once and a balance watch needs no further permission.
+      const enlacePrimaria = enlaceNueva(clavePrimario, host, port, null, CLIENT_ID)
+      enlaces.set(clavePrimario, enlacePrimaria)
+      asociarCuentas(enlacePrimaria)
+      const ib = enlacePrimaria.ib
+
+      // Shutdown drops every link's socket — including ones registered mid-flight (after the
+      // recreate below, the map's last state is exactly what had to be closed).
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          for (const enlace of enlaces.values()) enlace.ib.disconnect()
         }),
       )
 
-      ib.getAccountSummary("All", ACCOUNT_SUMMARY_TAGS).subscribe((update) =>
-        guard("accountSummary", () => {
-          const [id, tags] = [...update.all][0]
-          if (id === undefined || !tags) return
-          if (update.all.size > 1) pushLog("warning", "motor", `${update.all.size} cuentas en el resumen · usando ${id}`)
-          accountId.value = id
-          accountType.value = firstTagValue(tags.get("AccountType")) ?? null
-          // Same tag repeats per currency; balances come from the USD row, else the first row.
-          balances.value = {
-            cash: parseValue(firstTagValue(tags.get("TotalCashBalance") ?? tags.get("CashBalance"))),
-            equity: parseValue(firstTagValue(tags.get("NetLiquidation"))),
-          }
-          margenes.value = {
-            fondos: parseValue(firstTagValue(tags.get("AvailableFunds"))),
-            compraPoder: parseValue(firstTagValue(tags.get("BuyingPower"))),
-            margen: parseValue(firstTagValue(tags.get("MaintMarginReq"))),
-            liquidez: parseValue(firstTagValue(tags.get("ExcessLiquidity"))),
-          }
-          actualizada.value = Date.now()
-          if (!pnlSubscribed.has(id)) {
-            pnlSubscribed.add(id)
-            ib.getPnL(id).subscribe((updatePnl) =>
-              guard("pnl", () => {
-                pnl.value = {
-                  day: safeNumber(updatePnl.dailyPnL),
-                  realized: safeNumber(updatePnl.realizedPnL),
-                }
-              }),
-            )
-          }
-        }),
-      )
-
-      // TWS serves only a subset of the requested tags on the account-summary stream; the
-      // account-updates stream (the Account Window ledger) carries the cash balances, so it
-      // fills them in once it arrives. The ledger refreshes at most every 3 minutes.
-      ib.getAccountUpdates().subscribe((update) =>
-        guard("accountUpdates", () => {
-          const summaries = update.all.value
-          if (!summaries) return
-          const [id, tags] = [...summaries][0]
-          if (id === undefined || !tags) return
-          if (summaries.size > 1)
-            pushLog("warning", "motor", `${summaries.size} cuentas en el ledger · usando ${id}`)
-          accountType.value = accountType.value ?? (firstTagValue(tags.get("AccountType")) ?? null)
-          // Same ledger row repeats per currency; cash comes from the USD row, else the first row.
-          balances.value = {
-            ...balances.value,
-            cash: parseValue(
-              firstTagValue(
-                tags.get("$LEDGER-TotalCashBalance") ??
-                  tags.get("TotalCashBalance") ??
-                  tags.get("CashBalance") ??
-                  tags.get("TotalCashValue"),
-              ),
-            ),
-          }
-          actualizada.value = Date.now()
-        }),
-      )
+      const filasEnlaces = yield* db.select().from(TradingLinkTable).orderBy(asc(TradingLinkTable.time_created)).all().pipe(Effect.orDie)
+      for (const fila of filasEnlaces) {
+        if (fila.id === clavePrimario || enlaces.has(fila.id)) continue
+        yield* enlazar(fila.host, fila.port, fila.label ?? null, false)
+      }
 
       ib.getPositions().subscribe((update) =>
         guard("positions", () => {
@@ -600,7 +761,7 @@ const layer = (options: Options = {}) =>
       // action. Once linked, the 5 s reconnect interval keeps chasing a flapping TWS; the
       // user's Desconectar fully stops that chase until the next Conectar.
       const connect = Effect.gen(function* () {
-        if (connected.value) return toSchemaAccount()
+        if (enlacePrimaria.conectado) return toSchemaAccount()
         pushLog("info", "motor", `Conectando con TWS en ${host}:${port} (demo)… reintento cada 5 s hasta que acepte`)
         yield* Effect.sync(() => ib.connect(CLIENT_ID))
         return toSchemaAccount()
@@ -941,7 +1102,7 @@ const layer = (options: Options = {}) =>
         // would be rejected. Adopt the live one instead of spawning a twin, exactly what the
         // sweep does on its own beat.
         const clientId = def.clientId
-        if (connected.value && clientId !== null) {
+        if (enlacePrimaria.conectado && clientId !== null) {
           const ocupado = yield* Effect.promise(() => clientIdEnUso(host, port, clientId))
           if (ocupado) {
             adjuntar(def, "external", null, `Bot ya en marcha · detectado en TWS con su CLIENT_ID ${clientId}`)
@@ -1078,7 +1239,7 @@ const layer = (options: Options = {}) =>
       const aplicarRiesgo = Effect.gen(function* () {
         const riesgo = risk.value
         if (riesgo === null || riesgo.loss_day_limit <= 0) return
-        const dia = pnl.value.day
+        const dia = cuentaPrimaria()?.pnlDia ?? null
         if (dia === null) return
         if (riesgo.triggered_at !== null) {
           if (dia > -riesgo.loss_day_limit) {
@@ -1123,7 +1284,7 @@ const layer = (options: Options = {}) =>
         const ahora = Date.now()
         if (ahora - equityUltima < 15_000) return
         equityUltima = ahora
-        const punto: Trading.EquityPoint = { ts: ahora, equity: balances.value.equity, pnl_day: pnl.value.day }
+        const punto: Trading.EquityPoint = { ts: ahora, equity: cuentaPrimaria()?.equity ?? null, pnl_day: cuentaPrimaria()?.pnlDia ?? null }
         if (punto.equity === null && punto.pnl_day === null) return
         equity.value = [...equity.value, punto].slice(-1000)
       }
@@ -1324,11 +1485,12 @@ const layer = (options: Options = {}) =>
        * script (cierralotodo.py) proved live against TWS. */
       const cerrarUna = Effect.fn("TradingEngine.cerrarUna")(function* (posicion: Trading.Position) {
         const symbol = posicion.symbol
-        if (!connected.value) {
+        if (!enlacePrimaria.conectado) {
           pushLog("warning", "motor", `Cierre de ${symbol} · sin conexión con TWS, no se envió el cierre`)
           return { ok: false, message: "Sin conexión con TWS: no se envió el cierre." }
         }
-        const cuenta = accountId.value
+        // Orders trade through the primary link's own account, whatever the dashboard is showing.
+        const cuenta = idPrimario()
         if (!(posicion.size > 0)) return { ok: false, message: `La posición ${symbol} no tiene cantidad que cerrar.` }
         let contrato = contratos.value.get(symbol)
         if (!contrato || contrato.conId === undefined) {
@@ -1559,7 +1721,7 @@ const layer = (options: Options = {}) =>
        * open position runs the full cycle in turn, one failure never stops the rest, and the
        * verdict lists each symbol's outcome for manual follow-up. */
       const closeAllPositions = Effect.fn("TradingEngine.closeAllPositions")(function* () {
-        if (!connected.value) {
+        if (!enlacePrimaria.conectado) {
           pushLog("warning", "motor", "Cierre total · sin conexión con TWS, no se envió el cierre")
           return { ok: false, message: "Sin conexión con TWS: no se envió el cierre." }
         }
@@ -1638,28 +1800,103 @@ const layer = (options: Options = {}) =>
         Effect.andThen(Effect.forever(tick().pipe(Effect.andThen(Effect.sleep("5 seconds"))))),
       )
 
-      /** The account view of the last received IBKR values (null until an account id arrives). */
-      const toSchemaAccount = (): Trading.Account | null =>
-        accountId.value === null
-          ? null
-          : {
-              id: accountId.value,
-              type: `${accountType.value ?? "cuenta"} · IBKR demo (${port})`,
-              cash: balances.value.cash,
-              equity: balances.value.equity,
-              pnl_day: pnl.value.day,
-              pnl_realized: pnl.value.realized,
-              available_funds: margenes.value.fondos,
-              buying_power: margenes.value.compraPoder,
-              margin_used: margenes.value.margen,
-              excess_liquidity: margenes.value.liquidez,
-              updated_at: actualizada.value,
-            }
+      /** One account's wire view: its link carries the account (the panel uses it to pair
+       * account and link chips), and the "IBKR demo/live" suffix reads its own id's DU
+       * prefix plus its link's port — the same wording the single-account era showed. */
+      const toSchemaAccountDe = (enlace: Enlace, id: string, estado: EstadoCuenta): Trading.Account => ({
+        id,
+        type: `${estado.tipo ?? "cuenta"} · IBKR ${id.startsWith("DU") ? "demo" : "live"} (${enlace.port})`,
+        cash: estado.efectivo,
+        equity: estado.equity,
+        pnl_day: estado.pnlDia,
+        pnl_realized: estado.pnlRealizado,
+        available_funds: estado.fondos,
+        buying_power: estado.compraPoder,
+        margin_used: estado.margen,
+        excess_liquidity: estado.liquidez,
+        updated_at: estado.actualizada,
+        link: enlace.id,
+      })
+
+      /** The account view of the last received values (null until an account id arrives):
+       * the dashboard's active account — the remembered selection, else the primary's first. */
+      const toSchemaAccount = (): Trading.Account | null => {
+        const activa = cuentaActivaEstado()
+        if (activa === null) return null
+        return toSchemaAccountDe(activa.enlace, activa.id, activa.estado)
+      }
+
+      /** The links' wire view, the primary first (map insertion order keeps that). */
+      const toSchemaLink = (enlace: Enlace): Trading.Link => ({
+        id: enlace.id,
+        host: enlace.host,
+        port: enlace.port,
+        label: enlace.etiqueta,
+        connected: enlace.conectado,
+      })
+
+      /** Every account across the links, primary's first, ordered as discovered. */
+      const toSchemaAccounts = (): Trading.Account[] =>
+        [...enlaces.values()].flatMap((enlace) =>
+          [...enlace.cuentas.entries()].map((par) => toSchemaAccountDe(enlace, par[0], par[1])),
+        )
+
+      /** Switches the dashboard's active account. The input must name an account one of the
+       * engine's links has discovered; the selection persists and rides every snapshot. */
+      const accountSelect = Effect.fn("TradingEngine.accountSelect")(function* (accountID: string) {
+        const enlaceActiva = [...enlaces.values()].find((enlace) => enlace.cuentas.has(accountID))
+        if (enlaceActiva === undefined) return yield* new InvalidTaskError({ message: `Unknown account: ${accountID}` })
+        cuentaActiva = accountID
+        const stamp = Date.now()
+        yield* db
+          .insert(TradingMetaTable)
+          .values({ id: "cuenta_activa", value: accountID, time_created: stamp, time_updated: stamp })
+          .onConflictDoUpdate({ target: TradingMetaTable.id, set: { value: accountID, time_updated: stamp } })
+          .run()
+          .pipe(Effect.orDie)
+        pushLog("info", "motor", `Cuenta activa: ${accountID} (${enlaceActiva.id})`)
+        return toSchemaAccount()
+      })
+
+      /** Registers an extra TWS link: a permanent balance watch beyond the panel's own
+       * socket. Duplicates and already-linked addresses are refused; the live port's
+       * confirmation is the interface's dialog, not the engine's gate here. */
+      const linkAdd = Effect.fn("TradingEngine.linkAdd")(function* (input: LinkAddInput) {
+        if (!Number.isSafeInteger(input.port) || input.port < 1 || input.port > 65_535)
+          return yield* new InvalidTaskError({ message: "port must be a TCP port (1-65535)." })
+        const hostEnlace = input.host ?? host
+        const id = `${hostEnlace}:${input.port}`
+        if (enlaces.has(id)) return yield* new InvalidTaskError({ message: `Link ${id} is already registered.` })
+        const enlace = yield* enlazar(hostEnlace, input.port, input.label ?? null, true)
+        return toSchemaLink(enlace)
+      })
+
+      /** Withdraws a registered link: the socket drops, the row leaves the table and its
+       * accounts stop listing. The remembered selection drops with it when the account it
+       * names has left every link. */
+      const linkRemove = Effect.fn("TradingEngine.linkRemove")(function* (linkID: string) {
+        const enlace = enlaces.get(linkID)
+        if (enlace === undefined) return yield* new InvalidTaskError({ message: `Unknown link: ${linkID}` })
+        if (linkID === clavePrimario) return yield* new InvalidTaskError({ message: "The panel's own TWS link cannot be removed." })
+        yield* Effect.sync(() => enlace.ib.disconnect())
+        enlaces.delete(linkID)
+        yield* db.delete(TradingLinkTable).where(eq(TradingLinkTable.id, linkID)).run().pipe(Effect.orDie)
+        if (cuentaActiva !== null) {
+          const elegida = cuentaActiva
+          const viva = [...enlaces.values()].some((restante) => restante.cuentas.has(elegida))
+          if (!viva) {
+            cuentaActiva = null
+            yield* db.delete(TradingMetaTable).where(eq(TradingMetaTable.id, "cuenta_activa")).run().pipe(Effect.orDie)
+          }
+        }
+        pushLog("info", "motor", `Enlace ${linkID} retirado`)
+        return [...enlaces.values()].map(toSchemaLink)
+      })
 
       return {
         snapshot: () => ({
           version: VERSION,
-          connected: connected.value,
+          connected: enlacePrimaria.conectado,
           account: toSchemaAccount(),
           systems: sistemas.map(toSchemaSystem),
           positions: [...positions.value],
@@ -1676,6 +1913,8 @@ const layer = (options: Options = {}) =>
               notice: estado?.aviso ?? null,
             }
           }),
+          accounts: toSchemaAccounts(),
+          links: [...enlaces.values()].map(toSchemaLink),
         }),
         activate: (systemID) => arrancar(systemID, "user"),
         pause: (systemID) => detener(systemID, "user"),
@@ -1683,6 +1922,9 @@ const layer = (options: Options = {}) =>
         closeAllPositions,
         connect: () => connect,
         disconnect: () => disconnect,
+        accountSelect,
+        linkAdd,
+        linkRemove,
         panic,
         riskUpdate,
         taskList: () => Effect.gen(function* () { if (tasks.value.length === 0) yield* refreshTasks; return [...tasks.value] }),

@@ -290,6 +290,24 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`trading_link\` (
+          \`id\` text PRIMARY KEY,
+          \`host\` text NOT NULL,
+          \`port\` integer NOT NULL,
+          \`label\` text,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`trading_meta\` (
+          \`id\` text PRIMARY KEY,
+          \`value\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`trading_risk\` (
           \`id\` text PRIMARY KEY,
           \`loss_day_limit\` real NOT NULL,

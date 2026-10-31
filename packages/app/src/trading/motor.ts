@@ -21,6 +21,18 @@ export interface CuentaInfo {
   readonly liquidezExtra: number | null
   /** Epoch ms of the newest account fact (summary tag or portfolio update); null until seen. */
   readonly actualizada: number | null
+  /** The engine link the account lives on ("host:port"); null when the engine predates links. */
+  readonly enlace: string | null
+}
+
+/** One registered TWS link: a host:port whose socket the engine keeps watching. The panel's
+ * own primary link (the Conectar flow) is one of them, unnamed. */
+export interface EnlaceInfo {
+  readonly id: string
+  readonly host: string
+  readonly port: number
+  readonly etiqueta: string | null
+  readonly conectado: boolean
 }
 
 export interface BotInfo {
@@ -128,6 +140,11 @@ export interface SnapshotMotor {
   riesgo: RiesgoInfo | null
   /** Market-data health per tracked family, fixed order; null when the serving engine predates the field. */
   datos: DatosMercadoInfo[] | null
+  /** Every account the engine's links have discovered; null when the serving engine
+   * predates the field (or the sample fallback, which invents none). */
+  cuentas: CuentaInfo[] | null
+  /** The engine's links, the panel's primary one first; null on older engines and the sample. */
+  enlaces: EnlaceInfo[] | null
 }
 
 // ----------------------------- sample data -----------------------------
@@ -172,6 +189,7 @@ export const DEMO: SnapshotMotor = {
     margenUsado: null,
     liquidezExtra: null,
     actualizada: null,
+    enlace: null,
   },
   tareas: [],
   bots: [
@@ -209,6 +227,10 @@ export const DEMO: SnapshotMotor = {
   riesgo: { limite_dia: 250, disparada: null },
   // The sample invents no market-data health; the card stays hidden until the engine speaks.
   datos: null,
+  // The sample invents no account list or links either: the chips and the link rows stay
+  // hidden until a serving engine carries them.
+  cuentas: null,
+  enlaces: null,
 }
 
 function RegistroDemo(minutosAtras: number, nivel: RegistroInfo["nivel"], bot: string, mensaje: string): RegistroInfo {
@@ -278,20 +300,44 @@ function estadoDeNativo(status: TareaNativa["status"]): TareaInfo["estado"] {
   return "cancelada"
 }
 
-function desdeNativo(nativo: SnapshotNativo): Omit<SnapshotMotor, "demo"> {
-  const cuenta: CuentaInfo = {
-    id: nativo.account?.id ?? "",
-    tipo: nativo.account?.type ?? "",
-    efectivo: numeroNulo(nativo.account?.cash ?? null),
-    patrimonio: numeroNulo(nativo.account?.equity ?? null),
-    pnl_dia: numeroNulo(nativo.account?.pnl_day ?? null),
-    pnl_realizado: numeroNulo(nativo.account?.pnl_realized ?? null),
-    disponible: numeroNulo(nativo.account?.available_funds ?? null),
-    compraPoder: numeroNulo(nativo.account?.buying_power ?? null),
-    margenUsado: numeroNulo(nativo.account?.margin_used ?? null),
-    liquidezExtra: numeroNulo(nativo.account?.excess_liquidity ?? null),
-    actualizada: numeroNulo(nativo.account?.updated_at ?? null),
+/** The native account facts onto the dashboard's Spanish view; the optional link trait stays
+ * null on older engines. Empty strings keep the existing fallback rendering ("—"). */
+type CuentaNativa = NonNullable<SnapshotNativo["accounts"]>[number]
+
+function cuentaDeNativo(nativa: CuentaNativa): CuentaInfo {
+  return {
+    id: nativa.id ?? "",
+    tipo: nativa.type ?? "",
+    efectivo: numeroNulo(nativa.cash ?? null),
+    patrimonio: numeroNulo(nativa.equity ?? null),
+    pnl_dia: numeroNulo(nativa.pnl_day ?? null),
+    pnl_realizado: numeroNulo(nativa.pnl_realized ?? null),
+    disponible: numeroNulo(nativa.available_funds ?? null),
+    compraPoder: numeroNulo(nativa.buying_power ?? null),
+    margenUsado: numeroNulo(nativa.margin_used ?? null),
+    liquidezExtra: numeroNulo(nativa.excess_liquidity ?? null),
+    actualizada: numeroNulo(nativa.updated_at ?? null),
+    enlace: nativa.link ?? null,
   }
+}
+
+function desdeNativo(nativo: SnapshotNativo): Omit<SnapshotMotor, "demo"> {
+  const cuenta: CuentaInfo = nativo.account === null
+    ? {
+        id: "",
+        tipo: "",
+        efectivo: null,
+        patrimonio: null,
+        pnl_dia: null,
+        pnl_realizado: null,
+        disponible: null,
+        compraPoder: null,
+        margenUsado: null,
+        liquidezExtra: null,
+        actualizada: null,
+        enlace: null,
+      }
+    : cuentaDeNativo(nativo.account)
 
   return {
     enlace: nativo.connected,
@@ -353,6 +399,22 @@ function desdeNativo(nativo: SnapshotNativo): Omit<SnapshotMotor, "demo"> {
             familia: estado.symbol,
             actividad: numeroNulo(estado.updated_at ?? null),
             aviso: estado.notice ?? null,
+          })),
+    // The account list and the links arrive with the engine; absence keeps the chips hidden
+    // (an older engine's snapshot stays shaped exactly as it was).
+    cuentas:
+      nativo.accounts === undefined
+        ? null
+        : [...nativo.accounts].map((cuentaNativa) => cuentaDeNativo(cuentaNativa)),
+    enlaces:
+      nativo.links === undefined
+        ? null
+        : [...nativo.links].map((enlace) => ({
+            id: enlace.id,
+            host: enlace.host,
+            port: numero(enlace.port),
+            etiqueta: enlace.label ?? null,
+            conectado: enlace.connected,
           })),
   }
 }
@@ -435,6 +497,21 @@ export function panicoTotal(api: OpenCodeClient) {
 /** Sets the daily-loss guard's limit in USD; 0 disables it (persisted in the engine). */
 export function fijarLimiteDia(api: OpenCodeClient, limite: number) {
   return api.experimental.trading.risk.update({ lossDayLimit: limite }).catch(() => undefined)
+}
+
+/** Switches the dashboard's active account (every account field follows in the next snapshot). */
+export function seleccionarCuenta(api: OpenCodeClient, accountID: string) {
+  return api.experimental.trading.account.select({ accountID }).catch(() => undefined)
+}
+
+/** Registers an extra TWS link as a permanent balance watch (it never places orders). */
+export function añadirEnlace(api: OpenCodeClient, input: { host?: string; port: number; label?: string }) {
+  return api.experimental.trading.link.add({ host: input.host, port: input.port, label: input.label }).catch(() => undefined)
+}
+
+/** Withdraws a registered link (the panel's own primary link refuses on its own). */
+export function quitarEnlace(api: OpenCodeClient, linkID: string) {
+  return api.experimental.trading.link.remove({ linkID }).catch(() => undefined)
 }
 
 /** How often the dashboard re-polls the engine. */

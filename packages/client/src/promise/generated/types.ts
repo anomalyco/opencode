@@ -349,6 +349,7 @@ export type TradingAccount = {
   margin_used?: number | "Infinity" | "-Infinity" | "NaN" | null
   excess_liquidity?: number | "Infinity" | "-Infinity" | "NaN" | null
   updated_at?: number | "Infinity" | "-Infinity" | "NaN" | null
+  link?: string | null
 }
 
 export type TradingSystem = {
@@ -412,9 +413,19 @@ export type TradingDataStatus = {
   notice: string | null
 }
 
+export type TradingLink = {
+  id: string
+  host: string
+  port: number | "Infinity" | "-Infinity" | "NaN"
+  label: string | null
+  connected: boolean
+}
+
 export type TradingPositionCloseResult = { ok: boolean; message: string }
 
 export type TradingRisk1 = { loss_day_limit: number; triggered_at: number | null }
+
+export type TradingLink1 = { id: string; host: string; port: number; label: string | null; connected: boolean }
 
 export type ArtifactCapability = "static" | "server-code" | "sqlite" | "durable-objects"
 
@@ -2312,6 +2323,8 @@ export type TradingSnapshot = {
   equity?: Array<TradingEquityPoint>
   risk?: TradingRisk
   data_status?: Array<TradingDataStatus> | null
+  accounts?: Array<TradingAccount>
+  links?: Array<TradingLink>
 }
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
@@ -4766,6 +4779,22 @@ export type ExperimentalTradingPanicOutput = { data: TradingPanicResult }["data"
 export type ExperimentalTradingRiskUpdateInput = { readonly lossDayLimit: number }
 
 export type ExperimentalTradingRiskUpdateOutput = { data: TradingRisk1 }["data"]
+
+export type ExperimentalTradingAccountSelectInput = { readonly accountID: string }
+
+export type ExperimentalTradingAccountSelectOutput = { data: TradingAccount | null }["data"]
+
+export type ExperimentalTradingLinkAddInput = {
+  readonly host?: string | undefined
+  readonly port: number
+  readonly label?: string | undefined
+}
+
+export type ExperimentalTradingLinkAddOutput = { data: TradingLink1 }["data"]
+
+export type ExperimentalTradingLinkRemoveInput = { readonly linkID: string }
+
+export type ExperimentalTradingLinkRemoveOutput = { data: Array<TradingLink1> }["data"]
 
 export type ExperimentalArtifactsProvidersInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined

@@ -40,3 +40,23 @@ export const TradingRiskTable = sqliteTable("trading_risk", {
   triggered_at: integer(),
   ...Timestamps,
 })
+
+/** One registered TWS link beyond the panel's own primary socket: the watch's host:port
+ * (its "id") and the user's label, so the links survive engine restarts. */
+export const TradingLinkTable = sqliteTable("trading_link", {
+  /** "host:port", unique per address. */
+  id: text().primaryKey(),
+  host: text().notNull(),
+  port: integer().notNull(),
+  /** The user's own name for the link; null when none was given. */
+  label: text(),
+  ...Timestamps,
+})
+
+/** The engine's small key/value store (one row per key): the remembered active account
+ * ("cuenta_activa"), kept across restarts until the account leaves every link. */
+export const TradingMetaTable = sqliteTable("trading_meta", {
+  id: text().primaryKey(),
+  value: text().notNull(),
+  ...Timestamps,
+})

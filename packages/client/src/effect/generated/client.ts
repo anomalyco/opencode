@@ -273,6 +273,12 @@ import type {
   ExperimentalTradingPanicOutput,
   ExperimentalTradingRiskUpdateInput,
   ExperimentalTradingRiskUpdateOutput,
+  ExperimentalTradingAccountSelectInput,
+  ExperimentalTradingAccountSelectOutput,
+  ExperimentalTradingLinkAddInput,
+  ExperimentalTradingLinkAddOutput,
+  ExperimentalTradingLinkRemoveInput,
+  ExperimentalTradingLinkRemoveOutput,
   ExperimentalArtifactsProvidersInput,
   ExperimentalArtifactsProvidersOutput,
   ExperimentalArtifactsListInput,
@@ -1768,6 +1774,33 @@ const EndpointExperimentalTradingRiskUpdate =
       ),
     )
 
+const EndpointExperimentalTradingAccountSelect =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalTradingAccountSelectInput) =>
+    preserveEffect<ExperimentalTradingAccountSelectOutput>()(
+      raw["trading.account.select"]({ params: { accountID: input["accountID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalTradingLinkAdd =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalTradingLinkAddInput) =>
+    preserveEffect<ExperimentalTradingLinkAddOutput>()(
+      raw["trading.link.add"]({ payload: { host: input["host"], port: input["port"], label: input["label"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalTradingLinkRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalTradingLinkRemoveInput) =>
+    preserveEffect<ExperimentalTradingLinkRemoveOutput>()(
+      raw["trading.link.remove"]({ params: { linkID: input["linkID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const EndpointExperimentalArtifactsProviders =
   (raw: RawClient["server.experimental"]) => (input?: ExperimentalArtifactsProvidersInput) =>
     preserveEffect<ExperimentalArtifactsProvidersOutput>()(
@@ -1863,6 +1896,8 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     disconnect: EndpointExperimentalTradingDisconnect(raw),
     panic: EndpointExperimentalTradingPanic(raw),
     risk: { update: EndpointExperimentalTradingRiskUpdate(raw) },
+    account: { select: EndpointExperimentalTradingAccountSelect(raw) },
+    link: { add: EndpointExperimentalTradingLinkAdd(raw), remove: EndpointExperimentalTradingLinkRemove(raw) },
   },
   artifacts: {
     providers: EndpointExperimentalArtifactsProviders(raw),

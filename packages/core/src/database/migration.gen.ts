@@ -60,6 +60,7 @@ import m57 from "./migration/20261029165540_schedule_checks.js"
 import m58 from "./migration/20261029234643_trading-tasks.js"
 import m59 from "./migration/20261030054400_job.js"
 import m60 from "./migration/20261030221104_demonic_payback.js"
+import m61 from "./migration/20261031223045_trading-multicuenta.js"
 
 export const migrations = [
   m00,
@@ -123,4 +124,5 @@ export const migrations = [
   m58,
   m59,
   m60,
+  m61,
 ] satisfies DatabaseMigration.Migration[]

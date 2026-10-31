@@ -54,7 +54,7 @@ const TargetSessionRouteContent = lazy(() =>
 )
 import { isTradingSession, scanTradingSessions, TRADING_DESK_CONTEXT, TRADING_METADATA_MARK } from "./session"
 import "./trading.css"
-import { DEMO, REFRESCO_MS, arrancarSistema, cancelarTarea, cerrarPosicion, cerrarTotal, conectarCuenta, desconectarCuenta, panicoTotal, pararSistema, pedirSnapshot, programarTarea, type BotInfo, type CurvaInfo, type RegistroInfo, type SnapshotMotor, type TareaInfo, type TradeInfo } from "./motor"
+import { DEMO, REFRESCO_MS, añadirEnlace, arrancarSistema, cancelarTarea, cerrarPosicion, cerrarTotal, conectarCuenta, desconectarCuenta, panicoTotal, pararSistema, pedirSnapshot, programarTarea, quitarEnlace, seleccionarCuenta, type BotInfo, type CurvaInfo, type RegistroInfo, type SnapshotMotor, type TareaInfo, type TradeInfo } from "./motor"
 import { tradingSectionKey, TradingNavStrip } from "./nav"
 
 /** The trading panel's Intl formatter set: one per interface locale, built once and cached.
@@ -1125,6 +1125,67 @@ function TradingShell(props: {
     ))
   }
 
+  // Switching the account is a read-side move (the engine serves every field of the selected
+  // account): a settled switch needs no toast — the chip's own highlight answers; a failed
+  // one reports itself. Sample chips never write (their ids are the sample's).
+  const ejecutarCambioCuenta = async (accountID: string) => {
+    if (snapshot.demo) return
+
+    const respuesta = await seleccionarCuenta(sdk.api, accountID)
+
+    if (respuesta === undefined) showToast({ variant: "error", title: language.t("trading.accounts.select.failed") })
+    await refrescar()
+  }
+
+  // Registering a link only ever starts a balance watch: the live port's warning shows in
+  // the dialog, the confirm runs the registration, and the verdict comes back in the toast.
+  // A failure keeps the dialog open (like the prompt editor), a success closed.
+  const ejecutarEnlaceNuevo = async (entrada: { host?: string; port: number; label?: string }) => {
+    const respuesta = await añadirEnlace(sdk.api, entrada)
+
+    if (respuesta === undefined) {
+      showToast({ variant: "error", title: language.t("trading.accounts.add.failed") })
+
+      return false
+    }
+
+    showToast({ variant: "success", icon: "circle-check", title: language.t("trading.accounts.add.sent") })
+    await refrescar()
+
+    return true
+  }
+
+  const abrirEnlaceNuevo = () => dialog.show(() => <DialogEnlaceNuevo registrar={ejecutarEnlaceNuevo} />)
+
+  const ejecutarEnlaceFuera = async (linkID: string) => {
+    const respuesta = await quitarEnlace(sdk.api, linkID)
+
+    if (respuesta === undefined) {
+      showToast({ variant: "error", title: language.t("trading.accounts.link.remove.failed") })
+      await refrescar()
+
+      return
+    }
+
+    showToast({ variant: "success", icon: "circle-check", title: language.t("trading.accounts.link.removed") })
+    await refrescar()
+  }
+
+  // The confirmation's body names the link that leaves, label included; registered links
+  // only — the primary sits above the remove rows by construction.
+  const abrirEnlaceFuera = (id: string, etiqueta: string | null) => {
+    dialog.show(() => (
+      <DialogCierre
+        avisa={false}
+        confirmar={() => ejecutarEnlaceFuera(id)}
+        título={language.t("trading.accounts.link.remove.title")}
+        cuerpo={`${id}${etiqueta === null ? "" : ` · ${etiqueta}`}`}
+        advertencia=""
+        confirmarTexto={language.t("trading.accounts.link.remove.confirm")}
+      />
+    ))
+  }
+
   // A withdrawal is a small write: its engine round-trip answers right away, so the
   // confirmation lives in the row's tooltip and the verdict comes back in the toast.
   // Sample tasks carry fake ids, so their cancel never reaches the engine.
@@ -1263,6 +1324,89 @@ function TradingShell(props: {
               </Show>
               <Show when={sección() === "account"}>
                 <div class="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-4 py-4">
+                  {/* Accounts strip: every account the engine's links have discovered — one chip
+                      each carrying its own day P/L, clicking switches the dashboard's reading —
+                      and beneath it the registered links with their live state and a remove
+                      button. Old engines and the sample send neither field, so the strip only
+                      paints for a multicuenta-aware engine. */}
+                  <Show when={snapshot.cuentas !== null}>
+                    <div class="border-b border-v2-border-border-muted pb-3">
+                      <div class="mb-1.5 flex items-center gap-2">
+                        <h3 class="flex-1 px-1 text-[11px] tracking-[0.08em] text-v2-text-text-faint uppercase" style={LINEA}>
+                          {language.t("trading.accounts.title")}
+                        </h3>
+                        <Tooltip class="shrink-0" placement="bottom" value={language.t("trading.accounts.add.aria")}>
+                          <IconButton
+                            type="button"
+                            variant="ghost-muted"
+                            size="small"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={abrirEnlaceNuevo}
+                            aria-label={language.t("trading.accounts.add.aria")}
+                            icon={<Icon name="plus" />}
+                          />
+                        </Tooltip>
+                      </div>
+                      <Show
+                        when={(snapshot.cuentas ?? []).length > 0}
+                        fallback={<p class="px-1 text-[13px] text-v2-text-text-faint" style={LINEA}>{language.t("trading.accounts.empty")}</p>}
+                      >
+                        <div class="flex flex-wrap gap-1.5">
+                          <For each={snapshot.cuentas ?? []}>
+                            {(cuenta) => (
+                              <button
+                                type="button"
+                                class={`flex h-7 min-w-0 shrink-0 items-center gap-2 rounded-full border px-2.5 ${
+                                  snapshot.cuenta.id === cuenta.id
+                                    ? "border-v2-border-border-muted bg-v2-background-bg-layer-02 text-v2-text-text-base"
+                                    : "border-transparent text-v2-text-text-faint hover:text-v2-text-text-muted"
+                                }`}
+                                onClick={() => void ejecutarCambioCuenta(cuenta.id)}
+                                aria-pressed={snapshot.cuenta.id === cuenta.id}
+                              >
+                                <span
+                                  class={`inline-block size-1.5 shrink-0 rounded-full ${cuenta.id.startsWith("DU") ? "bg-v2-state-fg-info" : "bg-v2-state-fg-danger"}`}
+                                  aria-hidden="true"
+                                />
+                                <span class="truncate font-mono text-[12px]">{cuenta.id || "—"}</span>
+                                <span class={`shrink-0 text-[12px] tabular-nums ${tonoPnl(cuenta.pnl_dia)}`}>
+                                  {flechaPnl(cuenta.pnl_dia)}
+                                  {formatoUSD(cuenta.pnl_dia)}
+                                </span>
+                              </button>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
+                      <Show when={(snapshot.enlaces ?? []).length > 1}>
+                        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+                          <For each={(snapshot.enlaces ?? []).filter((enlace) => enlace.id !== snapshot.enlaces?.[0]?.id)}>
+                            {(enlace) => (
+                              <div class="flex h-5 items-center gap-1.5 text-[11px] leading-[18px] text-v2-text-text-faint">
+                                <span
+                                  class={`inline-block size-1.5 shrink-0 rounded-full ${enlace.conectado ? "bg-v2-state-fg-success" : "bg-v2-border-border-muted"}`}
+                                  aria-hidden="true"
+                                />
+                                <span class="font-mono">{enlace.id}</span>
+                                <Show when={enlace.etiqueta !== null}>
+                                  <span>· {enlace.etiqueta}</span>
+                                </Show>
+                                <span>{language.t(enlace.conectado ? "trading.engine.linked" : "trading.engine.offline")}</span>
+                                <button
+                                  type="button"
+                                  class="text-v2-text-text-faint transition-colors hover:text-v2-state-fg-danger focus-visible:text-v2-state-fg-danger"
+                                  aria-label={language.t("trading.accounts.link.remove.title")}
+                                  onClick={() => abrirEnlaceFuera(enlace.id, enlace.etiqueta)}
+                                >
+                                  <Icon name="close" class="size-3" />
+                                </button>
+                              </div>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
+                    </div>
+                  </Show>
                   <Show when={snapshot.enlace} fallback={<p class="px-1 text-[13px] text-v2-text-text-faint" style={LINEA}>{language.t("trading.account.offline")}</p>}>
                     {/* The three headline numbers read first, big and signed; the details dl
                         carries every account fact below them. */}
@@ -2046,6 +2190,85 @@ function DialogPrompto(props: { contenido: string; guardar: (valor: string) => P
         </Button>
         <Button type="button" variant="submit" disabled={guardando() || borrador() === props.contenido} onClick={guardar}>
           {language.t("common.save")}
+        </Button>
+      </DialogFooter>
+    </Dialog>
+  )
+}
+
+/**
+ * Registers an extra TWS link over one form: host, port and a label. The port comes
+ * prefilled with TWS's live 7496 — naming it shows the same warning tone as the
+ * confirmations. The registration's verdict comes back: a failed one keeps the dialog
+ * open with its error toast (like the prompt editor), a saved one closes it and the new
+ * link's row appears beneath the account chips.
+ */
+function DialogEnlaceNuevo(props: { registrar: (entrada: { host?: string; port: number; label?: string }) => Promise<boolean> }) {
+  const language = useLanguage()
+  const dialog = useDialog()
+  const [entrada, setEntrada] = createStore({ host: "127.0.0.1", port: "7496", label: "" })
+  const [guardando, setGuardando] = createSignal(false)
+
+  const válido = () => {
+    const texto = entrada.port.trim()
+    // Whole numbers only, in TWS's reachable range; the engine re-checks and can still refuse.
+    return /^\d+$/.test(texto) && Number(texto) >= 1 && Number(texto) <= 65_535
+  }
+
+  const registrar = async () => {
+    if (guardando()) return
+
+    setGuardando(true)
+    const guardado = await props.registrar({
+      host: entrada.host.trim() === "" ? undefined : entrada.host.trim(),
+      port: Number(entrada.port.trim()),
+      label: entrada.label.trim() === "" ? undefined : entrada.label.trim(),
+    })
+    setGuardando(false)
+
+    if (guardado) dialog.close()
+  }
+
+  return (
+    <Dialog preventBackdropDismiss>
+      <DialogHeader>
+        <DialogTitleGroup title={language.t("trading.accounts.add.title")} description={language.t("trading.accounts.add.description")} />
+      </DialogHeader>
+      <DialogBody class="flex flex-col gap-2 px-4 pb-2 -mt-2">
+        <div class="flex gap-2">
+          <TextInput
+            value={entrada.host}
+            aria-label={language.t("trading.accounts.add.host")}
+            onInput={(event) => setEntrada("host", event.currentTarget.value)}
+          />
+          <TextInput
+            class="w-24"
+            value={entrada.port}
+            numeric
+            aria-label={language.t("trading.accounts.add.port")}
+            placeholder="7496"
+            onInput={(event) => setEntrada("port", event.currentTarget.value)}
+          />
+        </div>
+        <TextInput
+          value={entrada.label}
+          aria-label={language.t("trading.accounts.add.label")}
+          placeholder={language.t("trading.accounts.add.label")}
+          onInput={(event) => setEntrada("label", event.currentTarget.value)}
+        />
+        <Show when={entrada.port.trim() === "7496"}>
+          <p class="flex items-start gap-2 text-[13px] text-v2-state-fg-warning" style={LINEA}>
+            <Icon name="circle-exclamation" class="mt-0.5 size-3.5 shrink-0" />
+            {language.t("trading.accounts.add.liveWarning")}
+          </p>
+        </Show>
+      </DialogBody>
+      <DialogFooter>
+        <Button type="button" variant="ghost-muted" onClick={() => dialog.close()}>
+          {language.t("common.cancel")}
+        </Button>
+        <Button type="button" variant="submit" disabled={guardando() || !válido()} onClick={() => void registrar()}>
+          {language.t("trading.accounts.add.confirm")}
         </Button>
       </DialogFooter>
     </Dialog>

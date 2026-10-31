@@ -34,6 +34,18 @@ export const RiskUpdatePayload = Schema.Struct({
 }).annotate({ identifier: "Trading.RiskUpdatePayload" })
 export type RiskUpdatePayload = typeof RiskUpdatePayload.Type
 
+export const LinkAddPayload = Schema.Struct({
+  /** The TWS host; omitted means the engine's own host. */
+  host: Schema.optional(Schema.String),
+  /** The TWS API port (7496 is the live port, 7497 the demo one). */
+  port: Schema.Number,
+  /** The user's own name for the link; shown beside its address. */
+  label: Schema.optional(Schema.String),
+}).annotate({ identifier: "Trading.LinkAddPayload" })
+export type LinkAddPayload = typeof LinkAddPayload.Type
+
+const linkParams = { linkID: Schema.String }
+
 /** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
 export const TradingEndpoints = [
   HttpApiEndpoint.get("trading.snapshot", "/api/experimental/trading/snapshot", {
@@ -166,6 +178,39 @@ export const TradingEndpoints = [
       "risk.update",
       "Update the daily-loss limit",
       "Set the engine's daily-loss guard: when the account's day P/L reaches the minus limit while trading, every running bot is stopped and the guard stays latched until the day P/L recovers above the limit. A limit of 0 disables the guard. Persisted across restarts.",
+    ),
+  ),
+  HttpApiEndpoint.post("trading.account.select", "/api/experimental/trading/account/:accountID/select", {
+    params: { accountID: Schema.String },
+    success: Schema.Struct({ data: Schema.NullOr(Trading.Account) }),
+    error: [InvalidRequestError],
+  }).annotateMerge(
+    annotations(
+      "account.select",
+      "Select the dashboard's active account",
+      "Switch the account `snapshot.account` shows: every account field, the KPI strip and the equity curve follow the selection. The input must name an account one of the engine's links has discovered. The selection is remembered across restarts while the account appears again in any link.",
+    ),
+  ),
+  HttpApiEndpoint.post("trading.link.add", "/api/experimental/trading/link", {
+    payload: LinkAddPayload,
+    success: Schema.Struct({ data: Trading.Link }),
+    error: [InvalidRequestError],
+  }).annotateMerge(
+    annotations(
+      "link.add",
+      "Register an extra TWS link",
+      "Register a second TWS address as a permanent balance watch: the engine opens its own socket (retries every 5 s until TWS accepts), discovers that login's accounts and lists them beside the primary's. A link never places orders. Already-registered addresses are refused. Persisted across restarts.",
+    ),
+  ),
+  HttpApiEndpoint.delete("trading.link.remove", "/api/experimental/trading/link/:linkID", {
+    params: linkParams,
+    success: Schema.Struct({ data: Schema.Array(Trading.Link) }),
+    error: [InvalidRequestError],
+  }).annotateMerge(
+    annotations(
+      "link.remove",
+      "Remove a registered TWS link",
+      "Withdraw a registered link: its socket drops and its accounts stop listing. The panel's own primary link is never removable. Returns the remaining links.",
     ),
   ),
 ] as const

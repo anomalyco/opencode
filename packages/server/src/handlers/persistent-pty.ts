@@ -122,6 +122,32 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
         }),
       )
       .handle(
+        "trading.account.select",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* trading.accountSelect(ctx.params.accountID).pipe(Effect.mapError((error) => invalidTask(error.message))),
+          }
+        }),
+      )
+      .handle(
+        "trading.link.add",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* trading
+              .linkAdd({ host: ctx.payload.host, port: ctx.payload.port, label: ctx.payload.label })
+              .pipe(Effect.mapError((error) => invalidTask(error.message))),
+          }
+        }),
+      )
+      .handle(
+        "trading.link.remove",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* trading.linkRemove(ctx.params.linkID).pipe(Effect.mapError((error) => invalidTask(error.message))),
+          }
+        }),
+      )
+      .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {
           return { data: yield* pty.read(ctx.params.sessionID, ctx.query.lines).pipe(mapUnavailable) }

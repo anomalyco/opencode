@@ -23,8 +23,28 @@ export const Account = Schema.Struct({
   excess_liquidity: optional(Schema.NullOr(Schema.Number)),
   /** Epoch ms of the newest account fact (summary tag or portfolio update); null until seen. */
   updated_at: optional(Schema.NullOr(Schema.Number)),
+  /** The engine link the account lives on (its "host:port"); null when the engine's own
+   * state carries no link id. Optional: an engine predating this field simply omits it. */
+  link: optional(Schema.NullOr(Schema.String)),
 }).annotate({ identifier: "Trading.Account" })
 export interface Account extends Schema.Schema.Type<typeof Account> {}
+
+/**
+ * One registered TWS link: a host:port whose socket the engine keeps watching (its own
+ * reconnect chase runs until TWS accepts). Links read balances only; they never place
+ * orders. The panel's own primary link (the Conectar flow) is one of them, with no label.
+ */
+export const Link = Schema.Struct({
+  /** "host:port", deduplicated with the primary against the same key. */
+  id: Schema.String,
+  host: Schema.String,
+  port: Schema.Number,
+  /** The user's own name for the link; null when none was given (the primary's case). */
+  label: Schema.NullOr(Schema.String),
+  /** true while the link's socket is up. */
+  connected: Schema.Boolean,
+}).annotate({ identifier: "Trading.Link" })
+export interface Link extends Schema.Schema.Type<typeof Link> {}
 
 /** One instrument family's market-data health as the engine sees it. */
 export const DataStatus = Schema.Struct({
@@ -199,5 +219,11 @@ export const Snapshot = Schema.Struct({
    * A family stays present with null fields when no fact arrived; absent only from
    * snapshots of an engine predating this field. */
   data_status: optional(Schema.NullOr(Schema.Array(DataStatus))),
+  /** Every account the engine's links have discovered, linked through `link`; absent only
+   * from snapshots of an engine predating this field. */
+  accounts: optional(Schema.Array(Account)),
+  /** The engine's links, the panel's primary one first; absent only from snapshots of an
+   * engine predating this field. */
+  links: optional(Schema.Array(Link)),
 }).annotate({ identifier: "Trading.Snapshot" })
 export interface Snapshot extends Schema.Schema.Type<typeof Snapshot> {}
