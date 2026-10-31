@@ -13,6 +13,7 @@ import { discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@openc
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
 import { resolveOpencodePty } from "./opencode-pty"
+import { platformFields } from "./platform-fields"
 import { NativeArch } from "../../../script/native-arch"
 import { bundledModelsSnapshot, modelsSnapshotPlugin } from "../../core/script/models-snapshot"
 
@@ -220,8 +221,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
         version: Script.version,
         license: "MIT",
         repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },
-        os: [item.os],
-        cpu: [item.arch],
+        ...platformFields(item),
       },
       null,
       2,
