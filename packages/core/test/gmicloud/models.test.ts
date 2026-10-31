@@ -22,9 +22,10 @@ test("matches exact catalog templates case-insensitively and inherits their type
 
   expect(model?.name).toBe("OpenAI/GPT-5.5 catalog")
   expect(model?.type).toBe("image")
+  expect(model?.family).toBe(Model.Family.make("catalog-family"))
 })
 
-test("inherits only family features from the closest same-org model template", () => {
+test("inherits type and compatibility from the closest same-org model template", () => {
   const farther = template("zai-org/GLM-4.7", {
     compatibility: { reasoningField: "reasoning" },
     variants: [{ id: Model.VariantID.make("old") }],
@@ -68,7 +69,7 @@ test("inherits only family features from the closest same-org model template", (
 
   expect(model?.type).toBe("decision")
   expect(model?.name).toBe("Live GLM-5.3")
-  expect(model?.family).toBe(Model.Family.make("catalog-family"))
+  expect(model?.family).toBeUndefined()
   expect(model?.compatibility).toEqual({ reasoningField: "reasoning_content" })
   expect(model?.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
   expect(model?.variants).toEqual([])
@@ -82,6 +83,19 @@ test("inherits only family features from the closest same-org model template", (
   expect(model?.cost[0]).toMatchObject({ input: 0.3, output: 0.5, cache: { write: 0 } })
   expect(Number(model?.cost[0]?.cache.read)).toBeCloseTo(0.1, 10)
   expect(model?.limit).toEqual({ context: 1048576, output: 0 })
+})
+
+test("does not inherit family from a related model template", () => {
+  const existing = template("moonshotai/kimi-k2.7-code-highspeed", {
+    family: Model.Family.make("kimi-k2"),
+    compatibility: { reasoningField: "reasoning_content" },
+  })
+  const models = GmiCloudModels.derive("https://gmi.example/v1", [{ id: "moonshotai/kimi-k3" }], [existing])
+  const model = models.get(Model.ID.make("moonshotai/kimi-k3"))
+
+  expect(model?.family).toBeUndefined()
+  expect(model?.compatibility).toEqual({ reasoningField: "reasoning_content" })
+  expect(model?.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
 })
 
 test("does not inherit family variants or input capabilities", () => {

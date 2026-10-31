@@ -98,8 +98,8 @@ function limit(value: number | undefined, fallback: number) {
 }
 
 function build(id: Model.ID, remote: RemoteModel, baseURL: string, selected?: { model: Model.Info; exact: boolean }) {
-  const family = selected?.model
-  const exact = selected?.exact ? family : undefined
+  const template = selected?.model
+  const exact = selected?.exact ? template : undefined
   const cost = exact?.cost[0]
   const input = exact?.limit.input
   return Model.Info.make({
@@ -107,10 +107,10 @@ function build(id: Model.ID, remote: RemoteModel, baseURL: string, selected?: { 
     id,
     modelID: Model.ID.make(remote.id),
     providerID,
-    type: family?.type,
+    type: template?.type,
     name: remote.name ?? exact?.name ?? remote.id,
-    family: family?.family,
-    compatibility: family?.compatibility,
+    family: exact?.family,
+    compatibility: template?.compatibility,
     package: "@opencode/ai/providers/openai-compatible",
     settings: Provider.mergeOverlay(exact?.settings, { baseURL, provider: providerID }),
     headers: exact?.headers,
