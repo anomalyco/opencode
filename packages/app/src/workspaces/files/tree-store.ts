@@ -69,12 +69,11 @@ export function createFileTreeStore(options: TreeStoreOptions) {
         const prevChildren = tree.dir[dir]?.children ?? []
         const nextChildren = nodes.map((node) => node.path)
         const nextSet = new Set(nextChildren)
+        const removedDirs: string[] = []
 
         setTree(
           "node",
           produce((draft) => {
-            const removedDirs: string[] = []
-
             for (const child of prevChildren) {
               if (nextSet.has(child)) continue
               const existing = draft[child]
@@ -85,10 +84,13 @@ export function createFileTreeStore(options: TreeStoreOptions) {
 
             if (removedDirs.length > 0) {
               const keys = Object.keys(draft)
+              const windows = /^[A-Za-z]:/.test(directory) || directory.startsWith("\\\\")
 
               for (const key of keys) {
                 for (const removed of removedDirs) {
-                  if (!key.startsWith(removed + "/")) continue
+                  const prefix = removed.endsWith("/") || (windows && removed.endsWith("\\")) ? removed : removed + "/"
+
+                  if (!key.startsWith(prefix)) continue
                   delete draft[key]
                   break
                 }
@@ -100,6 +102,20 @@ export function createFileTreeStore(options: TreeStoreOptions) {
             }
           }),
         )
+
+        if (removedDirs.length > 0) {
+          const directories = removedDirs.map((path) => options.normalizeDir(path))
+
+          setTree(
+            "dir",
+            produce((draft) => {
+              for (const key of Object.keys(draft)) {
+                if (!directories.some((path) => key === path || key.startsWith(path + "/"))) continue
+                delete draft[key]
+              }
+            }),
+          )
+        }
 
         setTree(
           "dir",
