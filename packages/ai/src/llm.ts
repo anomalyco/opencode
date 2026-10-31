@@ -229,17 +229,14 @@ const decodeObject = (output: Tool, response: LLMResponse) => {
   const call = response.toolCalls.find((event) => event.name === OBJECT_TOOL)
   const invalid = (message: string, cause?: unknown) =>
     new AIError({ reason: new InvalidProviderOutputError({ message, cause }), partial: response })
+  // A cut-off call arrives with truncated or empty input, so its decode error would hide the real cause.
+  if (response.finishReason.normalized === "length")
+    return Effect.fail(invalid("output hit the token limit before the forced tool call completed"))
   if (call)
     return output
       ._decode(call.input)
       .pipe(Effect.mapError((error) => invalid(`schema decode failed: ${error.message}`, error)))
-  return Effect.fail(
-    invalid(
-      response.finishReason.normalized === "length"
-        ? "output hit the token limit before the forced tool call completed"
-        : `model did not call the forced \`${OBJECT_TOOL}\` tool`,
-    ),
-  )
+  return Effect.fail(invalid(`model did not call the forced \`${OBJECT_TOOL}\` tool`))
 }
 
 const withObject = (output: Tool, event: Finish, state: LLMResponse.State): Effect.Effect<LLMEvent, AIError> => {

@@ -204,6 +204,26 @@ describe("schema on ai.stream and ai.loop", () => {
     execute: ({ value }) => Effect.succeed(value),
   })
 
+  scripted.effect("reports the token limit instead of a decode error when output is cut off", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.complete(
+          { reason: { normalized: "length" } },
+          LLMEvent.toolCall({ id: "call-1", name: "generate_object", input: {} }),
+        ),
+      )
+
+      const error = yield* ai
+        .generate({ model, prompt: "Pick a city.", schema: City, generation: { maxTokens: 1 } })
+        .pipe(Effect.flip)
+
+      expect(error.message).toContain("output hit the token limit")
+      expect(error.message).not.toContain("schema decode failed")
+      expect(error.partial?.toolCalls[0]?.name).toBe("generate_object")
+    }),
+  )
+
   scripted.effect("stream puts the decoded object on finish", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
