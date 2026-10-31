@@ -483,6 +483,27 @@ When you need to search docs, use `context7` tools.
 
 ---
 
+### Invokely
+
+Add [Invokely](https://invokely.ai/docs) to query official statistics through a hosted MCP server. Its no-account trial allows 25 calls per day per IP address ([plans](https://invokely.ai/pricing)). To keep this OpenCode configuration limited to statistics, the `tools` setting disables Invokely's account-scoped workspace tools in the client. Invokely still enforces access on the server.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "invokely": {
+      "type": "remote",
+      "url": "https://invokely.ai/mcp/trial"
+    }
+  },
+  "tools": {
+    "invokely_workspace_*": false
+  }
+}
+```
+
+---
+
 ### Grep by Vercel
 
 Add the [Grep by Vercel](https://grep.app) MCP server to search through code snippets on GitHub.
