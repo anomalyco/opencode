@@ -134,11 +134,11 @@ Usage limits are defined as monthly dollar amounts. The table below shows the
 monthly limit for each plan and the token costs for each model. Token pricing is
 the same for Go, Go Plus, and Go Teams.
 
-Each model has the following usage limits: 5-hour — 20% of the monthly limit;
-weekly — 50%; and monthly — 100%.
+All paid models share one workspace-wide allowance: 5-hour — 20% of the monthly
+allowance; weekly — 50%; and monthly — 100%.
 
-Each model's monthly limit below determines how its usage counts toward those allowances. Each response reports how
-much the request counted, as [`opencode.allowance`](/console/api/inference#cost).
+Each model's monthly limit below determines how heavily its usage counts toward that shared allowance. Each response
+reports how much the request counted, as [`opencode.allowance`](/console/api/inference#cost).
 
 Token prices are per 1M tokens.
 
