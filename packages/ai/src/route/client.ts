@@ -605,19 +605,17 @@ const compileUnsafe = Effect.fnUntraced(function* (request: LLMRequest, options?
       if (Option.isSome(failure)) {
         // The typed failure wins below, so a defect riding along in the same cause would vanish from both channels.
         if (!Cause.hasDies(cause)) return Effect.fail(failure.value)
-        const defect = cause.reasons.find(Cause.isDieReason)?.defect
         const squashed = ProviderShared.errorText(Cause.squash(cause))
         return Effect.andThen(
-          Effect.logError(`Route ${route.id} lowering defect alongside a typed failure: ${squashed}`, defect),
+          Effect.logError(`Route ${route.id} lowering defect alongside a typed failure: ${squashed}`, { cause }),
           Effect.fail(failure.value),
         )
       }
       const defect = Cause.squash(cause)
-      return Effect.fail(
-        ProviderShared.invalidRequest(
-          `Route ${route.id} failed to build the request body: ${ProviderShared.errorText(defect)}`,
-          defect,
-        ),
+      const message = `Route ${route.id} failed to build the request body: ${ProviderShared.errorText(defect)}`
+      return Effect.andThen(
+        Effect.logError(message, { cause }),
+        Effect.fail(ProviderShared.invalidRequest(message, defect)),
       )
     }),
   )

@@ -296,6 +296,12 @@ const jsonText = (value: unknown) =>
   })
 
 export const toolResultText = (part: ToolResultPart) => {
+  // A plugin can store a bare string (or another primitive) as the whole result. Reading `part.result.type` on it
+  // yields `undefined`, so every envelope branch below misses and the payload silently degrades to the "null"
+  // placeholder — dropping exactly the text (often a handle ref) the model needed. Degrade on shape first.
+  const result: unknown = part.result
+  if (typeof result === "string") return result
+  if (result === null || typeof result !== "object") return String(result)
   if (part.result.type === "text") return String(part.result.value)
   if (part.result.type === "error") {
     const value = part.result.value

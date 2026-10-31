@@ -114,7 +114,11 @@ export const ToolOutput = withStatics(
       }
     },
     toResultValue: (output: ToolOutput): ToolResultValue => {
-      if (output.content.length === 0) return ToolResultValue.make(output.structured)
+      // Explicit json envelope: `make` short-circuits on a value already shaped like `{ type, value }`, which
+      // would silently treat a structured output of that shape as a result envelope (and an "error" one as a
+      // failed tool). Undefined still has to become null so the type stays encodable.
+      if (output.content.length === 0)
+        return { type: "json", value: output.structured === undefined ? null : output.structured }
       if (output.content.length === 1 && output.content[0]?.type === "text")
         return { type: "text", value: output.content[0].text }
       return { type: "content", value: output.content }
