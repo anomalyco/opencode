@@ -7,7 +7,7 @@ import {
   type LanguageModel,
   type LLM,
   LLMEvent,
-  LLMRequest,
+  type LLMRequest,
   LLMResponse,
   Media,
   Message,
@@ -94,7 +94,7 @@ const restroomImage = () =>
 export const runWeatherToolLoop = (request: LLMRequest) =>
   Effect.gen(function* () {
     const tools = [weatherRuntimeTool]
-    let next = LLMRequest.update(request, { tools: toDefinitions(tools) })
+    let next = { ...request, tools: toDefinitions(tools) }
     const events: LLMEvent[] = []
 
     for (let step = 0; step < 10; step++) {
@@ -111,13 +111,14 @@ export const runWeatherToolLoop = (request: LLMRequest) =>
         ToolRuntime.dispatch(tools, call).pipe(Effect.map((result) => [call, result] as const)),
       )
       events.push(...dispatched.flatMap(([, result]) => result.events))
-      next = LLMRequest.update(next, {
+      next = {
+        ...next,
         messages: [
           ...next.messages,
           Message.assistant(assistantContent(response.events)),
           ...dispatched.map(([call, result]) => Message.tool({ id: call.id, name: call.name, result: result.result })),
         ],
-      })
+      }
     }
 
     throw new Error("Weather tool loop exceeded 10 steps")
@@ -198,8 +199,8 @@ type AssistantStep = {
   readonly system?: string
   readonly maxTokens?: number
   readonly finish?: FinishReason
-  readonly tools?: LLM.RequestInput["tools"]
-  readonly toolChoice?: LLM.RequestInput["toolChoice"]
+  readonly tools?: LLM.LLMRequestInput["tools"]
+  readonly toolChoice?: LLM.LLMRequestInput["toolChoice"]
   readonly providerOptions?: LLMRequest["providerOptions"]
   readonly assert?: (response: LLMResponse) => void
 }

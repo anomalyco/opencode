@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { ai, LLMEvent, LLMRequest, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
 import { Venice } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -52,7 +52,8 @@ for (const item of [
         expect(first.toolCalls).toMatchObject([{ name: "lookup_rate", input: { code: "ZEBRA" } }])
         expect(first.finishReason.normalized).toBe("tool-calls")
         expect(first.events.filter(LLMEvent.is.finish)).toHaveLength(1)
-        const continuation = LLMRequest.update(request, {
+        const continuation = {
+          ...request,
           toolChoice: ToolChoice.make("none"),
           messages: [
             ...request.messages,
@@ -61,7 +62,7 @@ for (const item of [
               Message.tool({ id: call.id, name: call.name, result: { code: "ZEBRA", rate: 23 } }),
             ),
           ],
-        })
+        }
         const compiled = yield* compileRequest(continuation)
         const assistant = compiled.body.messages.find((message) => message.role === "assistant")
         expect(assistant).toBeDefined()
@@ -100,13 +101,14 @@ for (const item of [
         expect(second.finishReason.normalized).toBe("stop")
         expect(second.usage?.inputTokens).toBeGreaterThan(0)
         expect(second.usage?.outputTokens).toBeGreaterThan(0)
-        const followUp = LLMRequest.update(continuation, {
+        const followUp = {
+          ...continuation,
           messages: [
             ...continuation.messages,
             second.message,
             Message.user("Add 7 to your previous final answer. Reply with just the number."),
           ],
-        })
+        }
         const third = yield* LLMClient.generate(followUp)
         expect(third.text).toContain("407")
         expect(third.finishReason.normalized).toBe("stop")
@@ -143,7 +145,8 @@ recorded.effect.with(
       })
       const first = yield* LLMClient.generate(request)
       expect(first.toolCalls).toHaveLength(2)
-      const continuation = LLMRequest.update(request, {
+      const continuation = {
+        ...request,
         toolChoice: ToolChoice.make("none"),
         messages: [
           ...request.messages,
@@ -161,7 +164,7 @@ recorded.effect.with(
             }),
           ),
         ],
-      })
+      }
       const compiled = yield* compileRequest(continuation)
       expect(compiled.body.messages).toEqual(
         expect.arrayContaining([
@@ -184,13 +187,14 @@ recorded.effect.with(
         .map((part) => part.providerMetadata?.venice?.messageThoughtSignature)
         .find((value) => value !== undefined)
       expect(signature).toEqual(expect.any(String))
-      const followUp = LLMRequest.update(continuation, {
+      const followUp = {
+        ...continuation,
         messages: [
           ...continuation.messages,
           second.message,
           Message.user("Add 7 to your previous final answer. Reply with just the number."),
         ],
-      })
+      }
       expect((yield* compileRequest(followUp)).body.messages).toEqual(
         expect.arrayContaining([expect.objectContaining({ role: "assistant", thought_signature: signature })]),
       )

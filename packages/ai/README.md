@@ -896,7 +896,7 @@ The hosted result is represented as a provider-executed tool call and a tool res
 
 Everything below is exported from `@opencode/ai/effect` unless noted.
 
-- **`ai.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
+- **`ai.request({...})`** — build a provider-neutral `LLMRequest`, a plain object. Accepts ergonomic inputs (`system: string`, `prompt: string`) and normalizes them into `system`, `messages` and `tools` arrays. Edit it with a spread, or pass the edited object back to `ai.request`.
 - **`ai.generate` / `ai.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
 - **`ai.loop`** — stream model calls, running `tool(...)` tools between them until the model stops calling tools.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
@@ -1273,9 +1273,7 @@ Prefer this operation, where supported, when the application owns compaction pol
 ```ts
 const compacted = Effect.gen(function* () {
   const result = yield* ai.compact(request)
-  const next = LLMRequest.update(request, {
-    messages: result.replacement,
-  })
+  const next = { ...request, messages: result.replacement }
   return yield* ai.generate(next)
 })
 ```
@@ -1335,7 +1333,7 @@ Enable OpenAI compaction with typed provider options:
 
 ```ts
 import { Effect } from "effect"
-import { ai, LLMClient, LLMRequest, Message } from "@opencode/ai/effect"
+import { ai, LLMClient, Message } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 
 const request = ai.request({
@@ -1347,9 +1345,7 @@ const request = ai.request({
 })
 const continued = Effect.gen(function* () {
   const response = yield* LLMClient.generate(request)
-  return LLMRequest.update(request, {
-    messages: [...request.messages, response.message, Message.user("Continue")],
-  })
+  return { ...request, messages: [...request.messages, response.message, Message.user("Continue")] }
 })
 ```
 

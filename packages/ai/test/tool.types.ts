@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { ai, type ExecutableTool, LLMRequest, toDefinitions, tool, ToolRuntime } from "../src/effect.js"
+import { ai, type ExecutableTool, toDefinitions, tool, ToolRuntime } from "../src/effect.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { Auth } from "../src/route.js"
 import { AI } from "../src/index.js"
@@ -34,7 +34,7 @@ tool({
 })
 
 ai.stream(request)
-ai.generate(LLMRequest.update(request, { tools: toDefinitions([schemaOnly]) }))
+ai.generate({ ...request, tools: toDefinitions([schemaOnly]) })
 ToolRuntime.dispatch([executable], { type: "tool-call", id: "call_1", name: "executable", input: { city: "Paris" } })
 
 ai.stream({ model: request.model, prompt: "Use the tool.", tools: [schemaOnly, executable] })

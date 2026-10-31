@@ -1,7 +1,7 @@
 import { Config, Effect, Formatter, Schema, Stream } from "effect"
 import { HttpClientResponse } from "effect/http"
 import { NodeFileSystem } from "@effect/platform-node"
-import { ai, AIClient, LLMRequest, Media, Message, ProviderID, ToolRuntime } from "@opencode/ai/effect"
+import { ai, AIClient, Media, Message, ProviderID, ToolRuntime } from "@opencode/ai/effect"
 import { tool } from "@opencode/ai/effect"
 import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode/ai/route"
 import { OpenAI } from "@opencode/ai/providers"
@@ -113,13 +113,14 @@ const streamWithTools = Effect.gen(function* () {
 
     // A durable agent would persist these messages before starting another
     // raw model turn. This tutorial keeps the boundary visible instead.
-    const followUp = LLMRequest.update(request, {
+    const followUp = {
+      ...request,
       messages: [
         ...request.messages,
         Message.assistant([event]),
         Message.tool({ ...event, result: dispatched.result }),
       ],
-    })
+    }
     console.log("follow-up history messages:", followUp.messages.length)
   }
 })

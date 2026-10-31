@@ -73,7 +73,6 @@ export {
   ToolNamespace,
   ToolEntry,
   ToolChoice,
-  LLMRequest,
   FinishReason,
   Usage,
   MediaUsage,
@@ -124,17 +123,18 @@ export type {
   GenerationOptionsInput,
   LanguageModelInput,
   LanguageModelProviderOptions,
+  LLMRequest,
   ToolDefinitionInput,
   ToolNamespaceInput,
   ToolNamespaceEntryInput,
   ToolEntryInput,
   UsageInput,
 } from "./schema/index.js"
-export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageRequest, ImageResponse } from "./image.js"
+export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageResponse } from "./image.js"
 export type {
   ImageModelOptions,
   ImageOptions,
-  ImageRequestFor,
+  ImageRequest,
   ImageRequestInput,
   ImageResolution,
   ImageRoute,
@@ -152,7 +152,6 @@ export {
   DecisionModelSchema,
   DecisionPart,
   DecisionQuestion,
-  DecisionRequest,
   DecisionResponse,
   DecisionTextPart,
   DecisionUsage,
@@ -170,7 +169,7 @@ export type {
   DecisionModelOptions,
   DecisionOptions,
   DecisionQuestions,
-  DecisionRequestFor,
+  DecisionRequest,
   DecisionRequestInput,
   DecisionResponseFor,
   DecisionModelRoute,
@@ -202,3 +201,4 @@ export type {
   ToolToModelOutput,
 } from "./tool.js"
 export type { LLM } from "./llm.js"
+export type { LLMLoopInput, LLMRequestInput } from "./llm.js"

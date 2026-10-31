@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, Message, ToolRuntime } from "../../src/effect.js"
+import { ai, LLMEvent, Message, ToolRuntime } from "../../src/effect.js"
 import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -43,7 +43,8 @@ describe("Gemini OpenAI-compatible Chat recorded", () => {
         expect(extraContent).toEqual({ google: { thought_signature: expect.any(String) } })
 
         const results = yield* Effect.forEach(calls, (call) => ToolRuntime.dispatch(tools, call))
-        const continuation = LLMRequest.update(request, {
+        const continuation = {
+          ...request,
           messages: [
             ...request.messages,
             first.message,
@@ -51,7 +52,7 @@ describe("Gemini OpenAI-compatible Chat recorded", () => {
               Message.tool({ id: call.id, name: call.name, result: results[index]!.result }),
             ),
           ],
-        })
+        }
         const prepared = yield* compileRequest(continuation)
         const assistant = prepared.body.messages.find((message) => message.role === "assistant")
         expect(assistant?.role === "assistant" ? assistant.tool_calls?.[0]?.extra_content : undefined).toEqual(

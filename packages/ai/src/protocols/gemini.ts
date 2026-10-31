@@ -561,11 +561,7 @@ const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: st
 const terminalFinishReason = (finishReason: string | null | undefined) =>
   finishReason && finishReason !== "FINISH_REASON_UNSPECIFIED" ? finishReason : undefined
 
-const RECOVERABLE_FINISH_REASONS = new Set([
-  "MALFORMED_RESPONSE",
-  "MALFORMED_FUNCTION_CALL",
-  "UNEXPECTED_TOOL_CALL",
-])
+const RECOVERABLE_FINISH_REASONS = new Set(["MALFORMED_RESPONSE", "MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL"])
 
 const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean): FinishReason => {
   if (finishReason === undefined) return hasToolCalls ? "tool-calls" : "unknown"
@@ -917,12 +913,10 @@ export const transport: Transport<GeminiBody, Prepared, unknown> = {
         })
       const next = (continuationToken: string) =>
         Stream.unwrap(
-          sse
-            .prepare({ ...prepared.input, body: { ...prepared.input.body, continuationToken } })
-            .pipe(
-              Effect.flatMap((continued) => sse.execute(continued, request, runtime)),
-              Effect.map(respond),
-            ),
+          sse.prepare({ ...prepared.input, body: { ...prepared.input.body, continuationToken } }).pipe(
+            Effect.flatMap((continued) => sse.execute(continued, request, runtime)),
+            Effect.map(respond),
+          ),
         )
       const first = yield* sse.execute(prepared.http, request, runtime)
       return {

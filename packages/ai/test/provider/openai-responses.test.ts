@@ -8,7 +8,6 @@ import {
   HttpOptions,
   LanguageModel,
   LLMEvent,
-  LLMRequest,
   Media,
   Message,
   ToolCallPart,
@@ -300,7 +299,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lowers semantic service tier options", () =>
     Effect.gen(function* () {
-      const input = LLMRequest.update(request, { providerOptions: { serviceTier: "priority" } })
+      const input = { ...request, providerOptions: { serviceTier: "priority" } }
       expect(input.providerOptions).toEqual({ serviceTier: "priority" })
       const prepared = yield* compileRequest(input)
 
@@ -311,9 +310,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("passes through custom OpenAI reasoning effort strings", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, { providerOptions: { reasoningEffort: "experimental" } }),
-      )
+      const prepared = yield* compileRequest({ ...request, providerOptions: { reasoningEffort: "experimental" } })
 
       expect(prepared.body.reasoning).toEqual({ effort: "experimental" })
     }),
@@ -321,11 +318,10 @@ describe("OpenAI Responses route", () => {
 
   it.effect("lowers reasoning mode and context into the reasoning object", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          providerOptions: { reasoningEffort: "high", reasoningMode: "pro", reasoningContext: "current_turn" },
-        }),
-      )
+      const prepared = yield* compileRequest({
+        ...request,
+        providerOptions: { reasoningEffort: "high", reasoningMode: "pro", reasoningContext: "current_turn" },
+      })
 
       expect(prepared.body.reasoning).toEqual({ effort: "high", mode: "pro", context: "current_turn" })
       expect(prepared.body).not.toHaveProperty("reasoningMode")
@@ -335,9 +331,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("passes through custom OpenAI text verbosity strings", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, { providerOptions: { textVerbosity: "verbose" } }),
-      )
+      const prepared = yield* compileRequest({ ...request, providerOptions: { textVerbosity: "verbose" } })
 
       expect(prepared.body.text).toEqual({ verbosity: "verbose" })
     }),
@@ -346,7 +340,7 @@ describe("OpenAI Responses route", () => {
   it.effect("passes through provider-defined and future service tiers", () =>
     Effect.gen(function* () {
       for (const serviceTier of ["scale", "ultrafast", "future-tier"]) {
-        const prepared = yield* compileRequest(LLMRequest.update(request, { providerOptions: { serviceTier } }))
+        const prepared = yield* compileRequest({ ...request, providerOptions: { serviceTier } })
 
         expect(prepared.body.service_tier).toBe(serviceTier)
       }
@@ -355,35 +349,34 @@ describe("OpenAI Responses route", () => {
 
   it.effect("preserves function schemas", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          tools: [
-            ToolDefinition.make({
-              name: "read",
-              description: "Read a path or resource.",
-              inputSchema: {
-                type: "object",
-                anyOf: [
-                  {
-                    type: "object",
-                    properties: {
-                      path: { type: "string" },
-                      reference: { anyOf: [{ type: "string" }, { type: "null" }] },
-                      limit: { type: "integer", maximum: 2000 },
-                    },
-                    required: ["path"],
+      const prepared = yield* compileRequest({
+        ...request,
+        tools: [
+          ToolDefinition.make({
+            name: "read",
+            description: "Read a path or resource.",
+            inputSchema: {
+              type: "object",
+              anyOf: [
+                {
+                  type: "object",
+                  properties: {
+                    path: { type: "string" },
+                    reference: { anyOf: [{ type: "string" }, { type: "null" }] },
+                    limit: { type: "integer", maximum: 2000 },
                   },
-                  {
-                    type: "object",
-                    properties: { resource: { type: "string" }, limit: { type: "integer", maximum: 51200 } },
-                    required: ["resource"],
-                  },
-                ],
-              },
-            }),
-          ],
-        }),
-      )
+                  required: ["path"],
+                },
+                {
+                  type: "object",
+                  properties: { resource: { type: "string" }, limit: { type: "integer", maximum: 51200 } },
+                  required: ["resource"],
+                },
+              ],
+            },
+          }),
+        ],
+      })
 
       expect(prepared.body.tools).toEqual([
         {
@@ -417,22 +410,13 @@ describe("OpenAI Responses route", () => {
 
   it.effect("maps the canonical parallel tool setting with provider-option precedence", () =>
     Effect.gen(function* () {
-      const disabled = yield* compileRequest(
-        LLMRequest.update(request, {
-          toolChoice: { type: "auto", disableParallelToolUse: true },
-        }),
-      )
-      const enabled = yield* compileRequest(
-        LLMRequest.update(request, {
-          toolChoice: { type: "auto", disableParallelToolUse: false },
-        }),
-      )
-      const overridden = yield* compileRequest(
-        LLMRequest.update(request, {
-          toolChoice: { type: "auto", disableParallelToolUse: true },
-          providerOptions: { parallelToolCalls: true },
-        }),
-      )
+      const disabled = yield* compileRequest({ ...request, toolChoice: { type: "auto", disableParallelToolUse: true } })
+      const enabled = yield* compileRequest({ ...request, toolChoice: { type: "auto", disableParallelToolUse: false } })
+      const overridden = yield* compileRequest({
+        ...request,
+        toolChoice: { type: "auto", disableParallelToolUse: true },
+        providerOptions: { parallelToolCalls: true },
+      })
 
       expect(disabled.body.parallel_tool_calls).toBe(false)
       expect(enabled.body.parallel_tool_calls).toBe(true)
@@ -459,13 +443,12 @@ describe("OpenAI Responses route", () => {
 
   it.effect("prepares one OpenAI Responses route for either transport", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLMRequest.update(request, {
-          model: OpenAIResponses.route
-            .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-            .model({ id: "gpt-4.1-mini" }),
-        }),
-      )
+      const prepared = yield* compileRequest({
+        ...request,
+        model: OpenAIResponses.route
+          .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+          .model({ id: "gpt-4.1-mini" }),
+      })
 
       expect(prepared.route).toBe("openai-responses")
       expect(prepared.protocol).toBe("openai-responses")
@@ -1314,9 +1297,7 @@ describe("OpenAI Responses route", () => {
   it.effect("uses exactly one HTTP request when no WebSocket executor is supplied", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)
-      yield* LLMClient.generate(
-        LLMRequest.update(request, { http: new HttpOptions({ body: { input: "raw-http-input" } }) }),
-      ).pipe(
+      yield* LLMClient.generate({ ...request, http: new HttpOptions({ body: { input: "raw-http-input" } }) }).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Effect.gen(function* () {
@@ -1495,13 +1476,12 @@ describe("OpenAI Responses route", () => {
 
   it.effect("adds native query params to the Responses URL", () =>
     Effect.gen(function* () {
-      yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          model: LanguageModel.update(model, {
-            route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
-          }),
+      yield* LLMClient.generate({
+        ...request,
+        model: LanguageModel.update(model, {
+          route: model.route.with({ endpoint: { query: { "api-version": "v1" } } }),
         }),
-      ).pipe(
+      }).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Effect.gen(function* () {
@@ -1519,15 +1499,14 @@ describe("OpenAI Responses route", () => {
 
   it.effect("uses Azure api-key header for static OpenAI Responses keys", () =>
     Effect.gen(function* () {
-      yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          model: Azure.configure({
-            baseURL: "https://opencode-test.openai.azure.com/openai/",
-            apiKey: "azure-key",
-            headers: { authorization: "Bearer stale" },
-          }).responses("gpt-4.1-mini"),
-        }),
-      ).pipe(
+      yield* LLMClient.generate({
+        ...request,
+        model: Azure.configure({
+          baseURL: "https://opencode-test.openai.azure.com/openai/",
+          apiKey: "azure-key",
+          headers: { authorization: "Bearer stale" },
+        }).responses("gpt-4.1-mini"),
+      }).pipe(
         Effect.provide(
           dynamicResponse((input) =>
             Effect.gen(function* () {
@@ -1546,11 +1525,10 @@ describe("OpenAI Responses route", () => {
   )
 
   it.effect("loads OpenAI default auth from Effect Config", () =>
-    LLMClient.generate(
-      LLMRequest.update(request, {
-        model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/" }).responses("gpt-4.1-mini"),
-      }),
-    ).pipe(
+    LLMClient.generate({
+      ...request,
+      model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/" }).responses("gpt-4.1-mini"),
+    }).pipe(
       configEnv({ OPENAI_API_KEY: "env-key" }),
       Effect.provide(
         dynamicResponse((input) =>
@@ -1567,14 +1545,13 @@ describe("OpenAI Responses route", () => {
   )
 
   it.effect("lets explicit auth override OpenAI default API key auth", () =>
-    LLMClient.generate(
-      LLMRequest.update(request, {
-        model: OpenAI.configure({
-          baseURL: "https://api.openai.test/v1/",
-          auth: Auth.bearer("oauth-token"),
-        }).responses("gpt-4.1-mini"),
-      }),
-    ).pipe(
+    LLMClient.generate({
+      ...request,
+      model: OpenAI.configure({
+        baseURL: "https://api.openai.test/v1/",
+        auth: Auth.bearer("oauth-token"),
+      }).responses("gpt-4.1-mini"),
+    }).pipe(
       Effect.provide(
         dynamicResponse((input) =>
           Effect.gen(function* () {
@@ -1951,14 +1928,15 @@ describe("OpenAI Responses route", () => {
       expect((yield* compileRequest(metaRequest)).body.input, "Meta flushes videos at end of history").toMatchObject(
         metaInput,
       )
-      const continued = yield* compileRequest(
-        LLMRequest.update(metaRequest, { messages: [...metaRequest.messages, Message.user("continue")] }),
-      )
+      const continued = yield* compileRequest({
+        ...metaRequest,
+        messages: [...metaRequest.messages, Message.user("continue")],
+      })
       expect(continued.body.input, "Meta flushes videos before the next user message").toMatchObject([
         ...metaInput,
         { type: "message", role: "user", content: [{ type: "input_text", text: "continue" }] },
       ])
-      const nested = yield* compileRequest(LLMRequest.update(metaRequest, { model: custom }))
+      const nested = yield* compileRequest({ ...metaRequest, model: custom })
       expect(nested.body.input, "the shared protocol keeps tool video nested").toMatchObject([
         { type: "function_call", call_id: "call_video", name: "record", arguments: "{}" },
         { type: "function_call", call_id: "call_text", name: "read", arguments: "{}" },
@@ -3048,9 +3026,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("ignores terminal reasoning output when item completion is missing", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { store: false } }),
-      ).pipe(
+      const response = yield* LLMClient.generate({ ...request, providerOptions: { store: false } }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -3122,9 +3098,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("recovers pending function calls without reconciling terminal reasoning", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { store: false } }),
-      ).pipe(
+      const response = yield* LLMClient.generate({ ...request, providerOptions: { store: false } }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -3174,9 +3148,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("streams each reasoning summary part as a separate block", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { store: false } }),
-      ).pipe(
+      const response = yield* LLMClient.generate({ ...request, providerOptions: { store: false } }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -3229,9 +3201,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("concludes reasoning at implicit summary boundaries", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { store: false } }),
-      ).pipe(
+      const response = yield* LLMClient.generate({ ...request, providerOptions: { store: false } }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -3430,9 +3400,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("reconciles reasoning summaries that arrive only as finals", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, { providerOptions: { store: false } }),
-      ).pipe(
+      const response = yield* LLMClient.generate({ ...request, providerOptions: { store: false } }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -3530,7 +3498,7 @@ describe("OpenAI Responses route", () => {
 
   it.effect("preserves final reasoning metadata when storage is enabled", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(LLMRequest.update(request, { providerOptions: { store: true } })).pipe(
+      const response = yield* LLMClient.generate({ ...request, providerOptions: { store: true } }).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -4237,11 +4205,10 @@ describe("OpenAI Responses route", () => {
         },
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
-        }),
-      ).pipe(Effect.provide(fixedResponse(body)))
+      const response = yield* LLMClient.generate({
+        ...request,
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+      }).pipe(Effect.provide(fixedResponse(body)))
       const usage = new Usage({
         inputTokens: 5,
         outputTokens: 1,
@@ -4690,11 +4657,10 @@ describe("OpenAI Responses route", () => {
         },
         { type: "response.completed", response: { usage: { input_tokens: 5, output_tokens: 1 } } },
       )
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
-        }),
-      ).pipe(Effect.provide(fixedResponse(body)))
+      const response = yield* LLMClient.generate({
+        ...request,
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+      }).pipe(Effect.provide(fixedResponse(body)))
 
       expect(response.toolCalls).toEqual([])
       expect(response.events.find(LLMEvent.is.toolInputError)).toMatchObject({

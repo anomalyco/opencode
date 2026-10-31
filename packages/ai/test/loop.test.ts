@@ -18,7 +18,7 @@ const read_file = tool({
     path === "missing.txt" ? new ToolFailure({ message: `No such file: ${path}` }) : Effect.succeed("hello"),
 })
 
-const collect = (until?: LLM.LoopInput["until"]) =>
+const collect = (until?: LLM.LLMLoopInput["until"]) =>
   ai.loop({ model, prompt: "Read the file.", tools: [read_file], until }).pipe(
     Stream.runCollect,
     Effect.map((events) => Array.from(events)),
@@ -179,7 +179,7 @@ describe("ai.loop", () => {
   it.effect("fails untyped input that has neither or both of prompt and messages", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
-      const untyped = (input: object) => input as LLM.RequestInput
+      const untyped = (input: object) => input as LLM.LLMRequestInput
       const message = "Pass exactly one of `prompt` or `messages`, not both or neither"
       const neither = yield* ai.generate(untyped({ model })).pipe(Effect.flip)
       const both = yield* ai

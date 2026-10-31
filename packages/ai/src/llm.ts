@@ -1,6 +1,16 @@
 import { Effect, JsonSchema, Schema, Stream } from "effect"
 import { tryRequest } from "./media-model.js"
-import { LLMClient, Service, type StreamOptions } from "./route/client.js"
+import {
+  LLMClient,
+  Service,
+  canCompact,
+  compactRequest,
+  type CheckpointRequest,
+  type CompactionRequest,
+  type EndpointCompactOptions,
+  type StreamOptions,
+  type TriggerCompactOptions,
+} from "./route/client.js"
 import {
   GenerationOptions,
   HttpOptions,
@@ -8,54 +18,55 @@ import {
   InvalidRequestError,
   AIError,
   LLMEvent,
-  LLMRequest,
   LLMResponse,
   Message,
   LanguageModel,
   SystemPart,
+  type CachePolicy,
+  type CompactionCheckpointResponse,
+  type CompactionResponse,
   type Finish,
   ToolChoice,
   ToolEntry,
   type ContentPart,
   type LanguageModelProviderOptions,
+  type LLMRequest,
   type ToolEntryInput,
   withPartial,
 } from "./schema/index.js"
 import { tool, type ExecutableTool, type Tool, type ToolSchema } from "./tool.js"
 import { ToolRuntime } from "./tool-runtime.js"
 
-/** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
-export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageModel> =
-  RequestFields<SelectedLanguageModel> & PromptOrMessages
+/** Input accepted by `ai.request`, `ai.generate`, `ai.stream` and `ai.compact`. An `LLMRequest` is also a valid input. */
+export type LLMRequestInput<Model extends LanguageModel = LanguageModel> = TextRequestFields<Model> & PromptOrMessages
 
 /** Exactly one of `prompt`, a single user message, or `messages`, the full conversation. */
 export type PromptOrMessages =
   | { readonly prompt: string | ContentPart | ReadonlyArray<ContentPart>; readonly messages?: never }
   | { readonly messages: ReadonlyArray<Message | Message.Input>; readonly prompt?: never }
 
-type RequestFields<SelectedLanguageModel extends LanguageModel> = Omit<
-  ConstructorParameters<typeof LLMRequest>[0],
-  "model" | "system" | "messages" | "tools" | "toolChoice" | "generation" | "http" | "providerOptions"
-> & {
-  readonly model: SelectedLanguageModel
+interface TextRequestFields<Model extends LanguageModel> {
+  readonly id?: string
+  readonly model: Model
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
   /** Sent in array order. Pass `tool(...)` values or wire entries such as hosted provider tools. */
   readonly tools?: ReadonlyArray<Tool | ToolEntryInput>
   readonly toolChoice?: ToolChoice.Input
   readonly generation?: GenerationOptions.Input
-  readonly providerOptions?: NoInfer<LanguageModelProviderOptions<SelectedLanguageModel>>
+  readonly providerOptions?: NoInfer<LanguageModelProviderOptions<Model>>
   readonly http?: HttpOptions.Input
+  readonly cache?: CachePolicy
+  /** Stable cache affinity for protocols that support provider-managed prompt caching. */
+  readonly promptCacheKey?: string
+  readonly metadata?: Record<string, unknown>
+  /** Emit a `raw` event with each provider frame before the events parsed from it. */
+  readonly includeRaw?: boolean
 }
 
 /** An Effect Schema decodes and types `object`; a raw JSON Schema leaves it `unknown`. */
 export type OutputSchema = ToolSchema<any> | JsonSchema.JsonSchema
 
 export type OutputType<S extends OutputSchema> = S extends Schema.Top ? Schema.Schema.Type<S> : unknown
-
-export type ObjectInput<
-  S extends OutputSchema,
-  SelectedLanguageModel extends LanguageModel = LanguageModel,
-> = RequestInput<SelectedLanguageModel> & { readonly schema: S }
 
 export type ObjectResponse<T> = LLMResponse & { readonly object: T }
 
@@ -67,11 +78,11 @@ export type LoopObjectEvent<T> = Exclude<LLMEvent, Finish> | (Finish & { readonl
 
 /** Run one model call. With `schema`, the model must answer through a forced tool call decoded into `object`. */
 export function generate<const Model extends LanguageModel, S extends OutputSchema>(
-  input: ObjectInput<S, Model>,
+  input: LLMRequestInput<Model> & { readonly schema: S },
   options?: StreamOptions,
 ): Effect.Effect<ObjectResponse<OutputType<S>>, AIError, Service>
 export function generate<const Model extends LanguageModel>(
-  input: RequestInput<Model> | LLMRequest,
+  input: LLMRequestInput<Model>,
   options?: StreamOptions,
 ): Effect.Effect<LLMResponse, AIError, Service>
 export function generate(input: Input, options?: StreamOptions) {
@@ -90,11 +101,11 @@ export function generate(input: Input, options?: StreamOptions) {
 
 /** Stream one model call. With `schema`, the `finish` event carries the decoded `object`. */
 export function stream<const Model extends LanguageModel, S extends OutputSchema>(
-  input: ObjectInput<S, Model>,
+  input: LLMRequestInput<Model> & { readonly schema: S },
   options?: StreamOptions,
 ): Stream.Stream<ObjectEvent<OutputType<S>>, AIError, Service>
 export function stream<const Model extends LanguageModel>(
-  input: RequestInput<Model> | LLMRequest,
+  input: LLMRequestInput<Model>,
   options?: StreamOptions,
 ): Stream.Stream<LLMEvent, AIError, Service>
 export function stream(input: Input, options?: StreamOptions) {
@@ -117,10 +128,7 @@ export function stream(input: Input, options?: StreamOptions) {
   )
 }
 
-export type LoopInput<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
-  RequestFields<SelectedLanguageModel>,
-  "tools"
-> &
+export type LLMLoopInput<Model extends LanguageModel = LanguageModel> = Omit<TextRequestFields<Model>, "tools"> &
   PromptOrMessages & {
     readonly tools: ReadonlyArray<ExecutableTool>
     /** Called after each step that has tool calls; returning `true` ends the loop without running them. */
@@ -133,14 +141,14 @@ export type LoopInput<SelectedLanguageModel extends LanguageModel = LanguageMode
  * With `schema`, the model ends by calling the hidden answer tool, decoded into `object` on that step's `finish`.
  */
 export function loop<const Model extends LanguageModel, S extends OutputSchema>(
-  input: LoopInput<Model> & { readonly schema: S },
+  input: LLMLoopInput<Model> & { readonly schema: S },
   options?: StreamOptions,
 ): Stream.Stream<LoopObjectEvent<OutputType<S>>, AIError, Service>
 export function loop<const Model extends LanguageModel>(
-  input: LoopInput<Model>,
+  input: LLMLoopInput<Model>,
   options?: StreamOptions,
 ): Stream.Stream<LLMEvent, AIError, Service>
-export function loop(input: LoopInput & { readonly schema?: OutputSchema }, options?: StreamOptions) {
+export function loop(input: LLMLoopInput & { readonly schema?: OutputSchema }, options?: StreamOptions) {
   const { tools, until, ...rest } = input
   // A step that calls the answer tool is final, even if it also called other tools.
   const clientCalls = (response: LLMResponse, output: Tool | undefined) =>
@@ -178,7 +186,8 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
               const results = yield* Effect.forEach(calls, (call) => ToolRuntime.dispatch(tools, call), {
                 concurrency: "unbounded",
               })
-              const next = LLMRequest.update(request, {
+              const next = {
+                ...request,
                 messages: [
                   ...request.messages,
                   response.message,
@@ -192,7 +201,7 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
                     }),
                   ),
                 ],
-              })
+              }
               return Stream.fromIterable(results.flatMap((result) => result.events)).pipe(
                 Stream.concat(step(next, done, output)),
               )
@@ -206,11 +215,10 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
 
 const OBJECT_TOOL = "generate_object"
 
-type Input = (RequestInput & { readonly schema?: OutputSchema }) | LLMRequest
+type Input = LLMRequestInput & { readonly schema?: OutputSchema }
 
 // `schema` adds a hidden tool whose input is the answer. With other tools the model only has to call some tool.
 const prepare = (input: Input) => {
-  if (input instanceof LLMRequest) return Effect.succeed({ request: input, output: undefined })
   const { schema, ...rest } = input
   return tryRequest(() => {
     const description = "Return the structured result by calling this tool."
@@ -255,36 +263,47 @@ const withObject = (output: Tool, event: Finish, state: LLMResponse.State): Effe
     : decodeObject(output, response).pipe(Effect.map((object) => ({ ...event, object })))
 }
 
-export const request = <const SelectedLanguageModel extends LanguageModel>(
-  input: RequestInput<SelectedLanguageModel>,
-) => {
-  const {
-    system: requestSystem,
-    prompt,
-    messages,
-    tools,
-    toolChoice: requestToolChoice,
-    generation: requestGeneration,
-    providerOptions: requestProviderOptions,
-    http: requestHttp,
-    ...rest
-  } = input
-  if ((prompt === undefined) === (messages === undefined))
+/** Normalize text request input into a plain `LLMRequest`, with `prompt` turned into the one user message. */
+export const request = <const Model extends LanguageModel>(input: LLMRequestInput<Model>): LLMRequest<Model> => {
+  if ((input.prompt === undefined) === (input.messages === undefined))
     throw new AIError({
       reason: new InvalidRequestError({ message: "Pass exactly one of `prompt` or `messages`, not both or neither" }),
     })
-  return new LLMRequest({
-    ...rest,
-    system: SystemPart.content(requestSystem),
-    messages: prompt === undefined ? (messages ?? []).map(Message.make) : [Message.user(prompt)],
-    tools: tools?.map((item) => ("_definition" in item ? item._definition : ToolEntry.make(item))) ?? [],
-    toolChoice: requestToolChoice ? ToolChoice.make(requestToolChoice) : undefined,
-    generation: requestGeneration === undefined ? undefined : GenerationOptions.make(requestGeneration),
-    providerOptions: requestProviderOptions,
-    http: HttpOptions.make(requestHttp),
-  })
+  return {
+    id: input.id,
+    model: input.model,
+    system: SystemPart.content(input.system),
+    messages: input.prompt === undefined ? (input.messages ?? []).map(Message.make) : [Message.user(input.prompt)],
+    tools: input.tools?.map((item) => ("_definition" in item ? item._definition : ToolEntry.make(item))) ?? [],
+    toolChoice: input.toolChoice ? ToolChoice.make(input.toolChoice) : undefined,
+    generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
+    providerOptions: input.providerOptions,
+    http: HttpOptions.make(input.http),
+    cache: input.cache,
+    promptCacheKey: input.promptCacheKey,
+    metadata: input.metadata,
+    includeRaw: input.includeRaw,
+  }
 }
 
-export { canCompact, compact } from "./route/client.js"
+/** Compact a text request: a replacement window, or a checkpoint with `mechanism: "trigger"`. */
+export function compact(
+  input: CheckpointRequest,
+  options: TriggerCompactOptions,
+): Effect.Effect<CompactionCheckpointResponse, AIError, Service>
+export function compact(
+  input: CompactionRequest,
+  options?: EndpointCompactOptions,
+): Effect.Effect<CompactionResponse, AIError, Service>
+export function compact(
+  input: CheckpointRequest | CompactionRequest,
+  options?: EndpointCompactOptions | TriggerCompactOptions,
+) {
+  return tryRequest(() => request<LanguageModel>(input)).pipe(
+    Effect.flatMap((normalized) => compactRequest(normalized, options)),
+  )
+}
+
+export { canCompact }
 
 export * as LLM from "./llm.js"

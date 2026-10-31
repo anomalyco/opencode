@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -104,7 +104,8 @@ for (const api of ["responses", "chat"] as const) {
           expect(first.events.some(LLMEvent.is.toolInputDelta)).toBe(true)
           expectUsage(first)
 
-          const followUp = LLMRequest.update(request, {
+          const followUp = {
+            ...request,
             messages: [
               ...request.messages,
               first.message,
@@ -112,7 +113,7 @@ for (const api of ["responses", "chat"] as const) {
                 Message.tool({ id: call.id, name: call.name, result: { condition: "sunny", temperature: "18C" } }),
               ),
             ],
-          })
+          }
           const replay = yield* compileRequest(followUp)
           if (api === "responses") {
             const reasoning = first.message.content.find((part) => part.type === "reasoning")

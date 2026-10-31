@@ -5,7 +5,6 @@ import {
   ai,
   GenerationOptions,
   LLMEvent,
-  LLMRequest,
   LLMResponse,
   toDefinitions,
   ToolCallPart,
@@ -117,10 +116,11 @@ describe("LLMClient tools", () => {
       )
 
       yield* TestToolRuntime.runTools({
-        request: LLMRequest.update(baseRequest, {
+        request: {
+          ...baseRequest,
           generation: GenerationOptions.make({ maxTokens: 50 }),
           toolChoice: ToolChoice.make("auto"),
-        }),
+        },
         tools: [get_weather],
       }).pipe(Stream.runCollect, Effect.provide(layer))
 
@@ -567,7 +567,7 @@ describe("LLMClient tools", () => {
       ])
 
       const events = Array.from(
-        yield* LLMClient.stream(LLMRequest.update(baseRequest, { tools: toDefinitions([schema_only_weather]) })).pipe(
+        yield* LLMClient.stream({ ...baseRequest, tools: toDefinitions([schema_only_weather]) }).pipe(
           Stream.runCollect,
           Effect.provide(layer),
         ),
@@ -620,11 +620,12 @@ describe("LLMClient tools", () => {
       )
 
       yield* TestToolRuntime.runTools({
-        request: LLMRequest.update(baseRequest, {
+        request: {
+          ...baseRequest,
           model: AnthropicMessages.route
             .with({ auth: Auth.header("x-api-key", "test") })
             .model({ id: "claude-sonnet-4-5" }),
-        }),
+        },
         tools: [get_weather],
       }).pipe(Stream.runCollect, Effect.provide(layer))
 
@@ -881,11 +882,12 @@ describe("LLMClient tools", () => {
       )
       const events = Array.from(
         yield* TestToolRuntime.runTools({
-          request: LLMRequest.update(baseRequest, {
+          request: {
+            ...baseRequest,
             model: AnthropicMessages.route
               .with({ auth: Auth.header("x-api-key", "test") })
               .model({ id: "claude-sonnet-4-5" }),
-          }),
+          },
           tools: [],
         }).pipe(Stream.runCollect, Effect.provide(layer)),
       )

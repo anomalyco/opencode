@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { ExtractionAnswers, ExtractionModel, ExtractionResponse, type ExtractionRequestFor } from "./extraction.js"
+import { ExtractionAnswers, ExtractionModel, ExtractionResponse, type ExtractionRequest } from "./extraction.js"
 import { JsonObject, ProviderShared } from "../protocols/shared.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaProtocol } from "../route/media-protocol.js"
@@ -21,7 +21,10 @@ const decodeEnvelope = route.decodeJson(
       state_text: Schema.optional(Schema.String),
       usage: Schema.optional(
         Schema.StructWithRest(
-          Schema.Struct({ input_tokens: Schema.optional(Schema.Number), output_tokens: Schema.optional(Schema.Number) }),
+          Schema.Struct({
+            input_tokens: Schema.optional(Schema.Number),
+            output_tokens: Schema.optional(Schema.Number),
+          }),
           [JsonObject],
         ),
       ),
@@ -30,7 +33,7 @@ const decodeEnvelope = route.decodeJson(
 )
 
 /** Posts Clairic's `{ model, state, fields }` body to Cloudflare's `/ai/run/{model}`. */
-export const protocol = MediaProtocol.inline<ExtractionRequestFor, ExtractionResponse>(route, {
+export const protocol = MediaProtocol.inline<ExtractionRequest, ExtractionResponse>(route, {
   body: {
     from: (request) =>
       Effect.succeed(
@@ -72,7 +75,11 @@ export const protocol = MediaProtocol.inline<ExtractionRequestFor, ExtractionRes
             : new Usage({
                 inputTokens: result.usage.input_tokens,
                 outputTokens: result.usage.output_tokens,
-                totalTokens: ProviderShared.totalTokens(result.usage.input_tokens, result.usage.output_tokens, undefined),
+                totalTokens: ProviderShared.totalTokens(
+                  result.usage.input_tokens,
+                  result.usage.output_tokens,
+                  undefined,
+                ),
                 providerMetadata: { [route.provider]: result.usage },
               }),
         providerMetadata: {
@@ -95,7 +102,7 @@ export const model = (input: MediaRoute.ModelInput) =>
     http: input.http,
     route: MediaRoute.inline({
       protocol,
-      endpoint: Endpoint.path<MediaProtocol.Body, ExtractionRequestFor>(({ request }) => `/${request.model.id}`, {
+      endpoint: Endpoint.path<MediaProtocol.Body, ExtractionRequest>(({ request }) => `/${request.model.id}`, {
         baseURL: input.baseURL,
       }),
       auth: input.auth,

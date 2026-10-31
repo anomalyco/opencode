@@ -115,11 +115,11 @@ const make = (options: LayerOptions) =>
         ),
       )
     function compact(
-      request: CompactionRequest,
+      request: LLMRequest & Pick<CompactionRequest, "model">,
       options?: EndpointCompactOptions,
     ): Effect.Effect<CompactionResponse, AIError>
     function compact(
-      request: CheckpointRequest,
+      request: LLMRequest & Pick<CheckpointRequest, "model">,
       options: TriggerCompactOptions,
     ): Effect.Effect<CompactionCheckpointResponse, AIError>
     function compact(

@@ -5,7 +5,7 @@ import {
   ImageModel,
   type ImageModelOptions,
   type ImageOptions,
-  type ImageRequestFor,
+  type ImageRequest,
   Media,
 } from "../src/effect.js"
 import type { Service } from "../src/image-client.js"
@@ -169,7 +169,7 @@ const request = ai.image.request({
   prompt: "A lighthouse",
   providerOptions: { imageSize: "1K", futureOption: true },
 })
-const typedRequest: ImageRequestFor<GoogleLikeOptions> = request
+const typedRequest: ImageRequest<ImageModel<GoogleLikeOptions>> = request
 void typedRequest
 const generated = ImageClient.generate(request)
 type GenerateRequirements = Assert<Equal<Requirements<typeof generated>, Service>>

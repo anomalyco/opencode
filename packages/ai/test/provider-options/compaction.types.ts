@@ -5,7 +5,7 @@ import {
   LanguageModel,
   LLMClient,
   LLMEvent,
-  LLMRequest,
+  type LLMRequest,
   Message,
   ProviderID,
 } from "../../src/effect.js"
@@ -57,12 +57,12 @@ LLMClient.Service.use((client) => {
 })
 
 const request = ai.request({ model: openai, prompt: "hello" })
-ai.compact(LLMRequest.update(request, { messages: [Message.user("continue")] }))
-ai.compact(new LLMRequest(LLMRequest.input(request)))
-const switched = LLMRequest.update(request, { model: Anthropic.configure().model("fixture") })
+ai.compact({ ...request, messages: [Message.user("continue")] })
+ai.compact({ ...request })
+const switched = { ...request, model: Anthropic.configure().model("fixture") }
 // @ts-expect-error Switching models replaces, rather than inherits, the capability.
 ai.compact(switched)
-ai.compact(LLMRequest.update(switched, { model: openai }))
+ai.compact({ ...switched, model: openai })
 ai.compact(
   // @ts-expect-error Replacing the route also replaces compaction capability.
   ai.request({
@@ -72,13 +72,13 @@ ai.compact(
 )
 
 declare const dynamicModel: LanguageModel
-declare const dynamicPatch: Partial<LLMRequest.Input>
+declare const dynamicPatch: Partial<LLMRequest>
 const dynamicRequest = ai.request({ model: dynamicModel, prompt: "hello" })
 // @ts-expect-error A dynamically selected model must be narrowed first.
 ai.compact(dynamicRequest)
 if (ai.canCompact(dynamicRequest)) ai.compact(dynamicRequest)
 // @ts-expect-error An optional model override cannot retain the old capability statically.
-ai.compact(LLMRequest.update(request, dynamicPatch))
+ai.compact({ ...request, ...dynamicPatch })
 
 const checkpoint = CompactionPart.make({ provider: ProviderID.make("openai"), id: "cmp_1", encrypted: "opaque" })
 const provider = ProviderID.make("anthropic")
@@ -138,3 +138,9 @@ ai.request({
     contextManagement: { edits: [{ type: "compact_20260112", pauseAfterCompaction: "yes" }] },
   },
 })
+
+// Plain inputs compact without `ai.request(...)`, and a model alone can be narrowed.
+ai.compact({ model: OpenAI.configure().responses("fixture"), messages: [Message.user("continue")] })
+if (ai.canCompact(dynamicModel)) ai.compact({ model: dynamicModel, prompt: "continue" })
+// @ts-expect-error A dynamically selected model must be narrowed first.
+ai.compact({ model: dynamicModel, prompt: "continue" })

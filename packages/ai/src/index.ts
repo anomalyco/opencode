@@ -20,18 +20,16 @@ import {
   type CompactionCheckpointResponse,
   type CompactionResponse,
   type LLMEvent,
-  type LLMRequest,
   type LLMResponse,
 } from "./schema/index.js"
 import type {
-  LoopInput,
   LoopObjectEvent,
   ObjectEvent,
-  ObjectInput,
   ObjectResponse,
   OutputSchema,
   OutputType,
-  RequestInput,
+  LLMLoopInput,
+  LLMRequestInput,
 } from "./llm.js"
 import { Speech, type SpeechModel, type SpeechRequest, type SpeechRequestInput } from "./speech.js"
 import {
@@ -113,41 +111,38 @@ export const make = (options: Options = {}) => {
     )
 
   function generate<const Model extends LanguageModel, S extends OutputSchema>(
-    input: ObjectInput<S, Model>,
+    input: LLMRequestInput<Model> & { readonly schema: S },
     options?: StreamOptions & RunOptions,
   ): Promise<ObjectResponse<OutputType<S>>>
   function generate<const Model extends LanguageModel>(
-    input: RequestInput<Model> | LLMRequest,
+    input: LLMRequestInput<Model>,
     options?: StreamOptions & RunOptions,
   ): Promise<LLMResponse>
-  function generate(
-    input: ObjectInput<OutputSchema> | RequestInput | LLMRequest,
-    options?: StreamOptions & RunOptions,
-  ) {
+  function generate(input: LLMRequestInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
     return run(LLM.generate(input, options), options)
   }
 
   function stream<const Model extends LanguageModel, S extends OutputSchema>(
-    input: ObjectInput<S, Model>,
+    input: LLMRequestInput<Model> & { readonly schema: S },
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<ObjectEvent<OutputType<S>>>
   function stream<const Model extends LanguageModel>(
-    input: RequestInput<Model> | LLMRequest,
+    input: LLMRequestInput<Model>,
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<LLMEvent>
-  function stream(input: ObjectInput<OutputSchema> | RequestInput | LLMRequest, options?: StreamOptions & RunOptions) {
+  function stream(input: LLMRequestInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
     return iterate(LLM.stream(input, options), options)
   }
 
   function loop<const Model extends LanguageModel, S extends OutputSchema>(
-    input: LoopInput<Model> & { readonly schema: S },
+    input: LLMLoopInput<Model> & { readonly schema: S },
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<LoopObjectEvent<OutputType<S>>>
   function loop<const Model extends LanguageModel>(
-    input: LoopInput<Model>,
+    input: LLMLoopInput<Model>,
     options?: StreamOptions & RunOptions,
   ): AsyncIterable<LLMEvent>
-  function loop(input: LoopInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
+  function loop(input: LLMLoopInput & { readonly schema?: OutputSchema }, options?: StreamOptions & RunOptions) {
     return iterate(LLM.loop(input, options), options)
   }
 
@@ -376,7 +371,6 @@ export {
   ToolNamespace,
   ToolEntry,
   ToolChoice,
-  LLMRequest,
   FinishReason,
   Usage,
   MediaUsage,
@@ -427,17 +421,18 @@ export type {
   GenerationOptionsInput,
   LanguageModelInput,
   LanguageModelProviderOptions,
+  LLMRequest,
   ToolDefinitionInput,
   ToolNamespaceInput,
   ToolNamespaceEntryInput,
   ToolEntryInput,
   UsageInput,
 } from "./schema/index.js"
-export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageRequest, ImageResponse } from "./image.js"
+export { ImageAspectRatio, ImageEvent, ImageModel, ImageModelSchema, ImageResponse } from "./image.js"
 export type {
   ImageModelOptions,
   ImageOptions,
-  ImageRequestFor,
+  ImageRequest,
   ImageRequestInput,
   ImageResolution,
   ImageRoute,
@@ -454,7 +449,6 @@ export {
   DecisionModelSchema,
   DecisionPart,
   DecisionQuestion,
-  DecisionRequest,
   DecisionResponse,
   DecisionTextPart,
   DecisionUsage,
@@ -472,7 +466,7 @@ export type {
   DecisionModelOptions,
   DecisionOptions,
   DecisionQuestions,
-  DecisionRequestFor,
+  DecisionRequest,
   DecisionRequestInput,
   DecisionResponseFor,
   DecisionModelRoute,
@@ -499,3 +493,4 @@ export type {
   ToolToModelOutput,
 } from "./tool.js"
 export type { LLM } from "./llm.js"
+export type { LLMLoopInput, LLMRequestInput } from "./llm.js"
