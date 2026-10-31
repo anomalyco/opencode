@@ -29,6 +29,17 @@ export const System = Schema.Struct({
   timeframe: Schema.String,
   /** The bot's unrealized PnL from its own registro.log portfolio updates; null until seen today. */
   pnl_day: Schema.NullOr(Schema.Number),
+  /** The bot's configured TWS CLIENT_ID from its config.py; null when the line is missing.
+   * Optional: an engine predating this field simply omits it. */
+  client_id: optional(Schema.NullOr(Schema.Number)),
+  /** The config's session-close hour ("HH:MM:SS", New York's close); null when the line is absent. */
+  close_hour: optional(Schema.NullOr(Schema.String)),
+  /** Epoch ms of the bot's newest own record row today; null when it has not logged today. */
+  last_activity_at: optional(Schema.NullOr(Schema.Number)),
+  /** The system's one-paragraph idea from its own reglas.json; null when the file is absent. */
+  description: optional(Schema.NullOr(Schema.String)),
+  /** The system's rules as key→text pairs in file order; null when reglas.json is absent. */
+  rules: optional(Schema.NullOr(Schema.Record(Schema.String, Schema.String))),
 }).annotate({ identifier: "Trading.System" })
 export interface System extends Schema.Schema.Type<typeof System> {}
 

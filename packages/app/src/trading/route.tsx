@@ -1704,8 +1704,10 @@ function DialogCierre(props: {
 }
 
 /**
- * The system's dossier: its live engine flags and the tail of its own record, the same rows
- * the record card draws filtered to this one system, live-updating with the dashboard's 3s poll.
+ * The system's dossier: its live engine flags, the facts its own files state (config.py's
+ * client id, close hour and the activity its record shows; reglas.json's idea and rules),
+ * and the tail of its own record, the same rows the record card draws filtered to this one
+ * system, live-updating with the dashboard's 3s poll.
  */
 function DialogFicha(props: {
   bot: Accessor<BotInfo | undefined>
@@ -1737,6 +1739,26 @@ function DialogFicha(props: {
     const valor = vista()
     return valor === undefined ? "—" : `${valor.simbolo} · ${valor.temporalidad}`
   }
+  const clienteFicha = () => {
+    const valor = vista()?.cliente
+    return valor === null || valor === undefined ? "—" : String(valor)
+  }
+  const cierreFicha = () => vista()?.horaCierre ?? "—"
+  const actividadFicha = () => {
+    // Day-aware like the started row (see formatoMomento).
+    const valor = vista()?.actividad
+    return valor === null || valor === undefined ? "—" : formatoMomento(valor)
+  }
+  const marchaFicha = () => {
+    // A bare clock keeps it language-neutral: H:MM:SS since the engine (re)attached, re-ticking
+    // on every poll the way the other fields do, never claiming precision beyond its beat.
+    const valor = vista()?.arrancada
+    if (!enMarchaFicha() || valor === null || valor === undefined) return "—"
+    const segundos = Math.max(0, Math.floor((Date.now() - valor) / 1000))
+    return `${Math.floor(segundos / 3600)}:${String(Math.floor((segundos % 3600) / 60)).padStart(2, "0")}:${String(segundos % 60).padStart(2, "0")}`
+  }
+  const descripcionFicha = () => vista()?.descripcion ?? null
+  const reglasFicha = () => vista()?.reglas ?? null
 
   return (
     <Dialog size="large" preventBackdropDismiss>
@@ -1758,13 +1780,42 @@ function DialogFicha(props: {
           <MetaCuenta etiqueta={language.t("trading.ficha.started")} mono>
             {arranqueFicha()}
           </MetaCuenta>
+          <MetaCuenta etiqueta={language.t("trading.ficha.uptime")} mono>
+            {marchaFicha()}
+          </MetaCuenta>
           <MetaCuenta etiqueta={language.t("trading.ficha.instrument")}>
             {instrumentoFicha()}
           </MetaCuenta>
           <MetaCuenta etiqueta={language.t("trading.account.pnlToday")} tono={tonoPnl(pnlFicha())}>
             {formatoUSD(pnlFicha())}
           </MetaCuenta>
+          <MetaCuenta etiqueta={language.t("trading.ficha.client")} mono>
+            {clienteFicha()}
+          </MetaCuenta>
+          <MetaCuenta etiqueta={language.t("trading.ficha.schedule")} mono>
+            {cierreFicha()}
+          </MetaCuenta>
+          <MetaCuenta etiqueta={language.t("trading.ficha.activity")} mono>
+            {actividadFicha()}
+          </MetaCuenta>
         </dl>
+        <Show when={descripcionFicha() !== null || reglasFicha() !== null}>
+          <section class="rounded-[8px] border border-v2-border-border-muted bg-v2-background-bg-deep p-3">
+            <h3 class="mb-2 px-1 text-[11px] tracking-[0.08em] text-v2-text-text-faint uppercase" style={LINEA}>
+              {language.t("trading.ficha.about")}
+            </h3>
+            <Show when={descripcionFicha() !== null}>
+              <p class="mb-2 px-1 text-[13px] text-v2-text-text-muted" style={LINEA}>
+                {descripcionFicha()}
+              </p>
+            </Show>
+            <Show when={reglasFicha() !== null}>
+              <dl class="grid gap-y-1 px-1">
+                <For each={reglasFicha() ?? []}>{(par) => <MetaCuenta etiqueta={par[0]}>{par[1]}</MetaCuenta>}</For>
+              </dl>
+            </Show>
+          </section>
+        </Show>
               <section class="flex min-h-0 flex-1 flex-col rounded-[8px] border border-v2-border-border-muted bg-v2-background-bg-deep p-3">
                 <h3 class="mb-2 px-1 text-[11px] tracking-[0.08em] text-v2-text-text-faint uppercase" style={LINEA}>
                   {language.t("trading.ficha.record")}

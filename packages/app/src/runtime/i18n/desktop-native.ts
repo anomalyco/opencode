@@ -313,6 +313,12 @@ export const DESKTOP_NATIVE_ENGLISH = {
 
   "desktop.trading.closeWarning": "Trading bots are still running",
   "desktop.trading.closeWarning.detail": "These systems keep trading while the app is closed:\n\n{{names}}\n\nClose anyway?",
+  "desktop.trading.closeWarning.positions": "There are still open positions",
+  "desktop.trading.closeWarning.positions.detail":
+    "These positions stay open unattended while the app is closed:\n\n{{symbols}}\n\nClose anyway?",
+  "desktop.trading.closeWarning.mixed": "Bots are still running and positions are open",
+  "desktop.trading.closeWarning.mixed.detail":
+    "These systems keep trading while the app is closed:\n\n{{names}}\n\nThese positions stay open unattended:\n\n{{symbols}}\n\nClose anyway?",
   "desktop.trading.closeWarning.action.close": "Close Anyway",
   "desktop.trading.closeWarning.action.cancel": "Cancel",
 

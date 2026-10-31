@@ -26,6 +26,16 @@ export interface BotInfo {
   readonly simbolo: string
   readonly temporalidad: string
   readonly pnl_dia: number | null
+  /** The bot's configured TWS CLIENT_ID; null when the engine drew a blank (older engine, unreadable config). */
+  readonly cliente: number | null
+  /** The config's session-close hour ("HH:MM:SS", New York's close); null when absent. */
+  readonly horaCierre: string | null
+  /** Epoch ms of the bot's newest own record row today; null until it logs. */
+  readonly actividad: number | null
+  /** The system's one-paragraph idea from its own reglas.json; null when absent. */
+  readonly descripcion: string | null
+  /** The system's rules as (name, rule) pairs in file order; null when reglas.json is absent. */
+  readonly reglas: readonly (readonly [string, string])[] | null
 }
 
 export interface TareaInfo {
@@ -105,6 +115,27 @@ export interface SnapshotMotor {
 // the IG markets paper account. Shown until the engine answers a first time; the
 // values mirror the TUI plugin's DEMO so both views read the same numbers.
 
+/** One DEMO row: the dossier facts stay null on purpose — the engine fills them from each
+ * bot's own files, and a sample row has no business inventing CLIENT_IDs or rules. */
+function botDemo(nombre: string, activo: boolean, simbolo: string, temporalidad: string, pnl_dia: number): BotInfo {
+  return {
+    id: nombre.slice(0, 2),
+    nombre,
+    activo,
+    enMarcha: false,
+    pid: null,
+    arrancada: null,
+    simbolo,
+    temporalidad,
+    pnl_dia,
+    cliente: null,
+    horaCierre: null,
+    actividad: null,
+    descripcion: null,
+    reglas: null,
+  }
+}
+
 export const DEMO: SnapshotMotor = {
   enlace: false,
   demo: true,
@@ -119,21 +150,21 @@ export const DEMO: SnapshotMotor = {
   },
   tareas: [],
   bots: [
-    { id: "01", nombre: "01_nasdaq_apertura_alcista", activo: true, enMarcha: false, pid: null, arrancada: null, simbolo: "NQ", temporalidad: "5m", pnl_dia: 12.5 },
-    { id: "02", nombre: "02_nasdaq_ruptura_media_hora", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "NQ", temporalidad: "30m", pnl_dia: 0 },
-    { id: "03", nombre: "03_nasdaq_impulso_con_tendencia", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "NQ", temporalidad: "15m", pnl_dia: 0 },
-    { id: "04", nombre: "04_oro_rebote_del_viernes", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "GC", temporalidad: "30m", pnl_dia: 0 },
-    { id: "05", nombre: "05_oro_fuerza_de_madrugada", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "GC", temporalidad: "15m", pnl_dia: 0 },
-    { id: "06", nombre: "06_nasdaq_pullback", activo: true, enMarcha: false, pid: null, arrancada: null, simbolo: "NQ", temporalidad: "1h", pnl_dia: -40 },
-    { id: "07", nombre: "07_oro_nube_ichimoku", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "GC", temporalidad: "1h", pnl_dia: 0 },
-    { id: "08", nombre: "08_russell_estocastico_h2", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "RTY", temporalidad: "2h", pnl_dia: 0 },
-    { id: "09", nombre: "09_russell_cci_tendencia", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "RTY", temporalidad: "1h", pnl_dia: 0 },
-    { id: "10", nombre: "10_russell_estocastico_h4", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "RTY", temporalidad: "4h", pnl_dia: 0 },
-    { id: "11", nombre: "11_usdjpy_ruptura_bollinger", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "JPY", temporalidad: "1h", pnl_dia: 0 },
-    { id: "12", nombre: "12_usdjpy_ruptura_keltner", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "JPY", temporalidad: "1h", pnl_dia: 0 },
-    { id: "13", nombre: "13_usdjpy_ruptura_donchian", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "JPY", temporalidad: "1h", pnl_dia: 0 },
-    { id: "14", nombre: "14_usdjpy_cruce_ema_10_40", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "JPY", temporalidad: "1h", pnl_dia: 0 },
-    { id: "15", nombre: "15_usdjpy_precio_ema30_h3", activo: false, enMarcha: false, pid: null, arrancada: null, simbolo: "JPY", temporalidad: "3h", pnl_dia: 0 },
+    botDemo("01_nasdaq_apertura_alcista", true, "NQ", "5m", 12.5),
+    botDemo("02_nasdaq_ruptura_media_hora", false, "NQ", "30m", 0),
+    botDemo("03_nasdaq_impulso_con_tendencia", false, "NQ", "15m", 0),
+    botDemo("04_oro_rebote_del_viernes", false, "GC", "30m", 0),
+    botDemo("05_oro_fuerza_de_madrugada", false, "GC", "15m", 0),
+    botDemo("06_nasdaq_pullback", true, "NQ", "1h", -40),
+    botDemo("07_oro_nube_ichimoku", false, "GC", "1h", 0),
+    botDemo("08_russell_estocastico_h2", false, "RTY", "2h", 0),
+    botDemo("09_russell_cci_tendencia", false, "RTY", "1h", 0),
+    botDemo("10_russell_estocastico_h4", false, "RTY", "4h", 0),
+    botDemo("11_usdjpy_ruptura_bollinger", false, "JPY", "1h", 0),
+    botDemo("12_usdjpy_ruptura_keltner", false, "JPY", "1h", 0),
+    botDemo("13_usdjpy_ruptura_donchian", false, "JPY", "1h", 0),
+    botDemo("14_usdjpy_cruce_ema_10_40", false, "JPY", "1h", 0),
+    botDemo("15_usdjpy_precio_ema30_h3", false, "JPY", "3h", 0),
   ],
   posiciones: [
     { simbolo: "MNQZ6", lado: "corto", tamano: 1, entrada: 25_150.75, actual: 25_191.3, pnl: -81.11, pnl_pct: -0.16 },
@@ -244,6 +275,11 @@ function desdeNativo(nativo: SnapshotNativo): Omit<SnapshotMotor, "demo"> {
       simbolo: system.symbol,
       temporalidad: system.timeframe,
       pnl_dia: numeroNulo(system.pnl_day),
+      cliente: numeroNulo(system.client_id ?? null),
+      horaCierre: system.close_hour ?? null,
+      actividad: numeroNulo(system.last_activity_at ?? null),
+      descripcion: system.description ?? null,
+      reglas: system.rules ? Object.entries(system.rules) : null,
     })),
     tareas: [...nativo.tasks].map((task) => tareaDeNativo(task)),
     posiciones: [...nativo.positions].map((position) => ({

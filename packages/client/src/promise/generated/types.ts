@@ -356,6 +356,11 @@ export type TradingSystem = {
   symbol: string
   timeframe: string
   pnl_day: number | "Infinity" | "-Infinity" | "NaN" | null
+  client_id?: number | "Infinity" | "-Infinity" | "NaN" | null
+  close_hour?: string | null
+  last_activity_at?: number | "Infinity" | "-Infinity" | "NaN" | null
+  description?: string | null
+  rules?: { [x: string]: string } | null
 }
 
 export type TradingPosition = {
@@ -394,18 +399,6 @@ export type TradingEquityPoint = {
 export type TradingRisk = {
   loss_day_limit: number | "Infinity" | "-Infinity" | "NaN"
   triggered_at: number | "Infinity" | "-Infinity" | "NaN" | null
-}
-
-export type TradingSystem1 = {
-  id: string
-  name: string
-  running: boolean
-  active: boolean
-  pid: number | null
-  started_at: number | null
-  symbol: string
-  timeframe: string
-  pnl_day: number | null
 }
 
 export type TradingPositionCloseResult = { ok: boolean; message: string }
@@ -4734,11 +4727,11 @@ export type ExperimentalTradingSnapshotOutput = { data: TradingSnapshot }["data"
 
 export type ExperimentalTradingSystemActivateInput = { readonly systemID: string }
 
-export type ExperimentalTradingSystemActivateOutput = { data: TradingSystem1 }["data"]
+export type ExperimentalTradingSystemActivateOutput = { data: TradingSystem }["data"]
 
 export type ExperimentalTradingSystemPauseInput = { readonly systemID: string }
 
-export type ExperimentalTradingSystemPauseOutput = { data: TradingSystem1 }["data"]
+export type ExperimentalTradingSystemPauseOutput = { data: TradingSystem }["data"]
 
 export type ExperimentalTradingPositionCloseInput = { readonly symbol: string }
 

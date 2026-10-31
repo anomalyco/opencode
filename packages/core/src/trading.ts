@@ -135,12 +135,22 @@ const META: Record<string, { symbol: string; timeframe: string }> = {
   "15_usdjpy_precio_ema30_h3": { symbol: "JPY", timeframe: "3h" },
 }
 
-/** One pool system: a folder with its bot.py and the CLIENT_ID from its config.py. */
+/** One pool system: a folder with its bot.py, the dossier facts its own files state, and the
+ * display metadata the folder's name maps to. */
 interface Definicion {
   readonly id: string
   readonly name: string
   readonly dir: string | null
   readonly clientId: number | null
+  /** The "HOST:PUERTO" the bot's config.py points at; null when either line is missing.
+   * A config that points elsewhere runs outside the engine's own watch. */
+  readonly servidor: string | null
+  /** The config's HORA_CIERRE as "HH:MM:SS" (New York's close); null when the line is absent. */
+  readonly horaCierre: string | null
+  /** The system's one-paragraph idea from its own reglas.json. */
+  readonly descripcion: string | null
+  /** The system's rules, key→text in file order; null when reglas.json is absent. */
+  readonly reglas: Readonly<Record<string, string>> | null
   readonly meta: { symbol: string; timeframe: string } | null
 }
 
@@ -155,6 +165,8 @@ interface Runtime {
   planeado: boolean
   registroOffset: number
   consolaOffset: number
+  /** Epoch ms of the bot's newest own row today; null when it has not logged today. */
+  ultimaActividad: number | null
 }
 
 /** The pool's folder names: directories `NN_name` (bot.py checked later, per definition). */
@@ -167,17 +179,40 @@ const escanearCarpetas = async (dir: string): Promise<string[]> => {
   }
 }
 
-/** Reads the bot's config.py for its CLIENT_ID (the TWS probe matches on it); unreadable configs fail only this system's external detection. */
+/** Reads the bot's config.py and reglas.json into the system's dossier facts: its CLIENT_ID
+ * (the TWS probe matches on it), the HOST:PUERTO the config points at, the close hour, and
+ * the written idea/rules. Unreadable or malformed files null their own facts only — the bot
+ * itself boots fine without them, and only the engine's dossier and probe miss out. */
 const definicion = async (name: string, dir: string): Promise<Definicion> => {
   const folder = `${dir}\\${name}`
-  let clientId: number | null = null
-  try {
-    const config = await readFile(`${folder}\\config.py`, "utf8")
-    clientId = Number(/^CLIENT_ID\s*=\s*(\d+)/m.exec(config)?.[1]) || null
-  } catch {
-    // The bot itself boots fine without it; only the engine's external-bot probe misses.
+  const config = await readFile(`${folder}\\config.py`, "utf8").catch(() => "")
+  const clientId = Number(/^CLIENT_ID\s*=\s*(\d+)/m.exec(config)?.[1]) || null
+  const servidorHost = /^HOST\s*=\s*"([^"]+)"/m.exec(config)?.[1]
+  const servidorPuerto = Number(/^PUERTO\s*=\s*(\d+)/m.exec(config)?.[1]) || null
+  const tupla = /^\s*HORA_CIERRE\s*=\s*\((\d+),\s*(\d+)(?:,\s*(\d+))?\)/m.exec(config)
+  const horaCierre =
+    tupla === null
+      ? null
+      : `${tupla[1].padStart(2, "0")}:${tupla[2].padStart(2, "0")}${tupla[3] === undefined ? "" : `:${tupla[3].padStart(2, "0")}`}`
+  const escrito = (await readFile(`${folder}\\reglas.json`, "utf8")
+    .then((texto) => JSON.parse(texto) as { idea?: unknown; reglas?: unknown })
+    .catch(() => null)) ?? null
+  const descripcion = typeof escrito?.idea === "string" ? escrito.idea : null
+  const reglas =
+    escrito === null || typeof escrito.reglas !== "object" || escrito.reglas === null
+      ? null
+      : Object.fromEntries(Object.entries(escrito.reglas).filter((entrada) => typeof entrada[1] === "string"))
+  return {
+    id: name.slice(0, 2),
+    name,
+    dir: folder,
+    clientId,
+    servidor: servidorHost !== undefined && servidorPuerto !== null ? `${servidorHost}:${servidorPuerto}` : null,
+    horaCierre,
+    descripcion,
+    reglas,
+    meta: META[name] ?? null,
   }
-  return { id: name.slice(0, 2), name, dir: folder, clientId, meta: META[name] ?? null }
 }
 
 /** Whether a pid still belongs to a live process; callers that may kill always add the bot.py command-line check. */
@@ -236,6 +271,11 @@ const toSchemaSystem = (system: Definicion): Trading.System => {
     symbol: system.meta?.symbol ?? "?",
     timeframe: system.meta?.timeframe ?? "?",
     pnl_day: pnlBots.get(system.id) ?? null,
+    client_id: system.clientId,
+    close_hour: system.horaCierre,
+    last_activity_at: runtime === undefined ? null : runtime.ultimaActividad,
+    description: system.descripcion,
+    rules: system.reglas === null ? null : { ...system.reglas },
   }
 }
 
@@ -583,7 +623,7 @@ const layer = (options: Options = {}) =>
        * result) and its closed-trade result from FUERA rows. Timestamp-less rows are either
        * indented traceback continuations (they glue to the beat above) or plain lifecycle
        * notes that timestamp on arrival. */
-      const parsearChunk = (systemID: string, chunk: string, cosecha = true): { latidos: Latido[]; cierres: CosechaCierre[] } => {
+      const parsearChunk = (systemID: string, chunk: string, cosecha = true): { latidos: Latido[]; cierres: CosechaCierre[]; ultima: number | null } => {
         const latidos: Latido[] = []
         const cierres: CosechaCierre[] = []
         let ultimaTs: number | null = null
@@ -631,7 +671,7 @@ const layer = (options: Options = {}) =>
             // it; inherit that row's hour so the record keeps the fault in its true place.
             latidos.push({ ts: ultimaTs, level: "error", message: texto })
         }
-        return { latidos, cierres }
+        return { latidos, cierres, ultima: ultimaTs }
       }
 
       const runtimeNuevo = (): Runtime => ({
@@ -642,7 +682,16 @@ const layer = (options: Options = {}) =>
         planeado: false,
         registroOffset: 0,
         consolaOffset: 0,
+        ultimaActividad: null,
       })
+
+      /** The bot's latest own row: its line's own timestamp when it carries one, the arrival
+       * time otherwise. Today only — the tail offsets start at today's first row, so a stopped
+       * bot's activity is its latest line of the day, not its last session ever. */
+      const notaActividad = (runtime: Runtime, ultima: number | null) => {
+        const ts = ultima ?? Date.now()
+        runtime.ultimaActividad = runtime.ultimaActividad === null ? ts : Math.max(runtime.ultimaActividad, ts)
+      }
 
       /** The record owes itself to the current day only: the tail offset starts at today's
        * first registro.log row, so a restart never replays older sessions. */
@@ -684,6 +733,7 @@ const layer = (options: Options = {}) =>
             pushLog(latido.level, def.name, latido.message, { ts: latido.ts ?? undefined, event: latido.event })
           }
           if (salida.cierres.length > 0) registrarTrades(def.id, salida.cierres)
+          if (salida.latidos.length > 0) notaActividad(runtime, salida.ultima)
         }
         const consola = await leerCola(`${def.dir}\\consola.log`, runtime.consolaOffset)
         if (consola !== null) {
@@ -692,6 +742,7 @@ const layer = (options: Options = {}) =>
           for (const latido of salida.latidos) {
             pushLog(latido.level, def.name, latido.message, { ts: latido.ts ?? undefined, event: latido.event })
           }
+          if (salida.latidos.length > 0) notaActividad(runtime, salida.ultima)
         }
       }
 
@@ -772,6 +823,23 @@ const layer = (options: Options = {}) =>
           return
         }
         sistemas = await Promise.all(carpetas.map((name) => definicion(name, sistemasDir)))
+        // Config warnings at boot: a shared CLIENT_ID would have TWS reject the second bot,
+        // and a config that points at another port runs outside the engine's own watch —
+        // the sweep would neither see nor adopt a bot connecting over there.
+        const porCliente = new Map<number, string[]>()
+        for (const def of sistemas) {
+          if (def.clientId === null) continue
+          const lista = porCliente.get(def.clientId) ?? []
+          lista.push(def.name)
+          porCliente.set(def.clientId, lista)
+        }
+        for (const [clientId, names] of porCliente) {
+          if (names.length > 1) pushLog("warning", "motor", `CLIENT_ID ${clientId} compartido por ${names.join(", ")} · TWS rechazaría al segundo`)
+        }
+        for (const def of sistemas) {
+          if (def.servidor !== null && def.servidor !== `${host}:${port}`)
+            pushLog("warning", def.name, `config.py apunta a ${def.servidor} · el motor vigila ${host}:${port}`)
+        }
         const rutaPythonw = spawnSync("where", ["pythonw"], { timeout: 5_000, windowsHide: true })
         const primera = rutaPythonw.stdout?.toString().split(/\r?\n/)[0]?.trim() ?? ""
         if (primera !== "") pythonwEjecutable = primera
@@ -802,6 +870,34 @@ const layer = (options: Options = {}) =>
           pushLog("error", def.name, "El bot no se puede arrancar: la carpeta del sistema no está disponible")
           return toSchemaSystem(def)
         }
+        // TWS serves one session per client id: when a session already exists for this bot's
+        // own id (an externally started process the sweep hasn't adopted yet), a second spawn
+        // would be rejected. Adopt the live one instead of spawning a twin, exactly what the
+        // sweep does on its own beat.
+        const clientId = def.clientId
+        if (connected.value && clientId !== null) {
+          const ocupado = yield* Effect.promise(() => clientIdEnUso(host, port, clientId))
+          if (ocupado) {
+            adjuntar(def, "external", null, `Bot ya en marcha · detectado en TWS con su CLIENT_ID ${clientId}`)
+            return toSchemaSystem(def)
+          }
+        }
+        // Two bots over the same instrument may well duplicate each other's positions. The
+        // start itself still proceeds; its warning lands in the record beside the launch note.
+        const simbolo = def.meta?.symbol
+        const gemelo =
+          simbolo === undefined
+            ? undefined
+            : sistemas.find(
+                (otro) =>
+                  otro.id !== id && otro.meta?.symbol === simbolo && (bots.get(otro.id)?.startedAt ?? null) !== null,
+              )
+        if (gemelo !== undefined)
+          pushLog(
+            "warning",
+            def.name,
+            `Dos bots sobre el mismo símbolo · ${gemelo.name} ya corre sobre ${simbolo}: puede duplicar posiciones`,
+          )
         const runtime = previo ?? runtimeNuevo()
         if (previo === undefined) {
           // Tail offsets are seeded at the current day's first row, so the record keeps the
