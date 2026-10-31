@@ -31,14 +31,14 @@ export function ProductSwitcher(props: { trading: boolean; aOpenCode: () => void
       <Menu.Portal>
         <Menu.Content class="min-w-44" aria-label={language.t("product.switch")}>
           {/* Radio semantics for the menu items, but no group-level onChange: it never fires
-              for the already-active product, so picking it would strand the menu open. Each
-              item closes on select; the product move runs only when the pick actually
-              switches, so re-picking the active product just folds the menu. */}
+              for the already-active product, so picking it would strand the menu open. Per-item
+              onSelect always fires, so every pick folds the menu; the titlebar's move guard
+              ignores the ask when the shell already sits on the picked product. */}
           <Menu.RadioGroup value={props.trading ? "trading" : "opencode"} aria-label={language.t("product.switch")}>
             <Menu.RadioItem
               value="opencode"
               onSelect={() => {
-                if (!props.trading) props.aOpenCode()
+                props.aOpenCode()
                 setAbierto(false)
               }}
             >
@@ -48,7 +48,6 @@ export function ProductSwitcher(props: { trading: boolean; aOpenCode: () => void
             <Menu.RadioItem
               value="trading"
               onSelect={() => {
-                if (props.trading) return
                 props.aTrading()
                 setAbierto(false)
               }}
