@@ -2,11 +2,13 @@ import type { KeymapActive, KeymapCommand, KeymapLayer, KeymapPending } from "@o
 import { InputRenderable, TextareaRenderable, type KeyEvent, type Renderable } from "@opentui/core"
 import { stringifyKeyStroke, type Binding, type CommandContext } from "@opentui/keymap"
 import {
+  createTextareaBindings,
   registerBackspacePopsPendingSequence,
   registerBaseLayoutFallback,
   registerCommaBindings,
+  registerEditBufferCommands,
   registerEscapeClearsPendingSequence,
-  registerManagedTextareaLayer,
+  registerTextareaMappingSuspension,
   registerTimedLeader,
 } from "@opentui/keymap/addons/opentui"
 import { formatCommandBindings, formatKeySequence } from "@opentui/keymap/extras"
@@ -86,52 +88,83 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
       if (key === context.input) return
       return [{ key, displays: context.displays }]
     }),
+    // Terminals without CSI-u report Ctrl+J (and Windows Terminal's Ctrl+Enter) as raw LF, which OpenTUI parses as linefeed.
+    keymap.appendEventMatchResolver((event, context) => {
+      if (event.name === "kpenter") {
+        return [
+          context.resolveKey({
+            name: "return",
+            ctrl: event.ctrl,
+            shift: event.shift,
+            meta: event.meta,
+            super: event.super ?? false,
+            hyper: event.hyper || undefined,
+          }),
+        ]
+      }
+      if (event.name !== "linefeed" || event.ctrl || event.shift || event.super || event.hyper) return
+      return [
+        context.resolveKey({
+          name: "j",
+          ctrl: true,
+          meta: event.meta,
+        }),
+      ]
+    }),
     registerBaseLayoutFallback(keymap),
     registerEscapeClearsPendingSequence(keymap),
     registerBackspacePopsPendingSequence(keymap),
-    registerManagedTextareaLayer(keymap, renderer, {
+    registerEditBufferCommands(keymap, renderer),
+    registerTextareaMappingSuspension(keymap, renderer),
+    // Omit OpenTUI's standalone-editor newline/submit defaults so input.newline and input.submit come solely from config.
+    keymap.registerLayer({
       enabled: () => {
         const editor = renderer.currentFocusedEditor
         return editor instanceof TextareaRenderable && !(editor instanceof InputRenderable)
       },
       bindings: [
-        "input.move.left",
-        "input.move.right",
-        "input.move.up",
-        "input.move.down",
-        "input.select.left",
-        "input.select.right",
-        "input.select.up",
-        "input.select.down",
-        "input.line.home",
-        "input.line.end",
-        "input.select.line.home",
-        "input.select.line.end",
-        "input.visual.line.home",
-        "input.visual.line.end",
-        "input.select.visual.line.home",
-        "input.select.visual.line.end",
-        "input.buffer.home",
-        "input.buffer.end",
-        "input.select.buffer.home",
-        "input.select.buffer.end",
-        "input.delete.line",
-        "input.delete.to.line.end",
-        "input.delete.to.line.start",
-        "input.backspace",
-        "input.delete",
-        "input.newline",
-        "input.undo",
-        "input.redo",
-        "input.word.forward",
-        "input.word.backward",
-        "input.select.word.forward",
-        "input.select.word.backward",
-        "input.delete.word.forward",
-        "input.delete.word.backward",
-        "input.select.all",
-        "input.submit",
-      ].flatMap((command) => config.keybinds.get(command)),
+        ...[
+          "input.move.left",
+          "input.move.right",
+          "input.move.up",
+          "input.move.down",
+          "input.select.left",
+          "input.select.right",
+          "input.select.up",
+          "input.select.down",
+          "input.line.home",
+          "input.line.end",
+          "input.select.line.home",
+          "input.select.line.end",
+          "input.visual.line.home",
+          "input.visual.line.end",
+          "input.select.visual.line.home",
+          "input.select.visual.line.end",
+          "input.buffer.home",
+          "input.buffer.end",
+          "input.select.buffer.home",
+          "input.select.buffer.end",
+          "input.delete.line",
+          "input.delete.to.line.end",
+          "input.delete.to.line.start",
+          "input.backspace",
+          "input.delete",
+          "input.newline",
+          "input.undo",
+          "input.redo",
+          "input.word.forward",
+          "input.word.backward",
+          "input.select.word.forward",
+          "input.select.word.backward",
+          "input.delete.word.forward",
+          "input.delete.word.backward",
+          "input.select.all",
+          "input.submit",
+        ].flatMap((command) => config.keybinds.get(command)),
+        ...createTextareaBindings().filter(
+          (binding) => binding.cmd !== "input.newline" && binding.cmd !== "input.submit",
+        ),
+      ],
     }),
   ]
   const leader = config.keybinds.get("leader")?.[0]?.key
