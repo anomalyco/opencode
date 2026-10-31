@@ -5,6 +5,30 @@ description: "Reference for the opencode command line."
 
 Every command accepts `--help` for its full flag list, for example `opencode run --help`. Some server-backed commands accept `--standalone` to run a private server or `--server <url>` to target a specific one; check the command's help for its supported flags.
 
+## Shell completion
+
+The `--completions` global flag prints a completion script for your shell. It supports `bash`, `zsh`, `fish` and `sh`.
+
+For bash, append the script to your profile.
+
+```bash
+$ opencode --completions bash >> ~/.bashrc
+```
+
+For zsh, write the script to your completions directory and add that directory to your `fpath`.
+
+```bash
+$ opencode --completions zsh > ~/.zsh/completions/_opencode
+```
+
+For fish, write the script to the fish completions directory.
+
+```bash
+$ opencode --completions fish > ~/.config/fish/completions/opencode.fish
+```
+
+The `sh` script is the bash one.
+
 ## run
 
 Sends a message and prints the reply without opening the interactive interface.
