@@ -36,8 +36,6 @@ export async function resolveSessionTarget(input: {
   continue?: boolean
   session?: string
   fork?: boolean
-  /** Create a new git worktree, named when a string, and start the new Session in it. */
-  worktree?: string | true
   model?: ModelRef
   agent?: string
   environment?: Readonly<Record<string, string>>
@@ -50,7 +48,7 @@ export async function resolveSessionTarget(input: {
     selection.location ??
     (await resolveLocation(
       input.client,
-      selected ? { directory: selected.location.directory } : await startLocation(input),
+      selected ? { directory: selected.location.directory } : input.location,
       input.signal,
     ))
   const prepared = await input.prepare({
@@ -134,29 +132,29 @@ async function selectSession(input: {
   }
 }
 
-async function startLocation(input: {
+/** Create a new worktree of the location's project, keeping the caller's subfolder when the worktree has it. */
+export async function createWorktreeLocation(input: {
   client: OpenCodeClient
   location?: { directory?: string }
-  worktree?: string | true
+  name?: string
   signal?: AbortSignal
 }) {
-  if (input.worktree === undefined) return input.location
   const base = await resolveLocation(input.client, input.location, input.signal)
   const created = await input.client.worktree
     .create(
-      { projectID: base.project.id, name: input.worktree === true ? undefined : input.worktree },
+      { projectID: base.project.id, from: base.project.directory, name: input.name },
       ...requestOptions(input.signal),
     )
     .catch((error) => {
       throw new SessionTargetMutationError(error)
     })
-  // Start in the same subfolder of the new worktree, or its root when that folder is not checked in.
   const subfolder = path.relative(base.project.directory, base.directory)
-  if (!subfolder || subfolder.startsWith("..")) return { directory: created.directory }
+  if (!subfolder || subfolder.startsWith("..") || path.isAbsolute(subfolder))
+    return { root: created.directory, directory: created.directory }
   const directory = path.join(created.directory, subfolder)
   return resolveLocation(input.client, { directory }, input.signal).then(
-    () => ({ directory }),
-    () => ({ directory: created.directory }),
+    () => ({ root: created.directory, directory }),
+    () => ({ root: created.directory, directory: created.directory }),
   )
 }
 

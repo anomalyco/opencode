@@ -6,7 +6,7 @@ import { open } from "node:fs/promises"
 import path from "node:path"
 import { readStdin } from "../util/io"
 import { ServerConnection } from "../services/server-connection"
-import { parseSessionTargetModel, resolveSessionTarget } from "../session-target"
+import { createWorktreeLocation, parseSessionTargetModel, resolveSessionTarget } from "../session-target"
 import { toolInlineInfo } from "@opencode/tui/mini/tool"
 import { runNonInteractivePrompt } from "./noninteractive"
 import { UI } from "./ui"
@@ -92,13 +92,22 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     fetch: noTimeoutFetch,
   })
   const explicit = parseRunModel(input.model)
+  const location = prepared.directory ? { directory: prepared.directory } : undefined
+  const worktree =
+    input.worktree === undefined
+      ? undefined
+      : await createWorktreeLocation({
+          client,
+          location,
+          name: input.worktree === true ? undefined : input.worktree,
+        })
+  if (worktree) UI.println(UI.Style.TEXT_DIM + "worktree " + worktree.root + UI.Style.TEXT_NORMAL)
   const target = await resolveSessionTarget({
     client,
-    location: prepared.directory ? { directory: prepared.directory } : undefined,
+    location: worktree ? { directory: worktree.directory } : location,
     continue: input.continue,
     session: input.session,
     fork: input.fork,
-    worktree: input.worktree,
     model: explicit
       ? { providerID: explicit.model.providerID, id: explicit.model.modelID, variant: explicit.variant }
       : undefined,
@@ -129,8 +138,6 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     return undefined
   })
   if (!target) return
-  if (input.worktree !== undefined)
-    UI.println(UI.Style.TEXT_DIM + "worktree " + target.location.directory + UI.Style.TEXT_NORMAL)
   const model = target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined
   const variant = target.model?.variant
   if (!target.resume && input.title !== undefined) {
