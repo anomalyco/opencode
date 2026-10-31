@@ -10,7 +10,7 @@ import { tmpdirScoped } from "./fixture/tmpdir"
 
 const it = testEffect(LayerNode.compile(MarketplaceLocal.node))
 const catalog = (system = "reviewed", id = "review") => ({
-  schema: "opencode.marketplace/v1",
+  schema: "opencode.marketplace/experimental",
   id: "team",
   name: "Team",
   items: [
@@ -42,7 +42,9 @@ it.live("applies the captured agent snapshot once and leaves user files untouche
     const state = yield* marketplace.install(plan.id)
     expect(state.revision).toBe(1)
     expect(state.installed[plan.key].agents.review.system).toBe("reviewed")
-    expect(MarketplaceLocal.documents(state)[0]?.info.agents?.review.system).toBe("reviewed")
+    expect(MarketplaceLocal.documents(state)[0]?.info.agents?.[`marketplace/${plan.key}/review`].system).toBe(
+      "reviewed",
+    )
     const replay = yield* Effect.flip(marketplace.install(plan.id))
     expect(replay.reason).toBe("plan")
     const removed = yield* marketplace.uninstall({ key: plan.key, revision: state.revision })
@@ -96,7 +98,7 @@ it.live("expires a plan using the caller's clock without sleeping", () =>
   }),
 )
 
-it.live("rejects overlapping agent ownership and updates the same package through a new plan", () =>
+it.live("keeps same-named agents in distinct package namespaces across updates", () =>
   Effect.gen(function* () {
     const tmp = yield* tmpdirScoped()
     const file = AbsolutePath.make(path.join(tmp.path, "marketplace.json"))
@@ -104,16 +106,19 @@ it.live("rejects overlapping agent ownership and updates the same package throug
     yield* Effect.promise(() => Bun.write(file, JSON.stringify(catalog())))
     const first = yield* marketplace.plan({ file, item: "review" })
     yield* marketplace.install(first.id)
-    yield* Effect.promise(() => Bun.write(file, JSON.stringify(catalog("collision", "another"))))
-    const collision = yield* marketplace.plan({ file, item: "another" })
-    expect((yield* Effect.flip(marketplace.install(collision.id))).reason).toBe("collision")
+    yield* Effect.promise(() => Bun.write(file, JSON.stringify(catalog("another package", "another"))))
+    const second = yield* marketplace.plan({ file, item: "another" })
+    yield* marketplace.install(second.id)
     yield* Effect.promise(() => Bun.write(file, JSON.stringify(catalog("updated"))))
     const update = yield* marketplace.plan({ file, item: "review" })
     expect(update.key).toBe(first.key)
     const state = yield* marketplace.install(update.id)
-    expect(Object.keys(state.installed)).toEqual([first.key])
+    expect(Object.keys(state.installed).sort()).toEqual([first.key, second.key].sort())
     expect(state.installed[first.key].agents.review.system).toBe("updated")
-    expect(state.revision).toBe(2)
+    expect(state.installed[second.key].agents.review.system).toBe("another package")
+    const projected = MarketplaceLocal.documents(state).flatMap((document) => Object.keys(document.info.agents ?? {}))
+    expect(projected.sort()).toEqual([`marketplace/${first.key}/review`, `marketplace/${second.key}/review`].sort())
+    expect(state.revision).toBe(3)
   }),
 )
 
@@ -125,6 +130,7 @@ it.live("rejects unsupported catalog shapes before changing durable state", () =
     const valid = catalog()
     const invalid = [
       "{",
+      JSON.stringify({ ...valid, schema: "opencode.marketplace/v1" }),
       JSON.stringify({ ...valid, items: [...valid.items, ...valid.items] }),
       JSON.stringify({ ...valid, items: [{ ...valid.items[0], kind: "plugin" }] }),
       JSON.stringify({

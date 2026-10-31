@@ -1,8 +1,8 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import type { Marketplace } from "@opencode/schema/marketplace"
+import type { MarketplaceLocal } from "../marketplace.js"
 
 export const MarketplaceTable = sqliteTable("marketplace_registry", {
   id: integer().primaryKey(),
   revision: integer().notNull(),
-  installed: text({ mode: "json" }).$type<(typeof Marketplace.State.Encoded)["installed"]>().notNull(),
+  installed: text({ mode: "json" }).$type<(typeof MarketplaceLocal.State.Encoded)["installed"]>().notNull(),
 })
