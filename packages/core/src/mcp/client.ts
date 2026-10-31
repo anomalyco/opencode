@@ -30,6 +30,7 @@ import {
 import { Cause, Clock, Duration, Effect, Exit, Schedule, Schema } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
+import { isRecord } from "@opencode/util/record"
 import { McpStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
@@ -261,6 +262,8 @@ export const connect = Effect.fnUntraced(function* (
     reported: false,
   }
   const failure = (error: unknown) => {
+    // A tool call that relists first can fail with the list's already mapped expiry.
+    if (error instanceof SessionExpiredError) return error
     if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
     const expired =
       error.status === 404 ||
@@ -347,12 +350,7 @@ export const connect = Effect.fnUntraced(function* (
         yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
       }),
     )
-    // Lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
-    // re-parses it and compiles an output validator for every listed tool. Each call passes its own
-    // checked definition instead, so only that tool's outputSchema is compiled and modern
-    // Mcp-Param-* header mirroring still sees the schema. Lists are refetched only on list_changed,
-    // reconnect, or a stale header declaration, so modern list TTLs are not honored.
-    const catalog = { timeout: timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT, cacheMode: "bypass" as const }
+    const catalog = { timeout: timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT }
     const listed = new Map<string, Tool>()
     const execution = timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
     const request = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
@@ -376,9 +374,16 @@ export const connect = Effect.fnUntraced(function* (
       modern: client.getProtocolEra() === "modern",
       title: client.getServerVersion()?.title?.trim() || undefined,
       instructions: client.getInstructions()?.trim() || undefined,
+      // Tool lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
+      // re-parses it and compiles an output validator for every listed tool. Each call passes its own
+      // checked definition instead, so only that tool's outputSchema is compiled and modern Mcp-Param-*
+      // header mirroring still sees the schema. Tools are relisted only on list_changed, reconnect, or a
+      // stale header declaration, so modern tool list TTLs are not honored.
       tools: () =>
         advertised("tools")
-          ? list("list MCP tools", (signal) => client.listTools(undefined, { ...catalog, signal })).pipe(
+          ? list("list MCP tools", (signal) =>
+              client.listTools(undefined, { ...catalog, cacheMode: "bypass", signal }),
+            ).pipe(
               // Our SDK patch leaves the listed tools unchecked, so one malformed tool doesn't fail the
               // whole list; each is checked here and copied with only the fields we read.
               Effect.flatMap((result) => {
@@ -391,9 +396,9 @@ export const connect = Effect.fnUntraced(function* (
                   if (!isRecord(tool)) return skip("not an object")
                   if (typeof tool.name !== "string" || tool.name === "") return skip("name is not a non-empty string")
                   if (!isRecord(tool.inputSchema)) return skip("inputSchema is not an object")
-                  const { properties, required, ...inputSchema } = tool.inputSchema
-                  if (inputSchema.type !== undefined && inputSchema.type !== "object")
+                  if (tool.inputSchema.type !== undefined && tool.inputSchema.type !== "object")
                     return skip('inputSchema type is not "object"')
+                  const { properties, required, ...inputSchema } = tool.inputSchema
                   return [
                     {
                       name: tool.name,
@@ -451,28 +456,36 @@ export const connect = Effect.fnUntraced(function* (
           client.getPrompt({ name: input.name, arguments: input.args ?? {} }, { signal, timeout: execution }),
         ),
       callTool: (input) => {
-        const params = {
-          name: input.name,
-          arguments: input.args ?? {},
-          ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
-        }
         const call = Effect.tryPromise({
           try: (signal) =>
-            client.callTool(params, {
-              signal,
-              timeout: execution,
-              // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
-              onprogress: () => {},
-              // The SDK's types say schema values are JSON; ours are unknown values parsed from JSON.
-              toolDefinition: listed.get(input.name) as CallToolRequestOptions["toolDefinition"],
-            }),
+            client.callTool(
+              {
+                name: input.name,
+                arguments: input.args ?? {},
+                ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
+              },
+              {
+                signal,
+                timeout: execution,
+                // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
+                onprogress: () => {},
+                // Always passed, even for a tool we haven't listed, so the SDK never falls back to listing
+                // and caching the raw tools itself. Its types are narrower than what it reads (JSON values,
+                // a string `$schema`); ours keep the server's values.
+                toolDefinition: (listed.get(input.name) ?? {
+                  name: input.name,
+                  inputSchema: { type: "object" },
+                }) as CallToolRequestOptions["toolDefinition"],
+              },
+            ),
           catch: (error) => error,
         })
         // A modern server rejects headers mirrored from a stale definition before running the tool,
         // so relist and retry once with the fresh definition.
         return call.pipe(
           Effect.catchIf(
-            (error) => error instanceof ProtocolError && error.code === HEADER_MISMATCH,
+            (error) =>
+              client.getProtocolEra() === "modern" && error instanceof ProtocolError && error.code === HEADER_MISMATCH,
             () => connection.tools().pipe(Effect.andThen(call)),
           ),
           Effect.mapError(failure),
@@ -518,10 +531,6 @@ function rejectsUnknownQuery(url: URL) {
   if (/(^|\.)zohomcp\.[a-z.]+$/.test(url.hostname)) return true
   // Loopback servers run on this machine (Figma Desktop's Dev Mode MCP returns 404), so they are not hosted Code Mode servers.
   return url.hostname === "localhost" || url.hostname === "[::1]" || /^127(\.\d+){3}$/.test(url.hostname)
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 // Absent config is legacy: the SDK sends the plain initialize handshake with no discover probe.
