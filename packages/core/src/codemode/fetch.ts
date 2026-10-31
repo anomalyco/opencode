@@ -16,9 +16,11 @@ type Init = {
 
 const fetch = (input: string | URL, init: Init = {}) =>
   Effect.gen(function* () {
-    const url = String(input)
-    if (URL.parse(url)?.protocol === "file:")
-      return yield* Effect.fail(new Error("fetch cannot be used for filesystem access."))
+    // Rules are matched against the URL that is requested, so `HTTPS://EVIL.COM` meets a rule for `https://evil.com/*`.
+    const parsed = URL.parse(String(input))
+    if (parsed === null) return yield* Effect.fail(new TypeError(`fetch received an invalid URL: ${String(input)}`))
+    if (parsed.protocol === "file:") return yield* Effect.fail(new Error("fetch cannot be used for filesystem access."))
+    const url = parsed.href
     const execution = yield* CodeModeExecution.Service
     const permission = yield* Permission.Service
     // The same rules as the webfetch tool, so a URL denied there is denied here.
@@ -27,7 +29,7 @@ const fetch = (input: string | URL, init: Init = {}) =>
         action: "webfetch",
         resources: [url],
         save: ["*"],
-        metadata: display([input, init]),
+        metadata: display([url, init]),
         sessionID: execution.sessionID,
         agent: execution.agent,
         source: { type: "tool", messageID: execution.messageID, id: execution.id },
@@ -38,7 +40,7 @@ const fetch = (input: string | URL, init: Init = {}) =>
           Effect.fail(new Error(`The user rejected fetching ${url}: ${error.feedback}`)),
         ),
       )
-    return yield* Effect.tryPromise({ try: () => send(input, init), catch: (error) => error })
+    return yield* Effect.tryPromise({ try: () => send(url, init), catch: (error) => error })
   })
 
 const send = async (input: string | URL, init: Init) => {
