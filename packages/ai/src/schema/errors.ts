@@ -13,6 +13,9 @@ export class HttpContext extends Schema.Class<HttpContext>("AI.HttpContext")({
   headers: Schema.Record(Schema.String, Schema.String),
 }) {}
 
+export const isStandardHttpStatus = (status: number) =>
+  Number.isInteger(status) && status >= 100 && status <= 599
+
 export class HttpRateLimitDetails extends Schema.Class<HttpRateLimitDetails>("AI.HttpRateLimitDetails")({
   retryAfterMs: Schema.optional(NonNegativeInt),
   limit: Schema.optional(Schema.Record(Schema.String, Schema.String)),
