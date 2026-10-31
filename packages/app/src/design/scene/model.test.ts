@@ -33,6 +33,15 @@ describe("design scene prompts", () => {
     expect(object?.material.color).toBe("#5b8def")
   })
 
+  test("adds capsule and torus knot primitives", () => {
+    const { scene } = sceneWithObjects()
+    const capsule = interpretPrompt(scene, "add a capsule")
+    const knot = interpretPrompt(capsule.scene, "add a torus knot")
+
+    expect(capsule.scene.objects.at(-1)?.shape).toBe("capsule")
+    expect(knot.scene.objects.at(-1)?.shape).toBe("knot")
+  })
+
   test("moves, rotates and scales the selected object", () => {
     const { scene, first } = sceneWithObjects()
     const moved = interpretPrompt(scene, "move it to 4 2 1", first)

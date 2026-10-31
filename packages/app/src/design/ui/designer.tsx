@@ -12,9 +12,11 @@ import { Switch } from "@opencode/ui/switch"
 import { Spinner } from "@opencode/ui/spinner"
 import { uuid } from "@opencode/util/uuid"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
 import type { DesignProjectTarget } from "../project"
+import { DesignModelSelect, type DesignModelChoice } from "../model-select"
 import {
   UI_ACCENTS,
   UI_TEMPLATES,
@@ -43,6 +45,12 @@ export type UiProjectBridge = {
   setFolder: (value: string) => void
   write: (filename: string, payload: Uint8Array, folder: string) => Promise<string>
   generate: (prompt: string) => Promise<string>
+  ai: {
+    models: Accessor<DesignModelChoice[]>
+    selected: Accessor<DesignModelChoice | undefined>
+    loading: Accessor<boolean>
+    select: (model: DesignModelChoice | null | undefined) => void
+  }
 }
 
 type Message = { id: string; role: "user" | "system"; text: string; ok?: boolean }
@@ -51,10 +59,12 @@ type Device = "desktop" | "tablet" | "phone"
 
 export function UiDesigner(props: { project: UiProjectBridge }) {
   const language = useLanguage()
+  const platform = usePlatform()
   const [document, setDocument] = createStore<UiDocument>(loadDocument())
   const [prompt, setPrompt] = createSignal("")
   const [promptMode, setPromptMode] = createSignal<"local" | "ai">("ai")
   const [generating, setGenerating] = createSignal(false)
+  const [limitReached, setLimitReached] = createSignal(false)
 
   const [messages, setMessages] = createSignal<Message[]>([
     { id: uuid(), role: "system", text: language.t("design.ui.chat.welcome"), ok: true },
@@ -103,15 +113,18 @@ export function UiDesigner(props: { project: UiProjectBridge }) {
       }
 
       push("system", language.t(outcome.notice.key, outcome.notice.params), outcome.ok)
+      setLimitReached(false)
 
       return
     }
 
     setGenerating(true)
+    setLimitReached(false)
 
     try {
       const request = uiPrompt(unwrap(document), value)
       const text = await props.project.generate(request)
+
       const next =
         parseUiDocument(extractJson(text)) ??
         parseUiDocument(
@@ -127,7 +140,9 @@ export function UiDesigner(props: { project: UiProjectBridge }) {
       setDocument(reconcile(next))
       push("system", language.t("design.ui.notice.aiUpdated"), true)
     } catch (cause) {
-      push("system", `${language.t("design.ui.notice.aiFailed")} ${errorMessage(cause, "")}`.trim(), false)
+      const message = errorMessage(cause, "")
+      push("system", `${language.t("design.ui.notice.aiFailed")} ${message}`.trim(), false)
+      setLimitReached(/free usage limit|rate_limit|\b429\b/i.test(message))
     } finally {
       setGenerating(false)
     }
@@ -155,6 +170,16 @@ export function UiDesigner(props: { project: UiProjectBridge }) {
   const removeSection = (section: UiSection) => {
     apply({ ...unwrap(document), sections: document.sections.filter((item) => item.id !== section.id) })
     push("system", language.t("design.ui.notice.removed", { section: section.kind }), true)
+  }
+
+  const moveSection = (section: UiSection, delta: number) => {
+    const sections = [...unwrap(document).sections]
+    const index = sections.findIndex((item) => item.id === section.id)
+    const target = index + delta
+
+    if (index === -1 || target < 0 || target >= sections.length) return
+    ;[sections[index], sections[target]] = [sections[target]!, sections[index]!]
+    apply({ ...unwrap(document), sections })
   }
 
   const save = async () => {
@@ -272,6 +297,27 @@ export function UiDesigner(props: { project: UiProjectBridge }) {
               </Switch>
             </Tooltip>
           </div>
+          <Show when={promptMode() === "ai"}>
+            <div class="mb-1.5">
+              <div class="mb-1 flex items-center justify-between gap-2">
+                <span class="text-[10px] leading-3 text-v2-text-text-faint">{language.t("design.ai.model")}</span>
+                <Show when={props.project.ai.selected()?.free}>
+                  <span class="rounded-[3px] bg-v2-background-bg-layer-02 px-1 text-[10px] leading-3 text-v2-text-text-faint">
+                    {language.t("design.ai.modelFree")}
+                  </span>
+                </Show>
+              </div>
+              <DesignModelSelect
+                models={props.project.ai.models()}
+                selected={props.project.ai.selected()}
+                loading={props.project.ai.loading()}
+                onSelect={props.project.ai.select}
+              />
+              <Show when={props.project.ai.selected()?.free}>
+                <div class="mt-1 text-[10px] leading-3 text-v2-text-text-faint">{language.t("design.ai.modelHint")}</div>
+              </Show>
+            </div>
+          </Show>
           <Textarea
             rows={3}
             value={prompt()}
@@ -305,6 +351,15 @@ export function UiDesigner(props: { project: UiProjectBridge }) {
               </Show>
             </Button>
           </div>
+          <Show when={limitReached()}>
+            <button
+              type="button"
+              class="mt-1 text-[11px] text-v2-text-text-accent underline-offset-2 hover:underline"
+              onClick={() => platform.openExternal("https://opencode.ai/go")}
+            >
+              {language.t("design.ai.openGo")}
+            </button>
+          </Show>
         </div>
       </aside>
 
@@ -457,10 +512,30 @@ export function UiDesigner(props: { project: UiProjectBridge }) {
             </div>
             <div class="mt-1.5 flex flex-col gap-0.5">
               <For each={document.sections}>
-                {(section) => (
+                {(section, index) => (
                   <div class="group flex h-7 items-center gap-2 rounded-[5px] px-1.5 text-[12px] text-v2-text-text-muted hover:bg-v2-background-bg-layer-02">
                     <span class="size-1.5 rounded-full bg-v2-text-text-faint" aria-hidden="true" />
                     <span class="min-w-0 flex-1 truncate">{language.t(sectionKey(section.kind))}</span>
+                    <IconButton
+                      type="button"
+                      size="small"
+                      variant="ghost-muted"
+                      class="hover-reveal"
+                      disabled={index() === 0 || section.kind === "footer"}
+                      aria-label={language.t("design.ui.section.moveUp")}
+                      icon={<Icon name="arrow-up" size="small" />}
+                      onClick={() => moveSection(section, -1)}
+                    />
+                    <IconButton
+                      type="button"
+                      size="small"
+                      variant="ghost-muted"
+                      class="hover-reveal"
+                      disabled={index() === document.sections.length - 1 || section.kind === "footer"}
+                      aria-label={language.t("design.ui.section.moveDown")}
+                      icon={<Icon name="arrow-up" size="small" class="[transform:rotate(180deg)]" />}
+                      onClick={() => moveSection(section, 1)}
+                    />
                     <IconButton
                       type="button"
                       size="small"

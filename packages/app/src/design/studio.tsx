@@ -12,8 +12,10 @@ import { Textarea } from "@opencode/ui/textarea"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { displayName } from "@opencode/ui/project-avatar"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import type { ModelInfo } from "@opencode/client/promise"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { useLayout } from "@/shell/state/layout"
 import { errorMessage } from "@/shell/layout/helpers"
@@ -48,6 +50,7 @@ import { DesignViewport, type TransformMode } from "./scene/viewport"
 import { UiDesigner } from "./ui/designer"
 import type { DesignProjectTarget } from "./project"
 import { extractJson, generateDesignText, scenePrompt } from "./ai"
+import { DesignModelSelect, designModelKey, type DesignModelChoice } from "./model-select"
 import { Spinner } from "@opencode/ui/spinner"
 import "./studio.css"
 
@@ -62,6 +65,7 @@ export default function DesignStudio() {
   const layout = useLayout()
   const global = useGlobal()
   const servers = useServers()
+  const platform = usePlatform()
   const navigate = useNavigate()
   const pickDirectory = useDirectoryPicker()
 
@@ -72,6 +76,7 @@ export default function DesignStudio() {
   const [promptMode, setPromptMode] = createSignal<"local" | "ai">("ai")
   const [generating, setGenerating] = createSignal(false)
   const [aiError, setAiError] = createSignal<string>()
+  const [limitReached, setLimitReached] = createSignal(false)
   const [notice, setNotice] = createSignal<Notice>()
   const [undoStack, setUndoStack] = createSignal<DesignScene[]>([])
   const [redoStack, setRedoStack] = createSignal<DesignScene[]>([])
@@ -83,6 +88,10 @@ export default function DesignStudio() {
   const [saving, setSaving] = createSignal<"json" | ExportFormat>()
   const [saveStatus, setSaveStatus] = createSignal<SaveStatus>()
   const [saveFolder, setSaveFolder] = createSignal("design")
+  const [models, setModels] = createSignal<DesignModelChoice[]>([])
+  const [modelsLoading, setModelsLoading] = createSignal(false)
+  const [serverDefaultModel, setServerDefaultModel] = createSignal<string>()
+  const [modelKey, setModelKey] = createSignal(localStorage.getItem("opencode.design.model") ?? "")
 
   const selected = createMemo(() => scene.objects.find((object) => object.id === selectedID()))
 
@@ -156,6 +165,7 @@ export default function DesignStudio() {
 
       setNotice({ ...outcome.notice, ok: outcome.ok })
       setAiError(undefined)
+      setLimitReached(false)
 
       return
     }
@@ -171,12 +181,16 @@ export default function DesignStudio() {
 
     setGenerating(true)
     setAiError(undefined)
+    setLimitReached(false)
     setNotice(undefined)
 
     try {
       const ctx = global.ensureServerCtx(server)
       const request = scenePrompt(unwrap(scene), value)
-      const text = await generateDesignText(ctx, request)
+      const selected = selectedModel()
+      const model = selected ? { id: selected.modelID, providerID: selected.providerID } : undefined
+      const text = await generateDesignText(ctx, request, model)
+
       const next =
         parseDesignScene(extractJson(text)) ??
         parseDesignScene(
@@ -184,6 +198,7 @@ export default function DesignStudio() {
             await generateDesignText(
               ctx,
               `${request}\n\nYour previous response could not be parsed. Return only the complete JSON object.`,
+              model,
             ),
           ),
         )
@@ -193,7 +208,9 @@ export default function DesignStudio() {
       setNotice({ key: "design.notice.aiUpdated", ok: true })
       setPrompt("")
     } catch (cause) {
-      setAiError(errorMessage(cause, language.t("design.ai.failed")))
+      const message = errorMessage(cause, language.t("design.ai.failed"))
+      setAiError(message)
+      setLimitReached(/free usage limit|rate_limit|\b429\b/i.test(message))
       setNotice({ key: "design.notice.aiFailed", ok: false })
     } finally {
       setGenerating(false)
@@ -282,6 +299,59 @@ export default function DesignStudio() {
     return current ?? targets()[0]
   })
 
+  const modelServer = createMemo(() => target()?.server ?? servers.visible[0])
+
+  createEffect(() => {
+    const server = modelServer()
+    const directory = target()?.directory
+
+    if (!server) {
+      setModels([])
+
+      return
+    }
+
+    let cancelled = false
+    const ctx = global.ensureServerCtx(server)
+    const location = directory ? { directory } : undefined
+
+    setModelsLoading(true)
+    void Promise.all([
+      ctx.sdk.api.model.list(location ? { location } : undefined).catch(() => undefined),
+      ctx.sdk.api.model.default(location ? { location } : undefined).catch(() => undefined),
+    ])
+      .then(([list, fallback]) => {
+        if (cancelled) return
+        setModels((list?.data ?? []).filter((model) => model.enabled).map(toModelChoice))
+        const fallbackModel = fallback?.data
+
+        setServerDefaultModel(
+          fallbackModel
+            ? designModelKey({ providerID: fallbackModel.providerID, modelID: fallbackModel.modelID })
+            : undefined,
+        )
+      })
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false)
+      })
+    onCleanup(() => {
+      cancelled = true
+    })
+  })
+
+  const selectedModel = createMemo(
+    () =>
+      models().find((model) => model.key === modelKey()) ??
+      models().find((model) => model.key === serverDefaultModel()) ??
+      models()[0],
+  )
+
+  const selectModel = (model: DesignModelChoice | null | undefined) => {
+    if (!model) return
+    setModelKey(model.key)
+    localStorage.setItem("opencode.design.model", model.key)
+  }
+
   const selectTarget = (item: DesignProjectTarget | null | undefined) => {
     if (!item) return
     layout.home.setSelection({ server: ServerConnection.key(item.server), directory: item.directory })
@@ -311,11 +381,13 @@ export default function DesignStudio() {
     const destination = target()
 
     if (!destination) throw new Error(language.t("design.project.none"))
+
     const folder = folderValue
       .trim()
       .replaceAll("\\", "/")
       .replace(/^\.\/+/, "")
       .replace(/\/+$/g, "")
+
     const path = folder ? `${folder}/${filename}` : filename
 
     await global.ensureServerCtx(destination.server).sdk.api.experimental.file.write({
@@ -331,8 +403,13 @@ export default function DesignStudio() {
     const server = target()?.server ?? servers.visible[0]
 
     if (!server) return Promise.reject(new Error(language.t("design.ai.noServer")))
+    const model = selectedModel()
 
-    return generateDesignText(global.ensureServerCtx(server), promptValue)
+    return generateDesignText(
+      global.ensureServerCtx(server),
+      promptValue,
+      model ? { id: model.modelID, providerID: model.providerID } : undefined,
+    )
   }
 
   const saveFile = async (format: "json" | ExportFormat) => {
@@ -486,6 +563,12 @@ export default function DesignStudio() {
                   setFolder: setSaveFolder,
                   write: writeProjectFile,
                   generate: generateWithModel,
+                  ai: {
+                    models,
+                    selected: selectedModel,
+                    loading: modelsLoading,
+                    select: selectModel,
+                  },
                 }}
               />
             }
@@ -589,6 +672,29 @@ export default function DesignStudio() {
                     </Switch>
                   </Tooltip>
                 </div>
+                <Show when={promptMode() === "ai"}>
+                  <div class="mb-1.5">
+                    <div class="mb-1 flex items-center justify-between gap-2">
+                      <span class="text-[10px] leading-3 text-v2-text-text-faint">{language.t("design.ai.model")}</span>
+                      <Show when={selectedModel()?.free}>
+                        <span class="rounded-[3px] bg-v2-background-bg-layer-02 px-1 text-[10px] leading-3 text-v2-text-text-faint">
+                          {language.t("design.ai.modelFree")}
+                        </span>
+                      </Show>
+                    </div>
+                    <DesignModelSelect
+                      models={models()}
+                      selected={selectedModel()}
+                      loading={modelsLoading()}
+                      onSelect={selectModel}
+                    />
+                    <Show when={selectedModel()?.free}>
+                      <div class="mt-1 text-[10px] leading-3 text-v2-text-text-faint">
+                        {language.t("design.ai.modelHint")}
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
                 <Textarea
                   rows={3}
                   value={prompt()}
@@ -642,6 +748,15 @@ export default function DesignStudio() {
                       {message()}
                     </div>
                   )}
+                </Show>
+                <Show when={limitReached()}>
+                  <button
+                    type="button"
+                    class="mt-1 text-[11px] text-v2-text-text-accent underline-offset-2 hover:underline"
+                    onClick={() => platform.openExternal("https://opencode.ai/go")}
+                  >
+                    {language.t("design.ai.openGo")}
+                  </button>
                 </Show>
               </div>
             </aside>
@@ -1081,6 +1196,20 @@ function HexField(props: { label: string; value: string; onChange: (value: strin
 
 function shapeKey(shape: DesignShape) {
   return `design.shape.${shape}` as const
+}
+
+function toModelChoice(model: ModelInfo): DesignModelChoice {
+  const cost = model.cost.find((item) => item.tier === undefined) ?? model.cost[0]
+  const free = !!cost && cost.input === 0 && cost.output === 0
+
+  return {
+    key: designModelKey({ providerID: model.providerID, modelID: model.modelID }),
+    name: model.name,
+    providerID: model.providerID,
+    modelID: model.modelID,
+    free,
+    cost: cost && !free ? `$${cost.input.toFixed(2)} / 1M` : undefined,
+  }
 }
 
 function formatNumber(value: number) {

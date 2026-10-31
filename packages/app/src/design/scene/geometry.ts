@@ -1,6 +1,7 @@
 import {
   BoxGeometry,
   BufferGeometry,
+  CapsuleGeometry,
   ConeGeometry,
   CylinderGeometry,
   DoubleSide,
@@ -10,6 +11,7 @@ import {
   PlaneGeometry,
   SphereGeometry,
   TorusGeometry,
+  TorusKnotGeometry,
 } from "three"
 import type { DesignMaterial, DesignObject, DesignShape } from "./model"
 
@@ -25,6 +27,10 @@ export function createGeometry(shape: DesignShape): BufferGeometry {
       return new ConeGeometry(0.65, 1.2, 48)
     case "torus":
       return new TorusGeometry(0.6, 0.2, 24, 64)
+    case "knot":
+      return new TorusKnotGeometry(0.55, 0.16, 128, 24, 2, 3)
+    case "capsule":
+      return new CapsuleGeometry(0.45, 0.9, 8, 24)
     case "plane":
       return new PlaneGeometry(4, 4, 1, 1)
   }

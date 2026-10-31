@@ -1,6 +1,6 @@
 import { uuid } from "@opencode/util/uuid"
 
-export type DesignShape = "box" | "sphere" | "cylinder" | "cone" | "torus" | "plane"
+export type DesignShape = "box" | "sphere" | "cylinder" | "cone" | "torus" | "knot" | "capsule" | "plane"
 
 export type Vec3 = [number, number, number]
 
@@ -53,7 +53,7 @@ export type PromptOutcome = {
   notice: { key: DesignNoticeKey; params?: Record<string, string | number> }
 }
 
-export const DESIGN_SHAPES: DesignShape[] = ["box", "sphere", "cylinder", "cone", "torus", "plane"]
+export const DESIGN_SHAPES: DesignShape[] = ["box", "sphere", "cylinder", "cone", "torus", "knot", "capsule", "plane"]
 
 export const DESIGN_COLORS = ["#5b8def", "#43b581", "#e2b13c", "#e8833a", "#d65780", "#a97cf8", "#35b8c9", "#8b8b8b"]
 
@@ -65,6 +65,8 @@ const shapeLabels: Record<DesignShape, string> = {
   cylinder: "Cylinder",
   cone: "Cone",
   torus: "Torus",
+  knot: "Torus Knot",
+  capsule: "Capsule",
   plane: "Plane",
 }
 
@@ -86,6 +88,14 @@ const shapeWords: Record<string, DesignShape> = {
   donut: "torus",
   ring: "torus",
   reifen: "torus",
+  knot: "knot",
+  torusknot: "knot",
+  "torus knot": "knot",
+  "torus-knot": "knot",
+  knoten: "knot",
+  capsule: "capsule",
+  pill: "capsule",
+  kapsel: "capsule",
   plane: "plane",
   floor: "plane",
   ground: "plane",
@@ -706,6 +716,10 @@ function defaultPosition(shape: DesignShape): Vec3 {
   if (shape === "box") return [0, 0.5, 0]
 
   if (shape === "sphere") return [0, 0.75, 0]
+
+  if (shape === "capsule") return [0, 0.9, 0]
+
+  if (shape === "knot") return [0, 0.76, 0]
 
   return [0, 0.6, 0]
 }

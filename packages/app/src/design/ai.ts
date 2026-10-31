@@ -92,8 +92,12 @@ User request: ${request}
 Return the complete updated page JSON.`
 }
 
-export async function generateDesignText(ctx: ServerCtx, prompt: string) {
-  const result = await ctx.sdk.api.experimental.generate.text({ prompt })
+export async function generateDesignText(
+  ctx: ServerCtx,
+  prompt: string,
+  model?: { id: string; providerID: string; variant?: string },
+) {
+  const result = await ctx.sdk.api.experimental.generate.text({ prompt, model })
 
   return result.text
 }
