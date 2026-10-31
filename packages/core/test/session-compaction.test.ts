@@ -52,7 +52,12 @@ let beforeResponse: Effect.Effect<void> = Effect.void
 let reject: ((request: LLMRequest) => boolean) | undefined
 /** Overrides what the mock replies to the request on the given 1-based attempt; undefined keeps the default reply. */
 let reply:
-  | ((_request: LLMRequest, attempt: number) => { text?: string; finish?: "stop" | "length" } | undefined)
+  | ((
+      _request: LLMRequest,
+      attempt: number,
+    ) =>
+      | { text?: string; finish?: "stop" | "length"; usage?: { inputTokens?: number; outputTokens?: number } }
+      | undefined)
   | undefined
 const model = LanguageModel.make({
   id: "summary-model",
@@ -92,6 +97,7 @@ const client = Layer.mock(LLMClient.Service)({
               cacheReadInputTokens: 3,
               cacheWriteInputTokens: 2,
               reasoningTokens: 2,
+              ...override?.usage,
             },
           }),
           LLMEvent.finish({
@@ -1130,12 +1136,12 @@ it.effect("summary measured recovery shrinks from the rejected measured size", (
   }),
 )
 
-it.effect("a summary reply that fills the output limit is retried with a smaller input", () =>
+it.effect("a summary reply the window cut short is retried with a smaller input", () =>
   Effect.gen(function* () {
     const fixture = yield* summaryFixture([
       textUser("Earlier question"),
+      measured("Earlier answer", 180_000),
       textUser("Latest question"),
-      measured("Latest answer", 1000),
     ])
     reply = (_request, attempt) => (attempt === 1 ? { finish: "length" } : undefined)
     yield* Effect.addFinalizer(() =>
@@ -1156,10 +1162,10 @@ it.effect("summary output-limit failures give up after the shrink ladder is spen
   Effect.gen(function* () {
     const fixture = yield* summaryFixture([
       textUser("First question"),
-      measured("First answer", 80_000),
+      measured("First answer", 180_000),
       textUser("Second question"),
     ])
-    reply = () => ({ finish: "length" })
+    reply = () => ({ finish: "length", usage: { inputTokens: 199_000, outputTokens: 1_500 } })
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         reply = undefined
@@ -1175,14 +1181,35 @@ it.effect("summary output-limit failures give up after the shrink ladder is spen
   }),
 )
 
-it.effect("empty summary replies are retried with a smaller input, then give up", () =>
+it.effect("a summary truncated at the output cap fails without shrinking", () =>
+  Effect.gen(function* () {
+    const fixture = yield* summaryFixture([
+      textUser("Earlier question"),
+      textUser("Latest question"),
+      measured("Latest answer", 1000),
+    ])
+    reply = () => ({ finish: "length", usage: { inputTokens: 15, outputTokens: 30_000 } })
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        reply = undefined
+      }),
+    )
+    expect(yield* fixture.run()).toEqual({
+      status: "failed",
+      error: { type: "compaction.failed", message: "Compaction summary reached the output token limit" },
+    })
+    expect(requests).toHaveLength(1)
+  }),
+)
+
+it.effect("empty summary replies the window filled are retried with a smaller input, then give up", () =>
   Effect.gen(function* () {
     const fixture = yield* summaryFixture([
       textUser("First question"),
-      measured("First answer", 80_000),
+      measured("First answer", 180_000),
       textUser("Second question"),
     ])
-    reply = () => ({ text: "" })
+    reply = () => ({ text: "", usage: { inputTokens: 199_000, outputTokens: 2_000 } })
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         reply = undefined
@@ -1194,6 +1221,27 @@ it.effect("empty summary replies are retried with a smaller input, then give up"
     })
     // Each of the five attempts spends its prompt and one nudge.
     expect(requests).toHaveLength(10)
+  }),
+)
+
+it.effect("empty summary replies at the output cap fail after the nudge without shrinking", () =>
+  Effect.gen(function* () {
+    const fixture = yield* summaryFixture([
+      textUser("Earlier question"),
+      textUser("Latest question"),
+      measured("Latest answer", 1000),
+    ])
+    reply = () => ({ text: "", usage: { inputTokens: 15, outputTokens: 25_000 } })
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        reply = undefined
+      }),
+    )
+    expect(yield* fixture.run()).toEqual({
+      status: "failed",
+      error: { type: "compaction.failed", message: "Compaction produced no summary" },
+    })
+    expect(requests).toHaveLength(2)
   }),
 )
 
@@ -1476,7 +1524,8 @@ it.effect("compaction summarizes as usual when the held background summary stops
     const compaction = yield* enablePrecompute
     const session = yield* insertSession(Session.ID.make("ses_precompute_length"))
     const history = precomputeHistory()
-    reply = (_request, attempt) => (attempt <= 5 ? { finish: "length" } : undefined)
+    reply = (_request, attempt) =>
+      attempt <= 5 ? { finish: "length", usage: { inputTokens: 199_000, outputTokens: 1_500 } } : undefined
     yield* Effect.addFinalizer(() => Effect.sync(() => (reply = undefined)))
     const billed = yield* bus
       .subscribe(SessionEvent.UsageRecorded)
