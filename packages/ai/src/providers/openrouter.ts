@@ -9,6 +9,7 @@ import { SystemOne } from "../protocols/system-one.js"
 import { OpenAIImages, type OpenAIImageSizing } from "../protocols/openai-images.js"
 import { MediaRoute } from "../route/media.js"
 import { HttpTransport } from "../route/transport/index.js"
+import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { cacheControl } from "../protocols/utils/cache.js"
@@ -89,7 +90,10 @@ export interface OpenRouterDecisionOptions {
 export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
-    readonly providerOptions?: OpenRouterProviderOptionsInput | OpenRouterResponsesProviderOptionsInput
+    readonly providerOptions?:
+      | OpenRouterProviderOptionsInput
+      | OpenRouterResponsesProviderOptionsInput
+      | AnthropicMessages.ProviderOptionsInput
   }
 
 export type Settings<Options = OpenRouterProviderOptionsInput> = ProviderPackage.Settings &
@@ -240,7 +244,13 @@ const responsesRoute = Route.make({
   defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 
-export const routes = [route, responsesRoute]
+const messagesRoute = AnthropicMessages.route.with({
+  id: "openrouter-messages",
+  provider: id,
+  endpoint: { baseURL },
+})
+
+export const routes = [route, responsesRoute, messagesRoute]
 
 export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
@@ -248,6 +258,7 @@ export const configure = (input: Config = {}) => {
   const options = { ...defaults, endpoint: { baseURL: endpoint ?? baseURL }, auth }
   const chatRoute = route.with(options)
   const configuredResponses = responsesRoute.with(options)
+  const configuredMessages = messagesRoute.with(options)
   const decisionRoute = SystemOne.route.with({
     provider: id,
     providerMetadataKey: "openrouter",
@@ -278,6 +289,8 @@ export const configure = (input: Config = {}) => {
       chatRoute.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
     responses: (modelID: string | ModelID) =>
       configuredResponses.model<OpenRouterResponsesProviderOptionsInput>({ id: modelID }),
+    messages: (modelID: string | ModelID) =>
+      configuredMessages.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
     image,
     decision,
     configure,
@@ -288,12 +301,17 @@ export const provider = configure()
 export const decision = provider.decision
 export const image = provider.image
 export const responses = provider.responses
+export const messages = provider.messages
 export const model: ProviderPackage.Model<Settings, OpenRouterProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
 export const responsesModel: ProviderPackage.Model<
   Settings<OpenRouterResponsesProviderOptionsInput>,
   OpenRouterResponsesProviderOptionsInput
 > = (modelID, settings) => configure(config(settings)).responses(modelID)
+export const messagesModel: ProviderPackage.Model<
+  Settings<AnthropicMessages.ProviderOptionsInput>,
+  AnthropicMessages.ProviderOptionsInput
+> = (modelID, settings) => configure(config(settings)).messages(modelID)
 export const imageModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)
