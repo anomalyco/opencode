@@ -445,7 +445,10 @@ export function mockStressTimeline(page: Page, input: Partial<MockServerConfig> 
 }
 
 // Rewritten on every page load, unlike `seed`.
-export async function installStressSessionTabs(page: Page, input?: { draftID?: string; sessionIDs?: string[] }) {
+export async function installStressSessionTabs(
+  page: Page,
+  input?: { draftID?: string; sessionIDs?: string[]; server?: string },
+) {
   await page.addInitScript(
     ({ directory, sessionIDs, dirBase64, server, draftID }) => {
       localStorage.setItem(
@@ -465,7 +468,7 @@ export async function installStressSessionTabs(page: Page, input?: { draftID?: s
       directory: fixture.directory,
       sessionIDs: input?.sessionIDs ?? [fixture.sourceID, fixture.targetID],
       dirBase64: base64Encode(fixture.directory),
-      server: SERVER,
+      server: input?.server ?? SERVER,
       draftID: input?.draftID,
     },
   )

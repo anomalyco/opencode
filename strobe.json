@@ -1,0 +1,29 @@
+{
+  "build": { "command": "bun run build", "cwd": "packages/app", "output": "packages/app/dist" },
+  "serve": { "command": "bun e2e/utils/serve.ts --host 127.0.0.1 --port {port}", "cwd": "packages/app" },
+  "apps": {
+    "opencode": {
+      "exe": {
+        "windows": "%LOCALAPPDATA%/Programs/ai.opencode.desktop/OpenCode.exe",
+        "macos": "/Applications/OpenCode.app/Contents/MacOS/OpenCode"
+      },
+      "unset": ["OPENCODE_*", "OTEL_*", "SENTRY_*"],
+      "env": {
+        "OPENCODE_DB": "{home}/.local/share/opencode/opencode.db",
+        "OPENCODE_CONFIG_DIR": "{home}/.config/opencode",
+        "HTTPS_PROXY": "http://127.0.0.1:9"
+      },
+      "dirs": [".local/share/opencode"],
+      "files": { ".config/opencode/service.json": { "port": "{port}" } },
+      "guard": [{ "file": "~/.local/state/opencode/service.json", "pid": "pid", "url": "url" }],
+      "protocols": ["opencode"]
+    },
+    "opencode-beta": {
+      "extends": "opencode",
+      "exe": {
+        "windows": "%LOCALAPPDATA%/Programs/ai.opencode.desktop.beta/OpenCode Beta.exe",
+        "macos": "/Applications/OpenCode Beta.app/Contents/MacOS/OpenCode Beta"
+      }
+    }
+  }
+}
