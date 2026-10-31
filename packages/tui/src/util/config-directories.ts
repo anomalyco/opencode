@@ -1,15 +1,20 @@
 import path from "node:path"
 import { stat } from "node:fs/promises"
 
+// Lowest priority first at each level, matching core config discovery.
+const projectRoots = [path.join(".agents", "opencode"), ".opencode"]
+
 export function configDirectories(config: string, cwd: string) {
-  return [...new Set([config, ...ancestors(cwd).map((directory) => path.join(directory, ".opencode"))])]
+  return [...new Set([config, ...ancestors(cwd).flatMap(projectRootsIn)])]
 }
 
 export function projectConfigDirectories(project: string, cwd: string) {
   const directories = ancestors(cwd)
-  return directories
-    .slice(directories.indexOf(path.resolve(project)))
-    .map((directory) => path.join(directory, ".opencode"))
+  return directories.slice(directories.indexOf(path.resolve(project))).flatMap(projectRootsIn)
+}
+
+function projectRootsIn(directory: string) {
+  return projectRoots.map((root) => path.join(directory, root))
 }
 
 export async function localProjectDirectory(cwd: string) {

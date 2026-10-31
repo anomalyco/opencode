@@ -148,3 +148,25 @@ test("theme directories include global config before project directories", async
     project: { source: "project" },
   })
 })
+
+test("theme directories include .agents/opencode below .opencode at each level", async () => {
+  await using tmp = await tmpdir()
+  const global = path.join(tmp.path, "global")
+  const project = path.join(tmp.path, "repo")
+  await mkdir(path.join(project, ".agents", "opencode", "themes"), { recursive: true })
+  await mkdir(path.join(project, ".opencode", "themes"), { recursive: true })
+  await writeFile(
+    path.join(project, ".agents", "opencode", "themes", "agents.json"),
+    JSON.stringify({ source: "agents" }),
+  )
+  await writeFile(
+    path.join(project, ".agents", "opencode", "themes", "shared.json"),
+    JSON.stringify({ source: "agents" }),
+  )
+  await writeFile(path.join(project, ".opencode", "themes", "shared.json"), JSON.stringify({ source: "opencode" }))
+
+  await expect(discoverThemes(configDirectories(global, project))).resolves.toEqual({
+    agents: { source: "agents" },
+    shared: { source: "opencode" },
+  })
+})
