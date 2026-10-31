@@ -176,22 +176,14 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
 
   createEffect(() => {
     const knownRoots = new Set(props.sessions.map((session) => session.id))
-    const active = data.session.active()
-    active.forEach((id) => {
-      void data.session.permission.sync(id).catch(() => undefined)
-      void data.session.form.sync(id).catch(() => undefined)
-    })
-    new Set(
-      [
-        ...data.session.permission.sessions(),
-        ...data.session.form.sessions(),
-        ...(recent() === true ? active : []),
-      ].map((id) => data.session.root(id)),
-    ).forEach((rootID) => {
-      if (!knownRoots.has(rootID) && !data.session.get(rootID)) {
-        void data.session.sync(rootID).catch(() => undefined)
-      }
-    })
+    // A family read loads the root and every member's pending requests. Any member's ID reads the same family, so an
+    // unloaded Session resolves to itself.
+    new Set([
+      ...data.session.active().map((id) => data.session.root(id)),
+      ...[...data.session.permission.sessions(), ...data.session.form.sessions()]
+        .map((id) => data.session.root(id))
+        .filter((rootID) => !knownRoots.has(rootID) && !data.session.get(rootID)),
+    ]).forEach((rootID) => void data.session.sync(rootID, { children: true }).catch(() => undefined))
   })
 
   const options = createMemo(() => {

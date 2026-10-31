@@ -35,16 +35,7 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
       ),
     )
     expect(created.status).toBe(200)
-    const session = Schema.decodeUnknownSync(Schema.Struct({ data: Session.Info }))(
-      yield* Effect.promise(() => created.json()),
-    ).data
-    const endpoints = [
-      "/api/model",
-      "/api/integration",
-      `/api/session/${session.id}/permission`,
-      "/api/session/global/form",
-    ]
-    for (const endpoint of endpoints) {
+    for (const endpoint of ["/api/model", "/api/integration", "/api/session/global/form"]) {
       const response = yield* Effect.promise(() =>
         handler(
           new Request(`http://opencode.local${endpoint}`, {

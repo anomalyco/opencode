@@ -10,6 +10,7 @@ import type { Location } from "@opencode/schema/location"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Effect, Layer, LayerMap } from "effect"
+import { readyWhenCached } from "./location"
 
 // Plain-prompt unit fixtures use virtual directories.
 export const promptLocationNode = makeGlobalNode({
@@ -26,7 +27,7 @@ export const promptLocationNode = makeGlobalNode({
               Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
             ],
           }) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
-      )
+      ).pipe(readyWhenCached)
     }),
   ),
   deps: [Bus.node],

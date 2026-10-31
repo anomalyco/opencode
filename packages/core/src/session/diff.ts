@@ -39,7 +39,7 @@ export const turn = Effect.fn("SessionDiff.turn")(function* (
   db: Database.Interface["db"],
   locations: Context.Service.Shape<typeof LocationServiceMap.Service>,
   input: {
-    readonly session: SessionSchema.Info
+    readonly session: SessionSchema.Persisted
     /** The process is currently executing this Session. */
     readonly active: boolean
     readonly from?: SessionMessage.ID

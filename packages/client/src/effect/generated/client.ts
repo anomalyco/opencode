@@ -243,6 +243,8 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
+  ExperimentalSessionFamilyGetInput,
+  ExperimentalSessionFamilyGetOutput,
   ExperimentalScheduleCreateInput,
   ExperimentalScheduleCreateOutput,
   ExperimentalScheduleListInput,
@@ -1580,6 +1582,15 @@ const EndpointExperimentalPersistentPtyConnectToken =
       ),
     )
 
+const EndpointExperimentalSessionFamilyGet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSessionFamilyGetInput) =>
+    preserveEffect<ExperimentalSessionFamilyGetOutput>()(
+      raw["sessionFamily.get"]({ params: { sessionID: input["sessionID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const EndpointExperimentalScheduleCreate =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleCreateInput) =>
     preserveEffect<ExperimentalScheduleCreateOutput>()(
@@ -1711,6 +1722,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     remove: EndpointExperimentalPersistentPtyRemove(raw),
     connectToken: EndpointExperimentalPersistentPtyConnectToken(raw),
   },
+  sessionFamily: { get: EndpointExperimentalSessionFamilyGet(raw) },
   schedule: {
     create: EndpointExperimentalScheduleCreate(raw),
     list: EndpointExperimentalScheduleList(raw),

@@ -58,7 +58,7 @@ describe("contract hygiene", () => {
       }),
     ).toEqual({ text: "completed" })
 
-    const info = Session.Info.make({
+    const info = Session.Persisted.make({
       id: Session.ID.make("ses_untitled"),
       projectID: Project.ID.make("global"),
       cost: Money.USD.zero,
@@ -72,11 +72,11 @@ describe("contract hygiene", () => {
       title: undefined,
       location: { directory: AbsolutePath.make("/project") },
     })
-    const encoded = Schema.encodeSync(Session.Info)(info)
+    const encoded = Schema.encodeSync(Session.Persisted)(info)
     expect(encoded).not.toHaveProperty("title")
     expect(encoded.time).toEqual({ created: 0, updated: 0 })
     expect(
-      Schema.encodeSync(Session.Info)({
+      Schema.encodeSync(Session.Persisted)({
         ...info,
         time: { ...info.time, idle: DateTime.makeUnsafe(2), viewed: DateTime.makeUnsafe(1) },
       }).time,

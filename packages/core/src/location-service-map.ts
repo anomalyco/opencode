@@ -6,10 +6,12 @@ import path from "path"
 import { Location } from "./location.js"
 import type { Instance } from "./instance.js"
 
-export class Service extends Context.Service<
-  Service,
-  LayerMap.LayerMap<Location.Ref, Instance.Services, Instance.Error>
->()("@opencode/example/LocationServiceMap") {
+export interface Interface extends LayerMap.LayerMap<Location.Ref, Instance.Services, Instance.Error> {
+  /** Whether the Location finished starting and was not invalidated since. Never waits on or fails with a start. */
+  readonly ready: (ref: Location.Ref) => Effect.Effect<boolean>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/example/LocationServiceMap") {
   static get(ref: Location.Ref) {
     return Layer.unwrap(Effect.map(Service, (locations) => locations.get(ref)))
   }

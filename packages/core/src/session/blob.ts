@@ -263,7 +263,7 @@ export const enabled = Effect.gen(function* () {
  * {@link enabled} as `session`'s location configures it, where its media is written. Off when that location can't
  * boot or load its config, which surfaces as defects too, so a broken location never fails the caller.
  */
-export const enabledFor = (instances: Instance.Interface, session: SessionSchema.Info) =>
+export const enabledFor = (instances: Instance.Interface, session: SessionSchema.Persisted) =>
   enabled.pipe(
     instances.provide(session),
     Effect.catchCause((cause) =>

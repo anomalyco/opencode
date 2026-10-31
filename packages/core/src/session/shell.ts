@@ -7,7 +7,10 @@ import { Plugin } from "../plugin/service.js"
 import { Shell } from "../shell.js"
 import { ShellResult } from "../shell/result.js"
 
-export const start = Effect.fn("SessionShell.start")(function* (input: { session: Session.Info; command: string }) {
+export const start = Effect.fn("SessionShell.start")(function* (input: {
+  session: Session.Persisted
+  command: string
+}) {
   const instances = yield* Instance.Service
   const shell = yield* Plugin.awaitActivation.pipe(Effect.andThen(Shell.Service), instances.provide(input.session))
   const info = yield* shell.create({

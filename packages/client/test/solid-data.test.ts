@@ -2,7 +2,14 @@ import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
+import {
+  OpenCode,
+  type ModelInfo,
+  type OpenCodeEvent,
+  type Project,
+  type SessionFamily,
+  type SessionInfo,
+} from "../src/promise"
 
 const session = (viewed: number): SessionInfo => ({
   id: "ses_refresh",
@@ -13,6 +20,31 @@ const session = (viewed: number): SessionInfo => ({
   time: { created: 0, updated: 0, idle: 2, viewed },
   location: { directory: "/project" },
 })
+
+const member = (id: string, parentID?: string, extra?: Partial<SessionInfo>): SessionInfo => ({
+  ...session(0),
+  id,
+  parentID,
+  ...extra,
+})
+
+const permission = (id: string, sessionID: string) => ({ id, sessionID, action: "bash", resources: ["*"] })
+
+const form = (id: string, sessionID: string): SessionFamily["forms"][number] => ({
+  id,
+  sessionID,
+  title: "Question",
+  fields: [{ key: "answer", type: "string" }],
+})
+
+const sessionEvent = (type: OpenCodeEvent["type"], data: object, created = 1) =>
+  ({
+    id: `evt_${type}_${created}`,
+    created,
+    type,
+    durable: { aggregateID: "", seq: 1, version: 1 },
+    data,
+  }) as unknown as OpenCodeEvent
 
 test("uses the configured initial window and retains normal cursor page sizes", async () => {
   const requests: { limit: string | null; cursor: string | null }[] = []
@@ -47,54 +79,6 @@ test("uses the configured initial window and retains normal cursor page sizes", 
       { limit: "20", cursor: "older" },
     ])
     expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(["msg_1", "msg_2"])
-  } finally {
-    setup.dispose()
-  }
-})
-
-test("counts every subagent page in a root session's cost", async () => {
-  const child = (index: number): SessionInfo => ({
-    ...session(0),
-    id: `ses_child_${index}`,
-    parentID: "ses_root",
-    cost: 1,
-  })
-  const requests: string[] = []
-  const api = OpenCode.make({
-    baseUrl: "http://opencode.local",
-    fetch: async (input, init) => {
-      const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
-      requests.push(`${url.pathname}?${url.searchParams}`)
-
-      if (url.pathname === "/api/session/ses_root")
-        return Response.json({ data: { ...session(0), id: "ses_root", cost: 0.5 } })
-
-      if (url.searchParams.get("cursor") === "page_2")
-        return Response.json({
-          data: Array.from({ length: 50 }, (_, index) => child(200 + index)),
-          cursor: { next: "page_3" },
-        })
-
-      return Response.json({
-        data: Array.from({ length: 200 }, (_, index) => child(index)),
-        cursor: { next: "page_2" },
-      })
-    },
-  })
-  const setup = createRoot((dispose) => ({
-    data: createData({ api: () => api, directory: "/project", event: { on: () => () => {}, listen: () => () => {} } }),
-    dispose,
-  }))
-
-  try {
-    await setup.data.session.sync("ses_root", { children: true })
-    expect(setup.data.session.family("ses_root")).toHaveLength(251)
-    expect(setup.data.session.cost("ses_root")).toBe(250.5)
-    expect(requests.toSorted()).toEqual([
-      "/api/session/ses_root?",
-      "/api/session?limit=200&cursor=page_2",
-      "/api/session?limit=200&order=desc&parentID=ses_root",
-    ])
   } finally {
     setup.dispose()
   }
@@ -330,162 +314,451 @@ test("omits inline tool-result file payloads from read and live tool results whe
   }
 })
 
-test("refreshes a loaded session's execution start when it starts running", async () => {
-  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
-  const api = OpenCode.make({
-    baseUrl: "http://opencode.local",
-    fetch: async (input, init) => {
-      const request = input instanceof Request ? input : new Request(input, init)
-      if (!request.url.endsWith("/api/session/ses_refresh")) throw new Error(`Unexpected request: ${request.url}`)
-      return Response.json({ data: { ...session(2), time: { ...session(2).time, busy: 3 } } })
-    },
+test("reads a whole family once and serves its members' reads from it", async () => {
+  const setup = sessionFixture((path) => {
+    if (path !== "/api/experimental/session/ses_child/family") throw new Error(`Unexpected request: ${path}`)
+    return Response.json({
+      data: {
+        rootID: "ses_root",
+        sessions: [
+          member("ses_root", undefined, { cost: 0.5 }),
+          member("ses_child", "ses_root", { cost: 1, status: "running" }),
+          member("ses_grandchild", "ses_child", { cost: 2 }),
+        ],
+        permissions: [permission("per_child", "ses_child")],
+        forms: [form("frm_grandchild", "ses_grandchild")],
+      } satisfies SessionFamily,
+    })
   })
-  const event: CreateDataInput["event"] = {
-    on:
-      <Type extends OpenCodeEvent["type"]>(
-        _type: Type,
-        _handler: (event: Extract<OpenCodeEvent, { type: Type }>) => void,
-      ) =>
-      () => {},
-    listen(handler) {
-      listeners.add(handler)
-      return () => listeners.delete(handler)
-    },
-  }
-  const setup = createRoot((dispose) => ({
-    data: createData({ api: () => api, directory: "/project", event, connection: { status: () => "connected" } }),
-    dispose,
-  }))
 
   try {
-    setup.data.session.remember(session(2))
-    const started: OpenCodeEvent = {
-      id: "evt_started",
-      created: 3,
-      type: "session.execution.started",
-      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
-      data: { sessionID: "ses_refresh" },
-    }
-    listeners.forEach((listener) => listener({ name: started.type, details: started }))
-    expect(setup.data.session.status("ses_refresh")).toBe("running")
-    await wait(() => setup.data.session.get("ses_refresh")?.time.busy === 3)
+    await setup.data.session.sync("ses_child", { children: true })
+
+    expect(setup.data.session.family("ses_grandchild")).toEqual(["ses_root", "ses_child", "ses_grandchild"])
+    expect(setup.data.session.cost("ses_root")).toBe(3.5)
+    expect(setup.data.session.active()).toEqual(["ses_child"])
+    expect(setup.data.session.permission.sessions()).toEqual(["ses_child"])
+    expect(setup.data.session.permission.list("ses_root")).toEqual([])
+    expect(setup.data.session.form.sessions()).toEqual(["ses_grandchild"])
+    expect(setup.data.session.form.list("ses_child")).toEqual([])
+
+    await Promise.all([
+      setup.data.session.sync("ses_root", { children: true }),
+      setup.data.session.sync("ses_grandchild"),
+      setup.data.session.permission.sync("ses_grandchild"),
+      setup.data.session.form.sync("ses_grandchild"),
+    ])
+    expect(setup.requests).toEqual(["/api/experimental/session/ses_child/family"])
   } finally {
     setup.dispose()
   }
 })
 
-test("revalidates after an event overtakes an active session read", async () => {
-  let release!: () => void
-  const gate = new Promise<void>((resolve) => (release = resolve))
-  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
-  let requests = 0
-  const api = OpenCode.make({
-    baseUrl: "http://opencode.local",
-    fetch: async (input, init) => {
-      const request = input instanceof Request ? input : new Request(input, init)
-      if (!request.url.endsWith("/api/session/ses_refresh")) throw new Error(`Unexpected request: ${request.url}`)
-      requests++
-      if (requests === 1) {
-        await gate
-        return Response.json({ data: session(1) })
-      }
-      return Response.json({ data: session(2) })
-    },
-  })
-  const event: CreateDataInput["event"] = {
-    on:
-      <Type extends OpenCodeEvent["type"]>(
-        _type: Type,
-        _handler: (event: Extract<OpenCodeEvent, { type: Type }>) => void,
-      ) =>
-      () => {},
-    listen(handler) {
-      listeners.add(handler)
-      return () => listeners.delete(handler)
-    },
-  }
-  const setup = createRoot((dispose) => ({
-    data: createData({ api: () => api, directory: "/project", event, connection: { status: () => "connected" } }),
-    dispose,
-  }))
+test("a family member without status keeps the status already known", async () => {
+  const { status: _, ...child } = member("ses_child", "ses_root")
+  const setup = sessionFixture(() =>
+    Response.json({ data: { rootID: "ses_root", sessions: [member("ses_root"), child], permissions: [], forms: [] } }),
+  )
 
   try {
-    setup.data.session.remember(session(1))
-    setup.data.session.invalidate("ses_refresh")
-    const initial = setup.data.session.sync("ses_refresh")
-    await wait(() => requests === 1)
+    setup.emit(sessionEvent("session.execution.started", { sessionID: "ses_child" }))
+    await setup.data.session.sync("ses_root", { children: true })
 
-    const viewed: OpenCodeEvent = {
-      id: "evt_viewed",
-      created: 2,
-      type: "session.viewed",
-      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
-      data: { sessionID: "ses_refresh", idle: 2 },
-    }
-    listeners.forEach((listener) => listener({ name: viewed.type, details: viewed }))
-    await Bun.sleep(20)
-    release()
-    await initial
-
-    await wait(() => requests === 2 && setup.data.session.get("ses_refresh")?.time.viewed === 2)
+    expect(setup.data.session.family("ses_root")).toEqual(["ses_root", "ses_child"])
+    expect(setup.data.session.status("ses_child")).toBe("running")
   } finally {
     setup.dispose()
   }
 })
 
-test("preserves a live session rename across concurrent session and family reads", async () => {
-  const family = Promise.withResolvers<void>()
-  const renamed = Promise.withResolvers<void>()
-  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
-  let requests = 0
-  const stale = { ...session(0), title: undefined }
-  const api = OpenCode.make({
-    baseUrl: "http://opencode.local",
-    fetch: async (input, init) => {
-      const request = input instanceof Request ? input : new Request(input, init)
-      if (!request.url.endsWith(`/api/session/${stale.id}`)) return Response.json({ data: [], cursor: {} })
-      requests++
-      await (requests === 1 ? family.promise : renamed.promise)
-      return Response.json({ data: stale })
-    },
+test("reads families from servers without the family route, once per connection", async () => {
+  const older = ({ status: _, ...info }: SessionInfo) => info
+  const setup = sessionFixture((path, url) => {
+    if (path.endsWith("/family")) return new Response(null, { status: 404 })
+    if (path === "/api/session/active") return Response.json({ data: { ses_a: { type: "running" } } })
+    const id = path.match(/^\/api\/session\/([^/]+)$/)?.[1]
+    if (id) return Response.json({ data: older(member(id, id === "ses_root" ? undefined : "ses_root")) })
+    if (path === "/api/session")
+      return Response.json({
+        data:
+          url.searchParams.get("parentID") === "ses_root"
+            ? [older(member("ses_a", "ses_root")), older(member("ses_b", "ses_root"))]
+            : [],
+        cursor: {},
+      })
+    if (path === "/api/session/ses_a/permission") return Response.json({ data: [permission("per_a", "ses_a")] })
+    if (path === "/api/session/ses_b/permission")
+      return Response.json(
+        { _tag: "LocationNotFoundError", location: { directory: "/gone" }, message: "Location not found" },
+        { status: 404 },
+      )
+    if (path === "/api/session/ses_grandchild/permission")
+      return Response.json({ data: [permission("per_grandchild", "ses_grandchild")] })
+    if (path === "/api/session/ses_b/form") return Response.json({ data: [form("frm_b", "ses_b")] })
+    if (path.endsWith("/permission") || path.endsWith("/form")) return Response.json({ data: [] })
+    if (path === "/api/project") return Response.json([])
+    if (path === "/api/location") return Response.json({ directory: "/project" })
+    return Response.json({ location: { directory: "/project" }, data: { branch: "main" } })
   })
-  const setup = createRoot((dispose) => ({
-    data: createData({
-      api: () => api,
-      directory: "/project",
-      event: {
-        on: () => () => {},
-        listen(handler) {
-          listeners.add(handler)
-          return () => listeners.delete(handler)
-        },
-      },
-    }),
-    dispose,
-  }))
+  const familyReads = () => setup.requests.filter((path) => path.endsWith("/family"))
 
   try {
-    const initial = setup.data.session.sync(stale.id, { children: true })
-    await wait(() => requests === 1)
-    const event: OpenCodeEvent = {
-      id: "evt_renamed",
+    setup.data.session.remember(member("ses_known", "ses_root"))
+    // Beyond the direct children the fallback lists, so only the family index knows it.
+    setup.data.session.remember(member("ses_grandchild", "ses_known"))
+    setup.emit(sessionEvent("session.execution.started", { sessionID: "ses_b" }))
+    await setup.data.session.sync("ses_root", { children: true })
+
+    expect(setup.data.session.family("ses_root").toSorted()).toEqual([
+      "ses_a",
+      "ses_b",
+      "ses_grandchild",
+      "ses_known",
+      "ses_root",
+    ])
+    // Only the requested Session's pending requests are awaited; the other members' load in the background.
+    await wait(() => setup.data.session.permission.list("ses_grandchild")?.[0]?.id === "per_grandchild")
+    await wait(() => setup.data.session.form.list("ses_b")?.[0]?.id === "frm_b")
+    expect(setup.data.session.permission.list("ses_a")?.map((request) => request.id)).toEqual(["per_a"])
+    expect(setup.data.session.status("ses_b")).toBe("running")
+
+    await setup.data.session.sync("ses_a", { children: true })
+    expect(familyReads()).toEqual(["/api/experimental/session/ses_root/family"])
+
+    setup.emit({ type: "server.connected", data: {} })
+    await wait(() => setup.data.session.status("ses_a") === "running")
+    await setup.data.session.sync("ses_b", { children: true })
+    expect(familyReads()).toEqual([
+      "/api/experimental/session/ses_root/family",
+      "/api/experimental/session/ses_b/family",
+    ])
+    expect(setup.data.session.status("ses_a")).toBe("running")
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("a fallback read invalidated in flight reads no pending requests", async () => {
+  const release = Promise.withResolvers<void>()
+  const setup = sessionFixture(async (path) => {
+    if (path.endsWith("/family")) return new Response(null, { status: 404 })
+    if (path === "/api/session") return Response.json({ data: [], cursor: {} })
+    await release.promise
+    return Response.json({ data: member("ses_root") })
+  })
+
+  try {
+    const read = setup.data.session.sync("ses_root", { children: true })
+    await wait(() => setup.requests.includes("/api/session/ses_root"))
+    setup.emit(sessionEvent("session.deleted", { sessionID: "ses_root" }))
+    release.resolve()
+    await read
+    expect(setup.requests.filter((path) => path.endsWith("/permission") || path.endsWith("/form"))).toEqual([])
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+test("a family whose top names a missing parent keeps its members and live events", async () => {
+  const release = Promise.withResolvers<void>()
+  const setup = sessionFixture(async () => {
+    await release.promise
+    return Response.json({
+      data: {
+        rootID: "ses_top",
+        sessions: [member("ses_top", "ses_missing"), member("ses_child", "ses_top")],
+        permissions: [],
+        forms: [],
+      } satisfies SessionFamily,
+    })
+  })
+
+  try {
+    const read = setup.data.session.sync("ses_child", { children: true })
+    await wait(() => setup.requests.length === 1)
+    setup.emit(sessionEvent("session.renamed", { sessionID: "ses_child", title: "Live" }))
+    release.resolve()
+    await read
+    expect(setup.data.session.family("ses_child")).toEqual(["ses_top", "ses_child"])
+    expect(setup.data.session.get("ses_child")?.title).toBe("Live")
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+test("metadata updates and permission replies made during a read survive its response", async () => {
+  const release = Promise.withResolvers<void>()
+  const setup = sessionFixture(async (path) => {
+    if (path.endsWith("/reply")) return new Response(null, { status: 204 })
+    await release.promise
+    if (path === "/api/session/ses_refresh/permission")
+      return Response.json({ data: [permission("per_answered", "ses_refresh")] })
+    return Response.json({ data: { ...session(0), metadata: { stale: true } } })
+  })
+
+  try {
+    const reads = Promise.all([
+      setup.data.session.sync("ses_refresh"),
+      setup.data.session.permission.sync("ses_refresh"),
+    ])
+    await wait(() => setup.requests.length === 2)
+    setup.emit(sessionEvent("session.metadata.updated", { sessionID: "ses_refresh", metadata: { live: true } }, 5))
+    await setup.data.session.permission.reply({
+      sessionID: "ses_refresh",
+      requestID: "per_answered",
+      decision: "once",
+    })
+    release.resolve()
+    await reads
+    expect(setup.data.session.get("ses_refresh")).toMatchObject({ metadata: { live: true }, time: { updated: 5 } })
+    expect(setup.data.session.get("ses_refresh")?.metadata).not.toHaveProperty("stale")
+    expect(setup.data.session.permission.list("ses_refresh")).toEqual([])
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+test("a missing Session on the family route rejects without falling back", async () => {
+  const setup = sessionFixture(() =>
+    Response.json(
+      { _tag: "SessionNotFoundError", sessionID: "ses_gone", message: "Session not found" },
+      { status: 404 },
+    ),
+  )
+
+  try {
+    await expect(setup.data.session.sync("ses_gone", { children: true })).rejects.toMatchObject({
+      _tag: "SessionNotFoundError",
+    })
+    expect(setup.requests).toEqual(["/api/experimental/session/ses_gone/family"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("events recorded during a family read survive its response", async () => {
+  const release = Promise.withResolvers<void>()
+  const setup = sessionFixture(async (path) => {
+    if (path === "/api/session/ses_new") return Response.json({ data: member("ses_new", "ses_child") })
+    if (path !== "/api/experimental/session/ses_root/family") throw new Error(`Unexpected request: ${path}`)
+    await release.promise
+    return Response.json({
+      data: {
+        rootID: "ses_root",
+        sessions: [member("ses_root"), member("ses_child", "ses_root"), member("ses_deleted", "ses_root")],
+        permissions: [],
+        forms: [],
+      } satisfies SessionFamily,
+    })
+  })
+
+  try {
+    setup.data.session.remember(member("ses_root"))
+    setup.data.session.remember(member("ses_child", "ses_root"))
+    // Deleted while the client was disconnected: the family read is the only way to learn it left.
+    setup.data.session.remember(member("ses_gone", "ses_root"))
+    setup.emit({ id: "evt_gone", created: 1, type: "permission.asked", data: permission("per_gone", "ses_gone") })
+    const read = setup.data.session.sync("ses_root", { children: true })
+    await wait(() => setup.requests.length === 1)
+    setup.emit(sessionEvent("session.renamed", { sessionID: "ses_child", title: "Live" }))
+    setup.emit(sessionEvent("session.usage.updated", { sessionID: "ses_child", cost: 5, tokens: session(0).tokens }))
+    setup.emit(sessionEvent("session.execution.started", { sessionID: "ses_child" }))
+    setup.emit({ id: "evt_asked", created: 1, type: "permission.asked", data: permission("per_live", "ses_child") })
+    setup.emit(sessionEvent("session.deleted", { sessionID: "ses_deleted" }))
+    setup.emit(
+      sessionEvent("session.created", {
+        sessionID: "ses_new",
+        parentID: "ses_child",
+        projectID: "project",
+        location: { directory: "/project" },
+        slug: "new",
+        version: "1",
+      }),
+    )
+    await wait(() => setup.data.session.get("ses_new") !== undefined)
+    release.resolve()
+    await read
+
+    expect(setup.data.session.family("ses_root")).toEqual(["ses_root", "ses_child", "ses_new"])
+    expect(setup.data.session.get("ses_deleted")).toBeUndefined()
+    expect(setup.data.session.get("ses_gone")).toBeUndefined()
+    expect(setup.data.session.permission.sessions()).toEqual(["ses_child"])
+    expect(setup.data.session.get("ses_child")).toMatchObject({ title: "Live", cost: 5 })
+    expect(setup.data.session.status("ses_child")).toBe("running")
+    expect(setup.data.session.permission.list("ses_child")?.map((request) => request.id)).toEqual(["per_live"])
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+test("a family read invalidated in flight commits nothing", async () => {
+  const release = Promise.withResolvers<void>()
+  const setup = sessionFixture(async (path) => {
+    if (path === "/api/experimental/session/ses_root/family")
+      return Response.json({
+        data: {
+          rootID: "ses_root",
+          sessions: [
+            member("ses_root", undefined, { title: "Fresh" }),
+            member("ses_sibling", "ses_root", { status: "running" }),
+            member("ses_new", "ses_root"),
+          ],
+          permissions: [permission("per_new", "ses_new")],
+          forms: [],
+        } satisfies SessionFamily,
+      })
+    if (path === "/api/session/ses_child/permission") return Response.json({ data: [] })
+    await release.promise
+    return Response.json({
+      data: {
+        rootID: "ses_root",
+        sessions: [
+          member("ses_root", undefined, { title: "Stale" }),
+          member("ses_child", "ses_root"),
+          member("ses_sibling", "ses_root"),
+        ],
+        permissions: [],
+        forms: [],
+      } satisfies SessionFamily,
+    })
+  })
+
+  try {
+    // Deleting the Session a family read was keyed by invalidates that read, as a reconnect does.
+    const stale = setup.data.session.sync("ses_child", { children: true })
+    await wait(() => setup.requests.length === 1)
+    setup.emit(sessionEvent("session.deleted", { sessionID: "ses_child" }))
+    await setup.data.session.sync("ses_root", { children: true })
+    release.resolve()
+    await stale
+
+    expect(setup.data.session.family("ses_root")).toEqual(["ses_root", "ses_sibling", "ses_new"])
+    expect(setup.data.session.get("ses_root")?.title).toBe("Fresh")
+    expect(setup.data.session.get("ses_child")).toBeUndefined()
+    expect(setup.data.session.status("ses_sibling")).toBe("running")
+    expect(setup.data.session.permission.sessions()).toEqual(["ses_new"])
+    await setup.data.session.permission.sync("ses_child")
+    expect(setup.requests).toEqual([
+      "/api/experimental/session/ses_child/family",
+      "/api/experimental/session/ses_root/family",
+      "/api/session/ses_child/permission",
+    ])
+  } finally {
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+test("keeps pending requests that arrive before a read that missed them", async () => {
+  const release = Promise.withResolvers<void>()
+  const setup = sessionFixture(async (path) => {
+    await release.promise
+    if (path === "/api/session/ses_refresh/permission") return Response.json({ data: [] })
+    if (path === "/api/session/ses_refresh/form") return Response.json({ data: [] })
+    throw new Error(`Unexpected request: ${path}`)
+  })
+
+  try {
+    const reads = Promise.all([
+      setup.data.session.permission.sync("ses_refresh"),
+      setup.data.session.form.sync("ses_refresh"),
+    ])
+    await wait(() => setup.requests.length === 2)
+    setup.emit({ id: "evt_asked", created: 1, type: "permission.asked", data: permission("per_1", "ses_refresh") })
+    setup.emit({
+      id: "evt_form",
       created: 1,
-      type: "session.renamed",
-      durable: { aggregateID: stale.id, seq: 1, version: 1 },
-      data: { sessionID: stale.id, title: "Generated title" },
-    }
-    listeners.forEach((listener) => listener({ name: event.type, details: event }))
-    await wait(() => requests === 2)
-    renamed.resolve()
-    await wait(() => setup.data.session.get(stale.id) !== undefined)
-    family.resolve()
-    await initial
-    await Bun.sleep(0)
+      type: "form.created",
+      location: { directory: "/project" },
+      data: { form: form("frm_1", "ses_refresh") },
+    })
+    release.resolve()
+    await reads
 
-    expect(setup.data.session.get(stale.id)?.title).toBe("Generated title")
+    expect(setup.data.session.permission.list("ses_refresh")?.map((request) => request.id)).toEqual(["per_1"])
+    expect(setup.data.session.form.list("ses_refresh")?.map((item) => item.id)).toEqual(["frm_1"])
   } finally {
-    family.resolve()
-    renamed.resolve()
+    release.resolve()
+    setup.dispose()
+  }
+})
+
+test("folds idle, viewed, and updated times from events without reading the Session again", async () => {
+  const release = Promise.withResolvers<void>()
+  const permissions = Promise.withResolvers<void>()
+  const setup = sessionFixture(async (path) => {
+    if (path === "/api/session/ses_refresh/permission") {
+      await permissions.promise
+      return Response.json({ data: [] })
+    }
+    if (path !== "/api/session/ses_refresh") throw new Error(`Unexpected request: ${path}`)
+    await release.promise
+    return Response.json({ data: session(2) })
+  })
+
+  try {
+    // The terminal event overtakes a read whose response already includes it, so replaying it changes nothing.
+    const read = setup.data.session.sync("ses_refresh")
+    await wait(() => setup.requests.length === 1)
+    setup.emit(sessionEvent("session.execution.succeeded", { sessionID: "ses_refresh" }, 2))
+    release.resolve()
+    await read
+    expect(setup.data.session.get("ses_refresh")).toMatchObject({ outcome: "succeeded", time: { idle: 2 } })
+
+    setup.emit(
+      sessionEvent(
+        "session.execution.failed",
+        { sessionID: "ses_refresh", error: { type: "provider.no-route", message: "Model unavailable" } },
+        10,
+      ),
+    )
+    expect(setup.data.session.get("ses_refresh")).toMatchObject({ outcome: "failed", time: { idle: 10 } })
+    setup.emit(sessionEvent("session.execution.started", { sessionID: "ses_refresh" }, 15))
+    expect(setup.data.session.status("ses_refresh")).toBe("running")
+    expect(setup.data.session.get("ses_refresh")?.time.busy).toBe(15)
+    setup.emit(sessionEvent("session.execution.interrupted", { sessionID: "ses_refresh", reason: "shutdown" }, 20))
+    expect(setup.data.session.status("ses_refresh")).toBe("idle")
+    expect(setup.data.session.get("ses_refresh")).toMatchObject({ outcome: "failed", time: { busy: 15, idle: 10 } })
+
+    setup.emit(sessionEvent("session.viewed", { sessionID: "ses_refresh", idle: 10 }, 21))
+    setup.emit(sessionEvent("session.viewed", { sessionID: "ses_refresh", idle: 5 }, 22))
+    expect(setup.data.session.get("ses_refresh")?.time.viewed).toBe(10)
+
+    // A pending-request read replays Session folds on Session info its response never reset.
+    const pending = setup.data.session.permission.sync("ses_refresh")
+    await wait(() => setup.requests.length === 2)
+    setup.emit(sessionEvent("session.execution.succeeded", { sessionID: "ses_refresh" }, 28))
+    setup.emit(sessionEvent("session.execution.interrupted", { sessionID: "ses_refresh", reason: "user" }, 30))
+    permissions.resolve()
+    await pending
+    expect(setup.data.session.get("ses_refresh")).toMatchObject({ outcome: "interrupted", time: { idle: 30 } })
+
+    setup.emit(sessionEvent("session.renamed", { sessionID: "ses_refresh", title: "Renamed" }, 25))
+    expect(setup.data.session.get("ses_refresh")?.time.updated).toBe(25)
+    setup.emit(
+      sessionEvent(
+        "session.step.started",
+        {
+          sessionID: "ses_refresh",
+          assistantMessageID: "msg_step",
+          agent: "build",
+          model: { providerID: "p", id: "m" },
+          started: 27,
+        },
+        27,
+      ),
+    )
+    setup.emit(sessionEvent("session.renamed", { sessionID: "ses_refresh", title: "Older" }, 3))
+    expect(setup.data.session.get("ses_refresh")?.time.updated).toBe(27)
+
+    expect(setup.requests).toEqual(["/api/session/ses_refresh", "/api/session/ses_refresh/permission"])
+  } finally {
+    release.resolve()
+    permissions.resolve()
     setup.dispose()
   }
 })
@@ -1430,16 +1703,34 @@ test.each([
   }
 })
 
-test("adds running sessions created while disconnected to their family", async () => {
-  const root = { ...session(0), id: "ses_root" }
-  const child = { ...session(0), id: "ses_child", parentID: "ses_root" }
-  const setup = activityFixture(() => Response.json({ data: { ses_child: { type: "running" } } }), [child])
+test("reads each running family created while disconnected once, by its root", async () => {
+  const setup = activityFixture(
+    () =>
+      Response.json({
+        data: {
+          ses_child: { type: "running", rootID: "ses_root" },
+          ses_grandchild: { type: "running", rootID: "ses_root" },
+        },
+      }),
+    {
+      rootID: "ses_root",
+      sessions: [
+        member("ses_root"),
+        member("ses_child", "ses_root", { status: "running" }),
+        member("ses_grandchild", "ses_child", { status: "running" }),
+      ],
+      permissions: [],
+      forms: [],
+    },
+  )
 
   try {
-    setup.data.session.remember(root)
     setup.emit({ type: "server.connected", data: {} })
-    await wait(() => setup.data.session.family("ses_root").includes("ses_child"))
-    expect(setup.data.session.status("ses_child")).toBe("running")
+    await wait(() => setup.data.session.family("ses_root").length === 3)
+    expect(setup.data.session.active().toSorted()).toEqual(["ses_child", "ses_grandchild"])
+    expect(setup.requests.filter((path) => /^\/api\/(experimental\/)?session\/ses_/.test(path))).toEqual([
+      "/api/experimental/session/ses_root/family",
+    ])
   } finally {
     setup.dispose()
   }
@@ -1516,22 +1807,40 @@ function modelInfo(name: string): ModelInfo {
   }
 }
 
-function activityFixture(read: () => Response | Promise<Response>, sessions: SessionInfo[] = []) {
+function activityFixture(read: () => Response | Promise<Response>, family?: SessionFamily) {
+  return sessionFixture((path) => {
+    if (path === "/api/session/active") return read()
+    if (family && path === `/api/experimental/session/${family.rootID}/family`) return Response.json({ data: family })
+    // Hydration reads the family of each running Session it has not loaded.
+    const running = path.match(/^\/api\/experimental\/session\/([^/]+)\/family$/)?.[1]
+    if (running)
+      return Response.json({
+        data: {
+          rootID: running,
+          sessions: [member(running, undefined, { status: "running" })],
+          permissions: [],
+          forms: [],
+        },
+      })
+    if (path === "/api/project") return Response.json([])
+    if (path === "/api/location") return Response.json({ directory: "/project" })
+    return Response.json({ location: { directory: "/project" }, data: { branch: "main" } })
+  })
+}
+
+function sessionFixture(respond: (path: string, url: URL) => Response | Promise<Response>) {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const requests: string[] = []
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
     fetch: async (input, init) => {
-      const request = input instanceof Request ? input : new Request(input, init)
-      const path = new URL(request.url).pathname
-      if (path === "/api/session/active") return read()
-      const known = sessions.find((item) => path === `/api/session/${item.id}`)
-      if (known) return Response.json({ data: known })
-      if (path === "/api/project") return Response.json([])
-      if (path === "/api/location") return Response.json({ directory: "/project" })
-      return Response.json({ location: { directory: "/project" }, data: { branch: "main" } })
+      const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
+      requests.push(url.pathname)
+      return respond(url.pathname, url)
     },
   })
   return createRoot((dispose) => ({
+    requests,
     data: createData({
       api: () => api,
       directory: "/project",

@@ -95,9 +95,15 @@ test("event refreshes report failures, remain retryable, and preserve explicit r
   const event: OpenCodeEvent = {
     id: "evt_refresh_failure",
     created: 2,
-    type: "session.viewed",
+    type: "session.created",
     durable: { aggregateID: session.id, seq: 1, version: 1 },
-    data: { sessionID: session.id, idle: 2 },
+    data: {
+      sessionID: session.id,
+      projectID: "project",
+      location: { directory: "/project" },
+      slug: "refresh",
+      version: "1",
+    },
   }
   try {
     setup.data.session.remember(session)
@@ -285,17 +291,23 @@ test("event-driven session reads evict missing sessions without reporting an err
     }),
     dispose,
   }))
-  const viewed: OpenCodeEvent = {
-    id: "evt_ephemeral_viewed",
+  const created: OpenCodeEvent = {
+    id: "evt_ephemeral_created",
     created: 2,
-    type: "session.viewed",
+    type: "session.created",
     durable: { aggregateID: session.id, seq: 1, version: 1 },
-    data: { sessionID: session.id, idle: 2 },
+    data: {
+      sessionID: session.id,
+      projectID: "project",
+      location: { directory: "/project" },
+      slug: "ephemeral",
+      version: "1",
+    },
   }
   try {
     setup.data.session.remember(session)
     expect(setup.data.session.get(session.id)).toBeDefined()
-    listeners.forEach((listener) => listener({ name: viewed.type, details: viewed }))
+    listeners.forEach((listener) => listener({ name: created.type, details: created }))
     const deadline = Date.now() + 2_000
     while (!setup.data.session.missing(session.id)) {
       if (Date.now() > deadline) throw new Error("Timed out waiting for missing-session eviction")
@@ -338,11 +350,12 @@ test("delayed metadata and family reads do not resurrect sessions deleted while 
     fetch: async (input, init) => {
       const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
       requests.push(`${url.pathname}${url.search}`)
-      if (url.pathname === `/api/session/${root.id}`) return Response.json({ data: root })
-      if (url.pathname === "/api/session" && url.searchParams.get("parentID") === root.id) {
+      if (url.pathname.endsWith(`/${root.id}/family`)) {
         familyStarted.resolve()
         await familyRelease.promise
-        return Response.json({ data: [child], cursor: {} })
+        return Response.json({
+          data: { rootID: root.id, sessions: [root, child], permissions: [], forms: [] },
+        })
       }
       if (url.pathname === `/api/session/${child.id}` && requests.filter((item) => item === `/api/session/${child.id}`).length === 1) {
         ownStarted.resolve()

@@ -141,7 +141,7 @@ describe("ConfigCompactionPlugin.Plugin", () => {
   )
 })
 
-const session = Session.Info.make({
+const session = Session.Persisted.make({
   id: Session.ID.make("ses_compaction_config"),
   projectID: Project.ID.global,
   cost: Money.USD.zero,
