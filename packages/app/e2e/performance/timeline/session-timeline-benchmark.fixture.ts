@@ -68,17 +68,65 @@ const assistantMessage = {
   content: [toolContent(editPart)],
 } satisfies SessionMessageInfo
 
-export async function setupTimelineBenchmark(
-  page: Page,
-  options: {
-    historyTurns: number
-    eventBatch: number
-    vcsDiff?: unknown[]
-    turnDiffs?: unknown[]
-    busy?: boolean
-    historyShape?: "mixed" | "tool-heavy"
-  },
-) {
+type TimelineOptions = {
+  historyTurns: number
+  eventBatch: number
+  vcsDiff?: unknown[]
+  turnDiffs?: unknown[]
+  busy?: boolean
+  historyShape?: "mixed" | "tool-heavy"
+  /** The mocked server's origin. Production builds use the page's own origin as the server. */
+  server?: string
+}
+
+export async function setupTimelineBenchmark(page: Page, options: TimelineOptions) {
+  const session = await mockTimelineSession(page, options)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const text = page.locator(`[data-timeline-part-id="${textPartID}"]`).first()
+  await page.goto(session.path)
+  await expectSessionTitle(page, title)
+  await expectAppVisible(scroller)
+
+  return {
+    workload: session.workload,
+    scroller,
+    text,
+    transport: session.transport,
+    async scrollToBottom() {
+      await scroller.evaluate((element) => {
+        element.scrollTop = element.scrollHeight
+      })
+    },
+    async waitForStableGeometry() {
+      await expect
+        .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+        .toBeLessThanOrEqual(1)
+      await page.waitForFunction((partID) => {
+        const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
+          element.querySelector(`[data-timeline-part-id="${partID}"]`),
+        )
+
+        if (!root) return false
+
+        return new Promise<boolean>((resolve) => {
+          const height = root.scrollHeight
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              resolve(root.scrollHeight === height && root.scrollHeight - root.clientHeight - root.scrollTop <= 1),
+            ),
+          )
+        })
+      }, textPartID)
+    },
+  }
+}
+
+/**
+ * Mocks the server for one long session without navigating, so a harness other than Playwright Test (strobe) can
+ * own navigation and timing. Returns the session's path and the event-stream transport.
+ */
+export async function mockTimelineSession(page: Page, options: TimelineOptions) {
   const events: EventPayload[] = []
   let eventBatch = options.eventBatch
 
@@ -121,7 +169,12 @@ export async function setupTimelineBenchmark(
     assistantMessage,
   ]
 
+  const server =
+    options.server ??
+    `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+
   await mockOpenCodeServer(page, {
+    server,
     directory,
     project: project(),
     provider: provider(),
@@ -144,22 +197,14 @@ export async function setupTimelineBenchmark(
       }),
     )
   })
-  await page.setViewportSize({ width: 1366, height: 768 })
-  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
-  const text = page.locator(`[data-timeline-part-id="${textPartID}"]`).first()
-  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
-  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
-  await expectSessionTitle(page, title)
-  await expectAppVisible(scroller)
 
   return {
+    path: `/server/${base64Encode(server)}/session/${sessionID}`,
     workload: {
       messages: messages.length,
       parts: messages.reduce((sum, message) => sum + (message.type === "assistant" ? message.content.length : 0), 0),
       historyBytes: Buffer.byteLength(JSON.stringify(messages)),
     },
-    scroller,
-    text,
     transport: {
       enqueue(payload: EventPayload | EventPayload[]) {
         events.push(...(Array.isArray(payload) ? payload : [payload]))
@@ -170,32 +215,6 @@ export async function setupTimelineBenchmark(
       releaseAll() {
         eventBatch = events.length
       },
-    },
-    async scrollToBottom() {
-      await scroller.evaluate((element) => {
-        element.scrollTop = element.scrollHeight
-      })
-    },
-    async waitForStableGeometry() {
-      await expect
-        .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
-        .toBeLessThanOrEqual(1)
-      await page.waitForFunction((partID) => {
-        const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
-          element.querySelector(`[data-timeline-part-id="${partID}"]`),
-        )
-
-        if (!root) return false
-
-        return new Promise<boolean>((resolve) => {
-          const height = root.scrollHeight
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() =>
-              resolve(root.scrollHeight === height && root.scrollHeight - root.clientHeight - root.scrollTop <= 1),
-            ),
-          )
-        })
-      }, textPartID)
     },
   }
 }
