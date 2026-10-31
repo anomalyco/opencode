@@ -9,6 +9,8 @@ import { useTuiApp, useTuiPaths } from "./runtime"
 
 type Options<Value extends object> = {
   readonly initial: Value
+  /** Global stores are shared across release channels. Defaults to "channel". */
+  readonly scope?: "global" | "channel"
   /** Reconcile key for arrays inside the stored value, preserving item identity across updates. Defaults to "id". */
   readonly key?: string
 }
@@ -49,15 +51,40 @@ export function createStorage(root: string, channel: string) {
   const entries = new Map<string, { readonly value: Entry<object>; readonly reload: () => void }>()
   const memories = new Map<string, MemoryEntry<object>>()
   const pending = new Set<Promise<void>>()
-  const directory = path.join(root, segment(channel), "tui")
-  const locks = path.join(root, segment(channel), "locks")
-  mkdirSync(directory, { recursive: true })
+  const location = path.join(root, segment(channel))
+  mkdirSync(path.join(location, "tui"), { recursive: true })
+  const watchers = new Map<string, ReturnType<typeof safeWatch>>()
+  const reloadTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   const storage: Storage = {
     store<Value extends object>(key: string, options: Options<Value>) {
+      const base = options.scope === "global" ? root : location
+      const directory = path.join(base, "tui")
       const file = path.join(directory, segment(key) + ".json")
       const existing = entries.get(file)
       if (existing) return existing.value as Entry<Value>
+
+      if (!watchers.has(directory)) {
+        mkdirSync(directory, { recursive: true })
+        const watcher = safeWatch(directory, () => {
+          clearTimeout(reloadTimers.get(directory))
+          // Atomic writes notify for the temporary file before its final rename, and some
+          // platforms coalesce the rename event. Reload after the event burst has settled.
+          reloadTimers.set(
+            directory,
+            setTimeout(() => {
+              reloadTimers.delete(directory)
+              entries.forEach((entry) => entry.reload())
+            }, 50),
+          )
+        })
+        watchers.set(directory, watcher)
+        watcher?.on("error", () => {
+          clearTimeout(reloadTimers.get(directory))
+          reloadTimers.delete(directory)
+          watchers.delete(directory)
+        })
+      }
 
       const load = () => {
         try {
@@ -79,7 +106,7 @@ export function createStorage(root: string, channel: string) {
             await writeJsonAtomic(file, next)
             batch(() => setStore(merge(next)))
           },
-          { dir: locks },
+          { dir: path.join(base, "locks") },
         )
         pending.add(operation)
         operation.then(
@@ -111,22 +138,11 @@ export function createStorage(root: string, channel: string) {
     },
   }
 
-  let reloadTimer: ReturnType<typeof setTimeout> | undefined
-  let watcher = safeWatch(directory, () => {
-    clearTimeout(reloadTimer)
-    // Atomic writes notify for the temporary file before its final rename, and some
-    // platforms coalesce the rename event. Reload after the event burst has settled.
-    reloadTimer = setTimeout(() => entries.forEach((entry) => entry.reload()), 50)
-  })
-  watcher?.on("error", () => {
-    clearTimeout(reloadTimer)
-    watcher = undefined
-  })
   return {
     storage,
     close: () => {
-      clearTimeout(reloadTimer)
-      watcher?.close()
+      reloadTimers.forEach((timer) => clearTimeout(timer))
+      watchers.forEach((watcher) => watcher?.close())
     },
   }
 }
