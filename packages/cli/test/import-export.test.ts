@@ -1,8 +1,11 @@
 import { expect, test } from "bun:test"
+import { createHash } from "node:crypto"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { OPENCODE_VERSION } from "../src/version"
+import { isolatedEnv } from "./fixture/environment"
+import { tmpdir } from "./fixture/tmpdir"
 
 const info = {
   id: "ses_export_test",
@@ -93,6 +96,69 @@ test("export is raw by default and supports explicit sanitization", async () => 
     await server.stop(true)
   }
 }, 15_000)
+
+test("export flushes a large transcript before exiting", async () => {
+  await using root = await tmpdir()
+  const large = {
+    ...transfer,
+    messages: [{ ...transfer.messages[0], text: "Exported text 文本\n".repeat(128 * 1024) }],
+  }
+  const expected = JSON.stringify(large, null, 2) + os.EOL
+  const reader = path.join(root.path, "read-export.ts")
+  await Bun.write(
+    reader,
+    `import { createHash } from "node:crypto"
+const output = await Bun.stdin.text()
+console.log(JSON.stringify({ bytes: Buffer.byteLength(output), hash: createHash("sha256").update(output).digest("hex") }))`,
+  )
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url)
+      if (url.pathname === "/api/info") return status()
+      if (url.pathname === `/api/experimental/session/${info.id}/export`) return Response.json({ data: large })
+      return new Response("Not found", { status: 404 })
+    },
+  })
+
+  try {
+    // A shell creates a real OS pipe; Bun's subprocess buffering can hide a truncated write.
+    const command =
+      process.platform === "win32"
+        ? '"%EXPORT_BUN%" "%EXPORT_CLI%" session export ses_export_test --server "%EXPORT_SERVER%" | "%EXPORT_BUN%" "%EXPORT_READER%"'
+        : '"$EXPORT_BUN" "$EXPORT_CLI" session export ses_export_test --server "$EXPORT_SERVER" | "$EXPORT_BUN" "$EXPORT_READER"'
+    await using child = Bun.spawn(
+      process.platform === "win32" ? ["cmd", "/d", "/s", "/c", `"${command}"`] : ["sh", "-c", command],
+      {
+        cwd: path.join(import.meta.dir, ".."),
+        env: isolatedEnv(root.path, {
+          EXPORT_BUN: process.execPath,
+          EXPORT_CLI: path.join(import.meta.dir, "../src/index.ts"),
+          EXPORT_SERVER: server.url.toString(),
+          EXPORT_READER: reader,
+        }),
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        windowsVerbatimArguments: true,
+      },
+    )
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
+
+    expect(stderr).toBe("")
+    expect(exitCode).toBe(0)
+    expect(JSON.parse(stdout)).toEqual({
+      bytes: Buffer.byteLength(expected),
+      hash: createHash("sha256").update(expected).digest("hex"),
+    })
+  } finally {
+    await server.stop(true)
+  }
+})
 
 test("export requires a session outside an interactive terminal", async () => {
   const server = Bun.serve({
