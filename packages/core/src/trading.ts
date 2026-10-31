@@ -393,6 +393,9 @@ const layer = (options: Options = {}) =>
         /** The user's own name; null on the primary (unnamed) link. */
         readonly etiqueta: string | null
         readonly ib: IBApiNext
+        /** The fixed TWS client id this link always connects with; passing it to every
+         * connect call keeps the auto-reconnect's fixedClientId from drifting. */
+        readonly cliente: number
         /** The socket's newest connection state; each socket keeps its own 5 s chase. */
         conectado: boolean
         readonly cuentas: Map<string, EstadoCuenta>
@@ -413,6 +416,7 @@ const layer = (options: Options = {}) =>
         port: portEnlace,
         etiqueta,
         ib: new IBApiNext({ host: hostEnlace, port: portEnlace, reconnectInterval: 5_000, connectionWatchdogInterval: 15 }),
+        cliente,
         conectado: false,
         cuentas: new Map(),
       })
@@ -1847,6 +1851,11 @@ const layer = (options: Options = {}) =>
         const enlaceActiva = [...enlaces.values()].find((enlace) => enlace.cuentas.has(accountID))
         if (enlaceActiva === undefined) return yield* new InvalidTaskError({ message: `Unknown account: ${accountID}` })
         cuentaActiva = accountID
+        // Selecting an account is the user consenting to that link's socket: bring it up
+        // right away instead of leaving it to the 5 s tick. IBApiNext's connect only acts
+        // when its state is Disconnected, so an attempt already in flight can never be
+        // duplicated; the fixed client id keeps the re-connect id from drifting.
+        if (!enlaceActiva.conectado) yield* Effect.sync(() => enlaceActiva.ib.connect(enlaceActiva.cliente))
         const stamp = Date.now()
         yield* db
           .insert(TradingMetaTable)
