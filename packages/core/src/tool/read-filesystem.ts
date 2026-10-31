@@ -18,7 +18,25 @@ const FIRST_CHUNK = 256 * 1024
 const MAX_LINE_LENGTH = 2_000
 const TREE_BASE = 6
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
-export const MEDIA_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"])
+export const MEDIA_MIMES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/bmp",
+  "image/avif",
+  "application/pdf",
+  "audio/mpeg",
+  "audio/wav",
+  "audio/ogg",
+  "audio/flac",
+  "audio/mp4",
+  "audio/aac",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "video/x-msvideo",
+])
 
 export class BinaryFileError extends Schema.TaggedError<BinaryFileError>()("ReadTool.BinaryFileError", {
   resource: Schema.String,
@@ -133,7 +151,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
   )
   if (first instanceof ListPage) return first
 
-  const media = Mime.detect(first.bytes)
+  const media = Mime.detect(first.bytes, input)
   if (MEDIA_MIMES.has(media)) {
     if (first.info.size > MAX_MEDIA_INGEST_BYTES)
       return yield* new MediaIngestLimitError({ resource, maximumBytes: MAX_MEDIA_INGEST_BYTES })

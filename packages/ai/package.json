@@ -22,6 +22,7 @@
     "./experimental": "./src/experimental.ts",
     "./experimental/testing": "./src/experimental/testing.ts",
     "./route": "./src/route.ts",
+    "./media": "./src/media.ts",
     "./providers": "./src/providers.ts",
     "./providers/alibaba": "./src/providers/alibaba.ts",
     "./providers/alibaba/chat": "./src/providers/alibaba/chat.ts",
