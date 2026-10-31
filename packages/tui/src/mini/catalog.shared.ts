@@ -98,16 +98,16 @@ export async function loadRunReferences(
   return result.data.filter((reference) => !reference.hidden)
 }
 
-export async function loadRunProviders(
+export async function loadRunCatalog(
   sdk: OpenCodeClient,
   ref: LocationRef,
   signal?: AbortSignal,
-): Promise<RunProvider[]> {
+): Promise<{ providers: RunProvider[]; models: ModelListOutput["data"] }> {
   const [providers, models] = await Promise.all([
     sdk.provider.list(location(ref), ...requestOptions(signal)),
     sdk.model.list(location(ref), ...requestOptions(signal)),
   ])
-  return runProviders([...providers.data], [...models.data])
+  return { providers: runProviders([...providers.data], [...models.data]), models: [...models.data] }
 }
 
 export function requestOptions(signal?: AbortSignal): [] | [{ signal: AbortSignal }] {
