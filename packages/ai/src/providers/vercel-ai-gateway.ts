@@ -3,6 +3,7 @@ import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { OpenAIDecisions } from "../protocols/openai-decisions.js"
+import { OpenAIChatImages, type ChatImageSizing } from "../protocols/openai-chat-images.js"
 import { OpenAIImages, type OpenAIImageSizing } from "../protocols/openai-images.js"
 import { XAIImages } from "../protocols/xai-images.js"
 import { ProviderShared } from "../protocols/shared.js"
@@ -220,6 +221,18 @@ const imageSizing: OpenAIImageSizing = (request) => {
   return { providerOptions: { xai: { aspect_ratio: request.aspect, resolution: XAIImages.resolution(request) } } }
 }
 
+// Gemini image models (Nano Banana) are language models on the Gateway: `/images/generations` rejects them with
+// `ModelTypeMismatchError`, so they return images from `/chat/completions` and read sizing from `providerOptions.google`.
+const chatImage = (modelID: string) => /^google\/gemini-(.+-image|nano-banana)/.test(modelID)
+
+const chatImageSizing: ChatImageSizing = (request) => {
+  if (request.aspect === undefined && request.resolution === undefined) return undefined
+  // Google names the half tier `512` and rejects `0.5K`.
+  const resolution = request.resolution?.toUpperCase()
+  const imageSize = resolution === "0.5K" ? "512" : resolution
+  return { providerOptions: { google: { imageConfig: { aspectRatio: request.aspect, imageSize } } } }
+}
+
 export const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const configured = {
@@ -247,7 +260,9 @@ export const configure = (input: Config = {}) => {
   }
   const media = MediaRoute.deployment({ ...input, baseURL: configured.endpoint.baseURL }, configured.auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
-    OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions, sizing: imageSizing })
+    chatImage(modelID)
+      ? OpenAIChatImages.model({ ...media, id: modelID, provider: id, providerOptions, sizing: chatImageSizing })
+      : OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions, sizing: imageSizing })
   const decisionRoute = OpenAIDecisions.route.with({
     provider: id,
     endpoint: { baseURL: configured.endpoint.baseURL },
