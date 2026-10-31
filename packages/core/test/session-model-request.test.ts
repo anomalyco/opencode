@@ -59,7 +59,7 @@ describe("SessionModelRequest.unsupportedParts", () => {
     })
   })
 
-  test("replaces images xAI cannot decode and keeps png, jpeg and webp", () => {
+  test("replaces images Grok cannot decode and keeps png, jpeg and webp", () => {
     const image = (mime: string, name: string) => ({
       type: "media" as const,
       media: Media.base64("aGVsbG8=", mime),
@@ -82,7 +82,7 @@ describe("SessionModelRequest.unsupportedParts", () => {
         }),
       ),
     ]
-    const result = unsupportedParts(messages, capabilities(["text", "image"]), "xai")
+    const result = unsupportedParts(messages, capabilities(["text", "image"]), { provider: "xai" })
 
     expect(result[0]?.content).toEqual([
       ...user,
@@ -101,7 +101,15 @@ describe("SessionModelRequest.unsupportedParts", () => {
         ],
       },
     })
-    expect(unsupportedParts(messages, capabilities(["text", "image"]), "openai")).toEqual(messages)
+    expect(unsupportedParts(messages, capabilities(["text", "image"]), { provider: "openai" })).toEqual(messages)
+    // Gateways such as OpenCode Zen serve Grok under their own provider ID, and the upstream check still applies.
+    for (const family of ["grok", "grok-build"])
+      expect(unsupportedParts(messages, capabilities(["text", "image"]), { provider: "opencode", family })).toEqual(
+        result,
+      )
+    expect(
+      unsupportedParts(messages, capabilities(["text", "image"]), { provider: "opencode", family: "gpt" }),
+    ).toEqual(messages)
   })
 
   test("preserves supported media", () => {
