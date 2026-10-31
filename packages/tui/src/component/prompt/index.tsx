@@ -503,6 +503,7 @@ export function Prompt(props: PromptProps) {
         name: "session.interrupt",
         category: "Session",
         palette: undefined,
+        slash: { name: "interrupt" },
         enabled: status() === "running",
         run: () => {
           if (auto()?.visible) return
