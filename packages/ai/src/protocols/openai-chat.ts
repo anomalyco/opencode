@@ -321,7 +321,7 @@ export const OpenAIChatChoice = Schema.StructWithRest(
 const OpenAIChatError = Schema.StructWithRest(
   Schema.Struct({
     code: optionalNull(Schema.Union([Schema.String, Schema.Number])),
-    message: Schema.String,
+    message: optionalNull(Schema.String),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
@@ -1115,7 +1115,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       const body = ProviderShared.encodeJson(event)
       return yield* new AIError({
         reason: classifyProviderFailure({
-          message: event.error.message,
+          message: event.error.message ?? ProviderShared.encodeJson(event.error),
           status: typeof event.error.code === "number" ? event.error.code : undefined,
           rawBody: body,
         }),

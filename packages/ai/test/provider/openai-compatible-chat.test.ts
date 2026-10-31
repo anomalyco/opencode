@@ -641,6 +641,21 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("classifies provider error events without a message", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents({ error: { code: 502, type: "server_error" } }))),
+        Effect.flip,
+      )
+
+      expect(error).toMatchObject({
+        reason: { _tag: "ProviderInternal" },
+        message: '{"code":502,"type":"server_error"}',
+      })
+      expect(decodeJson(error.reason.body ?? "")).toMatchObject({ error: { code: 502, type: "server_error" } })
+    }),
+  )
+
   it.effect("preserves content-filter finishes in the common reason algebra", () =>
     Effect.gen(function* () {
       const filtered = yield* LLMClient.generate(request).pipe(
