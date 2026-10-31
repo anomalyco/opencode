@@ -46,17 +46,11 @@ const layer = Layer.effect(
     yield* project.activate(location.project.id)
     const unsubscribe = yield* bus.listen((event) => {
       if (!event.location || !durableSessionEventTypes.has(event.type)) return Effect.void
-      if (event.location.workspaceID !== self.workspaceID) return Effect.void
-      if (
-        event.location.directory !== self.directory &&
-        LocationServiceMap.canonical(event.location).directory !== self.directory
-      ) {
-        return Effect.void
-      }
+      const ref = LocationServiceMap.canonical(event.location)
+      if (ref.directory !== self.directory || ref.workspaceID !== self.workspaceID) return Effect.void
       if (!isSessionEvent(event)) return Effect.void
       // Listeners run inside publish; keep the write and its Project event off that path.
-      const activation = project.activate(location.project.id)
-      return activation === Effect.void ? Effect.void : activation.pipe(Effect.forkIn(scope), Effect.asVoid)
+      return project.activate(location.project.id, { forkIn: scope })
     })
     yield* Effect.addFinalizer(() => unsubscribe)
     let closed = false

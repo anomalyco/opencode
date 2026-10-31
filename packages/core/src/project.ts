@@ -82,11 +82,16 @@ export interface ResolveOptions {
   readonly persist?: boolean
 }
 
+export interface ActivateOptions {
+  /** Forks unthrottled persistence writes into `forkIn` instead of blocking the caller. */
+  readonly forkIn?: Scope.Scope
+}
+
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<ReadonlyArray<Info>>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   /** Records Project activity for recency ordering, at most once per minute per Project. */
-  readonly activate: (projectID: ID) => Effect.Effect<void>
+  readonly activate: (projectID: ID, options?: ActivateOptions) => Effect.Effect<void>
   /** Resolves the owning Project, persisting it unless `persist` is false. */
   readonly resolve: (input: AbsolutePath, options?: ResolveOptions) => Effect.Effect<Resolved>
   /** Archives Projects whose known directories are all gone; resolving a Project unarchives it. */
@@ -291,13 +296,15 @@ const layer = Layer.effect(
         .pipe(Effect.orDie)
       if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row))
     })
-    const activate = (projectID: ID): Effect.Effect<void> => {
-      const timestamp = now()
-      const last = activated.get(projectID)
-      if (last !== undefined && timestamp - last < ACTIVATE_INTERVAL) return Effect.void
-      activated.set(projectID, timestamp)
-      return persistActivate(projectID, timestamp)
-    }
+    const activate = (projectID: ID, options?: ActivateOptions): Effect.Effect<void> =>
+      Effect.suspend(() => {
+        const timestamp = now()
+        const last = activated.get(projectID)
+        if (last !== undefined && timestamp - last < ACTIVATE_INTERVAL) return Effect.void
+        activated.set(projectID, timestamp)
+        const write = persistActivate(projectID, timestamp)
+        return options?.forkIn ? write.pipe(Effect.forkIn(options.forkIn), Effect.asVoid) : write
+      })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
       return yield* fs.readFileString(path.join(dir, "opencode")).pipe(
