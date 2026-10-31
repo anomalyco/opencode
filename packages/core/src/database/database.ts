@@ -37,6 +37,7 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
       const db = yield* makeDatabase
 
       if (supportsTuningPragmas) {
+        yield* db.run("PRAGMA auto_vacuum = INCREMENTAL")
         yield* db.run("PRAGMA journal_mode = WAL")
         yield* db.run("PRAGMA synchronous = NORMAL")
         yield* db.run("PRAGMA busy_timeout = 5000")
@@ -47,6 +48,7 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
       if (supportsForeignKeyToggle) yield* db.run("PRAGMA foreign_keys = ON")
       const semaphore = yield* lock
       yield* semaphore.withPermit(DatabaseMigration.apply(db))
+      if (supportsTuningPragmas) yield* db.run("PRAGMA incremental_vacuum(500)")
 
       return { db }
     }).pipe(Effect.orDie),
@@ -69,7 +71,7 @@ export function layer(options: Options = { path: ":memory:" }) {
     Effect.gen(function* () {
       const provide = (filename: string) =>
         databaseLayer(filename === ":memory:" ? Semaphore.make(1) : Effect.succeed(lockFor(filename))).pipe(
-          Layer.provide(sqliteLayer({ filename })),
+          Layer.provide(sqliteLayer({ filename, disableWAL: true })),
         )
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:") return provide(filename)
