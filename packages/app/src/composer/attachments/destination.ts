@@ -28,7 +28,11 @@ export function useAttachmentDestination(controls: Accessor<ComposerControls>) {
       const info = await sdk.api.server.info({ signal })
       // One directory per upload keeps the original filename without collisions; the server
       // normalizes the separators and returns the resolved path.
-      const url = new URL("/api/experimental/fs/write", server.conn.http.url)
+      // A leading slash would replace any path prefix on the server URL, so join relative to it.
+      const baseUrl = new URL(server.conn.http.url)
+
+      if (!baseUrl.pathname.endsWith("/")) baseUrl.pathname += "/"
+      const url = new URL("api/experimental/fs/write", baseUrl)
       url.searchParams.set("location[directory]", location().directory)
       url.searchParams.set("path", `${info.paths.tmp}/uploads/${uuid()}/${file.name}`)
 
