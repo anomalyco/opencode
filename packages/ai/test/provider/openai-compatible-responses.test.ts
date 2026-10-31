@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, Media, Message, ToolDefinition } from "../../src/effect.js"
-import { configure } from "../../src/providers/openai-compatible-responses.js"
-import { OpenAI } from "../../src/providers.js"
+import { openaiCompatibleResponses } from "../../src/providers/openai-compatible-responses.js"
+import { openai } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { OpenAICompatibleResponses } from "../../src/protocols/openai-compatible-responses.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
@@ -19,11 +19,11 @@ describe("Open Responses-compatible route", () => {
       expect(OpenAICompatibleResponses.route.transport).toBe(OpenResponses.httpTransport)
       expect(OpenAICompatibleResponses.route.body).not.toBe(OpenAIResponses.protocol.body)
 
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
         provider: "example",
-      }).model("example-model")
+      })("example-model")
       const prepared = yield* compileRequest(
         ai.request({
           model,
@@ -58,11 +58,11 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("allows callers to override stateless encrypted reasoning defaults", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
         provider: "example",
-      }).model("example-model")
+      })("example-model")
       const prepared = yield* compileRequest(
         ai.request({ model, prompt: "Say hello.", providerOptions: { store: true, include: [] } }),
       )
@@ -74,11 +74,11 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("lowers chronological system updates as standard developer messages", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
         provider: "example",
-      }).model("example-model")
+      })("example-model")
       const prepared = yield* compileRequest(
         ai.request({
           model,
@@ -98,11 +98,11 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("omits user messages with no content", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
         provider: "example",
-      }).model("example-model")
+      })("example-model")
       const prepared = yield* compileRequest(
         ai.request({
           model,
@@ -119,11 +119,11 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("uses data URLs for embedded PDF messages and tool results", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
         provider: "example",
-      }).model("example-model")
+      })("example-model")
       const pdf = "data:application/pdf;base64,JVBERi0xLjQ="
       const prepared = yield* compileRequest(
         ai.request({
@@ -159,12 +159,12 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("rejects OpenAI-native tools", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
-      }).model("example-model")
+      })("example-model")
       const error = yield* compileRequest(
-        ai.request({ model, prompt: "Draw.", tools: [OpenAI.imageGeneration()] }),
+        ai.request({ model, prompt: "Draw.", tools: [openai.imageGeneration()] }),
       ).pipe(Effect.flip)
 
       expect(error.reason._tag).toBe("InvalidRequest")
@@ -174,9 +174,10 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("flattens tool namespaces", () =>
     Effect.gen(function* () {
-      const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
-        "example-model",
-      )
+      const model = openaiCompatibleResponses.configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      })("example-model")
       const prepared = yield* compileRequest(
         ai.request({
           model,
@@ -219,9 +220,10 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("flattens tool namespaces in history", () =>
     Effect.gen(function* () {
-      const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
-        "example-model",
-      )
+      const model = openaiCompatibleResponses.configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      })("example-model")
       const prepared = yield* compileRequest(
         ai.request({
           model,
@@ -241,10 +243,10 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("lowers canonical parallel tool control", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
-      }).model("example-model")
+      })("example-model")
       const prepared = yield* compileRequest(
         ai.request({
           model,
@@ -275,10 +277,10 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("keeps foreign item id grammars but drops malformed ids", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
-      }).model("example-model")
+      })("example-model")
       const prepared = yield* compileRequest(
         ai.request({
           model,
@@ -339,11 +341,11 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("replays only shared hosted tool items", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
         provider: "example",
-      }).model("example-model")
+      })("example-model")
       const items = [
         { type: "web_search_call", id: "ws_1", status: "completed" },
         { type: "x_search_call", id: "x_search_1", status: "completed" },
@@ -377,10 +379,10 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("routes response deltas by output index", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
-      }).model("example-model")
+      })("example-model")
       const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
         Effect.provide(
           fixedResponse(
@@ -402,10 +404,10 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("ignores bare null frames between events", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
-      }).model("example-model")
+      })("example-model")
       const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say hello." })).pipe(
         Effect.provide(
           fixedResponse(
@@ -429,7 +431,9 @@ describe("Open Responses-compatible route", () => {
 
   describe("stream validation", () => {
     const request = ai.request({
-      model: configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model("example-model"),
+      model: openaiCompatibleResponses.configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" })(
+        "example-model",
+      ),
       prompt: "Respond.",
     })
 
@@ -770,11 +774,11 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("finalizes pending function calls from completed response output", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
         provider: "example",
-      }).model("example-model")
+      })("example-model")
       const response = yield* LLMClient.generate(ai.request({ model, prompt: "Look it up." })).pipe(
         Effect.provide(
           fixedResponse(
@@ -812,10 +816,10 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("ignores terminal reasoning output when item completion is missing", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
-      }).model("example-model")
+      })("example-model")
       const response = yield* LLMClient.generate(ai.request({ model, prompt: "Think it through." })).pipe(
         Effect.provide(
           fixedResponse(
@@ -845,10 +849,10 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("reconciles raw reasoning finals without streamed deltas", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
-      }).model("example-model")
+      })("example-model")
       const response = yield* LLMClient.generate(ai.request({ model, prompt: "Think it through." })).pipe(
         Effect.provide(
           fixedResponse(
@@ -876,10 +880,10 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("preserves nullable phases in the forgiving Open Responses baseline", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
-      }).model("example-model")
+      })("example-model")
       const prepared = yield* compileRequest(
         ai.request({
           model,
@@ -908,11 +912,11 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("preserves standard refusal content as ordinary assistant text", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
         provider: "example",
-      }).model("example-model")
+      })("example-model")
       const response = yield* LLMClient.generate(ai.request({ model, prompt: "Unsafe request" })).pipe(
         Effect.provide(
           fixedResponse(
@@ -965,7 +969,7 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("reads standard Open Responses options", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
         providerOptions: {
@@ -981,7 +985,7 @@ describe("Open Responses-compatible route", () => {
           maxToolCalls: 2,
           parallelToolCalls: false,
         },
-      }).model("example-model")
+      })("example-model")
       const prepared = yield* compileRequest(
         ai.request({
           model,
@@ -1015,11 +1019,11 @@ describe("Open Responses-compatible route", () => {
 
   it.effect("does not interpret OpenAI hosted-tool items", () =>
     Effect.gen(function* () {
-      const model = configure({
+      const model = openaiCompatibleResponses.configure({
         apiKey: "test-key",
         baseURL: "https://responses.example.test/v1",
         provider: "example",
-      }).model("example-model")
+      })("example-model")
       const response = yield* LLMClient.generate(ai.request({ model, prompt: "Search." })).pipe(
         Effect.provide(
           fixedResponse(

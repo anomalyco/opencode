@@ -4,21 +4,15 @@ import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/c
 import { Endpoint } from "../route/endpoint.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { MediaRoute } from "../route/media.js"
-import {
-  HttpOptions,
-  ProviderConfigurationError,
-  ProviderID,
-  mergeHttpOptions,
-  type ModelID,
-  type ProviderOptions,
-} from "../schema/index.js"
+import { HttpOptions, ProviderID, mergeHttpOptions, type ModelID, type ProviderOptions } from "../schema/index.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
+import { config } from "./azure-settings.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
 
-export const id = ProviderID.make("azure")
+const id = ProviderID.make("azure")
 const routeAuth = Auth.remove("authorization")
 const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 55 * 60 * 1000
 
@@ -129,7 +123,7 @@ function endpoint(input: Config, modelID: string | ModelID) {
   return { baseURL: `${baseURL}/v1`, query }
 }
 
-export const configure = (input: Config) => {
+const configure = (input: Config) => {
   const modelDefaults = defaults(input)
 
   const responses = (modelID: string | ModelID) =>
@@ -171,62 +165,15 @@ export const configure = (input: Config) => {
     })
   }
 
-  return {
-    id,
-    model: responses,
-    responses,
-    chat,
-    messages,
-    image,
-    configure,
-  }
+  return Object.assign(responses, { id, responses, chat, messages, image, configure })
 }
 
-export const provider = {
+export const azure = Object.assign((modelID: string | ModelID, input: Config) => configure(input)(modelID), {
   id,
   configure,
-}
+})
 
-const config = ({
-  apiKey,
-  apiVersion,
-  baseURL,
-  body,
-  headers,
-  queryParams,
-  resourceName,
-  useDeploymentBasedUrls,
-  ...providerOptions
-}: Settings<Config["providerOptions"]>): Config => {
-  const common = {
-    apiKey,
-    apiVersion,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-    queryParams,
-    useDeploymentBasedUrls,
-  }
-  if (baseURL !== undefined) return { ...common, baseURL }
-  if (resourceName !== undefined) return { ...common, resourceName }
-  throw new ProviderConfigurationError({ provider: id, message: "Azure requires resourceName or baseURL" })
-}
-
-export const responsesModel: ProviderPackage.Model<
-  Settings,
-  OpenAIProviderOptionsInput,
-  typeof responsesRoute.compact
-> = (modelID, settings) => configure(config(settings)).responses(modelID)
-export const chatModel: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).chat(modelID)
-export const messagesModel: ProviderPackage.Model<MessagesSettings, AnthropicMessages.ProviderOptionsInput> = (
+export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput, typeof responsesRoute.compact> = (
   modelID,
   settings,
-) => configure(config(settings)).messages(modelID)
-export const imageModel = (modelID: string, settings: Settings) => {
-  const input = config(settings)
-  return configure(input).image(modelID, input.providerOptions)
-}
-export const model = responsesModel
-export const responses = responsesModel
-export const chat = chatModel
+) => configure(config(settings)).responses(modelID)

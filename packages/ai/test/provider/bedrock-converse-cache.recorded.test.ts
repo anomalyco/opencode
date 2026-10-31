@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, CacheHint } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
-import { AmazonBedrock } from "../../src/providers.js"
+import { amazonBedrock } from "../../src/providers.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -12,10 +12,10 @@ const RECORDING_REGION = process.env.BEDROCK_RECORDING_REGION ?? "us-east-1"
 // doesn't reliably surface `cacheRead`/`cacheWrite` in usage, so the second
 // call wouldn't deterministically prove cache mapping works. Override with
 // BEDROCK_CACHE_MODEL_ID if your account has access elsewhere.
-const model = AmazonBedrock.configure({
+const model = amazonBedrock.configure({
   apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
   region: RECORDING_REGION,
-}).model(process.env.BEDROCK_CACHE_MODEL_ID ?? "us.anthropic.claude-haiku-4-5-20251001-v1:0")
+})(process.env.BEDROCK_CACHE_MODEL_ID ?? "us.anthropic.claude-haiku-4-5-20251001-v1:0")
 
 const cacheRequest = ai.request({
   id: "recorded_bedrock_cache",

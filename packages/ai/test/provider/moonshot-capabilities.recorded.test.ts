@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, Media, Message, ToolDefinition } from "../../src/effect.js"
-import { Moonshot } from "../../src/providers.js"
+import { moonshot } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -20,10 +20,12 @@ const weather = ToolDefinition.make({
 })
 
 for (const api of ["chat", "messages", "responses"] as const) {
-  const model = Moonshot.configure({
-    apiKey,
-    providerOptions: api === "messages" ? { effort: "low" } : { reasoningEffort: "low" },
-  })[api]("kimi-k3")
+  const model = moonshot
+    .configure({
+      apiKey,
+      providerOptions: api === "messages" ? { effort: "low" } : { reasoningEffort: "low" },
+    })
+    [api]("kimi-k3")
   const recorded = recordedTests({
     prefix: `moonshot-${api}`,
     provider: "moonshot",

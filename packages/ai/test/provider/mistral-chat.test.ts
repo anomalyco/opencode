@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, LanguageModel, LLMEvent, Media, Message, SystemPart, ToolDefinition } from "../../src/effect.js"
-import { Mistral } from "../../src/providers/index.js"
+import { mistral } from "../../src/providers/index.js"
 import { MistralChat } from "../../src/protocols/index.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -10,7 +10,9 @@ import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
-const model = Mistral.configure({ apiKey: "fixture" }).model("mistral-large-latest")
+const mistralPackage = await import("../../src/providers/mistral.js")
+
+const model = mistral.configure({ apiKey: "fixture" })("mistral-large-latest")
 const request = ai.request({ model, prompt: "Hello" })
 const chunk = (delta: object, finishReason: string | null = null, usage?: object) => ({
   choices: [{ delta, finish_reason: finishReason }],
@@ -21,15 +23,15 @@ describe("Mistral Chat", () => {
   test("exposes native provider and protocol identities", async () => {
     const entrypoint = await import("@opencode/ai/providers/mistral")
 
-    expect(Mistral.id).toBe("mistral")
+    expect(mistral.id).toBe("mistral")
     expect(MistralChat.protocol.id).toBe("mistral-chat")
-    expect(Mistral.route).toMatchObject({
+    expect(mistralPackage.route).toMatchObject({
       id: "mistral-chat",
       provider: "mistral",
       providerMetadataKey: "mistral",
       protocol: "mistral-chat",
     })
-    expect(Mistral.route.endpoint).toMatchObject({
+    expect(mistralPackage.route.endpoint).toMatchObject({
       baseURL: "https://api.mistral.ai/v1",
       path: "/chat/completions",
     })
@@ -732,7 +734,7 @@ describe("Mistral Chat", () => {
   it.effect("uses environment bearer auth and custom package settings", () =>
     LLMClient.generate(
       ai.request({
-        model: Mistral.model("fixture-model", {
+        model: mistralPackage.model("fixture-model", {
           baseURL: "https://mistral.test/v1",
           headers: { "x-app": "test" },
           body: { service_tier: "priority" },

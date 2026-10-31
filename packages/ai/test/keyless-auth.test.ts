@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { ai } from "../src/index.js"
-import { Anthropic, OpenAICompatible } from "../src/providers.js"
+import { anthropic, openaiCompatible } from "../src/providers.js"
 import { sseEvents } from "./lib/sse.js"
 
 const seen: Array<Headers> = []
@@ -46,37 +46,37 @@ const lastHeaders = () => {
 
 describe("apiKey: false", () => {
   test("an OpenAI-compatible model without a key still fails by default", async () => {
-    const model = OpenAICompatible.model("local", { baseURL: baseURL() })
+    const model = openaiCompatible.configure({ baseURL: baseURL() })("local")
     await expect(ai.generate({ model, prompt: "hi" })).rejects.toThrow("Missing auth credential: apiKey")
   })
 
   test("an OpenAI-compatible model sends no Authorization header", async () => {
-    const model = OpenAICompatible.model("local", { apiKey: false, baseURL: baseURL() })
+    const model = openaiCompatible.configure({ apiKey: false, baseURL: baseURL() })("local")
     const response = await ai.generate({ model, prompt: "hi" })
     expect(response.text).toBe("ok")
     expect(lastHeaders().get("authorization")).toBeNull()
   })
 
   test("custom headers are the only auth sent", async () => {
-    const model = OpenAICompatible.configure({
+    const model = openaiCompatible.configure({
       apiKey: false,
       baseURL: baseURL(),
       headers: { "x-gateway-token": "t" },
-    }).model("local")
+    })("local")
     await ai.generate({ model, prompt: "hi" })
     expect(lastHeaders().get("authorization")).toBeNull()
     expect(lastHeaders().get("x-gateway-token")).toBe("t")
   })
 
   test("image models share the keyless auth", async () => {
-    const model = OpenAICompatible.configure({ apiKey: false, baseURL: baseURL() }).image("gpt-image-2")
+    const model = openaiCompatible.configure({ apiKey: false, baseURL: baseURL() }).image("gpt-image-2")
     const response = await ai.image.generate({ model, prompt: "a lighthouse" })
     expect(response.images).toHaveLength(1)
     expect(lastHeaders().get("authorization")).toBeNull()
   })
 
   test("Anthropic sends no x-api-key header", async () => {
-    const model = Anthropic.model("claude-local", { apiKey: false, baseURL: baseURL() })
+    const model = anthropic.configure({ apiKey: false, baseURL: baseURL() })("claude-local")
     const response = await ai.generate({ model, prompt: "hi" })
     expect(response.text).toBe("ok")
     expect(lastHeaders().get("x-api-key")).toBeNull()

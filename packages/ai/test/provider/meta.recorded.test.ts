@@ -1,12 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
-import { Meta } from "../../src/providers/meta.js"
+import { meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
-const meta = Meta.configure({ apiKey: process.env.META_API_KEY ?? "fixture" })
+const metaProvider = meta.configure({ apiKey: process.env.META_API_KEY ?? "fixture" })
 const modelID = "muse-spark-1.3"
 const weather = ToolDefinition.make({
   name: "lookup_weather",
@@ -36,7 +36,7 @@ for (const api of ["responses", "chat"] as const) {
         () =>
           Effect.gen(function* () {
             const request = ai.request({
-              model: meta[api](modelID),
+              model: metaProvider[api](modelID),
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
               generation: { maxTokens: 1024 },
               providerOptions: {
@@ -86,7 +86,7 @@ for (const api of ["responses", "chat"] as const) {
       () =>
         Effect.gen(function* () {
           const request = ai.request({
-            model: meta[api](modelID),
+            model: metaProvider[api](modelID),
             prompt:
               "Look up the current weather in Paris using lookup_weather before answering. After receiving the result, report Paris's weather in one short sentence.",
             tools: [weather],

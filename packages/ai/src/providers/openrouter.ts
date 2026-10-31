@@ -14,8 +14,9 @@ import { OpenResponses } from "../protocols/open-responses.js"
 import { cacheControl } from "../protocols/utils/cache.js"
 import { isRecord, JsonObject, lenient, ProviderShared } from "../protocols/shared.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { config } from "./openrouter-settings.js"
 
-export const id = ProviderID.make("openrouter")
+const id = ProviderID.make("openrouter")
 const baseURL = "https://openrouter.ai/api/v1"
 const ADAPTER = "openrouter"
 
@@ -97,6 +98,8 @@ export type Settings<Options = OpenRouterProviderOptionsInput> = ProviderPackage
     readonly apiKey?: string | false
     readonly baseURL?: string
   }
+
+export type ResponsesSettings = Settings<OpenRouterResponsesProviderOptionsInput>
 
 const SharedOptions = Schema.Struct({
   models: lenient(Schema.Array(Schema.String)),
@@ -242,7 +245,7 @@ const responsesRoute = Route.make({
 
 export const routes = [route, responsesRoute]
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const auth = AuthOptions.bearer(input, "OPENROUTER_API_KEY")
   const options = { ...defaults, endpoint: { baseURL: endpoint ?? baseURL }, auth }
@@ -274,46 +277,17 @@ export const configure = (input: Config = {}) => {
     })
   const chat = (modelID: string | ModelID) =>
     chatRoute.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } })
-  return {
+  return Object.assign(chat, {
     id,
-    model: chat,
     chat,
     responses: (modelID: string | ModelID) =>
       configuredResponses.model<OpenRouterResponsesProviderOptionsInput>({ id: modelID }),
     image,
     decision,
     configure,
-  }
+  })
 }
 
-export const provider = configure()
-export const decision = provider.decision
-export const image = provider.image
-export const chat = provider.chat
-export const responses = provider.responses
+export const openrouter = configure()
 export const model: ProviderPackage.Model<Settings, OpenRouterProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
-export const responsesModel: ProviderPackage.Model<
-  Settings<OpenRouterResponsesProviderOptionsInput>,
-  OpenRouterResponsesProviderOptionsInput
-> = (modelID, settings) => configure(config(settings)).responses(modelID)
-export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
-  return configure(input).image(modelID, input.providerOptions)
-}
-export const decisionModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
-  return configure(input).decision(modelID, input.providerOptions)
-}
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings<Config["providerOptions"]> = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
-}
-
-export * as OpenRouter from "./openrouter.js"
+  configure(config(settings))(modelID)

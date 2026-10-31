@@ -5,7 +5,7 @@ import * as BedrockConverse from "../protocols/bedrock-converse.js"
 import type { BedrockCredentials } from "../protocols/bedrock-converse.js"
 import { BedrockAuth } from "../protocols/utils/bedrock-auth.js"
 
-export const id = ProviderID.make("amazon-bedrock")
+const id = ProviderID.make("amazon-bedrock")
 
 export type Config = RouteDefaultsInput & {
   /** Bedrock API key. Falls back to `AWS_BEARER_TOKEN_BEDROCK`; bearer auth takes precedence over SigV4. */
@@ -54,16 +54,16 @@ const configuredRoute = (input: Config) => {
   })
 }
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
-  return {
+  return Object.assign((modelID: string | ModelID) => route.model<BedrockConverse.OptionsInput>({ id: modelID }), {
     id,
-    model: (modelID: string | ModelID) => route.model<BedrockConverse.OptionsInput>({ id: modelID }),
     configure,
-  }
+  })
 }
 
-export const provider = configure()
+export const amazonBedrock = configure()
+
 export const model: ProviderPackage.Model<Settings, BedrockConverse.OptionsInput> = (
   modelID,
   { apiKey, auth, baseURL, credentials, profile, region, topP, headers, body, ...providerOptions }: Settings = {},
@@ -79,4 +79,4 @@ export const model: ProviderPackage.Model<Settings, BedrockConverse.OptionsInput
     providerOptions,
     profile,
     region,
-  }).model(modelID)
+  })(modelID)

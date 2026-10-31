@@ -2,15 +2,17 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { ai, CacheHint } from "../../src/effect.js"
 import { compileRequest } from "../../src/route/client.js"
-import { DigitalOcean } from "../../src/providers/digitalocean.js"
+import { digitalocean } from "../../src/providers/digitalocean.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 import { LLMClient } from "../../src/route.js"
 
+const digitaloceanPackage = await import("../../src/providers/digitalocean.js")
+
 describe("DigitalOcean", () => {
   test("preserves package entrypoint headers and body overrides", () => {
-    const model = DigitalOcean.model("anthropic-claude-fable-5.1", {
+    const model = digitaloceanPackage.model("anthropic-claude-fable-5.1", {
       apiKey: "test-key",
       headers: { "X-Test": "fixture" },
       body: { temperature: 0 },
@@ -23,7 +25,7 @@ describe("DigitalOcean", () => {
 
   it.effect("prepares DigitalOcean models with default endpoint and auth", () =>
     Effect.gen(function* () {
-      const model = DigitalOcean.configure({ apiKey: "test-key" }).model("anthropic-claude-fable-5.1")
+      const model = digitalocean.configure({ apiKey: "test-key" })("anthropic-claude-fable-5.1")
 
       expect(model).toMatchObject({
         id: "anthropic-claude-fable-5.1",
@@ -47,7 +49,7 @@ describe("DigitalOcean", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: DigitalOcean.configure({ apiKey: "test-key" }).model("anthropic-claude-fable-5.1"),
+          model: digitalocean.configure({ apiKey: "test-key" })("anthropic-claude-fable-5.1"),
           system: [
             { type: "text", text: "Base agent", cache: new CacheHint({ type: "ephemeral", ttl: "1h" }) },
             { type: "text", text: "Project instructions" },
@@ -79,7 +81,7 @@ describe("DigitalOcean", () => {
 
   it.effect("parses DigitalOcean cache usage fields into AI.Usage", () =>
     Effect.gen(function* () {
-      const model = DigitalOcean.configure({ apiKey: "test-key" }).model("anthropic-claude-fable-5.1")
+      const model = digitalocean.configure({ apiKey: "test-key" })("anthropic-claude-fable-5.1")
       const response = yield* LLMClient.generate(ai.request({ model, prompt: "Say OK" })).pipe(
         Effect.provide(
           fixedResponse(

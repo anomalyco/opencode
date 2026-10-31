@@ -1,13 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Speech } from "../../src/experimental.js"
-import { OpenAI } from "../../src/providers.js"
+import { openai } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TEXT, collectSpeech } from "./speech-recording.js"
 
-const model = OpenAI.configure({
-  apiKey: process.env.OPENAI_API_KEY ?? "fixture",
-}).speech("gpt-4o-mini-tts")
+const model = openai
+  .configure({
+    apiKey: process.env.OPENAI_API_KEY ?? "fixture",
+  })
+  .speech("gpt-4o-mini-tts")
 
 const recorded = recordedTests({
   prefix: "openai-speech",

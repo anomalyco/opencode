@@ -5,7 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ai, LanguageModel, Message, ToolCallPart } from "../../src/effect.js"
-import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers.js"
+import { googleVertex, googleVertexChat, googleVertexMessages, googleVertexResponses } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -69,11 +69,11 @@ describe("Google Vertex providers", () => {
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: GoogleVertex.configure({
+          model: googleVertex.configure({
             accessToken: "vertex-token",
             location: "global",
             project: "vertex-project",
-          }).model("gemini-3.5-flash"),
+          })("gemini-3.5-flash"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -112,13 +112,13 @@ describe("Google Vertex providers", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: GoogleVertex.configure({
+          model: googleVertex.configure({
             accessToken: "vertex-token",
             project: "vertex-project",
             providerOptions: {
               labels: { component: "opencode", environment: "test" },
             },
-          }).model("gemini-3.5-flash"),
+          })("gemini-3.5-flash"),
           prompt: "Say hello.",
         }),
       )
@@ -133,12 +133,12 @@ describe("Google Vertex providers", () => {
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: GoogleVertex.configure({
+          model: googleVertex.configure({
             accessToken: "vertex-token",
             location: "global",
             project: "vertex-project",
             providerOptions: { serviceTier: "flex" },
-          }).model("gemini-2.5-flash"),
+          })("gemini-2.5-flash"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -172,10 +172,10 @@ describe("Google Vertex providers", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: GoogleVertex.configure({
+          model: googleVertex.configure({
             accessToken: "vertex-token",
             project: "vertex-project",
-          }).model("gemini-3.5-flash"),
+          })("gemini-3.5-flash"),
           messages: [
             Message.assistant([
               ToolCallPart.make({
@@ -216,10 +216,10 @@ describe("Google Vertex providers", () => {
 
   it.effect("round-trips Vertex Gemini metadata through signed content, tool calls, and usage", () =>
     Effect.gen(function* () {
-      const model = GoogleVertex.configure({
+      const model = googleVertex.configure({
         accessToken: "vertex-token",
         project: "vertex-project",
-      }).model("gemini-3.5-flash")
+      })("gemini-3.5-flash")
       const response = yield* LLMClient.generate(ai.request({ model, prompt: "Check the weather." })).pipe(
         Effect.provide(
           fixedResponse(
@@ -312,11 +312,11 @@ describe("Google Vertex providers", () => {
 
   it.effect("projects Anthropic Messages onto the Vertex raw-predict API", () =>
     Effect.gen(function* () {
-      const model = GoogleVertexMessages.configure({
+      const model = googleVertexMessages.configure({
         accessToken: "vertex-token",
         location: "eu",
         project: "vertex-project",
-      }).model("claude-sonnet-4-6")
+      })("claude-sonnet-4-6")
       const response = yield* LLMClient.generate(
         ai.request({
           model,
@@ -364,11 +364,11 @@ describe("Google Vertex providers", () => {
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: GoogleVertexChat.configure({
+          model: googleVertexChat.configure({
             accessToken: "vertex-token",
             location: "global",
             project: "vertex-project",
-          }).model("deepseek-ai/deepseek-v3.2-maas"),
+          })("deepseek-ai/deepseek-v3.2-maas"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -403,11 +403,11 @@ describe("Google Vertex providers", () => {
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: GoogleVertexChat.configure({
+          model: googleVertexChat.configure({
             accessToken: "vertex-token",
             location: "global",
             project: "vertex-project",
-          }).model("xai/grok-4.6"),
+          })("xai/grok-4.6"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -430,11 +430,11 @@ describe("Google Vertex providers", () => {
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: GoogleVertexResponses.configure({
+          model: googleVertexResponses.configure({
             accessToken: "vertex-token",
             location: "global",
             project: "vertex-project",
-          }).model("xai/grok-4.20-reasoning"),
+          })("xai/grok-4.20-reasoning"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -483,19 +483,19 @@ describe("Google Vertex providers", () => {
         )
 
       const normalized = { ...inputSchema, required: ["query"] }
-      const tunedModel = GoogleVertex.configure(vertex).model("endpoints/1234567890")
+      const tunedModel = googleVertex.configure(vertex)("endpoints/1234567890")
       const tuned = yield* request(tunedModel)
       expect(tuned.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(normalized)
       const optedOut = yield* request(LanguageModel.update(tunedModel, { compatibility: { sanitizer: "none" } }))
       expect(optedOut.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(inputSchema)
-      const geminiChat = yield* request(GoogleVertexChat.configure(vertex).model("google/gemini-3.8-flash"))
+      const geminiChat = yield* request(googleVertexChat.configure(vertex)("google/gemini-3.8-flash"))
       expect(geminiChat.body.tools?.[0]?.function.parameters).toEqual(normalized)
 
-      const chat = yield* request(GoogleVertexChat.configure(vertex).model("deepseek-ai/deepseek-v3.2-maas"))
+      const chat = yield* request(googleVertexChat.configure(vertex)("deepseek-ai/deepseek-v3.2-maas"))
       expect(chat.body.tools?.[0]?.function.parameters).toEqual(inputSchema)
-      const responses = yield* request(GoogleVertexResponses.configure(vertex).model("xai/grok-4.20-reasoning"))
+      const responses = yield* request(googleVertexResponses.configure(vertex)("xai/grok-4.20-reasoning"))
       expect(responses.body.tools?.[0]).toMatchObject({ parameters: inputSchema })
-      const messages = yield* request(GoogleVertexMessages.configure(vertex).model("claude-sonnet-4-6"))
+      const messages = yield* request(googleVertexMessages.configure(vertex)("claude-sonnet-4-6"))
       expect(messages.body.tools?.[0]).toMatchObject({ input_schema: inputSchema })
     }),
   )
@@ -504,11 +504,11 @@ describe("Google Vertex providers", () => {
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: GoogleVertex.configure({
+          model: googleVertex.configure({
             accessToken: "vertex-token",
             location: "us-central1",
             project: "vertex-project",
-          }).model("endpoints/1234567890"),
+          })("endpoints/1234567890"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -556,11 +556,11 @@ describe("Google Vertex providers", () => {
       ]
       const response = yield* LLMClient.generate(
         ai.request({
-          model: GoogleVertex.configure({
+          model: googleVertex.configure({
             accessToken: "vertex-token",
             project: "vertex-project",
             providerOptions: { labels: { component: "opencode" }, serviceTier: "flex" },
-          }).model("gemini-test"),
+          })("gemini-test"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -584,7 +584,7 @@ describe("Google Vertex providers", () => {
   )
 
   test("rejects tuned Gemini models in express mode", () => {
-    expect(() => GoogleVertex.configure({ apiKey: "fixture" }).model("endpoints/1234567890")).toThrow(
+    expect(() => googleVertex.configure({ apiKey: "fixture" })("endpoints/1234567890")).toThrow(
       expect.objectContaining({
         _tag: "ProviderConfiguration",
         provider: "google-vertex",

@@ -10,7 +10,7 @@ import {
   type VideoRequest,
 } from "../src/experimental.js"
 import type { Service } from "../src/video-client.js"
-import { Anthropic, Google, OpenAI, Runway, XAI } from "../src/providers.js"
+import { anthropic, google, openai, runway, xai } from "../src/providers.js"
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
 type Success<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never
@@ -46,48 +46,52 @@ Video.generate(
   { poll: { interval: "10 seconds", timeout: "10 minutes" } },
 )
 
-const google = Google.configure({ apiKey: "test" }).video("veo-3.1-generate-preview")
-Video.start({ model: google, prompt: "A kitten", providerOptions: { personGeneration: "future-value" } })
+const googleModel = google.configure({ apiKey: "test" }).video("veo-3.1-generate-preview")
+Video.start({ model: googleModel, prompt: "A kitten", providerOptions: { personGeneration: "future-value" } })
 // @ts-expect-error Known Google string options retain their value kind.
-Video.start({ model: google, prompt: "A kitten", providerOptions: { personGeneration: 1 } })
-Video.generate({ model: google, prompt: "A kitten", resolution: "future-resolution" })
+Video.start({ model: googleModel, prompt: "A kitten", providerOptions: { personGeneration: 1 } })
+Video.generate({ model: googleModel, prompt: "A kitten", resolution: "future-resolution" })
 
-const xai = XAI.configure({ apiKey: "test" }).video("grok-imagine-video-1.5")
+const xaiModel = xai.configure({ apiKey: "test" }).video("grok-imagine-video-1.5")
 Video.start({
-  model: xai,
+  model: xaiModel,
   prompt: "Waves",
   video: Media.url("https://example.com/in.mp4"),
   providerOptions: { mode: "extend", reference_audios: [{ voice_id: "eve" }], future_option: true },
 })
 // @ts-expect-error xAI modes are a closed set because the route selects an endpoint from them.
-Video.start({ model: xai, prompt: "Waves", providerOptions: { mode: "remix" } })
+Video.start({ model: xaiModel, prompt: "Waves", providerOptions: { mode: "remix" } })
 
-const runway = Runway.configure({ apiKey: "test" }).video("gen4.5")
+const runwayModel = runway.configure({ apiKey: "test" }).video("gen4.5")
 Video.start({
-  model: runway,
+  model: runwayModel,
   prompt: "Kite",
   aspect: "1280:720",
   providerOptions: { contentModeration: { publicFigureThreshold: "low" }, outputFormat: "future-format" },
 })
 // @ts-expect-error Known Runway nested options retain their value kind.
-Video.start({ model: runway, prompt: "Kite", providerOptions: { contentModeration: { publicFigureThreshold: 1 } } })
+Video.start({
+  model: runwayModel,
+  prompt: "Kite",
+  providerOptions: { contentModeration: { publicFigureThreshold: 1 } },
+})
 
 // @ts-expect-error Known Veo-like options are inferred from the selected model.
 Video.generate({ model: veo, prompt: "A kitten", providerOptions: { personGeneration: "everyone" } })
 
 // @ts-expect-error Language models cannot be used for video requests.
-Video.generate({ model: Anthropic.configure({ apiKey: "test" }).model("claude-sonnet-4-5"), prompt: "A kitten" })
+Video.generate({ model: anthropic.configure({ apiKey: "test" })("claude-sonnet-4-5"), prompt: "A kitten" })
 // @ts-expect-error Image models cannot be used for video requests.
-Video.generate({ model: OpenAI.configure({ apiKey: "test" }).image("gpt-image-2"), prompt: "A kitten" })
+Video.generate({ model: openai.configure({ apiKey: "test" }).image("gpt-image-2"), prompt: "A kitten" })
 
 // @ts-expect-error Frames are media assets, not strings.
-Video.generate({ model: google, prompt: "A kitten", frames: { first: "https://example.com/first.png" } })
+Video.generate({ model: googleModel, prompt: "A kitten", frames: { first: "https://example.com/first.png" } })
 // @ts-expect-error Aspect ratios are `${w}:${h}` strings.
-Video.generate({ model: google, prompt: "A kitten", aspect: "wide" })
+Video.generate({ model: googleModel, prompt: "A kitten", aspect: "wide" })
 // @ts-expect-error Durations are numbers of seconds.
-Video.generate({ model: google, prompt: "A kitten", durationSeconds: "8s" })
+Video.generate({ model: googleModel, prompt: "A kitten", durationSeconds: "8s" })
 // @ts-expect-error Provider-native controls live under `providerOptions`.
-Video.generate({ model: google, prompt: "A kitten", options: { personGeneration: "allow_all" } })
+Video.generate({ model: googleModel, prompt: "A kitten", options: { personGeneration: "allow_all" } })
 
 declare const generic: VideoModel<VideoOptions>
 const widenVideo = <Options extends VideoOptions>(model: VideoModel<Options>): VideoModel => model
@@ -103,6 +107,6 @@ type StartSuccess = Assert<Equal<Success<typeof started>, Generation<VideoRespon
 void (true satisfies StartRequirements)
 void (true satisfies StartSuccess)
 
-const resumed = Video.resume(google, { operation: "models/veo/operations/op" })
+const resumed = Video.resume(googleModel, { operation: "models/veo/operations/op" })
 type ResumeSuccess = Assert<Equal<Success<typeof resumed>, Generation<VideoResponse>>>
 void (true satisfies ResumeSuccess)

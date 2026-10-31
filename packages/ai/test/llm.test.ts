@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { ai, CacheHint, LLMEvent, LLMResponse, ToolEntry, ToolNamespace } from "../src/effect.js"
-import { OpenAI } from "../src/providers.js"
+import { openai } from "../src/providers.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAIResponses from "../src/protocols/openai-responses.js"
 import {
@@ -239,7 +239,7 @@ describe("llm constructors", () => {
   })
 
   test("generates and streams from input or a prebuilt request", async () => {
-    const model = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).chat("gpt-4o-mini")
+    const model = openai.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).chat("gpt-4o-mini")
     const layer = fixedResponse(
       sseEvents({ choices: [{ delta: { content: "Hello" } }] }, { choices: [{ delta: {}, finish_reason: "stop" }] }),
     )

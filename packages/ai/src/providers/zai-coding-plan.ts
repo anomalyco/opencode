@@ -10,7 +10,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 
-export const id = ProviderID.make("zai-coding-plan")
+const id = ProviderID.make("zai-coding-plan")
 
 export type ChatOptionsInput = ZAIChat.OptionsInput
 export type MessagesOptionsInput = ZAIMessages.OptionsInput
@@ -28,6 +28,9 @@ export type Settings<Options = ChatOptionsInput> = ProviderPackage.Settings &
     readonly apiKey?: string | false
     readonly baseURL?: string
   }
+
+export type MessagesSettings = Settings<MessagesOptionsInput>
+export type ResponsesSettings = Settings<ResponsesOptionsInput>
 
 const chatRoute = Route.make({
   id: "zai-coding-chat",
@@ -57,7 +60,7 @@ const responsesRoute = Route.make({
 
 export const routes = [chatRoute, messagesRoute, responsesRoute]
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL, ...rest } = input
   const defaults = {
     ...rest,
@@ -72,13 +75,10 @@ export const configure = (input: Config = {}) => {
       .model<MessagesOptionsInput>({ id: modelID, compatibility: { requireSignature: false } })
   const responses = (modelID: string | ModelID) =>
     responsesRoute.with(defaults).model<ResponsesOptionsInput>({ id: modelID })
-  return { id, model: chat, chat, messages, responses, configure }
+  return Object.assign(chat, { id, chat, messages, responses, configure })
 }
 
-export const provider = configure()
-export const chat = provider.chat
-export const messages = provider.messages
-export const responses = provider.responses
+export const zaiCodingPlan = configure()
 
 export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (
   modelID,
@@ -90,6 +90,4 @@ export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
-
-export * as ZAICodingPlan from "./zai-coding-plan.js"
+  })(modelID)

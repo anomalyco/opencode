@@ -1,31 +1,39 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
-import { Azure } from "../../src/providers.js"
+import { azure } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"
 
 const resourceName = process.env.AZURE_OPENAI_RESOURCE_NAME ?? "aiden-azury-group"
 
-const chatModel = Azure.configure({
-  resourceName,
-  apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
-}).chat("gpt-5.6-luna")
+const chatModel = azure
+  .configure({
+    resourceName,
+    apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
+  })
+  .chat("gpt-5.6-luna")
 
-const responsesModel = Azure.configure({
-  resourceName,
-  apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
-}).responses("gpt-5.6-luna")
+const responsesModel = azure
+  .configure({
+    resourceName,
+    apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
+  })
+  .responses("gpt-5.6-luna")
 
-const messagesModel = Azure.configure({
-  resourceName,
-  apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
-}).messages("claude-haiku-4-5")
+const messagesModel = azure
+  .configure({
+    resourceName,
+    apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
+  })
+  .messages("claude-haiku-4-5")
 
-const foundryChatModel = Azure.configure({
-  baseURL: `https://${resourceName}.services.ai.azure.com/models`,
-  apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
-}).chat("Kimi-K2.5")
+const foundryChatModel = azure
+  .configure({
+    baseURL: `https://${resourceName}.services.ai.azure.com/models`,
+    apiKey: process.env.AZURE_OPENAI_API_KEY ?? "fixture",
+  })
+  .chat("Kimi-K2.5")
 
 const lookupWeather = ToolDefinition.make({
   name: "lookup_weather",

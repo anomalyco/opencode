@@ -2,13 +2,15 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
-import * as OpenAI from "../../src/providers/openai.js"
+import { openai } from "../../src/providers/openai.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = OpenAI.configure({
-  apiKey: process.env.OPENAI_API_KEY ?? "fixture",
-}).responses("gpt-4.1-mini")
+const model = openai
+  .configure({
+    apiKey: process.env.OPENAI_API_KEY ?? "fixture",
+  })
+  .responses("gpt-4.1-mini")
 
 // OpenAI caches prefixes automatically once they cross the 1024-token threshold;
 // `CacheHint` is a no-op for the wire body. The stable signal is the

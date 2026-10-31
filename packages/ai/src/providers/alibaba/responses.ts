@@ -1,3 +1,8 @@
-import type { Alibaba } from "../alibaba.js"
-export { responsesModel as model } from "../alibaba.js"
-export type Settings = Alibaba.Settings<Alibaba.ResponsesOptionsInput>
+import type { ProviderPackage } from "../../provider-package.js"
+import { alibaba, type ResponsesOptionsInput, type ResponsesSettings } from "../alibaba.js"
+import { config } from "../alibaba-settings.js"
+
+export type { ResponsesSettings as Settings } from "../alibaba.js"
+
+export const model: ProviderPackage.Model<ResponsesSettings, ResponsesOptionsInput> = (modelID, settings) =>
+  alibaba.configure(config(settings)).responses(modelID)

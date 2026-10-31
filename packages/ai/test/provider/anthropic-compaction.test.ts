@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { ai, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route/client.js"
-import { Anthropic, GoogleVertexMessages } from "../../src/providers/index.js"
+import { anthropic, googleVertexMessages } from "../../src/providers/index.js"
 import { testEffect } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
@@ -50,7 +50,7 @@ for (const fixture of [
     Effect.gen(function* () {
       const result = yield* LLMClient.generate(
         ai.request({
-          model: Anthropic.configure({ apiKey: "test" }).model("claude-opus-4-6"),
+          model: anthropic.configure({ apiKey: "test" })("claude-opus-4-6"),
           prompt: "hello",
         }),
       )
@@ -60,8 +60,8 @@ for (const fixture of [
 }
 
 for (const model of [
-  Anthropic.configure({ apiKey: "test" }).model("claude-opus-4-6"),
-  GoogleVertexMessages.configure({ accessToken: "test", project: "test" }).model("claude-opus-4-6"),
+  anthropic.configure({ apiKey: "test" })("claude-opus-4-6"),
+  googleVertexMessages.configure({ accessToken: "test", project: "test" })("claude-opus-4-6"),
 ]) {
   for (const summary of ["Summary of the conversation", null]) {
     const block = { type: "compaction", content: summary }
@@ -162,7 +162,7 @@ for (const events of [
     () =>
       Effect.gen(function* () {
         const error = yield* LLMClient.generate(
-          ai.request({ model: Anthropic.configure({ apiKey: "test" }).model("claude-opus-4-6"), prompt: "hello" }),
+          ai.request({ model: anthropic.configure({ apiKey: "test" })("claude-opus-4-6"), prompt: "hello" }),
         ).pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidProviderOutput")
         expect(error.reason.http?.status).toBe(200)

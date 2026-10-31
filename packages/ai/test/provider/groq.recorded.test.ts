@@ -1,4 +1,4 @@
-import { configure } from "@opencode/ai/providers/groq"
+import { groq } from "@opencode/ai/providers/groq"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, LLMResponse, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
@@ -32,7 +32,7 @@ describe("Groq recorded", () => {
     () =>
       Effect.gen(function* () {
         const request = ai.request({
-          model: configure({
+          model: groq.configure({
             apiKey,
             providerOptions: {
               includeReasoning: false,
@@ -40,7 +40,7 @@ describe("Groq recorded", () => {
               serviceTier: "on_demand",
               user: "recorded-test",
             },
-          }).model("openai/gpt-oss-20b"),
+          })("openai/gpt-oss-20b"),
           prompt: "Reply with exactly one word: hello",
           generation: { maxTokens: 512 },
         })
@@ -68,7 +68,7 @@ describe("Groq recorded", () => {
   for (const item of [
     {
       name: "continues Qwen parallel tool calls",
-      model: configure({ apiKey, providerOptions: { parallelToolCalls: true, reasoningEffort: "none" } }).model(
+      model: groq.configure({ apiKey, providerOptions: { parallelToolCalls: true, reasoningEffort: "none" } })(
         "qwen/qwen3.6-27b",
       ),
       cities: ["Paris", "London"],
@@ -76,7 +76,7 @@ describe("Groq recorded", () => {
     },
     {
       name: "replays GPT OSS reasoning through a tool loop",
-      model: configure({ apiKey, providerOptions: { includeReasoning: true, reasoningEffort: "low" } }).model(
+      model: groq.configure({ apiKey, providerOptions: { includeReasoning: true, reasoningEffort: "low" } })(
         "openai/gpt-oss-20b",
       ),
       cities: ["Paris"],
@@ -155,10 +155,10 @@ describe("Groq recorded", () => {
     () =>
       Effect.gen(function* () {
         const request = ai.request({
-          model: configure({
+          model: groq.configure({
             apiKey,
             providerOptions: { reasoningEffort: "default" },
-          }).model("qwen/qwen3.6-27b"),
+          })("qwen/qwen3.6-27b"),
           prompt:
             "What is 173 multiplied by 219? Think through the arithmetic, then reply with only the final integer.",
           generation: { maxTokens: 2048 },

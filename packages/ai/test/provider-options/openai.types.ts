@@ -1,8 +1,8 @@
 import { ai } from "../../src/effect.js"
-import { OpenAI } from "../../src/providers.js"
+import { openai } from "../../src/providers.js"
 
-const selected = OpenAI.responses("gpt-5")
-const chat = OpenAI.chat("gpt-4o-mini")
+const selected = openai.responses("gpt-5")
+const chat = openai.chat("gpt-4o-mini")
 
 ai.request({ model: selected, prompt: "Hello", providerOptions: { reasoningEffort: "high" } })
 ai.request({ model: selected, prompt: "Hello", providerOptions: { reasoningEffort: "experimental" } })
@@ -21,7 +21,7 @@ ai.request({
   providerOptions: { reasoningEffort: 1 },
 })
 
-OpenAI.configure({
+openai.configure({
   // @ts-expect-error Transport is execution policy, not provider configuration.
   transport: "websocket",
 })

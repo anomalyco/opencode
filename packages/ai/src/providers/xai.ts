@@ -10,8 +10,9 @@ import { XAIImages } from "../protocols/xai-images.js"
 import { XAIVideo } from "../protocols/xai-video.js"
 import type { OpenAIOptionsInput } from "./openai-options.js"
 import type { ProviderPackage } from "../provider-package.js"
+import { config } from "./xai-settings.js"
 
-export const id = ProviderID.make("xai")
+const id = ProviderID.make("xai")
 const baseURL = "https://api.x.ai/v1"
 
 export type XAIProviderOptionsInput = OpenAIOptionsInput &
@@ -86,44 +87,25 @@ const configuredChatRoute = (input: Config) => {
   })
 }
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const responsesRoute = configuredResponsesRoute(input)
   const chatRoute = configuredChatRoute(input)
   const responses = (modelID: string | ModelID) => responsesRoute.model<XAIProviderOptionsInput>({ id: modelID })
   const chat = (modelID: string | ModelID) => chatRoute.model<XAIProviderOptionsInput>({ id: modelID })
   const media = MediaRoute.deployment(input, auth(input))
-  return {
+  return Object.assign(responses, {
     id,
-    model: responses,
     responses,
     chat,
     image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
       XAIImages.model({ ...media, id: modelID, providerOptions }),
     video: (modelID: string | ModelID) => XAIVideo.model({ ...media, id: modelID }),
     configure,
-  }
+  })
 }
 
-export const provider = configure()
+export const xai = configure()
 export const model: ProviderPackage.Model<Settings, XAIProviderOptionsInput, typeof responsesRoute.compact> = (
   modelID,
   settings,
-) => configure(config(settings)).model(modelID)
-export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
-  return configure(input).image(modelID, input.providerOptions)
-}
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
-}
-export const responses = provider.responses
-export const chat = provider.chat
-export const image = provider.image
-export const video = provider.video
+) => configure(config(settings))(modelID)

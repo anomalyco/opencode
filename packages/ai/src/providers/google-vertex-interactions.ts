@@ -9,7 +9,7 @@ import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export type GoogleInteractionsOptionsInput = GoogleInteractions.OptionsInput
 
-export const id = ProviderID.make("google-vertex")
+const id = ProviderID.make("google-vertex")
 
 export type Config = RouteDefaultsInput &
   GoogleVertexShared.ApiKeyOptions & {
@@ -70,19 +70,18 @@ const configuredRoute = (input: Config) => {
   })
 }
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
-  return {
-    id,
-    model: (modelID: string | ModelID) => route.model<GoogleInteractions.ProviderOptionsInput>({ id: modelID }),
-    configure,
-  }
+  return Object.assign(
+    (modelID: string | ModelID) => route.model<GoogleInteractions.ProviderOptionsInput>({ id: modelID }),
+    { id, configure },
+  )
 }
 
-export const provider = {
-  id,
-  configure,
-}
+export const googleVertexInteractions = Object.assign(
+  (modelID: string | ModelID, input: Config = {}) => configure(input)(modelID),
+  { id, configure },
+)
 
 export const model: ProviderPackage.Model<Settings, GoogleInteractions.ProviderOptionsInput> = (
   modelID,
@@ -101,5 +100,5 @@ export const model: ProviderPackage.Model<Settings, GoogleInteractions.ProviderO
     location,
     project,
     providerOptions,
-  }).model(modelID)
+  })(modelID)
 }

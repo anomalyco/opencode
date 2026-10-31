@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { ai, DecisionClient, DecisionModel, type DecisionModelRoute, type DecisionRequestInput } from "../src/effect.js"
 import type { Service } from "../src/decision-client.js"
-import { Baseten, OpenAI, OpenCode, OpenRouter, TypeSafeAI } from "../src/providers.js"
+import { baseten, openai, opencode, openrouter, typesafeAI } from "../src/providers.js"
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
 type Success<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never
@@ -9,7 +9,7 @@ type Equal<A, B> = [A, B] extends [B, A] ? true : false
 type Assert<T extends true> = T
 
 const request = ai.decision.request({
-  model: TypeSafeAI.configure({ apiKey: "test" }).decision("jev-latest"),
+  model: typesafeAI.configure({ apiKey: "test" }).decision("jev-latest"),
   input: { ticket: "refund" },
   questions: [
     { name: "topic", type: "choice", instructions: "Which team?", choices: [{ value: "billing" }, { value: true }] },
@@ -36,7 +36,7 @@ ai.decision.generate({ ...request, input: [{ type: "text", text: "Charged twice"
 
 Effect.gen(function* () {
   const response = yield* ai.decision.generate({
-    model: OpenCode.decision("jev-1.13"),
+    model: opencode.decision("jev-1.13"),
     input: [{ type: "text", text: "hello" }],
     questions: [{ name: "greeting", type: "predicate", instructions: "Greeting?" }],
   })
@@ -49,7 +49,7 @@ Effect.gen(function* () {
   response.answers[1]
 })
 ;({
-  model: OpenCode.decision("jev-1.13"),
+  model: opencode.decision("jev-1.13"),
   // @ts-expect-error Input is a JSON object or a list of parts, not a plain string.
   input: "hello",
   questions: [{ name: "ok", type: "predicate", instructions: "OK?" }],
@@ -72,46 +72,46 @@ ai.decision.generate({
 }) satisfies DecisionRequestInput<typeof custom>
 
 ai.decision.generate({
-  model: OpenAI.decision("gpt-6-luna"),
+  model: openai.decision("gpt-6-luna"),
   input: { text: "hello" },
   questions: [{ name: "ok", type: "predicate", instructions: "OK?" }],
   providerOptions: { promptCacheKey: "support-v1", safetyIdentifier: "user-1" },
 })
-const openai = OpenAI.decision("gpt-6-luna")
+const openaiModel = openai.decision("gpt-6-luna")
 ;({
-  model: openai,
+  model: openaiModel,
   input: { text: "hello" },
   questions: [{ name: "ok", type: "predicate", instructions: "OK?" }],
   // @ts-expect-error OpenAI safety identifiers are strings.
   providerOptions: { safetyIdentifier: 1 },
-}) satisfies DecisionRequestInput<typeof openai>
+}) satisfies DecisionRequestInput<typeof openaiModel>
 
 ai.decision.generate({
-  model: OpenRouter.decision("typesafe/jev-1.13"),
+  model: openrouter.decision("typesafe/jev-1.13"),
   input: { text: "hello" },
   questions: [{ name: "ok", type: "predicate", instructions: "OK?" }],
   providerOptions: { provider: { zdr: true }, session_id: "session-1", user: "user-1" },
 })
-const openrouter = OpenRouter.decision("typesafe/jev-1.13")
+const openrouterModel = openrouter.decision("typesafe/jev-1.13")
 ;({
-  model: openrouter,
+  model: openrouterModel,
   input: { text: "hello" },
   questions: [{ name: "ok", type: "predicate", instructions: "OK?" }],
   // @ts-expect-error OpenRouter session IDs are strings.
   providerOptions: { session_id: 1 },
-}) satisfies DecisionRequestInput<typeof openrouter>
+}) satisfies DecisionRequestInput<typeof openrouterModel>
 
 ai.decision.generate({
-  model: Baseten.decision("decision-models/baseten-elephant-9b-latest"),
+  model: baseten.decision("decision-models/baseten-elephant-9b-latest"),
   input: { text: "hello" },
   questions: [{ name: "ok", type: "predicate", instructions: "OK?" }],
   providerOptions: { max_len: 512 },
 })
-const baseten = Baseten.decision("decision-models/baseten-elephant-9b-latest")
+const basetenModel = baseten.decision("decision-models/baseten-elephant-9b-latest")
 ;({
-  model: baseten,
+  model: basetenModel,
   input: { text: "hello" },
   questions: [{ name: "ok", type: "predicate", instructions: "OK?" }],
   // @ts-expect-error Baseten max_len is a number.
   providerOptions: { max_len: "512" },
-}) satisfies DecisionRequestInput<typeof baseten>
+}) satisfies DecisionRequestInput<typeof basetenModel>

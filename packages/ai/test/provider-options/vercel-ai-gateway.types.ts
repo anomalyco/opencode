@@ -1,12 +1,12 @@
 import { ai } from "../../src/effect.js"
-import { VercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
+import { vercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
 
-const gateway = VercelAIGateway.configure({
+const gateway = vercelAIGateway.configure({
   apiKey: "fixture",
   providerOptions: { gateway: { only: ["anthropic", "bedrock"], caching: "auto" }, reasoningEffort: "high" },
 })
 ai.request({
-  model: gateway.model("meta/muse-spark-1.3"),
+  model: gateway("meta/muse-spark-1.3"),
   prompt: "Hello",
   providerOptions: { reasoningEffort: "max" },
 })
@@ -20,11 +20,11 @@ ai.request({
   prompt: "Hello",
   providerOptions: { reasoningSummary: "detailed", cacheTTL: "1h" },
 })
-VercelAIGateway.configure({
+vercelAIGateway.configure({
   providerOptions: {
     gateway: { byok: { anthropic: [{ apiKey: "fixture" }] } },
     upstream: { google: { thinkingConfig: { includeThoughts: true, thinkingBudget: 1024 } } },
   },
 })
 // @ts-expect-error A thinking budget is numeric.
-VercelAIGateway.configure({ providerOptions: { thinking: { type: "enabled", budgetTokens: "many" } } })
+vercelAIGateway.configure({ providerOptions: { thinking: { type: "enabled", budgetTokens: "many" } } })

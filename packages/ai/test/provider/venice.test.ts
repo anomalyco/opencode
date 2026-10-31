@@ -2,22 +2,22 @@ import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
 import { ai, Auth, LLMClient, Message } from "../../src/effect.js"
-import { OpenAI, Venice } from "../../src/providers.js"
+import { openai, venice } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { Endpoint } from "../../src/route/endpoint.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
-const model = Venice.configure({ apiKey: "fixture" }).chat("fixture-model")
+const model = venice.configure({ apiKey: "fixture" }).chat("fixture-model")
 const frame = (delta: Record<string, unknown>, finish_reason: string | null = null) => ({
   choices: [{ delta, finish_reason }],
 })
 
 it.effect("Venice owns its endpoint, environment auth, aliases, and SDK-compatible prompt default", () =>
   Effect.gen(function* () {
-    expect(Venice.provider.model).toBe(Venice.provider.chat)
-    const selected = Venice.chat("qwen3-6-27b")
+    expect(venice("fixture").route.id).toBe(venice.chat("fixture").route.id)
+    const selected = venice.chat("qwen3-6-27b")
     const request = ai.request({ model: selected, prompt: "Hello", promptCacheKey: "session-123" })
     const compiled = yield* compileRequest(request)
     const url = Endpoint.render(selected.route.endpoint, { request, body: compiled.body }).toString()
@@ -35,11 +35,13 @@ it.effect("Venice owns its endpoint, environment auth, aliases, and SDK-compatib
       headers: Headers.empty,
     })
     expect(headers.authorization).toBe("Bearer fixture")
-    const custom = Venice.configure({
-      baseURL: "https://gateway.example/v1",
-      queryParams: { deployment: "private" },
-      auth: Auth.header("x-key", "fixture"),
-    }).chat("qwen3-6-27b")
+    const custom = venice
+      .configure({
+        baseURL: "https://gateway.example/v1",
+        queryParams: { deployment: "private" },
+        auth: Auth.header("x-key", "fixture"),
+      })
+      .chat("qwen3-6-27b")
     expect(Endpoint.render(custom.route.endpoint, { request, body: compiled.body }).toString()).toBe(
       "https://gateway.example/v1/chat/completions?deployment=private",
     )
@@ -50,7 +52,7 @@ it.effect("Venice lowers typed options, model defaults, and explicit reasoning o
   Effect.gen(function* () {
     const compiled = yield* compileRequest(
       ai.request({
-        model: Venice.configure({ apiKey: "fixture", providerOptions: { reasoningEffort: "low" } }).model(
+        model: venice.configure({ apiKey: "fixture", providerOptions: { reasoningEffort: "low" } })(
           "qwen3-6-27b",
         ),
         prompt: "Hello",
@@ -182,7 +184,7 @@ it.effect("Venice preserves opaque-only reasoning and does not eat an incomplete
 
 it.effect("Venice encrypted trailers do not change the base OpenAI Chat protocol", () =>
   LLMClient.generate(
-    ai.request({ model: OpenAI.configure({ apiKey: "fixture" }).chat("gpt-4o"), prompt: "Hello" }),
+    ai.request({ model: openai.configure({ apiKey: "fixture" }).chat("gpt-4o"), prompt: "Hello" }),
   ).pipe(
     Effect.provide(
       fixedResponse(

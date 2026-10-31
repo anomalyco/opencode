@@ -1,13 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Video } from "../../src/experimental.js"
-import { Google } from "../../src/providers.js"
+import { google } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { queuedPoll } from "./queued-recording.js"
 
-const model = Google.configure({
-  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture",
-}).video("veo-3.1-fast-generate-preview")
+const model = google
+  .configure({
+    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture",
+  })
+  .video("veo-3.1-fast-generate-preview")
 
 const recorded = recordedTests({
   prefix: "google-video",

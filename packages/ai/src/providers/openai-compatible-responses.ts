@@ -7,7 +7,7 @@ import type { OpenResponsesProviderOptionsInput } from "./open-responses-options
 
 export type { OpenResponsesOptionsInput, OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
-export const id = ProviderID.make("openai-compatible")
+const id = ProviderID.make("openai-compatible")
 
 export type Config = RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
@@ -25,7 +25,7 @@ export type Settings = ProviderPackage.Settings &
 
 export const routes = [OpenAICompatibleResponses.route]
 
-export const configure = (input: Config) => {
+const configure = (input: Config) => {
   const provider = input.provider ?? "openai-compatible"
   const { provider: _, baseURL, apiKey: _apiKey, auth: _auth, ...rest } = input
   const route = OpenAICompatibleResponses.route.with({
@@ -34,17 +34,16 @@ export const configure = (input: Config) => {
     endpoint: { baseURL },
     auth: AuthOptions.bearer(input, []),
   })
-  return {
+  return Object.assign((modelID: string | ModelID) => route.model<OpenResponsesProviderOptionsInput>({ id: modelID }), {
     id: ProviderID.make(provider),
-    model: (modelID: string | ModelID) => route.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     configure,
-  }
+  })
 }
 
-export const provider = {
-  id,
-  configure,
-}
+export const openaiCompatibleResponses = Object.assign(
+  (modelID: string | ModelID, input: Config) => configure(input)(modelID),
+  { id, configure },
+)
 
 export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (
   modelID,
@@ -57,4 +56,4 @@ export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptions
     http: body === undefined ? undefined : { body },
     provider,
     providerOptions,
-  }).model(modelID)
+  })(modelID)

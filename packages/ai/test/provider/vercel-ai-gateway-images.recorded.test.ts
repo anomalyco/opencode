@@ -1,13 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai } from "../../src/effect.js"
-import { VercelAIGateway } from "../../src/providers.js"
+import { vercelAIGateway } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = VercelAIGateway.configure({
-  apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture",
-}).image("meta/muse-image-1.0")
+const model = vercelAIGateway
+  .configure({
+    apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture",
+  })
+  .image("meta/muse-image-1.0")
 
 const recorded = recordedTests({
   prefix: "vercel-ai-gateway-images",
@@ -40,9 +42,9 @@ describe("Vercel AI Gateway Images recorded", () => {
     () =>
       Effect.gen(function* () {
         const response = yield* ai.image.generate({
-          model: VercelAIGateway.configure({ apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture" }).image(
-            "spacexai/grok-imagine-image",
-          ),
+          model: vercelAIGateway
+            .configure({ apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture" })
+            .image("spacexai/grok-imagine-image"),
           prompt: "A simple flat black circle centered on a plain white background.",
           aspect: "16:9",
           resolution: "1K",

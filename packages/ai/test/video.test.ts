@@ -3,7 +3,7 @@ import { Effect, Fiber, Layer, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { Media, type GenerationEvent } from "../src/effect.js"
 import { Video, VideoClient, type VideoEvent } from "../src/experimental.js"
-import { Google, Runway, XAI } from "../src/providers.js"
+import { google, runway, xai } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, settle, type Call, type HandlerInput } from "./lib/http.js"
 
@@ -17,12 +17,12 @@ const DAY = 24 * 60 * 60 * 1000
 // ---------------------------------------------------------------------------
 
 describe("Video / Google Veo", () => {
-  const google = Google.configure({
+  const googleModel = google.configure({
     apiKey: "test",
     baseURL: "https://google.test/v1beta",
     headers: { "x-deployment": "yes" },
   })
-  const model = google.video("veo-3.1-generate-preview")
+  const model = googleModel.video("veo-3.1-generate-preview")
   const operation = "models/veo-3.1-generate-preview/operations/op_1"
   const fileUri = "https://generativelanguage.googleapis.com/v1beta/files/abc:download?alt=media"
 
@@ -63,7 +63,12 @@ describe("Video / Google Veo", () => {
         expect(JSON.stringify(response.video)).not.toContain("x-goog-api-key")
         expect(Media.from(response.video.source).headers).toBeUndefined()
         expect(response.providerMetadata).toEqual({
-          google: { operation, raiMediaFilteredCount: 1, raiMediaFilteredReasons: ["audio filtered"], metadata: undefined },
+          google: {
+            operation,
+            raiMediaFilteredCount: 1,
+            raiMediaFilteredReasons: ["audio filtered"],
+            metadata: undefined,
+          },
         })
         expect(yield* response.video.bytes()).toEqual(Uint8Array.from([9, 9, 9]))
       })
@@ -131,11 +136,13 @@ describe("Video / Google Veo", () => {
   it.effect("hands the asset the auth header that overwrote a deployment header", () =>
     Effect.gen(function* () {
       const generation = yield* Video.start({
-        model: Google.configure({
-          apiKey: "test",
-          baseURL: "https://google.test/v1beta",
-          headers: { "x-goog-api-key": "stale" },
-        }).video("veo-3.1-generate-preview"),
+        model: google
+          .configure({
+            apiKey: "test",
+            baseURL: "https://google.test/v1beta",
+            headers: { "x-goog-api-key": "stale" },
+          })
+          .video("veo-3.1-generate-preview"),
         prompt: "A kite",
       })
       const response = yield* generation.result()
@@ -239,8 +246,8 @@ describe("Video / Google Veo", () => {
 // ---------------------------------------------------------------------------
 
 describe("Video / xAI", () => {
-  const xai = XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" })
-  const model = xai.video("grok-imagine-video-1.5")
+  const xaiProvider = xai.configure({ apiKey: "test", baseURL: "https://xai.test/v1" })
+  const model = xaiProvider.video("grok-imagine-video-1.5")
 
   it.effect("submits a generation, reports pending progress, and returns the temporary URL", () =>
     Effect.gen(function* () {
@@ -445,8 +452,8 @@ describe("Video / xAI", () => {
 // ---------------------------------------------------------------------------
 
 describe("Video / Runway", () => {
-  const runway = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" })
-  const model = runway.video("gen4.5")
+  const runwayProvider = runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" })
+  const model = runwayProvider.video("gen4.5")
   const taskUrl = "https://runway.test/v1/tasks/task_1"
 
   it.effect("submits image_to_video, polls the task, reports credits, and keeps the finished task on cancel", () =>
@@ -755,7 +762,7 @@ describe("Video / Runway", () => {
 // ---------------------------------------------------------------------------
 
 describe("Video / transient read failures", () => {
-  const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+  const model = runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
   const succeeded = { id: "task_1", status: "SUCCEEDED", output: ["https://runway.test/out.mp4"] }
   const failure = (input: HandlerInput, status: number, headers?: Record<string, string>) =>
     json(input, { error: `HTTP ${status}` }, { status, headers })
@@ -920,19 +927,19 @@ describe("Video / transient read failures", () => {
 describe("Video / queued result", () => {
   for (const pending of [
     {
-      model: Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).video("veo-3.1"),
+      model: google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).video("veo-3.1"),
       token: { operation: "models/veo-3.1/operations/op_1" },
       body: { name: "models/veo-3.1/operations/op_1", done: false },
       name: "Google Veo",
     },
     {
-      model: XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5"),
+      model: xai.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5"),
       token: { requestID: "req_1" },
       body: { status: "pending", progress: 40 },
       name: "xAI Video",
     },
     {
-      model: Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5"),
+      model: runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5"),
       token: { taskID: "task_1" },
       body: { status: "RUNNING", progress: 0.5 },
       name: "Runway",
@@ -955,7 +962,7 @@ describe("Video / queued result", () => {
   const veoOperation = "models/veo-3.1/operations/op_1"
   for (const queued of [
     {
-      model: Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).video("veo-3.1"),
+      model: google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).video("veo-3.1"),
       submitted: { name: veoOperation },
       token: { operation: veoOperation },
       submitURL: "https://google.test/v1beta/models/veo-3.1:predictLongRunning",
@@ -970,7 +977,7 @@ describe("Video / queued result", () => {
       url: "https://google.test/out.mp4",
     },
     {
-      model: XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5"),
+      model: xai.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5"),
       submitted: { request_id: "req_1" },
       token: { requestID: "req_1" },
       submitURL: "https://xai.test/v1/videos/generations",
@@ -1014,11 +1021,11 @@ describe("Video / queued result", () => {
 
   for (const queued of [
     {
-      model: Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).video("veo-3.1"),
+      model: google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).video("veo-3.1"),
       submitted: { name: veoOperation },
     },
     {
-      model: XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5"),
+      model: xai.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5"),
       submitted: { request_id: "req_1" },
     },
   ]) {
@@ -1050,7 +1057,7 @@ describe("Video / queued result", () => {
       const response = yield* settle(
         Video.generate(
           {
-            model: Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5"),
+            model: runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5"),
             prompt: "x",
           },
           { poll: { interval: "1 second" } },

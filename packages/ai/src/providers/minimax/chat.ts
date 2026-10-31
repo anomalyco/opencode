@@ -1,16 +1,18 @@
 import type { ProviderPackage } from "../../provider-package.js"
-import { MiniMax } from "../minimax.js"
+import { minimax, type ChatOptionsInput, type ChatSettings } from "../minimax.js"
 
-export type Settings = MiniMax.Settings<MiniMax.ChatOptionsInput>
+export type { ChatSettings as Settings } from "../minimax.js"
 
-export const model: ProviderPackage.Model<Settings, MiniMax.ChatOptionsInput> = (
+export const model: ProviderPackage.Model<ChatSettings, ChatOptionsInput> = (
   modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
+  { apiKey, baseURL, body, headers, ...providerOptions }: ChatSettings = {},
 ) =>
-  MiniMax.configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).chat(modelID)
+  minimax
+    .configure({
+      apiKey,
+      baseURL,
+      headers,
+      http: body === undefined ? undefined : { body },
+      providerOptions,
+    })
+    .chat(modelID)

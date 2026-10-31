@@ -17,6 +17,7 @@ import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-opt
 import { OpenAIImages } from "../protocols/openai-images.js"
 import { OpenAISpeech } from "../protocols/openai-speech.js"
 import { OpenAITranscription } from "../protocols/openai-transcription.js"
+import { config } from "./openai-settings.js"
 import { OpenAIDecisions, type OptionsInput as OpenAIDecisionOptionsInput } from "../protocols/openai-decisions.js"
 
 export type { OpenAIOptionsInput, OpenAIResponseIncludable, OpenAIServiceTier } from "./openai-options.js"
@@ -25,7 +26,7 @@ export type { OpenAISpeechOptions } from "../protocols/openai-speech.js"
 export type { OpenAITranscriptionOptions } from "../protocols/openai-transcription.js"
 export type { OptionsInput as OpenAIDecisionOptions } from "../protocols/openai-decisions.js"
 
-export const id = ProviderID.make("openai")
+const id = ProviderID.make("openai")
 
 export const routes = [OpenAIResponses.route, OpenAIChat.route]
 
@@ -52,7 +53,7 @@ export interface ImageGenerationOptions {
   >
 }
 
-export const imageGeneration = (options: ImageGenerationOptions = {}) =>
+const imageGeneration = (options: ImageGenerationOptions = {}) =>
   ToolDefinition.make({
     name: "image_generation",
     description: "Generate or edit an image using OpenAI's hosted image generation tool.",
@@ -97,7 +98,7 @@ const configuredRoute = <Body, Prepared, Compact extends CompactionOperations | 
     endpoint: { baseURL: input.baseURL, query: input.queryParams },
   })
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const responsesRoute = configuredRoute(OpenAIResponses.route, input)
   const chatRoute = configuredRoute(OpenAIChat.route, input)
   const modelDefaults = defaults(input)
@@ -131,67 +132,23 @@ export const configure = (input: Config = {}) => {
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model<OpenAIDecisionOptionsInput>({ id: modelID, providerOptions })
 
-  return {
+  return Object.assign((modelID: string | ModelID) => responses(modelID), {
     id,
-    model: responses,
     responses,
     chat,
     image,
     speech,
     transcription,
     decision,
+    imageGeneration,
     configure,
-  }
+  })
 }
 
-export const provider = configure()
-
-const config = ({
-  apiKey,
-  baseURL,
-  body,
-  headers: given,
-  organization,
-  project,
-  queryParams,
-  ...providerOptions
-}: Settings = {}): Config => {
-  const headers = {
-    ...(organization === undefined ? {} : { "OpenAI-Organization": organization }),
-    ...(project === undefined ? {} : { "OpenAI-Project": project }),
-    ...given,
-  }
-  return {
-    apiKey,
-    baseURL,
-    headers: Object.keys(headers).length === 0 ? undefined : headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-    queryParams,
-  }
-}
+export const openai = configure()
 
 export const model: ProviderPackage.Model<
   Settings,
   OpenAIProviderOptionsInput,
   typeof OpenAIResponses.route.compact
-> = (modelID, settings) => {
-  return configure(config(settings)).responses(modelID)
-}
-
-export const chatModel: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).chat(modelID)
-export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
-  return configure(input).image(modelID, input.providerOptions)
-}
-export const decisionModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
-  return configure(input).decision(modelID, input.providerOptions)
-}
-export const responses = provider.responses
-export const chat = provider.chat
-export const image = provider.image
-export const speech = provider.speech
-export const transcription = provider.transcription
-export const decision = provider.decision
+> = (modelID, settings) => configure(config(settings)).responses(modelID)

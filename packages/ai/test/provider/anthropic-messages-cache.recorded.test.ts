@@ -2,13 +2,13 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, CacheHint, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
-import * as Anthropic from "../../src/providers/anthropic.js"
+import { anthropic } from "../../src/providers/anthropic.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = Anthropic.configure({
+const model = anthropic.configure({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
-}).model("claude-haiku-4-5-20251001")
+})("claude-haiku-4-5-20251001")
 
 // Two identical generations in a row. The first call writes the prefix into
 // Anthropic's cache; the second should report a cache read against the same

@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, Media } from "../../src/effect.js"
-import { OpenRouter } from "../../src/providers.js"
+import { openrouter } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
 
-const openrouter = OpenRouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
+const openrouterProvider = openrouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
 
 const recorded = recordedTests({
   prefix: "openrouter-images",
@@ -22,7 +22,7 @@ describe("OpenRouter Images recorded", () => {
     () =>
       Effect.gen(function* () {
         const response = yield* ai.image.generate({
-          model: openrouter.image("google/gemini-3.1-flash-image"),
+          model: openrouterProvider.image("google/gemini-3.1-flash-image"),
           prompt: "A simple flat black circle centered on a plain white background.",
           aspect: "16:9",
           resolution: "2K",
@@ -38,7 +38,7 @@ describe("OpenRouter Images recorded", () => {
     () =>
       Effect.gen(function* () {
         const response = yield* ai.image.generate({
-          model: openrouter.image("black-forest-labs/flux-3-image-klein"),
+          model: openrouterProvider.image("black-forest-labs/flux-3-image-klein"),
           prompt: "A simple flat black circle centered on a plain white background.",
           aspect: "16:9",
           resolution: "1K",
@@ -55,7 +55,7 @@ describe("OpenRouter Images recorded", () => {
     () =>
       Effect.gen(function* () {
         const response = yield* ai.image.generate({
-          model: openrouter.image("openai/gpt-image-1-mini"),
+          model: openrouterProvider.image("openai/gpt-image-1-mini"),
           prompt: "Keep the simple shape and change it from black to bright green.",
           images: [
             Media.bytes(

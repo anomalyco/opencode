@@ -1,4 +1,4 @@
-import { configure } from "../google.js"
+import { google } from "../google.js"
 import type { ProviderPackage } from "../../provider-package.js"
 import type { GoogleInteractions } from "../../protocols/google-interactions.js"
 
@@ -12,10 +12,12 @@ export const model: ProviderPackage.Model<Settings, GoogleInteractions.ProviderO
   modelID,
   { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
 ) =>
-  configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).interactions(modelID)
+  google
+    .configure({
+      apiKey,
+      baseURL,
+      headers,
+      http: body === undefined ? undefined : { body },
+      providerOptions,
+    })
+    .interactions(modelID)

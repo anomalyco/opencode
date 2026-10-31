@@ -1,8 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LanguageModel, LLMEvent, LLMResponse } from "../../src/effect.js"
-import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
-import * as OpenRouter from "../../src/providers/openrouter.js"
+import { openaiCompatible } from "../../src/providers/openai-compatible.js"
+import { openrouter } from "../../src/providers/openrouter.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
@@ -12,10 +12,10 @@ const cases = [
   {
     name: "OpenRouter",
     model: LanguageModel.update(
-      OpenRouter.configure({
+      openrouter.configure({
         apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
         providerOptions: { reasoning: { max_tokens: 1024 } },
-      }).model("anthropic/claude-sonnet-4.6"),
+      })("anthropic/claude-sonnet-4.6"),
       { compatibility: { reasoningField: "reasoning" } },
     ),
     requires: ["OPENROUTER_API_KEY"],
@@ -25,12 +25,12 @@ const cases = [
   {
     name: "Vercel AI Gateway",
     model: LanguageModel.update(
-      OpenAICompatible.configure({
+      openaiCompatible.configure({
         provider: "vercel-ai-gateway",
         baseURL: "https://ai-gateway.vercel.sh/v1",
         apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture",
         http: { body: { reasoning: { enabled: true, max_tokens: 1024 } } },
-      }).model("anthropic/claude-sonnet-4.6"),
+      })("anthropic/claude-sonnet-4.6"),
       { compatibility: { reasoningField: "reasoning" } },
     ),
     requires: ["AI_GATEWAY_API_KEY"],

@@ -3,21 +3,21 @@ import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, ImageClient, Media } from "../../src/effect.js"
 import type { ImageRequestInput } from "../../src/image.js"
-import { MiniMax } from "../../src/providers.js"
+import { minimax } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 
-const minimax = MiniMax.configure({ apiKey: "test" })
+const minimaxProvider = minimax.configure({ apiKey: "test" })
 const imageResponse = JSON.stringify({ data: { image_urls: ["https://cdn.minimax.test/a.jpeg"] } })
 
 /** The JSON body MiniMax receives for a request. */
 const sent = (
-  request: Omit<ImageRequestInput<ReturnType<typeof minimax.image>>, "model" | "prompt">,
+  request: Omit<ImageRequestInput<ReturnType<typeof minimaxProvider.image>>, "model" | "prompt">,
   model = "image-01",
 ) =>
   Effect.gen(function* () {
     let body: unknown
-    yield* ai.image.generate({ model: minimax.image(model), prompt: "test", ...request }).pipe(
+    yield* ai.image.generate({ model: minimaxProvider.image(model), prompt: "test", ...request }).pipe(
       Effect.provide(
         ImageClient.layer.pipe(
           Layer.provide(
@@ -33,12 +33,12 @@ const sent = (
   })
 
 const failure = (
-  request: Omit<ImageRequestInput<ReturnType<typeof minimax.image>>, "model" | "prompt">,
+  request: Omit<ImageRequestInput<ReturnType<typeof minimaxProvider.image>>, "model" | "prompt">,
   model = "image-01",
   response = imageResponse,
 ) =>
   ai.image
-    .generate({ model: minimax.image(model), prompt: "test", ...request })
+    .generate({ model: minimaxProvider.image(model), prompt: "test", ...request })
     .pipe(
       Effect.provide(
         ImageClient.layer.pipe(
@@ -52,12 +52,14 @@ describe("MiniMax Images", () => {
   it.effect("generates through the MiniMax image API", () =>
     Effect.gen(function* () {
       const response = yield* ai.image.generate({
-        model: MiniMax.configure({
-          apiKey: "test",
-          baseURL: "https://api.minimax.test/v1",
-          headers: { "x-default": "yes" },
-          http: { body: { configured: true } },
-        }).image("image-01"),
+        model: minimax
+          .configure({
+            apiKey: "test",
+            baseURL: "https://api.minimax.test/v1",
+            headers: { "x-default": "yes" },
+            http: { body: { configured: true } },
+          })
+          .image("image-01"),
         prompt: "A girl stands by the library window",
         n: 2,
         aspect: "16:9",

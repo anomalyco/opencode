@@ -2,12 +2,12 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai } from "../../src/effect.js"
-import { Azure } from "../../src/providers.js"
+import { azure } from "../../src/providers.js"
 import { LLMClient } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse } from "../lib/http.js"
 
-const send = (model: ReturnType<typeof Azure.messagesModel>) =>
+const send = (model: ReturnType<ReturnType<typeof azure.configure>["messages"]>) =>
   Effect.gen(function* () {
     const seen: Array<Request> = []
     yield* LLMClient.generate(ai.request({ model, prompt: "Hi" })).pipe(
@@ -27,7 +27,9 @@ const send = (model: ReturnType<typeof Azure.messagesModel>) =>
 describe("Azure Messages", () => {
   it.effect("sends Anthropic Messages to the Foundry resource with x-api-key", () =>
     Effect.gen(function* () {
-      const request = yield* send(Azure.messagesModel("claude-haiku-4-5", { resourceName: "fixture", apiKey: "key" }))
+      const request = yield* send(
+        azure.configure({ resourceName: "fixture", apiKey: "key" }).messages("claude-haiku-4-5"),
+      )
 
       expect(request.url).toBe("https://fixture.services.ai.azure.com/anthropic/v1/messages")
       expect(request.headers.get("x-api-key")).toBe("key")
@@ -39,7 +41,7 @@ describe("Azure Messages", () => {
   it.effect("uses a configured baseURL as is", () =>
     Effect.gen(function* () {
       const request = yield* send(
-        Azure.configure({ baseURL: "https://gateway.example/anthropic/v1/", apiKey: "key" }).messages("claude"),
+        azure.configure({ baseURL: "https://gateway.example/anthropic/v1/", apiKey: "key" }).messages("claude"),
       )
 
       expect(request.url).toBe("https://gateway.example/anthropic/v1/messages")

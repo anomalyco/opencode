@@ -2,13 +2,14 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
-import { AmazonBedrock } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
+
+const amazonBedrockPackage = await import("../../src/providers/amazon-bedrock.js")
 
 const RECORDING_REGION = process.env.BEDROCK_RECORDING_REGION ?? "us-east-1"
 
-const bedrock = (id: string, settings: Omit<Parameters<typeof AmazonBedrock.model>[1], "apiKey" | "region">) =>
-  AmazonBedrock.model(id, {
+const bedrock = (id: string, settings: Omit<Parameters<typeof amazonBedrockPackage.model>[1], "apiKey" | "region">) =>
+  amazonBedrockPackage.model(id, {
     apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
     region: RECORDING_REGION,
     ...settings,

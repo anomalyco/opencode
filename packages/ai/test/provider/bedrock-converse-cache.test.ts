@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, CacheHint, LanguageModel, Message, ToolCallPart } from "../../src/effect.js"
-import { AmazonBedrock } from "../../src/providers.js"
+import { amazonBedrock } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 
-const bedrock = AmazonBedrock.configure({ apiKey: "fixture" })
+const bedrock = amazonBedrock.configure({ apiKey: "fixture" })
 
 describe("Bedrock Converse cache policy", () => {
   for (const id of [
@@ -35,7 +35,7 @@ describe("Bedrock Converse cache policy", () => {
           const cache = policy === "none" ? new CacheHint({ type: "ephemeral", ttl: "1h" }) : undefined
           const prepared = yield* compileRequest(
             ai.request({
-              model: bedrock.model(id),
+              model: bedrock(id),
               cache: policy,
               system: [{ type: "text", text: "System prefix", cache }],
               tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" }, cache }],
@@ -89,7 +89,7 @@ describe("Bedrock Converse cache policy", () => {
         Effect.gen(function* () {
           const prepared = yield* compileRequest(
             ai.request({
-              model: bedrock.model(id),
+              model: bedrock(id),
               system: [
                 { type: "text", text: "Agent" },
                 { type: "text", text: "Project" },
@@ -97,7 +97,9 @@ describe("Bedrock Converse cache policy", () => {
               tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
               prompt: "Question",
               cache:
-                ttlRequest === undefined ? undefined : { tools: true, system: true, messages: { tail: 1 }, ttl: ttlRequest },
+                ttlRequest === undefined
+                  ? undefined
+                  : { tools: true, system: true, messages: { tail: 1 }, ttl: ttlRequest },
             }),
           )
           const marker = {
@@ -126,7 +128,7 @@ describe("Bedrock Converse cache policy", () => {
         Effect.gen(function* () {
           const prepared = yield* compileRequest(
             ai.request({
-              model: LanguageModel.update(bedrock.model(arn), { compatibility: { cacheFormat: "anthropic" } }),
+              model: LanguageModel.update(bedrock(arn), { compatibility: { cacheFormat: "anthropic" } }),
               system: [
                 { type: "text", text: "Agent" },
                 { type: "text", text: "Project" },
@@ -134,7 +136,9 @@ describe("Bedrock Converse cache policy", () => {
               tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
               prompt: "Question",
               cache:
-                ttlRequest === undefined ? undefined : { tools: true, system: true, messages: { tail: 1 }, ttl: ttlRequest },
+                ttlRequest === undefined
+                  ? undefined
+                  : { tools: true, system: true, messages: { tail: 1 }, ttl: ttlRequest },
             }),
           )
           const marker = { cachePoint: ttlRequest === undefined ? { type: "default" } : { type: "default", ttl: "1h" } }
@@ -155,7 +159,7 @@ describe("Bedrock Converse cache policy", () => {
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
           ai.request({
-            model: LanguageModel.update(bedrock.model(id), { compatibility: { cacheFormat: "alibaba" } }),
+            model: LanguageModel.update(bedrock(id), { compatibility: { cacheFormat: "alibaba" } }),
             system: "System prefix",
             prompt: "Question",
           }),

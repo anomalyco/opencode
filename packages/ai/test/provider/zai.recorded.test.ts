@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, type LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
-import { ZAI } from "../../src/providers.js"
+import { zai } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
@@ -26,7 +26,7 @@ for (const effort of [undefined, "low", "high", "max"] as const) {
     () =>
       Effect.gen(function* () {
         const request = ai.request({
-          model: ZAI.configure({ apiKey, providerOptions: { reasoningEffort: effort } }).model("glm-5.3"),
+          model: zai.configure({ apiKey, providerOptions: { reasoningEffort: effort } })("glm-5.3"),
           prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
           generation: { maxTokens: 4096 },
         })
@@ -49,10 +49,12 @@ recorded.effect.with(
   () =>
     Effect.gen(function* () {
       const request = ai.request({
-        model: ZAI.configure({
-          apiKey,
-          providerOptions: { reasoningEffort: "high", thinking: { type: "enabled", clear_thinking: false } },
-        }).chat("glm-5.3"),
+        model: zai
+          .configure({
+            apiKey,
+            providerOptions: { reasoningEffort: "high", thinking: { type: "enabled", clear_thinking: false } },
+          })
+          .chat("glm-5.3"),
         prompt:
           "We have a budget of 38000 dollars for 219 trips costing 173 dollars each. Calculate whether that is affordable. If it is, use get_weather to look up the current weather in Paris. After receiving the result, report the weather in one short sentence.",
         tools: [weather],

@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { Transcription } from "../../src/experimental.js"
-import { Deepgram } from "../../src/providers.js"
+import { deepgram } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TRANSCRIPT, audio, audioRecording, dialog } from "./transcription-recording.js"
 
-const model = Deepgram.configure({ apiKey: process.env.DEEPGRAM_API_KEY ?? "fixture" }).transcription("nova-3")
+const model = deepgram.configure({ apiKey: process.env.DEEPGRAM_API_KEY ?? "fixture" }).transcription("nova-3")
 
 const recorded = recordedTests({
   prefix: "deepgram-transcription",

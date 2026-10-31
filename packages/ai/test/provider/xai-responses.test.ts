@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
 import { ai, LLMEvent, Message } from "../../src/effect.js"
-import { XAI } from "../../src/providers.js"
+import { xai } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
 import * as ProviderShared from "../../src/protocols/shared.js"
@@ -18,7 +18,7 @@ import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
-const model = XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).responses("grok-4.6")
+const model = xai.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).responses("grok-4.6")
 
 /** Runs a request through the WebSocket transport and hands back its channel driver; the HTTP fallback answers. */
 const channelDriver = (request: ReturnType<typeof ai.request>) =>
@@ -328,7 +328,7 @@ describe("xAI Responses route", () => {
 it.effect("names the xAI Chat route separately from its OpenAI Chat protocol", () =>
   Effect.gen(function* () {
     const prepared = yield* compileRequest(
-      ai.request({ model: XAI.configure({ apiKey: "test" }).chat("grok-4.6"), prompt: "Hello" }),
+      ai.request({ model: xai.configure({ apiKey: "test" }).chat("grok-4.6"), prompt: "Hello" }),
     )
     expect(prepared.route).toBe("xai-chat")
     expect(prepared.protocol).toBe("openai-chat")

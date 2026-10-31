@@ -203,7 +203,7 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/cloudflare-ai-gateway"),
       import("@opencode/ai/providers/cloudflare-workers-ai"),
     ])
-    for (const provider of modules) {
+    for (const [index, provider] of modules.entries()) {
       const selected = provider.model("provider-model", {
         accountId: "account",
         apiKey: "fixture",
@@ -211,7 +211,7 @@ describe("provider package entrypoints", () => {
         body: { custom: true },
         reasoningEffort: "high",
       })
-      expect(selected.provider).toBe(provider.id)
+      expect(selected.provider).toBe(["cloudflare-ai-gateway", "cloudflare-workers-ai"][index])
       expect(selected.route.endpoint.baseURL).toBe(provider.baseURL({ accountId: "account" }))
       expect(selected.route.defaults.headers).toMatchObject({ "x-application": "opencode" })
       expect(selected.route.defaults.http?.body).toEqual({ custom: true })
@@ -436,7 +436,7 @@ describe("provider package entrypoints", () => {
     expect(interactions.route.id).toBe("google-interactions")
     expect(interactions.route.endpoint.baseURL).toBe("https://generativelanguage.test/v1beta")
     expect(interactions.route.defaults.providerOptions).toEqual({ thinkingLevel: "low", store: true })
-    expect(Google.configure().interactions("gemini-3.8-flash").route.protocol).toBe("google-interactions")
+    expect(Google.google.configure().interactions("gemini-3.8-flash").route.protocol).toBe("google-interactions")
   })
 
   test("selects Vertex entrypoints with the same model contract", async () => {
@@ -537,10 +537,10 @@ describe("provider package entrypoints", () => {
       ]),
     ).toThrow(configuration("google-vertex", "Google Vertex apiKey cannot be combined with accessToken or auth"))
     // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes a statically invalid option combination.
-    const configured = Reflect.apply(GoogleVertex.configure, undefined, [
+    const configured = Reflect.apply(GoogleVertex.googleVertex.configure, undefined, [
       { accessToken: "token", auth: {}, project: "vertex-project" },
     ])
-    expect(() => configured.model("gemini-3.5-flash")).toThrow(
+    expect(() => configured("gemini-3.5-flash")).toThrow(
       configuration("google-vertex", "Google Vertex accessToken cannot be combined with auth"),
     )
     expect(() =>
@@ -552,7 +552,7 @@ describe("provider package entrypoints", () => {
     ).toThrow(configuration("google-vertex", "Google Vertex Messages does not support API keys"))
     expect(() =>
       // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes an unsupported authentication option.
-      Reflect.apply(Providers.GoogleVertexMessages.configure, undefined, [
+      Reflect.apply(Providers.googleVertexMessages.configure, undefined, [
         { apiKey: "fixture", project: "vertex-project" },
       ]),
     ).toThrow(configuration("google-vertex", "Google Vertex Messages does not support API keys"))
@@ -565,7 +565,7 @@ describe("provider package entrypoints", () => {
     ).toThrow(configuration("google-vertex", "Google Vertex Chat does not support API keys"))
     expect(() =>
       // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes an unsupported authentication option.
-      Reflect.apply(Providers.GoogleVertexChat.configure, undefined, [
+      Reflect.apply(Providers.googleVertexChat.configure, undefined, [
         { apiKey: "fixture", project: "vertex-project" },
       ]),
     ).toThrow(configuration("google-vertex", "Google Vertex Chat does not support API keys"))
@@ -578,7 +578,7 @@ describe("provider package entrypoints", () => {
     ).toThrow(configuration("google-vertex", "Google Vertex Responses does not support API keys"))
     expect(() =>
       // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes an unsupported authentication option.
-      Reflect.apply(Providers.GoogleVertexResponses.configure, undefined, [
+      Reflect.apply(Providers.googleVertexResponses.configure, undefined, [
         { apiKey: "fixture", project: "vertex-project" },
       ]),
     ).toThrow(configuration("google-vertex", "Google Vertex Responses does not support API keys"))

@@ -6,7 +6,7 @@ import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
-export const id = ProviderID.make("google-vertex")
+const id = ProviderID.make("google-vertex")
 
 export type Config = RouteDefaultsInput &
   GoogleVertexShared.OAuthOptions & {
@@ -61,19 +61,18 @@ const configuredRoute = (input: Config) => {
   })
 }
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
-  return {
+  return Object.assign((modelID: string | ModelID) => route.model<OpenResponsesProviderOptionsInput>({ id: modelID }), {
     id,
-    model: (modelID: string | ModelID) => route.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     configure,
-  }
+  })
 }
 
-export const provider = {
-  id,
-  configure,
-}
+export const googleVertexResponses = Object.assign(
+  (modelID: string | ModelID, input: Config = {}) => configure(input)(modelID),
+  { id, configure },
+)
 
 export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptionsInput> = (
   modelID,
@@ -89,5 +88,5 @@ export const model: ProviderPackage.Model<Settings, OpenResponsesProviderOptions
     location,
     project,
     providerOptions,
-  }).model(modelID)
+  })(modelID)
 }

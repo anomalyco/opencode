@@ -1,12 +1,12 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, Media, Message } from "../../src/effect.js"
-import { Meta } from "../../src/providers/meta.js"
+import { meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
-const meta = Meta.configure({ apiKey: process.env.META_API_KEY ?? "fixture" })
+const metaProvider = meta.configure({ apiKey: process.env.META_API_KEY ?? "fixture" })
 const modelID = "muse-image-1.0"
 const recorded = recordedTests({
   prefix: "meta-images",
@@ -26,7 +26,7 @@ recorded.effect.with(
   () =>
     Effect.gen(function* () {
       const response = yield* ai.image.generate({
-        model: meta.image(modelID),
+        model: metaProvider.image(modelID),
         prompt: "A flat black square centered on a plain white background. No text.",
         n: 1,
         providerOptions: { ...controls, size: "256x256" },
@@ -47,7 +47,7 @@ recorded.effect.with(
   () =>
     Effect.gen(function* () {
       const response = yield* ai.image.generate({
-        model: meta.image(modelID),
+        model: metaProvider.image(modelID),
         prompt: "Change the shape to bright purple. Keep the plain white background.",
         images: [
           Media.bytes(
@@ -70,10 +70,10 @@ recorded.effect.with(
   () =>
     Effect.gen(function* () {
       const request = ai.request({
-        model: meta.responses(modelID),
+        model: metaProvider.responses(modelID),
         prompt: "A simple flat black square centered on a plain white background. No text.",
         tools: [
-          Meta.imageGeneration({
+          meta.imageGeneration({
             reasoningStrength: "low",
             enableImageSearch: false,
             enableWebSearch: false,

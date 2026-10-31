@@ -1,14 +1,16 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Extraction } from "../src/experimental.js"
-import { CloudflareWorkersAI } from "../src/providers.js"
+import { cloudflareWorkersAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json } from "./lib/http.js"
 
-const model = CloudflareWorkersAI.configure({
-  accountId: "test-account",
-  apiKey: "cloudflare-key",
-}).experimental.extraction("@cf/cloudflare/clairic")
+const model = cloudflareWorkersAI
+  .configure({
+    accountId: "test-account",
+    apiKey: "cloudflare-key",
+  })
+  .experimental.extraction("@cf/cloudflare/clairic")
 
 describe("Extraction", () => {
   it.effect("sends Clairic fields and decodes typed answers", () =>

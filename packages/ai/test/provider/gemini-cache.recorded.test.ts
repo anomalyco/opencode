@@ -2,13 +2,13 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
-import * as Google from "../../src/providers/google.js"
+import { google } from "../../src/providers/google.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = Google.configure({
+const model = google.configure({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY ?? "fixture",
-}).model("gemini-2.5-flash")
+})("gemini-2.5-flash")
 
 // Gemini does implicit prefix caching on 2.5+ models above ~1024 tokens. The
 // `CacheHint` is currently a no-op for Gemini (the explicit `CachedContent`

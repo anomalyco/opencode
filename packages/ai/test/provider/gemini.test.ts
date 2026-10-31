@@ -15,7 +15,7 @@ import {
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as Gemini from "../../src/protocols/gemini.js"
-import { Google } from "../../src/providers.js"
+import { google } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents, sseRaw } from "../lib/sse.js"
@@ -640,7 +640,7 @@ describe("Gemini route", () => {
 
       const interactions = yield* compileRequest(
         ai.request({
-          model: Google.configure({ apiKey: "test" }).interactions("gemini-3-flash-preview"),
+          model: google.configure({ apiKey: "test" }).interactions("gemini-3-flash-preview"),
           messages,
         }),
       )

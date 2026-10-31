@@ -1,10 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, Media } from "../../src/effect.js"
-import { Alibaba } from "../../src/providers.js"
+import { alibaba } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
-const alibaba = Alibaba.configure({ region: "ap-southeast-1", apiKey: process.env.ALIBABA_API_KEY ?? "fixture" })
+const alibabaProvider = alibaba.configure({
+  region: "ap-southeast-1",
+  apiKey: process.env.ALIBABA_API_KEY ?? "fixture",
+})
 
 const recorded = recordedTests({
   prefix: "alibaba-images",
@@ -18,7 +21,7 @@ describe("Alibaba Images recorded", () => {
   recorded.effect("generates Qwen-Image images", () =>
     Effect.gen(function* () {
       const response = yield* ai.image.generate({
-        model: alibaba.image("qwen-image-2.0"),
+        model: alibabaProvider.image("qwen-image-2.0"),
         prompt: "A simple flat red circle centered on a plain white background.",
         n: 2,
         aspect: "1:1",
@@ -35,7 +38,7 @@ describe("Alibaba Images recorded", () => {
   recorded.effect("generates Wan images", () =>
     Effect.gen(function* () {
       const response = yield* ai.image.generate({
-        model: alibaba.image("wan2.7-image"),
+        model: alibabaProvider.image("wan2.7-image"),
         prompt: "A simple flat blue square centered on a plain white background.",
         n: 2,
         resolution: "0.75K",
@@ -52,7 +55,7 @@ describe("Alibaba Images recorded", () => {
     () =>
       Effect.gen(function* () {
         const response = yield* ai.image.generate({
-          model: alibaba.image("qwen-image-2.0"),
+          model: alibabaProvider.image("qwen-image-2.0"),
           prompt: "Keep the simple shape and change it from black to bright purple.",
           images: [
             Media.bytes(

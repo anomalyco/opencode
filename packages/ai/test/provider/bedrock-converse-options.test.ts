@@ -3,12 +3,13 @@ import { Effect } from "effect"
 import { ai } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
-import { AmazonBedrock } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse } from "../lib/http.js"
 
-const bedrock = (id: string, settings: Omit<Parameters<typeof AmazonBedrock.model>[1], "apiKey" | "baseURL">) =>
-  AmazonBedrock.model(id, { baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer", ...settings })
+const amazonBedrockPackage = await import("../../src/providers/amazon-bedrock.js")
+
+const bedrock = (id: string, settings: Omit<Parameters<typeof amazonBedrockPackage.model>[1], "apiKey" | "baseURL">) =>
+  amazonBedrockPackage.model(id, { baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer", ...settings })
 
 const request = (model: ReturnType<typeof bedrock>) =>
   ai.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 64 } })

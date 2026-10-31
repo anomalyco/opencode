@@ -11,7 +11,7 @@ import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
 
-export const id = ProviderID.make("moonshotai")
+const id = ProviderID.make("moonshotai")
 
 export type ReasoningEffort = "low" | "high" | "max" | (string & {})
 
@@ -47,6 +47,9 @@ export type Settings<Options = ChatOptionsInput> = ProviderPackage.Settings &
     readonly apiKey?: string | false
     readonly baseURL?: string
   }
+
+export type MessagesSettings = Settings<MessagesOptionsInput>
+export type ResponsesSettings = Settings<ResponsesOptionsInput>
 
 const ChatOptions = Schema.Struct({
   reasoningEffort: Schema.optional(Schema.String),
@@ -98,7 +101,7 @@ const responsesRoute = Route.make({
 
 export const routes = [chatRoute, messagesRoute, responsesRoute]
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL, ...rest } = input
   const defaults = {
     ...rest,
@@ -125,13 +128,10 @@ export const configure = (input: Config = {}) => {
     responsesRoute
       .with(defaults)
       .model<ResponsesOptionsInput>({ id: modelID, compatibility: { sanitizer: "moonshot" } })
-  return { id, model: chat, chat, messages, responses, configure }
+  return Object.assign(chat, { id, chat, messages, responses, configure })
 }
 
-export const provider = configure()
-export const chat = provider.chat
-export const messages = provider.messages
-export const responses = provider.responses
+export const moonshot = configure()
 
 export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (
   modelID,
@@ -143,6 +143,4 @@ export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
-
-export * as Moonshot from "./moonshot.js"
+  })(modelID)

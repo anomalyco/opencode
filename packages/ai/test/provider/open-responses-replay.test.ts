@@ -1,16 +1,18 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, Message } from "../../src/effect.js"
-import { OpenAI } from "../../src/providers.js"
-import { configure } from "../../src/providers/openai-compatible-responses.js"
+import { openai } from "../../src/providers.js"
+import { openaiCompatibleResponses } from "../../src/providers/openai-compatible-responses.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 for (const model of [
-  OpenAI.configure({ apiKey: "test-key" }).responses("example-model"),
-  configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model("example-model"),
+  openai.configure({ apiKey: "test-key" }).responses("example-model"),
+  openaiCompatibleResponses.configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" })(
+    "example-model",
+  ),
 ]) {
   describe(`${model.route.protocol} message replay`, () => {
     const key = model.route.providerMetadataKey ?? "openresponses"

@@ -5,7 +5,7 @@ import { CartesiaSpeech } from "../protocols/cartesia-speech.js"
 
 export type { CartesiaEncoding, CartesiaSpeechOptions } from "../protocols/cartesia-speech.js"
 
-export const id = ProviderID.make("cartesia")
+const id = ProviderID.make("cartesia")
 
 export type Config = ProviderAuthOption<"optional"> & {
   readonly baseURL?: string
@@ -15,15 +15,10 @@ export type Config = ProviderAuthOption<"optional"> & {
 
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "CARTESIA_API_KEY")
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const media = MediaRoute.deployment(input, auth(input))
   const speech = (modelID: string | ModelID) => CartesiaSpeech.model({ ...media, id: modelID })
-  return {
-    id,
-    speech,
-    configure,
-  }
+  return { id, speech, configure }
 }
 
-export const provider = configure()
-export const speech = provider.speech
+export const cartesia = configure()

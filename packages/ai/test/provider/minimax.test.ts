@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
 import { ai } from "../../src/effect.js"
-import { MiniMax } from "../../src/providers.js"
+import { minimax } from "../../src/providers.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { Auth } from "../../src/route/auth.js"
@@ -12,19 +12,19 @@ import { it } from "../lib/effect.js"
 
 describe("MiniMax provider", () => {
   test("composes the baseline Messages and Responses protocols", () => {
-    const minimax = MiniMax.configure()
-    expect(minimax.model).toBe(minimax.messages)
-    expect(minimax.model("MiniMax-M3").route.body).toBe(AnthropicMessages.protocol.body)
-    expect(minimax.responses("MiniMax-M3").route.body).toBe(OpenResponses.protocol.body)
+    const minimaxProvider = minimax.configure()
+    expect(minimaxProvider("fixture").route.id).toBe(minimaxProvider.messages("fixture").route.id)
+    expect(minimaxProvider("MiniMax-M3").route.body).toBe(AnthropicMessages.protocol.body)
+    expect(minimaxProvider.responses("MiniMax-M3").route.body).toBe(OpenResponses.protocol.body)
   })
 
   it.effect("owns API endpoints, provider identity and environment bearer authentication", () =>
     Effect.gen(function* () {
-      const minimax = MiniMax.configure()
+      const minimaxProvider = minimax.configure()
       for (const item of [
-        { model: minimax.model("MiniMax-M3"), path: "/anthropic/v1/messages" },
-        { model: minimax.chat("MiniMax-M3"), path: "/v1/chat/completions" },
-        { model: minimax.responses("MiniMax-M3"), path: "/v1/responses" },
+        { model: minimaxProvider("MiniMax-M3"), path: "/anthropic/v1/messages" },
+        { model: minimaxProvider.chat("MiniMax-M3"), path: "/v1/chat/completions" },
+        { model: minimaxProvider.responses("MiniMax-M3"), path: "/v1/responses" },
       ]) {
         const request = ai.request({ model: item.model, prompt: "Hello" })
         const compiled = yield* compileRequest(request)
@@ -47,10 +47,10 @@ describe("MiniMax provider", () => {
 
   it.effect("honors explicit auth and custom API bases", () =>
     Effect.gen(function* () {
-      const model = MiniMax.configure({
+      const model = minimax.configure({
         baseURL: "https://gateway.example/anthropic/v1",
         auth: Auth.header("x-api-key", "gateway-key"),
-      }).model("custom-model")
+      })("custom-model")
       const request = ai.request({ model, prompt: "Hello" })
       const compiled = yield* compileRequest(request)
       expect(Endpoint.render(model.route.endpoint, { request, body: compiled.body }).toString()).toBe(
@@ -71,10 +71,10 @@ describe("MiniMax provider", () => {
 
   it.effect("keeps thinking controls native to the selected API", () =>
     Effect.gen(function* () {
-      const minimax = MiniMax.configure({ apiKey: "fixture" })
+      const minimaxProvider = minimax.configure({ apiKey: "fixture" })
       const messages = yield* compileRequest(
         ai.request({
-          model: minimax.model("MiniMax-M3"),
+          model: minimaxProvider("MiniMax-M3"),
           prompt: "Hello",
           providerOptions: { thinking: { type: "adaptive" } },
         }),
@@ -83,7 +83,7 @@ describe("MiniMax provider", () => {
       expect(messages.body.output_config).toBeUndefined()
       const chat = yield* compileRequest(
         ai.request({
-          model: minimax.chat("MiniMax-M3"),
+          model: minimaxProvider.chat("MiniMax-M3"),
           prompt: "Hello",
           generation: { maxTokens: 128 },
           providerOptions: { thinking: { type: "disabled" }, reasoningSplit: false },
@@ -98,7 +98,7 @@ describe("MiniMax provider", () => {
       expect(chat.body.store).toBeUndefined()
       const responses = yield* compileRequest(
         ai.request({
-          model: minimax.responses("MiniMax-M3"),
+          model: minimaxProvider.responses("MiniMax-M3"),
           prompt: "Hello",
           providerOptions: { reasoningEffort: "minimal" },
         }),

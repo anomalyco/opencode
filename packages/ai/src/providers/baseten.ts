@@ -8,8 +8,9 @@ import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import { config } from "./baseten-settings.js"
 
-export const id = ProviderID.make("baseten")
+const id = ProviderID.make("baseten")
 const baseURL = "https://inference.baseten.co/v1"
 
 export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
@@ -52,7 +53,7 @@ const decisionProtocol = DecisionRoute.protocol({
   },
 })
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const auth = AuthOptions.bearer(input, "BASETEN_API_KEY")
   const configured = route.with({
@@ -72,32 +73,14 @@ export const configure = (input: Config = {}) => {
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model<BasetenDecisionOptions>({ id: modelID, providerOptions })
-  return {
+  return Object.assign((modelID: string | ModelID) => configured.model<OpenAIProviderOptionsInput>({ id: modelID }), {
     id,
-    model: (modelID: string | ModelID) => configured.model<OpenAIProviderOptionsInput>({ id: modelID }),
     decision,
     configure,
-  }
+  })
 }
 
-export const provider = configure()
-export const decision = provider.decision
+export const baseten = configure()
 
 export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
-export const decisionModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
-  return configure(input).decision(modelID, input.providerOptions)
-}
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
-}
-
-export * as Baseten from "./baseten.js"
+  configure(config(settings))(modelID)

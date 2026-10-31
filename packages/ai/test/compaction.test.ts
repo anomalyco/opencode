@@ -2,13 +2,13 @@ import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CompactionPart, CompactionResponse, LLMEvent, LLMResponse, Message, ProviderID } from "../src/schema/index.js"
 import { ai, LanguageModel } from "../src/effect.js"
-import { OpenAI, Anthropic } from "../src/providers.js"
+import { openai, anthropic } from "../src/providers.js"
 import { testEffect } from "./lib/effect.js"
 import { fixedResponse } from "./lib/http.js"
 
 test("runtime capability checks follow model and route updates", () => {
-  const supported = OpenAI.configure({ apiKey: "test" }).responses("fixture")
-  const unsupported = Anthropic.configure({ apiKey: "test" }).model("fixture")
+  const supported = openai.configure({ apiKey: "test" }).responses("fixture")
+  const unsupported = anthropic.configure({ apiKey: "test" })("fixture")
   const request = ai.request({ model: supported, prompt: "hello" })
   expect(ai.canCompact(request)).toBe(true)
   expect(ai.canCompact({ ...request, messages: [] })).toBe(true)
@@ -91,7 +91,7 @@ testEffect(fixedResponse("")).effect(
   () =>
     Effect.gen(function* () {
       const request = ai.request({
-        model: Anthropic.configure({ apiKey: "test" }).model("fixture"),
+        model: anthropic.configure({ apiKey: "test" })("fixture"),
         prompt: "hello",
       })
       expect(ai.canCompact(request)).toBe(false)

@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, ImageClient, LLMEvent, Media, Message, ToolDefinition } from "../../src/effect.js"
-import { Meta } from "../../src/providers/meta.js"
+import { meta } from "../../src/providers/meta.js"
 import { MetaMessages } from "../../src/protocols/meta-messages.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -12,7 +12,9 @@ import { sseEvents } from "../lib/sse.js"
 
 it.effect("Meta selects Messages and lowers native search alongside ordinary functions", () =>
   Effect.gen(function* () {
-    const model = Meta.messagesModel("muse-spark-1.3", { apiKey: "fixture", baseURL: "https://gateway.example/v1" })
+    const model = meta
+      .configure({ apiKey: "fixture", baseURL: "https://gateway.example/v1" })
+      .messages("muse-spark-1.3")
     expect(model.route.endpoint).toMatchObject({ baseURL: "https://gateway.example/v1", path: "/messages" })
     expect(MetaMessages.protocol.stream).toBe(AnthropicMessages.protocol.stream)
     const compiled = yield* compileRequest(
@@ -20,7 +22,7 @@ it.effect("Meta selects Messages and lowers native search alongside ordinary fun
         model,
         prompt: "Search",
         tools: [
-          Meta.webSearch({ userLocation: { country: "US" } }),
+          meta.webSearch({ userLocation: { country: "US" } }),
           ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }),
         ],
         providerOptions: { effort: "low" },
@@ -50,7 +52,7 @@ it.effect("Meta rejects unsupported native tools instead of sending them as loca
   Effect.gen(function* () {
     for (const input of [
       {
-        model: Meta.responses("muse-spark-1.3"),
+        model: meta.responses("muse-spark-1.3"),
         tool: ToolDefinition.make({
           name: "foreign",
           description: "Foreign tool",
@@ -58,8 +60,8 @@ it.effect("Meta rejects unsupported native tools instead of sending them as loca
           native: { other: { type: "web_search" } },
         }),
       },
-      { model: Meta.messages("muse-spark-1.3"), tool: Meta.imageGeneration() },
-      { model: Meta.messages("muse-spark-1.3"), tool: Meta.webSearch({ searchContextSize: "low" }) },
+      { model: meta.messages("muse-spark-1.3"), tool: meta.imageGeneration() },
+      { model: meta.messages("muse-spark-1.3"), tool: meta.webSearch({ searchContextSize: "low" }) },
     ]) {
       const error = yield* compileRequest(
         ai.request({ model: input.model, prompt: "Hello", tools: [input.tool] }),
@@ -72,11 +74,13 @@ it.effect("Meta rejects unsupported native tools instead of sending them as loca
 it.effect("Meta Images preserves request overlays, bearer auth, JSON edit inputs and URL output formats", () =>
   Effect.gen(function* () {
     const response = yield* ai.image.generate({
-      model: Meta.configure({
-        apiKey: "fixture",
-        baseURL: "https://gateway.example/v1",
-        headers: { "x-client": "test" },
-      }).image("muse-image-1.0"),
+      model: meta
+        .configure({
+          apiKey: "fixture",
+          baseURL: "https://gateway.example/v1",
+          headers: { "x-client": "test" },
+        })
+        .image("muse-image-1.0"),
       prompt: "Edit",
       images: [Media.bytes(Uint8Array.from([1, 2, 3]), "image/png")],
       format: "webp",
@@ -129,7 +133,7 @@ it.effect("Meta Images validates the final output format before sending the requ
   Effect.gen(function* () {
     const error = yield* ai.image
       .generate({
-        model: Meta.configure({ apiKey: "fixture" }).image("muse-image-1.0"),
+        model: meta.configure({ apiKey: "fixture" }).image("muse-image-1.0"),
         prompt: "Draw",
         format: "png",
         http: { body: { output_format: 42 } },
@@ -152,7 +156,7 @@ for (const streamed of [false, true]) {
       Effect.gen(function* () {
         const item = { type: "image_generation_call", id: "ig_signed", status: "completed", result: "iVBORw0KGgo=" }
         const request = ai.request({
-          model: Meta.configure({ apiKey: "fixture" }).responses("muse-image-1.0"),
+          model: meta.configure({ apiKey: "fixture" }).responses("muse-image-1.0"),
           prompt: "Draw",
         })
         const response = yield* ai.generate(request).pipe(
@@ -195,7 +199,7 @@ it.effect("Meta rejects malformed image data from terminal-only Responses output
   Effect.gen(function* () {
     const error = yield* ai
       .generate(
-        ai.request({ model: Meta.configure({ apiKey: "fixture" }).responses("muse-image-1.0"), prompt: "Draw" }),
+        ai.request({ model: meta.configure({ apiKey: "fixture" }).responses("muse-image-1.0"), prompt: "Draw" }),
       )
       .pipe(
         Effect.provide(

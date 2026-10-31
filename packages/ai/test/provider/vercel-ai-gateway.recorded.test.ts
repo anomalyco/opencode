@@ -2,11 +2,11 @@ import { expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMClient, LLMEvent } from "../../src/effect.js"
 import { isRetryable } from "../../src/provider-error.js"
-import { VercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
+import { vercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
 import { recordedTests } from "../recorded-test.js"
 import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop } from "../recorded-scenarios.js"
 
-const gateway = VercelAIGateway.configure({ apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture" })
+const gateway = vercelAIGateway.configure({ apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture" })
 const recorded = recordedTests({
   prefix: "vercel-native",
   provider: "vercel-ai-gateway",
@@ -28,25 +28,25 @@ for (const item of [
   },
   {
     name: "responses GPT",
-    model: gateway.model("openai/gpt-6-luna"),
+    model: gateway("openai/gpt-6-luna"),
     options: { reasoningEffort: "low" },
     reasoning: false,
   },
   {
     name: "chat Muse",
-    model: gateway.model("meta/muse-spark-1.3"),
+    model: gateway("meta/muse-spark-1.3"),
     options: { reasoningEffort: "low" },
     reasoning: false,
   },
   {
     name: "messages DeepSeek",
-    model: gateway.model("deepseek/deepseek-v4.1-flash"),
+    model: gateway("deepseek/deepseek-v4.1-flash"),
     options: { reasoningEffort: "high" },
     reasoning: true,
   },
   {
     name: "responses Grok",
-    model: gateway.model("spacexai/grok-4.7"),
+    model: gateway("spacexai/grok-4.7"),
     options: { reasoningEffort: "low" },
     reasoning: true,
   },
@@ -86,7 +86,7 @@ recorded.effect(
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(
         ai.request({
-          model: VercelAIGateway.configure({ apiKey: "invalid-gateway-key" }).messages("anthropic/claude-sonnet-5.5"),
+          model: vercelAIGateway.configure({ apiKey: "invalid-gateway-key" }).messages("anthropic/claude-sonnet-5.5"),
           prompt: "Hello",
           generation: { maxTokens: 32 },
         }),

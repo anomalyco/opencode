@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
-import { GoogleVertexResponses } from "../../src/providers.js"
+import { googleVertexResponses } from "../../src/providers.js"
 
-const model = GoogleVertexResponses.configure({ accessToken: "test", project: "project" }).model("gemini")
+const model = googleVertexResponses.configure({ accessToken: "test", project: "project" })("gemini")
 
 ai.request({ model, prompt: "Hello", providerOptions: { textVerbosity: "high" } })
 ai.request({ model, prompt: "Hello", providerOptions: { textVerbosity: "verbose" } })

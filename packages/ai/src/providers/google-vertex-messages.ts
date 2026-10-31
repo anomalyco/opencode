@@ -15,7 +15,7 @@ export type AnthropicThinkingInput = AnthropicMessages.ThinkingInput
 const VERSION = "vertex-2023-10-16" as const
 const HEADER_VERSION = "2023-06-01" as const
 
-export const id = ProviderID.make("google-vertex")
+const id = ProviderID.make("google-vertex")
 
 export type Config = RouteDefaultsInput &
   GoogleVertexShared.OAuthOptions & {
@@ -90,19 +90,18 @@ const configuredRoute = (input: Config) => {
   })
 }
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
-  return {
-    id,
-    model: (modelID: string | ModelID) => route.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
-    configure,
-  }
+  return Object.assign(
+    (modelID: string | ModelID) => route.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
+    { id, configure },
+  )
 }
 
-export const provider = {
-  id,
-  configure,
-}
+export const googleVertexMessages = Object.assign(
+  (modelID: string | ModelID, input: Config = {}) => configure(input)(modelID),
+  { id, configure },
+)
 
 export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput> = (
   modelID,
@@ -118,5 +117,5 @@ export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOp
     location,
     project,
     providerOptions,
-  }).model(modelID)
+  })(modelID)
 }

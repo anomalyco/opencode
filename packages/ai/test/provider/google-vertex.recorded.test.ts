@@ -2,13 +2,13 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 
 import { ai, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
-import { GoogleVertex } from "../../src/providers.js"
+import { googleVertex } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = GoogleVertex.configure({
+const model = googleVertex.configure({
   apiKey: process.env.GOOGLE_VERTEX_API_KEY ?? "fixture",
-}).model("gemini-3.5-flash")
+})("gemini-3.5-flash")
 
 const lookupWeather = ToolDefinition.make({
   name: "lookup_weather",

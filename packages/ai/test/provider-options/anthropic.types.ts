@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
-import { Anthropic } from "../../src/providers.js"
+import { anthropic } from "../../src/providers.js"
 
-const model = Anthropic.provider.model("claude-sonnet-4-5")
+const model = anthropic("claude-sonnet-4-5")
 
 ai.request({ model, prompt: "Hello", providerOptions: { thinking: { type: "adaptive" } } })
 ai.request({

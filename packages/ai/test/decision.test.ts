@@ -3,13 +3,13 @@ import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, DecisionClient, DecisionUsage, Media } from "../src/effect.js"
 import {
-  Baseten,
-  CloudflareWorkersAI,
-  OpenAI,
-  OpenCode,
-  OpenRouter,
-  TypeSafeAI,
-  VercelAIGateway,
+  baseten,
+  cloudflareWorkersAI,
+  openai,
+  opencode,
+  openrouter,
+  typesafeAI,
+  vercelAIGateway,
 } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, type Handler } from "./lib/http.js"
@@ -76,12 +76,14 @@ describe("Decision", () => {
   it.effect("decides through System One with TypeSafe image assets", () =>
     Effect.gen(function* () {
       const response = yield* ai.decision.generate({
-        model: TypeSafeAI.configure({
-          apiKey: "test",
-          baseURL: "https://typesafe.test/v1/",
-          headers: { "x-default": "yes" },
-          http: { body: { deployment: "test" }, query: { api: "v1" } },
-        }).decision("jev-latest"),
+        model: typesafeAI
+          .configure({
+            apiKey: "test",
+            baseURL: "https://typesafe.test/v1/",
+            headers: { "x-default": "yes" },
+            http: { body: { deployment: "test" }, query: { api: "v1" } },
+          })
+          .decision("jev-latest"),
         input: [
           { type: "text", text: "Ticket:" },
           { type: "json", value: { ticket: "Please refund the duplicate charge." } },
@@ -142,7 +144,7 @@ describe("Decision", () => {
   it.effect("sends a lone input object as the System One state and maps boolean choices back", () =>
     ai.decision
       .generate({
-        model: OpenCode.configure({ apiKey: "opencode-key", baseURL: "https://opencode.test/v1" }).decision("jev-1.13"),
+        model: opencode.configure({ apiKey: "opencode-key", baseURL: "https://opencode.test/v1" }).decision("jev-1.13"),
         input: { ticket: "hello" },
         questions: [
           {
@@ -210,7 +212,7 @@ describe("Decision", () => {
     Effect.gen(function* () {
       const error = yield* ai.decision
         .generate({
-          model: TypeSafeAI.decision("jev-latest"),
+          model: typesafeAI.decision("jev-latest"),
           input: { ticket: "hello" },
           questions: [
             { name: "ok", type: "choice", instructions: "OK?", choices: [{ value: true }, { value: "true" }] },
@@ -225,9 +227,9 @@ describe("Decision", () => {
   it.effect("places media in the OpenRouter state and downloads URL media first", () =>
     ai.decision
       .generate({
-        model: OpenRouter.configure({ apiKey: "openrouter-key", baseURL: "https://openrouter.test/api/v1" }).decision(
-          "cloudflare/clef-omni",
-        ),
+        model: openrouter
+          .configure({ apiKey: "openrouter-key", baseURL: "https://openrouter.test/api/v1" })
+          .decision("cloudflare/clef-omni"),
         input: [
           { type: "text", text: "Before:" },
           { type: "media", media: Media.url("https://assets.test/before.png", { mediaType: "image/png" }) },
@@ -283,7 +285,7 @@ describe("Decision", () => {
   it.effect("puts media in a user message inside the Baseten state", () =>
     ai.decision
       .generate({
-        model: Baseten.configure({ apiKey: "baseten-key" }).decision("decision-models/baseten-mammoth-27b-latest"),
+        model: baseten.configure({ apiKey: "baseten-key" }).decision("decision-models/baseten-mammoth-27b-latest"),
         input: [
           { type: "text", text: "Photo:" },
           { type: "media", media: png },
@@ -323,11 +325,13 @@ describe("Decision", () => {
   it.effect("decides through OpenAI Decisions", () =>
     ai.decision
       .generate({
-        model: OpenAI.configure({
-          apiKey: "openai-key",
-          baseURL: "https://openai.test/v1",
-          queryParams: { api: "v1" },
-        }).decision("gpt-6-luna"),
+        model: openai
+          .configure({
+            apiKey: "openai-key",
+            baseURL: "https://openai.test/v1",
+            queryParams: { api: "v1" },
+          })
+          .decision("gpt-6-luna"),
         input: [
           { type: "text", text: "Ticket:" },
           { type: "json", value: { ticket: "Please refund the duplicate charge." } },
@@ -427,7 +431,7 @@ describe("Decision", () => {
   it.effect("returns OpenAI refusals as per-question errors", () =>
     ai.decision
       .generate({
-        model: OpenAI.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
+        model: openai.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
         input: [{ type: "text", text: "hello" }],
         questions: [
           { name: "greeting", type: "predicate", instructions: "Is this a greeting?" },
@@ -466,7 +470,7 @@ describe("Decision", () => {
     Effect.gen(function* () {
       const error = yield* ai.decision
         .generate({
-          model: OpenAI.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
+          model: openai.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
           input: [{ type: "media", media: Media.base64("AAAA", "audio/wav") }],
           questions: [{ name: "speech", type: "predicate", instructions: "Is someone speaking?" }],
         })
@@ -479,9 +483,9 @@ describe("Decision", () => {
   it.effect("decides through Vercel AI Gateway's OpenAI Decisions endpoint", () =>
     ai.decision
       .generate({
-        model: VercelAIGateway.configure({ apiKey: "gateway-key", baseURL: "https://gateway.test/v1/" }).decision(
-          "typesafe-ai/jev",
-        ),
+        model: vercelAIGateway
+          .configure({ apiKey: "gateway-key", baseURL: "https://gateway.test/v1/" })
+          .decision("typesafe-ai/jev"),
         input: [{ type: "text", text: "refund" }],
         questions: [{ name: "refund", type: "predicate", instructions: "Is a refund requested?" }],
       })
@@ -518,9 +522,9 @@ describe("Decision", () => {
   it.effect("puts media in Clef's top-level lists on Cloudflare Run", () =>
     ai.decision
       .generate({
-        model: CloudflareWorkersAI.configure({ accountId: "test-account", apiKey: "cloudflare-key" }).decision(
-          "@cf/cloudflare/clef-omni",
-        ),
+        model: cloudflareWorkersAI
+          .configure({ accountId: "test-account", apiKey: "cloudflare-key" })
+          .decision("@cf/cloudflare/clef-omni"),
         input: [
           { type: "text", text: "Compare:" },
           { type: "media", media: png },
@@ -558,9 +562,9 @@ describe("Decision", () => {
   it.effect("surfaces Cloudflare Run errors", () =>
     ai.decision
       .generate({
-        model: CloudflareWorkersAI.configure({ accountId: "test-account", apiKey: "cloudflare-key" }).decision(
-          "@cf/cloudflare/clef",
-        ),
+        model: cloudflareWorkersAI
+          .configure({ accountId: "test-account", apiKey: "cloudflare-key" })
+          .decision("@cf/cloudflare/clef"),
         input: [{ type: "text", text: "refund" }],
         questions: [{ name: "refund", type: "predicate", instructions: "Is a refund requested?" }],
       })
@@ -600,7 +604,7 @@ describe("Decision", () => {
   it.effect("fails the call when an answer picks an option that wasn't offered", () =>
     ai.decision
       .generate({
-        model: OpenAI.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
+        model: openai.configure({ apiKey: "openai-key" }).decision("gpt-6-luna"),
         input: [{ type: "text", text: "refund" }],
         questions: [{ name: "tone", type: "choice", instructions: "Tone?", choices: [{ value: "calm" }] }],
       })
@@ -631,7 +635,7 @@ describe("Decision", () => {
   it.effect("fails the call when System One leaves a question unanswered", () =>
     ai.decision
       .generate({
-        model: TypeSafeAI.configure({ apiKey: "test" }).decision("jev-latest"),
+        model: typesafeAI.configure({ apiKey: "test" }).decision("jev-latest"),
         input: [{ type: "text", text: "refund" }],
         questions: [
           { name: "refund", type: "predicate", instructions: "Refund?" },
@@ -653,7 +657,7 @@ describe("Decision", () => {
     Effect.gen(function* () {
       const error = yield* ai.decision
         .generate({
-          model: TypeSafeAI.decision("jev-latest"),
+          model: typesafeAI.decision("jev-latest"),
           input: [{ type: "text", text: "hello" }],
           questions: [
             { name: "same", type: "predicate", instructions: "One?" },

@@ -1,9 +1,9 @@
 import { ai } from "../../src/effect.js"
-import { GoogleVertexInteractions } from "../../src/providers.js"
+import { googleVertexInteractions } from "../../src/providers.js"
 import { Auth } from "../../src/route/auth.js"
 import { model } from "../../src/providers/google-vertex/interactions.js"
 
-const selected = GoogleVertexInteractions.configure({ project: "project" }).model("gemini-3.8-flash")
+const selected = googleVertexInteractions.configure({ project: "project" })("gemini-3.8-flash")
 
 ai.request({
   model: selected,
@@ -18,12 +18,12 @@ ai.request({
   providerOptions: { store: "yes" },
 })
 
-GoogleVertexInteractions.configure({ auth: Auth.bearer("token"), project: "project" })
-GoogleVertexInteractions.configure({ apiKey: "key" })
+googleVertexInteractions.configure({ auth: Auth.bearer("token"), project: "project" })
+googleVertexInteractions.configure({ apiKey: "key" })
 // @ts-expect-error API keys and OAuth credentials are mutually exclusive.
-GoogleVertexInteractions.configure({ apiKey: "key", accessToken: "token" })
+googleVertexInteractions.configure({ apiKey: "key", accessToken: "token" })
 // @ts-expect-error API keys and auth overrides are mutually exclusive.
-GoogleVertexInteractions.configure({ apiKey: "key", auth: Auth.bearer("token") })
+googleVertexInteractions.configure({ apiKey: "key", auth: Auth.bearer("token") })
 model("gemini-3.8-flash", { project: "project", thinkingLevel: "low" })
 // @ts-expect-error Package settings also reject conflicting credentials.
 model("gemini-3.8-flash", { apiKey: "key", accessToken: "token" })

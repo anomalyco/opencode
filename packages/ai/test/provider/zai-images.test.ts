@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, ImageClient } from "../../src/effect.js"
-import { ZAI } from "../../src/providers.js"
+import { zai } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 
@@ -10,12 +10,14 @@ describe("Z.ai Images", () => {
   it.effect("generates through the Z.ai Images API", () =>
     Effect.gen(function* () {
       const response = yield* ai.image.generate({
-        model: ZAI.configure({
-          apiKey: "test",
-          baseURL: "https://api.z.ai.test/api/paas/v4",
-          headers: { "x-default": "yes" },
-          http: { body: { configured: true, quality: "configured" }, query: { trace: "default" } },
-        }).image("glm-image"),
+        model: zai
+          .configure({
+            apiKey: "test",
+            baseURL: "https://api.z.ai.test/api/paas/v4",
+            headers: { "x-default": "yes" },
+            http: { body: { configured: true, quality: "configured" }, query: { trace: "default" } },
+          })
+          .image("glm-image"),
         prompt: "A red circle on a white background",
         providerOptions: {
           quality: "hd",
@@ -86,9 +88,9 @@ describe("Z.ai Images", () => {
   it.effect("sanitizes unpaired surrogates in outbound image requests", () =>
     ai.image
       .generate({
-        model: ZAI.configure({ apiKey: "test", http: { body: { metadata: { source: "default\uDC00" } } } }).image(
-          "model",
-        ),
+        model: zai
+          .configure({ apiKey: "test", http: { body: { metadata: { source: "default\uDC00" } } } })
+          .image("model"),
         prompt: "A red circle \uD800 on a white background \u{1F600}",
       })
       .pipe(
@@ -115,7 +117,7 @@ describe("Z.ai Images", () => {
   it.effect("lets raw native options override aliases", () =>
     ai.image
       .generate({
-        model: ZAI.configure({ apiKey: "test" }).image("model"),
+        model: zai.configure({ apiKey: "test" }).image("model"),
         prompt: "test",
         providerOptions: { quality: "future-quality", userID: "x", user_id: "raw-user" },
       })
@@ -139,7 +141,7 @@ describe("Z.ai Images", () => {
 
   it.effect("rejects invalid response structures", () =>
     Effect.gen(function* () {
-      const model = ZAI.configure({ apiKey: "test" }).image("model")
+      const model = zai.configure({ apiKey: "test" }).image("model")
       const payloads = [
         {},
         { data: [] },

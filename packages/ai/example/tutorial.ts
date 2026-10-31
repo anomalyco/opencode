@@ -4,7 +4,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { ai, AIClient, Media, Message, ProviderID, ToolRuntime } from "@opencode/ai/effect"
 import { tool } from "@opencode/ai/effect"
 import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode/ai/route"
-import { OpenAI } from "@opencode/ai/providers"
+import { openai } from "@opencode/ai/providers"
 
 /**
  * A runnable walkthrough of the LLM package use-site API.
@@ -22,18 +22,19 @@ import { OpenAI } from "@opencode/ai/providers"
 
 const apiKey = Config.Redacted("OPENAI_API_KEY")
 
-// 1. Configure a provider. The configured facade records provider identity,
-// deployment options, authentication, and defaults. Per-modality selectors pick
-// the API: `.responses(...)` / `.chat(...)` for LLM calls and `.image(...)` for
-// image generation.
-const openai = OpenAI.configure({
+// 1. Pick a provider. Calling it selects its default API: `openai("gpt-4o-mini")`
+// is a Responses model that reads `OPENAI_API_KEY`. `configure(...)` returns the
+// same callable shape with provider identity, deployment options,
+// authentication, and defaults. Named methods pick another API: `.chat(...)`
+// for Chat Completions and `.image(...)` for image generation.
+const configured = openai.configure({
   apiKey,
   generation: { maxTokens: 160 },
   providerOptions: {
     store: false,
   },
 })
-const model = openai.responses("gpt-4o-mini")
+const model = configured("gpt-4o-mini")
 
 // 2. Build a provider-neutral request. This is useful when reusing one request
 // across generate and stream examples.
@@ -209,15 +210,14 @@ const FakeAdapter = Route.make({
   framing: Framing.sse,
 })
 
-// A provider module exports a configured facade. Configuration happens before
-// model selection; model selectors accept ids only.
-const FakeEcho = {
-  id: ProviderID.make("fake-echo"),
-  configure: () => ({
+// A provider module exports a callable provider. Calling it selects the default
+// model; `configure` returns the same shape with new deployment options.
+const configureFakeEcho = () =>
+  Object.assign((id: string) => FakeAdapter.model({ id }), {
     id: ProviderID.make("fake-echo"),
-    model: (id: string) => FakeAdapter.model({ id }),
-  }),
-}
+    configure: configureFakeEcho,
+  })
+const fakeEcho = configureFakeEcho()
 
 // 7. Run the fake provider offline. `RequestExecutor.middleware` sees every HTTP
 // request before it is sent; here it answers with two SSE frames instead of
@@ -232,7 +232,7 @@ const fakeExecutor = RequestExecutor.middleware((request) =>
 )
 
 const generateFake = Effect.gen(function* () {
-  const response = yield* ai.generate({ model: FakeEcho.configure().model("echo-1"), prompt: "Say hello." })
+  const response = yield* ai.generate({ model: fakeEcho("echo-1"), prompt: "Say hello." })
   console.log("\n== fake provider ==")
   console.log("generated text:", response.text)
 })
@@ -242,7 +242,7 @@ const generateFake = Effect.gen(function* () {
 // `Media.write` persists them through the Effect `FileSystem`.
 const generateImage = Effect.gen(function* () {
   const response = yield* ai.image.generate({
-    model: openai.image("gpt-image-1-mini"),
+    model: configured.image("gpt-image-1-mini"),
     prompt: "A flat black circle centered on a plain white background.",
     aspect: "1:1",
     // Exact pixel sizes and output formats are provider options.

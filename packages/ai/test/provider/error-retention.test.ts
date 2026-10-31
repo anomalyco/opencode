@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai } from "../../src/effect.js"
-import { Anthropic, Google, OpenAI } from "../../src/providers.js"
+import { anthropic, google, openai } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
@@ -12,17 +12,17 @@ describe("provider error retention", () => {
   const cases = [
     {
       name: "Anthropic",
-      model: Anthropic.configure(options).model("claude"),
+      model: anthropic.configure(options)("claude"),
       event: { type: "error", error: { type: "rate_limit_error", message: "Slow down", details: { opaque: [1, 2] } } },
     },
     {
       name: "OpenAI Chat",
-      model: OpenAI.configure(options).chat("gpt"),
+      model: openai.configure(options).chat("gpt"),
       event: { error: { code: "rate_limit_exceeded", message: "Slow down", details: { opaque: [1, 2] } } },
     },
     {
       name: "OpenAI Responses",
-      model: OpenAI.configure(options).responses("gpt"),
+      model: openai.configure(options).responses("gpt"),
       event: {
         type: "response.failed",
         response: {
@@ -34,7 +34,7 @@ describe("provider error retention", () => {
     },
     {
       name: "Gemini",
-      model: Google.configure(options).model("gemini"),
+      model: google.configure(options)("gemini"),
       event: { error: { code: 429, status: "RESOURCE_EXHAUSTED", message: "Slow down", details: { opaque: [1, 2] } } },
     },
   ]
@@ -69,7 +69,7 @@ describe("provider error retention", () => {
         trace: { opaque: "outer" },
       })
       const error = yield* LLMClient.generate(
-        ai.request({ model: Google.configure(options).model("gemini"), prompt: "hello" }),
+        ai.request({ model: google.configure(options)("gemini"), prompt: "hello" }),
       ).pipe(
         Effect.provide(
           fixedResponse(sseEvents(body), {
@@ -91,7 +91,7 @@ describe("provider error retention", () => {
     Effect.gen(function* () {
       const body = JSON.stringify({ error: "RESOURCE_EXHAUSTED", trace: { opaque: "outer" } })
       const error = yield* LLMClient.generate(
-        ai.request({ model: Google.configure(options).model("gemini"), prompt: "hello" }),
+        ai.request({ model: google.configure(options)("gemini"), prompt: "hello" }),
       ).pipe(Effect.provide(fixedResponse(sseEvents(body))), Effect.flip)
 
       expect(error.reason._tag).toBe("InvalidProviderOutput")
@@ -105,7 +105,7 @@ describe("provider error retention", () => {
     Effect.gen(function* () {
       const body = JSON.stringify({ error: null, trace: { opaque: "outer" } })
       const error = yield* LLMClient.generate(
-        ai.request({ model: Google.configure(options).model("gemini"), prompt: "hello" }),
+        ai.request({ model: google.configure(options)("gemini"), prompt: "hello" }),
       ).pipe(
         Effect.provide(fixedResponse(sseEvents(body), { headers: { "x-provider-trace": "trace-null" } })),
         Effect.flip,
@@ -122,7 +122,7 @@ describe("provider error retention", () => {
     Effect.gen(function* () {
       const body = '{"type":"error","error":{"message":42,"opaque":{"nested":true}},"trace":"outer"}'
       const error = yield* LLMClient.generate(
-        ai.request({ model: Anthropic.configure(options).model("claude"), prompt: "hello" }),
+        ai.request({ model: anthropic.configure(options)("claude"), prompt: "hello" }),
       ).pipe(Effect.provide(fixedResponse(sseEvents(body))), Effect.flip)
       expect(error.reason._tag).toBe("InvalidProviderOutput")
       expect(error.reason.body).toBe(body)
@@ -135,7 +135,7 @@ describe("provider error retention", () => {
     Effect.gen(function* () {
       const body = '{"type":"error","error":{"code":"rate_limit_exceeded","message":"Slow down","extra":42}}'
       const error = yield* LLMClient.generate(
-        ai.request({ model: OpenAI.configure(options).responses("gpt"), prompt: "hello" }),
+        ai.request({ model: openai.configure(options).responses("gpt"), prompt: "hello" }),
         {
           webSocket: {
             execute: (exchange) => Effect.succeed({ frames: exchange.fallback(), complete: Effect.void }),

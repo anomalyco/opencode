@@ -1,16 +1,18 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Transcription } from "../../src/experimental.js"
-import { AssemblyAI } from "../../src/providers.js"
+import { assemblyai } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TRANSCRIPT, audio, audioRecording } from "./transcription-recording.js"
 import { queuedPoll } from "./queued-recording.js"
 
 // Recorded against the EU region: the US endpoint was unreachable from the recording network. Same API and shapes.
-const model = AssemblyAI.configure({
-  apiKey: process.env.ASSEMBLYAI_API_KEY ?? "fixture",
-  baseURL: "https://api.eu.assemblyai.com",
-}).transcription("universal-3-5-pro")
+const model = assemblyai
+  .configure({
+    apiKey: process.env.ASSEMBLYAI_API_KEY ?? "fixture",
+    baseURL: "https://api.eu.assemblyai.com",
+  })
+  .transcription("universal-3-5-pro")
 
 const recorded = recordedTests({
   prefix: "assemblyai-transcription",

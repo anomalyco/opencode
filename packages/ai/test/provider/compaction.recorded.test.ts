@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route/client.js"
-import { OpenAI, XAI, Anthropic } from "../../src/providers.js"
+import { openai, xai, anthropic } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
 const history = [
@@ -16,12 +16,12 @@ for (const provider of [
   {
     id: "openai",
     key: "OPENAI_API_KEY",
-    model: OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).responses("gpt-5.3-codex"),
+    model: openai.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).responses("gpt-5.3-codex"),
   },
   {
     id: "xai",
     key: "XAI_API_KEY",
-    model: XAI.configure({ apiKey: process.env.XAI_API_KEY ?? "fixture" }).responses("grok-4.6"),
+    model: xai.configure({ apiKey: process.env.XAI_API_KEY ?? "fixture" }).responses("grok-4.6"),
   },
 ]) {
   recordedTests({ prefix: `${provider.id}-compaction`, provider: provider.id, requires: [provider.key] }).effect(
@@ -52,9 +52,7 @@ recordedTests({
   "automatically compacts and continues after a pause",
   () =>
     Effect.gen(function* () {
-      const model = Anthropic.configure({ apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture" }).model(
-        "claude-sonnet-4-6",
-      )
+      const model = anthropic.configure({ apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture" })("claude-sonnet-4-6")
       const request = ai.request({
         model,
         messages: [

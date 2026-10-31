@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
-import { Google } from "../../src/providers.js"
+import { google } from "../../src/providers.js"
 
-const model = Google.provider.model("gemini-2.5-pro")
+const model = google("gemini-2.5-pro")
 
 ai.request({
   model,

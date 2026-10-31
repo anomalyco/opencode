@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { ai, Message } from "../src/effect.js"
 import { LLMClient } from "../src/route/client.js"
-import { OpenAI } from "../src/providers.js"
+import { openai } from "../src/providers.js"
 import { testEffect } from "./lib/effect.js"
 import { runtimeLayer } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
@@ -69,9 +69,9 @@ testEffect(runtimeLayer(FetchHttpClient.layer)).live("compaction and a tool loop
       ),
       (server) => Effect.sync(() => server.stop(true)),
     )
-    const model = OpenAI.configure({ apiKey: "fixture", baseURL: `http://127.0.0.1:${server.port}/v1` }).responses(
-      "fixture",
-    )
+    const model = openai
+      .configure({ apiKey: "fixture", baseURL: `http://127.0.0.1:${server.port}/v1` })
+      .responses("fixture")
     const request = ai.request({
       model,
       prompt: "original",

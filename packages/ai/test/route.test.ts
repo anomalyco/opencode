@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { ai, AIError, HttpContext, InvalidProviderOutputError } from "../src/effect.js"
-import { Anthropic } from "../src/providers.js"
+import { anthropic } from "../src/providers.js"
 import { Auth, Framing, HttpTransport, LLMClient, Route } from "../src/route.js"
 import { fixedResponse, truncatedStream } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
@@ -146,7 +146,7 @@ describe("Route diagnostics", () => {
       const body = '{"query": BROKEN}'
       const error = yield* LLMClient.generate(
         ai.request({
-          model: Anthropic.configure({ apiKey: "test", baseURL: "https://provider.test" }).model("claude"),
+          model: anthropic.configure({ apiKey: "test", baseURL: "https://provider.test" })("claude"),
           prompt: "Hello",
         }),
       ).pipe(

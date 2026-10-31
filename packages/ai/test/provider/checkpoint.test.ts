@@ -1,14 +1,14 @@
 import { expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { ai, LLMClient } from "../../src/effect.js"
-import { Azure, OpenAI } from "../../src/providers.js"
+import { azure, openai } from "../../src/providers.js"
 import { testEffect } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 const checkpoint = { type: "compaction", id: "cmp_1", encrypted_content: "opaque" }
 const request = ai.request({
-  model: OpenAI.configure({ apiKey: "fixture" }).responses("fixture"),
+  model: openai.configure({ apiKey: "fixture" }).responses("fixture"),
   prompt: "hello",
 })
 const trigger = { mechanism: "trigger" } as const
@@ -131,7 +131,7 @@ testEffect(
 ).effect("keeps explicit verbosity on a trigger checkpoint for prompt cache reuse", () =>
   ai.compact(
     ai.request({
-      model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
+      model: openai.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
       prompt: "Hello.",
       providerOptions: { textVerbosity: "low" },
       http: { body: { text: { format: { type: "json_object" } } } },
@@ -154,7 +154,7 @@ testEffect(
 ).effect("keeps the effective body-overlay verbosity and text formatting", () =>
   ai.compact(
     ai.request({
-      model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
+      model: openai.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
       prompt: "Hello.",
       generation: { maxTokens: 20_000 },
       providerOptions: { textVerbosity: "low" },
@@ -179,7 +179,7 @@ testEffect(
     const error = yield* ai
       .compact(
         ai.request({
-          model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
+          model: openai.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
           prompt: "Hello.",
           generation: { maxTokens: 128 },
         }),
@@ -277,7 +277,7 @@ testEffect(dynamicResponse(() => Effect.die("Must reject before sending"))).effe
     Effect.gen(function* () {
       const client = yield* LLMClient.Service
       const unsupported = ai.request({
-        model: Azure.configure({ resourceName: "fixture" }).responses("fixture"),
+        model: azure.configure({ resourceName: "fixture" }).responses("fixture"),
         prompt: "Hello",
       })
       expect(ai.canCompact(unsupported)).toBe(true)

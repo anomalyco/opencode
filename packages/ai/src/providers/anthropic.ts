@@ -4,13 +4,13 @@ import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
-import { AnthropicCompatible } from "./anthropic-compatible.js"
+import { anthropicCompatible } from "./anthropic-compatible.js"
 
 export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
 export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput
 export type AnthropicThinkingInput = AnthropicMessages.ThinkingInput
 
-export const id = ProviderID.make("anthropic")
+const id = ProviderID.make("anthropic")
 
 export const routes = [AnthropicMessages.route]
 
@@ -32,22 +32,19 @@ export type Settings = ProviderPackage.Settings &
 const auth = (options: ProviderAuthOption<"optional">) =>
   AuthOptions.apiKey(options, "ANTHROPIC_API_KEY", Auth.header("x-api-key"))
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const { apiKey: _, auth: _auth, baseURL, ...rest } = input
-  const compatible = AnthropicCompatible.configure({
+  const compatible = anthropicCompatible.configure({
     ...rest,
     auth: auth(input),
     baseURL: baseURL ?? AnthropicMessages.DEFAULT_BASE_URL,
     provider: id,
   })
-  return {
-    id,
-    model: (modelID: string | ModelID) => compatible.model(modelID),
-    configure,
-  }
+  return Object.assign((modelID: string | ModelID) => compatible(modelID), { id, configure })
 }
 
-export const provider = configure()
+export const anthropic = configure()
+
 export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput> = (
   modelID,
   { apiKey, authToken, baseURL, body, headers, ...providerOptions }: Settings = {},
@@ -63,5 +60,5 @@ export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOp
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
+  })(modelID)
 }

@@ -2,14 +2,16 @@ import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { ai, LLMEvent } from "../../src/effect.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
-import { configure } from "../../src/providers/openai-compatible-responses.js"
+import { openaiCompatibleResponses } from "../../src/providers/openai-compatible-responses.js"
 import { LLMClient } from "../../src/route.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 const request = ai.request({
-  model: configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model("example-model"),
+  model: openaiCompatibleResponses.configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" })(
+    "example-model",
+  ),
   prompt: "Respond.",
 })
 const completed = { type: "response.completed", response: { id: "resp_1" } }

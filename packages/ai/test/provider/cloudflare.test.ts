@@ -2,8 +2,8 @@ import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, LLMEvent } from "../../src/effect.js"
-import { CloudflareAIGateway } from "../../src/providers/cloudflare-ai-gateway.js"
-import { CloudflareWorkersAI } from "../../src/providers/cloudflare-workers-ai.js"
+import { cloudflareAIGateway } from "../../src/providers/cloudflare-ai-gateway.js"
+import { cloudflareWorkersAI } from "../../src/providers/cloudflare-workers-ai.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse } from "../lib/http.js"
@@ -22,20 +22,18 @@ const deltaChunk = (delta: object, finishReason: string | null = null) => ({
 describe("Cloudflare", () => {
   it.effect("selects native AI Gateway protocols by model ID", () =>
     Effect.gen(function* () {
-      const gateway = CloudflareAIGateway.configure({
+      const gateway = cloudflareAIGateway.configure({
         accountId: "test-account",
         gatewayId: "test-gateway",
         apiKey: "test-token",
       })
-      const responses = yield* compileRequest(
-        ai.request({ model: gateway.model("openai/gpt-5.4"), prompt: "Say hello." }),
-      )
+      const responses = yield* compileRequest(ai.request({ model: gateway("openai/gpt-5.4"), prompt: "Say hello." }))
       const messages = yield* compileRequest(
-        ai.request({ model: gateway.model("anthropic/claude-haiku-4.5"), prompt: "Say hello." }),
+        ai.request({ model: gateway("anthropic/claude-haiku-4.5"), prompt: "Say hello." }),
       )
-      const chat = yield* compileRequest(ai.request({ model: gateway.model("xai/grok-4.6"), prompt: "Say hello." }))
+      const chat = yield* compileRequest(ai.request({ model: gateway("xai/grok-4.6"), prompt: "Say hello." }))
       const workers = yield* compileRequest(
-        ai.request({ model: gateway.model("workers-ai/@cf/meta/llama-3.3-70b-instruct"), prompt: "Say hello." }),
+        ai.request({ model: gateway("workers-ai/@cf/meta/llama-3.3-70b-instruct"), prompt: "Say hello." }),
       )
 
       expect(responses.route).toBe("cloudflare-ai-gateway-responses")
@@ -65,7 +63,7 @@ describe("Cloudflare", () => {
       const response = yield* ai
         .generate(
           ai.request({
-            model: CloudflareAIGateway.configure({
+            model: cloudflareAIGateway.configure({
               accountId: "test-account",
               gatewayId: "test-gateway",
               apiKey: "test-token",
@@ -74,7 +72,7 @@ describe("Cloudflare", () => {
               collectLog: false,
               metadata: { invoked_by: "test" },
               skipCache: true,
-            }).model("xai/grok-4.6"),
+            })("xai/grok-4.6"),
             prompt: "Say hello.",
           }),
         )
@@ -113,7 +111,7 @@ describe("Cloudflare", () => {
 
   it.effect("posts Claude and OpenAI models to the provider-native gateway endpoints", () =>
     Effect.gen(function* () {
-      const gateway = CloudflareAIGateway.configure({ accountId: "test-account", apiKey: "test-token", cacheTtl: 300 })
+      const gateway = cloudflareAIGateway.configure({ accountId: "test-account", apiKey: "test-token", cacheTtl: 300 })
       const requests: Array<Request> = []
       const capture = dynamicResponse((input) =>
         Effect.gen(function* () {
@@ -122,10 +120,10 @@ describe("Cloudflare", () => {
         }),
       )
       yield* ai
-        .generate(ai.request({ model: gateway.model("anthropic/claude-sonnet-4.6"), prompt: "Hi" }))
+        .generate(ai.request({ model: gateway("anthropic/claude-sonnet-4.6"), prompt: "Hi" }))
         .pipe(Effect.provide(capture), Effect.ignore)
       yield* ai
-        .generate(ai.request({ model: gateway.model("openai/gpt-5-nano"), prompt: "Hi" }))
+        .generate(ai.request({ model: gateway("openai/gpt-5-nano"), prompt: "Hi" }))
         .pipe(Effect.provide(capture), Effect.ignore)
 
       expect(requests.map((request) => request.url)).toEqual([
@@ -146,7 +144,7 @@ describe("Cloudflare", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: CloudflareAIGateway.configure({ accountId: "test-account", apiKey: "test-token" }).model(
+          model: cloudflareAIGateway.configure({ accountId: "test-account", apiKey: "test-token" })(
             "workers-ai/@cf/meta/llama-3.3-70b-instruct",
           ),
           prompt: "Say hello.",
@@ -159,11 +157,11 @@ describe("Cloudflare", () => {
 
   it.effect("preserves reasoning details for AI Gateway continuation", () =>
     Effect.gen(function* () {
-      const model = CloudflareAIGateway.configure({
+      const model = cloudflareAIGateway.configure({
         accountId: "test-account",
         gatewayId: "test-gateway",
         apiKey: "test-token",
-      }).model("xai/grok-4.6")
+      })("xai/grok-4.6")
       const details = [
         { type: "reasoning.text", text: "Think", format: "anthropic-claude-v1", index: 0 },
         { type: "reasoning.text", text: "ing", format: "anthropic-claude-v1", index: 0 },
@@ -216,10 +214,10 @@ describe("Cloudflare", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: CloudflareAIGateway.configure({
+          model: cloudflareAIGateway.configure({
             baseURL: "https://gateway.proxy.test/v1",
             apiKey: "test-token",
-          }).model("anthropic/claude-sonnet-4.6"),
+          })("anthropic/claude-sonnet-4.6"),
           prompt: "Say hello.",
         }),
       )
@@ -231,10 +229,10 @@ describe("Cloudflare", () => {
 
   it.effect("prepares direct Workers AI models through the OpenAI-compatible Chat protocol", () =>
     Effect.gen(function* () {
-      const model = CloudflareWorkersAI.configure({
+      const model = cloudflareWorkersAI.configure({
         accountId: "test-account",
         apiKey: "test-token",
-      }).model("@cf/meta/llama-3.1-8b-instruct")
+      })("@cf/meta/llama-3.1-8b-instruct")
 
       expect(model).toMatchObject({
         id: "@cf/meta/llama-3.1-8b-instruct",
@@ -259,10 +257,10 @@ describe("Cloudflare", () => {
       const response = yield* ai
         .generate(
           ai.request({
-            model: CloudflareWorkersAI.configure({
+            model: cloudflareWorkersAI.configure({
               accountId: "test-account",
               apiKey: "test-token",
-            }).model("@cf/meta/llama-3.1-8b-instruct"),
+            })("@cf/meta/llama-3.1-8b-instruct"),
             prompt: "Say hello.",
           }),
         )
@@ -299,9 +297,9 @@ describe("Cloudflare", () => {
         ai
           .generate(
             ai.request({
-              model: CloudflareWorkersAI.configure({
+              model: cloudflareWorkersAI.configure({
                 accountId: "test-account",
-              }).model("@cf/meta/llama-3.1-8b-instruct"),
+              })("@cf/meta/llama-3.1-8b-instruct"),
               prompt: "Say hello.",
             }),
           )

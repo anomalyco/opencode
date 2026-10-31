@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai } from "../../src/effect.js"
-import { DigitalOcean } from "../../src/providers/digitalocean.js"
+import { digitalocean } from "../../src/providers/digitalocean.js"
 import { LLMClient } from "../../src/route.js"
 import {
   LARGE_CACHEABLE_SYSTEM,
@@ -22,10 +22,10 @@ for (const item of [
   { id: "anthropic-claude-haiku-4.5", name: "Haiku", maxTokens: 128, providerOptions: undefined },
   { id: "openai-gpt-5-nano", name: "GPT Nano", maxTokens: 1024, providerOptions: { reasoningEffort: "minimal" } },
 ] as const) {
-  const model = DigitalOcean.configure({
+  const model = digitalocean.configure({
     apiKey: process.env.DIGITAL_OCEAN_OFFICIAL_API_KEY ?? "fixture",
     providerOptions: item.providerOptions,
-  }).model(item.id)
+  })(item.id)
 
   describe(`DigitalOcean ${item.name} recorded`, () => {
     recorded.effect.with(

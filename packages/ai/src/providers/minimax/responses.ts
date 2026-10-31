@@ -1,16 +1,18 @@
 import type { ProviderPackage } from "../../provider-package.js"
-import { MiniMax } from "../minimax.js"
+import { minimax, type ResponsesOptionsInput, type ResponsesSettings } from "../minimax.js"
 
-export type Settings = MiniMax.Settings<MiniMax.ResponsesOptionsInput>
+export type { ResponsesSettings as Settings } from "../minimax.js"
 
-export const model: ProviderPackage.Model<Settings, MiniMax.ResponsesOptionsInput> = (
+export const model: ProviderPackage.Model<ResponsesSettings, ResponsesOptionsInput> = (
   modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
+  { apiKey, baseURL, body, headers, ...providerOptions }: ResponsesSettings = {},
 ) =>
-  MiniMax.configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).responses(modelID)
+  minimax
+    .configure({
+      apiKey,
+      baseURL,
+      headers,
+      http: body === undefined ? undefined : { body },
+      providerOptions,
+    })
+    .responses(modelID)

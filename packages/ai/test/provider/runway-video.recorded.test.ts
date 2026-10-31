@@ -1,13 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Video } from "../../src/experimental.js"
-import { Runway } from "../../src/providers.js"
+import { runway } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { queuedPoll } from "./queued-recording.js"
 
-const model = Runway.configure({
-  apiKey: process.env.RUNWAYML_API_SECRET ?? "fixture",
-}).video("gen4.5")
+const model = runway
+  .configure({
+    apiKey: process.env.RUNWAYML_API_SECRET ?? "fixture",
+  })
+  .video("gen4.5")
 
 const recorded = recordedTests({
   prefix: "runway-video",

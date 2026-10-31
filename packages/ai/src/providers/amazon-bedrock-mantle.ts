@@ -9,7 +9,7 @@ import { claudeVersion } from "../protocols/utils/claude-model.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
 
-export const id = ProviderID.make("amazon-bedrock")
+const id = ProviderID.make("amazon-bedrock")
 
 export type OpenAIOptionsInput = OpenAIProviderOptionsInput
 export type MessagesOptionsInput = AnthropicMessages.ProviderOptionsInput
@@ -114,7 +114,7 @@ const defaults = (input: Config) => {
   return rest
 }
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   if (input.auth === "bearer" && input.apiKey === undefined && process.env.AWS_BEARER_TOKEN_BEDROCK === undefined)
     throw new ProviderConfigurationError({ provider: id, message: "Amazon Bedrock Mantle bearer auth requires apiKey" })
   if (input.auth === "sigv4" && input.apiKey !== undefined)
@@ -141,20 +141,10 @@ export const configure = (input: Config = {}) => {
   const messages = (modelID: string | ModelID) =>
     configuredMessagesRoute.with(modelDefaults).model<AnthropicMessages.ProviderOptionsInput>({ id: modelID })
 
-  return {
-    id,
-    model: responses,
-    chat,
-    messages,
-    responses,
-    configure,
-  }
+  return Object.assign(responses, { id, chat, messages, responses, configure })
 }
 
-export const provider = configure()
-export const chat = provider.chat
-export const messages = provider.messages
-export const responses = provider.responses
+export const amazonBedrockMantle = configure()
 
 const fromSettings = ({
   apiKey,

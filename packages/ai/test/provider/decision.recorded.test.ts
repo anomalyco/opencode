@@ -2,14 +2,14 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, type DecisionModel, type DecisionOptions } from "../../src/effect.js"
 import {
-  Baseten,
-  CloudflareAIGateway,
-  CloudflareWorkersAI,
-  DigitalOcean,
-  OpenAI,
-  OpenCode,
-  OpenRouter,
-  TypeSafeAI,
+  baseten,
+  cloudflareAIGateway,
+  cloudflareWorkersAI,
+  digitalocean,
+  openai,
+  opencode,
+  openrouter,
+  typesafeAI,
 } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -47,7 +47,7 @@ const typesafe = recordedTests({
   metadata: { model: "jev-latest" },
 })
 
-const opencode = recordedTests({
+const opencodeModel = recordedTests({
   prefix: "opencode-decision",
   provider: "opencode",
   protocol: "system-one",
@@ -55,7 +55,7 @@ const opencode = recordedTests({
   metadata: { model: "jev-1.13-free" },
 })
 
-const openrouter = recordedTests({
+const openrouterModel = recordedTests({
   prefix: "openrouter-decision",
   provider: "openrouter",
   protocol: "system-one",
@@ -63,7 +63,7 @@ const openrouter = recordedTests({
   metadata: { model: "typesafe/jev-1.13" },
 })
 
-const openai = recordedTests({
+const openaiModel = recordedTests({
   prefix: "openai-decision",
   provider: "openai",
   protocol: "openai-decisions",
@@ -75,7 +75,7 @@ const cloudflareOptions = {
   redact: { url: (url: string) => url.replace(/\/client\/v4\/accounts\/[^/]+\//, "/client/v4/accounts/{account}/") },
 }
 
-const cloudflareWorkersAI = recordedTests({
+const cloudflareWorkersAIModel = recordedTests({
   prefix: "cloudflare-workers-ai-decision",
   provider: "cloudflare-workers-ai",
   protocol: "system-one",
@@ -84,7 +84,7 @@ const cloudflareWorkersAI = recordedTests({
   options: cloudflareOptions,
 })
 
-const cloudflareAIGateway = recordedTests({
+const cloudflareAIGatewayModel = recordedTests({
   prefix: "cloudflare-ai-gateway-decision",
   provider: "cloudflare-ai-gateway",
   protocol: "system-one",
@@ -93,7 +93,7 @@ const cloudflareAIGateway = recordedTests({
   options: cloudflareOptions,
 })
 
-const baseten = recordedTests({
+const basetenModel = recordedTests({
   prefix: "baseten-decision",
   provider: "baseten",
   protocol: "system-one",
@@ -101,7 +101,7 @@ const baseten = recordedTests({
   metadata: { model: "decision-models/baseten-elephant-9b-latest" },
 })
 
-const digitalocean = recordedTests({
+const digitaloceanModel = recordedTests({
   prefix: "digitalocean-decision",
   provider: "digitalocean",
   protocol: "system-one",
@@ -111,21 +111,21 @@ const digitalocean = recordedTests({
 
 describe("Decision recorded", () => {
   typesafe.effect("decides choice score and predicate questions", () =>
-    assertDecision(TypeSafeAI.configure({ apiKey: process.env.TYPESAFE_API_KEY ?? "fixture" }).decision("jev-latest")),
+    assertDecision(typesafeAI.configure({ apiKey: process.env.TYPESAFE_API_KEY ?? "fixture" }).decision("jev-latest")),
   )
 
-  opencode.effect("decides choice score and predicate questions", () =>
-    assertDecision(OpenCode.configure({ apiKey: process.env.OPENCODE_API_KEY ?? "fixture" }).decision("jev-1.13-free")),
+  opencodeModel.effect("decides choice score and predicate questions", () =>
+    assertDecision(opencode.configure({ apiKey: process.env.OPENCODE_API_KEY ?? "fixture" }).decision("jev-1.13-free")),
   )
 
-  openrouter.effect("decides choice score and predicate questions", () =>
+  openrouterModel.effect("decides choice score and predicate questions", () =>
     assertDecision(
-      OpenRouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" }).decision("typesafe/jev-1.13"),
+      openrouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" }).decision("typesafe/jev-1.13"),
     ),
   )
 
-  openai.effect("decides choice score and predicate questions about JSON state", () =>
-    assertDecision(OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).decision("gpt-6-luna"), {
+  openaiModel.effect("decides choice score and predicate questions about JSON state", () =>
+    assertDecision(openai.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).decision("gpt-6-luna"), {
       ticket,
       plan: "pro",
     }).pipe(
@@ -136,35 +136,39 @@ describe("Decision recorded", () => {
     ),
   )
 
-  cloudflareWorkersAI.effect("decides choice score and predicate questions", () =>
+  cloudflareWorkersAIModel.effect("decides choice score and predicate questions", () =>
     assertDecision(
-      CloudflareWorkersAI.configure({
-        accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
-        apiKey: process.env.CLOUDFLARE_API_KEY ?? "fixture",
-      }).decision("@cf/cloudflare/clef"),
+      cloudflareWorkersAI
+        .configure({
+          accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
+          apiKey: process.env.CLOUDFLARE_API_KEY ?? "fixture",
+        })
+        .decision("@cf/cloudflare/clef"),
     ),
   )
 
-  cloudflareAIGateway.effect("decides choice score and predicate questions", () =>
+  cloudflareAIGatewayModel.effect("decides choice score and predicate questions", () =>
     assertDecision(
-      CloudflareAIGateway.configure({
-        accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
-        gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN ?? "fixture",
-      }).decision("typesafe/jev"),
+      cloudflareAIGateway
+        .configure({
+          accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
+          gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN ?? "fixture",
+        })
+        .decision("typesafe/jev"),
     ),
   )
 
-  baseten.effect("decides choice score and predicate questions", () =>
+  basetenModel.effect("decides choice score and predicate questions", () =>
     assertDecision(
-      Baseten.configure({ apiKey: process.env.BASETEN_API_KEY ?? "fixture" }).decision(
-        "decision-models/baseten-elephant-9b-latest",
-      ),
+      baseten
+        .configure({ apiKey: process.env.BASETEN_API_KEY ?? "fixture" })
+        .decision("decision-models/baseten-elephant-9b-latest"),
     ),
   )
 
-  digitalocean.effect("decides choice score and predicate questions", () =>
+  digitaloceanModel.effect("decides choice score and predicate questions", () =>
     assertDecision(
-      DigitalOcean.configure({ apiKey: process.env.DIGITALOCEAN_API_KEY ?? "fixture" }).decision("typesafe-jev-1.13.0"),
+      digitalocean.configure({ apiKey: process.env.DIGITALOCEAN_API_KEY ?? "fixture" }).decision("typesafe-jev-1.13.0"),
     ),
   )
 })

@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Speech } from "../../src/experimental.js"
-import { Google } from "../../src/providers.js"
+import { google } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TEXT, collectSpeech } from "./speech-recording.js"
 
-const google = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
+const googleProvider = google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
 
 const recorded = recordedTests({
   prefix: "google-speech",
@@ -18,7 +18,7 @@ describe("Google Speech recorded", () => {
   recorded.effect("generates speech", () =>
     Effect.gen(function* () {
       const response = yield* Speech.generate({
-        model: google.speech("gemini-2.5-flash-preview-tts"),
+        model: googleProvider.speech("gemini-2.5-flash-preview-tts"),
         text: `Say: ${TEXT}`,
         voice: "Kore",
       })
@@ -34,7 +34,11 @@ describe("Google Speech recorded", () => {
   recorded.effect("streams speech", () =>
     Effect.gen(function* () {
       const { finish } = yield* collectSpeech(
-        Speech.stream({ model: google.speech("gemini-3.1-flash-tts-preview"), text: `Say: ${TEXT}`, voice: "Kore" }),
+        Speech.stream({
+          model: googleProvider.speech("gemini-3.1-flash-tts-preview"),
+          text: `Say: ${TEXT}`,
+          voice: "Kore",
+        }),
       )
 
       expect(finish.audio.mediaType).toMatch(/^audio\/l16/i)

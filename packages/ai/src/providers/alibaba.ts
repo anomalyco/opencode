@@ -1,4 +1,3 @@
-import { Struct } from "effect"
 import type { ProviderPackage } from "../provider-package.js"
 import { AlibabaChat } from "../protocols/alibaba-chat.js"
 import { AlibabaImages } from "../protocols/alibaba-images.js"
@@ -9,6 +8,7 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
+import { config } from "./alibaba-settings.js"
 import {
   ProviderConfigurationError,
   ProviderID,
@@ -17,7 +17,7 @@ import {
   type ProviderOptions,
 } from "../schema/index.js"
 
-export const id = ProviderID.make("alibaba")
+const id = ProviderID.make("alibaba")
 
 export type Region =
   | "ap-southeast-1"
@@ -81,9 +81,25 @@ const responsesRoute = Route.make({
   framing: Framing.sse,
 })
 
+export type MessagesSettings = Settings<MessagesOptionsInput>
+export type ResponsesSettings = Settings<ResponsesOptionsInput>
+
 export const routes = [chatRoute, messagesRoute, responsesRoute]
 
-export const configure = (input: Config) => {
+const webSearch = () => hostedTool("web_search", "Search the web with Alibaba's hosted search tool.")
+const webExtractor = () => hostedTool("web_extractor", "Extract web page content with Alibaba's hosted tool.")
+const codeInterpreter = () => hostedTool("code_interpreter", "Execute code with Alibaba's hosted interpreter.")
+
+function hostedTool(type: "web_search" | "web_extractor" | "code_interpreter", description: string) {
+  return ToolDefinition.make({
+    name: type,
+    description,
+    inputSchema: { type: "object", properties: {} },
+    native: { alibaba: { type } },
+  })
+}
+
+const configure = (input: Config) => {
   const { apiKey: _key, auth: _auth, region, workspaceID, baseURL, ...rest } = input
   const host =
     region === undefined
@@ -115,46 +131,25 @@ export const configure = (input: Config) => {
   const media = MediaRoute.deployment({ ...input, baseURL: baseURL ?? `https://${host}/api/v1` }, opts.auth)
   const image = (id: string | ModelID, providerOptions?: ProviderOptions) =>
     AlibabaImages.model({ ...media, id, providerOptions })
-  return { id, model: chat, chat, messages, responses, image, configure }
-}
-
-export const provider = { id, configure }
-
-export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (id, input) => configure(config(input)).chat(id)
-export const messagesModel: ProviderPackage.Model<Settings<MessagesOptionsInput>, MessagesOptionsInput> = (id, input) =>
-  configure(config(input)).messages(id)
-export const responsesModel: ProviderPackage.Model<Settings<ResponsesOptionsInput>, ResponsesOptionsInput> = (
-  id,
-  input,
-) => configure(config(input)).responses(id)
-export const chat = model
-export const messages = messagesModel
-export const responses = responsesModel
-export const imageModel = (id: string, settings: Settings) => {
-  const input = config(settings)
-  return configure(input).image(id, input.providerOptions)
-}
-
-function config(input: Settings<Config["providerOptions"]>) {
-  const { body, ...rest } = input
-  return {
-    ...rest,
-    http: body === undefined ? undefined : { body },
-    providerOptions: Struct.omit(rest, ["apiKey", "baseURL", "headers", "region", "workspaceID"]),
-  }
-}
-
-export const webSearch = () => hostedTool("web_search", "Search the web with Alibaba's hosted search tool.")
-export const webExtractor = () => hostedTool("web_extractor", "Extract web page content with Alibaba's hosted tool.")
-export const codeInterpreter = () => hostedTool("code_interpreter", "Execute code with Alibaba's hosted interpreter.")
-
-function hostedTool(type: "web_search" | "web_extractor" | "code_interpreter", description: string) {
-  return ToolDefinition.make({
-    name: type,
-    description,
-    inputSchema: { type: "object", properties: {} },
-    native: { alibaba: { type } },
+  return Object.assign(chat, {
+    id,
+    chat,
+    messages,
+    responses,
+    image,
+    webSearch,
+    webExtractor,
+    codeInterpreter,
+    configure,
   })
 }
 
-export * as Alibaba from "./alibaba.js"
+export const alibaba = Object.assign((modelID: string | ModelID, input: Config) => configure(input)(modelID), {
+  id,
+  webSearch,
+  webExtractor,
+  codeInterpreter,
+  configure,
+})
+
+export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (id, input) => configure(config(input)).chat(id)

@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, Media } from "../../src/effect.js"
-import { MiniMax } from "../../src/providers.js"
+import { minimax } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = MiniMax.configure({ apiKey: process.env.MINIMAX_API_KEY ?? "fixture" }).image("image-01")
+const model = minimax.configure({ apiKey: process.env.MINIMAX_API_KEY ?? "fixture" }).image("image-01")
 
 const recorded = recordedTests({
   prefix: "minimax-images",
