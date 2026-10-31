@@ -5555,7 +5555,7 @@ describe("SessionRunnerLLM", () => {
     expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
     expect(yield* s.context).toMatchObject([
       Expected.user("Interrupt tool settlement"),
-      Expected.assistant({ finish: "tool-calls" }, [
+      Expected.assistant({ finish: "error", error: { type: "aborted", message: "Step interrupted" } }, [
         Expected.reasoning("Plan before tool"),
         Expected.failedTool(
           { id: "call-await-interrupt" },
@@ -5565,8 +5565,8 @@ describe("SessionRunnerLLM", () => {
     ])
     const eventTypes = yield* recordedEventTypes(sessionID)
     expect(eventTypes.filter((type) => type === "session.tool.failed.2")).toHaveLength(1)
-    expect(eventTypes.filter((type) => type === "session.step.ended.1")).toHaveLength(1)
-    expect(eventTypes).not.toContain("session.step.failed.1")
+    expect(eventTypes.filter((type) => type === "session.step.failed.1")).toHaveLength(1)
+    expect(eventTypes).not.toContain("session.step.ended.1")
     expect(eventTypes).not.toContain("session.retry.scheduled.1")
     expect(s.requests).toHaveLength(1)
 
@@ -6835,7 +6835,7 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(1)
     expect(yield* s.context).toMatchObject([
       Expected.user("Interrupt malformed recovery"),
-      Expected.assistant({ finish: "tool-calls" }, [
+      Expected.assistant({ error: { type: "aborted", message: "Step interrupted" } }, [
         Expected.failedTool({ id: "call-valid" }, { error: { type: "aborted" } }),
         Expected.failedTool({ id: "call-malformed" }, {}),
       ]),

@@ -212,7 +212,7 @@ export const make = Effect.gen(function* () {
                 ),
               )
             : undefined
-        if (llmFailure && llmError && retry?.retry && !recorded.outputStarted) {
+        if (llmError && retry?.retry && !recorded.outputStarted) {
           // Retry state projects onto the existing assistant, even before it has produced output.
           yield* publisher.startAssistant()
           return Outcome.Retry({ error: llmError, decision: retry })
@@ -237,7 +237,7 @@ export const make = Effect.gen(function* () {
               ? TOOLS_INTERRUPTED
               : undefined
         if (toolFailure) yield* publisher.failUnsettledTools(toolFailure)
-        if (interrupted && !recorded.finish) yield* publisher.failAssistant(STEP_INTERRUPTED)
+        if (interrupted) yield* publisher.failAssistant(STEP_INTERRUPTED)
 
         // Parsers may leave unfinished calls without an execution event.
         if (llmError || (Exit.isSuccess(stream) && !recorded.providerFailed)) {
@@ -273,14 +273,7 @@ export const make = Effect.gen(function* () {
             })
         }
 
-        if (
-          llmFailure &&
-          llmError &&
-          retry?.retry &&
-          record.outputStarted &&
-          tools.declines.length === 0 &&
-          !tools.interrupted
-        )
+        if (llmError && retry?.retry && tools.declines.length === 0 && !tools.interrupted)
           return record.toolCalled
             ? Outcome.Continue({ error: llmError, decision: retry })
             : Outcome.Retry({ error: llmError, decision: retry, freshAssistant: true })

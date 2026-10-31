@@ -152,12 +152,17 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
+const ranTool = (item: SessionMessage.AssistantContent) =>
+  item.type === "tool" && (item.time.ran !== undefined || item.executed === true)
+
 const isUncalledAbortedTool = (item: SessionMessage.AssistantTool) =>
   item.time.ran === undefined &&
   item.executed !== true &&
   item.state.status === "error" &&
   item.state.error.type === "aborted"
 
+// OpenAI multi-part reasoning summaries emit earlier summary parts with `reasoningEncryptedContent: null`
+// before `response.output_item.done` delivers the encrypted state on the final part.
 const isUnfinalizedReasoning = (native: Record<string, unknown> | undefined) =>
   native !== undefined && native.reasoningEncryptedContent === null && typeof native.signature !== "string"
 
@@ -169,49 +174,32 @@ const assistant = (
 ) => {
   const sameProvider = message.model.providerID === model.providerID
   const sameModel = sameProvider && message.model.id === model.id
-  const hasRanTool = message.content.some(
-    (item) => item.type === "tool" && (item.time.ran !== undefined || item.executed === true),
-  )
-  // A zero-tool failure superseded by Outcome.Retry({ freshAssistant: true }) is retried from the
-  // prompt (`message.retry` before the fresh message starts, `next?.type === "assistant"` once it
-  // does). Terminal failures and legacy synthetic continuations keep visible text without native state.
-  const supersededByRetry = message.retry !== undefined || next?.type === "assistant"
-  if (message.error !== undefined && message.error.type !== "aborted" && !hasRanTool && supersededByRetry) return []
-  const aborted = message.error?.type === "aborted"
-  const nonAbortError = message.error !== undefined && !aborted
-  const reasoningInterrupted = message.content.some(
-    (item) => item.type === "reasoning" && item.time !== undefined && item.time.completed === undefined,
-  )
-  const interrupted = message.error !== undefined || reasoningInterrupted
-  const kept = message.content.flatMap((item, originalIndex) =>
-    item.type === "tool" && isUncalledAbortedTool(item) ? [] : [{ item, originalIndex }],
-  )
-  const hasKeptOutputAfter = (index: number) =>
-    kept
-      .slice(index + 1)
-      .some((entry) => (entry.item.type === "text" && entry.item.text !== "") || entry.item.type === "tool")
-  const content = kept.flatMap((entry, index): ContentPart[] => {
-    const item = entry.item
-    if (item.type === "text") {
-      // Text can carry provider-bound state (e.g. Gemini thought signatures, OpenAI message IDs),
-      // which is only replayable for blocks closed before the stream ended on the producing model.
-      const reuseTextMetadata =
-        sameModel && !nonAbortError && (!interrupted || entry.originalIndex < message.content.length - 1)
+  const failed = message.error !== undefined && message.error.type !== "aborted"
+  // A zero-tool failure retried from the prompt keeps `retry` set until replaced; legacy `synthetic`
+  // continuations and `idle` stops (retries exhausted or Esc during backoff) keep their partial text.
+  const retriedFromPrompt = message.retry !== undefined && next?.type !== "synthetic" && next?.type !== "idle"
+  if (failed && retriedFromPrompt && !message.content.some(ranTool)) return []
+  const cut = message.error?.type === "aborted" || message.time.completed === undefined
+  const tail = cut ? message.content.at(-1) : undefined
+  const content = message.content.flatMap((item): ContentPart[] => {
+    if (item.type === "text")
       return [
         {
           type: "text",
           text: item.text,
-          providerMetadata: reuseTextMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined,
+          providerMetadata:
+            sameModel && !failed && item !== tail ? providerMetadata(providerMetadataKey, item.native) : undefined,
         },
       ]
-    }
     // Let the destination adapter handle readable reasoning after a model/provider switch.
     if (item.type === "reasoning") {
-      if (nonAbortError) return []
-      if (interrupted) {
-        if (item.time !== undefined && item.time.completed === undefined) return []
-        if (isUnfinalizedReasoning(item.native) || !hasKeptOutputAfter(index)) return []
-      }
+      if (
+        failed ||
+        item === tail ||
+        (item.time !== undefined && item.time.completed === undefined) ||
+        (cut && isUnfinalizedReasoning(item.native))
+      )
+        return []
       return sameModel
         ? [
             {
@@ -224,16 +212,13 @@ const assistant = (
           ? [{ type: "reasoning", text: item.text }]
           : []
     }
+    if (isUncalledAbortedTool(item)) return []
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
     // replay it.
-    const reuseToolProviderMetadata =
-      sameModel &&
-      (!nonAbortError ||
-        (item.executed === true && (item.state.status === "completed" || item.state.status === "error")))
     const call = toolCall(
       item,
-      reuseToolProviderMetadata ? providerMetadata(providerMetadataKey, item.native) : undefined,
+      sameModel && (!failed || item.executed === true) ? providerMetadata(providerMetadataKey, item.native) : undefined,
     )
     if (item.executed !== true) return [call]
     // Hosted tools (e.g. google_search) run inside the provider, so their
@@ -247,15 +232,21 @@ const assistant = (
     if (part.type !== "reasoning") return true
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
-  const results = kept
-    .map((entry) => entry.item)
-    .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.executed !== true)
+  const results = message.content
+    .filter(
+      (item): item is SessionMessage.AssistantTool =>
+        item.type === "tool" && item.executed !== true && !isUncalledAbortedTool(item),
+    )
     .map((item) =>
-      toolResult(item, sameModel && !nonAbortError ? providerMetadata(providerMetadataKey, item.native) : undefined),
+      toolResult(item, sameModel && !failed ? providerMetadata(providerMetadataKey, item.native) : undefined),
     )
     .filter((message) => message !== undefined)
     .map(Message.tool)
-  if (meaningful.length === 0) return results
+  if (
+    meaningful.length === 0 ||
+    (cut && !meaningful.some((part) => (part.type === "text" && part.text.trim() !== "") || part.type === "tool-call"))
+  )
+    return results
   return [
     Message.make({ id: message.id, role: "assistant", content: meaningful, metadata: message.metadata }),
     ...results,

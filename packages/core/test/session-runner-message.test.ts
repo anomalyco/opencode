@@ -1325,8 +1325,19 @@ Earlier work
               native: { phase: "commentary" },
             }),
           ],
+          retry: {
+            attempt: 1,
+            at: created,
+            error: { type: "provider.unknown", message: "Stream dropped" },
+          },
           error: { type: "provider.unknown", message: "Stream dropped" },
           time: { created, completed: created },
+        }),
+        SessionMessage.ModelSelected.make({
+          id: id("model-switched-during-retry"),
+          type: "model-switched",
+          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+          time: { created },
         }),
         SessionMessage.Assistant.make({
           id: id("assistant-replacement"),
@@ -1351,6 +1362,175 @@ Earlier work
         type: "text",
         text: "Clean retry answer",
         providerMetadata: { provider: { phase: "final_answer" } },
+      },
+    ])
+
+    // Legacy continuation sessions (retry still set on the partial message before a synthetic continuation)
+    // and Esc-cancelled retry countdowns (followed by an idle marker) must retain visible partial text.
+    const legacyContinuedAndEscDuringBackoff = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-legacy-continued"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "First half",
+              native: { phase: "final_answer" },
+            }),
+          ],
+          retry: {
+            attempt: 1,
+            at: created,
+            error: { type: "provider.invalid-output", message: "Incomplete" },
+          },
+          error: { type: "provider.invalid-output", message: "Incomplete" },
+          time: { created, completed: created },
+        }),
+        SessionMessage.Synthetic.make({
+          id: id("synthetic-continue"),
+          type: "synthetic",
+          text: "The previous response was interrupted. Continue from where you left off without repeating completed text or tool work.",
+          time: { created },
+        }),
+        SessionMessage.Assistant.make({
+          id: id("assistant-esc-during-backoff"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Kept after Esc during retry wait",
+              native: { phase: "final_answer" },
+            }),
+          ],
+          retry: {
+            attempt: 1,
+            at: created,
+            error: { type: "provider.rate-limit", message: "Rate limited" },
+          },
+          error: { type: "provider.rate-limit", message: "Rate limited" },
+          time: { created, completed: created },
+        }),
+        SessionMessage.Idle.make({
+          id: id("idle-aborted"),
+          type: "idle",
+          outcome: "interrupted",
+          time: { created },
+        }),
+      ],
+      Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
+    )
+    expect(legacyContinuedAndEscDuringBackoff.map((item) => ({ role: item.role, content: item.content }))).toEqual([
+      { role: "assistant", content: [{ type: "text", text: "First half", providerMetadata: undefined }] },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "The previous response was interrupted. Continue from where you left off without repeating completed text or tool work.",
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Kept after Esc during retry wait", providerMetadata: undefined }],
+      },
+    ])
+
+    // Crash-cut or aborted turns with only reasoning / whitespace text and an uncalled tool are omitted,
+    // and unfinalized OpenAI multi-part reasoning summaries (`reasoningEncryptedContent: null`) are dropped.
+    const edgeAborts = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("crash-cut-reasoning-and-streaming-tool"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              text: "Signed thought before crash",
+              native: { signature: "sig_crash" },
+              time: { created, completed: created },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "stale-uncalled",
+              name: "echo",
+              state: SessionMessage.ToolStateError.make({
+                status: "error",
+                input: {},
+                error: { type: "aborted", message: "Tool execution interrupted: echo" },
+              }),
+              time: { created, completed: created },
+            }),
+          ],
+          time: { created },
+        }),
+        SessionMessage.Assistant.make({
+          id: id("whitespace-between-thinking-and-aborted-tool"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              text: "Signed thought",
+              native: { signature: "sig_ws" },
+              time: { created, completed: created },
+            }),
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "\n\n",
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "aborted-uncalled",
+              name: "echo",
+              state: SessionMessage.ToolStateError.make({
+                status: "error",
+                input: {},
+                error: { type: "aborted", message: "Step interrupted" },
+              }),
+              time: { created, completed: created },
+            }),
+          ],
+          error: { type: "aborted", message: "Step interrupted" },
+          time: { created, completed: created },
+        }),
+        SessionMessage.Assistant.make({
+          id: id("openai-multipart-summary-cut"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              text: "Summary part 0",
+              native: { itemId: "rs_cut", reasoningEncryptedContent: null },
+              time: { created, completed: created },
+            }),
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Visible answer before Esc",
+            }),
+          ],
+          error: { type: "aborted", message: "Step interrupted" },
+          time: { created, completed: created },
+        }),
+      ],
+      Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
+    )
+    expect(edgeAborts).toHaveLength(1)
+    expect(edgeAborts[0]?.content).toEqual([
+      {
+        type: "text",
+        text: "Visible answer before Esc",
+        providerMetadata: undefined,
       },
     ])
   })
