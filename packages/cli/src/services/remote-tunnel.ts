@@ -65,6 +65,18 @@ export const ensure = Effect.fnUntraced(function* () {
   )
 })
 
+// Discards the stored tunnel state so the next ensure starts a new tunnel instead of resuming a wedged
+// one. The client's remove() only acts on a completed tunnel, so the profile directory is removed as
+// well to clear a pending issuance that got stuck (for example, during a service outage).
+export const reset = Effect.fnUntraced(function* () {
+  const { OpenTunnelClient, OpenTunnelStorage } = yield* Effect.promise(() => import("@opentunnel/client/effect"))
+  return yield* Effect.gen(function* () {
+    const client = yield* OpenTunnelClient
+    yield* client.tunnel.remove()
+    yield* OpenTunnelStorage.xdg().remove("default")
+  }).pipe(Effect.provide(OpenTunnelClient.layer()))
+})
+
 // The tunnel hostname is persisted once the certificate is ready, so this is undefined until then.
 export const hostname = Effect.fnUntraced(function* (route: string) {
   const { OpenTunnelStorage } = yield* Effect.promise(() => import("@opentunnel/client/effect"))

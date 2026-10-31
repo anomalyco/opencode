@@ -19,8 +19,14 @@ export default Runtime.handler(
       )
     if (input.remote && Option.isSome(input.url))
       return yield* Effect.fail(new Error("--remote cannot be combined with --url"))
-    if (input.remote && config.remote === undefined) {
-      if (!(yield* remoteConsent(config, input))) return
+    if (input.reset && !input.remote) return yield* Effect.fail(new Error("--reset requires --remote"))
+    if (input.remote && config.remote === undefined && !(yield* remoteConsent(config, input))) return
+    if (input.reset) {
+      // The service keeps retrying the wedged tunnel and can write the profile alongside the reset, so stop it first.
+      yield* Service.stop(yield* ServiceConfig.options())
+      yield* RemoteTunnel.reset()
+    }
+    if (input.remote && (config.remote === undefined || input.reset)) {
       // Changing the setting restarts the service, and the ensure below starts it again with the tunnel.
       yield* ServiceConfig.set("remote", "true")
     }
