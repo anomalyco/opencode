@@ -11,7 +11,7 @@ import { isStandalone, PwaRoutePersistence, restorePwaRoute } from "@/runtime/pl
 import { KeyboardInsets } from "@/runtime/platform/keyboard"
 import en from "@/runtime/i18n/en"
 import zh from "@/runtime/i18n/zh"
-import { authFromToken } from "@/runtime/server/api"
+import { authFromToken, devAuthTokenKey } from "@/runtime/server/api"
 import pkg from "../package.json"
 import { ServerConnection } from "@/runtime/server/registry"
 
@@ -78,7 +78,12 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
   // Lazy chunks can import the entry chunk back under a distinct URL, so claim the root before async startup.
   root.dataset.opencodeMounted = ""
   void loadInitialLocale().then((locale) => {
-    const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
+    const urlToken = new URLSearchParams(location.search).get("auth_token")
+    // Dev builds remember a token per server so reloading a review link stays signed in; health.ts clears it on a 401.
+    // A token in the URL always wins, even when invalid.
+    const devKey = import.meta.env.DEV && web.currentServerUrl ? devAuthTokenKey(web.currentServerUrl) : undefined
+    const auth = authFromToken(urlToken ?? (devKey ? localStorage.getItem(devKey) : null))
+    if (devKey && urlToken !== null && auth) localStorage.setItem(devKey, urlToken)
     clearAuthToken()
     const standalone = isStandalone()
     root.dataset.standalone = String(standalone)
