@@ -1,0 +1,79 @@
+---
+title: Marketplace
+description: Discover and manage extension packages from catalogs.
+---
+
+Marketplace is experimental. It installs plugins, skills, agents, commands, MCP servers, instructions, and bundles from catalogs while keeping your configuration files under your control.
+
+## Use Marketplace
+
+In the desktop or web app, open **Settings → Extensions → Plugins → Open Marketplace**. In the TUI, run `/marketplace`. Add a catalog URL or a local directory, search for a package, and review its permissions and conflicts before installing it. A package can be disabled or removed after installation; its individual skills and MCP servers can also be toggled in the app.
+
+<img src={`${import.meta.env.BASE_URL}assets/docs/marketplace-review.png`} alt="Marketplace showing a reviewed installation and explicit catalog trust confirmation" />
+
+The CLI can use the same registry:
+
+```bash
+opencode plugin marketplace add https://example.com/marketplace.json
+opencode plugin marketplace list
+opencode plugin marketplace install SOURCE:CATALOG:ITEM --accept-untrusted
+opencode plugin marketplace uninstall SOURCE:CATALOG:ITEM
+opencode plugin marketplace update --accept-untrusted
+```
+
+Add `--force` to accept reported configuration conflicts. Commands print the prepared plan and result as JSON. Use `--server` to connect to a different server.
+
+Catalogs can be HTTPS URLs, local files or directories, GitHub repositories, GitLab repositories, or SSH Git repositories. Local paths are resolved on the server. OpenCode discovers native `.opencode/marketplace.json` and `marketplace.json` catalogs and compatible `.agents/plugins/marketplace.json`, `.github/plugin/marketplace.json`, `.plugin/marketplace.json`, and `.claude-plugin/marketplace.json` catalogs. Unsupported foreign features are reported as compatibility requirements.
+
+For a private HTTP catalog, bind a header to an environment variable available to the **server process**:
+
+```bash
+opencode plugin marketplace add https://gitlab.example.com/team/plugins --trust private --header-env PRIVATE-TOKEN=GITLAB_TOKEN
+```
+
+Bindings are saved, but their values are resolved when the server makes a request. SSH repositories use the server's Git credentials.
+
+## Plans and state
+
+Planning fetches artifacts and records their digests before showing the installation summary. Applying consumes the one-time plan and verifies the registry revision and materialized content. Plugins can execute code and local MCP servers can run commands, so inspect the source and requested capabilities before accepting an untrusted catalog.
+
+Registry state is stored in the server's SQLite database. Installed components are projected into each Location's effective configuration; Marketplace does not write them into `opencode.json` or `opencode.jsonc`. Removing a source leaves its installed packages manageable.
+
+Profiles and locks let you exchange package intent or verify installed digests:
+
+```bash
+opencode plugin marketplace export marketplace-profile.json
+opencode plugin marketplace import marketplace-profile.json --mode merge --accept-untrusted
+opencode plugin marketplace lock marketplace.lock.json
+opencode plugin marketplace verify marketplace.lock.json
+opencode plugin marketplace audit
+opencode plugin marketplace prune
+```
+
+Profiles do not contain credentials. Configure private source credentials separately on each server. The experimental HTTP endpoints are under `/api/experimental/marketplace`; generated clients expose them as `client.experimental.marketplace`.
+
+## Catalog format
+
+A native catalog contains a stable ID and a list of items:
+
+```json
+{
+  "schema": "opencode.marketplace/v1",
+  "id": "team",
+  "name": "Team extensions",
+  "items": [
+    {
+      "id": "review",
+      "name": "Review",
+      "description": "Review changes",
+      "kind": "agent",
+      "version": "1.0.0",
+      "install": {
+        "agents": { "review": { "description": "Review changes", "prompt": "Review the current changes." } }
+      }
+    }
+  ]
+}
+```
+
+`kind` is one of `plugin`, `skill`, `agent`, `command`, `mcp`, or `bundle`. Install plans use `plugins`, `skills`, `agents`, `commands`, `mcp`, and `instructions`. Relative `./` artifact paths resolve against the catalog. Agent, command, and MCP entries use the legacy config shape and are normalized to the current runtime before installation. Invalid or unsupported configuration is rejected during planning.

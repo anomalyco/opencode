@@ -38,6 +38,7 @@ export const docsSections: DocsSection[] = [
           { title: "Themes", slug: "themes" },
           { title: "Commands", slug: "commands" },
           { title: "Plugins", slug: "plugins" },
+          { title: "Marketplace", slug: "marketplace" },
           { title: "Providers", slug: "providers" },
           { title: "Web search", slug: "websearch" },
           { title: "Network", slug: "network" },
