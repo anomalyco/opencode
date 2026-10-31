@@ -8,10 +8,10 @@
         "macos": "/Applications/OpenCode.app/Contents/MacOS/OpenCode"
       },
       "unset": ["OPENCODE_*", "OTEL_*", "SENTRY_*"],
+      "offline": true,
       "env": {
         "OPENCODE_DB": "{home}/.local/share/opencode/opencode.db",
-        "OPENCODE_CONFIG_DIR": "{home}/.config/opencode",
-        "HTTPS_PROXY": "http://127.0.0.1:9"
+        "OPENCODE_CONFIG_DIR": "{home}/.config/opencode"
       },
       "dirs": [".local/share/opencode"],
       "files": { ".config/opencode/service.json": { "port": "{port}" } },
