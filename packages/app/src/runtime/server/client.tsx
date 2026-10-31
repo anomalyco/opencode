@@ -101,7 +101,8 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
       info(message, data) {
         if (message !== "event stream disconnected") return
         const managed = server.type === "plugin" ? server.managed : !!reconnect
-        console.info("[global-sdk] event stream disconnected", { url: transport.url, managed, ...data })
+        // Debug exports keep the console as text, where an object reads "[object Object]".
+        console.info("[global-sdk] event stream disconnected", JSON.stringify({ url: transport.url, managed, ...data }))
       },
     },
   })

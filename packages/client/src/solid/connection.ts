@@ -31,6 +31,11 @@ export type ClientConnectionOptions = {
 
 const connectTimeout = 2_000
 const reconnectDelay = 1_000
+// Each attempt that fails before the stream connects (server offline, unreachable or rejecting us) doubles the wait
+// before the next one, up to this delay. Chromium keeps an aborted attempt's CORS preflight queued on the origin's six
+// sockets until TCP gives up minutes later, so retrying an unreachable server every few seconds piles them up. A
+// resync retries at once.
+const maxReconnectDelay = 30_000
 const connectionHistoryLimit = 50
 export const defaultIdleTimeout = 45_000
 // Longer than one server keepalive interval: a stream that is silent this long when the page
@@ -51,6 +56,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
   let flushTimer: ReturnType<typeof setTimeout> | undefined
   let stream: AbortController | undefined
   let current: AbortController | undefined
+  let pause: AbortController | undefined
   let run: Promise<void> | undefined
   let started = false
   let generation = 0
@@ -178,7 +184,12 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
         forced = false
         continue
       }
-      await wait(reconnectDelay, controller.signal)
+      pause = new AbortController()
+      await wait(
+        Math.min(reconnectDelay * 2 ** (attempt - 1), maxReconnectDelay),
+        AbortSignal.any([controller.signal, pause.signal]),
+      )
+      pause = undefined
     }
   }
 
@@ -208,9 +219,11 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
     setConnection({ status: "connecting", attempt: 0, error: undefined })
   }
 
-  // Drop the live request so the reconnect loop replaces it now instead of waiting for the idle watchdog.
+  // Drop the live request so the reconnect loop replaces it now instead of waiting for the idle watchdog. Between failed
+  // attempts, end the pause instead so the next attempt starts now.
   function resync(reason: string) {
-    if (!started || connection.status !== "connected") return
+    if (!started) return
+    if (connection.status !== "connected") return pause?.abort()
     options.log?.info?.("event stream resync", { reason, idle: Date.now() - lastActivity })
     forced = true
     current?.abort(new Error(reason))

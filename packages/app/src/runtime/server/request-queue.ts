@@ -51,7 +51,8 @@ export function createRequestQueue(input: {
   // Call the browser fetch unbound; `input.fetch(...)` would make `this` the options object.
   const base = input.fetch
   const now = input.now ?? Date.now
-  const log = input.log ?? ((message, data) => console.warn(`[server-request-queue] ${message}`, data))
+  // Debug exports keep the console as text, where an object reads "[object Object]".
+  const log = input.log ?? ((message, data) => console.warn(`[server-request-queue] ${message}`, JSON.stringify(data)))
   const inflight = new Set<Entry>()
   const waiting: Array<{ entry: Entry; start: () => void }> = []
   let warned = -Infinity

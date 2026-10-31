@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { afterEach, expect, jest, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createClientConnection } from "../src/solid"
 import { OpenCode, type OpenCodeEvent } from "../src/promise"
@@ -58,6 +58,8 @@ function setup(input: ReturnType<typeof server>, idleTimeout: number) {
     }),
   }))
 }
+
+afterEach(() => jest.useRealTimers())
 
 async function until(check: () => boolean, timeout = 2_000) {
   const deadline = Date.now() + timeout
@@ -158,6 +160,50 @@ test.each([
     await until(() => ctx.connection.status() === "reconnecting")
     expect(ctx.connection.error()).toBe(message)
     await until(() => fake.streams.length === 2)
+  } finally {
+    ctx.dispose()
+  }
+})
+
+test("a server that keeps failing before the stream connects is retried less often until a resync", async () => {
+  jest.useFakeTimers()
+  const requests: number[] = []
+  // Each resolves when the loop logs that failure, just before it starts the pause before the next attempt.
+  const disconnects = Array.from({ length: 9 }, () => Promise.withResolvers<void>())
+  const disconnected = (count: number) => disconnects[count - 1].promise
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () => {
+      requests.push(Date.now())
+      throw new TypeError("Failed to fetch")
+    },
+  })
+  const ctx = createRoot((dispose) => ({
+    dispose,
+    connection: createClientConnection(api, {
+      flushInterval: 0,
+      onEvent: () => undefined,
+      log: {
+        info(message, data) {
+          if (message === "event stream disconnected") disconnects[Number(data?.attempt) - 1]?.resolve()
+        },
+      },
+    }),
+  }))
+  try {
+    await disconnected(1)
+    for (const count of [2, 3, 4, 5, 6, 7, 8]) {
+      jest.advanceTimersToNextTimer()
+      await disconnected(count)
+    }
+    expect(requests.slice(1).map((at, index) => at - requests[index])).toEqual([
+      1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000,
+    ])
+    expect(ctx.connection.status()).toBe("reconnecting")
+
+    ctx.connection.internal.resync("Network connection restored")
+    await disconnected(9)
+    expect(requests.at(-1)).toBe(requests.at(-2))
   } finally {
     ctx.dispose()
   }
