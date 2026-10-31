@@ -595,6 +595,17 @@ const gitlabAnthropic: Protocol = (model, support) => {
   }
 }
 
+// Anthropic's OpenAI-compatible Chat ignores `reasoning_effort` and only takes a `thinking` budget in the body.
+const anthropicChat: Protocol = (model, support) => {
+  if (support.type === "toggle") return []
+  return budgets(
+    model,
+    { type: "budget_tokens", min: 1024, ...(support.type === "budget_tokens" ? support : {}) },
+    (tokens) => ({ body: { thinking: { type: "enabled", budget_tokens: tokens } } }),
+    ANTHROPIC_OUTPUT_TOKEN_MAX,
+  )
+}
+
 const gitlab: Protocol = (model, support) => {
   const id = modelID(model).toLowerCase()
   if (id.startsWith("duo-workflow")) return []
@@ -642,6 +653,8 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/fireworks": openaiChat,
   "@opencode/ai/providers/groq": openaiChat,
   "@opencode/ai/providers/meta/chat": openaiChat,
+  "@opencode/ai/providers/google/chat": openaiChat,
+  "@opencode/ai/providers/xai/chat": openaiChat,
   "@opencode/ai/providers/minimax/chat": openaiChat,
   "@opencode/ai/providers/mistral": openaiChat,
   "@opencode/ai/providers/google-vertex/mistral": openaiChat,
@@ -656,6 +669,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
 
   "@opencode/ai/providers/anthropic": anthropicMessages,
   "@opencode/ai/providers/anthropic-compatible": anthropicMessages,
+  "@opencode/ai/providers/anthropic/chat": anthropicChat,
   "@opencode/ai/providers/amazon-bedrock/mantle/messages": anthropicMessages,
   "@opencode/ai/providers/google-vertex/messages": anthropicMessages,
   "@opencode/ai/providers/google-vertex-messages": anthropicMessages,

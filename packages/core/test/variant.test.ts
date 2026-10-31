@@ -548,6 +548,20 @@ test("spells Google Interactions variants as thinking levels", () => {
     ])
 })
 
+test("spells lab Chat variants", () => {
+  for (const packageName of ["@opencode/ai/providers/google/chat", "@opencode/ai/providers/xai/chat"])
+    expect(resolve(model(packageName, "model"), [{ type: "effort", values: ["low", "high"] }])).toEqual([
+      { id: "low", settings: { reasoningEffort: "low" } },
+      { id: "high", settings: { reasoningEffort: "high" } },
+    ])
+  expect(
+    resolve(model("@opencode/ai/providers/anthropic/chat", "claude-haiku-4-5", 64_000), [{ type: "effort" }]),
+  ).toEqual([
+    { id: "high", body: { thinking: { type: "enabled", budget_tokens: 16_000 } } },
+    { id: "max", body: { thinking: { type: "enabled", budget_tokens: 31_999 } } },
+  ])
+})
+
 test("reads models.dev v2 reasoning as variant support", () => {
   expect(Variant.supports({ supported: false })).toEqual([])
   expect(Variant.supports({ supported: true })).toEqual([])
