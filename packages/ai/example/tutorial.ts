@@ -2,7 +2,7 @@ import { Config, Effect, Formatter, Schema, Stream } from "effect"
 import { HttpClientResponse } from "effect/http"
 import { NodeFileSystem } from "@effect/platform-node"
 import { ai, AIClient, LLMRequest, Media, Message, ProviderID, ToolRuntime } from "@opencode/ai/effect"
-import { toDefinitions, tool } from "@opencode/ai/effect"
+import { tool } from "@opencode/ai/effect"
 import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode/ai/route"
 import { OpenAI } from "@opencode/ai/providers"
 
@@ -86,21 +86,22 @@ const streamText = ai.stream(request).pipe(
 // 5. Tools are typed with Effect Schema. Provider turns remain explicit:
 // advertise definitions on the request, stream one turn, dispatch local calls,
 // then persist/build follow-up history in the enclosing product flow.
-const tools = {
-  get_weather: tool({
+const tools = [
+  tool({
+    name: "get_weather",
     description: "Get current weather for a city.",
     parameters: Schema.Struct({ city: Schema.String }),
     success: Schema.Struct({ forecast: Schema.String }),
     execute: (input) => Effect.succeed({ forecast: `${input.city}: sunny, 72F` }),
   }),
-}
+]
 
 const streamWithTools = Effect.gen(function* () {
   const request = ai.request({
     model,
     prompt: "Use get_weather for San Francisco, then answer in one sentence.",
     generation: { maxTokens: 80, temperature: 0 },
-    tools: toDefinitions(tools),
+    tools,
   })
   const events = Array.from(yield* ai.stream(request).pipe(Stream.runCollect))
   for (const event of events) {

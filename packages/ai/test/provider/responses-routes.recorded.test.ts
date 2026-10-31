@@ -7,14 +7,15 @@ import { tool } from "../../src/tool.js"
 import { expectWeatherToolLoop, runWeatherToolLoop, weatherToolLoopRequest } from "../recorded-scenarios.js"
 import { recordedTests } from "../recorded-test.js"
 
-const run = toDefinitions({
-  run: tool({
+const run = toDefinitions([
+  tool({
+    name: "run",
     description: "Run a Python snippet.",
     parameters: Schema.Struct({ code: Schema.String }),
     success: Schema.String,
     freeform: { type: "text" },
   }),
-})
+])
 
 for (const item of [
   {

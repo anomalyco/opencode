@@ -128,7 +128,10 @@ export const make = <R = never>(options: Options<R> = {}) => {
     input: RequestInput<Model> | LLMRequest,
     options?: StreamOptions & RunOptions,
   ): Promise<LLMResponse>
-  function generate(input: ObjectInput<OutputSchema> | RequestInput | LLMRequest, options?: StreamOptions & RunOptions) {
+  function generate(
+    input: ObjectInput<OutputSchema> | RequestInput | LLMRequest,
+    options?: StreamOptions & RunOptions,
+  ) {
     return run(LLM.generate(input, options), options)
   }
 
@@ -160,7 +163,10 @@ export const make = <R = never>(options: Options<R> = {}) => {
     request: CheckpointRequest,
     options: TriggerCompactOptions & RunOptions,
   ): Promise<CompactionCheckpointResponse>
-  function compact(request: CompactionRequest, options?: EndpointCompactOptions & RunOptions): Promise<CompactionResponse>
+  function compact(
+    request: CompactionRequest,
+    options?: EndpointCompactOptions & RunOptions,
+  ): Promise<CompactionResponse>
   // The overloads pair each request type with its mechanism; `LLM.compact` checks the route's capability at runtime.
   function compact(
     request: CheckpointRequest | CompactionRequest,
@@ -496,7 +502,6 @@ export type {
   ToolExecuteContext,
   ToolModelOutputInput,
   ToolOptions,
-  Tools,
   ToolSchema,
   ToolToModelOutput,
 } from "./tool.js"

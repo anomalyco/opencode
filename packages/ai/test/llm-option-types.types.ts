@@ -79,7 +79,7 @@ void ai.generate({ model, prompt: "Hello" }).pipe(Effect.map((response) => respo
 type FinishObject<T> = Extract<T, { readonly type: "finish" }> extends { readonly object?: infer O } ? O : never
 const streamedObject = ai.stream({ model, prompt: "Hello", schema: Schema.Struct({ answer: Schema.String }) })
 type StreamObjectValue = Assert<Equal<FinishObject<StreamEvent<typeof streamedObject>>, { readonly answer: string }>>
-const loopedObject = ai.loop({ model, prompt: "Hello", tools: {}, schema: Schema.Struct({ answer: Schema.String }) })
+const loopedObject = ai.loop({ model, prompt: "Hello", tools: [], schema: Schema.Struct({ answer: Schema.String }) })
 type LoopObjectValue = Assert<
   Equal<
     Extract<StreamEvent<typeof loopedObject>, { readonly type: "finish" }>,

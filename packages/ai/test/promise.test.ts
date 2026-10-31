@@ -127,9 +127,7 @@ describe("AI promise client", () => {
     const request = ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })
     const text = await ai.generate(request)
     expect(text.text).toBe("Hello world")
-    expect((await ai.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe(
-      "Hello world",
-    )
+    expect((await ai.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe("Hello world")
 
     const image = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
     expect(image.image).toBeInstanceOf(Media.Asset)
@@ -217,7 +215,7 @@ describe("AI promise client", () => {
 
     expect((await ai.generate(request, options)).text).toBe("Hello world")
     await Array.fromAsync(ai.stream(request, options))
-    await Array.fromAsync(ai.loop({ ...request, tools: {} }, options))
+    await Array.fromAsync(ai.loop({ ...request, tools: [] }, options))
     expect(seen).toEqual(Array(3).fill("https://openai.test/v1/chat/completions"))
 
     const responses = ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
@@ -362,9 +360,7 @@ describe("AI promise client", () => {
     const inFlight = new AbortController()
     setTimeout(() => inFlight.abort(reason), 10)
     expect(
-      await ai
-        .generate({ model: slow, prompt: "Hello" }, { signal: inFlight.signal })
-        .catch((error: unknown) => error),
+      await ai.generate({ model: slow, prompt: "Hello" }, { signal: inFlight.signal }).catch((error: unknown) => error),
     ).toBe(reason)
 
     const preAborted = await Array.fromAsync(
@@ -447,6 +443,7 @@ describe("AI promise client", () => {
       ),
     })
     const read_file = AI.tool({
+      name: "read_file",
       description: "Read a file.",
       parameters: Schema.Struct({ path: Schema.String }),
       execute: async ({ path }) => {
@@ -457,7 +454,7 @@ describe("AI promise client", () => {
     })
 
     const events = await Array.fromAsync(
-      ai.loop({ model: openai.chat("gpt-4o-mini"), prompt: "Read the files.", tools: { read_file } }),
+      ai.loop({ model: openai.chat("gpt-4o-mini"), prompt: "Read the files.", tools: [read_file] }),
     )
 
     expect(events.filter(LLMEvent.is.toolResult).map((event) => event.result)).toEqual([
@@ -532,9 +529,7 @@ describe("AI promise client", () => {
     const request = ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
 
     const compacted = await ai.compact(request)
-    expect(compacted.replacement.flatMap((message) => message.content.map((part) => part.type))).toEqual([
-      "compaction",
-    ])
+    expect(compacted.replacement.flatMap((message) => message.content.map((part) => part.type))).toEqual(["compaction"])
     expect(compacted.usage?.totalTokens).toBe(110)
 
     const triggered = await ai.compact(request, { mechanism: "trigger" })

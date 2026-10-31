@@ -55,8 +55,9 @@ Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployme
 `stream` runs one model call; `loop` runs the model's tool calls and calls the model again until it stops calling
 tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs. `until` is checked
 after each step that has tool calls, with every step's `LLMResponse`; returning `true` ends the loop without running
-them. `tool` takes a plain `async` execute; a throw or rejection goes back to the model as an error result, and
-`signal` aborts when the loop is interrupted.
+them. Tools are an array, sent in the order given so the provider can reuse its cached prompt prefix. Each tool has a
+`name`, and two tools with the same name fail the request. `tool` takes a plain `async` execute; a throw or rejection
+goes back to the model as an error result, and `signal` aborts when the loop is interrupted.
 `tool` from `@opencode/ai/effect` takes the same options (including an optional `success` schema) with an Effect execute:
 
 ```ts
@@ -65,6 +66,7 @@ import { Schema } from "effect"
 import { ai, tool } from "@opencode/ai"
 
 const read_file = tool({
+  name: "read_file",
   description: "Read a UTF-8 file.",
   parameters: Schema.Struct({ path: Schema.String }),
   execute: ({ path }, { signal }) => readFile(path, { encoding: "utf8", signal }),
@@ -73,7 +75,7 @@ const read_file = tool({
 const events = ai.loop({
   model,
   prompt: "Summarize package.json.",
-  tools: { read_file },
+  tools: [read_file],
   until: ({ steps }) => steps.length >= 8,
 })
 for await (const event of events) {
@@ -88,6 +90,7 @@ instead of JSON arguments: unconstrained `text`, or text matching a `regex` or `
 
 ```ts
 const run_code = tool({
+  name: "run_code",
   description: "Run JavaScript",
   parameters: Schema.Struct({ code: Schema.String }),
   freeform: { type: "lark", grammar: JS_GRAMMAR },

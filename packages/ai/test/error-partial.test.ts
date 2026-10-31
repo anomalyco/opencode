@@ -79,12 +79,13 @@ describe("AIError.partial", () => {
       yield* client.push(textThenFail)
 
       const echo = tool({
+        name: "echo",
         description: "Echo a value.",
         parameters: Schema.Struct({ value: Schema.String }),
         success: Schema.String,
         execute: ({ value }) => Effect.succeed(value),
       })
-      const error = yield* ai.loop({ model, prompt: "Echo hi.", tools: { echo } }).pipe(Stream.runDrain, Effect.flip)
+      const error = yield* ai.loop({ model, prompt: "Echo hi.", tools: [echo] }).pipe(Stream.runDrain, Effect.flip)
 
       expect(error.partial?.text).toBe("Partial answer")
       expect(error.partial?.toolCalls).toEqual([])

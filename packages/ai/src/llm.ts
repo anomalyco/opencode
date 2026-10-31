@@ -20,7 +20,7 @@ import {
   type ToolEntryInput,
   withPartial,
 } from "./schema/index.js"
-import { tool, toDefinitions, type ExecutableTool, type Tool, type ToolSchema } from "./tool.js"
+import { tool, type ExecutableTool, type Tool, type ToolSchema } from "./tool.js"
 import { ToolRuntime } from "./tool-runtime.js"
 
 /** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
@@ -32,7 +32,8 @@ export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageM
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
   readonly prompt?: string | ContentPart | ReadonlyArray<ContentPart>
   readonly messages?: ReadonlyArray<Message | Message.Input>
-  readonly tools?: ReadonlyArray<ToolEntryInput>
+  /** Sent in array order. Pass `tool(...)` values or wire entries such as hosted provider tools. */
+  readonly tools?: ReadonlyArray<Tool | ToolEntryInput>
   readonly toolChoice?: ToolChoice.Input
   readonly generation?: GenerationOptions.Input
   readonly providerOptions?: NoInfer<LanguageModelProviderOptions<SelectedLanguageModel>>
@@ -113,7 +114,7 @@ export type LoopInput<SelectedLanguageModel extends LanguageModel = LanguageMode
   RequestInput<SelectedLanguageModel>,
   "tools"
 > & {
-  readonly tools: Record<string, ExecutableTool>
+  readonly tools: ReadonlyArray<ExecutableTool>
   /** Called after each step that has tool calls; returning `true` ends the loop without running them. */
   readonly until?: (state: { readonly steps: ReadonlyArray<LLMResponse> }) => boolean
 }
@@ -192,11 +193,7 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
         ),
       )
     })
-  return Stream.unwrap(
-    prepare({ ...rest, tools: toDefinitions(tools) }).pipe(
-      Effect.map(({ request, output }) => step(request, [], output)),
-    ),
-  )
+  return Stream.unwrap(prepare({ ...rest, tools }).pipe(Effect.map(({ request, output }) => step(request, [], output))))
 }
 
 const OBJECT_TOOL = "generate_object"
@@ -208,20 +205,28 @@ const prepare = (input: Input) => {
   if (input instanceof LLMRequest) return Effect.succeed({ request: input, output: undefined })
   const { schema, ...rest } = input
   return tryRequest(() => {
-    const base = request(rest)
-    if (schema === undefined) return { request: base, output: undefined }
     const description = "Return the structured result by calling this tool."
-    const output: Tool = Schema.isSchema(schema)
-      ? tool({ description, parameters: schema })
-      : tool({ description, jsonSchema: schema })
-    const toolChoice = base.tools.length === 0 ? ToolChoice.named(OBJECT_TOOL) : new ToolChoice({ type: "required" })
-    return {
-      output,
-      request: LLMRequest.update(base, {
-        tools: [...base.tools, ...toDefinitions({ [OBJECT_TOOL]: output })],
-        toolChoice,
-      }),
-    }
+    const output: Tool | undefined =
+      schema === undefined
+        ? undefined
+        : Schema.isSchema(schema)
+          ? tool({ name: OBJECT_TOOL, description, parameters: schema })
+          : tool({ name: OBJECT_TOOL, description, jsonSchema: schema })
+    const tools = rest.tools ?? []
+    const built = request(
+      output === undefined
+        ? rest
+        : {
+            ...rest,
+            tools: [...tools, output],
+            toolChoice: tools.length === 0 ? ToolChoice.named(OBJECT_TOOL) : new ToolChoice({ type: "required" }),
+          },
+    )
+    const duplicate = built.tools.find(
+      (entry, index) => built.tools.findIndex((other) => other.name === entry.name) !== index,
+    )
+    if (duplicate) throw new Error(`Duplicate tool name: ${duplicate.name}`)
+    return { request: built, output }
   })
 }
 
@@ -267,7 +272,7 @@ export const request = <const SelectedLanguageModel extends LanguageModel>(
     ...rest,
     system: SystemPart.content(requestSystem),
     messages: [...(messages?.map(Message.make) ?? []), ...(prompt === undefined ? [] : [Message.user(prompt)])],
-    tools: tools?.map(ToolEntry.make) ?? [],
+    tools: tools?.map((item) => ("_definition" in item ? item._definition : ToolEntry.make(item))) ?? [],
     toolChoice: requestToolChoice ? ToolChoice.make(requestToolChoice) : undefined,
     generation: requestGeneration === undefined ? undefined : GenerationOptions.make(requestGeneration),
     providerOptions: requestProviderOptions,

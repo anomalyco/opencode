@@ -35,11 +35,12 @@ describe("tool (dynamic JSON Schema)", () => {
       required: ["city"],
     }
     const lookup = tool({
+      name: "lookup",
       description: "Look up something",
       jsonSchema,
       execute: () => Effect.succeed({ ok: true }),
     })
-    const [definition] = toDefinitions({ lookup })
+    const [definition] = toDefinitions([lookup])
     expect(definition?.name).toBe("lookup")
     expect(definition?.description).toBe("Look up something")
     expect(definition?.inputSchema).toEqual(jsonSchema)
@@ -49,6 +50,7 @@ describe("tool (dynamic JSON Schema)", () => {
     Effect.gen(function* () {
       const seen: unknown[] = []
       const echo = tool({
+        name: "echo",
         description: "echo",
         jsonSchema: { type: "object" },
         execute: (params) =>
@@ -199,6 +201,7 @@ describe("schema on ai.stream and ai.loop", () => {
   const City = Schema.Struct({ city: Schema.String })
   const scripted = testEffect(TestLLM.testLayer())
   const echo = tool({
+    name: "echo",
     description: "Echo a value.",
     parameters: Schema.Struct({ value: Schema.String }),
     execute: ({ value }) => Effect.succeed(value),
@@ -225,7 +228,7 @@ describe("schema on ai.stream and ai.loop", () => {
       yield* client.push(TestLLM.toolCall("call-2", "generate_object", { city: "Paris" }))
 
       const events = Array.from(
-        yield* ai.loop({ model, prompt: "Pick a city.", tools: { echo }, schema: City }).pipe(Stream.runCollect),
+        yield* ai.loop({ model, prompt: "Pick a city.", tools: [echo], schema: City }).pipe(Stream.runCollect),
       )
 
       expect(events.filter(LLMEvent.is.toolResult).map((event) => event.name)).toEqual(["echo"])
@@ -248,7 +251,7 @@ describe("schema on ai.stream and ai.loop", () => {
       )
 
       const events = Array.from(
-        yield* ai.loop({ model, prompt: "Pick a city.", tools: { echo }, schema: City }).pipe(Stream.runCollect),
+        yield* ai.loop({ model, prompt: "Pick a city.", tools: [echo], schema: City }).pipe(Stream.runCollect),
       )
 
       expect(events.some(LLMEvent.is.toolResult)).toBe(false)
