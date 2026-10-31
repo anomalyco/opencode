@@ -197,6 +197,38 @@ it.effect("Cohere preserves native tool plans in continued history", () =>
   }),
 )
 
+for (const mime of ["image/png", "IMAGE/PNG", "Image/Png"]) {
+  for (const media of [
+    Media.base64("aGVsbG8=", mime),
+    Media.bytes(new TextEncoder().encode("hello"), mime),
+    Media.url("https://example.com/image.png", { mediaType: mime }),
+  ]) {
+    it.effect(`Cohere accepts ${media.source.type} images with ${mime} MIME types`, () =>
+      Effect.gen(function* () {
+        const prepared = yield* compileRequest(
+          LLM.request({
+            model: cohere.model("command-a-vision-07-2025"),
+            prompt: Message.media(media),
+          }),
+        )
+        expect(prepared.body.messages).toEqual([
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: {
+                  url: media.source.type === "url" ? "https://example.com/image.png" : "data:image/png;base64,aGVsbG8=",
+                },
+              },
+            ],
+          },
+        ])
+      }),
+    )
+  }
+}
+
 it.effect("Cohere rejects unsupported media instead of silently dropping it", () =>
   Effect.gen(function* () {
     const error = yield* compileRequest(
