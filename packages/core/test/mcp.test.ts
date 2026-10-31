@@ -2,7 +2,12 @@ import path from "node:path"
 import fs from "node:fs/promises"
 import os from "node:os"
 import { describe, expect, test } from "bun:test"
-import { Client, InMemoryTransport, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
+import {
+  Client,
+  InMemoryTransport,
+  StreamableHTTPClientTransport,
+  isJSONRPCRequest,
+} from "@modelcontextprotocol/client"
 import {
   createMcpHandler,
   inputRequired,
@@ -103,6 +108,8 @@ function resourceServer(
      * malformed description.
      */
     malformedTool?: boolean
+    /** Listed after the default tools. A call's `structured` argument comes back as structured content. */
+    tools?: McpClient.Tool[]
     /** Legacy servers give up on the URL elicitation after this many milliseconds. */
     elicitationTimeout?: number
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
@@ -169,6 +176,7 @@ function resourceServer(
                 : input.urlElicitation
                   ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
                   : [{ name: "echo", inputSchema: { type: "object" as const, properties: {} } }]),
+              ...(input.tools ?? []),
             ],
           })
         })
@@ -218,7 +226,10 @@ function resourceServer(
               sessionID: request.params._meta?.["ai.opencode/sessionID"],
               progressToken: request.params._meta?.progressToken,
             })
-            return Promise.resolve({ content: [] })
+            const structured = request.params.arguments?.structured
+            return Promise.resolve(
+              structured === undefined ? { content: [] } : { content: [], structuredContent: structured },
+            )
           })
         }
         protocol.setRequestHandler("prompts/list", () => Promise.resolve({ prompts: [{ name: "greet" }] }))
@@ -1227,6 +1238,86 @@ describe.each([
       ),
     )
   })
+
+  test("validates structured content against the called tool's output schema", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const server = yield* resourceServer({
+            modern: era === "modern",
+            resources: false,
+            tools: [
+              {
+                name: "typed",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+              },
+            ],
+          })
+          const connection = yield* connect(
+            "typed",
+            new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol }),
+            import.meta.dir,
+          )
+          yield* connection.tools()
+
+          expect(yield* connection.callTool({ name: "typed", args: { structured: { value: "ok" } } })).toMatchObject({
+            structured: { value: "ok" },
+          })
+          expect(
+            (yield* connection.callTool({ name: "typed", args: { structured: { value: 42 } } }).pipe(Effect.flip))
+              .message,
+          ).toContain("Structured content does not match the tool's output schema")
+          expect((yield* connection.callTool({ name: "typed" }).pipe(Effect.flip)).message).toContain(
+            "has an output schema but did not return structured content",
+          )
+          expect(yield* connection.callTool({ name: "echo", args: { structured: { value: 42 } } })).toMatchObject({
+            structured: { value: 42 },
+          })
+        }),
+      ),
+    )
+  })
+})
+
+test("retries a modern MCP tool call whose listed header declaration went stale", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const region = { type: "string" as const, "x-mcp-header": "Region" }
+        const rejected: Array<string | null> = []
+        const server = yield* resourceServer({
+          modern: true,
+          resources: false,
+          tools: [{ name: "regional", inputSchema: { type: "object", properties: { region } } }],
+          // Stands in for the server-side check: the region must arrive in the currently declared header.
+          respond: async (request) => {
+            const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
+            if (!isJSONRPCRequest(body) || body.method !== "tools/call") return undefined
+            if (request.headers.get(`mcp-param-${region["x-mcp-header"]}`) === "eu") return undefined
+            rejected.push(request.headers.get("mcp-param-region"))
+            return Response.json(
+              { jsonrpc: "2.0", id: body.id, error: { code: -32020, message: "Header mismatch" } },
+              { status: 400 },
+            )
+          },
+        })
+        const connection = yield* connect(
+          "regional",
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" }),
+          import.meta.dir,
+        )
+        yield* connection.tools()
+        region["x-mcp-header"] = "Zone"
+
+        expect((yield* connection.callTool({ name: "regional", args: { region: "eu" } })).isError).toBe(false)
+        expect(server.state.toolCalls.map((call) => call.arguments)).toEqual([{ region: "eu" }])
+        // First the stale Region header, then no header; the SDK then relists and sends Zone.
+        expect(rejected).toEqual(["eu", null])
+        expect(server.state.toolLists).toBe(2)
+      }),
+    ),
+  )
 })
 
 test("lists, reads, and reports MCP resource changes", async () => {

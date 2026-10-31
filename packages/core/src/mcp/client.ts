@@ -4,6 +4,7 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import {
   Client,
+  ProtocolError,
   SdkError,
   SdkErrorCode,
   SdkHttpError,
@@ -37,6 +38,8 @@ const DEFAULT_CATALOG_TIMEOUT = 30_000
 const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
 const ATTACHED_EXECUTION_TIMEOUT = 10 * 60 * 1_000 // 10 minutes
 const TERMINATE_TIMEOUT = 1_000
+// SEP-2243 HeaderMismatch; the SDK does not export the constant.
+const HEADER_MISMATCH = -32020
 const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
 
 // HTTP statuses and network error codes live on error properties and are lost once flattened to a message.
@@ -233,7 +236,7 @@ export const connect = Effect.fnUntraced(function* (
 
     // Our SDK patch leaves tools/list items unchecked, so one malformed tool no longer fails every tool
     // on the server; they are checked here instead. The SDK runs a handler set on the transport before
-    // connect ahead of its own, on the same message, so it caches only the tools kept here.
+    // connect ahead of its own, on the same message, so it returns only the tools kept here.
     const onmessage = transport.onmessage
     transport.onmessage = (message, extra) => {
       if (isJSONRPCResultResponse(message) && Array.isArray(message.result.tools))
@@ -353,7 +356,13 @@ export const connect = Effect.fnUntraced(function* (
         yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
       }),
     )
-    const catalog = { timeout: timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT }
+    // Lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
+    // re-parses it and compiles an output validator for every listed tool. Each call passes its own
+    // listed definition instead, so only that tool's outputSchema is compiled and modern
+    // Mcp-Param-* header mirroring still sees the schema. Lists are refetched only on list_changed or
+    // reconnect, so modern list TTLs are not honored.
+    const catalog = { timeout: timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT, cacheMode: "bypass" as const }
+    const listed = new Map<string, Tool>()
     const execution = timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
     const request = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
       Effect.tryPromise({ try: run, catch: failure }).pipe(
@@ -379,7 +388,11 @@ export const connect = Effect.fnUntraced(function* (
       tools: () =>
         advertised("tools")
           ? list("list MCP tools", (signal) => client.listTools(undefined, { ...catalog, signal })).pipe(
-              Effect.map((r) => r.tools),
+              Effect.map((r) => {
+                listed.clear()
+                for (const tool of r.tools) listed.set(tool.name, tool)
+                return r.tools
+              }),
             )
           : Effect.succeed([]),
       prompts: () =>
@@ -411,17 +424,26 @@ export const connect = Effect.fnUntraced(function* (
           client.getPrompt({ name: input.name, arguments: input.args ?? {} }, { signal, timeout: execution }),
         ),
       callTool: (input) =>
-        request("call MCP tool", (signal) =>
-          client.callTool(
-            {
-              name: input.name,
-              arguments: input.args ?? {},
-              ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
-            },
-            // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
-            { signal, timeout: execution, onprogress: () => {} },
-          ),
-        ).pipe(Effect.map(toCallToolResult)),
+        request("call MCP tool", (signal) => {
+          const params = {
+            name: input.name,
+            arguments: input.args ?? {},
+            ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
+          }
+          // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
+          const options = { signal, timeout: execution, onprogress: () => {} }
+          const toolDefinition = listed.get(input.name)
+          if (toolDefinition === undefined) return client.callTool(params, options)
+          // A modern server rejects headers mirrored from a stale definition before running the tool.
+          // Without a definition the SDK refetches the list itself and retries.
+          return client
+            .callTool(params, { ...options, toolDefinition })
+            .catch((error) =>
+              error instanceof ProtocolError && error.code === HEADER_MISMATCH
+                ? client.callTool(params, options)
+                : Promise.reject(error),
+            )
+        }).pipe(Effect.map(toCallToolResult)),
       onClose: (callback) => {
         client.onclose = () => callback(lastError ? `Connection closed: ${lastError}` : "Connection closed")
       },
