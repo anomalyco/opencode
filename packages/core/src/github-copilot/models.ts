@@ -6,6 +6,28 @@ import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effe
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
 
+// Per-request price tier. Copilot selects the tier by prompt size: `default` up to its
+// max_prompt_tokens, `long_context` beyond it (e.g. Claude Haiku 5.5 at 5x above 100K tokens).
+const PriceTier = Schema.Struct({
+  // API version 2026-08-01 renamed cache_price to cache_read_price.
+  cache_price: Schema.optional(Schema.Number),
+  cache_read_price: Schema.optional(Schema.Number),
+  cache_write_price: Schema.optional(Schema.Number),
+  input_price: Schema.Number,
+  output_price: Schema.Number,
+  max_prompt_tokens: Schema.optional(Schema.Number),
+})
+
+// A malformed long_context must not fail the whole model decode and drop a usable model
+// from the catalog, so every field is optional and incomplete tiers are skipped in build().
+const LongContextTier = Schema.Struct({
+  cache_price: Schema.optional(Schema.Number),
+  cache_read_price: Schema.optional(Schema.Number),
+  cache_write_price: Schema.optional(Schema.Number),
+  input_price: Schema.optional(Schema.Number),
+  output_price: Schema.optional(Schema.Number),
+})
+
 const RemoteModel = Schema.Struct({
   model_picker_enabled: Schema.Boolean,
   id: Schema.String,
@@ -18,13 +40,8 @@ const RemoteModel = Schema.Struct({
       token_prices: Schema.optional(
         Schema.Struct({
           batch_size: Schema.Number,
-          default: Schema.Struct({
-            // API version 2026-08-01 renamed cache_price to cache_read_price.
-            cache_price: Schema.optional(Schema.Number),
-            cache_read_price: Schema.optional(Schema.Number),
-            input_price: Schema.Number,
-            output_price: Schema.Number,
-          }),
+          default: PriceTier,
+          long_context: Schema.optional(LongContextTier),
         }),
       ),
     }),
@@ -153,6 +170,32 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
   const prices = remote.billing?.token_prices
   // Copilot reports AIC per billing batch; OpenCode stores USD per million tokens.
   const usdPerMillion = prices && prices.batch_size > 0 ? 10_000 / prices.batch_size : 0
+  const price = (value?: number) => Money.USDPerMillionTokens.make((value ?? 0) * usdPerMillion)
+  const long = prices?.long_context
+  const cost: Model.Info["cost"] = [
+    {
+      input: price(prices?.default.input_price),
+      output: price(prices?.default.output_price),
+      cache: {
+        read: price(prices?.default.cache_read_price ?? prices?.default.cache_price),
+        write: price(prices?.default.cache_write_price),
+      },
+    },
+    // Copilot selects the per-request tier by prompt size, so the boundary is the default tier's cap.
+    ...(long?.input_price !== undefined && long.output_price !== undefined
+      ? [
+          {
+            tier: {
+              type: "context" as const,
+              size: prices?.default.max_prompt_tokens ?? remote.capabilities.limits.max_prompt_tokens,
+            },
+            input: price(long.input_price),
+            output: price(long.output_price),
+            cache: { read: price(long.cache_read_price ?? long.cache_price), write: price(long.cache_write_price) },
+          },
+        ]
+      : []),
+  ]
   const version = remote.version.startsWith(`${remote.id}-`)
     ? remote.version.slice(remote.id.length + 1)
     : remote.version
@@ -179,18 +222,7 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
     },
     variants: variants(remote, messages),
     time: { released: Number.isFinite(released) ? released : 0 },
-    cost: [
-      {
-        input: Money.USDPerMillionTokens.make((prices?.default.input_price ?? 0) * usdPerMillion),
-        output: Money.USDPerMillionTokens.make((prices?.default.output_price ?? 0) * usdPerMillion),
-        cache: {
-          read: Money.USDPerMillionTokens.make(
-            (prices?.default.cache_read_price ?? prices?.default.cache_price ?? 0) * usdPerMillion,
-          ),
-          write: Money.USDPerMillionTokens.zero,
-        },
-      },
-    ],
+    cost,
     status: "active",
     enabled: remote.model_picker_enabled,
     limit: {
