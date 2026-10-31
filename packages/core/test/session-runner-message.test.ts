@@ -1241,4 +1241,40 @@ Earlier work
       },
     ])
   })
+
+  test("lowers streaming tool arguments that are not objects to an empty object", () => {
+    const streaming = (value: string, input: string) =>
+      SessionMessage.AssistantTool.make({
+        type: "tool",
+        id: value,
+        name: "shell",
+        state: SessionMessage.ToolStateStreaming.make({ status: "streaming", input }),
+        time: { created },
+      })
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-streaming"),
+          type: "assistant",
+          agent: build,
+          model,
+          content: [
+            streaming("unparseable", "not-json"),
+            streaming("quoted", '"just a string"'),
+            streaming("array", "[1,2]"),
+            streaming("object", '{"command":"pwd"}'),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content.filter((part) => part.type === "tool-call").map((part) => part.input)).toEqual([
+      {},
+      {},
+      {},
+      { command: "pwd" },
+    ])
+  })
 })

@@ -9,6 +9,7 @@ import {
 } from "@opencode/ai/effect"
 import type { Model } from "@opencode/schema/model"
 import { Option, Schema } from "effect"
+import { isRecord } from "@opencode/util/record"
 import { fileURLToPath } from "url"
 import { SessionMessage } from "../message.js"
 import { SessionHistory } from "../history.js"
@@ -110,10 +111,19 @@ const providerMetadata = (
   state: Record<string, unknown> | undefined,
 ): ProviderMetadata | undefined => (state === undefined ? undefined : { [provider]: state })
 
-const toolInput = (tool: SessionMessage.AssistantTool) =>
-  tool.state.status === "streaming"
-    ? Option.getOrElse(decodeToolInput(tool.state.input), () => tool.state.input)
-    : tool.state.input
+/**
+ * Streaming parts only carry the raw argument text, which may be empty, truncated, or
+ * valid JSON that is not an object (a quoted string, number, or array). Providers
+ * require tool-call inputs to be objects, so anything else collapses to `{}`: the call
+ * was never executed, and its synthetic tool result already reports the interruption.
+ */
+const toolInput = (tool: SessionMessage.AssistantTool) => {
+  if (tool.state.status !== "streaming") return tool.state.input
+  return Option.match(decodeToolInput(tool.state.input), {
+    onNone: () => ({}),
+    onSome: (value) => (isRecord(value) ? value : {}),
+  })
+}
 
 const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined): ContentPart =>
   ToolCallPart.make({
