@@ -160,7 +160,7 @@ export function mergeInput(message: string | undefined, piped: string | undefine
 }
 
 function formatMessage(message: string[]) {
-  const value = message.map((part) => (part.includes(" ") ? `"${part.replace(/"/g, '\\"')}"` : part)).join(" ")
+  const value = message.join(" ")
   return value || undefined
 }
 
