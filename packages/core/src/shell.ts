@@ -15,7 +15,7 @@ import { FileRetention } from "./file-retention.js"
 import { Location } from "./location.js"
 import { Global } from "@opencode/util/global"
 import { ShellSelect } from "./shell/select.js"
-import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
+import type { ShellCreateBefore, ShellCreateSource } from "@opencode/plugin/effect/shell"
 import { PluginHooks } from "./plugin/hooks.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { SessionSchema } from "./session/schema.js"
@@ -36,6 +36,7 @@ export const DIRECTORY = "shell"
 type Info = Shell.Info
 type CreateInput = Shell.CreateInput & {
   shell?: string
+  source?: ShellCreateSource
 }
 
 type Active = {
@@ -271,6 +272,7 @@ const layer = () =>
             ? undefined
             : ((Schema.is(SessionSchema.ID)(sessionID) ? yield* environments.get(sessionID) : undefined) ?? process.env)
         const invocation: ShellCreateBefore = {
+          ...(input.source ? { source: input.source } : {}),
           command: input.command,
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout ?? 0,

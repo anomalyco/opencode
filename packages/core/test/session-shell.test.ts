@@ -6,6 +6,7 @@ import { Bus } from "@opencode/core/bus"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -277,6 +278,19 @@ describe("Session.shell", () => {
       }),
     )
   }
+
+  it.live("tells shell hooks the user started the command", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const locations = yield* LocationServiceMap.Service
+      const hooks = yield* PluginHooks.Service.pipe(Effect.provide(locations.get(fixture.created.location)))
+      const sources: unknown[] = []
+      yield* hooks.register("shell", "create.before", (event) => Effect.sync(() => void sources.push(event.source)))
+      yield* fixture.session.shell({ sessionID: fixture.created.id, command: "echo user" })
+
+      expect(sources).toEqual([{ type: "user", sessionID: fixture.created.id }])
+    }),
+  )
 
   for (const outcome of [
     {
