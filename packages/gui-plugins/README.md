@@ -517,10 +517,16 @@ export const Pairing = Ipc.define({
 <!-- source: src/pairing/index.ts -->
 
 ```ts
+import { builtinCatalog } from "@opencode/plugin/gui/builtin"
 import { Plugin } from "@opencode/plugin/gui"
 import en from "./i18n/en"
 
-export default Plugin.define({ i18n: { en } })
+export default Plugin.define({
+  i18n: builtinCatalog({
+    en,
+    fr: () => import("./i18n/fr"),
+  }),
+})
 ```
 
 3. **Provide it from main.** Whether main keeps the display awake is a main store, read synchronously and imported once from the key the desktop kept it under before; a built-in names that older home through `builtinMainContext`. Remote access runs `opencode service` through `ctx.cli`, with the caller's signal for a read and `ctx.signal` for a change a closing window must not cancel. `ctx.onCleanup` releases the blocker when the instance goes away.
