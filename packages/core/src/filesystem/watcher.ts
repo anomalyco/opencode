@@ -5,13 +5,21 @@ import { createWrapper } from "@parcel/watcher/wrapper.js"
 import type ParcelWatcher from "@parcel/watcher"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Cause, Context, Effect, Layer, PubSub, RcMap, Stream } from "effect"
+import { Cause, Context, Deferred, Duration, Effect, Layer, PubSub, RcMap, Stream } from "effect"
 import { lazy } from "../util/lazy.js"
 import { watch } from "node:fs"
 import path from "path"
 import loadBinding from "./watcher-binding.js"
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
+
+// Callers resubscribe on provider reloads: they release their stream and acquire a
+// new one milliseconds later. Without a grace period each blip closes the native
+// subscription and opens a new one, and the native addon panics when that stop/start
+// churn repeats (parcel-bundler/watcher on Windows). The keeper below holds an extra
+// reference for this window after the last consumer leaves, so a quick resubscribe
+// reuses the live subscription instead of restarting it.
+const IDLE_TIME_TO_LIVE = Duration.seconds(2)
 
 const watcher = lazy((): typeof ParcelWatcher | undefined => {
   try {
@@ -86,6 +94,7 @@ export const layer = (options?: Options) =>
         return Service.of({ subscribe: () => Effect.succeed(Stream.empty) })
       }
       const native = yield* Native
+      const scope = yield* Effect.scope
 
       // Keys compare structurally (effect Equal), so equivalent watches share one entry.
       const watchers = yield* RcMap.make({
@@ -123,6 +132,22 @@ export const layer = (options?: Options) =>
           }),
       })
 
+      // Holds a second reference to an acquired watch until the consumer leaves plus
+      // the grace window, so resubscribe churn never restarts the native watcher.
+      // `getOption` retains an existing entry instead of starting a lookup: the
+      // consumer still owns the acquisition, so interrupting it cancels a pending
+      // native subscribe rather than waiting out the grace window. The explicit
+      // `scoped` keeps the retained reference alive past the consumer's scope,
+      // which a bare `forkIn` fiber would inherit.
+      const keepWarm = (key: Target, released: Deferred.Deferred<void>, held: Deferred.Deferred<void>) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            yield* RcMap.getOption(watchers, key).pipe(Effect.onExit(() => Deferred.succeed(held, undefined)))
+            yield* Deferred.await(released)
+            yield* Effect.sleep(IDLE_TIME_TO_LIVE)
+          }),
+        ).pipe(Effect.ignoreCause, Effect.forkIn(scope), Effect.asVoid)
+
       const subscribe = Effect.fnUntraced(function* (input: WatchInput, onReady: Effect.Effect<void> = Effect.void) {
         const target = path.resolve(input.path)
         const ignore = [...new Set(input.type === "directory" ? (input.ignore ?? []) : [])].toSorted()
@@ -134,7 +159,13 @@ export const layer = (options?: Options) =>
         })
         return Stream.unwrap(
           Effect.gen(function* () {
-            const pubsub = yield* RcMap.get(watchers, { type: input.type, target, ignore, names })
+            const key = { type: input.type, target, ignore, names }
+            const pubsub = yield* RcMap.get(watchers, key)
+            const released = yield* Deferred.make<void>()
+            const held = yield* Deferred.make<void>()
+            yield* Effect.addFinalizer(() => Deferred.succeed(released, undefined))
+            yield* keepWarm(key, released, held)
+            yield* Deferred.await(held)
             const subscription = yield* PubSub.subscribe(pubsub)
             if (yield* PubSub.isShutdown(pubsub)) return Stream.empty
             yield* onReady
