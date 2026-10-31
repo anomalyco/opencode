@@ -83,6 +83,48 @@ test("a corrupt shared store does not reimport consumed legacy prompts", async (
   expect(await a.stash.pop()).toBeUndefined()
 })
 
+test("stored entries with an incompatible shape are filtered before use", async () => {
+  await using tmp = await tmpdir()
+  await mkdir(path.join(tmp.path, "tui"), { recursive: true })
+  const file = path.join(tmp.path, "tui", "prompt-stash.json")
+  await Bun.write(
+    file,
+    JSON.stringify({
+      migrated: true,
+      entries: [
+        { ...prompt("kept"), id: "valid", timestamp: 1 },
+        { id: "bad-prompt", timestamp: 2, prompt: { text: 42 } },
+        { id: "no-prompt", timestamp: 3 },
+        "garbage",
+      ],
+    }),
+  )
+  await using a = mount(tmp.path, "dev")
+  expect(a.stash.list().map((entry) => entry.prompt.text)).toEqual(["kept"])
+  await a.stash.push(prompt("new"))
+  const saved = await Bun.file(file).json()
+  expect(saved.entries.map((entry: { prompt: { text: string } }) => entry.prompt.text)).toEqual(["kept", "new"])
+})
+
+test("a mid-session rewrite with an incompatible shape never reaches the list", async () => {
+  await using tmp = await tmpdir()
+  await using a = mount(tmp.path, "dev")
+  await a.stash.push(prompt("kept"))
+  const file = path.join(tmp.path, "tui", "prompt-stash.json")
+  await Bun.write(
+    file,
+    JSON.stringify({
+      migrated: true,
+      entries: [{ id: "bad-prompt", timestamp: 2, prompt: { text: 42 } }],
+    }),
+  )
+  await until(() => a.stash.list().length === 0)
+  expect(await a.stash.pop()).toBeUndefined()
+  await a.stash.push(prompt("new"))
+  const saved = await Bun.file(file).json()
+  expect(saved.entries.map((entry: { prompt: { text: string } }) => entry.prompt.text)).toEqual(["new"])
+})
+
 function mount(root: string, channel: string) {
   return createRoot((dispose) => {
     let stash!: ReturnType<typeof usePromptStash>

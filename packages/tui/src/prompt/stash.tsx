@@ -15,6 +15,22 @@ export type StashEntry = {
 
 export const MAX_STASH_ENTRIES = 50
 
+function isStashEntry(value: unknown): value is StashEntry {
+  if (!value || typeof value !== "object") return false
+  const entry = value as Record<string, unknown>
+  return (
+    typeof entry.id === "string" && typeof entry.timestamp === "number" && parsePromptInfo(entry.prompt) !== undefined
+  )
+}
+
+// The shared store loads whole-file JSON without the per-entry checks the
+// legacy jsonl reader had, so entries coming back from disk (including files
+// written by another version) are re-validated before they reach consumers.
+function validEntries(value: unknown): StashEntry[] {
+  if (!Array.isArray(value)) return []
+  return value.filter(isStashEntry)
+}
+
 export function parsePromptStash(text: string) {
   return text
     .split("\n")
@@ -71,14 +87,19 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
           ready = migrate()
           return ready
         })
-        .then(() => update(mutation))
+        .then(() =>
+          update((draft) => {
+            draft.entries = validEntries(draft.entries)
+            mutation(draft)
+          }),
+        )
         .finally(() => setPending((count) => count - 1))
     }
 
     return {
       pending: () => pending() > 0,
       list() {
-        return store.entries
+        return validEntries(store.entries)
       },
       async push(entry: Pick<StashEntry, "prompt">) {
         const stash = structuredClone(unwrap({ ...entry, id: crypto.randomUUID(), timestamp: Date.now() }))
