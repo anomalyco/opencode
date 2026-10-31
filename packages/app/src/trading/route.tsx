@@ -31,6 +31,7 @@ import { Textarea } from "@opencode/ui/textarea"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Loader } from "@opencode/ui/loader"
+import { Menu } from "@opencode/ui/menu"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { Switch } from "@opencode/ui/switch"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -54,7 +55,7 @@ const TargetSessionRouteContent = lazy(() =>
 )
 import { isTradingSession, scanTradingSessions, TRADING_DESK_CONTEXT, TRADING_METADATA_MARK } from "./session"
 import "./trading.css"
-import { DEMO, REFRESCO_MS, añadirEnlace, arrancarSistema, cancelarTarea, cerrarPosicion, cerrarTotal, conectarCuenta, desconectarCuenta, panicoTotal, pararSistema, pedirSnapshot, programarTarea, quitarEnlace, seleccionarCuenta, type BotInfo, type CurvaInfo, type RegistroInfo, type SnapshotMotor, type TareaInfo, type TradeInfo } from "./motor"
+import { DEMO, REFRESCO_MS, añadirEnlace, arrancarSistema, cancelarTarea, cerrarPosicion, cerrarTotal, conectarCuenta, desconectarCuenta, panicoTotal, pararSistema, pedirSnapshot, programarTarea, quitarEnlace, seleccionarCuenta, type BotInfo, type CurvaInfo, type CuentaInfo, type EnlaceInfo, type RegistroInfo, type SnapshotMotor, type TareaInfo, type TradeInfo } from "./motor"
 import { tradingSectionKey, TradingNavStrip } from "./nav"
 
 /** The trading panel's Intl formatter set: one per interface locale, built once and cached.
@@ -1126,8 +1127,8 @@ function TradingShell(props: {
   }
 
   // Switching the account is a read-side move (the engine serves every field of the selected
-  // account): a settled switch needs no toast — the chip's own highlight answers; a failed
-  // one reports itself. Sample chips never write (their ids are the sample's).
+  // account): a settled switch needs no toast — the switcher's own radio mark answers; a
+  // failed one reports itself. Sample data never writes (its ids are the sample's).
   const ejecutarCambioCuenta = async (accountID: string) => {
     if (snapshot.demo) return
 
@@ -1260,9 +1261,26 @@ function TradingShell(props: {
                 "pe-6": props.abierto() && escritorio(),
               }}
             >
-              <h1 class="min-w-0 flex-1 truncate text-[15px] text-v2-text-text-base font-medium" style={{ "line-height": "var(--line-height-base)" }}>
-                {language.t(tradingSectionKey(sección()))}
-              </h1>
+              <div class="flex min-w-0 flex-1 items-center gap-2">
+                <h1 class="min-w-0 truncate text-[15px] text-v2-text-text-base font-medium" style={{ "line-height": "var(--line-height-base)" }}>
+                  {language.t(tradingSectionKey(sección()))}
+                </h1>
+                {/* The account switcher, beside the section's own heading: it names the account
+                    the dashboard reads and opens the menu with the connected accounts, the
+                    links beyond the panel's own and the register-link action — the accounts
+                    strip left the section's body for this one control. Only a multicuenta-aware
+                    engine mounts it (the sample and old engines send neither field). */}
+                <Show when={snapshot.cuentas !== null}>
+                  <MenuCuentas
+                    activa={snapshot.cuenta.id}
+                    cuentas={snapshot.cuentas ?? []}
+                    enlaces={snapshot.enlaces ?? null}
+                    cambiar={ejecutarCambioCuenta}
+                    fuera={abrirEnlaceFuera}
+                    añadir={abrirEnlaceNuevo}
+                  />
+                </Show>
+              </div>
               <Show when={!snapshot.demo}>
                 <div class="flex min-w-0 items-center gap-3">
                   {/* Panic itself never needs TWS (the stop half is a local engine flag; the
@@ -1324,89 +1342,6 @@ function TradingShell(props: {
               </Show>
               <Show when={sección() === "account"}>
                 <div class="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-4 py-4">
-                  {/* Accounts strip: every account the engine's links have discovered — one chip
-                      each carrying its own day P/L, clicking switches the dashboard's reading —
-                      and beneath it the registered links with their live state and a remove
-                      button. Old engines and the sample send neither field, so the strip only
-                      paints for a multicuenta-aware engine. */}
-                  <Show when={snapshot.cuentas !== null}>
-                    <div class="border-b border-v2-border-border-muted pb-3">
-                      <div class="mb-1.5 flex items-center gap-2">
-                        <h3 class="flex-1 px-1 text-[11px] tracking-[0.08em] text-v2-text-text-faint uppercase" style={LINEA}>
-                          {language.t("trading.accounts.title")}
-                        </h3>
-                        <Tooltip class="shrink-0" placement="bottom" value={language.t("trading.accounts.add.aria")}>
-                          <IconButton
-                            type="button"
-                            variant="ghost-muted"
-                            size="small"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={abrirEnlaceNuevo}
-                            aria-label={language.t("trading.accounts.add.aria")}
-                            icon={<Icon name="plus" />}
-                          />
-                        </Tooltip>
-                      </div>
-                      <Show
-                        when={(snapshot.cuentas ?? []).length > 0}
-                        fallback={<p class="px-1 text-[13px] text-v2-text-text-faint" style={LINEA}>{language.t("trading.accounts.empty")}</p>}
-                      >
-                        <div class="flex flex-wrap gap-1.5">
-                          <For each={snapshot.cuentas ?? []}>
-                            {(cuenta) => (
-                              <button
-                                type="button"
-                                class={`flex h-7 min-w-0 shrink-0 items-center gap-2 rounded-full border px-2.5 ${
-                                  snapshot.cuenta.id === cuenta.id
-                                    ? "border-v2-border-border-muted bg-v2-background-bg-layer-02 text-v2-text-text-base"
-                                    : "border-transparent text-v2-text-text-faint hover:text-v2-text-text-muted"
-                                }`}
-                                onClick={() => void ejecutarCambioCuenta(cuenta.id)}
-                                aria-pressed={snapshot.cuenta.id === cuenta.id}
-                              >
-                                <span
-                                  class={`inline-block size-1.5 shrink-0 rounded-full ${cuenta.id.startsWith("DU") ? "bg-v2-state-fg-info" : "bg-v2-state-fg-danger"}`}
-                                  aria-hidden="true"
-                                />
-                                <span class="truncate font-mono text-[12px]">{cuenta.id || "—"}</span>
-                                <span class={`shrink-0 text-[12px] tabular-nums ${tonoPnl(cuenta.pnl_dia)}`}>
-                                  {flechaPnl(cuenta.pnl_dia)}
-                                  {formatoUSD(cuenta.pnl_dia)}
-                                </span>
-                              </button>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
-                      <Show when={(snapshot.enlaces ?? []).length > 1}>
-                        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
-                          <For each={(snapshot.enlaces ?? []).filter((enlace) => enlace.id !== snapshot.enlaces?.[0]?.id)}>
-                            {(enlace) => (
-                              <div class="flex h-5 items-center gap-1.5 text-[11px] leading-[18px] text-v2-text-text-faint">
-                                <span
-                                  class={`inline-block size-1.5 shrink-0 rounded-full ${enlace.conectado ? "bg-v2-state-fg-success" : "bg-v2-border-border-muted"}`}
-                                  aria-hidden="true"
-                                />
-                                <span class="font-mono">{enlace.id}</span>
-                                <Show when={enlace.etiqueta !== null}>
-                                  <span>· {enlace.etiqueta}</span>
-                                </Show>
-                                <span>{language.t(enlace.conectado ? "trading.engine.linked" : "trading.engine.offline")}</span>
-                                <button
-                                  type="button"
-                                  class="text-v2-text-text-faint transition-colors hover:text-v2-state-fg-danger focus-visible:text-v2-state-fg-danger"
-                                  aria-label={language.t("trading.accounts.link.remove.title")}
-                                  onClick={() => abrirEnlaceFuera(enlace.id, enlace.etiqueta)}
-                                >
-                                  <Icon name="close" class="size-3" />
-                                </button>
-                              </div>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
-                    </div>
-                  </Show>
                   <Show when={snapshot.enlace} fallback={<p class="px-1 text-[13px] text-v2-text-text-faint" style={LINEA}>{language.t("trading.account.offline")}</p>}>
                     {/* The three headline numbers read first, big and signed; the details dl
                         carries every account fact below them. */}
@@ -2197,11 +2132,12 @@ function DialogPrompto(props: { contenido: string; guardar: (valor: string) => P
 }
 
 /**
- * Registers an extra TWS link over one form: host, port and a label. The port comes
- * prefilled with TWS's live 7496 — naming it shows the same warning tone as the
- * confirmations. The registration's verdict comes back: a failed one keeps the dialog
- * open with its error toast (like the prompt editor), a saved one closes it and the new
- * link's row appears beneath the account chips.
+/**
+ * Registers a link, watching a second TWS session's balances, over one form: host, port
+ * and a label. The port comes prefilled with TWS's live 7496 — naming it shows the same
+ * warning tone as the confirmations. The registration's verdict comes back: a failed one
+ * keeps the dialog open with its error toast (like the prompt editor), a saved one closes
+ * it and the link joins the account switcher's rows.
  */
 function DialogEnlaceNuevo(props: { registrar: (entrada: { host?: string; port: number; label?: string }) => Promise<boolean> }) {
   const language = useLanguage()
@@ -2272,6 +2208,112 @@ function DialogEnlaceNuevo(props: { registrar: (entrada: { host?: string; port: 
         </Button>
       </DialogFooter>
     </Dialog>
+  )
+}
+
+/**
+ * The account switcher beside the dashboard's heading: its trigger names the account the
+ * section reads, and the menu carries the connected accounts (demo dot blue, live red, the
+ * day's P/L beside each id), the links beyond the panel's own — one remove row each — and
+ * the register-link action. The remove rows open their own confirmation and a failed
+ * switch reports through the callback's toast; the row's ✕ rides along as the pointer
+ * affordance for what is already a destructive row.
+ */
+function MenuCuentas(props: {
+  /** The account the dashboard reads now ("—" while the engine has yet to name one). */
+  activa: string
+  cuentas: readonly CuentaInfo[]
+  enlaces: readonly EnlaceInfo[] | null
+  cambiar: (accountID: string) => Promise<void>
+  fuera: (id: string, etiqueta: string | null) => void
+  añadir: () => void
+}) {
+  const language = useLanguage()
+  const { formatoUSD } = useFormatos()
+
+  // The panel's own link sits first in the list; the rest are the registered ones.
+  const enlacesFuera = () => (props.enlaces === null || props.enlaces.length < 2 ? [] : props.enlaces.slice(1))
+
+  return (
+    <Menu placement="bottom-start" gutter={6} modal={false}>
+      <Menu.Trigger
+        as={Button}
+        variant="outline"
+        size="small"
+        class="min-w-0 max-w-[180px]"
+        data-action="trading-account-switcher"
+        aria-label={language.t("trading.accounts.switcher.aria")}
+      >
+        <span
+          class={`inline-block size-1.5 shrink-0 rounded-full ${props.activa.startsWith("DU") ? "bg-v2-state-fg-info" : "bg-v2-state-fg-danger"}`}
+          aria-hidden="true"
+        />
+        <span class="min-w-0 truncate font-mono text-[12px]">{props.activa || "—"}</span>
+        <Icon name="chevron-down" class="shrink-0 text-v2-icon-icon-muted" />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content class="min-w-[200px]">
+          {/* Kobalte wants every GroupLabel inside its own Group — a bare label throws. */}
+          <Menu.Group>
+            <Menu.GroupLabel>{language.t("trading.accounts.title")}</Menu.GroupLabel>
+            <Show
+              when={props.cuentas.length > 0}
+              fallback={
+                <Menu.Item disabled title={language.t("trading.accounts.empty")}>
+                  <span class="min-w-0 truncate text-v2-text-text-faint">{language.t("trading.accounts.empty")}</span>
+                </Menu.Item>
+              }
+            >
+              <Menu.RadioGroup value={props.activa} onChange={(id) => void props.cambiar(id)}>
+                <For each={props.cuentas}>
+                  {(cuenta) => (
+                    <Menu.RadioItem value={cuenta.id} closeOnSelect>
+                      <span
+                        class={`inline-block size-1.5 shrink-0 rounded-full ${cuenta.id.startsWith("DU") ? "bg-v2-state-fg-info" : "bg-v2-state-fg-danger"}`}
+                        aria-hidden="true"
+                      />
+                      <span class="min-w-0 truncate font-mono text-[12px]">{cuenta.id || "—"}</span>
+                      <span class={`shrink-0 text-[12px] ${tonoPnl(cuenta.pnl_dia)}`}>
+                        {flechaPnl(cuenta.pnl_dia)}
+                        {formatoUSD(cuenta.pnl_dia)}
+                      </span>
+                    </Menu.RadioItem>
+                  )}
+                </For>
+              </Menu.RadioGroup>
+            </Show>
+          </Menu.Group>
+          <Show when={enlacesFuera().length > 0}>
+            <Menu.Separator />
+            <For each={enlacesFuera()}>
+              {(enlace) => (
+                <Menu.Item
+                  aria-label={`${language.t("trading.accounts.link.remove.title")} — ${enlace.id}`}
+                  onSelect={() => props.fuera(enlace.id, enlace.etiqueta)}
+                >
+                  <span
+                    class={`inline-block size-1.5 shrink-0 rounded-full ${enlace.conectado ? "bg-v2-state-fg-success" : "bg-v2-border-border-muted"}`}
+                    aria-hidden="true"
+                  />
+                  <span class="min-w-0 truncate font-mono text-[12px]">{enlace.id}</span>
+                  <Show when={enlace.etiqueta !== null}>
+                    <span class="min-w-0 truncate text-v2-text-text-faint">{enlace.etiqueta}</span>
+                  </Show>
+                  <span class="ms-auto shrink-0 text-v2-icon-icon-muted" aria-hidden="true">
+                    <Icon name="close" class="size-3" />
+                  </span>
+                </Menu.Item>
+              )}
+            </For>
+          </Show>
+          <Menu.Separator />
+          <Menu.Item onSelect={props.añadir}>
+            <Icon name="plus" />
+            {language.t("trading.accounts.add.aria")}
+          </Menu.Item>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
   )
 }
 

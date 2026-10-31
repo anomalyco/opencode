@@ -703,6 +703,7 @@ export const dict = {
   "trading.accounts.title": "Accounts",
   "trading.accounts.empty": "No accounts yet — connect the engine and the login's accounts appear here.",
   "trading.accounts.select.failed": "The account could not be selected.",
+  "trading.accounts.switcher.aria": "Switch the dashboard's account",
   "trading.accounts.add.aria": "Register another TWS link",
   "trading.accounts.add.title": "Register another TWS link",
   "trading.accounts.add.description": "The link watches a second TWS session's balances with its own client id; it retries every 5 s until TWS accepts and it never places orders.",
