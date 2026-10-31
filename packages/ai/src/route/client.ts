@@ -341,7 +341,7 @@ const requireTerminalEvent = (route: string) => (events: Stream.Stream<LLMEvent,
           return Effect.fail(
             ProviderShared.eventError(route, `Provider emitted ${event.type} after the terminal event`),
           )
-        if (LLMEvent.is.finish(event) || LLMEvent.is.providerError(event)) terminal = true
+        if (LLMEvent.is.finish(event)) terminal = true
         return Effect.succeed(event)
       }),
       Stream.onEnd(Effect.suspend(() => (terminal ? Effect.void : Effect.fail(incompleteStreamError(route))))),

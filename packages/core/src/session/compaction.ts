@@ -5,7 +5,6 @@ import {
   AIError,
   type ContentPart,
   InvalidProviderOutputError,
-  InvalidRequestError,
   isContextOverflowFailure,
   LLMClient,
   LLMEvent,
@@ -772,16 +771,6 @@ export const layer = Layer.effect(
         Stream.runFoldEffect(
           (): Streamed => ({ text: "" }),
           (streamed, event): Effect.Effect<Streamed, AIError | Failure> => {
-            if (LLMEvent.is.providerError(event)) {
-              if (event.classification === undefined)
-                return unusable({ type: "provider.error", message: event.message })
-              return Effect.fail(
-                new AIError({
-                  reason: new InvalidRequestError({ message: event.message, classification: event.classification }),
-                }),
-              )
-            }
-
             if (LLMEvent.is.textDelta(event)) {
               const next = { ...streamed, text: streamed.text + event.text }
               if (background) return Effect.succeed(next)

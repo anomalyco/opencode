@@ -234,12 +234,6 @@ describe("LLMClient tools", () => {
         LLMEvent.toolCall({ id: "call_2", name: "missing", input: {}, providerMetadata }),
       )
       expect(failed.events).toEqual([
-        LLMEvent.toolError({
-          id: "call_2",
-          name: "missing",
-          message: 'No tool named "missing" is currently available. Please use a tool from the available tool list.',
-          providerMetadata,
-        }),
         LLMEvent.toolResult({
           id: "call_2",
           name: "missing",
@@ -701,7 +695,7 @@ describe("LLMClient tools", () => {
     }),
   )
 
-  it.effect("emits tool-error for unknown tools so the model can self-correct", () =>
+  it.effect("emits an error tool-result for unknown tools so the model can self-correct", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "missing_tool", "{}"), finishChunk("tool_calls")),
@@ -715,11 +709,7 @@ describe("LLMClient tools", () => {
         ),
       )
 
-      const toolError = events.find(LLMEvent.is.toolError)
-      expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "missing_tool" })
-      expect(toolError?.message).toBe(
-        'No tool named "missing_tool" is currently available. Please use a tool from the available tool list.',
-      )
+      expect(events.filter(LLMEvent.is.toolResult)).toHaveLength(1)
       expect(events.find(LLMEvent.is.toolResult)).toMatchObject({
         type: "tool-result",
         id: "call_1",
@@ -732,7 +722,7 @@ describe("LLMClient tools", () => {
     }),
   )
 
-  it.effect("emits tool-error when the LLM input fails the parameters schema", () =>
+  it.effect("emits an error tool-result when the LLM input fails the parameters schema", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "get_weather", '{"city":42}'), finishChunk("tool_calls")),
@@ -746,13 +736,17 @@ describe("LLMClient tools", () => {
         ),
       )
 
-      const toolError = events.find(LLMEvent.is.toolError)
-      expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "get_weather" })
-      expect(toolError?.message).toContain("Invalid tool input")
+      expect(events.filter(LLMEvent.is.toolResult)).toEqual([
+        expect.objectContaining({
+          id: "call_1",
+          name: "get_weather",
+          result: { type: "error", value: expect.stringContaining("Invalid tool input") },
+        }),
+      ])
     }),
   )
 
-  it.effect("emits tool-error when the handler returns a ToolFailure", () =>
+  it.effect("emits one error tool-result when the handler returns a ToolFailure", () =>
     Effect.gen(function* () {
       const layer = scriptedResponses([
         sseEvents(toolCallChunk("call_1", "get_weather", '{"city":"FAIL"}'), finishChunk("tool_calls")),
@@ -766,10 +760,13 @@ describe("LLMClient tools", () => {
         ),
       )
 
-      const toolError = events.find(LLMEvent.is.toolError)
-      expect(toolError).toMatchObject({ type: "tool-error", id: "call_1", name: "get_weather" })
-      expect(toolError?.message).toBe("Weather lookup failed for FAIL")
-      expect(toolError?.error).toBe(weatherFailureCause)
+      expect(events.filter(LLMEvent.is.toolResult)).toEqual([
+        expect.objectContaining({
+          id: "call_1",
+          name: "get_weather",
+          result: { type: "error", value: "Weather lookup failed for FAIL" },
+        }),
+      ])
     }),
   )
 
@@ -874,7 +871,7 @@ describe("LLMClient tools", () => {
       )
 
       expect(streams).toBe(1)
-      expect(events.find(LLMEvent.is.toolError)).toBeUndefined()
+      expect(events.filter(LLMEvent.is.toolResult).filter((event) => event.result.type === "error")).toEqual([])
       expect(events.filter(LLMEvent.is.toolCall)).toEqual([
         {
           type: "tool-call",

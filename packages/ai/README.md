@@ -53,7 +53,9 @@ Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployme
 ### Tool loop
 
 `stream` runs one model call; `loop` runs the model's tool calls and calls the model again until it stops calling
-tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs. `until` is checked
+tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs (an error result when
+it fails). Each step ends with its own `step-finish`; one `finish` ends the loop, carrying the final step's reason
+and the usage summed across steps. `until` is checked
 after each step that has tool calls, with every step's `LLMResponse`; returning `true` ends the loop without running
 them. `tool` takes a plain `async` execute; a throw or rejection goes back to the model as an error result, and
 `signal` aborts when the loop is interrupted.
@@ -79,6 +81,17 @@ const events = ai.loop({
 for await (const event of events) {
   if (event.type === "text-delta") process.stdout.write(event.text)
 }
+```
+
+The terminal `finish` carries the final assistant `message` and `usage`. To skip the events, `ai.collect` folds a
+stream from `stream` or `loop` into one result: `text` of the final step, `steps` (one `LLMResponse` per call),
+`messages` (each step's assistant message and its tool results, ready to append to the next request), the total
+`usage`, `finishReason`, and `object` with `schema`.
+
+```ts
+const result = await ai.collect(ai.loop({ model, prompt: "Summarize package.json.", tools: { read_file } }))
+// Effect: const result = yield* ai.collect(ai.loop({ ... }))
+console.log(result.text, result.usage?.totalTokens)
 ```
 
 ### Freeform tools
@@ -112,25 +125,28 @@ const res = await ai.generate({ model, prompt: "Pick a city.", schema: Schema.St
 res.object.city
 ```
 
-`stream` puts `object` on its `finish` event; `loop` runs tools first and puts it on the final step's `finish`. A
+`stream` puts `object` on its `finish` event; `loop` runs tools first and puts it on the loop's `finish`. A
 decode failure is an `AIError` whose `partial` holds the response.
 
 ### Raw provider events
 
 Set `includeRaw: true` on a request to also receive every provider frame as `{ type: "raw", data }`, in order and
 before the events parsed from that frame. `data` is the parsed JSON frame, so frames this package doesn't handle yet
-are visible too. Raw events are off by default, and `generate` ignores them. Translate a frame with a stream map:
+are visible too. Raw events are off by default, and `generate` ignores them. `RawEvent` is the event's type. Act on a
+frame with a stream map:
 
 ```ts
-import { Stream } from "effect"
-import { ai, LLMEvent } from "@opencode/ai/effect"
+import { Effect, Stream } from "effect"
+import { ai, AIError, ContentPolicyError } from "@opencode/ai/effect"
 
 const flagged = (data: unknown) =>
   typeof data === "object" && data !== null && "type" in data && data.type === "moderation.flagged"
 
 const events = ai.stream({ model, prompt: "Say hello.", includeRaw: true }).pipe(
-  Stream.map((event) =>
-    event.type === "raw" && flagged(event.data) ? LLMEvent.providerError({ message: "Flagged by moderation" }) : event,
+  Stream.mapEffect((event) =>
+    event.type === "raw" && flagged(event.data)
+      ? Effect.fail(new AIError({ reason: new ContentPolicyError({ message: "Flagged by moderation" }) }))
+      : Effect.succeed(event),
   ),
 )
 ```
@@ -885,6 +901,7 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`ai.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
 - **`ai.generate` / `ai.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
 - **`ai.loop`** — stream model calls, running `tool(...)` tools between them until the model stops calling tools.
+- **`ai.collect`** — fold a stream from `ai.stream` or `ai.loop` into its final result (`text`, `steps`, `messages`, `usage`).
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.

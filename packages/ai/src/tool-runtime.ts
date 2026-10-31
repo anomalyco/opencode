@@ -36,7 +36,7 @@ export const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<Dispat
   return decodeAndExecute(tool, call).pipe(
     Effect.map((value) => result(call, value)),
     Effect.catchTag("Tool.Error", (failure) =>
-      Effect.succeed(result(call, { type: "error", value: failure.message }, failure.error)),
+      Effect.succeed(result(call, { type: "error", value: failure.message })),
     ),
   )
 }
@@ -71,40 +71,21 @@ const decodeAndExecute = (tool: Tool, call: ToolCallPart): Effect.Effect<ToolSet
     ),
   )
 
-const result = (call: ToolCallPart, value: ToolResultValueType | ToolSettlement, error?: unknown): DispatchResult => {
+const result = (call: ToolCallPart, value: ToolResultValueType | ToolSettlement): DispatchResult => {
   const settlement = ToolResultValue.is(value) ? { result: value } : value
   return {
     result: settlement.result,
     output: settlement.output,
-    events:
-      settlement.result.type === "error"
-        ? [
-            LLMEvent.toolError({
-              id: call.id,
-              name: call.name,
-              namespace: call.namespace,
-              message: String(settlement.result.value),
-              error,
-              providerMetadata: call.providerMetadata,
-            }),
-            LLMEvent.toolResult({
-              id: call.id,
-              name: call.name,
-              namespace: call.namespace,
-              result: settlement.result,
-              providerMetadata: call.providerMetadata,
-            }),
-          ]
-        : [
-            LLMEvent.toolResult({
-              id: call.id,
-              name: call.name,
-              namespace: call.namespace,
-              result: settlement.result,
-              output: settlement.output,
-              providerMetadata: call.providerMetadata,
-            }),
-          ],
+    events: [
+      LLMEvent.toolResult({
+        id: call.id,
+        name: call.name,
+        namespace: call.namespace,
+        result: settlement.result,
+        output: settlement.output,
+        providerMetadata: call.providerMetadata,
+      }),
+    ],
   }
 }
 

@@ -474,6 +474,46 @@ describe("AI promise client", () => {
     await ai.dispose()
   })
 
+  test("collects a stream and a loop into their final results", async () => {
+    const ai = AI.make({
+      layer: RequestExecutor.layer.pipe(
+        Layer.provide(
+          handlerLayer((input) =>
+            Effect.succeed(
+              input.respond(
+                JSON.parse(input.text).messages.some((message: { role: string }) => message.role === "tool")
+                  ? chatBody
+                  : sseEvents(
+                      toolCallChunk("call-1", "read_file", JSON.stringify({ path: "a.txt" })),
+                      finishChunk("tool_calls"),
+                    ),
+                { headers: { "content-type": "text/event-stream" } },
+              ),
+            ),
+          ),
+        ),
+      ),
+    })
+    const read_file = AI.tool({
+      description: "Read a file.",
+      parameters: Schema.Struct({ path: Schema.String }),
+      execute: async () => "hello",
+    })
+    const model = openai.chat("gpt-4o-mini")
+
+    const looped = await ai.collect(ai.loop({ model, prompt: "Read the file.", tools: { read_file } }))
+    expect(looped.text).toBe("Hello world")
+    expect(looped.steps).toHaveLength(2)
+    expect(looped.messages.map((message) => message.role)).toEqual(["assistant", "tool", "assistant"])
+    expect(looped.finishReason.normalized).toBe("stop")
+
+    const streamed = await ai.collect(ai.stream({ model, prompt: "Read the file." }))
+    expect(streamed.steps).toHaveLength(1)
+    expect(streamed.messages).toEqual([streamed.steps[0].message])
+    expect(streamed.finishReason.normalized).toBe("tool-calls")
+    await ai.dispose()
+  })
+
   test("generates a decoded object", async () => {
     const ai = AI.make({
       layer: RequestExecutor.layer.pipe(

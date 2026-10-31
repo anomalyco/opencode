@@ -683,6 +683,9 @@ const incompleteStream = () =>
 const INCOMPLETE_STREAM_CONTINUATION =
   "The previous response was interrupted. Continue from where you left off without repeating completed content."
 
+const providerRejected = (input: { readonly message: string; readonly classification?: "context-overflow" }) =>
+  new AIError({ reason: new InvalidRequestError(input) })
+
 const invalidRequest = () =>
   new AIError({
     reason: new InvalidRequestError({ message: "Invalid request" }),
@@ -1061,7 +1064,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.admit("Second prompt")
     const titleFailed = yield* Deferred.make<void>()
     yield* s.llm.push(
-      Stream.make(LLMEvent.providerError({ message: "Title provider unavailable" })).pipe(
+      Stream.fail(providerRejected({ message: "Title provider unavailable" })).pipe(
         Stream.ensuring(Deferred.succeed(titleFailed, undefined)),
       ),
       TestLLM.text("Recovered", "text-recovered"),
@@ -2477,7 +2480,8 @@ describe("SessionRunnerLLM", () => {
       const second = yield* s.admit("STEER_B")
       const compact = yield* s.session.compact({ sessionID })
       if (outcome === "cancelled") yield* s.session.cancelInbox({ sessionID, inboxID: compact.id })
-      if (outcome === "failed") yield* s.llm.push([LLMEvent.providerError({ message: "summary unavailable" })])
+      if (outcome === "failed")
+        yield* s.llm.push(TestLLM.failAfter(providerRejected({ message: "summary unavailable" })))
       yield* s.llm.push(TestLLM.text("Steers complete", "steers"))
       yield* active.finish
 
@@ -2486,7 +2490,7 @@ describe("SessionRunnerLLM", () => {
         expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
         expect((yield* s.messages).find((message) => message.id === compact.id)).toMatchObject({
           status: "failed",
-          error: { type: "provider.error", message: "summary unavailable" },
+          error: { type: "provider.invalid-request", message: "summary unavailable" },
         })
       }
       if (outcome === "cancelled") expect((yield* s.messages).some((message) => message.id === compact.id)).toBe(false)
@@ -2722,14 +2726,14 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Earlier answer", "text-manual-provider-history"))
     yield* s.runPrompt("Earlier question")
 
-    yield* s.llm.push([LLMEvent.providerError({ message: "summary unavailable" })])
+    yield* s.llm.push(TestLLM.failAfter(providerRejected({ message: "summary unavailable" })))
     const compaction = yield* s.session.compact({ sessionID })
     yield* s.resume
 
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
       type: "compaction",
       status: "failed",
-      error: { type: "provider.error", message: "summary unavailable" },
+      error: { type: "provider.invalid-request", message: "summary unavailable" },
     })
   })
 
@@ -3196,7 +3200,7 @@ describe("SessionRunnerLLM", () => {
     s.currentModel = recoveryModel
     s.requests.length = 0
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       TestLLM.text("## Objective\n- Recovered", "summary"),
       TestLLM.text("Recovered", "recovered"),
     )
@@ -3234,7 +3238,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
     s.requests.length = 0
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "Too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "Too long", classification: "context-overflow" })),
       TestLLM.text("## Objective\n- Recovered", "summary"),
     )
     const compaction = yield* s.session.compact({ sessionID })
@@ -3524,7 +3528,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Before native checkpoint")
     s.requests.length = 0
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       checkpoint("recovered-window"),
       TestLLM.text("Recovered", "recovered"),
     )
@@ -3560,7 +3564,7 @@ describe("SessionRunnerLLM", () => {
     s.currentModel = compactModel
     s.requests.length = 0
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "Unsupported parameter: max_output_tokens" })],
+      TestLLM.failAfter(providerRejected({ message: "Unsupported parameter: max_output_tokens" })),
       TestLLM.text("Must not run", "text-after-failed-compaction"),
     )
     yield* s.admit("Recent exact request ".repeat(180))
@@ -3581,10 +3585,10 @@ describe("SessionRunnerLLM", () => {
   scenario("forces one compaction and retries after provider context overflow", function* (s) {
     yield* setupOverflowRecovery(s)
     yield* s.llm.push(
-      [
+      TestLLM.failAfter(
+        providerRejected({ message: "prompt too long", classification: "context-overflow" }),
         LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }),
-      ],
+      ),
       TestLLM.text("## Objective\n- Recover overflow", "text-summary"),
       TestLLM.text("Recovered", "text-final"),
     )
@@ -3614,7 +3618,7 @@ describe("SessionRunnerLLM", () => {
     })
     yield* s.admit("Continue")
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       TestLLM.text("## Objective\n- Overflow summary", "overflow-summary"),
       TestLLM.text("Recovered", "overflow-recovered"),
       TestLLM.stop(),
@@ -3676,7 +3680,7 @@ describe("SessionRunnerLLM", () => {
     const compaction = yield* SessionCompaction.Service
     yield* compaction.transform((editor) => editor.configure({ auto: false }))
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       TestLLM.text("Must not compact", "text-unexpected-summary"),
       TestLLM.text("Must not retry", "text-unexpected-retry"),
     )
@@ -3701,7 +3705,7 @@ describe("SessionRunnerLLM", () => {
     yield* setupOverflowRecovery(s)
     s.currentModel = unknownContextModel
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       TestLLM.text("## Objective\n- Recover unknown limit", "text-summary-unknown-limit"),
       TestLLM.text("Recovered", "text-final-unknown-limit"),
     )
@@ -3732,10 +3736,11 @@ describe("SessionRunnerLLM", () => {
 
   scenario("persists a second context overflow after one recovery", function* (s) {
     yield* setupOverflowRecovery(s)
-    const overflow = () => [
-      LLMEvent.stepStart({ index: 0 }),
-      LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }),
-    ]
+    const overflow = () =>
+      TestLLM.failAfter(
+        providerRejected({ message: "prompt too long", classification: "context-overflow" }),
+        LLMEvent.stepStart({ index: 0 }),
+      )
     yield* s.llm.push(overflow(), TestLLM.text("## Objective\n- Recover once", "text-summary"), overflow())
     yield* s.admit("Continue")
     expect((yield* s.resume.pipe(Effect.flip)).message).toBe("prompt too long")
@@ -3833,8 +3838,8 @@ describe("SessionRunnerLLM", () => {
   scenario("publishes the original overflow when recovery summarization fails", function* (s) {
     yield* setupOverflowRecovery(s)
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
-      [LLMEvent.providerError({ message: "summary unavailable" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
+      TestLLM.failAfter(providerRejected({ message: "summary unavailable" })),
     )
     yield* s.admit("Continue")
     expect((yield* s.resume.pipe(Effect.flip)).message).toBe("prompt too long")
@@ -3846,7 +3851,7 @@ describe("SessionRunnerLLM", () => {
         type: "compaction",
         status: "failed",
         reason: "auto",
-        error: { type: "provider.error", message: "summary unavailable" },
+        error: { type: "provider.invalid-request", message: "summary unavailable" },
       }),
     )
     expect(context.slice(-3)).toMatchObject([
@@ -3859,7 +3864,7 @@ describe("SessionRunnerLLM", () => {
   scenario("interrupts overflow recovery while the summary provider is running", function* (s) {
     yield* setupOverflowRecovery(s)
     yield* s.llm.push(
-      [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+      TestLLM.failAfter(providerRejected({ message: "prompt too long", classification: "context-overflow" })),
       TestLLM.text("## Objective\n- Interrupted", "text-summary"),
     )
     const first = yield* s.llm.gate()
@@ -3927,7 +3932,6 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.toolInputDelta({ id: "call-error", name: "write", text: '{"path":"README.md"}' }),
         LLMEvent.toolInputEnd({ id: "call-error", name: "write" }),
         LLMEvent.toolCall({ id: "call-error", name: "write", input: { path: "README.md" }, providerExecuted: true }),
-        LLMEvent.toolError({ id: "call-error", name: "write", message: "Denied" }),
         LLMEvent.toolResult({ id: "call-error", name: "write", result: { type: "error", value: "Denied" } }),
         LLMEvent.toolCall({
           id: "call-provider",
@@ -5612,26 +5616,28 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("projects provider errors as terminal assistant step failures", function* (s) {
-    yield* s.llm.push([LLMEvent.stepStart({ index: 0 }), LLMEvent.providerError({ message: "Provider unavailable" })])
+    yield* s.llm.push(
+      TestLLM.failAfter(providerRejected({ message: "Provider unavailable" }), LLMEvent.stepStart({ index: 0 })),
+    )
 
     expect((yield* s.runPrompt("Fail durably").pipe(Effect.flip)).message).toBe("Provider unavailable")
 
     expect(s.requests).toHaveLength(1)
     expect(yield* s.context).toMatchObject([
       Expected.user("Fail durably"),
-      { type: "assistant", finish: "error", error: { type: "provider.unknown", message: "Provider unavailable" } },
+      { type: "assistant", finish: "error", error: { type: "provider.invalid-request", message: "Provider unavailable" } },
     ])
   })
 
   scenario("projects provider errors emitted before assistant step start", function* (s) {
-    yield* s.llm.push([LLMEvent.providerError({ message: "Provider unavailable" })])
+    yield* s.llm.push(TestLLM.failAfter(providerRejected({ message: "Provider unavailable" })))
 
     expect((yield* s.runPrompt("Fail before step").pipe(Effect.flip)).message).toBe("Provider unavailable")
 
     expect(s.requests).toHaveLength(1)
     expect(yield* s.context).toMatchObject([
       Expected.user("Fail before step"),
-      { type: "assistant", finish: "error", error: { type: "provider.unknown", message: "Provider unavailable" } },
+      { type: "assistant", finish: "error", error: { type: "provider.invalid-request", message: "Provider unavailable" } },
     ])
   })
 
@@ -5733,13 +5739,15 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("does not recover context overflow after durable assistant output", function* (s) {
-    yield* s.llm.push([
-      LLMEvent.stepStart({ index: 0 }),
-      LLMEvent.textStart({ id: "text-partial" }),
-      LLMEvent.textDelta({ id: "text-partial", text: "Partial" }),
-      LLMEvent.textEnd({ id: "text-partial" }),
-      LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }),
-    ])
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        providerRejected({ message: "prompt too long", classification: "context-overflow" }),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text-partial" }),
+        LLMEvent.textDelta({ id: "text-partial", text: "Partial" }),
+        LLMEvent.textEnd({ id: "text-partial" }),
+      ),
+    )
     expect((yield* s.runPrompt("Fail after output").pipe(Effect.flip)).message).toBe("prompt too long")
 
     expect(s.requests).toHaveLength(1)
@@ -6859,11 +6867,13 @@ describe("SessionRunnerLLM", () => {
   scenario("does not continue automatically after a provider error follows a local tool call", function* (s) {
     yield* s.admit("Do not continue failed provider")
     const tools = yield* s.blockTools()
-    yield* s.llm.push([
-      LLMEvent.stepStart({ index: 0 }),
-      LLMEvent.toolCall({ id: "call-before-provider-error", name: "echo", input: { text: "settled" } }),
-      LLMEvent.providerError({ message: "Provider unavailable" }),
-    ])
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        providerRejected({ message: "Provider unavailable" }),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-before-provider-error", name: "echo", input: { text: "settled" } }),
+      ),
+    )
 
     const run = yield* s.resume.pipe(Effect.forkChild)
     yield* tools.started
@@ -6883,11 +6893,13 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("durably fails a hosted tool when its provider errors before returning a result", function* (s) {
-    yield* s.llm.push([
-      LLMEvent.stepStart({ index: 0 }),
-      hostedCall("call-hosted-provider-error", "effect"),
-      LLMEvent.providerError({ message: "Provider unavailable" }),
-    ])
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        providerRejected({ message: "Provider unavailable" }),
+        LLMEvent.stepStart({ index: 0 }),
+        hostedCall("call-hosted-provider-error", "effect"),
+      ),
+    )
 
     expect((yield* s.runPrompt("Fail hosted tool durably").pipe(Effect.flip)).message).toBe("Provider unavailable")
 
@@ -6907,11 +6919,13 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("preserves a tool defect before provider failure settlement", function* (s) {
-    yield* s.llm.push([
-      LLMEvent.stepStart({ index: 0 }),
-      LLMEvent.toolCall({ id: "call-defect-provider-error", name: "defect", input: {} }),
-      LLMEvent.providerError({ message: "Provider unavailable" }),
-    ])
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        providerRejected({ message: "Provider unavailable" }),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-defect-provider-error", name: "defect", input: {} }),
+      ),
+    )
 
     expect((yield* s.runPrompt("Defect while provider fails").pipe(Effect.flip)).message).toBe("Provider unavailable")
 
@@ -6936,11 +6950,13 @@ describe("SessionRunnerLLM", () => {
       }).pipe(Effect.andThen(Effect.die("tool output persistence failed")))
     })
     yield* s.admit("Storage fails while provider fails")
-    yield* s.llm.push([
-      LLMEvent.stepStart({ index: 0 }),
-      LLMEvent.toolCall({ id: "call-store-provider-error", name: "storefail", input: {} }),
-      LLMEvent.providerError({ message: "Provider unavailable" }),
-    ])
+    yield* s.llm.push(
+      TestLLM.failAfter(
+        providerRejected({ message: "Provider unavailable" }),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-store-provider-error", name: "storefail", input: {} }),
+      ),
+    )
 
     expect(yield* s.resume.pipe(Effect.exit)).toMatchObject({
       _tag: "Failure",
@@ -6948,7 +6964,7 @@ describe("SessionRunnerLLM", () => {
 
     expect(injected).toBe(true)
     expect(requireAssistant(yield* s.context)).toMatchObject({
-      error: { type: "provider.unknown", message: "Provider unavailable" },
+      error: { type: "provider.invalid-request", message: "Provider unavailable" },
     })
   })
 

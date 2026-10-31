@@ -4,7 +4,6 @@ import {
   ContentPolicyError,
   InvalidRequestError,
   AIError,
-  ProviderErrorEvent,
   ProviderInternalError,
   QuotaExceededError,
   RateLimitError,
@@ -78,9 +77,9 @@ export const isContextOverflow = (message: string) =>
 export const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
 
 export const isContextOverflowFailure = (failure: unknown) =>
-  failure instanceof AIError
-    ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
-    : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
+  failure instanceof AIError &&
+  failure.reason._tag === "InvalidRequest" &&
+  failure.reason.classification === "context-overflow"
 
 /**
  * Whether a failed call may succeed when sent again: rate limits, provider-side failures, transport failures that did

@@ -184,8 +184,7 @@ export const withPartial = (error: AIError, partial: LLMResponse | undefined) =>
 /**
  * Failure type for tool execute handlers. Handlers must map their internal
  * errors to this shape; the runtime catches `ToolFailure`s and surfaces them
- * as `tool-error` events plus a `tool-result` of `type: "error"` so the model
- * can self-correct.
+ * as a `tool-result` of `type: "error"` so the model can self-correct.
  *
  * Anything thrown or yielded by a handler that is not a `ToolFailure` is
  * treated as a defect and fails the stream.
