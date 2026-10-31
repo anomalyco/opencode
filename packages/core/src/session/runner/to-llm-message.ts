@@ -110,10 +110,14 @@ const providerMetadata = (
   state: Record<string, unknown> | undefined,
 ): ProviderMetadata | undefined => (state === undefined ? undefined : { [provider]: state })
 
-const toolInput = (tool: SessionMessage.AssistantTool) =>
-  tool.state.status === "streaming"
-    ? Option.getOrElse(decodeToolInput(tool.state.input), () => tool.state.input)
-    : tool.state.input
+const toolInput = (tool: SessionMessage.AssistantTool) => {
+  if (tool.state.status !== "streaming") return tool.state.input
+  // Streaming arguments are still being accumulated, so the raw text may not be a complete
+  // JSON object yet. Providers reject a string `tool_use.input`, so anything that is not a
+  // JSON object lowers to an empty object until the tool call settles.
+  const decoded = Option.getOrUndefined(decodeToolInput(tool.state.input))
+  return decoded !== null && typeof decoded === "object" && !Array.isArray(decoded) ? decoded : {}
+}
 
 const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined): ContentPart =>
   ToolCallPart.make({

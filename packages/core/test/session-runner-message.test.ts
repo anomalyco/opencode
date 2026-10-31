@@ -875,6 +875,35 @@ Earlier work
     ])
   })
 
+  test("lowers a streaming tool call with unparseable arguments to an object, not the raw text", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "malformed",
+              name: "shell",
+              state: SessionMessage.ToolStateStreaming.make({ status: "streaming", input: "not-json" }),
+              time: { created },
+            }),
+          ],
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    // A streaming tool call whose accumulated arguments are not a complete JSON object
+    // yet must still lower to an object. Providers reject a string `tool_use.input`
+    // (Anthropic answers 400 "Input should be an object"), so the raw text must not leak.
+    expect(messages[0]?.content).toEqual([{ type: "tool-call", id: "malformed", name: "shell", input: {} }])
+  })
+
   test("restores OpenAI encrypted reasoning metadata", () => {
     const messages = toLLMMessages(
       [
