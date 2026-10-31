@@ -116,6 +116,10 @@ export const docsSections: DocsSection[] = [
           { title: "SDK", slug: "build/sdk/effect" },
         ],
       },
+      {
+        title: "Community",
+        items: [{ title: "Ecosystem", slug: "ecosystem" }],
+      },
     ],
   },
   {
