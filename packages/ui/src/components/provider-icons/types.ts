@@ -61,6 +61,8 @@ export const iconNames = [
   "llama",
   "kuae-cloud-coding-plan",
   "kimi-for-coding",
+  "kimi-code-plan-global",
+  "kimi-code-plan-cn",
   "kilo",
   "jiekou",
   "io-net",
