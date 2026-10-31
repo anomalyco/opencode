@@ -108,6 +108,11 @@ function useFormatos() {
 /** `-0.16%`-style signed percentage, or a dash when the engine received no value. */
 const formatoPct = (valor: number | null) => (valor === null || !Number.isFinite(valor) ? "—" : `${Number(valor.toFixed(2))}%`)
 
+/** Day-aware stamp allowing nulls: null and broken timestamps read as "—" (the engine sent no time yet). */
+function momentoNulo(ts: number | null | undefined, formato: (ts: number) => string) {
+  return ts === null || ts === undefined ? "—" : formato(ts)
+}
+
 function esHoy(momento: Date) {
   const ahora = new Date()
   return ahora.getFullYear() === momento.getFullYear() && ahora.getMonth() === momento.getMonth() && ahora.getDate() === momento.getDate()
@@ -134,6 +139,14 @@ function tonoPnl(valor: number | null) {
   if (valor < 0) return "text-v2-state-fg-danger"
 
   return "text-v2-text-text-base"
+}
+
+/** A KPI tile's direction glyph: ▲ on profit, ▼ on loss, blank on flat or unknown. The
+ * trailing space separates it from the value it rides in front of. */
+function flechaPnl(valor: number | null) {
+  if (valor === null || valor === 0) return ""
+
+  return valor > 0 ? "▲ " : "▼ "
 }
 
 function tonoNivel(nivel: RegistroInfo["nivel"]) {
@@ -571,7 +584,7 @@ function TradingShell(props: {
   sinMensajes: Accessor<boolean>
   chat: JSX.Element
 }) {
-  const { formatoUSD, formatoHora } = useFormatos()
+  const { formatoUSD, formatoHora, formatoMomento } = useFormatos()
   const language = useLanguage()
   const dialog = useDialog()
   const sdk = useServerSDK()
@@ -1251,19 +1264,45 @@ function TradingShell(props: {
               <Show when={sección() === "account"}>
                 <div class="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-4 py-4">
                   <Show when={snapshot.enlace} fallback={<p class="px-1 text-[13px] text-v2-text-text-faint" style={LINEA}>{language.t("trading.account.offline")}</p>}>
+                    {/* The three headline numbers read first, big and signed; the details dl
+                        carries every account fact below them. */}
+                    <div class="grid gap-x-10 gap-y-3 md:grid-cols-3">
+                      <div>
+                        <p class="text-[11px] tracking-[0.08em] text-v2-text-text-faint uppercase" style={LINEA}>
+                          {language.t("trading.account.netWorth")}
+                        </p>
+                        <p class="mt-1 truncate text-[20px] tabular-nums text-v2-text-text-base">{formatoUSD(snapshot.cuenta.patrimonio)}</p>
+                      </div>
+                      <div>
+                        <p class="text-[11px] tracking-[0.08em] text-v2-text-text-faint uppercase" style={LINEA}>
+                          {language.t("trading.account.pnlToday")}
+                        </p>
+                        <p class={`mt-1 truncate text-[20px] tabular-nums ${tonoPnl(snapshot.cuenta.pnl_dia)}`}>
+                          {flechaPnl(snapshot.cuenta.pnl_dia)}
+                          {formatoUSD(snapshot.cuenta.pnl_dia)}
+                        </p>
+                      </div>
+                      <div>
+                        <p class="text-[11px] tracking-[0.08em] text-v2-text-text-faint uppercase" style={LINEA}>
+                          {language.t("trading.account.pnlRealized")}
+                        </p>
+                        <p class={`mt-1 truncate text-[20px] tabular-nums ${tonoPnl(snapshot.cuenta.pnl_realizado)}`}>
+                          {flechaPnl(snapshot.cuenta.pnl_realizado)}
+                          {formatoUSD(snapshot.cuenta.pnl_realizado)}
+                        </p>
+                      </div>
+                    </div>
                     <dl class="grid gap-x-10 md:grid-cols-2">
                       <MetaCuenta etiqueta={language.t("trading.account.id")} mono>
                         {snapshot.cuenta.id || "—"}
                       </MetaCuenta>
                       <MetaCuenta etiqueta={language.t("trading.account.type")}>{snapshot.cuenta.tipo || "—"}</MetaCuenta>
-                      <MetaCuenta etiqueta={language.t("trading.account.netWorth")}>{formatoUSD(snapshot.cuenta.patrimonio)}</MetaCuenta>
                       <MetaCuenta etiqueta={language.t("trading.account.cash")}>{formatoUSD(snapshot.cuenta.efectivo)}</MetaCuenta>
-                      <MetaCuenta etiqueta={language.t("trading.account.pnlToday")} tono={tonoPnl(snapshot.cuenta.pnl_dia)}>
-                        {formatoUSD(snapshot.cuenta.pnl_dia)}
-                      </MetaCuenta>
-                      <MetaCuenta etiqueta={language.t("trading.account.pnlRealized")} tono={tonoPnl(snapshot.cuenta.pnl_realizado)}>
-                        {formatoUSD(snapshot.cuenta.pnl_realizado)}
-                      </MetaCuenta>
+                      <MetaCuenta etiqueta={language.t("trading.account.available")}>{formatoUSD(snapshot.cuenta.disponible)}</MetaCuenta>
+                      <MetaCuenta etiqueta={language.t("trading.account.buyingPower")}>{formatoUSD(snapshot.cuenta.compraPoder)}</MetaCuenta>
+                      <MetaCuenta etiqueta={language.t("trading.account.margin")}>{formatoUSD(snapshot.cuenta.margenUsado)}</MetaCuenta>
+                      <MetaCuenta etiqueta={language.t("trading.account.excess")}>{formatoUSD(snapshot.cuenta.liquidezExtra)}</MetaCuenta>
+                      <MetaCuenta etiqueta={language.t("trading.account.updated")}>{momentoNulo(snapshot.cuenta.actualizada, formatoMomento)}</MetaCuenta>
                     </dl>
                     <MiniCurva curva={snapshot.curva} />
                   </Show>
@@ -1272,6 +1311,37 @@ function TradingShell(props: {
                       {guardiaDia().texto}
                     </MetaCuenta>
                   </dl>
+                  {/* Market-data health, one row per tracked family; absent until the serving
+                      engine carries the field (and hidden on the sample, which invents none). */}
+                  <Show when={snapshot.datos !== null}>
+                    <div class="border-t border-v2-border-border-muted pt-3">
+                      <h3 class="mb-1 px-1 text-[11px] tracking-[0.08em] text-v2-text-text-faint uppercase" style={LINEA}>
+                        {language.t("trading.data.title")}
+                      </h3>
+                      <p class="mb-2 px-1 text-[11px] text-v2-text-text-faint" style={LINEA}>
+                        {language.t("trading.data.lastUpdate")}
+                      </p>
+                      <dl class="grid gap-x-10 md:grid-cols-2">
+                        <For each={snapshot.datos ?? []}>
+                          {(estado) => <MetaCuenta etiqueta={estado.familia} mono>{momentoNulo(estado.actividad, formatoMomento)}</MetaCuenta>}
+                        </For>
+                      </dl>
+                      <Show when={(snapshot.datos ?? []).some((estado) => estado.aviso !== null)}>
+                        <p class="mb-1 mt-2 px-1 text-[11px] tracking-[0.08em] text-v2-state-fg-warning uppercase" style={LINEA}>
+                          {language.t("trading.data.notices")}
+                        </p>
+                        <ul class="flex flex-col gap-1 px-1">
+                          <For each={(snapshot.datos ?? []).filter((estado) => estado.aviso !== null)}>
+                            {(estado) => (
+                              <li class="text-[13px] text-v2-state-fg-warning" style={LINEA}>
+                                <span class="font-mono">{estado.familia}</span> · {estado.aviso}
+                              </li>
+                            )}
+                          </For>
+                        </ul>
+                      </Show>
+                    </div>
+                  </Show>
                 </div>
               </Show>
 

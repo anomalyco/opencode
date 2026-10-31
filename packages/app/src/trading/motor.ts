@@ -11,6 +11,16 @@ export interface CuentaInfo {
   readonly patrimonio: number | null
   readonly pnl_dia: number | null
   readonly pnl_realizado: number | null
+  /** AvailableFunds from the account summary (USD); null until IBKR sends the tag. */
+  readonly disponible: number | null
+  /** BuyingPower from the account summary (USD); null until IBKR sends the tag. */
+  readonly compraPoder: number | null
+  /** MaintMarginReq from the account summary (USD); null until IBKR sends the tag. */
+  readonly margenUsado: number | null
+  /** ExcessLiquidity from the account summary (USD); null until IBKR sends the tag. */
+  readonly liquidezExtra: number | null
+  /** Epoch ms of the newest account fact (summary tag or portfolio update); null until seen. */
+  readonly actualizada: number | null
 }
 
 export interface BotInfo {
@@ -93,6 +103,14 @@ export interface RiesgoInfo {
   readonly disparada: number | null
 }
 
+/** One tracked family's market-data health: when its data last arrived and the newest
+ * IBKR notice naming it; nulls mean "no news yet" (no position update, no notice). */
+export interface DatosMercadoInfo {
+  readonly familia: string
+  readonly actividad: number | null
+  readonly aviso: string | null
+}
+
 export interface SnapshotMotor {
   /** true while the engine has an IBKR connection (TWS demo 7497). */
   enlace: boolean
@@ -108,6 +126,8 @@ export interface SnapshotMotor {
   curva: CurvaInfo[]
   /** Missing when the serving engine predates the risk fields (it has not restarted with the new engine). */
   riesgo: RiesgoInfo | null
+  /** Market-data health per tracked family, fixed order; null when the serving engine predates the field. */
+  datos: DatosMercadoInfo[] | null
 }
 
 // ----------------------------- sample data -----------------------------
@@ -147,6 +167,11 @@ export const DEMO: SnapshotMotor = {
     patrimonio: 24_870.35,
     pnl_dia: -81.11,
     pnl_realizado: -124.5,
+    disponible: null,
+    compraPoder: null,
+    margenUsado: null,
+    liquidezExtra: null,
+    actualizada: null,
   },
   tareas: [],
   bots: [
@@ -182,6 +207,8 @@ export const DEMO: SnapshotMotor = {
   ],
   curva: [],
   riesgo: { limite_dia: 250, disparada: null },
+  // The sample invents no market-data health; the card stays hidden until the engine speaks.
+  datos: null,
 }
 
 function RegistroDemo(minutosAtras: number, nivel: RegistroInfo["nivel"], bot: string, mensaje: string): RegistroInfo {
@@ -259,6 +286,11 @@ function desdeNativo(nativo: SnapshotNativo): Omit<SnapshotMotor, "demo"> {
     patrimonio: numeroNulo(nativo.account?.equity ?? null),
     pnl_dia: numeroNulo(nativo.account?.pnl_day ?? null),
     pnl_realizado: numeroNulo(nativo.account?.pnl_realized ?? null),
+    disponible: numeroNulo(nativo.account?.available_funds ?? null),
+    compraPoder: numeroNulo(nativo.account?.buying_power ?? null),
+    margenUsado: numeroNulo(nativo.account?.margin_used ?? null),
+    liquidezExtra: numeroNulo(nativo.account?.excess_liquidity ?? null),
+    actualizada: numeroNulo(nativo.account?.updated_at ?? null),
   }
 
   return {
@@ -314,6 +346,14 @@ function desdeNativo(nativo: SnapshotNativo): Omit<SnapshotMotor, "demo"> {
       nativo.risk === undefined
         ? null
         : { limite_dia: numero(nativo.risk.loss_day_limit), disparada: numeroNulo(nativo.risk.triggered_at ?? null) },
+    datos:
+      nativo.data_status === undefined || nativo.data_status === null
+        ? null
+        : [...nativo.data_status].map((estado) => ({
+            familia: estado.symbol,
+            actividad: numeroNulo(estado.updated_at ?? null),
+            aviso: estado.notice ?? null,
+          })),
   }
 }
 

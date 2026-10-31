@@ -12,8 +12,30 @@ export const Account = Schema.Struct({
   equity: Schema.NullOr(Schema.Number),
   pnl_day: Schema.NullOr(Schema.Number),
   pnl_realized: Schema.NullOr(Schema.Number),
+  /** AvailableFunds account-summary tag (USD); null until IBKR sends the tag.
+   * Optional: an engine predating this field simply omits it. */
+  available_funds: optional(Schema.NullOr(Schema.Number)),
+  /** BuyingPower account-summary tag (USD); null until IBKR sends the tag. */
+  buying_power: optional(Schema.NullOr(Schema.Number)),
+  /** MaintMarginReq account-summary tag (USD); null until IBKR sends the tag. */
+  margin_used: optional(Schema.NullOr(Schema.Number)),
+  /** ExcessLiquidity account-summary tag (USD); null until IBKR sends the tag. */
+  excess_liquidity: optional(Schema.NullOr(Schema.Number)),
+  /** Epoch ms of the newest account fact (summary tag or portfolio update); null until seen. */
+  updated_at: optional(Schema.NullOr(Schema.Number)),
 }).annotate({ identifier: "Trading.Account" })
 export interface Account extends Schema.Schema.Type<typeof Account> {}
+
+/** One instrument family's market-data health as the engine sees it. */
+export const DataStatus = Schema.Struct({
+  /** The family's headline symbol (MNQ, M2K, MGC, USDJPY). */
+  symbol: Schema.String,
+  /** Epoch ms of the newest portfolio update mentioning the family; null when none arrived. */
+  updated_at: Schema.NullOr(Schema.Number),
+  /** The newest IBKR market-data notice mentioning the family (code + text); null when none. */
+  notice: Schema.NullOr(Schema.String),
+}).annotate({ identifier: "Trading.DataStatus" })
+export interface DataStatus extends Schema.Schema.Type<typeof DataStatus> {}
 
 export const System = Schema.Struct({
   id: Schema.String,
@@ -173,5 +195,9 @@ export const Snapshot = Schema.Struct({
   equity: optional(Schema.Array(EquityPoint)),
   /** The daily-loss guard; absent only from snapshots of an engine predating this field. */
   risk: optional(Risk),
+  /** Market-data health per tracked instrument family, fixed order MNQ, M2K, MGC, USDJPY.
+   * A family stays present with null fields when no fact arrived; absent only from
+   * snapshots of an engine predating this field. */
+  data_status: optional(Schema.NullOr(Schema.Array(DataStatus))),
 }).annotate({ identifier: "Trading.Snapshot" })
 export interface Snapshot extends Schema.Schema.Type<typeof Snapshot> {}

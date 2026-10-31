@@ -252,6 +252,21 @@ const clientIdEnUso = async (host: string, port: number, clientId: number): Prom
     ib.connect(clientId)
   })
 
+/** The tracked instrument families, fixed snapshot order; a family stays present with null
+ * fields until the first fact naming it arrives (no position and no notice = no news). */
+const familiasRastreo = ["MNQ", "M2K", "MGC", "USDJPY"] as const
+type Familia = (typeof familiasRastreo)[number]
+
+/** Which tracked family a local symbol or an IBKR notice text belongs to. Word-boundary
+ * match so "MNQZ6" attributes to MNQ without swallowing lookalikes inside longer words. */
+const familiaDe = (texto: string): Familia | null => {
+  if (/\bMNQ|\bNQ/.test(texto)) return "MNQ"
+  if (/\bM2K|\bRTY/.test(texto)) return "M2K"
+  if (/\bMGC|\bGC/.test(texto)) return "MGC"
+  if (/\bUSDJPY|\bJPY/.test(texto)) return "USDJPY"
+  return null
+}
+
 /** The pool as the engine sees it: every known system, folder and its live runtime (empty when never started). */
 let sistemas: Definicion[] = []
 const bots = new Map<string, Runtime>()
@@ -287,7 +302,7 @@ const CLIENT_ID = 30
 
 /** IBKR TWS API port. 7497 is TWS's default demo port (7496 would be live). */
 const ACCOUNT_SUMMARY_TAGS =
-  "NetLiquidation,TotalCashBalance,CashBalance,UnrealizedPnL,RealizedPnL,AccountType,Currency"
+  "NetLiquidation,TotalCashBalance,CashBalance,UnrealizedPnL,RealizedPnL,AccountType,Currency,AvailableFunds,BuyingPower,ExcessLiquidity,MaintMarginReq"
 
 const parseValue = (value: string | undefined) => {
   if (value === undefined || value.trim() === "") return null
@@ -353,6 +368,21 @@ const layer = (options: Options = {}) =>
       const equity = { value: [] as Trading.EquityPoint[] }
       // The daily-loss guard, persisted in the trading_risk single row.
       const risk = { value: null as Trading.Risk | null }
+      // Per-currency margins from the summary stream (USD tag row) plus the time of the
+      // newest account fact, whatever stream carried it — the honest "how fresh is this".
+      const margenes = {
+        value: {
+          fondos: null as number | null,
+          compraPoder: null as number | null,
+          margen: null as number | null,
+          liquidez: null as number | null,
+        },
+      }
+      const actualizada = { value: null as number | null }
+      // Market-data health per tracked family: a portfolio update proves the family's data
+      // arrives, a data-farm or subscription notice names the family's stall; never reset
+      // on disconnect (same as the equity curve — the staleness read swallows time).
+      const datosMercado = { value: new Map<Familia, { actividad: number | null; aviso: string | null }>() }
       const pnlSubscribed = new Set<string>()
       let positionKey = ""
 
@@ -437,6 +467,13 @@ const layer = (options: Options = {}) =>
             cash: parseValue(firstTagValue(tags.get("TotalCashBalance") ?? tags.get("CashBalance"))),
             equity: parseValue(firstTagValue(tags.get("NetLiquidation"))),
           }
+          margenes.value = {
+            fondos: parseValue(firstTagValue(tags.get("AvailableFunds"))),
+            compraPoder: parseValue(firstTagValue(tags.get("BuyingPower"))),
+            margen: parseValue(firstTagValue(tags.get("MaintMarginReq"))),
+            liquidez: parseValue(firstTagValue(tags.get("ExcessLiquidity"))),
+          }
+          actualizada.value = Date.now()
           if (!pnlSubscribed.has(id)) {
             pnlSubscribed.add(id)
             ib.getPnL(id).subscribe((updatePnl) =>
@@ -475,6 +512,7 @@ const layer = (options: Options = {}) =>
               ),
             ),
           }
+          actualizada.value = Date.now()
         }),
       )
 
@@ -486,6 +524,13 @@ const layer = (options: Options = {}) =>
           for (const position of todas) {
             const local = position.contract.localSymbol ?? position.contract.symbol
             if (position.contract.conId !== undefined && local) contratos.value.set(local, position.contract)
+            // A portfolio update naming a tracked family is that family's data-arrival proof.
+            const familia = familiaDe(local ?? "")
+            if (familia !== null)
+              datosMercado.value.set(familia, {
+                actividad: Date.now(),
+                aviso: datosMercado.value.get(familia)?.aviso ?? null,
+              })
           }
           const mapped = todas
             .flatMap((position): Trading.Position[] => {
@@ -516,6 +561,27 @@ const layer = (options: Options = {}) =>
             positionKey = key
             pushLog("info", "motor", `Posiciones: ${key}`)
           }
+        }),
+      )
+
+      // IBKR's messages (order rejects, tick errors, data-farm status) used to vanish into
+      // the sidecar console; every one reaches the record from here. Subscription and
+      // data-farm codes additionally name a family's market-data stance when the text
+      // mentions one of the tracked symbols.
+      const DATOS_CODIGOS = new Set([354, 2103, 2104, 2105, 2106, 2107, 10083, 10089, 10090, 10091, 10167, 10182, 10185, 10197])
+      ib.errorSubject.subscribe((error) =>
+        guard("dataNotices", () => {
+          const codigo = Number(error.code)
+          const texto = String(error.error)
+          // Farm connection status reports are channel bookkeeping, not trouble.
+          pushLog(codigo >= 2100 && codigo <= 2199 ? "info" : "warning", "motor", `IBKR ${codigo}: ${texto}`)
+          if (!DATOS_CODIGOS.has(codigo)) return
+          const familia = familiaDe(texto)
+          if (familia === null) return
+          datosMercado.value.set(familia, {
+            actividad: datosMercado.value.get(familia)?.actividad ?? null,
+            aviso: `${codigo}: ${texto}`,
+          })
         }),
       )
 
@@ -1583,6 +1649,11 @@ const layer = (options: Options = {}) =>
               equity: balances.value.equity,
               pnl_day: pnl.value.day,
               pnl_realized: pnl.value.realized,
+              available_funds: margenes.value.fondos,
+              buying_power: margenes.value.compraPoder,
+              margin_used: margenes.value.margen,
+              excess_liquidity: margenes.value.liquidez,
+              updated_at: actualizada.value,
             }
 
       return {
@@ -1597,6 +1668,14 @@ const layer = (options: Options = {}) =>
           trades: [...trades.value],
           equity: [...equity.value],
           risk: risk.value === null ? { loss_day_limit: DEFAULT_LOSS_DAY_LIMIT, triggered_at: null } : { ...risk.value },
+          data_status: familiasRastreo.map((familia) => {
+            const estado = datosMercado.value.get(familia)
+            return {
+              symbol: familia,
+              updated_at: estado?.actividad ?? null,
+              notice: estado?.aviso ?? null,
+            }
+          }),
         }),
         activate: (systemID) => arrancar(systemID, "user"),
         pause: (systemID) => detener(systemID, "user"),
