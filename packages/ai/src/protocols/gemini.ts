@@ -535,7 +535,7 @@ const mapUsage = (
 // input plus output equal to the response's final context size, under-reporting billed input; the summed billed counts
 // remain in provider metadata.
 const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: string) => {
-  const sum = (field: keyof GeminiUsage) =>
+  const sum = (field: Exclude<keyof GeminiUsage, "is_byok" | "cost_details">) =>
     ProviderShared.sumTokens(...requests.map((usage) => usage[field] ?? undefined))
   return mapUsage(
     {

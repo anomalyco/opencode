@@ -73,9 +73,9 @@ export class Usage extends Schema.Class<Usage>("AI.Usage")({
   reasoningTokens: Schema.optional(Schema.Number),
   totalTokens: Schema.optional(Schema.Number),
   /**
-   * USD the endpoint says it charged for this request, as OpenRouter, LiteLLM and OpenCode Zen report it in
-   * `usage.cost`. `0` is authoritative: the request was free or a subscription covered it. Absent, callers price the
-   * tokens themselves.
+   * USD reported for this request via `usage.cost` (OpenRouter, LiteLLM, OpenCode Zen), plus upstream provider spend
+   * for OpenRouter BYOK requests when reported. `0` is authoritative: the request was free or a subscription covered
+   * it. Absent, callers price the tokens themselves.
    */
   cost: Schema.optional(Schema.Number),
   providerMetadata: Schema.optional(ProviderMetadata),
