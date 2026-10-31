@@ -18,6 +18,7 @@ export const Plugin = define({
   id: "opencode.config.provider",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
+    const runSync = Effect.runSyncWith(yield* Effect.context<never>())
     const loaded = yield* ConfigEntryObserver.observe(
       config,
       ctx.event,
@@ -61,14 +62,24 @@ export const Plugin = define({
         const { current, source, changed } = overlayProvider(providers, providerID, item)
         const definitions = new Map<string, { readonly inherit: boolean; readonly base?: Model.Info }>()
         for (const [id, config] of Object.entries(item.models ?? {})) {
-          const base = source?.models.get(config.modelID ?? id) ?? source?.models.get(id)
+          const named = source?.models.get(config.base ?? config.modelID ?? id)
+          if (config.base !== undefined && !named)
+            runSync(
+              Effect.logWarning("configured base model not found", { providerID, modelID: id, base: config.base }),
+            )
+          const base = named ?? source?.models.get(id)
           const inherit = changed || !current?.models.has(id)
           // Bind the source at this point in the provider fold. Later source edits/removal
           // and its credential availability must not change an already-defined alias.
           definitions.set(id, { inherit, base: base && structuredClone(base) })
           if (!inherit) continue
           providers.models.update(providerID, id, (model) => {
-            if (base) Object.assign(model, structuredClone(base))
+            if (base)
+              Object.assign(
+                model,
+                structuredClone(base),
+                config.base !== undefined ? aliasOf(providerID, id, config) : {},
+              )
             if (item.package !== undefined) model.package = undefined
           })
         }
@@ -113,7 +124,12 @@ export const Plugin = define({
             providerID,
             id,
             config,
-            inherit && source?.base ? { base: source.base } : undefined,
+            inherit && source?.base
+              ? {
+                  base: source.base,
+                  alias: config.base !== undefined ? aliasOf(providerID, id, config) : undefined,
+                }
+              : undefined,
           )
           // Inherited variants are spelled for the base model's package, so a package override needs fresh ones.
           // A base without variants has no reasoning support to respell.
@@ -140,6 +156,15 @@ export const Plugin = define({
     })
   }),
 })
+
+// A model with `base` keeps its own identity: only the metadata comes from the base model.
+function aliasOf(providerID: string, id: string, config: { readonly modelID?: string }) {
+  return {
+    id: Model.ID.make(id),
+    modelID: Model.ID.make(config.modelID ?? id),
+    providerID: Provider.ID.make(providerID),
+  }
+}
 
 // Integration documents are left out: their providers authenticate with the integration's connection, so they add no
 // integration or method, and the integration's own plugin applies them earlier in the provider chain (`integrate`).
@@ -212,11 +237,11 @@ function overlay(
   providerID: string,
   id: string,
   config: NonNullable<ConfigProvider.Info["models"]>[string],
-  inherit: { readonly base: Model.Info | undefined } | undefined,
+  inherit: { readonly base: Model.Info | undefined; readonly alias?: ReturnType<typeof aliasOf> } | undefined,
 ) {
   models.update(providerID, id, (model) => {
     if (inherit) {
-      if (inherit.base) Object.assign(model, structuredClone(inherit.base))
+      if (inherit.base) Object.assign(model, structuredClone(inherit.base), inherit.alias)
       if (item.package !== undefined) model.package = undefined
       if (item.settings?.baseURL !== undefined && model.settings) delete model.settings.baseURL
     }
