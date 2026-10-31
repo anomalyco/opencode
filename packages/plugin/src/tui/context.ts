@@ -177,6 +177,11 @@ export interface PanelInput {
   readonly toggleFullscreen: () => void
 }
 
+/** One layout of the session tab bar. The host owns its width and visibility; ui.tabs has the tabs. */
+export interface SessionTabsInput {
+  readonly width: number
+}
+
 /**
  * The host UI's slot tree. Every path is one slot: a named boundary a plugin
  * may render around, inside, or take over. Paths are absolute and
@@ -197,6 +202,8 @@ export interface SlotMap {
   readonly "prompt.footer.file": PromptFooterInput
   readonly "session.composer.top": { readonly sessionID: string }
   readonly "session.panel": PanelInput
+  readonly "session.tabs.horizontal": SessionTabsInput
+  readonly "session.tabs.vertical": SessionTabsInput
   readonly "sidebar.content": { readonly sessionID: string }
   readonly "sidebar.footer": { readonly sessionID: string }
 }
@@ -526,6 +533,16 @@ export interface UI {
     move(sessionID: string, index: number): boolean
     /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
     close(sessionID?: string): boolean
+    /**
+     * A built-in horizontal tab for plugins that draw their own bar. The host draws its status, title,
+     * pulse and close button and handles clicks. `label` replaces the status marker, as in numbers mode;
+     * its colour and the pulse still show the status. Reordering and the context menu stay with the built-in bar.
+     */
+    readonly Item: (props: {
+      readonly sessionID: string
+      readonly width: number
+      readonly label?: string
+    }) => JSX.Element
   }
   readonly model: {
     /** The prompt's selected model; variant is undefined for the model default. Reactive when read in a Solid computation. */
