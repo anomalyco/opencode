@@ -24,6 +24,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Schedule } from "@opencode/core/schedule"
 import { ScheduleTable } from "@opencode/core/schedule/sql"
 import { Session } from "@opencode/core/session"
+import { SessionEvent } from "@opencode/core/session/event"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionExecution } from "@opencode/core/session/execution"
@@ -52,13 +53,14 @@ const toggleDirectory = "/toggle"
 const missingDirectory = "/missing"
 
 const wakes: Session.ID[] = []
+const activeSessions = new Set<Session.ID>()
 /** Runs inside the next wake, which happens while a schedule is firing. */
 let duringWake: Effect.Effect<void> = Effect.void
 const execution = Layer.succeed(
   SessionExecution.Service,
   SessionExecution.Service.of({
-    active: Effect.sync(() => new Set()),
-    isActive: () => Effect.succeed(false),
+    active: Effect.sync(() => new Set(activeSessions)),
+    isActive: (id) => Effect.sync(() => activeSessions.has(id)),
     resume: () => Effect.void,
     interrupt: () => Effect.succeed(false),
     wake: (sessionID) =>
@@ -317,6 +319,7 @@ const setup = (directory = enabledDirectory) =>
       .run()
       .pipe(Effect.orDie)
     wakes.length = 0
+    activeSessions.clear()
     duringWake = Effect.void
     toggle.on = false
     toggle.reads = 0
@@ -346,10 +349,10 @@ const pending = Database.Service.use(({ db }) =>
       Effect.map((rows) => rows.map((row) => row.id)),
     ),
 )
-/** Moves pending prompts into the transcript, as a running Session would. */
+/** Moves pending prompts into the transcript at an idle boundary. */
 const deliver = Effect.gen(function* () {
   const { db } = yield* Database.Service
-  yield* SessionInbox.promote(db, yield* Bus.Service, sessionID, "steer")
+  yield* SessionInbox.promote(db, yield* Bus.Service, sessionID, "input")
 })
 const messageID = (schedule: Schedule.Info, run: number) => SessionMessage.ID.make(`msg_${schedule.id}_${run}`)
 const iso = (time: DateTime.Utc | undefined) => time && DateTime.formatIso(time)
@@ -375,9 +378,13 @@ describe("Schedule", () => {
       expect(wakes).toEqual([sessionID])
       const { db } = yield* Database.Service
       expect(yield* SessionInbox.find(db, messageID(schedule, 1))).toMatchObject({
-        type: "user",
-        delivery: "steer",
-        payload: { text: "check the build" },
+        type: "synthetic",
+        delivery: "queue",
+        payload: {
+          text: "check the build",
+          description: "Scheduled prompt",
+          metadata: { source: "schedule" },
+        },
       })
       expect(yield* schedules.get(schedule.id)).toMatchObject({
         status: "done",
@@ -521,6 +528,78 @@ describe("Schedule", () => {
     }),
   )
 
+  it.effect("waits for an idle boundary rather than steering mid-turn", () =>
+    Effect.gen(function* () {
+      const schedules = yield* setup()
+      const schedule = yield* schedules.create({
+        sessionID,
+        name: "Morning brief",
+        when: { type: "every", every: "10 minutes" },
+        action: { type: "prompt", prompt: "summarize overnight activity" },
+      })
+      yield* TestClock.adjust("10 minutes")
+      yield* schedules.tick
+
+      const { db } = yield* Database.Service
+      const bus = yield* Bus.Service
+      // Mid-turn step boundaries only promote steers, so a scheduled wake waits for idle.
+      expect(yield* SessionInbox.promote(db, bus, sessionID, "steer")).toBe(0)
+      expect(yield* pending).toEqual([messageID(schedule, 1)])
+
+      expect(yield* SessionInbox.promote(db, bus, sessionID, "input")).toBe(1)
+      expect(yield* pending).toEqual([])
+      const messages = yield* Session.Service.use((sessions) => sessions.messages({ sessionID }))
+      expect(messages.at(-1)).toMatchObject({
+        id: messageID(schedule, 1),
+        type: "synthetic",
+        text: "summarize overnight activity",
+        description: "Morning brief · #1",
+        metadata: { source: "schedule" },
+      })
+    }),
+  )
+
+  it.effect("skips a firing while the previous scheduled turn is still running, then queues behind a user turn once settled", () =>
+    Effect.gen(function* () {
+      const schedules = yield* setup()
+      const bus = yield* Bus.Service
+      const sessions = yield* Session.Service
+      const schedule = yield* schedules.create({
+        sessionID,
+        name: "Poll",
+        when: { type: "every", every: "1 minute" },
+        action: { type: "prompt", prompt: "poll" },
+      })
+
+      // Run #1 fires and is promoted into the active execution.
+      yield* TestClock.adjust("1 minute")
+      yield* schedules.tick
+      activeSessions.add(sessionID)
+      yield* deliver
+      expect(yield* pending).toEqual([])
+
+      // Run #1 has not settled yet -> next due slot is skipped rather than stacked.
+      wakes.length = 0
+      yield* TestClock.adjust("1 minute")
+      yield* schedules.tick
+      expect(yield* pending).toEqual([])
+      expect(wakes).toEqual([])
+      expect(yield* schedules.get(schedule.id)).toMatchObject({ runCount: 1, lastOutcome: "skipped" })
+
+      // Run #1 settles to idle, then the user starts an interactive turn.
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
+      yield* sessions.prompt({ sessionID, text: "interactive question", resume: false })
+      yield* deliver
+      activeSessions.add(sessionID)
+
+      // Next due slot sees Run #1 settled, so Run #2 queues politely behind the user's turn.
+      yield* TestClock.adjust("1 minute")
+      yield* schedules.tick
+      expect(yield* pending).toEqual([messageID(schedule, 2)])
+      expect(yield* schedules.get(schedule.id)).toMatchObject({ runCount: 2, lastOutcome: "fired" })
+    }),
+  )
+
   it.effect("does not duplicate a prompt admitted before a crash", () =>
     Effect.gen(function* () {
       const schedules = yield* setup()
@@ -532,7 +611,13 @@ describe("Schedule", () => {
       })
       yield* TestClock.adjust("1 minute")
       // The previous process admitted run 1 and died before advancing the row.
-      yield* sessions.prompt({ sessionID, id: messageID(schedule, 1), text: "once", resume: false })
+      yield* sessions.synthetic({
+        sessionID,
+        id: messageID(schedule, 1),
+        text: "once",
+        delivery: "queue",
+        resume: false,
+      })
 
       yield* schedules.tick
       expect(yield* pending).toEqual([messageID(schedule, 1)])

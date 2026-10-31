@@ -1,7 +1,7 @@
 export * as Schedule from "./schedule.js"
 
 import { randomUUID } from "node:crypto"
-import { and, asc, eq, gt, isNull, lte, min, or, sql } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, isNull, lte, min, or, sql } from "drizzle-orm"
 import { Cause, Clock, Context, Cron, DateTime, Effect, Latch, Layer, Option, Result, Schedule as EffectSchedule, Schema } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -30,7 +30,7 @@ import { Session } from "./session.js"
 import { SessionExecution } from "./session/execution.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
-import { SessionInboxTable } from "./session/sql.js"
+import { SessionInboxTable, SessionMessageTable } from "./session/sql.js"
 import { ScheduleCheck } from "./schedule/check.js"
 import { ScheduleTable } from "./schedule/sql.js"
 
@@ -167,6 +167,13 @@ const promptText = (prompt: string, message: string | undefined) => {
   return `${prompt}\n\n${message}`
 }
 
+const wakeDescription = (row: Pick<Row, "name" | "when" | "check">, run: number, suffix?: string) => {
+  const label = row.name ?? "Scheduled prompt"
+  if (suffix !== undefined) return `${label} · ${suffix}`
+  const oneShot = row.when.type === "in" || row.when.type === "at" || row.check?.mode === "until"
+  return oneShot ? label : `${label} · #${run}`
+}
+
 const resolveStoredCheck = (input: CreateInput): Effect.Effect<StoredCheck | undefined, InvalidError> => {
   if (input.if !== undefined && input.until !== undefined)
     return Effect.fail(new InvalidError({ reason: "Choose either if or until, not both" }))
@@ -254,6 +261,32 @@ const layer = Layer.effect(
           Effect.map((row) => row !== undefined),
         )
 
+    /** True while `messageID` was promoted into `sessionID` and that turn has not yet reached idle or another input. */
+    const activeTurn = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, messageID: SessionMessage.ID) {
+      if (!(yield* execution.isActive(sessionID))) return false
+      const message = yield* db
+        .select({ seq: SessionMessageTable.seq })
+        .from(SessionMessageTable)
+        .where(and(eq(SessionMessageTable.id, messageID), eq(SessionMessageTable.session_id, sessionID)))
+        .get()
+        .pipe(Effect.orDie)
+      if (message === undefined) return false
+      const boundary = yield* db
+        .select({ id: SessionMessageTable.id })
+        .from(SessionMessageTable)
+        .where(
+          and(
+            eq(SessionMessageTable.session_id, sessionID),
+            inArray(SessionMessageTable.type, ["idle", "user", "synthetic"]),
+            gt(SessionMessageTable.seq, message.seq),
+          ),
+        )
+        .limit(1)
+        .get()
+        .pipe(Effect.orDie)
+      return boundary === undefined
+    })
+
     const admitWake = Effect.fnUntraced(function* (
       row: Row,
       sessionID: SessionSchema.ID,
@@ -261,23 +294,29 @@ const layer = Layer.effect(
       due: number,
       late: boolean,
       text: string,
-      checkMeta?: Record<string, unknown>,
+      options?: {
+        readonly suffix?: string
+        readonly check?: Record<string, unknown>
+      },
     ) {
       // The id is derived from `run_count`, so retrying after a crash reconciles with the earlier admission.
+      // Queued synthetic delivery waits for an idle boundary rather than steering mid-turn and renders as a 1-line notice.
       const id = SessionMessage.ID.make(`msg_${row.id}_${run}`)
-      yield* sessions.prompt({
+      yield* sessions.synthetic({
         sessionID,
         id,
         text,
-        delivery: "steer",
+        description: wakeDescription(row, run, options?.suffix),
+        delivery: "queue",
         metadata: {
+          source: "schedule",
           schedule: {
             id: row.id,
             name: row.name ?? undefined,
             run,
             dueAt: due,
             late,
-            ...(checkMeta === undefined ? {} : { check: checkMeta }),
+            ...(options?.check === undefined ? {} : { check: options.check }),
           },
         },
       })
@@ -319,7 +358,7 @@ const layer = Layer.effect(
             due,
             late,
             `${row.action.prompt}\n\n${note}`,
-            { error: outcome.error, failures: strikes },
+            { suffix: "paused", check: { error: outcome.error, failures: strikes } },
           )
           yield* db
             .update(ScheduleTable)
@@ -351,7 +390,7 @@ const layer = Layer.effect(
               due,
               late,
               `${row.action.prompt}\n\n[Schedule timed out without matching: ${ScheduleCheck.describe(check.condition)}]`,
-              { expired: true },
+              { suffix: "timed out", check: { expired: true } },
             )
             yield* db
               .update(ScheduleTable)
@@ -394,7 +433,7 @@ const layer = Layer.effect(
           due,
           late,
           promptText(row.action.prompt, outcome.message),
-          outcome.message === undefined ? {} : { message: outcome.message },
+          outcome.message === undefined ? undefined : { check: { message: outcome.message } },
         )
         const remaining =
           check.mode === "until" ? 0 : row.remaining_runs === null ? null : row.remaining_runs - 1
@@ -455,19 +494,28 @@ const layer = Layer.effect(
         yield* update(row, { last_outcome: "disabled", retry_at: now + DISABLED_RETRY, time_updated: now })
         return
       }
-      if (row.last_message_id !== null && (yield* pending(row.last_message_id))) {
-        // The wake that followed admission may have been lost; waking again is harmless.
-        yield* execution.wake(session.id)
+      const skip = () => {
         const next = following(row, now)
         const done = finished(row, next, row.remaining_runs)
-        yield* update(row, {
+        return update(row, {
           last_outcome: "skipped",
           retry_at: null,
           status: done ? "done" : "active",
           next_due_at: done ? null : next,
           time_updated: now,
         })
-        return
+      }
+      if (row.last_message_id !== null) {
+        if (yield* pending(row.last_message_id)) {
+          // The wake that followed admission may have been lost; waking again is harmless.
+          yield* execution.wake(session.id)
+          yield* skip()
+          return
+        }
+        if (yield* activeTurn(session.id, row.last_message_id)) {
+          yield* skip()
+          return
+        }
       }
       yield* fire(row, session, due, now)
     })
