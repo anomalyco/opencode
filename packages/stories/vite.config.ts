@@ -58,7 +58,7 @@ export default defineConfig({
       { find: /^@\/runtime\/platform\/platform$/, replacement: path.resolve(mocks, "app/context/platform.ts") },
       { find: /^@\/runtime\/server\/sync$/, replacement: path.resolve(mocks, "app/context/server-sync.ts") },
       { find: /^@\/runtime\/server\/client$/, replacement: path.resolve(mocks, "app/context/server-sdk.ts") },
-      { find: /^@\/runtime\/server\/current$/, replacement: path.resolve(mocks, "app/context/server-current.ts") },
+      { find: /^@\/runtime\/server\/current$/, replacement: path.resolve(mocks, "app/context/server-current.tsx") },
       { find: /^@\/providers\/catalog\/providers$/, replacement: path.resolve(mocks, "app/hooks/use-providers.ts") },
       {
         find: /^@\/providers\/models\/unpaid$/,

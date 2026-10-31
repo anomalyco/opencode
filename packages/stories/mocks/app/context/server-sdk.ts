@@ -1,3 +1,6 @@
+import { useServer } from "@/runtime/server/current"
+import { ServerScope } from "@/runtime/server/scope"
+
 const providers = [
   "opencode-go",
   "opencode",
@@ -30,6 +33,7 @@ const client = {
       }),
       callback: async (input: { method?: number }) => {
         if (input.method === 0) return new Promise<never>(() => {})
+
         return { data: undefined }
       },
     },
@@ -51,12 +55,31 @@ const api = {
   },
 }
 
+const noopStream = {
+  on: () => () => undefined,
+  listen: () => () => undefined,
+}
+
 export function useServerSDK() {
+  const server = useServer()
+
+  if ("sdk" in server.ctx) return server.ctx.sdk
+
   return {
+    server: { type: "http" as const, http: { url: "http://storybook.local" } },
     scope: ServerScope.local,
     url: "http://storybook.local",
+    http: { url: "http://storybook.local" },
     api,
     client,
+    connection: {
+      status: () => "disconnected" as const,
+      attempt: () => 0,
+      error: () => undefined,
+    },
+    event: {
+      ...noopStream,
+      location: () => noopStream,
+    },
   }
 }
-import { ServerScope } from "@/runtime/server/scope"
