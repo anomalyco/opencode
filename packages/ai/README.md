@@ -287,7 +287,8 @@ if (department.type === "choice") department.choice // "billing" | "technical"
 ```
 
 `input` is a JSON object or an ordered list of `text`, `json` and `media` parts. Questions are keyed by name, and
-answers come back under the same names; key order is the order sent to the host.
+answers come back under the same names. Key order is the order sent to the host; as in any JavaScript object,
+integer-like names such as `"1"` come first.
 A question the host declines is `{ type: "error", reason, message? }`, with `reason` such as `"refusal"`; the other
 answers still come back.
 `response.usage` has `inputTokens`, `outputTokens`, `totalTokens` and the host's reported `cost` when it sends one;

@@ -63,7 +63,7 @@ export const DecisionQuestion = Schema.Union([PredicateQuestion, ChoiceQuestion,
   Schema.toTaggedUnion("type"),
 )
 export type DecisionQuestion = Schema.Schema.Type<typeof DecisionQuestion>
-/** Questions keyed by name; key order is the order sent to the host. */
+/** Questions keyed by name; key order is the order sent to the host, with integer-like names such as `"1"` first. */
 export type DecisionQuestions = Readonly<Record<string, DecisionQuestion>>
 
 // Only what makes a request meaningless is checked here; counts and sizes are the host's to enforce.
