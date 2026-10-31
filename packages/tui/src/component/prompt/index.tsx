@@ -35,8 +35,9 @@ import { registerComposer, saveDraft, takeDraft } from "./draft-stash"
 import { Skill } from "@opencode/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
-import { usePromptStash } from "../../prompt/stash"
+import { usePromptStash, type StashEntry } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
+import { stringWidth } from "../../util/string-width"
 import { type AutocompleteOption, type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
@@ -189,7 +190,8 @@ export function Prompt(props: PromptProps) {
   const [inputTarget, setInputTarget] = createSignal<TextareaRenderable | undefined>()
 
   const enabled = useInteractivity()
-  const disabled = () => props.disabled || !enabled()
+  const stash = usePromptStash()
+  const disabled = () => props.disabled || !enabled() || stash.pending()
   const leader = Keymap.useLeaderActive()
   const muted = () => leader() || props.muted
   const local = useLocal()
@@ -212,7 +214,6 @@ export function Prompt(props: PromptProps) {
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
   const history = usePromptHistory()
-  const stash = usePromptStash()
   const keymap = Keymap.use()
   const renderer = useRenderer()
   const measure = (text: string) => measureEditText(text, { widthMethod: renderer.widthMethod })
@@ -879,52 +880,56 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  function restoreStash(entry: StashEntry) {
+    if (disposed) {
+      saveDraft(stashSessionID, { prompt: entry.prompt, cursor: stringWidth(entry.prompt.text) })
+      return
+    }
+    ref.set(entry.prompt)
+  }
+
   const stashCommands = createMemo(() =>
     [
       {
         title: "Stash prompt",
         name: "prompt.stash",
         category: "Prompt",
-        enabled: !!store.prompt.text,
-        run: () => {
-          if (!store.prompt.text) return
-          stash.push({ prompt: store.prompt })
-          resetComposer()
+        enabled: !!store.prompt.text && !stash.pending(),
+        run: async () => {
+          if (!store.prompt.text || stash.pending()) return
+          const before = JSON.stringify(store.prompt)
           dialog.clear()
+          await stash.push({ prompt: store.prompt }).then(
+            () => {
+              if (!disposed && JSON.stringify(store.prompt) === before) resetComposer()
+            },
+            (error) => toast.error(error),
+          )
         },
       },
       {
         title: "Stash pop",
         name: "prompt.stash.pop",
         category: "Prompt",
-        enabled: stash.list().length > 0,
-        run: () => {
-          const entry = stash.pop()
-          if (entry) {
-            input.setText(entry.prompt.text)
-            setStore("prompt", entry.prompt)
-            restoreExtmarksFromPrompt(entry.prompt)
-            input.gotoBufferEnd()
-          }
+        enabled: stash.list().length > 0 && !stash.pending(),
+        run: async () => {
+          if (stash.pending()) return
           dialog.clear()
+          await stash.pop().then(
+            (entry) => {
+              if (entry) restoreStash(entry)
+            },
+            (error) => toast.error(error),
+          )
         },
       },
       {
         title: "Stash list",
         name: "prompt.stash.list",
         category: "Prompt",
-        enabled: stash.list().length > 0,
+        enabled: stash.list().length > 0 && !stash.pending(),
         run: () => {
-          dialog.replace(() => (
-            <DialogStash
-              onSelect={(entry) => {
-                input.setText(entry.prompt.text)
-                setStore("prompt", entry.prompt)
-                restoreExtmarksFromPrompt(entry.prompt)
-                input.gotoBufferEnd()
-              }}
-            />
-          ))
+          dialog.replace(() => <DialogStash onSelect={restoreStash} />)
         },
       },
     ].map(
