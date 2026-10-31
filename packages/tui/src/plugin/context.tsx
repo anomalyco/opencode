@@ -16,7 +16,7 @@ import {
 import path from "path"
 import { stat } from "fs/promises"
 import { fileURLToPath } from "url"
-import type { Page } from "@opencode/plugin/tui/context"
+import type { LanguageDefinition, Page } from "@opencode/plugin/tui/context"
 import { Host } from "@opencode/plugin/host"
 import { resolveSlots, type Claim } from "./structure"
 import { createStore, produce, reconcile as reconcileStore, unwrap } from "solid-js/store"
@@ -34,6 +34,7 @@ import { createPluginSources } from "./source"
 import { isMissingPath } from "../util/config-directories"
 import { createMarkdownRenderer } from "./markdown"
 import { useLog, type LogTags } from "../context/log"
+import { Languages } from "../util/languages"
 
 export interface PackageSource {
   readonly prepare: (spec: string, install?: boolean) => Promise<Host.Target>
@@ -76,6 +77,7 @@ type Registration = {
   routes: Record<string, Page>
   slots: Record<string, RegisteredSlot>
   markdown: Record<string, MarkdownCodeBlockRenderer>
+  languages: Record<string, LanguageDefinition>
   cleanups: Dispose[]
 }
 
@@ -141,10 +143,32 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
   const markdown = createMarkdownRenderer(() =>
     Object.values(store.registrations).flatMap((registration) => (registration.active ? [registration.markdown] : [])),
   )
+  // Plugins contribute in enable order, and cli.json languages override them.
+  createEffect(() =>
+    Languages.set(
+      "plugins",
+      Object.values(store.registrations).flatMap((registration) =>
+        registration.active ? Object.values(registration.languages) : [],
+      ),
+    ),
+  )
+  createEffect(() =>
+    Languages.set(
+      "config",
+      Object.entries(config.data.languages ?? {}).map(([id, language]) =>
+        Languages.resolve({ id, ...language }, directory),
+      ),
+    ),
+  )
+  onCleanup(() => {
+    Languages.set("plugins", [])
+    Languages.set("config", [])
+  })
   const clearContributions = (id: string) => {
     setStore("registrations", id, "routes", reconcileStore({}))
     setStore("registrations", id, "slots", reconcileStore({}))
     setStore("registrations", id, "markdown", reconcileStore({}))
+    setStore("registrations", id, "languages", reconcileStore({}))
   }
 
   const activate = async (id: string) => {
@@ -164,9 +188,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       registry: {
         has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
         set: (
-          kind: "routes" | "slots" | "markdown",
+          kind: "routes" | "slots" | "markdown" | "languages",
           name: string,
-          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer,
+          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer | LanguageDefinition,
         ) => setStore("registrations", id, kind, name, () => value),
         remove: (kind, name) =>
           setStore(
@@ -708,6 +732,7 @@ function toRegistration(item: Desired): Registration {
     routes: {},
     slots: {},
     markdown: {},
+    languages: {},
     cleanups: [],
   }
 }
