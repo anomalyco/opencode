@@ -204,7 +204,7 @@ const Event = Schema.Union([
     status: Schema.String,
   }),
   Schema.Struct({ event_type: Schema.Literal("interaction.completed"), interaction: Interaction }),
-  Schema.Struct({ event_type: Schema.Literal("error"), error: Schema.Unknown }),
+  Schema.Struct({ event_type: Schema.Literal("error"), error: Schema.optionalKey(Schema.Unknown) }),
   UnknownEvent,
 ])
 type Event = typeof Event.Type

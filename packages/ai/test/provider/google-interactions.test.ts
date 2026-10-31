@@ -152,6 +152,9 @@ describe("Google Interactions", () => {
         classification: "context-overflow",
         body: JSON.stringify(overflow),
       })
+
+      const bare = yield* generate({ event_type: "error" }).pipe(Effect.flip)
+      expect(bare.reason).toMatchObject({ _tag: "UnknownProvider", message: "Google Interactions stream error" })
     }),
   )
 
