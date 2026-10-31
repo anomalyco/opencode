@@ -87,6 +87,8 @@
     "./providers/moonshot/chat": "./src/providers/moonshot/chat.ts",
     "./providers/moonshot/messages": "./src/providers/moonshot/messages.ts",
     "./providers/moonshot/responses": "./src/providers/moonshot/responses.ts",
+    "./providers/nvidia": "./src/providers/nvidia.ts",
+    "./providers/nvidia/images": "./src/providers/nvidia/images.ts",
     "./providers/openai": "./src/providers/openai.ts",
     "./providers/openai-compatible": "./src/providers/openai-compatible.ts",
     "./providers/openai-compatible-responses": "./src/providers/openai-compatible-responses.ts",

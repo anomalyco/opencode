@@ -28,6 +28,7 @@ import {
   Google,
   Meta,
   MiniMax,
+  Nvidia,
   OpenCode,
   OpenAI,
   OpenAICompatible,
@@ -159,6 +160,10 @@ describe("public exports", () => {
     expect(ZAI.provider.image).toBe(ZAI.image)
     expect(MiniMax.configure({ apiKey: "fixture" }).image("image-01").route.id).toBe("minimax-images")
     expect(MiniMax.provider.image).toBe(MiniMax.image)
+    expect(Nvidia.configure({ apiKey: "fixture" }).image("black-forest-labs/flux.2-klein-4b").route.id).toBe(
+      "nvidia-genai-images",
+    )
+    expect(Nvidia.provider.image).toBe(Nvidia.image)
     expect(Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" }).image("qwen-image-2.0").route.id).toBe(
       "alibaba-images",
     )

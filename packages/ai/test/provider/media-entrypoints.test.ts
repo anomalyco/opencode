@@ -204,6 +204,30 @@ const images: ReadonlyArray<Case<ImageModel>> = [
     auth: ["authorization", "Bearer cloudflare-key"],
     modelInURL: true,
   },
+  {
+    name: "nvidia",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/nvidia/images")
+      return model("black-forest-labs/flux.2-klein-4b", { ...shared, apiKey: "nvidia-key" })
+    },
+    url: "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b",
+    auth: ["authorization", "Bearer nvidia-key"],
+    modelInURL: true,
+  },
+  {
+    name: "nvidia (catalog invoke URL)",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/nvidia/images")
+      return model("black-forest-labs/flux_2-klein-4b", {
+        ...shared,
+        apiKey: "nvidia-key",
+        baseURL: "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b",
+      })
+    },
+    url: "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b",
+    auth: ["authorization", "Bearer nvidia-key"],
+    modelInURL: true,
+  },
 ]
 
 const decisions: ReadonlyArray<Case<DecisionModel>> = [

@@ -681,6 +681,7 @@ table before swapping only the `model`:
 | Vercel AI Gateway     | ✓   | as OpenAI³           | as OpenAI³            | per model                        | as OpenAI                                          |
 | OpenRouter            | ✓   | ✓ (`aspect_ratio`)   | tier⁵                 | per model⁵                       | `size`, `outputFormat` (no `mask`)                 |
 | Cloudflare Workers AI | 1   | width × height²      | width × height²       | ✗                                | `width`, `height`, `seed`                          |
+| NVIDIA                | 1   | nearest size⁶        | nearest size⁶         | ✗                                | `width`, `height`, `seed`, `steps`, `image`        |
 
 ✓ lowers natively; ✗ fails whenever the field is set (including `n: 1`); `1` means `n > 1` fails. "width × height"
 computes a size the provider accepts and fails when the request falls outside its limits. ¹ `ai.image.stream` on OpenAI
@@ -694,6 +695,8 @@ Recraft, reject sizes outside it. Grok (`spacexai/*`, `xai/*`) ignores `size`, s
 exact width × height (512–2048 px, steps of 8) otherwise; `image-01-live` takes only the presets, minus `21:9`.
 ⁵ OpenRouter takes `512`, `768`, `1K`, `1.5K`, `2K` or `4K` rather than pixels; other values are left out. It has no
 edits endpoint, so input images go to `/images/generations` as `input_references` (data URLs or http(s) URLs).
+⁶ NVIDIA picks the nearest width × height from the list each FLUX model accepts (FLUX.1 schnell and dev, FLUX.2
+klein 4B, FLUX.1 Kontext dev); other models need `width` and `height` in `providerOptions`.
 
 `Media.Asset` is the one asset type shared by image requests, image responses, LLM messages, and tool results.
 `asset.source` is the serializable `Media.Source` (`bytes`, `base64`, `url`, or `ref`); `asset.bytes()`,
@@ -841,6 +844,26 @@ The reference image is sent as a `character` subject, so it should be a single f
 back inline (`responseFormat: "base64"` by default); `responseFormat: "url"` returns links that expire after 24 hours
 and carry no MIME type until materialized. MiniMax status codes map to typed errors; code 1026 is a `ContentPolicy`
 error.
+
+### NVIDIA images
+
+```ts
+import { Nvidia } from "@opencode/ai/providers"
+
+const nvidia = ai.image.generate({
+  model: Nvidia.configure({ apiKey: process.env.NVIDIA_API_KEY }).image("black-forest-labs/flux.2-klein-4b"),
+  prompt,
+  aspect: "16:9",
+  providerOptions: { seed: 42, steps: 4 },
+})
+```
+
+Each model has its own URL under `https://ai.api.nvidia.com/v1/genai`, and the flat body takes the model's own fields
+(`steps`, `cfg_scale`, `mode`). A `baseURL` that does not end in `/genai`, such as the per-model URL in the catalog,
+is used as the model's invoke URL. The hosted preview accepts only its own example images
+(`image: "data:image/png;example_id,0"` in `providerOptions`), so `images` fails. Images come back inline as JPEG with
+the seed in `providerMetadata.nvidia.seed`; `CONTENT_FILTERED` is a `ContentPolicy` error. The entrypoint is
+`@opencode/ai/providers/nvidia/images`.
 
 ### Partial images
 
