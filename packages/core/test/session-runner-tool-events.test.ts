@@ -507,26 +507,35 @@ test("authoritative end values replace accumulated deltas in the durable ended e
   })
 })
 
-test("tool input deltas are accumulated without being published", async () => {
-  const { published, publisher } = capture()
-  await Effect.runPromise(
-    Effect.forEach(
+it.effect("batches tool input deltas and flushes pending input before the terminal event", () =>
+  Effect.gen(function* () {
+    const { published, publisher } = capture()
+    yield* Effect.forEach(
       [
         LLMEvent.toolInputStart({ id: "call", name: "read" }),
         LLMEvent.toolInputDelta({ id: "call", name: "read", text: '{"path":' }),
-        LLMEvent.toolInputDelta({ id: "call", name: "read", text: '"file.txt"}' }),
-        LLMEvent.toolInputEnd({ id: "call", name: "read" }),
+        LLMEvent.toolInputDelta({ id: "call", name: "read", text: '"file' }),
       ],
       publisher.publish,
       { discard: true },
-    ),
-  )
+    )
 
-  expect(published.some((event) => event.type === "session.tool.input.delta")).toBe(false)
-  expect(published.find((event) => event.type === "session.tool.input.ended.1")?.data).toMatchObject({
-    text: '{"path":"file.txt"}',
-  })
-})
+    expect(published.filter((event) => event.type === "session.tool.input.delta")).toHaveLength(0)
+    yield* TestClock.adjust("100 millis")
+    expect(
+      published.filter((event) => event.type === "session.tool.input.delta").map((event) => event.data),
+    ).toMatchObject([{ id: "call", delta: '{"path":"file' }])
+
+    yield* publisher.publish(LLMEvent.toolInputDelta({ id: "call", name: "read", text: '.txt"}' }))
+    yield* publisher.publish(LLMEvent.toolInputEnd({ id: "call", name: "read" }))
+    expect(published.slice(-2).map((event) => event.type)).toEqual([
+      "session.tool.input.delta",
+      "session.tool.input.ended.1",
+    ])
+    expect(published.at(-2)?.data).toMatchObject({ delta: '.txt"}' })
+    expect(published.at(-1)?.data).toMatchObject({ text: '{"path":"file.txt"}' })
+  }),
+)
 
 test("provider-executed tool metadata is flattened using the route key", async () => {
   const { published, publisher } = capture("openai")
