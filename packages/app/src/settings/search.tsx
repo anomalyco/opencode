@@ -120,7 +120,16 @@ export function SettingsSearch() {
   }
 
   return (
-    <div ref={root} class="settings-search" data-empty={!search.state.query.trim()}>
+    <div
+      ref={root}
+      class="settings-search"
+      data-empty={!search.state.query.trim()}
+      onFocusOut={(event) => {
+        // The narrow popover covers the page, so it closes once focus leaves the search; focusing the field reopens it.
+        if (state.narrow && !(event.relatedTarget instanceof Node && root?.contains(event.relatedTarget)))
+          search.collapse()
+      }}
+    >
       <SearchList
         query={search.state.query}
         onQuery={(query) => search.input(query)}
