@@ -46,7 +46,7 @@ export function consoleViewport() {
       if (!view) return undefined
       return { width: view.bufferWidth, height: view.bottom - view.top + 1 }
     },
-    repair() {
+    repair(alternate: boolean) {
       const view = read()
       if (!view) return
       // Restore the horizontal extent to the buffer width; top and bottom are kept.
@@ -57,7 +57,9 @@ export function consoleViewport() {
       rectView.setInt16(4, view.bufferWidth - 1, true)
       rectView.setInt16(6, view.bottom, true)
       kernel32.symbols.SetConsoleWindowInfo(handle, 1, ptr(rect))
-      if (!valid()) process.stdout.write(RECREATE_ALTERNATE_SCREEN)
+      // Only the alternate screen needs re-entering; on the main screen the
+      // repair above is enough. Writing this outside the renderer is a known risk.
+      if (alternate && !valid()) process.stdout.write(RECREATE_ALTERNATE_SCREEN)
     },
   }
 }
