@@ -1,0 +1,498 @@
+---
+title: "Mô hình"
+---
+
+Chọn một mô hình cho phiên hiện tại bằng `/models`:
+
+```text
+/models
+```
+
+OpenCode liệt kê mô hình từ [mô hình.dev](https://models.dev), các tích hợp nhà cung cấp và cấu hình của bạn. Bộ chọn chỉ
+hiển thị các mô hình đã bật có nhà cung cấp khả dụng trong dự án hiện tại. Hãy kết nối nhà cung cấp trong
+[Nhà cung cấp](/providers).
+
+## Chọn
+
+Hãy chọn một mục từ `/models` thay vì đoán nhà cung cấp hoặc ID mô hình của nó. Lựa chọn này áp dụng cho phiên hiện
+tại và không thay đổi cấu hình của bạn.
+
+```text
+anthropic/claude-sonnet-4-5
+```
+
+Tính khả dụng phụ thuộc vào dự án:
+
+- Mô hình phải được bật.
+- Nhà cung cấp của nó phải khả dụng trong dự án hiện tại.
+- Thông tin xác thực và cấu hình từ dự án khác không tự động mang sang.
+
+## Lần chạy
+
+Dùng `--model` để chọn một mô hình cho một lần chạy dòng lệnh mà không thay đổi mặc định đã cấu hình:
+
+```bash
+opencode run --model anthropic/claude-sonnet-4-5 "Refactor parseToken"
+```
+
+Tác nhân và lệnh cũng có thể chọn mô hình riêng của chúng. Xem [Tác nhân](/agents) và [Lệnh](/commands).
+
+## Mặc định
+
+Đặt `model` trong `opencode.json` hoặc `opencode.jsonc` để chọn mô hình mặc định cho công việc mới:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-5",
+}
+```
+
+Mô hình được cấu hình trở thành mặc định của catalog khi nó được bật và nhà cung cấp của nó khả dụng. Nếu không,
+OpenCode quay về mô hình được hỗ trợ khả dụng mới nhất.
+
+- Một mô hình đã được chọn cho một phiên sẽ được ưu tiên hơn mặc định đã cấu hình.
+- Việc đổi mô hình của một phiên không ghi lại tệp cấu hình.
+- `model` ở gốc hiện chỉ giữ lại nhà cung cấp và mô hình mặc định, không giữ biến thể.
+
+Xem [Cấu hình](/config) để biết về vị trí cấu hình và thứ tự ưu tiên.
+
+## Biến thể
+
+Biến thể là các tuỳ chọn có tên của một mô hình, thường dùng cho mức độ suy luận hoặc ngân sách token. Hãy thêm
+`#variant` khi chọn một biến thể cho một lần chạy, một phiên, một tác nhân hoặc một lệnh:
+
+```bash
+opencode run --model openai/gpt-5.2#high "Review this migration plan"
+```
+
+Tên biến thể đến từ metadata catalog hiện tại của mô hình đã chọn. Các tên như `low`, `high` và `max` không khả dụng
+với mọi mô hình, và một biến thể không xác định sẽ tạo ra lỗi phân giải mô hình.
+
+Định nghĩa các biến thể mới, hoặc thay các biến thể catalog có cùng ID, trong mảng `variants` của mô hình:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2": {
+          "settings": {
+            "reasoningEffort": "medium",
+          },
+          "variants": [
+            {
+              "id": "fast",
+              "settings": {
+                "reasoningEffort": "low",
+              },
+            },
+            {
+              "id": "deep",
+              "settings": {
+                "reasoningEffort": "high",
+                "reasoningSummary": "auto",
+              },
+            },
+          ],
+        },
+      },
+    },
+  },
+}
+```
+
+Mỗi biến thể có thể chứa `settings`, `headers` và `body`. Giá trị của nó được áp dụng sau giá trị của nhà cung cấp và
+giá trị của mô hình.
+
+Để thay thế các biến thể suy luận của một mô hình, hãy mô tả các bộ điều khiển suy luận của mô hình đó trong
+`capabilities.reasoning`, theo cấu trúc v2 của [models.dev](https://models.dev). OpenCode tạo các biến thể cho package
+của mô hình từ những điều khiển này:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-5.2": {
+          "capabilities": {
+            "reasoning": {
+              "supported": true,
+              "effort": ["low", "medium", "high"],
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+| Trường      | Mục đích                                                                                     |
+| ----------- | --------------------------------------------------------------------------------------------- |
+| `supported` | Mô hình có suy luận hay không. `false`, hoặc `true` mà không có điều khiển nào, sẽ không thêm biến thể nào. |
+| `toggle`    | Thêm một biến thể `none` để tắt suy luận.                                                      |
+| `effort`    | Các mức độ nỗ lực sẽ được cung cấp. `default` giữ nguyên mặc định của nhà cung cấp và không thêm biến thể nào. |
+| `budget`    | Tuỳ chọn ngân sách token suy luận: `min` và `max`. Bị bỏ qua khi đã đặt `effort`.               |
+
+Các biến thể liệt kê trong `variants` được áp dụng chồng lên các biến thể được tạo từ `capabilities.reasoning`.
+
+## Tuỳ chọn
+
+Các mục nhà cung cấp và mô hình có thể tuỳ biến request bằng `settings`, `headers` và `body`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "settings": {
+        "baseURL": "https://api.example.com/v1",
+      },
+      "headers": {
+        "X-Team": "platform",
+      },
+      "models": {
+        "gpt-5.2": {
+          "settings": {
+            "reasoningEffort": "high",
+          },
+          "body": {
+            "store": false,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+| Trường     | Mục đích                                                           |
+| ---------- | ------------------------------------------------------------------ |
+| `settings` | Các tuỳ chọn của package nhà cung cấp như `baseURL` hoặc `reasoningEffort`. |
+| `headers`  | Header HTTP bổ sung cho request.                                   |
+| `body`     | Các trường body của request riêng theo nhà cung cấp.               |
+
+OpenCode áp dụng giá trị của nhà cung cấp trước, giá trị của mô hình sau, và biến thể đã chọn cuối cùng.
+
+- Các object `settings` và `body` lồng nhau được hợp nhất.
+- Mảng và giá trị vô hướng ở sau sẽ thay thế các giá trị trước đó.
+- Tên header được khớp không phân biệt chữ hoa chữ thường.
+- Các tuỳ chọn là riêng theo nhà cung cấp và có thể bị bỏ qua hoặc từ chối bởi một package nhà cung cấp khác.
+
+## Bí danh
+
+Dùng `modelID` để gán cho một mô hình API một ID catalog dễ đọc hơn:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/coding-default",
+  "providers": {
+    "openai": {
+      "models": {
+        "coding-default": {
+          "modelID": "gpt-5.2",
+          "name": "Coding default",
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image"],
+            "output": ["text"],
+          },
+          "limit": {
+            "context": 200000,
+            "output": 32000,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Ở đây, `openai/coding-default` là tham chiếu có thể chọn còn `gpt-5.2` là ID được gửi tới nhà cung cấp. Với một mô
+hình chưa có trong catalog, OpenCode giả định:
+
+- Hỗ trợ công cụ, input văn bản và ảnh, và output văn bản.
+- Giới hạn context 200.000 token và giới hạn output 32.000 token.
+- Giới hạn input không xác định.
+
+Đây là các giả định dự phòng, không phải khả năng được phát hiện. Hãy đặt các giá trị `capabilities` và `limit` chính
+xác khi đã biết; các giá trị tường minh sẽ thay thế giá trị dự phòng. Thêm `disabled: true` để ẩn một mô hình khỏi
+catalog khả dụng:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "legacy-model": {
+          "disabled": true,
+        },
+      },
+    },
+  },
+}
+```
+
+## Suy luận
+
+Với một mô hình tương thích OpenAI truyền nội dung suy luận trong một trường tin nhắn trợ giúp tuỳ chỉnh, hãy đặt
+`compatibility.reasoningField`:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "local": {
+      "models": {
+        "reasoner": {
+          "compatibility": {
+            "reasoningField": "reasoning_content",
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+OpenCode nhận diện `reasoning`, `reasoning_content` và `reasoning_text`, đồng thời cũng chấp nhận một chuỗi tuỳ chỉnh
+khác của nhà cung cấp. Nó đọc nội dung suy luận được truyền từ trường đó và khôi phục trường đó khi gửi lại các tin
+nhắn trợ giúp trước đó cho mô hình.
+
+## Bộ nhớ đệm lời nhắc
+
+OpenCode tự động đặt các điểm ngắt bộ nhớ đệm lời nhắc trên những tuyến được biết là cần chúng, chẳng hạn như
+Anthropic. Khi mô hình Claude được phục vụ qua một proxy tương thích OpenAI như LiteLLM, OpenCode không thể biết chúng
+cần các điểm ngắt `cache_control` kiểu Anthropic. Hãy đặt `compatibility.cacheFormat` cho những mô hình Claude đó:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "litellm": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://litellm.example.com/v1" },
+      "models": {
+        "claude-sonnet-5": {
+          "compatibility": { "cacheFormat": "anthropic" },
+        },
+        "claude-opus-5-5": {
+          "compatibility": { "cacheFormat": "anthropic" },
+        },
+        // Other models on the same proxy cache automatically and need no setting.
+        "gpt-6.1": {},
+      },
+    },
+  },
+}
+```
+
+Sau đó OpenCode đánh dấu định nghĩa công cụ cuối cùng, system lời nhắc và tin nhắn mới nhất bằng
+`cache_control: { "type": "ephemeral" }`, dùng thời lượng cache mặc định năm phút của endpoint. Dùng `"alibaba"` cho các
+mô hình Alibaba Mô hình Studio, vốn chấp nhận cùng các marker đó nhưng bỏ qua chúng trên định nghĩa công cụ. Hãy đặt
+`compatibility.cacheFormat` trên nhà cung cấp thay cho khi mọi mô hình mà nó phục vụ đều chấp nhận cùng một định
+dạng.
+
+## Cục bộ
+
+OpenCode tự động phát hiện mô hình từ Ollama, LM Studio và vLLM tại các địa chỉ cục bộ mặc định của chúng. Bạn cũng có
+thể cấu hình thủ công bất kỳ server nào tương thích OpenAI.
+
+```text
+ollama/gemma3:4b
+lmstudio/google/gemma-4-26b-a4b
+vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct
+```
+
+### Ollama
+
+Khi Ollama đang lắng nghe tại `http://127.0.0.1:11434`, hãy chọn một mô hình được phát hiện bằng ID nhà cung cấp
+`ollama`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "ollama/gemma3:4b",
+}
+```
+
+OpenCode làm mới danh mục ở chế độ nền và đọc khả năng context, thị giác và dùng công cụ từ Ollama. Các mô hình chỉ
+dùng cho embedding bị loại trừ.
+
+Với một host hoặc cổng khác, hãy đặt URL tương thích OpenAI của Ollama. Việc phát hiện vẫn dùng API Ollama gốc tại
+cùng tiền tố đường dẫn:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "ollama": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:OLLAMA_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- Bỏ qua `apiKey` khi endpoint không yêu cầu xác thực bearer.
+- Tắt việc phát hiện bằng `"plugins": ["-opencode.provider.ollama"]`.
+
+### LMStudio
+
+Với một server LM Studio không xác thực tại `http://127.0.0.1:1234`, hãy chọn một mô hình được phát hiện bằng ID nhà
+cung cấp `lmstudio`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-4-26b-a4b",
+}
+```
+
+OpenCode làm mới danh mục ở chế độ nền và đọc khả năng context, thị giác và dùng công cụ từ LM Studio. Các mô hình
+embedding bị loại trừ.
+
+Với một host hoặc cổng khác, hãy đặt URL tương thích OpenAI. Mô hình vẫn được phát hiện tự động:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "lmstudio": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:5678/v1",
+        "apiKey": "{env:LMSTUDIO_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- Bỏ qua `apiKey` khi xác thực LM Studio bị tắt.
+- Tắt việc phát hiện bằng `"plugins": ["-opencode.provider.lmstudio"]`.
+
+### vLLM
+
+Khi vLLM đang lắng nghe tại `http://127.0.0.1:8000`, hãy chọn một mô hình được phát hiện bằng ID nhà cung cấp
+`vllm`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+}
+```
+
+OpenCode kiểm tra `/health`, làm mới `/v1/models` ở chế độ nền, dùng giá trị `max_model_len` được báo cáo làm giới hạn
+context, và chỉ đưa vào các mô hình card do `vllm` sở hữu.
+
+Các mô hình được phát hiện quảng bá input và output văn bản, nhưng không có thị giác hay công cụ. vLLM bật gọi công cụ
+bằng các cờ server như `--enable-auto-tool-choice` và `--tool-call-parser`, mà việc phát hiện không báo cáo.
+
+Với một endpoint khác hoặc một server có xác thực, hãy đặt URL tương thích OpenAI của nó:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "vllm": {
+      "settings": {
+        "baseURL": "http://127.0.0.1:9000/v1",
+        "apiKey": "{env:VLLM_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- Bỏ qua `apiKey` khi xác thực bị tắt.
+- Tắt việc phát hiện bằng `"plugins": ["-opencode.provider.vllm"]`.
+- Proxy có tiền tố đường dẫn được hỗ trợ. Ví dụ, `https://example.com/vllm/v1` kiểm tra `/vllm/health` và phát hiện
+  `/vllm/v1/models`.
+
+### Tương thích
+
+Với một server tương thích OpenAI khác, hãy định nghĩa package nhà cung cấp, endpoint và ít nhất một mô hình:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "local/coder",
+  "providers": {
+    "local": {
+      "name": "Local server",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://127.0.0.1:1234/v1",
+      },
+      "models": {
+        "coder": {
+          "modelID": "model-name-on-server",
+          "capabilities": {
+            "tools": true,
+            "input": ["text"],
+            "output": ["text"],
+          },
+          "limit": {
+            "context": 32768,
+            "output": 8192,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+Hãy dùng tên mô hình, giới hạn, kiểu input và output cùng khả năng dùng công cụ đúng theo thực tế của server. OpenCode
+không thể phát hiện liệu các giá trị dự phòng cho mô hình tuỳ chỉnh có chính xác hay không. Nếu endpoint yêu cầu một
+key, hãy thêm `apiKey` vào `settings` với một thay thế biến môi trường như `"apiKey": "{env:LOCAL_API_KEY}"`; đừng
+commit bí mật.
+
+## Tham chiếu
+
+Bộ chọn mô hình dùng `provider/model` kèm một `#variant` tuỳ chọn:
+
+```text
+openai/gpt-5.2
+openai/gpt-5.2#high
+openrouter/anthropic/claude-sonnet-4.5#high
+```
+
+| Phần                         | Quy tắc                                                    |
+| ---------------------------- | ----------------------------------------------------------- |
+| Nhà cung cấp                 | Kết thúc ở dấu `/` đầu tiên; không được chứa `/` hoặc `#`. |
+| Mô hình                      | Có thể chứa thêm ký tự `/`; không được chứa `#`.            |
+| Biến thể                     | Đi sau `#` khi có mặt.                                      |
+| Phân biệt chữ hoa chữ thường | ID nhà cung cấp và mô hình phân biệt chữ hoa chữ thường.     |
+
+Hãy dùng ID catalog thay vì tên hiển thị của nhà cung cấp. Các trường `model` ở gốc, của tác nhân và của lệnh chấp
+nhận dạng chuỗi ở trên hoặc một object mở rộng:
+
+```jsonc
+{
+  "model": {
+    "providerID": "openrouter",
+    "model": "anthropic/claude-sonnet-4.5",
+  },
+}
+```
+
+Dạng mở rộng hữu ích cho cấu hình được sinh ra hoặc cấu hình theo chương trình.
+
+## Lưu ý
+
+Hãy ghi nhớ các quy tắc sau khi cấu hình mô hình:
+
+```jsonc
+{
+  "model": "openai/gpt-5.2"
+}
+```
+
+- Object của bộ chọn dùng `model`; một mục catalog của nhà cung cấp dùng `modelID` cho ID được gửi tới nhà cung cấp.
+- Mặc dù hình dạng lựa chọn ở gốc chấp nhận một biến thể, mặc định catalog của V2 không giữ lại nó. Hãy chọn biến thể
+  cho một phiên, một lần chạy, một tác nhân hoặc một lệnh thay thế.
+- Các tuỳ chọn mô hình là riêng theo nhà cung cấp. Một package nhà cung cấp khác có thể bỏ qua hoặc từ chối chúng.
+- Dữ liệu catalog, thông tin xác thực và cấu hình được giới hạn theo location. Một mô hình khả dụng trong dự án này
+  có thể không khả dụng trong dự án khác.
+- Các tệp cấu hình thường tự tải lại. Một request mô hình đang chạy sẽ giữ nguyên các cài đặt mà nó bắt đầu.
