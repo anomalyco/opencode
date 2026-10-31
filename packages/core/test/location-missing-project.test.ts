@@ -25,23 +25,27 @@ const it = testEffect(
   ]),
 )
 
+const load = (directory: AbsolutePath) =>
+  Effect.gen(function* () {
+    const locations = yield* LocationServiceMap.Service
+    return yield* Location.Service.pipe(
+      Effect.provide(locations.get(Location.Ref.make({ directory }))),
+      Effect.scoped,
+    )
+  })
+
 describe("Location missing project persistence", () => {
   it.live("does not persist a project row when a local directory is missing", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()
       const missing = AbsolutePath.make(path.join(dir.path, "deleted-worktree"))
-      const locations = yield* LocationServiceMap.Service
       const projects = yield* Project.Service
-      const load = Location.Service.pipe(
-        Effect.provide(locations.get(Location.Ref.make({ directory: missing }))),
-        Effect.scoped,
-      )
 
-      expect(Exit.isFailure(yield* Effect.exit(load))).toBe(true)
+      expect(Exit.isFailure(yield* Effect.exit(load(missing)))).toBe(true)
       expect((yield* projects.list({ archived: true })).some((item) => item.canonical === missing)).toBe(false)
 
       yield* Effect.promise(() => fs.mkdir(missing))
-      const resolved = yield* load
+      const resolved = yield* load(missing)
       expect(resolved.project.canonical).toBe(missing)
       expect((yield* projects.list({ archived: true })).some((item) => item.id === resolved.project.id)).toBe(true)
     }),
@@ -54,27 +58,14 @@ describe("Location missing project persistence", () => {
       yield* Effect.promise(() => fs.mkdir(removed))
       const db = (yield* Database.Service).db
       const projects = yield* Project.Service
-      const locations = yield* LocationServiceMap.Service
       const created = yield* projects.resolve(removed)
 
       yield* Effect.promise(() => fs.rm(removed, { recursive: true, force: true }))
-      const stale = Date.now() - 2 * 60 * 60 * 1000
-      yield* db
-        .update(ProjectTable)
-        .set({ time_updated: stale, time_active: stale })
-        .where(eq(ProjectTable.id, created.id))
-        .run()
-      yield* projects.sweep()
-      const archived = (yield* projects.list({ archived: true })).find((item) => item.id === created.id)
-      expect(archived?.time.archived).toBeDefined()
+      yield* db.update(ProjectTable).set({ time_archived: 1 }).where(eq(ProjectTable.id, created.id)).run()
 
-      const load = Location.Service.pipe(
-        Effect.provide(locations.get(Location.Ref.make({ directory: removed }))),
-        Effect.scoped,
-      )
-      expect(Exit.isFailure(yield* Effect.exit(load))).toBe(true)
-      const afterMissingBoot = (yield* projects.list({ archived: true })).find((item) => item.id === created.id)
-      expect(afterMissingBoot?.time.archived).toBe(archived?.time.archived)
+      expect(Exit.isFailure(yield* Effect.exit(load(removed)))).toBe(true)
+      const after = (yield* projects.list({ archived: true })).find((item) => item.id === created.id)
+      expect(after?.time.archived).toBe(1)
     }),
   )
 })

@@ -190,12 +190,9 @@ it.live("returns undefined without recording span failures when the directory is
     expect(yield* ProjectIcon.refresh(filesystem, db, id)).toBeUndefined()
 
     const iconSpans = spans.filter((span) => span.name.startsWith("ProjectIcon."))
-    expect(iconSpans.some((span) => span.name === "ProjectIcon.refresh")).toBe(true)
-    expect(iconSpans.some((span) => span.name === "ProjectIcon.discover")).toBe(true)
+    expect(iconSpans.map((span) => span.name)).toEqual(["ProjectIcon.refresh", "ProjectIcon.discover"])
     for (const span of iconSpans) {
-      if (span.status._tag === "Ended") {
-        expect(Exit.isFailure(span.status.exit)).toBe(false)
-      }
+      expect(span.status._tag === "Ended" && Exit.isSuccess(span.status.exit)).toBe(true)
     }
   }).pipe(Effect.provideService(Tracer.Tracer, tracer))
 })
