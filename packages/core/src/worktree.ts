@@ -256,7 +256,30 @@ const layer = Layer.effect(
 
     const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput, current?: WorktreeStrategies.Interface) {
       const row = yield* project(input.projectID)
-      const worktreeDirectory = yield* canonical(fs, input.directory)
+      const worktreeDirectory = AbsolutePath.make(yield* fs.resolve(input.directory))
+      const exists = yield* fs
+        .exists(worktreeDirectory)
+        .pipe(Effect.mapError(() => new DirectoryUnavailableError({ directory: input.directory })))
+      if (!exists) {
+        const link = yield* fs.readLink(worktreeDirectory).pipe(
+          Effect.as(true),
+          Effect.catchIf(
+            (error) => error.reason._tag === "NotFound",
+            () => Effect.succeed(false),
+          ),
+          Effect.mapError(() => new DirectoryUnavailableError({ directory: input.directory })),
+        )
+        if (link) return yield* new DirectoryUnavailableError({ directory: input.directory })
+        const stored = yield* ops.find(input.projectID, worktreeDirectory)
+        if (!stored?.strategy) return yield* new DirectoryUnavailableError({ directory: input.directory })
+        const settings = yield* load(row.worktree, current)
+        if (!settings.strategies.get(stored.strategy)?.canForgetMissingDirectory)
+          return yield* new DirectoryUnavailableError({ directory: input.directory })
+        yield* changed(input.projectID, yield* ops.remove(input.projectID, worktreeDirectory))
+        return
+      }
+      if (!(yield* fs.isDir(worktreeDirectory)))
+        return yield* new DirectoryUnavailableError({ directory: input.directory })
       const stored = yield* ops.find(input.projectID, worktreeDirectory)
       if (!stored?.strategy) return yield* new InvalidDirectoryError({ directory: worktreeDirectory })
       const settings = yield* load(row.worktree, current)
