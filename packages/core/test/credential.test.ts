@@ -1,6 +1,7 @@
+import path from "path"
 import { describe, expect } from "bun:test"
 import { eq, sql } from "drizzle-orm"
-import { Effect } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Credential } from "@opencode/core/credential"
 import { CredentialTable } from "@opencode/core/credential/sql"
@@ -10,11 +11,14 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Workspace } from "@opencode/core/workspace"
 import { Event } from "@opencode/schema/event"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
 import { Integration } from "@opencode/core/integration"
 import { location } from "./fixture/location"
+import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([Credential.node, Bus.node, Database.node])))
+const isolated = testEffect(Layer.empty)
 
 describe("Credential", () => {
   it.effect("stores, updates, lists, and removes credentials", () =>
@@ -267,5 +271,126 @@ describe("Credential", () => {
         { type: Credential.Event.Updated.type, data: {} },
       ])
     }),
+  )
+
+  isolated.effect("caches decoded credential reads and invalidates before bus subscribers run", () =>
+    Effect.gen(function* () {
+      const database = yield* Layer.build(LayerNode.compile(Database.node))
+      const baseDb = Context.get(database, Database.Service).db
+      let selects = 0
+      const proxyDb: Database.Interface["db"] = Object.create(baseDb, {
+        select: {
+          value: (fields?: Parameters<typeof baseDb.select>[0]) => {
+            if (fields === undefined) selects++
+            return fields === undefined ? baseDb.select() : baseDb.select(fields)
+          },
+        },
+      })
+
+      const layer = LayerNode.compile(LayerNode.group([Credential.node, Bus.node]), {
+        replacements: [Database.node.replace(Layer.succeed(Database.Service, { db: proxyDb }))],
+      })
+
+      yield* Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const bus = yield* Bus.Service
+        const integrationID = Integration.ID.make("openai")
+        const created = yield* credentials.create({
+          integrationID,
+          label: "Primary",
+          value: Credential.Key.make({ type: "key", key: "initial" }),
+        })
+
+        selects = 0
+        const [all, listed, single] = yield* Effect.all(
+          [credentials.all(), credentials.list(integrationID), credentials.get(created.id)],
+          { concurrency: "unbounded" },
+        )
+        expect(all).toEqual([created])
+        expect(listed).toEqual([created])
+        expect(single).toEqual(created)
+        expect(yield* credentials.all()).toEqual([created])
+        expect(yield* credentials.list(integrationID)).toEqual([created])
+        expect(yield* credentials.get(created.id)).toEqual(created)
+        expect(selects).toBe(1)
+
+        const seenInSubscriber: string[] = []
+        yield* bus.listen((event) =>
+          event.type === Credential.Event.Updated.type
+            ? credentials.get(created.id).pipe(
+                Effect.tap((item) =>
+                  Effect.sync(() => {
+                    if (item) seenInSubscriber.push(item.label)
+                  }),
+                ),
+                Effect.asVoid,
+              )
+            : Effect.void,
+        )
+
+        yield* credentials.update(created.id, {
+          label: "Rotated",
+          value: Credential.Key.make({ type: "key", key: "rotated" }),
+        })
+        expect(seenInSubscriber).toEqual(["Rotated"])
+        expect((yield* credentials.get(created.id))?.value).toEqual(
+          Credential.Key.make({ type: "key", key: "rotated" }),
+        )
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  isolated.live("observes credential writes committed by another database connection", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const dbPath = path.join(tmp.path, "credentials.db")
+        const connectionLayer = () =>
+          LayerNode.compile(LayerNode.group([Credential.node, Bus.node, Database.node]), {
+            replacements: [
+              Global.node.replace(Global.layerWith({ data: tmp.path })),
+              Database.node.replace(Database.configured({ path: dbPath })),
+            ],
+          })
+
+        return Effect.gen(function* () {
+          const first = yield* Layer.build(connectionLayer())
+          const second = yield* Layer.build(connectionLayer())
+          expect(Context.get(first, Credential.Service)).not.toBe(Context.get(second, Credential.Service))
+          const integrationID = Integration.ID.make("openai")
+          const created = yield* Effect.provide(
+            Credential.Service.use((credentials) =>
+              credentials.create({
+                integrationID,
+                value: Credential.Key.make({ type: "key", key: "initial" }),
+              }),
+            ),
+            first,
+          )
+          // Warm the first connection's cache before the second connection writes.
+          expect(
+            yield* Effect.provide(
+              Credential.Service.use((credentials) => credentials.get(created.id)),
+              first,
+            ),
+          ).toEqual(created)
+
+          yield* Effect.provide(
+            Credential.Service.use((credentials) =>
+              credentials.update(created.id, {
+                value: Credential.Key.make({ type: "key", key: "refreshed-externally" }),
+              }),
+            ),
+            second,
+          )
+
+          expect(
+            (yield* Effect.provide(
+              Credential.Service.use((credentials) => credentials.get(created.id)),
+              first,
+            ))?.value,
+          ).toEqual(Credential.Key.make({ type: "key", key: "refreshed-externally" }))
+        }).pipe(Effect.scoped)
+      }),
+    ),
   )
 })

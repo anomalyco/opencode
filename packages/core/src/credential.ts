@@ -1,10 +1,11 @@
 export * as Credential from "./credential.js"
 
 import { asc, desc, eq } from "drizzle-orm"
-import { Cause, Context, Effect, Fiber, Layer, Schema } from "effect"
+import { Cause, Context, Effect, Fiber, Layer, Schema, Semaphore } from "effect"
 import { Credential } from "@opencode/schema/credential"
 import { CredentialLegacy } from "@opencode/schema/credential-legacy"
 import { Integration } from "@opencode/schema/integration"
+import { supportsTuningPragmas } from "#sqlite"
 import { Database } from "./database/database.js"
 import { Bus } from "./bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -94,6 +95,66 @@ const layer = Layer.effect(
         return credential ? [credential] : []
       })
 
+    type Snapshot = {
+      readonly all: ReadonlyArray<Info>
+      readonly byID: ReadonlyMap<ID, Info>
+      readonly byIntegration: ReadonlyMap<Integration.ID, ReadonlyArray<Info>>
+      readonly dataVersion: number | undefined
+    }
+
+    let cached: Snapshot | undefined
+    let generation = 0
+    const loadLock = yield* Semaphore.make(1)
+
+    const invalidate = () => {
+      generation += 1
+      cached = undefined
+    }
+
+    // `PRAGMA data_version` increments when another SQLite connection commits to the same database file,
+    // keeping CLI and server processes coherent without re-decoding every stored secret on each read.
+    // Durable Object SQLite (`supportsTuningPragmas === false`) is single-connection and rejects tuning pragmas.
+    const readDataVersion = () =>
+      supportsTuningPragmas
+        ? db.get<{ data_version: number | bigint }>("PRAGMA data_version").pipe(
+            Effect.orDie,
+            Effect.map((row) => (row ? Number(row.data_version) : undefined)),
+          )
+        : Effect.succeed(undefined)
+
+    const buildSnapshot = (items: ReadonlyArray<Info>, dataVersion: number | undefined): Snapshot => {
+      const byID = new Map<ID, Info>()
+      const byIntegration = new Map<Integration.ID, Info[]>()
+      for (const item of items) {
+        byID.set(item.id, item)
+        const group = byIntegration.get(item.integrationID)
+        if (group) group.push(item)
+        else byIntegration.set(item.integrationID, [item])
+      }
+      return { all: items, byID, byIntegration, dataVersion }
+    }
+
+    const snapshot = Effect.fnUntraced(function* () {
+      const version = yield* readDataVersion()
+      if (cached && cached.dataVersion === version) return cached
+      return yield* loadLock.withPermits(1)(
+        Effect.gen(function* () {
+          const currentVersion = yield* readDataVersion()
+          if (cached && cached.dataVersion === currentVersion) return cached
+          const targetGeneration = generation
+          const rows = yield* db
+            .select()
+            .from(CredentialTable)
+            .orderBy(asc(CredentialTable.active), asc(CredentialTable.time_created), asc(CredentialTable.id))
+            .all()
+            .pipe(Effect.orDie)
+          const next = buildSnapshot(storedRows(rows), currentVersion)
+          if (generation === targetGeneration) cached = next
+          return next
+        }),
+      )
+    })
+
     return Service.of({
       lock: Effect.fn("Credential.lock")((id, operation) =>
         Effect.uninterruptibleMask((restore) =>
@@ -112,27 +173,16 @@ const layer = Layer.effect(
           }),
         ),
       ),
-      all: Effect.fn("Credential.all")(() =>
-        db
-          .select()
-          .from(CredentialTable)
-          .orderBy(asc(CredentialTable.active), asc(CredentialTable.time_created), asc(CredentialTable.id))
-          .all()
-          .pipe(Effect.orDie, Effect.map(storedRows)),
-      ),
+      all: Effect.fn("Credential.all")(() => snapshot().pipe(Effect.map((state) => [...state.all]))),
       list: Effect.fn("Credential.list")((integrationID) =>
-        db
-          .select()
-          .from(CredentialTable)
-          .where(eq(CredentialTable.integration_id, integrationID))
-          .orderBy(asc(CredentialTable.active), asc(CredentialTable.time_created), asc(CredentialTable.id))
-          .all()
-          .pipe(Effect.orDie, Effect.map(storedRows)),
+        snapshot().pipe(
+          Effect.map((state) => {
+            const items = state.byIntegration.get(integrationID)
+            return items ? [...items] : []
+          }),
+        ),
       ),
-      get: Effect.fn("Credential.get")(function* (id) {
-        const row = yield* db.select().from(CredentialTable).where(eq(CredentialTable.id, id)).get().pipe(Effect.orDie)
-        return row ? stored(row) : undefined
-      }),
+      get: Effect.fn("Credential.get")((id) => snapshot().pipe(Effect.map((state) => state.byID.get(id)))),
       create: Effect.fn("Credential.create")(function* (input) {
         const credential = new Info({
           id: input.id ?? ID.create(),
@@ -182,6 +232,7 @@ const layer = Layer.effect(
             ),
             Effect.orDie,
           )
+        invalidate()
         yield* Effect.logInfo("credential created", {
           credentialID: credential.id,
           integrationID: credential.integrationID,
@@ -229,6 +280,7 @@ const layer = Layer.effect(
             Effect.orDie,
           )
         if (integrationID) {
+          invalidate()
           yield* Effect.logInfo("credential activated", { integrationID, credentialID: id })
           yield* bus.publish(Event.Switched, { integrationID, credentialID: id }, { global: true })
         }
@@ -274,6 +326,7 @@ const layer = Layer.effect(
           yield* Effect.logWarning("credential update skipped", { credentialID: id, reason: "credential_removed" })
           return
         }
+        invalidate()
         yield* Effect.logInfo("credential updated", {
           credentialID: id,
           integrationID: credential.integrationID,
@@ -335,6 +388,7 @@ const layer = Layer.effect(
             Effect.orDie,
           )
         if (!removed) return
+        invalidate()
         yield* Effect.logInfo("credential removed", {
           credentialID: id,
           integrationID: removed.integrationID,
