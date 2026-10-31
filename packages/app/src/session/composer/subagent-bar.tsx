@@ -81,19 +81,19 @@ export function SubagentBar(props: {
                 </Match>
                 <Match when={part === "model" && props.model}>
                   {(model) => (
-                    <span data-slot="subagent-model" class="flex min-w-0">
+                    <span data-slot="subagent-model" class="flex min-w-0 flex-1">
                       <Show when={model().provider}>
-                        <span class="shrink-0">{model().provider}</span>
-                        <Slash gap={4} />
+                        <span class="hidden shrink-0 sm:inline">{model().provider}</span>
+                        <Slash gap={4} class="hidden sm:block" />
                         <span class="sr-only">{" / "}</span>
                       </Show>
-                      <span class="truncate">{model().name}</span>
+                      <span class="min-w-0 truncate">{model().name}</span>
                       {/* Like the message metadata: the variant follows the name, dimmer, with no separator. */}
                       <Show when={model().variant !== "default" && model().variant}>
                         {(variant) => (
                           <>
                             <span class="sr-only">{" "}</span>
-                            <span class="ms-1 shrink-0 capitalize opacity-[0.66]">{variant()}</span>
+                            <span class="ms-1 hidden shrink-0 capitalize opacity-[0.66] sm:inline">{variant()}</span>
                           </>
                         )}
                       </Show>

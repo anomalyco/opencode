@@ -27,3 +27,20 @@ story("a subagent with no recorded outcome starts its line at the agent", async 
   await expect(bar.locator(":scope > span")).toHaveCount(0)
   await expect(bar).toHaveText(/^surveyor·Anthropic/)
 })
+
+story("a subagent status line fits a phone-width viewport", async ({ mount, page }) => {
+  await page.setViewportSize({ width: 412, height: 915 })
+  await mount("app-current-session-surface--child-session-done")
+
+  const bar = page.locator('[data-component="subagent-bar"]')
+  const overlap = await bar.evaluate((el) => {
+    const text = el.querySelector(":scope > div.flex-1")!
+    const button = el.querySelector("button")!
+    const contentRight = Math.max(...[...text.querySelectorAll("span")].map((span) => span.getBoundingClientRect().right))
+    return contentRight - button.getBoundingClientRect().left
+  })
+
+  expect(overlap).toBeLessThanOrEqual(0)
+  await expect(bar.locator('[data-slot="subagent-model"]')).toBeVisible()
+  await expect(bar.getByText("Anthropic", { exact: true })).toBeHidden()
+})
