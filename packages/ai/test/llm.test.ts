@@ -24,6 +24,7 @@ describe("llm constructors", () => {
   test("normalizes recursive tool namespaces", () => {
     const request = ai.request({
       model: LanguageModel.make({ id: "fake-model", provider: "fake", route: responsesRoute }),
+      prompt: "Hello",
       tools: [
         {
           type: "namespace",

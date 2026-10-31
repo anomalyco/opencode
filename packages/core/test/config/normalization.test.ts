@@ -112,7 +112,8 @@ describe("ConfigNormalize", () => {
     expect(result.encoded.warming).toEqual({ interval: "240000 millis", duration: "1800000 millis" })
     const info = Schema.decodeUnknownSync(Info)(result.encoded)
     if (typeof info.warming === "boolean" || info.warming === undefined) throw new Error("expected warming info")
-    expect(Duration.toMillis(info.warming.interval ?? Duration.zero)).toBe(240_000)
+    const interval = info.warming.interval
+    expect(interval === "auto" ? interval : Duration.toMillis(interval ?? Duration.zero)).toBe(240_000)
     expect(Duration.toMillis(info.warming.duration ?? Duration.zero)).toBe(1_800_000)
   })
 

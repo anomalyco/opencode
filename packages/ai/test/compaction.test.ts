@@ -13,10 +13,14 @@ test("runtime capability checks follow model and route updates", () => {
   expect(ai.canCompact(request)).toBe(true)
   expect(ai.canCompact(LLMRequest.update(request, { messages: [] }))).toBe(true)
   expect(ai.canCompact(LLMRequest.update(request, { model: unsupported }))).toBe(false)
-  expect(ai.canCompact(ai.request({ model: LanguageModel.update(supported, { route: unsupported.route }) }))).toBe(
-    false,
-  )
-  expect(ai.canCompact(ai.request({ model: LanguageModel.update(supported, { route: undefined }) }))).toBe(true)
+  expect(
+    ai.canCompact(
+      ai.request({ model: LanguageModel.update(supported, { route: unsupported.route }), prompt: "Hello" }),
+    ),
+  ).toBe(false)
+  expect(
+    ai.canCompact(ai.request({ model: LanguageModel.update(supported, { route: undefined }), prompt: "Hello" })),
+  ).toBe(true)
 })
 
 test("explicit compaction serializes a replacement window without a messages alias", () => {

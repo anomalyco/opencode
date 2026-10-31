@@ -128,3 +128,34 @@ test("preserves authored synthetic-looking names without an anonymous family roo
 
   expect(result.components.schemas.Union_2).toEqual({ type: "string" })
 })
+
+test("folds a chain of copies onto the original without leaving a dangling reference", () => {
+  const result = stabilizeOpenApi({
+    components: {
+      schemas: {
+        OAuth: { type: "string" },
+        OAuth_2: { type: "string" },
+        OAuth_2_1: { type: "string" },
+        Holder: { type: "array", items: [{ $ref: "#/components/schemas/OAuth_2_1" }] },
+      },
+    },
+  }) as { components: { schemas: Record<string, { items?: Array<{ $ref: string }> }> } }
+
+  expect(Object.keys(result.components.schemas).sort()).toEqual(["Holder", "OAuth"])
+  expect(result.components.schemas.Holder?.items?.[0]?.$ref).toBe("#/components/schemas/OAuth")
+})
+
+test("names an unsuffixed encoded variant by content when suffixed siblings exist", () => {
+  const generate = (versions: Array<number>) => {
+    const schemas: Record<string, unknown> = {}
+    versions.forEach((version, index) => {
+      schemas[index === 0 ? "Event.VersionEncoded" : `Event.VersionEncoded_${index}`] = { enum: [version] }
+    })
+    return stabilizeOpenApi({ components: { schemas } }) as { components: { schemas: Record<string, unknown> } }
+  }
+
+  const forward = generate([2, 1]).components.schemas
+  const reversed = generate([1, 2]).components.schemas
+  expect(Object.keys(forward)).not.toContain("Event.VersionEncoded")
+  expect(forward).toEqual(reversed)
+})

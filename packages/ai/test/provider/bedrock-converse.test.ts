@@ -1095,7 +1095,7 @@ describe("Bedrock Converse route", () => {
           tool({
             name: "browser_tabs_open",
             description: "Open a tab",
-            parameters: Schema.Struct({}),
+            input: Schema.Struct({}),
             success: Schema.String,
             execute: () => Effect.die("A normalized replay name must not select an executor"),
           }),

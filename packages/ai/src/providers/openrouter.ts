@@ -272,10 +272,12 @@ export const configure = (input: Config = {}) => {
       compatibility: { mediaInput: "state" },
       providerOptions,
     })
+  const chat = (modelID: string | ModelID) =>
+    chatRoute.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } })
   return {
     id,
-    model: (modelID: string | ModelID) =>
-      chatRoute.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
+    model: chat,
+    chat,
     responses: (modelID: string | ModelID) =>
       configuredResponses.model<OpenRouterResponsesProviderOptionsInput>({ id: modelID }),
     image,
@@ -287,6 +289,7 @@ export const configure = (input: Config = {}) => {
 export const provider = configure()
 export const decision = provider.decision
 export const image = provider.image
+export const chat = provider.chat
 export const responses = provider.responses
 export const model: ProviderPackage.Model<Settings, OpenRouterProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)

@@ -106,6 +106,7 @@ it.effect("ZAI Chat retains native thinking fields and scopes tool streaming to 
         const result = yield* compileRequest(
           ai.request({
             model: provider.chat("glm-5.2"),
+            prompt: "Hello",
             providerOptions: {
               thinking,
               toolStream: false,
@@ -160,18 +161,23 @@ it.effect("ZAI lowers effort using the selected native API without inventing thi
       const standard = yield* compileRequest(
         ai.request({
           model: ZAI.configure({ apiKey: "fixture" }).chat("glm-5.3"),
+          prompt: "Hello",
           providerOptions: { reasoningEffort: effort },
         }),
       )
       const coding = ZAICodingPlan.configure({ apiKey: "fixture" })
       const chat = yield* compileRequest(
-        ai.request({ model: coding.chat("glm-5.3"), providerOptions: { reasoningEffort: effort } }),
+        ai.request({ model: coding.chat("glm-5.3"), prompt: "Hello", providerOptions: { reasoningEffort: effort } }),
       )
       const messages = yield* compileRequest(
-        ai.request({ model: coding.messages("glm-5.3"), providerOptions: { effort } }),
+        ai.request({ model: coding.messages("glm-5.3"), prompt: "Hello", providerOptions: { effort } }),
       )
       const responses = yield* compileRequest(
-        ai.request({ model: coding.responses("glm-5.3"), providerOptions: { reasoningEffort: effort } }),
+        ai.request({
+          model: coding.responses("glm-5.3"),
+          prompt: "Hello",
+          providerOptions: { reasoningEffort: effort },
+        }),
       )
       expect(standard.body.reasoning_effort).toBe(effort)
       expect(chat.body.reasoning_effort).toBe(effort)
@@ -185,6 +191,7 @@ it.effect("ZAI lowers effort using the selected native API without inventing thi
           model: ZAICodingPlan.configure({ apiKey: "fixture", providerOptions: { thinking: { type } } }).messages(
             "glm-5.3",
           ),
+          prompt: "Hello",
         }),
       )
       expect(result.body.thinking).toEqual({ type })
@@ -230,7 +237,7 @@ it.effect("ZAI rejects invalid typed thinking options before execution", () =>
       .chat("glm-5.3")
       .route.with({ providerOptions: { thinking: { clear_thinking: "false" } } })
       .model({ id: "glm-5.3" })
-    const error = yield* compileRequest(ai.request({ model })).pipe(Effect.flip)
+    const error = yield* compileRequest(ai.request({ model, prompt: "Hello" })).pipe(Effect.flip)
     expect(error.reason._tag).toBe("InvalidRequest")
     expect(error.message).toContain("clear_thinking")
   }),

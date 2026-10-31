@@ -276,7 +276,10 @@ testEffect(dynamicResponse(() => Effect.die("Must reject before sending"))).effe
   () =>
     Effect.gen(function* () {
       const client = yield* LLMClient.Service
-      const unsupported = ai.request({ model: Azure.configure({ resourceName: "fixture" }).responses("fixture") })
+      const unsupported = ai.request({
+        model: Azure.configure({ resourceName: "fixture" }).responses("fixture"),
+        prompt: "Hello",
+      })
       expect(ai.canCompact(unsupported)).toBe(true)
       expect(ai.canCompact(unsupported, trigger)).toBe(false)
       // @ts-expect-error Exercise untyped consumers; the service must reject before sending.

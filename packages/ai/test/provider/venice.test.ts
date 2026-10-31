@@ -53,6 +53,7 @@ it.effect("Venice lowers typed options, model defaults, and explicit reasoning o
         model: Venice.configure({ apiKey: "fixture", providerOptions: { reasoningEffort: "low" } }).model(
           "qwen3-6-27b",
         ),
+        prompt: "Hello",
         generation: { maxTokens: 200, topK: 20 },
         providerOptions: {
           reasoningEffort: "future-effort",
@@ -97,10 +98,12 @@ it.effect("Venice lowers typed options, model defaults, and explicit reasoning o
     expect(compiled.body.reasoning_effort).toBeUndefined()
     expect(compiled.body.max_tokens).toBeUndefined()
     expect(
-      (yield* compileRequest(ai.request({ model, providerOptions: { reasoning: { enabled: false } } }))).body.reasoning,
+      (yield* compileRequest(
+        ai.request({ model, prompt: "Hello", providerOptions: { reasoning: { enabled: false } } }),
+      )).body.reasoning,
     ).toEqual({ enabled: false })
     expect(
-      (yield* compileRequest(ai.request({ model, cache: "none", promptCacheKey: "session-123" }))).body
+      (yield* compileRequest(ai.request({ model, prompt: "Hello", cache: "none", promptCacheKey: "session-123" }))).body
         .prompt_cache_key,
     ).toBeUndefined()
   }),
