@@ -25,10 +25,19 @@ const paid = Model.ID.make("paid")
 const local = Model.ID.make("local")
 const other = Provider.ID.make("other")
 
-for (const flag of [undefined, "0", "1", "true"]) {
+for (const flags of [
+  { disabled: undefined, only: undefined },
+  { disabled: "0", only: "0" },
+  { disabled: "1", only: undefined },
+  { disabled: "true", only: undefined },
+  { disabled: undefined, only: "1" },
+  { disabled: undefined, only: "TRUE" },
+  { disabled: undefined, only: "false" },
+  { disabled: "true", only: "1" },
+]) {
   for (const providerID of [Provider.ID.opencode, Provider.ID.make("opencode-go")])
-    it.effect(`${providerID} catalog with OPENCODE_DISABLE_FREE_MODELS=${flag}`, () =>
-      withEnv({ OPENCODE_DISABLE_FREE_MODELS: flag }, () =>
+    it.effect(`${providerID} catalog with free-model filters ${JSON.stringify(flags)}`, () =>
+      withEnv({ OPENCODE_DISABLE_FREE_MODELS: flags.disabled, OPENCODE_ONLY_FREE_MODELS: flags.only }, () =>
         Effect.gen(function* () {
           const providers = yield* Provider.Service
           const models = yield* Model.Service
@@ -55,35 +64,43 @@ for (const flag of [undefined, "0", "1", "true"]) {
             editor.models.update(other, local, () => {})
           })
           yield* models.transform((editor) => editor.default.set(providerID, free))
-          const disabled = flag === "1" || flag === "true"
-          expect((yield* models.all()).map((model) => model.id)).toEqual(disabled ? [paid, local] : [free, paid, local])
+          const hideFree = flags.disabled === "1" || flags.disabled === "true"
+          const hidePaid = flags.only === "1" || flags.only === "TRUE"
+          expect((yield* models.all()).map((model) => model.id)).toEqual([
+            ...(!hideFree ? [free] : []),
+            ...(!hidePaid ? [paid] : []),
+            local,
+          ])
           expect(yield* models.available()).toEqual(yield* models.all())
-          expect((yield* models.default())?.id).toBe(disabled ? paid : free)
-          expect((yield* models.get(providerID, free))?.id).toBe(disabled ? undefined : free)
-          expect((yield* models.small(providerID))?.id).toBe(disabled ? undefined : free)
-          if (!disabled) return
+          expect((yield* models.default())?.id).toBe(!hideFree ? free : !hidePaid ? paid : local)
+          expect((yield* models.get(providerID, free))?.id).toBe(hideFree ? undefined : free)
+          expect((yield* models.get(providerID, paid))?.id).toBe(hidePaid ? undefined : paid)
+          expect((yield* models.small(providerID))?.id).toBe(hideFree ? undefined : free)
+          if (!hideFree && !hidePaid) return
+          const hidden = hideFree ? free : paid
           const session = Session.Info.make({
             id: Session.ID.make("ses_free_model"),
             projectID: Project.ID.global,
             title: "test",
-            model: { id: free, providerID },
+            model: { id: hidden, providerID },
             cost: Money.USD.zero,
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
             time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
             location: ref,
           })
           const failure = yield* runner.resolve(session, models.available).pipe(Effect.flip)
-          expect(failure.message).toBe(`Model unavailable: ${providerID}/big-pickle`)
-          expect(yield* resolver.resolve(Model.Ref.make({ providerID, id: free }))).toBeUndefined()
-          // Later transforms cannot restore a free model, even when all paid models are removed.
+          expect(failure.message).toBe(`Model unavailable: ${providerID}/${hidden}`)
+          expect(yield* resolver.resolve(Model.Ref.make({ providerID, id: hidden }))).toBeUndefined()
+          // Later transforms cannot restore a filtered model, even after removing the surviving models.
           yield* models.transform((editor) => {
-            editor.update(providerID, free, (model) => {
+            editor.update(providerID, hidden, (model) => {
               model.enabled = true
             })
-            editor.remove(providerID, paid)
+            if (!hideFree) editor.remove(providerID, free)
+            if (!hidePaid) editor.remove(providerID, paid)
           })
           expect((yield* models.default())?.providerID).toBe(other)
-          expect(yield* models.get(providerID, free)).toBeUndefined()
+          expect(yield* models.get(providerID, hidden)).toBeUndefined()
         }).pipe(Effect.provide(layer)),
       ),
     )
