@@ -91,12 +91,6 @@ function modelItems(data: ReturnType<typeof useData>, model: SessionMessageAssis
   return [{ label: name }, { label: model.variant[0]?.toUpperCase() + model.variant.slice(1), variant: true }]
 }
 
-function sameModel(a: SessionMessageAssistant["model"], b: SessionMessageAssistant["model"]) {
-  return (
-    a.providerID === b.providerID && a.id === b.id && (a.variant ?? "default") === (b.variant ?? "default")
-  )
-}
-
 function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part" }) {
   return (
     <For each={props.items}>
@@ -122,7 +116,7 @@ function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy" | "reset" | "fork" | "arrow-down-to-line" | "outline-trash"
+    icon: "check" | "copy"
     label: JSX.Element
     size?: "small" | "normal"
   },
@@ -309,13 +303,19 @@ export function CurrentUserMessageDisplay(props: {
   text: string
   agent: string
   model: SessionMessageAssistant["model"]
-  /** The agent and model the previous prompt chose; a waiting steer names only what it changes. */
-  previousSelection?: { agent: string; model: SessionMessageAssistant["model"] }
   actions?: SessionUserActions
   comments?: SessionUserComment[]
   references?: SessionUserAttachmentReference[]
   voice?: boolean
   run?: UserRun
+  /** The newest delivered prompt, whose revert undoes the last turn. */
+  latest?: boolean
+  /** Whether run changes snap now, while a message arrives, rather than spring. Omitted, folding always snaps. */
+  runSnaps?: () => boolean
+  /** The pointer is somewhere in this message's run, so its last bubble shows the run's meta line. */
+  runHovered?: boolean
+  /** An open menu keeps its run's meta line in view while the pointer is on the menu. */
+  onMenuOpenChange?: (open: boolean) => void
   /** Folds a long message to its first lines with a Read more toggle. Omitted, the message always shows in full. */
   fold?: boolean
   /** Whether a folded message is open. The timeline owns it so it survives row recycling. */
@@ -351,12 +351,6 @@ export function CurrentUserMessageDisplay(props: {
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
 
-  const sent = createMemo(() =>
-    new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }).format(
-      props.message.time.created,
-    ),
-  )
-
   // Mobile shows the current agent and model in the composer and switch notices, so repeating them per message is noise.
   const mobile = createMediaQuery("(max-width: 767px)")
 
@@ -366,27 +360,35 @@ export function CurrentUserMessageDisplay(props: {
     return agent ? [{ label: agent }] : []
   })
 
-  // A waiting steer joins the running turn, so its agent and model only say something when it changes them.
-  const changedLabels = createMemo<MetaItem[]>(() => {
-    const previous = props.previousSelection
+  // The menu names the day relatively: Today and Yesterday, then the date this year, then the date with its year.
+  const sent = createMemo(() => {
+    const created = new Date(props.message.time.created)
+    const now = new Date()
+    const midnight = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+    const days = Math.round((midnight(now) - midnight(created)) / 86_400_000)
+    const time = new Intl.DateTimeFormat(i18n.locale(), { timeStyle: "short" }).format(created)
 
-    if (!previous) return [...agentItems(), ...modelItems(data, props.model)]
+    if (days === 0 || days === 1) {
+      const day = new Intl.RelativeTimeFormat(i18n.locale(), { numeric: "auto" }).format(-days, "day")
 
-    return [
-      ...(previous.agent === props.agent ? [] : agentItems()),
-      ...(sameModel(previous.model, props.model) ? [] : modelItems(data, props.model)),
-    ]
+      return `${day[0]?.toLocaleUpperCase(i18n.locale())}${day.slice(1)}, ${time}`
+    }
+
+    if (created.getFullYear() === now.getFullYear())
+      return new Intl.DateTimeFormat(i18n.locale(), {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(created)
+
+    return new Intl.DateTimeFormat(i18n.locale(), { dateStyle: "medium", timeStyle: "short" }).format(created)
   })
 
-  const metaLabels = createMemo(() => {
-    if (mobile()) return []
+  // A waiting steer reads agent · model · Pending; mobile shows the agent and model in the composer instead.
+  const metaLabels = createMemo(() => (mobile() ? [] : [...agentItems(), ...modelItems(data, props.model)]))
 
-    if (waiting()) return changedLabels()
-
-    return [...agentItems(), ...modelItems(data, props.model)]
-  })
-
-  // In a run, only the last message keeps the meta line; the others offer their actions beside the bubble.
+  // In a run, only the last message keeps the meta line; every bubble offers its actions from its own chevron.
   // Bubble corners tighten where two bubbles meet, as in the iOS app's grouped corners.
   const folded = createMemo(() => !!props.run?.below && !!props.text)
 
@@ -413,8 +415,9 @@ export function CurrentUserMessageDisplay(props: {
       el.style.setProperty("--user-run-bottom", `${value.bottom}`)
       el.toggleAttribute("data-run-meta-hidden", value.meta === 0)
     },
-    // Folding a meta line away is instant; the next message's line takes its place as that message grows in.
-    { ...userRunSpring, snap: folded },
+    // Folding a meta line away is instant while the next message grows in to take its place; otherwise it springs in step
+    // with the line that replaces it.
+    { ...userRunSpring, snap: () => folded() && (props.runSnaps?.() ?? true) },
   )
 
   // Delivery drops the Pending footer at once rather than fading it like the hover reveal.
@@ -462,82 +465,74 @@ export function CurrentUserMessageDisplay(props: {
     setState("updating", false)
   }
 
-  const renderActions = () => (
-    <span data-slot="user-message-actions">
-      <Show when={props.actions?.pending}>
-        <UserMessageTransition active={pending()}>
-          <MessageActionButton
-            icon="arrow-down-to-line"
-            size="small"
-            label={i18n.t("ui.message.moveToQueue")}
-            disabled={state.updating}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={(event) => {
-              event.stopPropagation()
-              void updatePending("queue")
-            }}
-            aria-label={i18n.t("ui.message.moveToQueue")}
-          />
-          <MessageActionButton
-            icon="outline-trash"
-            size="small"
-            label={i18n.t("ui.message.deletePending")}
-            disabled={state.updating}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={(event) => {
-              event.stopPropagation()
-              void updatePending("remove")
-            }}
-            aria-label={i18n.t("ui.message.deletePending")}
-          />
-        </UserMessageTransition>
-      </Show>
-      <Show when={props.actions?.revert}>
-        <UserMessageTransition active={!pending()}>
-          <MessageActionButton
-            icon="reset"
-            size="small"
-            label={i18n.t("ui.message.revertMessage")}
-            disabled={state.reverting}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={(event) => {
-              event.stopPropagation()
-              void revert()
-            }}
-            aria-label={i18n.t("ui.message.revertMessage")}
-          />
-        </UserMessageTransition>
-      </Show>
-      <Menu gutter={4} placement="bottom-end">
-        <Tooltip appearance="compact" value={i18n.t("ui.message.moreActions")} placement="top" gutter={4}>
-          <Menu.Trigger
-            as={IconButton}
-            icon={<Icon name="outline-dots" size="small" />}
-            size="small"
-            variant="ghost-muted"
-            onMouseDown={(event: MouseEvent) => event.preventDefault()}
-            onClick={(event: MouseEvent) => event.stopPropagation()}
-            aria-label={i18n.t("ui.message.moreActions")}
-          />
-        </Tooltip>
+  const renderMenu = () => (
+    <span data-slot="user-message-menu">
+      <Menu gutter={4} placement="top-end" onOpenChange={(open) => props.onMenuOpenChange?.(open)}>
+        {/* The chevron explains itself, so it carries only an accessible name, no tooltip. */}
+        <Menu.Trigger
+          as={IconButton}
+          icon={<Icon name="chevron-down" size="small" />}
+          size="small"
+          variant="ghost-muted"
+          onMouseDown={(event: MouseEvent) => event.preventDefault()}
+          onClick={(event: MouseEvent) => event.stopPropagation()}
+          aria-label={i18n.t("ui.message.moreActions")}
+        />
         <Menu.Portal>
           <Menu.Content>
             <Menu.Group>
               <Menu.GroupLabel>
-                <time dateTime={new Date(props.message.time.created).toISOString()}>{sent()}</time>
+                <Show when={!waiting()} fallback={i18n.t("ui.message.pending")}>
+                  <time dateTime={new Date(props.message.time.created).toISOString()}>{sent()}</time>
+                </Show>
               </Menu.GroupLabel>
             </Menu.Group>
             <Menu.Separator />
-            <Menu.Item disabled={!props.actions?.fork || pending() || state.forking} onSelect={() => void fork()}>
-              {i18n.t("ui.message.forkMessage")}
-            </Menu.Item>
+            <Show when={pending() && props.actions?.pending}>
+              <Menu.Item disabled={state.updating} onSelect={() => void updatePending("queue")}>
+                <Icon name="bullet-list" size="small" />
+                {i18n.t("ui.message.moveToQueue")}
+              </Menu.Item>
+            </Show>
             <Menu.Item disabled={!props.text} onSelect={() => void writeClipboard(props.text)}>
+              <Icon name="outline-copy" size="small" />
               {i18n.t("ui.message.copyMessage")}
             </Menu.Item>
             {/* Like the iOS app, a Voice message also offers the full prompt the session received. */}
             <Show when={props.voice}>
               <Menu.Item onSelect={() => void writeClipboard(props.message.text)}>
+                <Icon name="outline-copy" size="small" />
                 {i18n.t("ui.message.copyFullMessage")}
+              </Menu.Item>
+            </Show>
+            {/* A pending steer has no history to fork from yet. */}
+            <Show when={!pending()}>
+              <Menu.Item disabled={!props.actions?.fork || state.forking} onSelect={() => void fork()}>
+                <Icon name="fork" size="small" />
+                {i18n.t("ui.message.forkMessage")}
+              </Menu.Item>
+            </Show>
+            {/* A pending steer is withdrawn rather than reverted; a sent message reverts only where the host allows it. */}
+            <Show
+              when={pending() && props.actions?.pending}
+              fallback={
+                <Show when={props.actions?.revert}>
+                  <Menu.Separator />
+                  <Menu.Item disabled={state.reverting} onSelect={() => void revert()}>
+                    <Icon name={props.latest ? "outline-undo" : "reset"} size="small" />
+                    {props.latest ? i18n.t("ui.message.undoMessage") : i18n.t("ui.message.revertMessage")}
+                  </Menu.Item>
+                </Show>
+              }
+            >
+              <Menu.Separator />
+              <Menu.Item
+                data-variant="critical"
+                disabled={state.updating}
+                onSelect={() => void updatePending("remove")}
+              >
+                <Icon name="outline-trash" size="small" />
+                {i18n.t("ui.message.deletePending")}
               </Menu.Item>
             </Show>
           </Menu.Content>
@@ -683,6 +678,8 @@ export function CurrentUserMessageDisplay(props: {
       data-component="user-message"
       data-pending={waiting() ? "true" : undefined}
       data-run-folded={folded() ? "" : undefined}
+      data-run-above={meetsAbove() ? "" : undefined}
+      data-run-hovered={props.runHovered ? "" : undefined}
       data-run-meta-hidden={restingPose.meta === 0 ? "" : undefined}
       style={{
         "--user-run-meta": `${restingPose.meta}`,
@@ -725,10 +722,8 @@ export function CurrentUserMessageDisplay(props: {
             <Show when={comments().length > 0}>
               <UserMessageComments comments={comments()} bounded />
             </Show>
+            {renderMenu()}
           </div>
-          <Show when={folded()}>
-            <div data-slot="user-message-run-actions">{renderActions()}</div>
-          </Show>
         </div>
       </Show>
       {/* Like the TUI, a pending steer of only attachments still offers its actions. */}
@@ -736,22 +731,23 @@ export function CurrentUserMessageDisplay(props: {
         <div data-slot="user-message-copy-wrapper">
           <span data-slot="user-message-meta-wrap">
             <span data-slot="user-message-meta">
-              <UserMessageTransition active={waiting()}>
-                <span data-slot="user-message-pending">{i18n.t("ui.message.pending")}</span>
-                <Show when={metaLabels().length > 0}>
-                  <span data-slot="user-message-meta-separator" aria-hidden="true">
-                    {"\u00B7"}
-                  </span>
-                </Show>
-              </UserMessageTransition>
               <Show when={metaLabels().length > 0}>
                 <span data-slot="user-message-meta-label">
                   <MetaItems items={metaLabels()} slot="user-message" />
                 </span>
               </Show>
+              {/* Pending closes the line and stays in view; the agent and model before it show on hover. */}
+              <UserMessageTransition active={waiting()}>
+                <Show when={metaLabels().length > 0}>
+                  <span data-slot="user-message-pending-separator" aria-hidden="true">
+                    {"\u00B7"}
+                  </span>
+                </Show>
+                <span data-slot="user-message-pending">{i18n.t("ui.message.pending")}</span>
+              </UserMessageTransition>
             </span>
           </span>
-          {renderActions()}
+          <Show when={!props.text}>{renderMenu()}</Show>
         </div>
       </Show>
     </div>

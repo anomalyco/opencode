@@ -27,7 +27,15 @@ export function CurrentSessionProviders(props: {
         ],
         provider: {
           all: new Map<string, { models: Record<string, { name: string }> }>([
-            ["anthropic", { models: { "claude-sonnet-4": { name: "Claude Sonnet 4" } } }],
+            [
+              "anthropic",
+              {
+                models: {
+                  "claude-sonnet-4": { name: "Claude Sonnet 4" },
+                  "claude-opus-5-5": { name: "Claude Opus 5.5" },
+                },
+              },
+            ],
             [
               "company-gateway",
               {
@@ -95,7 +103,7 @@ export function CurrentSessionTimelineStory(props: {
       setActivity(`Opened ${file.name ?? file.mime}`)
     },
     revert: (input) => {
-      setActivity(`Rewound to ${input.messageID}`)
+      setActivity(`Reverted to ${input.messageID}`)
     },
     fork: (input) => {
       setActivity(`Forked from ${input.messageID}`)
