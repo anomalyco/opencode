@@ -25,6 +25,7 @@ import {
 } from "@/shell/sidebar-toggle"
 import { createPanelMotion, guardClosingFocus, panelOpacity } from "@/shell/panel-motion"
 import { createSidebarPeek } from "@/shell/sidebar-peek"
+import { TRADING_ROW_WIDTH_MIN } from "@/session/session-panel-width"
 import { windowDragEnabled } from "@/session/header/drag-area"
 
 // How far Home steps along a peek's header to clear the collapsed toggle: to the toggle's end, from the sidebar's 18px
@@ -275,12 +276,15 @@ export default function Layout(props: ParentProps) {
               classList={{ hidden: preferences.appearance.sidebarOpen() || !sidebarMotion.present() }}
             />
             <Show when={preferences.appearance.sidebarOpen()}>
+              {/* The sidebar never takes what the trading pane row needs (chat floor + gap +
+                  dashboard floor, plus the dash's own side insets), so widening it cannot
+                  crush the desk; a window too small for the row pins the sidebar at `min`. */}
               <ResizeHandle
                 class="-end-1"
                 direction="horizontal"
                 size={state.tabsWidth}
                 min={136}
-                max={640}
+                max={Math.max(136, Math.min(640, window.innerWidth - TRADING_ROW_WIDTH_MIN - 16))}
                 onResize={(width) => setState("tabsWidth", width)}
               />
             </Show>

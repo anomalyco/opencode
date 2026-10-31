@@ -41,6 +41,7 @@ import { SessionPanelFrame } from "@/session/session-frame"
 import {
   PANE_GAP,
   SESSION_PANEL_WIDTH_MIN,
+  TRADING_DASH_WIDTH_MIN,
   clampSessionPanelWidth,
   sessionPanelWidthCss,
   sessionPanelWidthMax,
@@ -655,6 +656,7 @@ function TradingShell(props: {
       available: disponible(),
       split: false,
       resized: props.resizada(),
+      paneMin: TRADING_DASH_WIDTH_MIN,
     }),
   )
 
@@ -680,7 +682,7 @@ function TradingShell(props: {
 
   // The chat's resting width in CSS against the row — the native formula, so it follows the
   // row on the frame it resizes — builds the dashboard's open width below.
-  const chatWidthCss = createMemo(() => sessionPanelWidthCss({ width: props.anchuraChat(), split: false, resized: props.resizada() }))
+  const chatWidthCss = createMemo(() => sessionPanelWidthCss({ width: props.anchuraChat(), split: false, resized: props.resizada(), paneMin: TRADING_DASH_WIDTH_MIN }))
 
   // The dashboard keeps its open width as the far end of a close's travel — the native
   // flight's sticky open width, mirrored one seam over: the row less the panel gap and the
@@ -806,15 +808,16 @@ function TradingShell(props: {
     ))
   }
 
-  // The chat drags up to the native maximum, derived off the row exactly where the resting
-  // formula caps it — `screen-layout.ts`'s `panel.max` (drag semantics: always `resized`),
-  // with the session's 1000 default before the row ever measures.
+  // The chat drags up to the desk's own maximum, derived off the row exactly where the
+  // resting formula caps it (drag semantics: always `resized`): the row minus the
+  // dashboard's own floor, never the crushed side-pane minimum the review pane tolerates.
+  // Unmeasured rows keep the session's 1000 fallback.
   const chatWidthMax = () => {
     const width = disponible()
 
     if (width === undefined) return 1000
 
-    return sessionPanelWidthMax({ available: width, split: false, resized: true })
+    return sessionPanelWidthMax({ available: width, split: false, resized: true, paneMin: TRADING_DASH_WIDTH_MIN })
   }
 
   // The size the handle sees is the same resting clamp the panel renders — never a raw
