@@ -558,6 +558,15 @@ const mapContinuedUsage = (requests: ReadonlyArray<GeminiUsage>, metadataKey: st
   )
 }
 
+const terminalFinishReason = (finishReason: string | null | undefined) =>
+  finishReason && finishReason !== "FINISH_REASON_UNSPECIFIED" ? finishReason : undefined
+
+const RECOVERABLE_FINISH_REASONS = new Set([
+  "MALFORMED_RESPONSE",
+  "MALFORMED_FUNCTION_CALL",
+  "UNEXPECTED_TOOL_CALL",
+])
+
 const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean): FinishReason => {
   if (finishReason === undefined) return hasToolCalls ? "tool-calls" : "unknown"
   if (finishReason === "STOP") return hasToolCalls ? "tool-calls" : "stop"
@@ -647,31 +656,23 @@ const step = (state: ParserState, event: GeminiEvent | NextRequest) => {
     )
   }
   const candidate = event.candidates?.[0]
+  const finishReason = terminalFinishReason(candidate?.finishReason)
   const nextState = {
     ...state,
     promptFeedback: event.promptFeedback ?? state.promptFeedback,
     usage: event.usageMetadata ?? state.usage,
-    finishReason: candidate?.finishReason ?? state.finishReason,
+    finishReason: finishReason ?? state.finishReason,
   }
-  // Gemini sporadically ends a valid request with MALFORMED_RESPONSE; continuing or resending it recovers.
-  if (candidate?.finishReason === "MALFORMED_RESPONSE")
+  if (finishReason && mapFinishReason(finishReason, state.hasToolCalls) === "error")
     return Effect.fail(
       new AIError({
         reason: new InvalidProviderOutputError({
           route: state.route,
-          message: `Gemini stopped with ${candidate.finishReason}`,
+          message: `Gemini stopped with ${finishReason}`,
           body: ProviderShared.encodeJson(event),
-          classification: "incomplete-stream",
+          classification: RECOVERABLE_FINISH_REASONS.has(finishReason) ? "incomplete-stream" : undefined,
         }),
       }),
-    )
-  if (candidate?.finishReason && mapFinishReason(candidate.finishReason, state.hasToolCalls) === "error")
-    return Effect.fail(
-      ProviderShared.eventError(
-        state.route,
-        `Gemini stopped with ${candidate.finishReason}`,
-        ProviderShared.encodeJson(event),
-      ),
     )
   if (!candidate?.content) return Effect.succeed([nextState, []] as const)
 
@@ -887,8 +888,9 @@ export const transport: Transport<GeminiBody, Prepared, unknown> = {
                 Effect.map((event) => {
                   if (typeof event === "object" && event !== null) raw.set(event, frame)
                   const candidate = Option.getOrUndefined(decodeCheckpoint(event))?.candidates?.[0]
-                  token = candidate?.continuationToken ?? (candidate?.finishReason ? undefined : token)
-                  finishReason = candidate?.finishReason ?? finishReason
+                  const candidateFinishReason = terminalFinishReason(candidate?.finishReason)
+                  token = candidate?.continuationToken ?? (candidateFinishReason ? undefined : token)
+                  finishReason = candidateFinishReason ?? finishReason
                   return event
                 }),
               ),
