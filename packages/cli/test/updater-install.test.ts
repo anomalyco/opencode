@@ -262,6 +262,28 @@ it.live("install failures expose stderr and process errors do not report success
     expect(missing.commands).toHaveLength(1)
   }),
 )
+
+it.live("explains npm min-release-age rejections", () =>
+  Effect.gen(function* () {
+    const npmFailure = (stderr: string) =>
+      fixture(() => ({ exitCode: 1, stderr: Buffer.from(stderr) })).pipe(
+        Effect.flatMap((test) => test.updater.upgrade("npm", "2.3.4")),
+        Effect.flip,
+      )
+    // https://github.com/anomalyco/opencode/issues/56108
+    expect(
+      yield* npmFailure(
+        "npm error code ETARGET\nnpm error notarget No matching version found for @opencode/cli@2.3.4 with a date before 10/13/2026, 2:51:41 PM.\n",
+      ),
+    ).toMatchObject({
+      title: "npm could not install OpenCode",
+      retry: expect.stringContaining("npm install --global --force @opencode/cli@2.3.4 --min-release-age=0"),
+    })
+    expect(yield* npmFailure("registry denied access\n")).toMatchObject({
+      retry: "Fix the issue above, then run opencode upgrade again.",
+    })
+  }),
+)
 ;(["npm", "pnpm", "bun", "yarn", "vp", undefined] as const).forEach((method) => {
   it.live(`method detection identifies ${method ?? "an unknown installation"} using the V2 package`, () =>
     Effect.gen(function* () {
