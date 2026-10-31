@@ -23,7 +23,13 @@ export function collapseToolOutput(output: string, maxLines: number, maxChars: n
   return { output: preview, overflow: true }
 }
 
-export function collapseShellOutput(input: string, output: string, maxLines: number, maxChars: number) {
+export function collapseShellOutput(
+  input: string,
+  output: string,
+  maxLines: number,
+  maxChars: number,
+  maxCommandLines = 2,
+) {
   if (!input) {
     const collapsed = collapseToolOutput(output, maxLines, maxChars)
     return {
@@ -33,7 +39,7 @@ export function collapseShellOutput(input: string, output: string, maxLines: num
     }
   }
 
-  const commandLines = Math.min(2, maxLines)
+  const commandLines = Math.min(maxCommandLines, maxLines)
   const lineChars = Math.max(1, Math.floor(maxChars / Math.max(1, maxLines)))
   const command = collapseShellCommand(input, commandLines, lineChars)
   if (!output) return { input: command.output, output, overflow: command.overflow }
