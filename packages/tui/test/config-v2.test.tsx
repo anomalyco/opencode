@@ -176,6 +176,8 @@ test("preserves current navigation defaults", () => {
   expect(config.keybinds.get("session.message.previous")).toEqual([])
   expect(config.keybinds.get("session.message.user.next")).toEqual([])
   expect(config.keybinds.get("session.message.user.previous")).toEqual([])
+  expect(config.keybinds.get("session.child.next")).toEqual([])
+  expect(config.keybinds.get("session.child.previous")).toEqual([])
   expect(config.keybinds.get("input.buffer.home")).toEqual([])
   expect(config.keybinds.get("input.buffer.end")).toEqual([])
   expect(config.keybinds.get("prompt.images.view")).toMatchObject([{ key: "<leader>i" }])
@@ -201,6 +203,8 @@ test("accepts every v2-only named command ID", () => {
   const commands = [
     "server.pair",
     "session.toggle.exploration_grouping",
+    "session.child.next",
+    "session.child.previous",
     "composer.subagent.up",
     "composer.subagent.down",
     "composer.subagent.select",
