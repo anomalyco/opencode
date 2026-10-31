@@ -105,6 +105,36 @@ const images: ReadonlyArray<Case<ImageModel>> = [
     provider: "vercel-ai-gateway",
   },
   {
+    name: "togetherai",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/togetherai/images")
+      return model("black-forest-labs/FLUX.2-dev", { ...shared, apiKey: "together-key" })
+    },
+    url: "https://api.together.xyz/v1/images/generations",
+    auth: ["authorization", "Bearer together-key"],
+    provider: "togetherai",
+  },
+  {
+    name: "deepinfra",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/deepinfra/images")
+      return model("black-forest-labs/FLUX-1-schnell", { ...shared, apiKey: "deepinfra-key" })
+    },
+    url: "https://api.deepinfra.com/v1/openai/images/generations",
+    auth: ["authorization", "Bearer deepinfra-key"],
+    provider: "deepinfra",
+  },
+  {
+    name: "venice",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/venice/images")
+      return model("z-image-turbo", { ...shared, apiKey: "venice-key", queryParams: { trace: "1" } })
+    },
+    url: "https://api.venice.ai/api/v1/images/generations?trace=1",
+    auth: ["authorization", "Bearer venice-key"],
+    provider: "venice",
+  },
+  {
     name: "digitalocean",
     load: async () => {
       const { model } = await import("@opencode/ai/providers/digitalocean/images")
