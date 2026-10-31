@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-Depo otomasyonu için GitHub aracısını yönetin.
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-GitHub aracısını deponuza yükleyin.
-
-```bash
-opencode github install
-```
-
-Bu komut gerekli GitHub Actions workflow'unu kurar ve yapılandırma adımlarında size rehberlik eder. [Daha fazla bilgi](/docs/github).
-
----
-
-#### run
-
-GitHub aracısını çalıştırın. Bu genellikle GitHub Eylemlerinde kullanılır.
-
-```bash
-opencode github run
-```
-
-##### Bayraklar
-
-| Bayrak                                | Açıklama                                    |
-| ------------------------------------- | ------------------------------------------- |
-| <nobr><code>{"--event"}</code></nobr> | Aracıyı çalıştırmak için GitHub sahte olayı |
-| <nobr><code>{"--token"}</code></nobr> | GitHub personal access token                |
-
----
-
 ### mcp
 
 Model Bağlam Protokolü sunucularını yönetin.
@@ -418,27 +379,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-Web arayüzüyle başsız bir opencode sunucusu başlatın.
-
-```bash
-opencode web
-```
-
-Bu, bir HTTP sunucusunu başlatır ve bir web arayüzü aracılığıyla opencode'a erişmek için bir web tarayıcısı açar. HTTP temel kimlik doğrulamasını etkinleştirmek için `OPENCODE_SERVER_PASSWORD` öğesini ayarlayın (kullanıcı adı varsayılan olarak `opencode` şeklindedir).
-
-#### Bayraklar
-
-| Bayrak                                   | Tanım                                      |
-| ---------------------------------------- | ------------------------------------------ |
-| <nobr><code>{"--port"}</code></nobr>     | Dinlenecek bağlantı noktası                |
-| <nobr><code>{"--hostname"}</code></nobr> | Dinlenecek ana bilgisayar adı              |
-| <nobr><code>{"--mdns"}</code></nobr>     | mDNS bulmayı etkinleştir                   |
-| <nobr><code>{"--cors"}</code></nobr>     | CORS'a izin verecek ek tarayıcı kaynakları |
 
 ---
 

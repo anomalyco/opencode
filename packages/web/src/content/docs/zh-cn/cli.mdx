@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-管理用于仓库自动化的 GitHub 代理。
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-在您的仓库中安装 GitHub 代理。
-
-```bash
-opencode github install
-```
-
-此命令会设置必要的 GitHub Actions 工作流并引导您完成配置过程。[了解更多](/docs/github)。
-
----
-
-#### run
-
-运行 GitHub 代理。通常在 GitHub Actions 中使用。
-
-```bash
-opencode github run
-```
-
-##### 标志
-
-| 标志                                  | 描述                           |
-| ------------------------------------- | ------------------------------ |
-| <nobr><code>{"--event"}</code></nobr> | 用于运行代理的 GitHub 模拟事件 |
-| <nobr><code>{"--token"}</code></nobr> | GitHub 个人访问令牌            |
-
----
-
 ### mcp
 
 管理 Model Context Protocol 服务器。
@@ -418,27 +379,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-启动带有 Web 界面的无界面 OpenCode 服务器。
-
-```bash
-opencode web
-```
-
-此命令启动一个 HTTP 服务器并打开浏览器，通过 Web 界面访问 OpenCode。设置 `OPENCODE_SERVER_PASSWORD` 可启用 HTTP 基本认证（用户名默认为 `opencode`）。
-
-#### 标志
-
-| 标志                                     | 描述                       |
-| ---------------------------------------- | -------------------------- |
-| <nobr><code>{"--port"}</code></nobr>     | 监听端口                   |
-| <nobr><code>{"--hostname"}</code></nobr> | 监听主机名                 |
-| <nobr><code>{"--mdns"}</code></nobr>     | 启用 mDNS 发现             |
-| <nobr><code>{"--cors"}</code></nobr>     | 允许 CORS 的额外浏览器来源 |
 
 ---
 

@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-Zarządzaj agentem GitHub w celu automatyzacji repozytorium.
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-Zainstaluj agenta GitHub w swoim repozytorium.
-
-```bash
-opencode github install
-```
-
-Spowoduje to utworzenie pliku workflow GitHub Actions i poprowadzi Cię przez proces konfiguracji. [Dowiedz się więcej](/docs/github).
-
----
-
-#### run
-
-Uruchom agenta na GitHubie. Zwykle używane w GitHub Actions.
-
-```bash
-opencode github run
-```
-
-##### Flagi
-
-| Flaga                                 | Opis                                     |
-| ------------------------------------- | ---------------------------------------- |
-| <nobr><code>{"--event"}</code></nobr> | Zdarzenie GitHub, które wyzwoliło agenta |
-| <nobr><code>{"--token"}</code></nobr> | Osobisty token dostępu GitHub            |
-
----
-
 ### mcp
 
 Zarządzaj serwerami Model Context Protocol (MCP).
@@ -418,27 +379,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-Uruchom serwer OpenCode z interfejsem internetowym.
-
-```bash
-opencode web
-```
-
-Uruchamia to serwer HTTP i udostępnia OpenCode przez interfejs przeglądarkowy. Ustaw `OPENCODE_SERVER_PASSWORD`, aby włączyć podstawowe uwierzytelnianie HTTP (domyślna nazwa użytkownika to `opencode`).
-
-#### Flagi
-
-| Flaga                                    | Opis                                       |
-| ---------------------------------------- | ------------------------------------------ |
-| <nobr><code>{"--port"}</code></nobr>     | Port do nasłuchiwania                      |
-| <nobr><code>{"--hostname"}</code></nobr> | Nazwa hosta, do której należy się powiązać |
-| <nobr><code>{"--mdns"}</code></nobr>     | Włącz wykrywanie mDNS                      |
-| <nobr><code>{"--cors"}</code></nobr>     | Dodatkowe dozwolone źródła CORS            |
 
 ---
 

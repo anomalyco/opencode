@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-จัดการเอเจนต์ GitHub สำหรับเวิร์กโฟลว์อัตโนมัติ
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-ติดตั้งเอเจนต์ GitHub ใน repository ของคุณ
-
-```bash
-opencode github install
-```
-
-คำสั่งนี้จะสร้างเวิร์กโฟลว์ GitHub Actions และแนะนำคุณตลอดกระบวนการตั้งค่า [เรียนรู้เพิ่มเติม](/docs/github)
-
----
-
-#### run
-
-รันเอเจนต์ GitHub ด้วยตนเองหรือใน GitHub Actions
-
-```bash
-opencode github run
-```
-
-##### แฟล็ก
-
-| แฟล็ก                                 | คำอธิบาย                               |
-| ------------------------------------- | -------------------------------------- |
-| <nobr><code>{"--event"}</code></nobr> | เหตุการณ์ GitHub เพื่อทริกเกอร์เอเจนต์ |
-| <nobr><code>{"--token"}</code></nobr> | GitHub token                           |
-
----
-
 ### mcp
 
 จัดการเซิร์ฟเวอร์ Model Context Protocol (MCP)
@@ -419,27 +380,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-เริ่ม OpenCode ในโหมดเซิร์ฟเวอร์พร้อมเว็บอินเตอร์เฟส
-
-```bash
-opencode web
-```
-
-คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP และเปิดเว็บเบราว์เซอร์เพื่อเข้าถึง OpenCode ผ่านทางเว็บอินเตอร์เฟส รองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `OPENCODE_SERVER_PASSWORD`)
-
-#### แฟล็ก
-
-| แฟล็ก                                    | คำอธิบาย                               |
-| ---------------------------------------- | -------------------------------------- |
-| <nobr><code>{"--port"}</code></nobr>     | พอร์ตที่จะฟัง                          |
-| <nobr><code>{"--hostname"}</code></nobr> | ชื่อโฮสต์ที่จะฟัง                      |
-| <nobr><code>{"--mdns"}</code></nobr>     | เปิดใช้งานการค้นหา mDNS                |
-| <nobr><code>{"--cors"}</code></nobr>     | ต้นกำเนิดเพิ่มเติมที่อนุญาตสำหรับ CORS |
 
 ---
 
