@@ -7,6 +7,7 @@ import type {
   ToolOutput as ToolOutputType,
 } from "./schema/index.js"
 import { ToolDefinition, ToolFailure, ToolOutput, type ToolDefinitionInput } from "./schema/index.js"
+import type { StandardJSONSchemaV1, StandardSchemaV1 } from "./standard-schema.js"
 import { isRecord } from "./utils/record.js"
 
 /**
@@ -16,11 +17,16 @@ import { isRecord } from "./utils/record.js"
  */
 export type ToolSchema<T> = Schema.Codec<T, any, never, never>
 
-/** A tool's `input`: an Effect Schema decodes and types it; a raw JSON Schema leaves it `unknown`. */
-export type ToolInput = ToolSchema<any> | JsonSchema.JsonSchema
+/**
+ * A tool's `input`: an Effect Schema or a Standard Schema (https://standardschema.dev, such as Zod 4, ArkType or Valibot)
+ * validates and types it; a raw JSON Schema leaves it `unknown`. A Standard Schema must also implement Standard JSON
+ * Schema, which gives the JSON Schema sent to the model.
+ */
+export type ToolInput = ToolSchema<any> | StandardSchemaV1 | JsonSchema.JsonSchema
 
 /** The value `execute` receives for a tool `input`. */
-export type ToolInputType<Input extends ToolInput> = Input extends ToolSchema<infer T> ? T : unknown
+export type ToolInputType<Input extends ToolInput> =
+  Input extends ToolSchema<infer T> ? T : Input extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<Input> : unknown
 
 export interface ToolExecuteContext {
   readonly id: ToolCallPart["id"]
@@ -83,7 +89,7 @@ export interface Tool<Input extends ToolInput = any, Success extends ToolSchema<
   readonly toModelOutput?: ToolToModelOutput<Input, Success>
   readonly toStructuredOutput?: (output: Success["Encoded"]) => unknown
   /** @internal */
-  readonly _decode: (input: unknown) => Effect.Effect<ToolInputType<Input>, Schema.SchemaError>
+  readonly _decode: (input: unknown) => Effect.Effect<ToolInputType<Input>, Schema.SchemaError | Error>
   // Method syntax keeps these parameters bivariant, so a concrete tool stays assignable to `ExecutableTool`.
   /** @internal */
   _encode(value: Schema.Schema.Type<Success>): Effect.Effect<unknown, Schema.SchemaError>
@@ -106,8 +112,9 @@ export type ExecutableTool<Input extends ToolInput = any, Success extends ToolSc
 /**
  * Options for `tool`, where `Execute` is the only part that differs between the Effect and Promise clients. Pass an
  * Effect Schema `input` (and optionally a `success` schema that validates the result, otherwise it is sent as is with
- * `undefined` as `null`), or a raw JSON Schema `input` known only at runtime, such as an MCP tool's, with an optional
- * JSON Schema `outputSchema`. Omit `execute` to declare a tool the model can call without running it here.
+ * `undefined` as `null`), a Standard Schema `input` that also exports JSON Schema, or a raw JSON Schema `input` known
+ * only at runtime, such as an MCP tool's. The last two take an optional JSON Schema `outputSchema`. Omit `execute` to
+ * declare a tool the model can call without running it here.
  */
 export type ToolOptions<
   Input extends ToolInput,
@@ -174,6 +181,22 @@ export function build(
       project(config.toModelOutput, config.toStructuredOutput, input, id, output),
   }
   const input = config.input
+  if (isStandardSchema(input))
+    return {
+      ...shared,
+      input,
+      success: Schema.Unknown,
+      _decode: (value: unknown) => validateStandard(input, value),
+      _encode: (value: unknown) => Effect.succeed(value ?? null),
+      _legacyResult: false,
+      _definition: definition({
+        name: config.name,
+        description: config.description,
+        inputSchema: standardJsonSchema(input),
+        outputSchema: config.outputSchema,
+        freeform: config.freeform,
+      }),
+    }
   if (!Schema.isSchema(input))
     return {
       ...shared,
@@ -240,6 +263,42 @@ const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
   if (Object.keys(document.definitions).length === 0) return document.schema
   return { ...document.schema, $defs: document.definitions }
 }
+
+const isStandardSchema = (input: ToolInput): input is StandardSchemaV1 => "~standard" in input
+
+// Standard JSON Schema has no affordance for validation and Standard Schema none for JSON Schema, so ask the schema for
+// both. Without a JSON Schema export there is nothing truthful to send the model, so fail rather than guess.
+const standardJsonSchema = (schema: StandardSchemaV1): JsonSchema.JsonSchema => {
+  const props: StandardSchemaV1.Props & Partial<StandardJSONSchemaV1.Props> = schema["~standard"]
+  if (props.jsonSchema === undefined)
+    throw new Error(
+      `This ${props.vendor} schema has no JSON Schema export. Use a Standard Schema that also implements Standard JSON Schema (https://standardschema.dev/json-schema), such as a Zod 4.2+ or ArkType schema or a Valibot schema wrapped in toStandardJsonSchema from @valibot/to-json-schema, or pass a raw JSON Schema.`,
+    )
+  // Effect's JSON Schema export omits `$schema` too; providers only read the schema body.
+  const { $schema, ...body } = props.jsonSchema.input({ target: "draft-2020-12" })
+  return body
+}
+
+// A throwing or rejecting `validate` is an input error the model can see, not a defect.
+const validateStandard = (schema: StandardSchemaV1, value: unknown) =>
+  Effect.try({ try: () => schema["~standard"].validate(value), catch: toError }).pipe(
+    Effect.flatMap((result) =>
+      result instanceof Promise ? Effect.tryPromise({ try: () => result, catch: toError }) : Effect.succeed(result),
+    ),
+    Effect.flatMap((result) =>
+      result.issues === undefined ? Effect.succeed(result.value) : Effect.fail(new Error(formatIssues(result.issues))),
+    ),
+  )
+
+const toError = (cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause)))
+
+const formatIssues = (issues: ReadonlyArray<StandardSchemaV1.Issue>) =>
+  issues
+    .map((issue) => {
+      const path = (issue.path ?? []).map((segment) => String(typeof segment === "object" ? segment.key : segment))
+      return path.length === 0 ? issue.message : `${path.join(".")}: ${issue.message}`
+    })
+    .join("; ")
 
 const project = (
   toModelOutput: ((input: ToolModelOutputInput<any, any>) => ReadonlyArray<Content>) | undefined,

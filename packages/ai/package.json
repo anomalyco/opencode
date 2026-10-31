@@ -149,7 +149,10 @@
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:",
-    "typescript": "catalog:"
+    "@valibot/to-json-schema": "1.8.0",
+    "typescript": "catalog:",
+    "valibot": "1.5.0",
+    "zod": "catalog:"
   },
   "dependencies": {
     "@aws-sdk/credential-providers": "3.1057.0",
