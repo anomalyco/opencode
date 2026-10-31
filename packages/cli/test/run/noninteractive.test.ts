@@ -72,7 +72,10 @@ function stepStarted(): V2Event {
   }
 }
 
-function stepFailed(message: string): V2Event {
+function stepFailed(
+  message: string,
+  type: "provider.transport" | "provider.invalid-output" = "provider.transport",
+): V2Event {
   return {
     id: "evt_step_failed",
     created: 2,
@@ -81,7 +84,7 @@ function stepFailed(message: string): V2Event {
     data: {
       sessionID: "ses_1",
       assistantMessageID: "msg_assistant",
-      error: { type: "provider.transport", message },
+      error: { type, message },
     },
   }
 }
@@ -97,6 +100,42 @@ function executionFailed(message: string): V2Event {
       error: { type: "provider.transport", message },
     },
   }
+}
+
+function idleMessage(outcome: "succeeded" | "failed" | "interrupted" = "succeeded"): SessionMessageInfo {
+  return {
+    id: "msg_idle",
+    type: "idle",
+    outcome,
+    ...(outcome === "failed" ? { error: { type: "output-limit" as const, message: "Execution failed" } } : {}),
+    time: { created: 5 },
+  }
+}
+
+function recoveredMessages(messageID: string): SessionMessageInfo[] {
+  return [
+    idleMessage(),
+    {
+      id: "msg_recovered",
+      type: "assistant",
+      agent: "build",
+      model: { providerID: "test", id: "test-model" },
+      content: [{ type: "text", text: "Recovered answer" }],
+      finish: "stop",
+      time: { created: 3, completed: 4 },
+    },
+    {
+      id: "msg_assistant",
+      type: "assistant",
+      agent: "build",
+      model: { providerID: "test", id: "test-model" },
+      content: [{ type: "reasoning", text: "Partial reasoning" }],
+      finish: "error",
+      error: { type: "provider.invalid-output", message: "The provider response ended unexpectedly." },
+      time: { created: 2, completed: 3 },
+    },
+    { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+  ]
 }
 
 function failedTool(inboxID: string): V2Event[] {
@@ -218,21 +257,26 @@ async function run(input: {
   messages?: (inboxID: string) => SessionMessageInfo[]
   wait?: () => Promise<void>
   terminalDelay?: number
+  terminalGate?: Promise<void>
+  disconnect?: boolean
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
   let wake: (() => void) | undefined
+  let submitted = false
   const wait = Promise.withResolvers<void>()
   const stream = (async function* (): AsyncGenerator<V2Event, void, unknown> {
     while (true) {
       const value = values.shift()
       if (!value) {
+        if (input.disconnect && submitted) return
         await new Promise<void>((resolve) => {
           wake = resolve
         })
         continue
       }
       if (value.type.startsWith("session.execution.")) {
+        await input.terminalGate
         if (input.terminalDelay) await Bun.sleep(input.terminalDelay)
         setTimeout(wait.resolve, 0)
       }
@@ -241,6 +285,7 @@ async function run(input: {
   })()
   spyOn(sdk.event, "subscribe").mockImplementation((() => stream) as typeof sdk.event.subscribe)
   spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
+  spyOn(sdk.session, "interrupt").mockImplementation(() => ok({ interrupted: true }))
   spyOn(sdk.session.form, "list").mockImplementation(
     (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
   )
@@ -263,6 +308,7 @@ async function run(input: {
   spyOn(sdk.session, "prompt").mockImplementation((request) => {
     const messageID = request.id ?? "msg_prompt"
     promptID = messageID
+    submitted = true
     values.push(...input.turn(messageID))
     wake?.()
     wake = undefined
@@ -347,6 +393,7 @@ describe("runNonInteractivePrompt", () => {
       turn: (messageID) => [prompted(messageID)],
       wait: () => idle.promise,
       messages: (messageID) => [
+        idleMessage(),
         {
           id: "msg_assistant",
           type: "assistant",
@@ -382,6 +429,7 @@ describe("runNonInteractivePrompt", () => {
   test("reports usage for a step that ends after the Session goes idle", async () => {
     const tokens = { input: 3, output: 5, reasoning: 7, cache: { read: 11, write: 13 } }
     const assistant = (messageID: string): SessionMessageInfo[] => [
+      idleMessage(),
       {
         id: "msg_assistant",
         type: "assistant",
@@ -418,6 +466,104 @@ describe("runNonInteractivePrompt", () => {
       settled(),
     ])
     expect(seen.filter((event) => event.type === "step_finish")).toHaveLength(1)
+  })
+
+  for (const live of [true, false]) {
+    test(`does not report recovered step errors as fatal (${live ? "live" : "projected"})`, async () => {
+      const failure = stepFailed("The provider response ended unexpectedly.", "provider.invalid-output")
+      const output = await capture({
+        format: "json",
+        turn: (messageID) => [prompted(messageID), ...(live ? [stepStarted(), failure, settled()] : [])],
+        messages: recoveredMessages,
+        ...(live ? {} : { wait: () => Promise.resolve() }),
+      })
+      expect(output.exitCode).toBe(0)
+      expect(output.stdout).toContain("Recovered answer")
+      expect(output.stdout).not.toContain('"type":"error"')
+      expect(output.stderr).toBe("")
+    })
+
+    test(`reports the final execution error, not a recovered step error (${live ? "live" : "projected"})`, async () => {
+      const output = await capture({
+        format: "json",
+        turn: (messageID) => [
+          prompted(messageID),
+          stepFailed("Recovered transport error"),
+          ...(live ? [executionFailed("Execution failed")] : []),
+        ],
+        messages: (messageID) => [idleMessage("failed"), ...recoveredMessages(messageID).slice(1)],
+        ...(live ? {} : { wait: () => Promise.resolve() }),
+      })
+      const errors = output.stdout.split("\n").filter((line) => line && JSON.parse(line).type === "error")
+      expect(output.exitCode).toBe(1)
+      expect(errors).toHaveLength(1)
+      expect(JSON.parse(errors[0]!).error.message).toBe("Execution failed")
+      expect(output.stdout).not.toContain("Recovered transport error")
+    })
+  }
+
+  test("waits for a delayed execution failure even after a clean assistant was projected", async () => {
+    const terminal = Promise.withResolvers<void>()
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID), executionFailed("Late execution failure")],
+      wait: () => Promise.resolve(),
+      terminalGate: terminal.promise,
+      messages: (messageID) => {
+        terminal.resolve()
+        return recoveredMessages(messageID).slice(1)
+      },
+    })
+    expect(output.exitCode).toBe(1)
+    expect(output.stdout).toContain("Late execution failure")
+    expect(output.stdout).not.toContain("ended unexpectedly")
+  })
+
+  test("does not swallow stream disconnection after a recoverable step failure", async () => {
+    await expect(
+      capture({
+        format: "json",
+        turn: (messageID) => [prompted(messageID), stepFailed("Recoverable fault")],
+        disconnect: true,
+      }),
+    ).rejects.toThrow("Event stream disconnected during prompt execution")
+  })
+
+  test("preserves a non-user interruption after a recoverable step failure", async () => {
+    const event = settled("interrupted")
+    if (event.type !== "session.execution.interrupted") throw new Error("Expected interruption")
+    event.data.reason = "shutdown"
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID), stepFailed("Recovered fault"), event],
+    })
+    expect(output.exitCode).toBe(1)
+    expect(output.stdout).toContain("Session interrupted: shutdown")
+    expect(output.stdout).not.toContain("Recovered fault")
+  })
+
+  test("does not infer success from a clean assistant after a projected interruption", async () => {
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID)],
+      wait: () => Promise.resolve(),
+      messages: (messageID) => [idleMessage("interrupted"), ...recoveredMessages(messageID).slice(1)],
+    })
+    expect(output.exitCode).toBe(1)
+    expect(output.stdout).toContain("Session interrupted")
+  })
+
+  test("keeps a locally interrupted run at exit 130 despite projected success", async () => {
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID), settled()],
+      wait: async () => {
+        process.emit("SIGINT")
+      },
+      messages: recoveredMessages,
+    })
+    expect(output.exitCode).toBe(130)
+    expect(output.stdout).not.toContain('"type":"error"')
   })
 
   test("reports an observed execution failure before prompt promotion", async () => {
@@ -460,6 +606,35 @@ describe("runNonInteractivePrompt", () => {
     }
   })
 
+  for (const format of ["json", "default"] as const) {
+    test(`explains fatal form cancellation without turning success into exit 0 (${format})`, async () => {
+      const output = await capture({
+        format,
+        pendingForms: [form("frm_pending", "ses_1")],
+        turn: (messageID) => [prompted(messageID), formCreated(form("frm_pending", "ses_1")), settled()],
+        messages: recoveredMessages,
+      })
+      expect(output.exitCode).toBe(1)
+      expect(format === "json" ? output.stdout : output.stderr).toContain("cannot complete a form")
+      if (format === "json") {
+        expect(output.stdout.split("\n").filter((line) => line && JSON.parse(line).type === "error")).toHaveLength(1)
+      }
+    })
+  }
+
+  test("question cancellation remains model-visible feedback, not a fatal form failure", async () => {
+    const question = { ...form("frm_question", "ses_1"), metadata: { kind: "question" } }
+    const output = await capture({
+      format: "json",
+      pendingForms: [question],
+      turn: (messageID) => [prompted(messageID), settled()],
+      messages: recoveredMessages,
+    })
+    expect(output.exitCode).toBe(0)
+    expect(output.stdout).not.toContain('"type":"error"')
+    expect(output.stderr).toBe("")
+  })
+
   test("cancels session and global form blockers and exits on pre-promotion interrupt", async () => {
     const sdk = await run({
       pendingForms: [form("frm_pending", "ses_1"), form("frm_pending_global", "global")],
@@ -474,7 +649,10 @@ describe("runNonInteractivePrompt", () => {
     }
     expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" }, globalOptions)
     expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
-    expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" }, globalOptions)
+    expect(sdk.session.form.cancel).toHaveBeenCalledWith(
+      { sessionID: "global", formID: "frm_pending_global" },
+      globalOptions,
+    )
     expect(sdk.form.list).toHaveBeenCalledWith({
       location: { directory: "/work tree" },
     })
@@ -489,7 +667,10 @@ describe("runNonInteractivePrompt", () => {
     })
     expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
     expect(sdk.form.list).not.toHaveBeenCalled()
-    expect(sdk.session.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" }, expect.anything())
+    expect(sdk.session.form.cancel).not.toHaveBeenCalledWith(
+      { sessionID: "global", formID: "frm_live" },
+      expect.anything(),
+    )
     expect(sdk.session.form.cancel).not.toHaveBeenCalledWith(
       { sessionID: "global", formID: "frm_pending_global" },
       expect.anything(),
