@@ -3,7 +3,7 @@ import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { mkdir, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { Effect } from "effect"
+import { Effect, Exit, Tracer } from "effect"
 import { makeDaemonTransport } from "../src/persistent-pty/daemon"
 import { listen, pong, temporaryDirectory, terminal, writeRegistration } from "./fixture/persistent-pty-daemon"
 import { it } from "./lib/effect"
@@ -261,6 +261,47 @@ it.live("stops a discovered inherited daemon when adoption fails", () =>
       expiresAt: Date.now() + 60_000,
     })
     expect(shutdowns).toBe(1)
+  }),
+)
+
+it.live("does not record span failures on requestIfRunning and supports when daemon is not running", () => {
+  const spans: Tracer.NativeSpan[] = []
+  const tracer = Tracer.make({
+    span(options) {
+      const span = new Tracer.NativeSpan(options)
+      spans.push(span)
+      return span
+    },
+  })
+  return Effect.gen(function* () {
+    const root = yield* temporaryDirectory()
+    const daemon = yield* makeDaemonTransport(root, "missing-daemon")
+
+    expect(yield* daemon.requestIfRunning({ op: "list" })).toBeUndefined()
+    expect(yield* daemon.supports("rename")).toBeFalse()
+
+    const ptySpans = spans.filter((s) => s.name.startsWith("PersistentPty."))
+    expect(ptySpans.length).toBeGreaterThan(0)
+    expect(ptySpans.some((s) => s.name === "PersistentPty.daemon.discover")).toBeTrue()
+    expect(ptySpans.some((s) => s.name === "PersistentPty.daemon.connect")).toBeTrue()
+    expect(ptySpans.some((s) => s.name === "PersistentPty.daemon.request")).toBeFalse()
+    expect(ptySpans.some((s) => s.name === "PersistentPty.daemon.request-attempt")).toBeFalse()
+    for (const span of ptySpans) {
+      if (span.status._tag === "Ended") {
+        expect(Exit.isFailure(span.status.exit)).toBeFalse()
+      }
+    }
+  }).pipe(Effect.provideService(Tracer.Tracer, tracer))
+})
+
+it.live("returns undefined on requestIfRunning when service.json exists but daemon is gone", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const deadSocket = path.join(directory, "dead.sock")
+    yield* Effect.promise(() => writeRegistration(directory, deadSocket))
+    const daemon = yield* makeDaemonTransport(root, "daemon")
+
+    expect(yield* daemon.requestIfRunning({ op: "list" })).toBeUndefined()
   }),
 )
 
