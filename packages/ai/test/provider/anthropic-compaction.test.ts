@@ -150,6 +150,66 @@ for (const model of [
   }
 }
 
+testEffect(
+  dynamicResponse(({ request, text, respond }) =>
+    Effect.sync(() => {
+      expect(request.headers["anthropic-beta"]).toBe("interleaved-thinking-2025-05-14,context-management-2025-06-27")
+      expect(JSON.parse(text).context_management).toEqual({
+        edits: [
+          { type: "clear_thinking_20251015", keep: "all" },
+          {
+            type: "clear_tool_uses_20250919",
+            trigger: { type: "input_tokens", value: 100000 },
+            keep: { type: "tool_uses", value: 5 },
+            clear_at_least: { type: "input_tokens", value: 30000 },
+            exclude_tools: ["todowrite"],
+            clear_tool_inputs: false,
+          },
+        ],
+      })
+      return respond(
+        sseEvents(
+          { type: "message_start", message: { usage: { input_tokens: 1, output_tokens: 0 } } },
+          {
+            type: "message_delta",
+            delta: { stop_reason: "end_turn" },
+            context_management: {
+              applied_edits: [{ type: "clear_tool_uses_20250919", cleared_tool_uses: 3, cleared_input_tokens: 40000 }],
+            },
+          },
+          { type: "message_stop" },
+        ),
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    }),
+  ),
+).effect("lowers context editing strategies with the context-management beta", () =>
+  Effect.gen(function* () {
+    const result = yield* LLMClient.generate(
+      LLM.request({
+        model: Anthropic.configure({ apiKey: "test" }).model("claude-opus-4-6"),
+        prompt: "hello",
+        providerOptions: {
+          contextManagement: {
+            edits: [
+              { type: "clear_thinking_20251015", keep: "all" },
+              {
+                type: "clear_tool_uses_20250919",
+                trigger: { type: "input_tokens", value: 100000 },
+                keep: { type: "tool_uses", value: 5 },
+                clearAtLeast: { type: "input_tokens", value: 30000 },
+                excludeTools: ["todowrite"],
+                clearToolInputs: false,
+              },
+            ],
+          },
+        },
+      }),
+    )
+    expect(result.finishReason.raw).toBe("end_turn")
+  }),
+)
+
 for (const events of [
   [{ type: "content_block_start", index: 0, content_block: { type: "compaction", content: 42 } }],
   [{ type: "content_block_delta", index: 0, delta: { type: "compaction_delta", content: "no start" } }],
