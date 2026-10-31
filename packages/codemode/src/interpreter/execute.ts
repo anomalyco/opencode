@@ -15,6 +15,7 @@ export const executeProgram = <R>(
   limits: ResolvedExecutionLimits,
   hooks: ToolRuntime.Hooks<R>,
   globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>,
+  stop?: Effect.Effect<void>,
 ): Effect.Effect<Result, never, R> => {
   if (code.trim().length === 0) {
     return Effect.succeed({
@@ -92,7 +93,24 @@ export const executeProgram = <R>(
             }),
           )
 
-    return operation.pipe(
+    // A stop ends the program like an interrupt, then reports what it had done once its running calls have settled.
+    const stoppable =
+      stop === undefined
+        ? operation
+        : operation.pipe(
+            Effect.raceFirst(stop.pipe(Effect.as(undefined))),
+            Effect.map(
+              (result): Result =>
+                result ?? {
+                  ok: false,
+                  error: { kind: "Interrupted", message: "Execution was interrupted." },
+                  ...logged(),
+                  toolCalls: tools.calls,
+                },
+            ),
+          )
+
+    return stoppable.pipe(
       Effect.catchCause((cause) =>
         Cause.hasInterruptsOnly(cause)
           ? Effect.interrupt

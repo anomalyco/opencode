@@ -86,7 +86,12 @@ const runtime = CodeMode.make({ tools, limits: { timeoutMs: 30_000 } })
 
 runtime.catalog() // structured tool descriptions
 runtime.execute(source) // Effect<CodeMode.Result, never, ToolServices>
+runtime.execute(source, bindings, { stop }) // per-run globals and a stop signal
 ```
+
+Interrupting the Effect interrupts the program and returns no result. To keep what it did, pass `stop` instead: when
+that Effect completes, running calls are interrupted and the execution returns
+`{ ok: false, error: { kind: "Interrupted" }, logs, toolCalls }`, bounded like any other failure.
 
 The Effect environment is inferred from the supplied tools. `hooks` surround every call the program makes into the
 host: `tool.before`/`tool.after` receive `{ name, input }` with decoded input, `extension.before`/`extension.after`
