@@ -276,16 +276,33 @@ export const connect = Effect.fnUntraced(function* (
   // it with 404, or with the 400 a freshly restarted single-session server emits, means it no longer
   // knows this connection. Modern connections never carry a session id, so a modern 404 for an unknown
   // method is not mistaken for expiry. Other 400s pass through untouched.
+  //
+  // A server that does not implement a method can still answer with 404 while carrying a JSON-RPC
+  // -32601 body (https://github.com/anomalyco/opencode/issues/60583). The HTTP status is nonstandard,
+  // but the session is alive: the request was parsed and rejected, so reconnecting would loop.
+  const methodNotFound = (error: SdkHttpError) => {
+    if (typeof error.data.text !== "string") return false
+    let body: unknown
+    try {
+      body = JSON.parse(error.data.text)
+    } catch {
+      return false
+    }
+    if (typeof body !== "object" || body === null || !("error" in body)) return false
+    const rpc = body.error
+    return typeof rpc === "object" && rpc !== null && "code" in rpc && rpc.code === -32601
+  }
   const session: { transport?: StreamableHTTPClientTransport; expired?: () => void; reported: boolean } = {
     reported: false,
   }
   const failure = (error: unknown) => {
     if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
     const expired =
-      error.status === 404 ||
-      (error.status === 400 &&
-        typeof error.data.text === "string" &&
-        error.data.text.includes("Bad Request: Server not initialized"))
+      !methodNotFound(error) &&
+      (error.status === 404 ||
+        (error.status === 400 &&
+          typeof error.data.text === "string" &&
+          error.data.text.includes("Bad Request: Server not initialized")))
     if (!expired) return new Error(explain(error))
     if (!session.reported) {
       session.reported = true
