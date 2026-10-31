@@ -625,6 +625,31 @@ story("selects side tabs with ⌘1–9 and ⇧⌘[ ] inside the side panel and s
   await expect(selected).toHaveText(/^browser:/)
 })
 
+story("keeps the browser launcher available when the first attachment suspends", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
+  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+
+  // The pane is still available, but suspending before its first inventory leaves it detached.
+  await root.getByRole("button", { name: "Pane away", exact: true }).click()
+  await expect(root.getByTestId("add-shortcut")).toHaveText(mac ? "⌃⌘B" : "Ctrl+Alt+B")
+})
+
+story("hides the browser launcher after another attachment replaces the pane", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+
+  await root.getByRole("button", { name: "Replace pane", exact: true }).click()
+  await expect(root.getByTestId("add-shortcut")).toHaveText("none")
+
+  const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
+  await page.keyboard.press(mac ? "Control+Meta+b" : "Control+Alt+b")
+  await expect(root.getByTestId("add-shortcut")).toHaveText("none")
+})
 story("keeps a restored browser tab selected and undrawn until the desktop's first inventory", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const tabs = root.getByRole("tab")
