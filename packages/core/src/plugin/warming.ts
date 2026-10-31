@@ -3,8 +3,13 @@ export * as WarmingPlugin from "./warming.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { Session } from "@opencode/schema/session"
-import { Clock, Duration, Effect, Scope, Stream } from "effect"
+import { ConfigWarming } from "@opencode/schema/config/warming"
+import type { Model } from "@opencode/schema/model"
+import { Clock, Duration, Effect, Option, Schema, Scope, Stream } from "effect"
 import { Config } from "../config.js"
+import { resolveModel } from "./optimize.js"
+
+const decodeWarming = Schema.decodeUnknownOption(ConfigWarming.Warming)
 
 const defaults = {
   prompt: "This is a keep-alive request. Do not perform any work or use tools. Reply with exactly: OK",
@@ -16,10 +21,23 @@ export const Plugin = define({
   id: "opencode.warming",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
-    const loadSettings = Effect.fn("WarmingPlugin.loadSettings")(function* () {
-      const warming = Config.latest(yield* config.entries(), "warming")
-      if (!warming) return
-      const settings = warming === true ? defaults : { ...defaults, ...warming }
+    // A model's or provider's `cache.warming` overrides the top-level `warming`.
+    const loadSettings = Effect.fn("WarmingPlugin.loadSettings")(function* (event: SessionHooks["context"]) {
+      // Shares the step's model lookup with the prompt plugins. Warming must never fail the request it hooks, so an
+      // unreadable catalog falls back to the top-level setting.
+      const model: Model.Info | undefined = yield* resolveModel(ctx, event).pipe(Effect.orElseSucceed(() => undefined))
+      const configured = model?.settings?.cache?.warming
+      const decoded = configured === undefined ? undefined : Option.getOrUndefined(decodeWarming(configured))
+      if (configured !== undefined && decoded === undefined)
+        yield* Effect.logWarning("invalid cache.warming setting; using the top-level warming setting", { model: event.model })
+      const global = Config.latest(yield* config.entries(), "warming")
+      if (!(decoded ?? global)) return
+      // The keep-alive prompt is only set at the top level; a model's setting changes timing.
+      const settings = {
+        ...defaults,
+        ...(typeof global === "object" ? global : {}),
+        ...(typeof decoded === "object" ? decoded : {}),
+      }
       const interval = Duration.toMillis(settings.interval)
       const duration = Duration.toMillis(settings.duration)
       if (Number.isFinite(interval) && interval > 0 && Number.isFinite(duration) && duration > 0) return settings
@@ -90,7 +108,7 @@ export const Plugin = define({
         if (session.parentID) return
 
         const active = sessions.get(event.sessionID)
-        const settings = yield* loadSettings()
+        const settings = yield* loadSettings(event)
         if (!settings) {
           sessions.delete(event.sessionID)
           return
