@@ -71,6 +71,108 @@ test("preserves the schema in an existing cli.json", async () => {
   expect(await Bun.file(file).json()).toEqual(config)
 })
 
+test("loads a cli.jsonc config with comments", async () => {
+  await using directory = await tmpdir()
+  await Bun.write(
+    path.join(directory.path, "cli.jsonc"),
+    `{
+  // Theme selection
+  "theme": { "name": "tokyonight" },
+  /* Motion */
+  "animations": false
+}
+`,
+  )
+
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.get()
+    }),
+  )
+
+  expect(config).toEqual({ theme: { name: "tokyonight" }, animations: false })
+})
+
+test("prefers cli.jsonc over cli.json", async () => {
+  await using directory = await tmpdir()
+  const jsonc = path.join(directory.path, "cli.jsonc")
+  const json = path.join(directory.path, "cli.json")
+  await Bun.write(jsonc, `{ "animations": false }`)
+  await Bun.write(json, `{ "animations": true }`)
+
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.update((draft) => {
+        draft.mouse = false
+      })
+    }),
+  )
+
+  expect(config).toEqual({ animations: false, mouse: false })
+  expect(await Bun.file(jsonc).json()).toEqual({ animations: false, mouse: false })
+  expect(await Bun.file(json).json()).toEqual({ animations: true })
+})
+
+test("reflects a cli.jsonc created after initialization in the service path", async () => {
+  await using directory = await tmpdir()
+  await Bun.write(path.join(directory.path, "cli.json"), `{ "animations": true }`)
+
+  const result = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      const initial = service.path
+      yield* Effect.promise(() => Bun.write(path.join(directory.path, "cli.jsonc"), `{ "animations": false }`))
+      yield* service.get()
+      return { initial, updated: service.path }
+    }),
+  )
+
+  expect(result.initial).toBe(path.join(directory.path, "cli.json"))
+  expect(result.updated).toBe(path.join(directory.path, "cli.jsonc"))
+})
+
+test("creates cli.json when neither cli.json nor cli.jsonc exists", async () => {
+  await using directory = await tmpdir()
+
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.update((draft) => {
+        draft.animations = false
+      })
+    }),
+  )
+
+  expect(config).toEqual({ $schema: "https://opencode.ai/v2/cli.json", animations: false })
+  expect(await Bun.file(path.join(directory.path, "cli.json")).json()).toEqual(config)
+  expect(await Bun.file(path.join(directory.path, "cli.jsonc")).exists()).toBe(false)
+})
+
+test("preserves comments when updating cli.jsonc", async () => {
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.jsonc")
+  await Bun.write(file, `{\n  // Keep this comment\n  "animations": true\n}\n`)
+
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.update((draft) => {
+        draft.animations = false
+      })
+    }),
+  )
+
+  expect(config).toEqual({ animations: false })
+  expect(await Bun.file(file).text()).toContain("// Keep this comment")
+})
+
 test("merges inline CLI config content over the global config", async () => {
   await using directory = await tmpdir()
   const file = path.join(directory.path, "cli.json")
