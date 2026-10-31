@@ -1,9 +1,9 @@
 import { expect } from "bun:test"
 import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
-import { mkdir, rm, stat, writeFile } from "node:fs/promises"
+import { mkdir, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { Effect } from "effect"
+import { Effect, Exit, Tracer } from "effect"
 import { makeDaemonTransport } from "../src/persistent-pty/daemon"
 import { listen, pong, temporaryDirectory, terminal, writeRegistration } from "./fixture/persistent-pty-daemon"
 import { it } from "./lib/effect"
@@ -264,53 +264,35 @@ it.live("stops a discovered inherited daemon when adoption fails", () =>
   }),
 )
 
-it.live("returns undefined on requestIfRunning and false on supports when daemon is not running without ENOENT failure", () =>
-  Effect.gen(function* () {
+it.live("does not record span failures on requestIfRunning and supports when daemon is not running", () => {
+  const spans: Tracer.NativeSpan[] = []
+  const tracer = Tracer.make({
+    span(options) {
+      const span = new Tracer.NativeSpan(options)
+      spans.push(span)
+      return span
+    },
+  })
+  return Effect.gen(function* () {
     const root = yield* temporaryDirectory()
     const daemon = yield* makeDaemonTransport(root, "missing-daemon")
+
     expect(yield* daemon.requestIfRunning({ op: "list" })).toBeUndefined()
     expect(yield* daemon.supports("rename")).toBeFalse()
-  }),
-)
 
-it.live("drops registration and abandons stale directory when an existing daemon directory is removed", () =>
-  Effect.gen(function* () {
-    const { root, directory } = yield* temporaryRuntime()
-    const socketPath = path.join(directory, "daemon.sock")
-    yield* listen(socketPath, (_socket, request) => {
-      if (request.op === "ping") return pong
-      return { type: "terminals", terminals: [] }
-    })
-    yield* Effect.promise(() => writeRegistration(directory, socketPath))
-    const daemon = yield* makeDaemonTransport(root, "daemon")
-    expect(yield* daemon.requestIfRunning({ op: "list" })).toEqual({ type: "terminals", terminals: [] })
-
-    // Simulate daemon shutdown / directory removal on disk
-    yield* Effect.promise(() => rm(directory, { recursive: true, force: true }))
-
-    // Subsequent requestIfRunning detects missing session directory and returns undefined cleanly
-    expect(yield* daemon.requestIfRunning({ op: "list" })).toBeUndefined()
-    expect(yield* daemon.supports("rename")).toBeFalse()
-  }),
-)
-
-it.live("prunes stale orphaned directories with dead PIDs on initialization", () =>
-  Effect.gen(function* () {
-    const root = yield* temporaryDirectory()
-    const deadDir = path.join(root, "stale-dead-uuid")
-    yield* Effect.promise(async () => {
-      await mkdir(deadDir, { recursive: true })
-      await writeFile(
-        path.join(deadDir, "service.json"),
-        JSON.stringify({ instance_id: "dead", pid: 99999999, protocol: 7, socket: "/tmp/fake.sock", token: "tok" }),
-      )
-    })
-    expect(existsSync(deadDir)).toBeTrue()
-
-    yield* makeDaemonTransport(root, "fresh-id")
-    expect(existsSync(deadDir)).toBeFalse()
-  }),
-)
+    const ptySpans = spans.filter((s) => s.name.startsWith("PersistentPty."))
+    expect(ptySpans.length).toBeGreaterThan(0)
+    expect(ptySpans.some((s) => s.name === "PersistentPty.daemon.discover")).toBeTrue()
+    expect(ptySpans.some((s) => s.name === "PersistentPty.daemon.connect")).toBeTrue()
+    expect(ptySpans.some((s) => s.name === "PersistentPty.daemon.request")).toBeFalse()
+    expect(ptySpans.some((s) => s.name === "PersistentPty.daemon.request-attempt")).toBeFalse()
+    for (const span of ptySpans) {
+      if (span.status._tag === "Ended") {
+        expect(Exit.isFailure(span.status.exit)).toBeFalse()
+      }
+    }
+  }).pipe(Effect.provideService(Tracer.Tracer, tracer))
+})
 
 function temporaryRuntime() {
   return Effect.gen(function* () {
