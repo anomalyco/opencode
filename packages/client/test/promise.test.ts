@@ -66,6 +66,7 @@ test("exposes every standard HTTP API group", () => {
     "migration",
     "usage",
     "config",
+    "marketplace",
   ])
   expect(Object.keys(client.experimental.session)).toEqual([
     "stats",

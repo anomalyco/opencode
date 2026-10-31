@@ -376,6 +376,107 @@ export type ConfigModelReasoning =
 
 export type ConfigShellOption = { path: string; name: string; acceptable: boolean }
 
+export type MarketplaceSource = {
+  id: string
+  name: string
+  url: string
+  reference?: string | undefined
+  enabled?: boolean | undefined
+  trust?: "official" | "verified" | "community" | "private" | undefined
+  format?: "auto" | "opencode" | "codex" | undefined
+  header_env?: { [x: string]: string } | undefined
+}
+
+export type MarketplaceInstallPlan = {
+  plugins?: Array<any> | undefined
+  skills?:
+    | {
+        paths?: Array<string> | undefined
+        urls?: Array<string> | undefined
+        items?:
+          | Array<{
+              id: string
+              name: string
+              description?: string | undefined
+              path?: string | undefined
+              url?: string | undefined
+              enabled?: boolean | undefined
+            }>
+          | undefined
+      }
+    | undefined
+  agents?: { [x: string]: { [x: string]: any } } | undefined
+  commands?: { [x: string]: { [x: string]: any } } | undefined
+  mcp?: { [x: string]: { [x: string]: any } } | undefined
+  instructions?: Array<string> | undefined
+}
+
+export type MarketplaceCacheSummary = {
+  root: string
+  objects: number
+  total_bytes: number
+  fetch_entries: number
+  materializations: number
+}
+
+export type MarketplaceIconResult = { data_url?: string | undefined }
+
+export type MarketplaceConflict = { path: string; current: any; incoming: any }
+
+export type MarketplaceProfile = {
+  schema: "opencode.marketplace.profile/v2"
+  name: string
+  description?: string | undefined
+  generated_at: string
+  sources: Array<{
+    id: string
+    name: string
+    url: string
+    trust?: "official" | "verified" | "community" | "private" | undefined
+    format?: "auto" | "opencode" | "codex" | undefined
+  }>
+  packages: Array<{
+    key: string
+    source: string
+    catalog: string
+    item: string
+    name: string
+    kind: string
+    version: string
+    listing_digest?: string | undefined
+    plan_digest?: string | undefined
+    priority?: number | undefined
+    enabled: boolean
+    components: { skills: { [x: string]: boolean }; mcp: { [x: string]: boolean } }
+  }>
+}
+
+export type MarketplaceLock = {
+  schema: "opencode.marketplace.lock/v1"
+  generated_at: string
+  packages: Array<{
+    key: string
+    source_url?: string | undefined
+    catalog: string
+    item: string
+    version: string
+    listing_digest?: string | undefined
+    plan_digest?: string | undefined
+    materialized_digest?: string | undefined
+    artifact_digests: Array<string>
+  }>
+}
+
+export type MarketplaceLockVerifyResult = { ok: boolean; errors: Array<string> }
+
+export type MarketplaceAuditEntry = {
+  id: number
+  revision: number
+  action: string
+  data: { [x: string]: any }
+  time_created: number
+}
+
 export type LocationPublicRef = { directory: AbsolutePath }
 
 export type FileSystemWrite = { path: AbsolutePath }
@@ -947,6 +1048,90 @@ export type ConfigModelCapabilities = {
   temperature?: boolean
   reasoning?: ConfigModelReasoning
 }
+
+export type MarketplaceLoadError = { source: MarketplaceSource; message: string }
+
+export type MarketplaceInstalled = {
+  source: string
+  source_url?: string | undefined
+  source_trust?: "official" | "verified" | "community" | "private" | undefined
+  catalog: string
+  catalog_name?: string | undefined
+  item: string
+  name: string
+  kind: "plugin" | "skill" | "agent" | "command" | "mcp" | "bundle"
+  version: string
+  publisher?: string | undefined
+  fingerprint: string
+  listing_digest?: string | undefined
+  plan_digest?: string | undefined
+  priority?: number | undefined
+  installed_at: string
+  updated_at: string
+  snapshot?: any | undefined
+  plan: MarketplaceInstallPlan
+  materialized_plan?: any | undefined
+  active_plan?: any | undefined
+  receipt: any
+  enabled?: boolean | undefined
+  disabled_skills?: Array<string> | undefined
+  disabled_mcp?: Array<string> | undefined
+  catalog_digest?: string | undefined
+  manifest_digest?: string | undefined
+  materialized_digest?: string | undefined
+  artifact_digests?: Array<string> | undefined
+}
+
+export type MarketplaceCatalogItem = {
+  id: string
+  name: string
+  description: string
+  kind: "plugin" | "skill" | "agent" | "command" | "mcp" | "bundle"
+  version: string
+  publisher?: { name: string; url?: string | undefined; verified?: boolean | undefined } | undefined
+  homepage?: string | undefined
+  repository?: string | undefined
+  license?: string | undefined
+  tags?: Array<string> | undefined
+  featured?: boolean | undefined
+  icon?: { "src-light": string; "src-dark"?: string | undefined } | undefined
+  brand_color?: string | undefined
+  permissions?: Array<string> | undefined
+  setup?: Array<string> | undefined
+  requires_restart?: boolean | undefined
+  compatibility?: any | undefined
+  install: MarketplaceInstallPlan
+}
+
+export type MarketplacePlanResult =
+  | {
+      ok: true
+      plan_id: string
+      revision: number
+      expires_at: string
+      key: string
+      action: "install" | "update"
+      listing_digest: string
+      plan_digest: string
+      compatibility: { compatible: boolean; reasons: Array<string> }
+      trust_warning: boolean
+      conflicts: Array<MarketplaceConflict>
+      permissions: Array<string>
+      summary: string
+    }
+  | { ok: false; reason: "not_found" | "materialization" | "incompatible"; message: string }
+
+export type MarketplaceProfilePlanResult =
+  | {
+      ok: true
+      plan_id: string
+      revision: number
+      expires_at: string
+      actions: Array<{ key: string; action: "install" | "update" }>
+      trust_warning: boolean
+      conflicts: Array<MarketplaceConflict>
+    }
+  | { ok: false; reason: "not_found" | "materialization" | "incompatible" | "digest"; message: string }
 
 export type SessionMessageLocationSwitched = {
   id: SessionMessageID
@@ -2191,6 +2376,23 @@ export type ScheduleWhen = ScheduleWhenIn | ScheduleWhenAt | ScheduleWhenEvery |
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
+export type MarketplaceState = {
+  revision?: number | undefined
+  sources?: Array<MarketplaceSource> | undefined
+  installed?: { [x: string]: MarketplaceInstalled } | undefined
+}
+
+export type MarketplaceCatalog = {
+  schema: "opencode.marketplace/v1"
+  id: string
+  name: string
+  description?: string | undefined
+  publisher?: { name: string; url?: string | undefined; verified?: boolean | undefined } | undefined
+  homepage?: string | undefined
+  updated_at?: string | undefined
+  items: Array<MarketplaceCatalogItem>
+}
+
 export type SessionInboxMove = {
   id: SessionMessageID
   sessionID: SessionID
@@ -2614,6 +2816,20 @@ export type ScheduleInfo = {
   time: { created: number; updated: number }
 }
 
+export type MarketplaceListing = {
+  status?: "available" | "installed" | "update" | undefined
+  key: string
+  source: MarketplaceSource
+  catalog: MarketplaceCatalog
+  item: MarketplaceCatalogItem
+  orphaned?: boolean | undefined
+  catalog_url?: string | undefined
+  catalog_digest?: string | undefined
+  listing_digest?: string | undefined
+  plan_digest?: string | undefined
+  compatibility?: { compatible: boolean; reasons: Array<string> } | undefined
+}
+
 export type AgentInfo = {
   id: AgentID
   name: string
@@ -2689,6 +2905,14 @@ export type GenerateDecisionsResponse = { data: GenerateDecisionResult }
 
 export type FormInfo1 = { id: FormID; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields1 }
 
+export type MarketplaceView = {
+  state: MarketplaceState
+  listings: Array<MarketplaceListing>
+  errors: Array<MarketplaceLoadError>
+  cache: MarketplaceCacheSummary
+  next_cursor?: string | undefined
+}
+
 export type SessionMessageInfo =
   | SessionMessageAgentSelected
   | SessionMessageModelSelected
@@ -2727,6 +2951,25 @@ export type FormCreated = {
   location?: LocationRef
   data: { form: FormInfo1 }
 }
+
+export type MarketplaceMutationResult =
+  | { ok: true; changed: boolean; view: MarketplaceView; connect_mcp: Array<string>; preserved: Array<string> }
+  | {
+      ok: false
+      reason:
+        | "conflict"
+        | "revision"
+        | "trust"
+        | "not_found"
+        | "materialization"
+        | "incompatible"
+        | "plan_not_found"
+        | "plan_expired"
+        | "plan_consumed"
+      message: string
+      revision?: number | undefined
+      conflicts?: Array<MarketplaceConflict> | undefined
+    }
 
 export type SessionTransferData = { info: SessionInfo; messages: Array<SessionMessageInfo> }
 
@@ -4795,6 +5038,251 @@ export type ConfigShellsOutput = Array<ConfigShellOption>
 export type ExperimentalConfigUpdateInput = { readonly shell: string | null }
 
 export type ExperimentalConfigUpdateOutput = void
+
+export type ExperimentalMarketplaceGetInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly cursor?: string | undefined
+  readonly limit?: number | undefined
+}
+
+export type ExperimentalMarketplaceGetOutput = { location: LocationPublicRef; data: MarketplaceView }
+
+export type ExperimentalMarketplaceRefreshInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type ExperimentalMarketplaceRefreshOutput = { location: LocationPublicRef; data: MarketplaceView }
+
+export type ExperimentalMarketplaceIconInput = {
+  readonly key: string
+  readonly variant: "src-light" | "src-dark"
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type ExperimentalMarketplaceIconOutput = { location: LocationPublicRef; data: MarketplaceIconResult }
+
+export type ExperimentalMarketplacePlanInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly key: string
+}
+
+export type ExperimentalMarketplacePlanOutput = { location: LocationPublicRef; data: MarketplacePlanResult }
+
+export type ExperimentalMarketplaceInstallInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly plan_id: string
+  readonly expected_revision: number
+  readonly force?: boolean | undefined
+  readonly accept_untrusted?: boolean | undefined
+}
+
+export type ExperimentalMarketplaceInstallOutput = { location: LocationPublicRef; data: MarketplaceMutationResult }
+
+export type ExperimentalMarketplaceUpdateAllInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly expected_revision: number
+  readonly force?: boolean | undefined
+  readonly accept_untrusted?: boolean | undefined
+}
+
+export type ExperimentalMarketplaceUpdateAllOutput = { location: LocationPublicRef; data: MarketplaceMutationResult }
+
+export type ExperimentalMarketplaceUpdatePlanInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type ExperimentalMarketplaceUpdatePlanOutput = {
+  location: LocationPublicRef
+  data: MarketplaceProfilePlanResult
+}
+
+export type ExperimentalMarketplaceUpdateApplyInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly plan_id: string
+  readonly expected_revision: number
+  readonly force?: boolean | undefined
+  readonly accept_untrusted?: boolean | undefined
+}
+
+export type ExperimentalMarketplaceUpdateApplyOutput = { location: LocationPublicRef; data: MarketplaceMutationResult }
+
+export type ExperimentalMarketplaceUninstallInput = {
+  readonly key: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly expected_revision: number
+}
+
+export type ExperimentalMarketplaceUninstallOutput = { location: LocationPublicRef; data: MarketplaceMutationResult }
+
+export type ExperimentalMarketplaceToggleInput = {
+  readonly key: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly expected_revision: number
+  readonly component: "package" | "skill" | "mcp"
+  readonly id?: string | undefined
+  readonly enabled: boolean
+}
+
+export type ExperimentalMarketplaceToggleOutput = { location: LocationPublicRef; data: MarketplaceMutationResult }
+
+export type ExperimentalMarketplaceSourceAddInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly expected_revision: number
+  readonly url: string
+  readonly name?: string | undefined
+  readonly trust?: "community" | "private" | undefined
+  readonly format?: "auto" | "opencode" | "codex" | undefined
+  readonly header_env?: { readonly [x: string]: string } | undefined
+}
+
+export type ExperimentalMarketplaceSourceAddOutput = { location: LocationPublicRef; data: MarketplaceMutationResult }
+
+export type ExperimentalMarketplaceSourceToggleInput = {
+  readonly id: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly expected_revision: number
+  readonly enabled: boolean
+}
+
+export type ExperimentalMarketplaceSourceToggleOutput = { location: LocationPublicRef; data: MarketplaceMutationResult }
+
+export type ExperimentalMarketplaceSourceRemoveInput = {
+  readonly id: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly expected_revision: number
+}
+
+export type ExperimentalMarketplaceSourceRemoveOutput = { location: LocationPublicRef; data: MarketplaceMutationResult }
+
+export type ExperimentalMarketplaceProfileExportInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly name?: string | undefined
+  readonly description?: string | undefined
+}
+
+export type ExperimentalMarketplaceProfileExportOutput = { location: LocationPublicRef; data: MarketplaceProfile }
+
+export type ExperimentalMarketplaceProfilePlanInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly profile:
+    | {
+        readonly schema: "opencode.marketplace.profile/v2"
+        readonly name: string
+        readonly description?: string | undefined
+        readonly generated_at: string
+        readonly sources: ReadonlyArray<{
+          readonly id: string
+          readonly name: string
+          readonly url: string
+          readonly trust?: "official" | "verified" | "community" | "private" | undefined
+          readonly format?: "auto" | "opencode" | "codex" | undefined
+        }>
+        readonly packages: ReadonlyArray<{
+          readonly key: string
+          readonly source: string
+          readonly catalog: string
+          readonly item: string
+          readonly name: string
+          readonly kind: string
+          readonly version: string
+          readonly listing_digest?: string | undefined
+          readonly plan_digest?: string | undefined
+          readonly priority?: number | undefined
+          readonly enabled: boolean
+          readonly components: {
+            readonly skills: { readonly [x: string]: boolean }
+            readonly mcp: { readonly [x: string]: boolean }
+          }
+        }>
+      }
+    | {
+        readonly schema: "opencode.marketplace.profile/v1"
+        readonly name: string
+        readonly description?: string | undefined
+        readonly generated_at: string
+        readonly sources: ReadonlyArray<{
+          readonly id: string
+          readonly name: string
+          readonly url: string
+          readonly trust?: "official" | "verified" | "community" | "private" | undefined
+          readonly format?: "auto" | "opencode" | "codex" | undefined
+        }>
+        readonly packages: ReadonlyArray<{
+          readonly key: string
+          readonly source: string
+          readonly catalog: string
+          readonly item: string
+          readonly name: string
+          readonly kind: string
+          readonly version: string
+          readonly listing_digest?: string | undefined
+          readonly plan_digest?: string | undefined
+          readonly priority?: number | undefined
+          readonly enabled: boolean
+          readonly components: {
+            readonly skills: { readonly [x: string]: boolean }
+            readonly mcp: { readonly [x: string]: boolean }
+          }
+        }>
+      }
+  readonly mode?: "merge" | "replace" | undefined
+}
+
+export type ExperimentalMarketplaceProfilePlanOutput = {
+  location: LocationPublicRef
+  data: MarketplaceProfilePlanResult
+}
+
+export type ExperimentalMarketplaceProfileApplyInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly plan_id: string
+  readonly expected_revision: number
+  readonly force?: boolean | undefined
+  readonly accept_untrusted?: boolean | undefined
+}
+
+export type ExperimentalMarketplaceProfileApplyOutput = { location: LocationPublicRef; data: MarketplaceMutationResult }
+
+export type ExperimentalMarketplaceLockExportInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+}
+
+export type ExperimentalMarketplaceLockExportOutput = { location: LocationPublicRef; data: MarketplaceLock }
+
+export type ExperimentalMarketplaceLockVerifyInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly lock: {
+    readonly schema: "opencode.marketplace.lock/v1"
+    readonly generated_at: string
+    readonly packages: ReadonlyArray<{
+      readonly key: string
+      readonly source_url?: string | undefined
+      readonly catalog: string
+      readonly item: string
+      readonly version: string
+      readonly listing_digest?: string | undefined
+      readonly plan_digest?: string | undefined
+      readonly materialized_digest?: string | undefined
+      readonly artifact_digests: ReadonlyArray<string>
+    }>
+  }
+}
+
+export type ExperimentalMarketplaceLockVerifyOutput = { location: LocationPublicRef; data: MarketplaceLockVerifyResult }
+
+export type ExperimentalMarketplaceAuditInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly limit?: number | undefined
+}
+
+export type ExperimentalMarketplaceAuditOutput = { location: LocationPublicRef; data: Array<MarketplaceAuditEntry> }
+
+export type ExperimentalMarketplaceCachePruneInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly max_age_days?: number | undefined
+}
+
+export type ExperimentalMarketplaceCachePruneOutput = { location: LocationPublicRef; data: MarketplaceCacheSummary }
 
 /** @deprecated Use `ExperimentalSessionStatsInput`. Removed in the next minor. */
 export type SessionStatsInput = ExperimentalSessionStatsInput

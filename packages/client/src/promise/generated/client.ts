@@ -318,6 +318,46 @@ import type {
   ConfigShellsOutput,
   ExperimentalConfigUpdateInput,
   ExperimentalConfigUpdateOutput,
+  ExperimentalMarketplaceGetInput,
+  ExperimentalMarketplaceGetOutput,
+  ExperimentalMarketplaceRefreshInput,
+  ExperimentalMarketplaceRefreshOutput,
+  ExperimentalMarketplaceIconInput,
+  ExperimentalMarketplaceIconOutput,
+  ExperimentalMarketplacePlanInput,
+  ExperimentalMarketplacePlanOutput,
+  ExperimentalMarketplaceInstallInput,
+  ExperimentalMarketplaceInstallOutput,
+  ExperimentalMarketplaceUpdateAllInput,
+  ExperimentalMarketplaceUpdateAllOutput,
+  ExperimentalMarketplaceUpdatePlanInput,
+  ExperimentalMarketplaceUpdatePlanOutput,
+  ExperimentalMarketplaceUpdateApplyInput,
+  ExperimentalMarketplaceUpdateApplyOutput,
+  ExperimentalMarketplaceUninstallInput,
+  ExperimentalMarketplaceUninstallOutput,
+  ExperimentalMarketplaceToggleInput,
+  ExperimentalMarketplaceToggleOutput,
+  ExperimentalMarketplaceSourceAddInput,
+  ExperimentalMarketplaceSourceAddOutput,
+  ExperimentalMarketplaceSourceToggleInput,
+  ExperimentalMarketplaceSourceToggleOutput,
+  ExperimentalMarketplaceSourceRemoveInput,
+  ExperimentalMarketplaceSourceRemoveOutput,
+  ExperimentalMarketplaceProfileExportInput,
+  ExperimentalMarketplaceProfileExportOutput,
+  ExperimentalMarketplaceProfilePlanInput,
+  ExperimentalMarketplaceProfilePlanOutput,
+  ExperimentalMarketplaceProfileApplyInput,
+  ExperimentalMarketplaceProfileApplyOutput,
+  ExperimentalMarketplaceLockExportInput,
+  ExperimentalMarketplaceLockExportOutput,
+  ExperimentalMarketplaceLockVerifyInput,
+  ExperimentalMarketplaceLockVerifyOutput,
+  ExperimentalMarketplaceAuditInput,
+  ExperimentalMarketplaceAuditOutput,
+  ExperimentalMarketplaceCachePruneInput,
+  ExperimentalMarketplaceCachePruneOutput,
 } from "./types.js"
 import { ClientError } from "./client-error.js"
 
@@ -1720,6 +1760,291 @@ export function make(options: ClientOptions) {
               successStatus: 204,
               declaredStatuses: [400, 401, 404],
               empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      marketplace: {
+        get: (input?: ExperimentalMarketplaceGetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/marketplace`,
+              query: { location: input?.["location"], cursor: input?.["cursor"], limit: input?.["limit"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        refresh: (input?: ExperimentalMarketplaceRefreshInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceRefreshOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/marketplace/refresh`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        icon: (input: ExperimentalMarketplaceIconInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceIconOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/marketplace/icon/${encodeURIComponent(input.key)}/${encodeURIComponent(input.variant)}`,
+              query: { location: input["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        plan: (input: ExperimentalMarketplacePlanInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplacePlanOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/marketplace/plan`,
+              query: { location: input["location"] },
+              body: { key: input["key"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        install: (input: ExperimentalMarketplaceInstallInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceInstallOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/marketplace/install`,
+              query: { location: input["location"] },
+              body: {
+                plan_id: input["plan_id"],
+                expected_revision: input["expected_revision"],
+                force: input["force"],
+                accept_untrusted: input["accept_untrusted"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        updateAll: (input: ExperimentalMarketplaceUpdateAllInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceUpdateAllOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/marketplace/update-all`,
+              query: { location: input["location"] },
+              body: {
+                expected_revision: input["expected_revision"],
+                force: input["force"],
+                accept_untrusted: input["accept_untrusted"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        updatePlan: (input?: ExperimentalMarketplaceUpdatePlanInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceUpdatePlanOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/marketplace/update/plan`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        updateApply: (input: ExperimentalMarketplaceUpdateApplyInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceUpdateApplyOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/marketplace/update/apply`,
+              query: { location: input["location"] },
+              body: {
+                plan_id: input["plan_id"],
+                expected_revision: input["expected_revision"],
+                force: input["force"],
+                accept_untrusted: input["accept_untrusted"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        uninstall: (input: ExperimentalMarketplaceUninstallInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceUninstallOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/marketplace/install/${encodeURIComponent(input.key)}`,
+              query: { location: input["location"], expected_revision: input["expected_revision"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        toggle: (input: ExperimentalMarketplaceToggleInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceToggleOutput>(
+            {
+              method: "PATCH",
+              path: `/api/experimental/marketplace/install/${encodeURIComponent(input.key)}`,
+              query: { location: input["location"] },
+              body: {
+                expected_revision: input["expected_revision"],
+                component: input["component"],
+                id: input["id"],
+                enabled: input["enabled"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        sourceAdd: (input: ExperimentalMarketplaceSourceAddInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceSourceAddOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/marketplace/source`,
+              query: { location: input["location"] },
+              body: {
+                expected_revision: input["expected_revision"],
+                url: input["url"],
+                name: input["name"],
+                trust: input["trust"],
+                format: input["format"],
+                header_env: input["header_env"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        sourceToggle: (input: ExperimentalMarketplaceSourceToggleInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceSourceToggleOutput>(
+            {
+              method: "PATCH",
+              path: `/api/experimental/marketplace/source/${encodeURIComponent(input.id)}`,
+              query: { location: input["location"] },
+              body: { expected_revision: input["expected_revision"], enabled: input["enabled"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        sourceRemove: (input: ExperimentalMarketplaceSourceRemoveInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceSourceRemoveOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/marketplace/source/${encodeURIComponent(input.id)}`,
+              query: { location: input["location"], expected_revision: input["expected_revision"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        profileExport: (input?: ExperimentalMarketplaceProfileExportInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceProfileExportOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/marketplace/profile`,
+              query: { location: input?.["location"] },
+              body: { name: input?.["name"], description: input?.["description"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        profilePlan: (input: ExperimentalMarketplaceProfilePlanInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceProfilePlanOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/marketplace/profile/plan`,
+              query: { location: input["location"] },
+              body: { profile: input["profile"], mode: input["mode"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        profileApply: (input: ExperimentalMarketplaceProfileApplyInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceProfileApplyOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/marketplace/profile/apply`,
+              query: { location: input["location"] },
+              body: {
+                plan_id: input["plan_id"],
+                expected_revision: input["expected_revision"],
+                force: input["force"],
+                accept_untrusted: input["accept_untrusted"],
+              },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        lockExport: (input?: ExperimentalMarketplaceLockExportInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceLockExportOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/marketplace/lock`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        lockVerify: (input: ExperimentalMarketplaceLockVerifyInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceLockVerifyOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/marketplace/lock/verify`,
+              query: { location: input["location"] },
+              body: { lock: input["lock"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        audit: (input?: ExperimentalMarketplaceAuditInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceAuditOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/marketplace/audit`,
+              query: { location: input?.["location"], limit: input?.["limit"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        cachePrune: (input?: ExperimentalMarketplaceCachePruneInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalMarketplaceCachePruneOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/marketplace/cache/prune`,
+              query: { location: input?.["location"] },
+              body: { max_age_days: input?.["max_age_days"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
             },
             requestOptions,
           ),

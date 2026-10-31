@@ -22,6 +22,7 @@ import { Instruction } from "@opencode/schema/instruction"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Integration } from "@opencode/schema/integration"
 import { Location } from "@opencode/schema/location"
+import { Marketplace } from "@opencode/schema/marketplace"
 import { Mcp } from "@opencode/schema/mcp"
 import { Model } from "@opencode/schema/model"
 import { Money } from "@opencode/schema/money"
@@ -56,13 +57,13 @@ const promiseContract = compile(ClientApi, {
   groupNames,
   omitEndpoints: promiseOmitEndpoints,
   namespace: clientNamespace,
-  aliases: true,
+  aliases: (endpoint) => !endpoint.path.startsWith("/api/experimental/marketplace"),
 })
 const effectContract = compile(ClientApi, {
   groupNames,
   omitEndpoints: effectOmitEndpoints,
   namespace: clientNamespace,
-  aliases: true,
+  aliases: (endpoint) => !endpoint.path.startsWith("/api/experimental/marketplace"),
 })
 const effectTypeReferences = [
   ...namespaceTypes("Agent", "@opencode/schema/agent", Agent),
@@ -82,6 +83,7 @@ const effectTypeReferences = [
   typeReference("Location.PublicRef", "@opencode/schema/location", Location.PublicRef),
   typeReference("Location.PublicInfo", "@opencode/schema/location", Location.PublicInfo),
   ...namespaceTypes("Mcp", "@opencode/schema/mcp", Mcp),
+  ...namespaceTypes("Marketplace", "@opencode/schema/marketplace", Marketplace),
   ...namespaceTypes("Model", "@opencode/schema/model", Model),
   ...namespaceTypes("Money", "@opencode/schema/money", Money),
   ...namespaceTypes("Permission", "@opencode/schema/permission", Permission),

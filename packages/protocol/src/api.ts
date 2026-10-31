@@ -35,6 +35,7 @@ import { WorktreeGroup } from "./groups/worktree.js"
 import { VcsGroup } from "./groups/vcs.js"
 import { MigrationGroup } from "./groups/migration.js"
 import { ConfigGroup } from "./groups/config.js"
+import { MarketplaceGroup } from "./groups/marketplace.js"
 
 type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof AgentGroup, LocationId>
@@ -52,6 +53,7 @@ type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof ReferenceGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof VcsGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof ConfigGroup, LocationId>
+  | HttpApiGroup.AddMiddleware<typeof MarketplaceGroup, LocationId>
 
 type PtyGroups<LocationId extends HttpApiMiddleware.AnyId, LocationService> = ReturnType<
   typeof makePtyGroup<LocationId, LocationService>
@@ -197,6 +199,7 @@ const makeApiFromGroup = <
     .add(WebSearchGroup.middleware(locationMiddleware))
     .add(UsageGroup.middleware(locationMiddleware))
     .add(ConfigGroup.middleware(locationMiddleware))
+    .add(MarketplaceGroup.middleware(locationMiddleware))
     .annotateMerge(
       OpenApi.annotations({
         title: "opencode HttpApi",

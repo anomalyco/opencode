@@ -125,9 +125,10 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
     readonly namespace?: (endpoint: HttpApiEndpoint.Top) => string | undefined
     /**
      * Keeps each namespaced endpoint's pre-namespace client path and generated type names as deprecated aliases of
-     * the namespaced ones, so moving an endpoint into a namespace does not break callers.
+     * the namespaced ones, so moving an endpoint into a namespace does not break callers. A predicate limits aliases
+     * to previously shipped endpoints; new experimental endpoints need no legacy alias.
      */
-    readonly aliases?: boolean
+    readonly aliases?: boolean | ((endpoint: HttpApiEndpoint.Top) => boolean)
   },
 ): Contract {
   const endpoints: Array<Endpoint> = []
@@ -334,11 +335,12 @@ export function compile<Id extends string, Groups extends HttpApiGroup.Constrain
     for (const [name, child] of node.children) visit(child, [...path, name])
   }
   visit(groupTree(groups), [])
-  if (options?.aliases !== true) return { groups }
+  if (!options?.aliases) return { groups }
   const aliases = groups.flatMap((group) =>
     group.endpoints.flatMap((endpoint): Array<Alias> => {
       const previous = unnamespaced.get(endpoint)
       if (previous === undefined) return []
+      if (typeof options.aliases === "function" && !options.aliases(endpoint.endpoint)) return []
       return [
         {
           from: [...previous.path, ...endpoint.clientPath],
