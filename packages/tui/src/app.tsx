@@ -1,5 +1,7 @@
 import { existsSync } from "fs"
 import path from "path"
+import { guardTerminalResize } from "./terminal-size"
+import { consoleViewport } from "#console-viewport"
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import "./component/spinner-renderable"
 import { Effect, Latch } from "effect"
@@ -290,6 +292,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         )
       })
       renderer.setMaxListeners(15)
+      yield* Effect.acquireRelease(
+        Effect.sync(() => guardTerminalResize(renderer, consoleViewport(), (message, error) => log("error", message, { error }))),
+        (restore) => Effect.sync(restore),
+      )
       const clipboard = yield* Effect.acquireRelease(
         Effect.sync(() => createTuiClipboard(renderer)),
         (clipboard) =>
