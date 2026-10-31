@@ -148,7 +148,11 @@ export const read = Effect.fn("ReadTool.read")(function* (
     }
   }
 
-  const paged = first.info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
+  // The whole-file path is only safe for compact files that also fit the line limit.
+  const total =
+    first.info.size <= MAX_READ_BYTES ? lineCount(textLeaf(first.bytes).summary.lines, first.bytes.at(-1)) : 0
+  const paged =
+    first.info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined || total > MAX_READ_LINES
   if (!paged) {
     if (first.bytes.includes(0)) return yield* new BinaryFileError({ resource })
     return {

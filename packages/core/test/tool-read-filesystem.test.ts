@@ -333,6 +333,35 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  it.effect("applies the default line limit to a small whole-file read", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "many-lines.txt")
+      yield* files.writeFileString(file, "x\n".repeat(3_000))
+
+      const result = yield* ReadToolFileSystem.read(environment, absolute(file), "many-lines.txt")
+
+      expect(result).toMatchObject({ type: "text-page", offset: 1, truncated: true, next: 2_001 })
+      if (result.type !== "text-page") return
+      expect(result.content.split("\n")).toHaveLength(ReadToolFileSystem.MAX_READ_LINES)
+      expect(ReadTool.toModelContent("many-lines.txt", undefined, result)).toContain(
+        "[Output truncated. Continue reading with offset: 2001]",
+      )
+    }),
+  )
+
+  it.effect("keeps a small file at the line limit on the whole-file path", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "limit.txt")
+      yield* files.writeFileString(file, "x\n".repeat(ReadToolFileSystem.MAX_READ_LINES))
+
+      const result = yield* ReadToolFileSystem.read(environment, absolute(file), "limit.txt")
+
+      expect(result).toMatchObject({ type: "file", encoding: "utf8" })
+    }),
+  )
+
   it.effect("reads page two after fetching more than the first 256KB range", () =>
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
