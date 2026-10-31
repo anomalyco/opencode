@@ -65,6 +65,28 @@ describe("parseFileLink", () => {
   })
 })
 
+describe("parseFileLink Markdown link", () => {
+  test.each([
+    ["docs/setup.md#install", "docs/setup.md", undefined],
+    ["docs/setup.md?plain=1#install", "docs/setup.md", undefined],
+    ["docs/setup.md#L3", "docs/setup.md", { start: 3, end: 3 }],
+    ["docs/setup.md?plain=1#L3", "docs/setup.md", { start: 3, end: 3 }],
+    ["/repo/docs/my%20notes.md", "/repo/docs/my notes.md", undefined],
+    ["src/C%23/a.cs", "src/C#/a.cs", undefined],
+    ["docs/a%23b.md#L10", "docs/a#b.md", { start: 10, end: 10 }],
+    ["notes%3F1.txt", "notes?1.txt", undefined],
+  ])("parses %s", (href, expectedPath, expectedSelection) => {
+    const parsed = parseFileLink(href, { link: true })
+    expect(parsed.path).toBe(expectedPath)
+    expect(parsed.selection).toEqual(expectedSelection)
+  })
+
+  test("keeps literal characters when the caller does not mark the input as a link", () => {
+    expect(parseFileLink("docs/setup.md#install").path).toBe("docs/setup.md#install")
+    expect(parseFileLink("docs/my%20notes.md").path).toBe("docs/my%20notes.md")
+  })
+})
+
 describe("findFileLink", () => {
   test.each<[string, FileLinkTarget | undefined]>([
     ["src/index.ts", { kind: "file", path: "src/index.ts" }],
@@ -108,5 +130,30 @@ describe("checkFileLinkExists", () => {
     expect(await check("~/README.md")).toBe(false)
     expect(await check("\\\\host\\share\\x.ts")).toBe(false)
     expect(await check("console.log")).toBe(false)
+  })
+
+  test("falls back to URL semantics for Markdown links", async () => {
+    const signal = new AbortController().signal
+    const onDisk = new Set(["/repo/docs/my notes.md"])
+    const indexed = ["docs/setup.md", "docs/my notes.md", "notes%20one.md"]
+
+    const check = (href: string) =>
+      checkFileLinkExists({
+        files: {
+          search: async (query: string) => indexed.filter((file) => file === query || file.endsWith(`/${query}`)),
+          exists: async (path: string) => onDisk.has(path),
+          resolve: (path: string) => path,
+        },
+        href,
+        signal,
+      })
+
+    expect(await check("docs/setup.md#install")).toBe(true)
+    expect(await check("docs/setup.md?plain=1")).toBe(true)
+    expect(await check("docs/setup.md#L3")).toBe(true)
+    expect(await check("docs/my%20notes.md")).toBe(true)
+    expect(await check("/repo/docs/my%20notes.md")).toBe(true)
+    expect(await check("notes%20one.md")).toBe(true)
+    expect(await check("docs/missing.md")).toBe(false)
   })
 })
