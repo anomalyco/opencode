@@ -72,7 +72,10 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         pool.serviceAnswered()
         const service = registration.service
         const decision = decide(service, options)
-        if (decision._tag === "fail") throw decision.error
+        if (decision._tag === "fail") {
+          if (service.state === "failed") await terminate(service.info, options, timing).catch(() => undefined)
+          throw decision.error
+        }
         if (decision._tag === "reuse") {
           await PtyHandoff.complete(options.file ?? fallback(), service.info)
           return service.endpoint
