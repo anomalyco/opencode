@@ -128,7 +128,11 @@ export function Tooltip(props: TooltipProps) {
   const adopt = (triggerProps: TriggerHandlers) => {
     handlers = triggerProps
 
-    if (ref) spread(ref, triggerProps, false, true)
+    if (!ref) return null
+    // Kobalte owns the open state attributes from here, and spread never removes an attribute it did not set, so a
+    // tooltip that mounts open would keep the closed marker.
+    ref.removeAttribute("data-closed")
+    spread(ref, triggerProps, false, true)
 
     return null
   }
@@ -149,7 +153,6 @@ export function Tooltip(props: TooltipProps) {
           class={local.class}
           onPointerEnter={mount}
           onFocus={mount}
-          onPointerLeave={leave}
           onFocusOut={() => requestAnimationFrame(() => drop())}
         >
           {local.children}
@@ -177,7 +180,9 @@ export function Tooltip(props: TooltipProps) {
               setState("open", open)
             }}
           >
-            <Trigger as={adopt} />
+            {/* Kobalte calls leave inside its own pointerleave listener. As a separate listener, its microtask would
+                close the tooltip before Kobalte's listener ran, which then skipped the skip-delay window. */}
+            <Trigger as={adopt} onPointerLeave={leave} />
             <Portal>
               <Content
                 ref={(el) => {
