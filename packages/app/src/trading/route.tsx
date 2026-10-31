@@ -1221,6 +1221,15 @@ function TradingShell(props: {
 
   const puntoMotor = () => (snapshot.enlace ? "bg-v2-state-fg-success" : "bg-v2-state-fg-danger")
 
+  // The account view's gate follows the READING, not the panel's own link: a registered
+  // link can serve the selected account while the panel's (demo) link is away. Old
+  // engines carry no link on their account, so the panel's connection stays their gate.
+  const leyendoConectado = () => {
+    if (snapshot.enlace) return true
+    const enlaceCuenta = snapshot.cuenta.enlace
+    return enlaceCuenta !== null && enlaceCuenta !== "" && (snapshot.enlaces ?? []).some((enlace) => enlace.id === enlaceCuenta && enlace.conectado)
+  }
+
   // The day-loss guard read passively: its state is one account line, never an input here —
   // the limit itself is set through the chat.
   const guardiaDia = () => {
@@ -1342,7 +1351,7 @@ function TradingShell(props: {
               </Show>
               <Show when={sección() === "account"}>
                 <div class="mx-auto flex w-full max-w-[720px] flex-col gap-4 px-4 py-4">
-                  <Show when={snapshot.enlace} fallback={<p class="px-1 text-[13px] text-v2-text-text-faint" style={LINEA}>{language.t("trading.account.offline")}</p>}>
+                  <Show when={leyendoConectado()} fallback={<p class="px-1 text-[13px] text-v2-text-text-faint" style={LINEA}>{language.t("trading.account.offline")}</p>}>
                     {/* The three headline numbers read first, big and signed; the details dl
                         carries every account fact below them. */}
                     <div class="grid gap-x-10 gap-y-3 md:grid-cols-3">
