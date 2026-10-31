@@ -1,10 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Layer, Schema, Stream } from "effect"
 import { ai, LanguageModel, LLMEvent, ProviderInternalError, tool } from "../src/effect.js"
 import { AI, AIError } from "../src/index.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
+import { OpenAI } from "../src/providers.js"
+import { RequestExecutor } from "../src/route.js"
 import { TestLLM } from "../src/testing.js"
 import { testEffect } from "./lib/effect.js"
+import { handlerLayer } from "./lib/http.js"
+import { sseEvents } from "./lib/sse.js"
 
 const model = LanguageModel.make({ id: "fictional-model", provider: "fixture", route: OpenAIChat.route })
 const it = testEffect(TestLLM.testLayer())
@@ -94,9 +98,27 @@ describe("AIError.partial", () => {
 
 describe("AIError.partial from the promise client", () => {
   test("rejects with the root-exported AIError carrying partial", async () => {
-    const client = AI.make({ clients: TestLLM.testLayer({ fallback: textThenFail }) })
+    const client = AI.make({
+      layer: RequestExecutor.layer.pipe(
+        Layer.provide(
+          handlerLayer((input) =>
+            Effect.succeed(
+              input.respond(
+                sseEvents(
+                  { choices: [{ delta: { content: "Partial answer" } }] },
+                  { error: { message: "Overloaded" } },
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              ),
+            ),
+          ),
+        ),
+      ),
+    })
 
-    const error = await client.generate({ model, prompt: "Hello" }).catch((error: unknown) => error)
+    const error = await client
+      .generate({ model: OpenAI.configure({ apiKey: "test" }).chat("gpt-4o-mini"), prompt: "Hello" })
+      .catch((error: unknown) => error)
 
     expect(error).toBeInstanceOf(AIError)
     expect(error instanceof AIError && error.partial?.text).toBe("Partial answer")

@@ -894,13 +894,13 @@ Everything below is exported from `@opencode/ai/effect` unless noted.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
 - **`ai.decision.request` / `ai.decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
 - **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
-- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `compact`, `canCompact`) at the top level plus `image` and `decision` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer?, clients? })` builds a client over a custom executor or test layers. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
+- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `compact`, `canCompact`) at the top level plus `image` and `decision` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer? })` builds a client over a custom executor. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
 - **`@opencode/ai/experimental`** — APIs that may change without compatibility guarantees: `Video`, `Speech`, `Transcription`, `Extraction`, and `Realtime`. See [Experimental](#experimental).
 
 ## Experimental
 
 These APIs may change without compatibility guarantees. The Effect API is exported from `@opencode/ai/experimental`,
-the Promise client exposes it under `ai.experimental`, and test layers come from `@opencode/ai/experimental/testing`.
+and the Promise client exposes it under `ai.experimental`.
 
 - **`Video`**, **`Speech`**, and **`Transcription`** — media generation and speech-to-text, with `VideoClient`,
   `SpeechClient`, and `TranscriptionClient` as their Effect services. Promise: `ai.experimental.video`, `.speech`, and
@@ -1233,13 +1233,16 @@ For explicit compaction, script a `CompactionResponse` through `push`, `always`,
 
 For `compact(request, { mechanism: "trigger" })`, script a `CompactionCheckpointResponse` instead. It carries `checkpoint`, `responseID`, and optional `usage`. Endpoint and trigger calls reject each other's fixtures; both share the same queue, gates, lazy recording, and fallback controls.
 
-`TestImage` and `TestDecision` (and `TestVideo`, `TestSpeech`, and `TestTranscription` from `@opencode/ai/experimental/testing`) follow the same pattern: `testLayer()` provides the modality's client and `Test`, with the same `push`, `always`, `serve`, `requests`, `wait`, and `gate` controls. Script an `ImageResponse` (or the modality's response) or an `AIError`. `stream` expands the response into its events, and `start` returns an already finished generation that `resume` accepts by token. Decision responses are returned as scripted, without checking the answers against the questions.
+Response helpers build common event arrays: `TestLLM.text(value, id)`, `textWithUsage(value, id, inputTokens)`,
+`toolCall(id, name, input)`, `stop(...events)`, `toolCalls(...events)`, and
+`complete({ reason, usage?, providerMetadata? }, ...events)`. `failAfter(error, ...events)` and `hangAfter(...events)`
+return streams that fail or never finish after the given events.
 
-The Promise client accepts the same layers as `AI.make({ clients: TestImage.testLayer() })`; `ai.run(TestImage.Test.use(...))` reaches the controls.
+`compileRequest`, also from `@opencode/ai/testing`, compiles an `LLMRequest` through its route without sending it, so
+tests can assert the provider payload.
 
-The published legacy `Service`, `layer`, `clientLayer`, and module-level controls remain available as adapters
-over the same implementation, including the legacy live `requests` array. New tests should use `Test` and
-`testLayer`.
+Other modalities and the Promise client have no test double. Test them over a custom executor layer, such as
+`AI.make({ layer })`, that answers the HTTP requests.
 
 ## Provider compaction
 
