@@ -3,7 +3,7 @@ export * as ImageGenerateTool from "./image-generate.js"
 import path from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
-import type { Document, Entry } from "@opencode/schema/config"
+import type { Entry } from "@opencode/schema/config"
 import { Identifier } from "@opencode/schema/identifier"
 import { Global } from "@opencode/util/global"
 import { Duration, Effect, Schema, Scope, Stream } from "effect"
@@ -248,7 +248,7 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((editor) => {
-        if (!enabled || imageGenerate(loaded.entries) === false) return
+        if (!enabled || Config.latestField(loaded.entries, "image_generate") === false) return
         editor.add({
           name,
           options: { codemode: false },
@@ -393,15 +393,8 @@ export function defaultModel(
   return candidates.find((model) => model.providerID === input.providerID) ?? candidates[0]
 }
 
-// Read per field so a later config that sets other experimental options doesn't hide this one.
-function imageGenerate(entries: readonly Entry[]) {
-  return entries.findLast(
-    (entry): entry is Document => entry.type === "document" && entry.info.experimental?.image_generate !== undefined,
-  )?.info.experimental?.image_generate
-}
-
 function configuredModel(entries: readonly Entry[]) {
-  const value = imageGenerate(entries)
+  const value = Config.latestField(entries, "image_generate")
   return typeof value === "object" ? value.model : undefined
 }
 
