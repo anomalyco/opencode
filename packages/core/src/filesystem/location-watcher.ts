@@ -9,7 +9,9 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "../git.js"
 import { Location } from "../location.js"
 import { Plugin } from "../plugin.js"
+import { Ignore } from "./ignore.js"
 import { LocationWatcherPolicy } from "./location-watcher-policy.js"
+import { Protected } from "./protected.js"
 import { Watcher } from "./watcher.js"
 
 export interface Interface {}
@@ -51,38 +53,83 @@ const layer = Layer.effect(
     )
     const lock = Semaphore.makeUnsafe(1)
     let stopped = false
-    let active: { path: string; scope: Scope.Closeable } | undefined
+    const active = new Map<string, { input: Watcher.WatchInput; scope: Scope.Closeable }>()
+
+    const start = (key: string, input: Watcher.WatchInput) =>
+      Effect.gen(function* () {
+        const scope = yield* Scope.make()
+        active.set(key, { input, scope })
+        yield* Effect.gen(function* () {
+          const updates = yield* watcher.subscribe(input)
+          yield* Stream.runForEach(updates, publish)
+        }).pipe(
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterrupts(cause),
+            (cause) => Effect.logError("location watcher subscription failed", { path: input.path, cause }),
+          ),
+          Effect.forkIn(scope, { startImmediately: true }),
+        )
+      })
+
+    const stop = (key: string) =>
+      Effect.gen(function* () {
+        const entry = active.get(key)
+        if (!entry) return
+        active.delete(key)
+        yield* Scope.close(entry.scope, Exit.void)
+      })
+
     const reconcile = () =>
       lock.withPermit(
         Effect.gen(function* () {
           if (stopped) return
           const resolved = yield* target
           const ignore = policy.current()
-          const next = resolved && !resolved.aliases.some((alias) => ignore.includes(alias)) ? resolved.path : undefined
-          if (active?.path === next) return
-          if (active) yield* Scope.close(active.scope, Exit.void)
-          active = undefined
-          if (!next) return
-          const scope = yield* Scope.make()
-          active = { path: next, scope }
-          yield* Effect.gen(function* () {
-            const updates = yield* watcher.subscribe({ path: next, type: "file" })
-            yield* Stream.runForEach(updates, publish)
-          }).pipe(
-            Effect.catchCauseIf(
-              (cause) => !Cause.hasInterrupts(cause),
-              (cause) => Effect.logError("location watcher subscription failed", { path: next, cause }),
-            ),
-            Effect.forkIn(scope, { startImmediately: true }),
-          )
+          // Workspace files: edits under the location are published so clients can
+          // refresh open views. VCS metadata is excluded: store churn is not an
+          // edit, and the exact branch-metadata subscription below covers switches.
+          const inputs = new Map<string, Watcher.WatchInput>()
+          // A workspace rooted at the home directory or the filesystem root would
+          // recursively watch everything under it. Only branch metadata is watched
+          // there; the policy remains available for narrower explicit watches.
+          const oversized = Protected.isHome(location.directory)
+            ? "home directory"
+            : location.directory === path.parse(location.directory).root
+              ? "filesystem root"
+              : undefined
+          if (oversized) {
+            yield* Effect.logWarning("workspace directory watch skipped", {
+              directory: location.directory,
+              reason: oversized,
+            })
+          } else {
+            const directory: Watcher.WatchInput = {
+              path: location.directory,
+              type: "directory",
+              ignore: [...new Set([...ignore, ...Ignore.PATTERNS])].toSorted(),
+            }
+            inputs.set(JSON.stringify(directory), directory)
+          }
+          const vcs =
+            resolved && !resolved.aliases.some((alias) => ignore.includes(alias))
+              ? { path: resolved.path, type: "file" as const }
+              : undefined
+          if (vcs) inputs.set(JSON.stringify(vcs), vcs)
+          for (const key of Array.from(active.keys())) {
+            if (inputs.has(key)) continue
+            yield* stop(key)
+          }
+          for (const [key, input] of inputs) {
+            if (active.has(key)) continue
+            yield* start(key, input)
+          }
         }).pipe(Effect.withSpan("LocationWatcher.reconcile", { attributes: { directory: location.directory } })),
       )
     yield* Effect.addFinalizer(() =>
       lock.withPermit(
         Effect.gen(function* () {
           stopped = true
-          if (active) yield* Scope.close(active.scope, Exit.void)
-          active = undefined
+          for (const key of Array.from(active.keys())) yield* stop(key)
         }),
       ),
     )
