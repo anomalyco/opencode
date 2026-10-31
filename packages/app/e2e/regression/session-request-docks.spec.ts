@@ -210,6 +210,40 @@ test("shows a pending permission dock", async ({ page }) => {
   await expect(page.locator('[data-component="composer"]')).toBeVisible()
 })
 
+test("names the MCP tool, the hook's message and the full input in the permission dock", async ({ page }) => {
+  const body = "x".repeat(3000)
+  await mockServer(page, {
+    sessionPermissions: {
+      [sessionID]: [
+        {
+          id: "permission-request",
+          sessionID,
+          action: "linear_save_comment",
+          resources: ["*"],
+          save: ["*"],
+          metadata: { input: { issueId: "ENG-1", labels: ["bug"], body } },
+          message: "Posts a comment on a Linear issue",
+        },
+      ],
+    },
+  })
+
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const input = permission.locator('[data-slot="permission-input"]')
+  await expect(permission.getByText("linear_save_comment")).toBeVisible()
+  await expect(permission.getByText("Posts a comment on a Linear issue")).toBeVisible()
+  await expect(input.getByText("issueId: ENG-1")).toBeVisible()
+  await expect(input.getByText('labels: ["bug"]')).toBeVisible()
+  // The user approves these arguments, so a long one stays whole and scrolls inside the dock instead of being cut
+  await expect(input.getByText(`body: ${body}`, { exact: true })).toBeVisible()
+  await expect.poll(() => input.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  // "Allow always" saves the wildcard, so its scope stays visible next to this call's input
+  await expect(permission.locator('[data-slot="permission-patterns"]').getByText("*", { exact: true })).toBeVisible()
+})
+
 test("loads a running subagent's question without polling idle subagents on every update", async ({ page }) => {
   const runningID = "ses_request_running_subagent"
   const idleIDs = Array.from({ length: 20 }, (_, index) => `ses_request_idle_${index}`)

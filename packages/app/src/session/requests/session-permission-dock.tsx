@@ -21,6 +21,14 @@ export function SessionPermissionDock(props: {
     return value
   }
 
+  const input = () => {
+    const value = props.request.metadata?.input
+    if (!value || typeof value !== "object") return []
+    return Object.entries(value).map(
+      ([key, item]) => `${key}: ${typeof item === "string" ? item : JSON.stringify(item)}`,
+    )
+  }
+
   return (
     <DockPrompt
       kind="permission"
@@ -54,10 +62,29 @@ export function SessionPermissionDock(props: {
         </>
       }
     >
-      <Show when={toolDescription()}>
+      <div data-slot="permission-row">
+        <span data-slot="permission-spacer" aria-hidden="true" />
+        <Show when={toolDescription()} fallback={<code data-slot="permission-hint">{props.request.action}</code>}>
+          <div data-slot="permission-hint">{toolDescription()}</div>
+        </Show>
+      </div>
+
+      <Show when={props.request.message}>
+        {(message) => (
+          <div data-slot="permission-row">
+            <span data-slot="permission-spacer" aria-hidden="true" />
+            <div data-slot="permission-hint">{message()}</div>
+          </div>
+        )}
+      </Show>
+
+      <Show when={input().length > 0}>
         <div data-slot="permission-row">
           <span data-slot="permission-spacer" aria-hidden="true" />
-          <div data-slot="permission-hint">{toolDescription()}</div>
+          {/* Scrolls rather than truncates: the user approves these arguments, so all of them must be reachable */}
+          <div data-slot="permission-input" data-scrollable>
+            <For each={input()}>{(line) => <code class="text-text-weak break-all">{line}</code>}</For>
+          </div>
         </div>
       </Show>
 
