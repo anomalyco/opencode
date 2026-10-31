@@ -2,7 +2,7 @@ export * as ConfigDiscovery from "./discovery.js"
 
 import os from "os"
 import path from "path"
-import { Effect, Option } from "effect"
+import { Effect } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Location } from "../location.js"
@@ -90,18 +90,18 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
         // listing an ancestor fall back to probing each candidate directly.
         const entries = yield* fs.readDirectory(parent).pipe(
           Effect.map((list) => new Set(list.map((entry) => entry.toLowerCase()))),
-          Effect.option,
+          Effect.orElseSucceed(() => undefined),
         )
         return yield* Effect.forEach(
           candidates,
-          (name): Effect.Effect<{ item: AbsolutePath; resolved: string; present: boolean | undefined }> => {
+          (name) => {
             const item = AbsolutePath.make(path.join(directory, name))
-            if (Option.isSome(entries) && !entries.value.has(name.toLowerCase())) {
-              return Effect.succeed({ item, resolved: path.resolve(parent, name), present: false })
+            if (entries && !entries.has(name.toLowerCase())) {
+              return Effect.succeed({ item, resolved: path.resolve(parent, name), missing: true })
             }
             return fs
               .resolve(path.join(parent, name))
-              .pipe(Effect.map((resolved) => ({ item, resolved, present: undefined })))
+              .pipe(Effect.map((resolved) => ({ item, resolved, missing: false })))
           },
           { concurrency: "unbounded" },
         )
@@ -144,7 +144,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     project: yield* Effect.forEach(
       visibleEntries.filter((entry) => path.basename(entry.item) === ".opencode").toReversed(),
       (entry) =>
-        entry.present === false
+        entry.missing
           ? Effect.succeed({ path: entry.item, present: false })
           : fs.isDir(entry.item).pipe(Effect.map((present) => ({ path: entry.item, present }))),
       { concurrency: "unbounded" },

@@ -19,13 +19,45 @@ function inFixture(root: string, target: string) {
   return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
 }
 
+function discoverWith(
+  root: string,
+  directory: string,
+  projectDirectory = directory,
+  wrapFs?: (base: FSUtil.Interface) => Partial<FSUtil.Interface>,
+) {
+  const globalDir = path.join(root, "global")
+  const fsLayer = wrapFs
+    ? Layer.effect(
+        FSUtil.Service,
+        Effect.map(FSUtil.Service, (base) => FSUtil.Service.of({ ...base, ...wrapFs(base) })),
+      ).pipe(Layer.provide(AppNodeBuilder.build(FSUtil.node)))
+    : AppNodeBuilder.build(FSUtil.node)
+
+  return ConfigDiscovery.discover({ system: false }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        fsLayer,
+        Global.layerWith({ config: globalDir, home: path.join(globalDir, "home") }),
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of(
+            location(
+              { directory: AbsolutePath.make(directory) },
+              { projectDirectory: AbsolutePath.make(projectDirectory) },
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+}
+
 describe("ConfigDiscovery.discover", () => {
   it.live("skips resolve and stat calls for absent ancestor candidates while keeping watch paths", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const root = yield* Effect.promise(() => fs.realpath(tmp.path))
-          const globalDir = path.join(root, "global")
           const ancestor = path.join(root, "ws", "org", "repo")
           const nested = path.join(ancestor, "packages", "feature")
           yield* Effect.promise(async () => {
@@ -36,58 +68,33 @@ describe("ConfigDiscovery.discover", () => {
 
           const resolved: string[] = []
           const dirChecks: string[] = []
-          const countingFs = Layer.effect(
-            FSUtil.Service,
-            Effect.gen(function* () {
-              const base = yield* FSUtil.Service
-              return FSUtil.Service.of({
-                ...base,
-                resolve: (input) => {
-                  resolved.push(input)
-                  return base.resolve(input)
-                },
-                isDir: (input) => {
-                  dirChecks.push(input)
-                  return base.isDir(input)
-                },
-              })
-            }),
-          ).pipe(Layer.provide(AppNodeBuilder.build(FSUtil.node)))
+          const sources = yield* discoverWith(root, nested, ancestor, (base) => ({
+            resolve: (input) => {
+              resolved.push(input)
+              return base.resolve(input)
+            },
+            isDir: (input) => {
+              dirChecks.push(input)
+              return base.isDir(input)
+            },
+          }))
 
-          const layer = Layer.mergeAll(
-            countingFs,
-            Global.layerWith({ config: globalDir, home: path.join(globalDir, "home") }),
-            Layer.succeed(
-              Location.Service,
-              Location.Service.of(
-                location({ directory: AbsolutePath.make(nested) }, { projectDirectory: AbsolutePath.make(ancestor) }),
-              ),
-            ),
-          )
-
-          const sources = yield* ConfigDiscovery.discover({ system: false }).pipe(Effect.provide(layer))
-
-          const fixtureResolved = resolved.filter((item) => inFixture(path.join(root, "ws"), item))
+          const ws = path.join(root, "ws")
+          const fixtureResolved = resolved.filter((item) => inFixture(ws, item))
           expect(fixtureResolved).not.toContain(path.join(nested, "opencode.jsonc"))
           expect(fixtureResolved).not.toContain(path.join(nested, ".opencode"))
           expect(fixtureResolved).not.toContain(path.join(ancestor, "opencode.json"))
           expect(fixtureResolved).toContain(path.join(nested, "opencode.json"))
           expect(fixtureResolved).toContain(path.join(ancestor, ".opencode"))
 
-          const fixtureDirChecks = dirChecks.filter((item) => inFixture(path.join(root, "ws"), item))
-          expect(fixtureDirChecks).toEqual([path.join(ancestor, ".opencode")])
+          expect(dirChecks.filter((item) => inFixture(ws, item))).toEqual([path.join(ancestor, ".opencode")])
 
-          const wsDirect = sources.direct.filter((item) => inFixture(path.join(root, "ws"), item))
+          const wsDirect = sources.direct.filter((item) => inFixture(ws, item))
           expect(wsDirect).toContain(AbsolutePath.make(path.join(nested, "opencode.jsonc")))
           expect(wsDirect).toContain(AbsolutePath.make(path.join(nested, "opencode.json")))
-          expect(sources.project.filter((entry) => inFixture(path.join(root, "ws"), entry.path))).toContainEqual({
-            path: AbsolutePath.make(path.join(ancestor, ".opencode")),
-            present: true,
-          })
-          expect(sources.project.filter((entry) => inFixture(path.join(root, "ws"), entry.path))).toContainEqual({
-            path: AbsolutePath.make(path.join(nested, ".opencode")),
-            present: false,
-          })
+          const wsProject = sources.project.filter((entry) => inFixture(ws, entry.path))
+          expect(wsProject).toContainEqual({ path: AbsolutePath.make(path.join(ancestor, ".opencode")), present: true })
+          expect(wsProject).toContainEqual({ path: AbsolutePath.make(path.join(nested, ".opencode")), present: false })
         }),
       ),
     ),
@@ -98,7 +105,6 @@ describe("ConfigDiscovery.discover", () => {
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const root = yield* Effect.promise(() => fs.realpath(tmp.path))
-          const globalDir = path.join(root, "global")
           const guarded = path.join(root, "guarded")
           const project = path.join(guarded, "project")
           yield* Effect.promise(async () => {
@@ -106,32 +112,12 @@ describe("ConfigDiscovery.discover", () => {
             await fs.mkdir(project, { recursive: true })
           })
 
-          const sandboxFs = Layer.effect(
-            FSUtil.Service,
-            Effect.gen(function* () {
-              const base = yield* FSUtil.Service
-              return FSUtil.Service.of({
-                ...base,
-                readDirectory: (target, options) =>
-                  target === guarded
-                    ? base.readDirectory(path.join(target, "unreadable-missing"), options)
-                    : base.readDirectory(target, options),
-              })
-            }),
-          ).pipe(Layer.provide(AppNodeBuilder.build(FSUtil.node)))
-
-          const layer = Layer.mergeAll(
-            sandboxFs,
-            Global.layerWith({ config: globalDir, home: path.join(globalDir, "home") }),
-            Layer.succeed(
-              Location.Service,
-              Location.Service.of(
-                location({ directory: AbsolutePath.make(project) }, { projectDirectory: AbsolutePath.make(project) }),
-              ),
-            ),
-          )
-
-          const sources = yield* ConfigDiscovery.discover({ system: false }).pipe(Effect.provide(layer))
+          const sources = yield* discoverWith(root, project, project, (base) => ({
+            readDirectory: (target, options) =>
+              target === guarded
+                ? base.readDirectory(path.join(target, "unreadable-missing"), options)
+                : base.readDirectory(target, options),
+          }))
           expect(sources.project).toContainEqual({
             path: AbsolutePath.make(path.join(guarded, ".opencode")),
             present: true,
@@ -146,36 +132,13 @@ describe("ConfigDiscovery.discover", () => {
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
           const root = yield* Effect.promise(() => fs.realpath(tmp.path))
-          const globalDir = path.join(root, "global")
           const project = path.join(root, "cased")
-          yield* Effect.promise(async () => {
-            await fs.mkdir(path.join(project, ".opencode"), { recursive: true })
-          })
+          yield* Effect.promise(() => fs.mkdir(path.join(project, ".opencode"), { recursive: true }))
 
-          const casedFs = Layer.effect(
-            FSUtil.Service,
-            Effect.gen(function* () {
-              const base = yield* FSUtil.Service
-              return FSUtil.Service.of({
-                ...base,
-                readDirectory: (target, options) =>
-                  target === project ? Effect.succeed([".OPENCODE"]) : base.readDirectory(target, options),
-              })
-            }),
-          ).pipe(Layer.provide(AppNodeBuilder.build(FSUtil.node)))
-
-          const layer = Layer.mergeAll(
-            casedFs,
-            Global.layerWith({ config: globalDir, home: path.join(globalDir, "home") }),
-            Layer.succeed(
-              Location.Service,
-              Location.Service.of(
-                location({ directory: AbsolutePath.make(project) }, { projectDirectory: AbsolutePath.make(project) }),
-              ),
-            ),
-          )
-
-          const sources = yield* ConfigDiscovery.discover({ system: false }).pipe(Effect.provide(layer))
+          const sources = yield* discoverWith(root, project, project, (base) => ({
+            readDirectory: (target, options) =>
+              target === project ? Effect.succeed([".OPENCODE"]) : base.readDirectory(target, options),
+          }))
           expect(sources.project).toContainEqual({
             path: AbsolutePath.make(path.join(project, ".opencode")),
             present: true,
