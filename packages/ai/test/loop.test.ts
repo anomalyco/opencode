@@ -184,3 +184,77 @@ describe("ai.loop", () => {
     }),
   )
 })
+
+describe("ai.collect", () => {
+  it.effect("folds a stream into one step whose finish carries the message and usage", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(TestLLM.textWithUsage("Hello.", "text-1", 7))
+
+      const events = Array.from(yield* ai.stream({ model, prompt: "Say hello." }).pipe(Stream.runCollect))
+      const finish = events.find(LLMEvent.is.finish)
+      expect(finish?.message?.content).toEqual([expect.objectContaining({ type: "text", text: "Hello." })])
+      expect(finish?.usage?.inputTokens).toBe(7)
+
+      yield* client.push(TestLLM.textWithUsage("Hello.", "text-1", 7))
+      const result = yield* ai.collect(ai.stream({ model, prompt: "Say hello." }))
+      expect(result.text).toBe("Hello.")
+      expect(result.steps).toHaveLength(1)
+      expect(result.messages).toEqual([result.steps[0].message])
+      expect(finish?.message).toEqual(result.steps[0].message)
+      expect(result.usage?.inputTokens).toBe(7)
+      expect(result.finishReason.normalized).toBe("stop")
+    }),
+  )
+
+  it.effect("folds a loop into its steps, one message per step and tool result, and the total usage", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.complete(
+          { reason: { normalized: "tool-calls" }, usage: { inputTokens: 10 } },
+          LLMEvent.textStart({ id: "text-1" }),
+          LLMEvent.textDelta({ id: "text-1", text: "Reading." }),
+          LLMEvent.textEnd({ id: "text-1" }),
+          LLMEvent.toolCall({ id: "call-1", name: "read_file", input: { path: "a.txt" } }),
+        ),
+        TestLLM.complete(
+          { reason: { normalized: "stop" }, usage: { inputTokens: 20 } },
+          LLMEvent.textDelta({ id: "text-2", text: "The file says hello." }),
+        ),
+      )
+
+      const result = yield* ai.collect(ai.loop({ model, prompt: "Read the file.", tools: { read_file } }))
+      const requests = yield* client.requests()
+
+      expect(result.text).toBe("The file says hello.")
+      expect(result.steps.map((step) => step.text)).toEqual(["Reading.", "The file says hello."])
+      expect(result.steps.map((step) => step.usage?.inputTokens)).toEqual([10, 20])
+      expect(result.usage?.inputTokens).toBe(30)
+      expect(result.messages.map((message) => message.role)).toEqual(["assistant", "tool", "assistant"])
+      // The first two messages are exactly what the loop sent back for the second step.
+      expect(result.messages.slice(0, 2)).toEqual(requests[1].messages.slice(1))
+    }),
+  )
+
+  it.effect("carries the decoded object when the stream has a schema", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(TestLLM.toolCall("call-1", "generate_object", { path: "a.txt" }))
+
+      const result = yield* ai.collect(
+        ai.stream({ model, prompt: "Pick a file.", schema: Schema.Struct({ path: Schema.String }) }),
+      )
+
+      const path: string = result.object.path
+      expect(path).toBe("a.txt")
+    }),
+  )
+
+  it.effect("fails when the stream ends without a finish event", () =>
+    Effect.gen(function* () {
+      const error = yield* ai.collect(Stream.make(LLMEvent.stepStart({ index: 0 }))).pipe(Effect.flip)
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+    }),
+  )
+})

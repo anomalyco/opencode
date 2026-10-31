@@ -13,6 +13,7 @@ import {
   LanguageModel,
   SystemPart,
   type Finish,
+  type FinishReasonDetails,
   ToolChoice,
   ToolEntry,
   Usage,
@@ -81,7 +82,10 @@ export function generate(input: Input, options?: StreamOptions) {
   )
 }
 
-/** Stream one model call. With `schema`, the `finish` event carries the decoded `object`. */
+/**
+ * Stream one model call. The `finish` event carries the assistant `message` and `usage`; with `schema`, also the
+ * decoded `object`.
+ */
 export function stream<const Model extends LanguageModel, S extends OutputSchema>(
   input: ObjectInput<S, Model>,
   options?: StreamOptions,
@@ -99,9 +103,10 @@ export function stream(input: Input, options?: StreamOptions) {
           return LLMClient.stream(request, options).pipe(
             Stream.mapEffect((event) => {
               state = LLMResponse.reduce(state, event)
-              return output === undefined || event.type !== "finish"
-                ? Effect.succeed(event)
-                : withObject(output, event, state)
+              const response = event.type === "finish" ? LLMResponse.complete(state) : undefined
+              if (!response || event.type !== "finish") return Effect.succeed(event)
+              const finish = { ...event, usage: response.usage, message: response.message }
+              return output === undefined ? Effect.succeed(finish) : withObject(output, finish, state)
             }),
           )
         }),
@@ -122,8 +127,8 @@ export type LoopInput<SelectedLanguageModel extends LanguageModel = LanguageMode
 /**
  * Stream model calls, running the model's tool calls between them, until a step has no client-executed tool calls or
  * `until` returns `true`. Each step's `step-start` and `step-finish` carry its step index and usage; one `finish` ends
- * the loop with the final step's reason and the usage summed across steps. With `schema`, the model ends by calling
- * the hidden answer tool, decoded into `object` on the `finish`.
+ * the loop with the final step's reason and `message` and the usage summed across steps. With `schema`, the model ends
+ * by calling the hidden answer tool, decoded into `object` on the `finish`.
  */
 export function loop<const Model extends LanguageModel, S extends OutputSchema>(
   input: LoopInput<Model> & { readonly schema: S },
@@ -166,7 +171,7 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
               const calls = clientCalls(response, output)
               const done = [...steps, response]
               if (calls.length === 0 || until?.({ steps: done })) {
-                const event = { ...finish, usage: total }
+                const event = { ...finish, usage: total, message: response.message }
                 return Stream.fromEffect(
                   output === undefined || calls.length > 0 ? Effect.succeed(event) : withObject(output, event, state),
                 )
@@ -202,6 +207,102 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
       Effect.map(({ request, output }) => step(request, [], undefined, output)),
     ),
   )
+}
+
+/** The result of `collect`: every step of a stream from `stream` or `loop`, folded into one value. */
+export interface Collected {
+  /** Text of the final step. */
+  readonly text: string
+  /** One response per model call, in order. */
+  readonly steps: ReadonlyArray<LLMResponse>
+  /** Each step's assistant message followed by its tool results, ready to append to the request's messages. */
+  readonly messages: ReadonlyArray<Message>
+  /** Usage from the terminal `finish`, summed across steps for a loop. */
+  readonly usage?: Usage
+  readonly finishReason: FinishReasonDetails
+}
+
+type FinishOf<Event> = Extract<Event, { readonly type: "finish" }>
+
+/** `Collected`, plus `object` when the stream was started with `schema`. */
+export type CollectResult<Event> = "object" extends keyof FinishOf<Event>
+  ? Collected & Pick<FinishOf<Event>, "object">
+  : Collected
+
+/** Run a stream from `stream` or `loop` to the end and fold its events into the final result. */
+export function collect<Event extends LLMEvent, E, R>(
+  events: Stream.Stream<Event, E, R>,
+): Effect.Effect<CollectResult<Event>, E | AIError, R>
+export function collect<E, R>(
+  events: Stream.Stream<LLMEvent, E, R>,
+): Effect.Effect<Collected & { readonly object?: unknown }, E | AIError, R> {
+  return Effect.suspend(() => {
+    const steps: LLMResponse[] = []
+    const messages: Message[] = []
+    let step = LLMResponse.empty()
+    // Between a `step-finish` and the next `step-start`, tool results come from the loop running tools.
+    let betweenSteps = false
+    let finish: Finish | undefined
+    const close = (reason: FinishReasonDetails, usage: Usage | undefined) => {
+      if (step.events.length === 0) return
+      const response = new LLMResponse({
+        message: step.message,
+        events: step.events,
+        usage: usage ?? step.usage,
+        finishReason: reason,
+      })
+      steps.push(response)
+      messages.push(response.message)
+      step = LLMResponse.empty()
+    }
+    return Stream.runForEach(events, (event) =>
+      Effect.sync(() => {
+        if (event.type === "finish") {
+          close(event.reason, event.usage)
+          finish = event
+          return
+        }
+        if (event.type === "tool-result" && betweenSteps) {
+          messages.push(
+            Message.tool({
+              id: event.id,
+              name: event.name,
+              namespace: event.namespace,
+              result: event.result,
+              providerMetadata: event.providerMetadata,
+            }),
+          )
+          return
+        }
+        if (event.type === "step-start") betweenSteps = false
+        step = LLMResponse.reduce(step, event)
+        if (event.type !== "step-finish") return
+        close(event.reason, event.usage)
+        betweenSteps = true
+      }),
+    ).pipe(
+      Effect.flatMap(() => {
+        if (finish === undefined)
+          return Effect.fail(
+            new AIError({
+              reason: new InvalidProviderOutputError({
+                message: "The stream ended without a finish event.",
+                classification: "incomplete-stream",
+              }),
+            }),
+          )
+        const result = {
+          text: steps.at(-1)?.text ?? "",
+          steps,
+          messages,
+          usage: finish.usage,
+          finishReason: finish.reason,
+          ...("object" in finish ? { object: finish.object } : {}),
+        }
+        return Effect.succeed(result)
+      }),
+    )
+  })
 }
 
 const addUsage = (total: Usage | undefined, step: Usage | undefined) => {
