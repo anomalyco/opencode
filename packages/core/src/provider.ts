@@ -526,7 +526,7 @@ const layer = Layer.effect(
         },
       )
     })
-    yield* bus.subscribe([Integration.Event.Updated, Credential.Event.Updated, Credential.Event.Switched]).pipe(
+    yield* bus.subscribe([Integration.Event.Updated, Credential.Event.Switched]).pipe(
       Stream.runForEach(() => notify),
       Effect.forkScoped({ startImmediately: true }),
     )

@@ -11,7 +11,6 @@ export const ai = {
   generate: LLM.generate,
   stream: LLM.stream,
   loop: LLM.loop,
-  generateObject: LLM.generateObject,
   compact: LLM.compact,
   canCompact: LLM.canCompact,
   image: Image,
@@ -198,7 +197,6 @@ export type {
   ToolExecuteContext,
   ToolModelOutputInput,
   ToolOptions,
-  Tools,
   ToolSchema,
   ToolToModelOutput,
 } from "./tool.js"

@@ -12,7 +12,7 @@ export type Config = ProviderAuthOption<"optional"> & {
   readonly http?: HttpOptions.Input
 }
 
-export type Settings = ProviderPackage.Settings & { readonly apiKey?: string }
+export type Settings = ProviderPackage.Settings & { readonly apiKey?: string | false }
 
 export const configure = (input: Config = {}) => {
   const route = SystemOne.route.with({

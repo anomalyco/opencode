@@ -1619,29 +1619,30 @@ describe("Gemini route", () => {
 
   it.effect("maps tool calls without a finish reason", () =>
     Effect.gen(function* () {
-      const response = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
-        }),
-      ).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents({
-              candidates: [
-                {
-                  content: {
-                    role: "model",
-                    parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }],
+      const toolRequest = LLMRequest.update(request, {
+        tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+      })
+      for (const finishReason of [undefined, "FINISH_REASON_UNSPECIFIED"] as const) {
+        const response = yield* LLMClient.generate(toolRequest).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents({
+                candidates: [
+                  {
+                    content: {
+                      role: "model",
+                      parts: [{ functionCall: { name: "lookup", args: { query: "weather" } } }],
+                    },
+                    ...(finishReason ? { finishReason } : {}),
                   },
-                },
-              ],
-              usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 1 },
-            }),
+                ],
+                usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 1 },
+              }),
+            ),
           ),
-        ),
-      )
-
-      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: undefined })
+        )
+        expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: undefined })
+      }
     }),
   )
 
@@ -1853,7 +1854,9 @@ describe("Gemini route", () => {
           reason: { _tag: "InvalidProviderOutput", body: JSON.stringify(event), http: { status: 200 } },
           message: `Gemini stopped with ${raw}`,
         })
-        expect(isRetryable(error)).toBe(raw === "MALFORMED_RESPONSE")
+        expect(isRetryable(error)).toBe(
+          raw === "MALFORMED_RESPONSE" || raw === "MALFORMED_FUNCTION_CALL" || raw === "UNEXPECTED_TOOL_CALL",
+        )
       }
     }),
   )

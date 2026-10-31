@@ -196,9 +196,9 @@ const readFileAttachment = Effect.fn("SessionPrompt.readFileAttachment")(functio
     return {
       bytes: Buffer.from(
         entries
-          .filter((entry) => entry.type === "file" || entry.type === "directory")
-          .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "directory" ? -1 : 1))
-          .map((entry) => entry.name + (entry.type === "directory" ? path.sep : ""))
+          .filter((entry) => entry.type === "File" || entry.type === "Directory")
+          .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "Directory" ? -1 : 1))
+          .map((entry) => entry.name + (entry.type === "Directory" ? path.sep : ""))
           .join("\n"),
       ),
       source: { type: "uri" as const, uri },

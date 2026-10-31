@@ -297,7 +297,7 @@ export const dict = {
     "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
   "go.faq.a5.learnMore": "Daha fazla bilgi",
   "go.faq.a5.deepseekRetention":
-    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ekim 2026 tarihine kadar geçerlidir.",
+    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 30 Kasım 2026 tarihine kadar geçerlidir.",
   "go.faq.a5.museRetention":
     "İstemlerinizi ve tamamlamalarınızı gelecekteki Meta modellerini eğitmek için kullanma izni karşılığında büyük ölçüde indirimli token fiyatları.",
 

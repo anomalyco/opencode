@@ -20,7 +20,6 @@
     "./effect": "./src/effect.ts",
     "./testing": "./src/testing.ts",
     "./experimental": "./src/experimental.ts",
-    "./experimental/testing": "./src/experimental/testing.ts",
     "./route": "./src/route.ts",
     "./providers": "./src/providers.ts",
     "./providers/alibaba": "./src/providers/alibaba.ts",

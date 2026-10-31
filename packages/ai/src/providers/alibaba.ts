@@ -46,7 +46,7 @@ export type Config = Location &
 export type Settings<Options = ChatOptionsInput> = Location &
   ProviderPackage.Settings &
   Options & {
-    readonly apiKey?: string
+    readonly apiKey?: string | false
   }
 
 const hosts = new Map<string, string>([
