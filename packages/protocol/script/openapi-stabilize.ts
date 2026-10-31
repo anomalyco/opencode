@@ -8,10 +8,14 @@ export function stabilizeOpenApi(source: object) {
   const schemas = document.components.schemas
   const reference = (name: string) => `#/components/schemas/${name}`
   const families = ["Union", "Objects", "Arrays"].filter((name) => `${name}_` in schemas)
+  const encoded = new Set(Object.keys(schemas).flatMap((name) => /^(.+Encoded)_\d+$/.exec(name)?.[1] ?? []))
   const anonymous = new Map(
     Object.keys(schemas)
       .filter(
-        (name) => families.some((family) => new RegExp(`^${family}_\\d*$`).test(name)) || /^.+Encoded_\d+$/.test(name),
+        (name) =>
+          families.some((family) => new RegExp(`^${family}_\\d*$`).test(name)) ||
+          /^.+Encoded_\d+$/.test(name) ||
+          encoded.has(name),
       )
       .map((name) => [name, schemas[name]]),
   )
@@ -121,6 +125,11 @@ function collapseCopies<Document extends { components: { schemas: Record<string,
       copies.delete(copy)
       changed = true
     }
+  }
+  for (const [copy, original] of copies) {
+    let target = original
+    while (copies.has(target)) target = copies.get(target)!
+    copies.set(copy, target)
   }
   if (copies.size === 0) return document
   const rewrite = (node: unknown): unknown => {

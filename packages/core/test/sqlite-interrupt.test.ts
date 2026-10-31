@@ -17,12 +17,17 @@ const sweep = (
   Effect.runPromise(
     Effect.gen(function* () {
       const leaked: Array<number> = []
-      for (let delay = 0; delay < 31; delay++) {
+      for (let delay = 0; delay < 45; delay++) {
         yield* Effect.scoped(
           Effect.gen(function* () {
             const sql = yield* SqlClient.SqlClient
             const holder = yield* Effect.forkChild(
-              Effect.scoped(Effect.andThen(sql.reserve, Effect.andThen(Effect.yieldNow, Effect.yieldNow))),
+              Effect.scoped(
+                Effect.andThen(
+                  sql.reserve,
+                  Effect.forEach(Array.from({ length: 22 }), () => Effect.yieldNow, { discard: true }),
+                ),
+              ),
             )
             const queued = yield* queue(sql).pipe(
               Effect.provideService(References.MaxOpsBeforeYield, 3),
