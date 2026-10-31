@@ -327,6 +327,28 @@ test("Zod schemas validate, transform, and describe typed tools", async () => {
   )
 })
 
+test.each(["input", "output"] as const)("Zod %s schemas preserve plugin JSON Schema overrides", (io) => {
+  const value = z.string().describe("Plugin value")
+  // Plugins such as AFT supply their own conversion for schemas from a bundled Zod.
+  // describe() leaves a parent that the override deliberately does not traverse.
+  value._zod.toJSONSchema = () => ({ type: "string", description: "Plugin value" })
+  const tool: Info = {
+    name: "plugin-schema",
+    description: "Plugin schema",
+    input: z.object({}),
+    [io]: z.object({ value }),
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(definition(tool)[io === "input" ? "inputSchema" : "outputSchema"]).toEqual({
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    properties: { value: { type: "string", description: "Plugin value" } },
+    required: ["value"],
+    ...(io === "output" ? { additionalProperties: false } : {}),
+  })
+})
+
 test("portable schema failures become tool failures", async () => {
   const input = {
     "~standard": {

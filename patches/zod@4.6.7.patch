@@ -1,0 +1,38 @@
+diff --git a/src/v4/core/to-json-schema.ts b/src/v4/core/to-json-schema.ts
+index 855c0c7f2d424bddd8bcf900dbe244d7151994e5..699d7d752e7fc7056ad79c80bdef3fa129ec97fd 100644
+--- a/src/v4/core/to-json-schema.ts
++++ b/src/v4/core/to-json-schema.ts
+@@ -628,6 +628,6 @@ export function finalize<T extends schemas.$ZodType>(
+     // If parent was extracted (has $ref), propagate $ref to this schema. This handles cases like: readonly().meta({id}).describe() where processor sets ref to innerType but parent should be referenced
+     const parent = zodSchema._zod.parent;
+-    if (parent && parent !== ref) {
++    if (parent && parent !== ref && ctx.seen.has(parent)) {
+       // Ensure parent is processed first so its def has inherited properties
+       flattenRef(parent);
+       const parentSeen = ctx.seen.get(parent);
+diff --git a/v4/core/to-json-schema.cjs b/v4/core/to-json-schema.cjs
+index c2db7a55afd652408925c24bba4103d3b3351857..4878ae0841d7e6b7ad890409bccf28d007b2e6ca 100644
+--- a/v4/core/to-json-schema.cjs
++++ b/v4/core/to-json-schema.cjs
+@@ -448,7 +448,7 @@ function finalize(ctx, schema) {
+         }
+         // If parent was extracted (has $ref), propagate $ref to this schema. This handles cases like: readonly().meta({id}).describe() where processor sets ref to innerType but parent should be referenced
+         const parent = zodSchema._zod.parent;
+-        if (parent && parent !== ref) {
++        if (parent && parent !== ref && ctx.seen.has(parent)) {
+             // Ensure parent is processed first so its def has inherited properties
+             flattenRef(parent);
+             const parentSeen = ctx.seen.get(parent);
+diff --git a/v4/core/to-json-schema.js b/v4/core/to-json-schema.js
+index c0ae14b7326566650a389c86c367c64341e7edcb..933359006720d37875c2d253c5e4dcc2495e8b26 100644
+--- a/v4/core/to-json-schema.js
++++ b/v4/core/to-json-schema.js
+@@ -439,7 +439,7 @@ export function finalize(ctx, schema) {
+         }
+         // If parent was extracted (has $ref), propagate $ref to this schema. This handles cases like: readonly().meta({id}).describe() where processor sets ref to innerType but parent should be referenced
+         const parent = zodSchema._zod.parent;
+-        if (parent && parent !== ref) {
++        if (parent && parent !== ref && ctx.seen.has(parent)) {
+             // Ensure parent is processed first so its def has inherited properties
+             flattenRef(parent);
+             const parentSeen = ctx.seen.get(parent);
