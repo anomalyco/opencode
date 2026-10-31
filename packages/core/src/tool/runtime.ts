@@ -167,8 +167,41 @@ const outputJsonSchema = (schema: Tool.ValueSchema<any>): JsonSchema.JsonSchema 
 
 const standardJsonSchema = (schema: StandardSchemaV1<any, any>, io: "input" | "output"): JsonSchema.JsonSchema => {
   if (isStandardJSONSchema(schema)) return schema["~standard"].jsonSchema[io]({ target: "draft-2020-12" })
-  if (schema instanceof $ZodType) return toJSONSchema(schema, { target: "draft-2020-12", io })
+  if (schema instanceof $ZodType) return zodJsonSchema(schema, io)
   throw new Error(`Schema vendor "${schema["~standard"].vendor}" does not support JSON Schema conversion`)
+}
+
+// Zod versions before 4.2 do not expose `~standard.jsonSchema`, so plugin schemas from those
+// versions reach this conversion path. A plugin-defined `_zod.toJSONSchema` override replaces
+// the default processor, which also skips processing `_zod.parent`; Zod's finalizer still walks
+// that parent and crashes on schemas cloned by `.describe()`. Hide only the parents that the
+// override strands for the duration of the conversion, then restore them.
+const zodJsonSchema = (schema: $ZodType, io: "input" | "output"): JsonSchema.JsonSchema => {
+  const restore: Array<() => void> = []
+  const seen = new Set<object>()
+  const hideStrandedParents = (value: unknown) => {
+    if (typeof value !== "object" || value === null || seen.has(value)) return
+    seen.add(value)
+    const zod = (value as { _zod?: { def?: object; parent?: unknown; toJSONSchema?: unknown } })._zod
+    if (zod === undefined) {
+      for (const child of Object.values(value)) hideStrandedParents(child)
+      return
+    }
+    if (zod.toJSONSchema !== undefined && zod.parent !== undefined) {
+      const parent = zod.parent
+      zod.parent = undefined
+      restore.push(() => {
+        zod.parent = parent
+      })
+    }
+    hideStrandedParents(zod.def)
+  }
+  try {
+    hideStrandedParents(schema)
+    return toJSONSchema(schema, { target: "draft-2020-12", io })
+  } finally {
+    for (const restoreParent of restore.reverse()) restoreParent()
+  }
 }
 
 const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {

@@ -327,6 +327,36 @@ test("Zod schemas validate, transform, and describe typed tools", async () => {
   )
 })
 
+test("legacy Zod schemas with JSON Schema overrides still convert", () => {
+  const path = z.string().describe("File path")
+  path._zod.toJSONSchema = () => ({ type: "string", description: "File path" })
+  const input = z.object({ args: z.object({ path }) })
+  // Zod versions before 4.2 do not expose `~standard.jsonSchema`, which is what routes plugin
+  // schemas from older bundles through the core JSON Schema conversion.
+  Object.defineProperty(input, "~standard", {
+    value: { validate: (value: unknown) => ({ value }), vendor: "zod", version: 1 },
+  })
+  const tool: Info = {
+    name: "legacy-zod",
+    description: "Legacy Zod tool",
+    input,
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(definition(tool).inputSchema).toEqual({
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    properties: {
+      args: {
+        type: "object",
+        properties: { path: { type: "string", description: "File path" } },
+        required: ["path"],
+      },
+    },
+    required: ["args"],
+  })
+})
+
 test("portable schema failures become tool failures", async () => {
   const input = {
     "~standard": {
