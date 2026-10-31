@@ -13,8 +13,8 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import type { DownloadPlatform } from "./types"
 
-function getDownloadHref(platform: DownloadPlatform, channel: "stable" | "beta" = "stable") {
-  return `/download/${channel}/${platform}`
+function getDownloadHref(platform: DownloadPlatform) {
+  return `/download/latest/${platform}`
 }
 
 function CopyStatus() {

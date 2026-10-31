@@ -282,7 +282,7 @@ export const dict = {
   "go.faq.a5.gptRetention": "所有 API 功能的使用都會產生濫用監控日誌，並保留最多 30 天。",
   "go.faq.a5.museRetention": "以允許使用您的提示詞和生成結果來訓練未來的 Meta 模型為交換，token 價格可享大幅折扣。",
   "go.faq.a5.learnMore": "了解更多",
-  "go.faq.a5.deepseekRetention": "ZDR 協議每月續簽。目前的協議有效至 2026 年 10 月 31 日。",
+  "go.faq.a5.deepseekRetention": "ZDR 協議每月續簽。目前的協議有效至 2026 年 11 月 30 日。",
   "go.faq.q6": "我可以儲值額度嗎？",
   "go.faq.a6": "如果你需要更多使用量，可以在帳戶中儲值額度。",
   "go.faq.q7": "我可以取消嗎？",

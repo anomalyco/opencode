@@ -105,7 +105,7 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
     readonly providerOptions?: ProviderOptionsInput
   }
 
-export type Settings = ProviderPackage.Settings & ProviderOptionsInput & { readonly apiKey?: string }
+export type Settings = ProviderPackage.Settings & ProviderOptionsInput & { readonly apiKey?: string | false }
 
 const GatewayOptionsSchema = Schema.Struct({
   gateway: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),

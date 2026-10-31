@@ -90,6 +90,7 @@ const readPdf = ToolDefinition.make({
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
 })
 const readPdfRuntime = tool({
+  name: "read_pdf",
   description: readPdf.description,
   parameters: Schema.Struct({ path: Schema.String }),
   success: Schema.String,
@@ -163,7 +164,7 @@ describe("PDF recorded", () => {
                 cache: "none",
                 generation: { maxTokens: target.maxTokens, temperature: 0 },
               }),
-              tools: { read_pdf: readPdfRuntime },
+              tools: [readPdfRuntime],
             }).pipe(Stream.runCollect),
           )
           expect(events.at(-1)).toMatchObject({ type: "finish", reason: { normalized: "stop" } })

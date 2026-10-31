@@ -290,7 +290,7 @@ export const dict = {
   "go.faq.a5.museRetention":
     "향후 Meta 모델 학습에 사용자의 프롬프트와 생성 결과를 사용할 수 있도록 허용하는 대신 토큰 가격이 대폭 할인됩니다.",
   "go.faq.a5.learnMore": "자세히 알아보기",
-  "go.faq.a5.deepseekRetention": "ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 10월 31일까지 유효합니다.",
+  "go.faq.a5.deepseekRetention": "ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 11월 30일까지 유효합니다.",
   "go.faq.q6": "크레딧을 충전할 수 있나요?",
   "go.faq.a6": "사용량이 더 필요한 경우 계정에서 크레딧을 충전할 수 있습니다.",
   "go.faq.q7": "취소할 수 있나요?",

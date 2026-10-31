@@ -1,7 +1,5 @@
 export * as TestLLM from "./testing.js"
 export { compileRequest } from "./route/client.js"
-export { TestDecision } from "./testing/decision.js"
-export { TestImage } from "./testing/image.js"
 
 import {
   LLMClient,
@@ -21,8 +19,7 @@ import {
   type ProviderMetadata,
   type UsageInput,
 } from "./schema/index.js"
-import { Context, Effect, Layer, Stream } from "effect"
-import { TestScript } from "./testing/script.js"
+import { Context, Deferred, Effect, Latch, Layer, Queue, Scope, Stream } from "effect"
 
 export type Response =
   | readonly LLMEvent[]
@@ -30,17 +27,34 @@ export type Response =
   | CompactionResponse
   | CompactionCheckpointResponse
 
-export type Gate = TestScript.Gate
+export type Gate = Readonly<{ started: Effect.Effect<void>; release: Effect.Effect<void> }>
 
 type ClientInterface = Context.Service.Shape<typeof LLMClient.Service>
 
 export type Responder = (request: LLMRequest) => Response
 
-export interface TestInterface extends ClientInterface, TestScript.Controls<LLMRequest, Response> {}
+interface Controls {
+  /** Returns a snapshot of requests observed at execution time. */
+  readonly requests: () => Effect.Effect<readonly LLMRequest[]>
+  readonly push: (...responses: readonly Response[]) => Effect.Effect<void>
+  /** Replaces the fallback without changing queued responses. */
+  readonly always: (response: Response) => Effect.Effect<void>
+  /** Answers requests after the one-shot queue is exhausted; receives the original request. */
+  readonly serve: (responder: Responder) => Effect.Effect<void>
+  /** Waits for request arrivals, not output or completion. */
+  readonly wait: (count: number) => Effect.Effect<void>
+  readonly gate: () => Effect.Effect<Gate, never, Scope.Scope>
+}
+
+export interface TestInterface extends ClientInterface, Controls {}
 
 export class Test extends Context.Service<Test, TestInterface>()("@opencode/ai/TestLLM/Test") {}
 
-export type LayerOptions = TestScript.Options<LLMRequest, Response>
+export interface LayerOptions {
+  readonly transformRequest?: (request: LLMRequest) => LLMRequest
+  /** Used after the one-shot response queue is exhausted. Omit to defect on unexpected requests. */
+  readonly fallback?: Response
+}
 
 export const complete = (
   options: {
@@ -89,7 +103,7 @@ export const hangAfter = (...events: readonly LLMEvent[]) => Stream.concat(Strea
 
 const make = (options: LayerOptions) =>
   Effect.sync(() => {
-    const script = TestScript.make<LLMRequest, Response>("TestLLM", options)
+    const script = makeScript(options)
     const stream: ClientInterface["stream"] = (request) =>
       Stream.unwrap(
         script.take(request).pipe(
@@ -137,3 +151,68 @@ export const testLayer = (options: LayerOptions = {}) =>
   Layer.effectContext(
     Effect.map(make(options), (test) => Context.make(LLMClient.Service, test).pipe(Context.add(Test, test))),
   )
+
+/** The response queue, fallback, request log, and gates behind the test controls. */
+const makeScript = (options: LayerOptions) => {
+  const requests: LLMRequest[] = []
+  const responses: Response[] = []
+  let started = Deferred.makeUnsafe<void>()
+  const initial = options.fallback
+  let fallback: Responder | undefined = initial === undefined ? undefined : () => initial
+  let activeGate: { readonly started: Queue.Queue<void>; readonly release: Latch.Latch } | undefined
+  const wait = (count: number): Effect.Effect<void> =>
+    Effect.suspend(() =>
+      requests.length >= count ? Effect.void : Deferred.await(started).pipe(Effect.andThen(wait(count))),
+    )
+
+  const take = (request: LLMRequest) =>
+    Effect.suspend(() => {
+      const count = requests.push(options.transformRequest?.(request) ?? request)
+      const waiting = started
+      started = Deferred.makeUnsafe()
+      const gate = activeGate
+      try {
+        const response = responses.shift() ?? fallback?.(request)
+        if (!response) return Effect.die(new Error(`TestLLM has no response for request ${count}`))
+        if (!gate) return Effect.succeed(response)
+        return Queue.offer(gate.started, undefined).pipe(Effect.andThen(gate.release.await), Effect.as(response))
+      } finally {
+        // Waiters can resume synchronously; assign the reply and gate before notifying them.
+        Deferred.doneUnsafe(waiting, Effect.void)
+      }
+    })
+
+  const controls: Controls = {
+    requests: () => Effect.sync(() => [...requests]),
+    push: (...input) =>
+      Effect.sync(() => {
+        responses.push(...input)
+      }),
+    always: (response) =>
+      Effect.sync(() => {
+        fallback = () => response
+      }),
+    serve: (responder) =>
+      Effect.sync(() => {
+        fallback = responder
+      }),
+    wait,
+    gate: () =>
+      Effect.gen(function* () {
+        const gate = {
+          started: yield* Effect.acquireRelease(Queue.unbounded<void>(), Queue.shutdown),
+          release: yield* Latch.make(),
+        }
+        activeGate = gate
+        const release = Effect.sync(() => {
+          if (activeGate === gate) activeGate = undefined
+        }).pipe(Effect.andThen(gate.release.open), Effect.asVoid)
+        yield* Effect.addFinalizer(() => release)
+        return {
+          started: Queue.take(gate.started),
+          release,
+        }
+      }),
+  }
+  return { take, controls }
+}

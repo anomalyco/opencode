@@ -58,8 +58,6 @@ export function toSessionError(cause: unknown): SessionError.Error {
         return providerError("provider.invalid-request", cause.reason)
       case "UnsupportedOperation":
         return providerError("provider.unsupported-operation", cause.reason)
-      case "NoRoute":
-        return providerError("provider.no-route", cause.reason)
       case "UnknownProvider":
         return providerError("provider.unknown", cause.reason)
       case "Timeout":
