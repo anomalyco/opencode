@@ -62,10 +62,29 @@ test("opens an investigation draft for a failed MCP server at its originating lo
   }
 })
 
-async function renderMcp(options?: { failed?: boolean; location?: { directory: string; workspaceID?: string } }) {
+test("focuses the requested MCP server", async () => {
+  const fixture = await renderMcp({ initialServer: "selected" })
+
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("selected"))
+    fixture.app.mockInput.pressKey(" ")
+    await fixture.app.waitForFrame(() => fixture.connectedServer !== undefined)
+
+    expect(fixture.connectedServer).toBe("selected")
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+async function renderMcp(options?: {
+  failed?: boolean
+  initialServer?: string
+  location?: { directory: string; workspaceID?: string }
+}) {
   const events = createEventStream()
   let oauth = 0
   let connect = 0
+  let connectedServer: string | undefined
   let route!: ReturnType<typeof useRoute>
   const calls = createFetch((url, request) => {
     const location = {
@@ -84,6 +103,7 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
               : { status: "needs_auth", error: "Authentication required" },
             integrationID: "mcp_linear",
           },
+          ...(options?.initialServer ? [{ name: options.initialServer, status: { status: "disabled" as const } }] : []),
         ],
       })
     if (url.pathname === "/api/integration")
@@ -114,8 +134,10 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
       if (request.method === "DELETE") return new Response(null, { status: 204 })
       return json({ location, data: { status: "pending" } })
     }
-    if (url.pathname === "/api/experimental/mcp/linear/connect" && request.method === "POST") {
+    const target = url.pathname.match(/^\/api\/experimental\/mcp\/([^/]+)\/connect$/)?.[1]
+    if (target && request.method === "POST") {
       connect++
+      connectedServer = decodeURIComponent(target)
       return new Response(null, { status: 204 })
     }
     return undefined
@@ -131,7 +153,7 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
       void Promise.all([
         data.location.mcp.server.sync(options?.location),
         data.location.integration.sync(options?.location),
-      ]).then(() => dialog.replace(() => <DialogMcp />))
+      ]).then(() => dialog.replace(() => <DialogMcp initialServer={options?.initialServer} />))
     })
     return null
   }
@@ -173,6 +195,9 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
     },
     get connect() {
       return connect
+    },
+    get connectedServer() {
+      return connectedServer
     },
   }
 }
