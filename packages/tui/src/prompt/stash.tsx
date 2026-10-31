@@ -1,5 +1,5 @@
 import path from "path"
-import { readFileSync } from "fs"
+import { existsSync, readFileSync } from "fs"
 import { createSignal } from "solid-js"
 import { unwrap } from "solid-js/store"
 import { createSimpleContext } from "../context/helper"
@@ -44,27 +44,35 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
       scope: "global",
       initial: { migrated: false, entries: [] as StashEntry[] },
     })
-    // Import under the same lock as mutations. The marker survives an empty stash,
-    // so another startup cannot restore prompts that were already consumed.
-    const ready = store.migrated
-      ? Promise.resolve()
-      : update((draft) => {
-          if (draft.migrated) return
-          draft.migrated = true
-          try {
-            const text = readFileSync(path.join(paths.state, "prompt-stash.jsonl"), "utf8")
-            draft.entries = parsePromptStash(text).map((entry) => ({ ...entry, id: crypto.randomUUID() }))
-          } catch (error) {
-            if (error instanceof Error && "code" in error && error.code === "ENOENT") return
-            throw error
-          }
-        })
+    function migrate() {
+      return update((draft) => {
+        if (draft.migrated) return
+        draft.migrated = true
+        try {
+          const text = readFileSync(path.join(paths.state, "prompt-stash.jsonl"), "utf8")
+          draft.entries = parsePromptStash(text).map((entry) => ({ ...entry, id: crypto.randomUUID() }))
+        } catch (error) {
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") return
+          throw error
+        }
+      })
+    }
+
+    // Never rebuild an existing store from legacy prompts that may already be consumed.
+    let ready =
+      store.migrated || existsSync(path.join(paths.state, "tui", "prompt-stash.json")) ? Promise.resolve() : migrate()
     void ready.catch((error) => console.error("Failed to load prompt stash", error))
 
     const [pending, setPending] = createSignal(0)
     function mutate(mutation: Parameters<typeof update>[0]) {
       setPending((count) => count + 1)
-      return ready.then(() => update(mutation)).finally(() => setPending((count) => count - 1))
+      return ready
+        .catch(() => {
+          ready = migrate()
+          return ready
+        })
+        .then(() => update(mutation))
+        .finally(() => setPending((count) => count - 1))
     }
 
     return {

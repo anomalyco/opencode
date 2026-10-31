@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { createComponent, createRoot } from "solid-js"
 import path from "node:path"
+import { mkdir, rm } from "node:fs/promises"
 import { TuiAppProvider, TuiPathsProvider } from "../../src/context/runtime"
 import { StorageProvider, useStorage } from "../../src/context/storage"
 import { emptyPrompt } from "../../src/prompt/history"
@@ -55,6 +56,31 @@ test("legacy prompts import once, pop once, and stay consumed after restarting",
   }
   await using restarted = mount(tmp.path, "dev")
   expect(await restarted.stash.pop()).toBeUndefined()
+})
+
+test("a failed legacy import retries on the next mutation", async () => {
+  await using tmp = await tmpdir()
+  const legacy = path.join(tmp.path, "prompt-stash.jsonl")
+  await mkdir(legacy)
+  await using a = mount(tmp.path, "dev")
+  await expect(a.stash.pop()).rejects.toThrow()
+
+  await rm(legacy, { recursive: true })
+  await Bun.write(legacy, JSON.stringify({ ...prompt("legacy"), timestamp: 1 }) + "\n")
+  await a.stash.push(prompt("new"))
+  expect(a.stash.list().map((entry) => entry.prompt.text)).toEqual(["legacy", "new"])
+})
+
+test("a corrupt shared store does not reimport consumed legacy prompts", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(
+    path.join(tmp.path, "prompt-stash.jsonl"),
+    JSON.stringify({ ...prompt("consumed"), timestamp: 1 }) + "\n",
+  )
+  await mkdir(path.join(tmp.path, "tui"), { recursive: true })
+  await Bun.write(path.join(tmp.path, "tui", "prompt-stash.json"), "not json")
+  await using a = mount(tmp.path, "dev")
+  expect(await a.stash.pop()).toBeUndefined()
 })
 
 function mount(root: string, channel: string) {
