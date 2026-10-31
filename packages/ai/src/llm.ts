@@ -133,8 +133,11 @@ export function loop<const Model extends LanguageModel>(
 ): Stream.Stream<LLMEvent, AIError, Service>
 export function loop(input: LoopInput & { readonly schema?: OutputSchema }, options?: StreamOptions) {
   const { tools, until, ...rest } = input
-  const clientCalls = (response: LLMResponse) =>
-    response.toolCalls.filter((call) => call.providerExecuted !== true && call.name !== OBJECT_TOOL)
+  // A step that calls the answer tool is final, even if it also called other tools.
+  const clientCalls = (response: LLMResponse, output: Tool | undefined) =>
+    output && response.toolCalls.some((call) => call.name === OBJECT_TOOL)
+      ? []
+      : response.toolCalls.filter((call) => call.providerExecuted !== true)
   const step = (
     request: LLMRequest,
     steps: ReadonlyArray<LLMResponse>,
@@ -150,14 +153,16 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
           state = LLMResponse.reduce(state, event)
           if (output === undefined || event.type !== "finish") return Effect.succeed(event)
           const response = LLMResponse.complete(state)
-          return response && clientCalls(response).length > 0 ? Effect.succeed(event) : withObject(output, event, state)
+          return response && clientCalls(response, output).length > 0
+            ? Effect.succeed(event)
+            : withObject(output, event, state)
         }),
         Stream.mapError((error) => withPartial(error, LLMResponse.partial(state))),
         Stream.concat(
           Stream.unwrap(
             Effect.gen(function* () {
               const response = LLMResponse.complete(state)
-              const calls = response ? clientCalls(response) : []
+              const calls = response ? clientCalls(response, output) : []
               if (!response || calls.length === 0 || state.events.some(LLMEvent.is.providerError)) return Stream.empty
               const done = [...steps, response]
               if (until?.({ steps: done })) return Stream.empty

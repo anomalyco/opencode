@@ -198,6 +198,11 @@ describe("ai.generate with schema", () => {
 describe("schema on ai.stream and ai.loop", () => {
   const City = Schema.Struct({ city: Schema.String })
   const scripted = testEffect(TestLLM.testLayer())
+  const echo = tool({
+    description: "Echo a value.",
+    parameters: Schema.Struct({ value: Schema.String }),
+    execute: ({ value }) => Effect.succeed(value),
+  })
 
   scripted.effect("stream puts the decoded object on finish", () =>
     Effect.gen(function* () {
@@ -218,11 +223,6 @@ describe("schema on ai.stream and ai.loop", () => {
       const client = yield* TestLLM.Test
       yield* client.push(TestLLM.toolCall("call-1", "echo", { value: "Paris" }))
       yield* client.push(TestLLM.toolCall("call-2", "generate_object", { city: "Paris" }))
-      const echo = tool({
-        description: "Echo a value.",
-        parameters: Schema.Struct({ value: Schema.String }),
-        execute: ({ value }) => Effect.succeed(value),
-      })
 
       const events = Array.from(
         yield* ai.loop({ model, prompt: "Pick a city.", tools: { echo }, schema: City }).pipe(Stream.runCollect),
@@ -234,6 +234,28 @@ describe("schema on ai.stream and ai.loop", () => {
         { city: "Paris" },
       ])
       expect((yield* client.requests())[0]?.toolChoice?.type).toBe("required")
+    }),
+  )
+
+  scripted.effect("loop ends at a step that calls the answer tool alongside another tool", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.toolCalls(
+          LLMEvent.toolCall({ id: "call-1", name: "echo", input: { value: "Paris" } }),
+          LLMEvent.toolCall({ id: "call-2", name: "generate_object", input: { city: "Paris" } }),
+        ),
+      )
+
+      const events = Array.from(
+        yield* ai.loop({ model, prompt: "Pick a city.", tools: { echo }, schema: City }).pipe(Stream.runCollect),
+      )
+
+      expect(events.some(LLMEvent.is.toolResult)).toBe(false)
+      expect(events.filter((event) => event.type === "finish").map((event) => event.object)).toEqual([
+        { city: "Paris" },
+      ])
+      expect(yield* client.requests()).toHaveLength(1)
     }),
   )
 })
