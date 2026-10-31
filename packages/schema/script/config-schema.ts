@@ -51,12 +51,25 @@ function document(schema: Schema.Top) {
   return { root, definitions }
 }
 
+// V1-only keys keep the description V1 published, except where that text no longer describes what V2 does. V2
+// normalizes `autoupdate` onto `update`, so the published description cannot keep claiming updates are never
+// installed automatically.
+export const migratedDescriptions = new Map([
+  [
+    "autoupdate",
+    '@deprecated Use `update` instead. `false` maps to `"disable"`, `"notify"` maps to `"notify"`, and `true` maps to `"auto"`, which installs updates automatically.',
+  ],
+])
+
 function merge(current: Readonly<Record<string, JsonSchema>>, previous: Readonly<Record<string, JsonSchema>>) {
   return Object.fromEntries([
     ...Object.entries(current).map(([key, schema]) => [key, previous[key] ? combine(schema, previous[key]) : schema]),
     ...Object.entries(previous)
       .filter(([key]) => !current[key])
-      .map(([key, schema]) => [key, { ...schema, deprecated: true }]),
+      .map(([key, schema]) => [
+        key,
+        { ...schema, deprecated: true, description: migratedDescriptions.get(key) ?? schema.description },
+      ]),
   ])
 }
 
