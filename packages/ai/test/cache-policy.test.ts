@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, CompactionPart, LLM, Message, ProviderID, ToolCallPart } from "../src/effect.js"
+import { ai, CacheHint, CompactionPart, Message, ProviderID, ToolCallPart } from "../src/effect.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import {
@@ -44,7 +44,7 @@ describe("applyCachePolicy", () => {
   it.effect("undefined cache resolves to 'auto' (the recommended default)", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: anthropicModel,
           system: "You are concise.",
           prompt: "hi",
@@ -63,7 +63,7 @@ describe("applyCachePolicy", () => {
   it.effect("'auto' marks the last tool, first and last system parts, and final message boundary on Anthropic", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: anthropicModel,
           system: [
             { type: "text", text: "Base agent" },
@@ -100,7 +100,7 @@ describe("applyCachePolicy", () => {
   it.effect("'auto' emits Anthropic cache markers on Vertex", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" }).model(
             "claude-opus-4-8",
           ),
@@ -121,7 +121,7 @@ describe("applyCachePolicy", () => {
   it.effect("'auto' emits cache_control markers on DigitalOcean", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: DigitalOcean.configure({ apiKey: "test" }).model("anthropic-claude-fable-5.1"),
           system: "You are concise.",
           tools: [{ name: "lookup", description: "Look up a value", inputSchema: { type: "object", properties: {} } }],
@@ -148,7 +148,7 @@ describe("applyCachePolicy", () => {
   it.effect("Alibaba chat caches the system and conversation tail without marking tools", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).chat("qwen3.8-max"),
           system: "You are concise.",
           tools: [{ name: "lookup", description: "Look up a value", inputSchema: { type: "object", properties: {} } }],
@@ -173,7 +173,7 @@ describe("applyCachePolicy", () => {
   it.effect("Alibaba chat omits automatic cache markers when cache is none", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).chat("qwen3.8-max"),
           system: "You are concise.",
           prompt: "hi",
@@ -190,7 +190,7 @@ describe("applyCachePolicy", () => {
       const alibaba = Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" })
       for (const modelID of ["kimi-k3", "glm-5.2", "deepseek-v4-flash-0731", "MiniMax-M2.5"]) {
         const prepared = yield* compileRequest(
-          LLM.request({ model: alibaba.chat(modelID), system: "You are concise.", prompt: "hi" }),
+          ai.request({ model: alibaba.chat(modelID), system: "You are concise.", prompt: "hi" }),
         )
 
         expect(JSON.stringify(prepared.body)).not.toContain("cache_control")
@@ -201,7 +201,7 @@ describe("applyCachePolicy", () => {
   it.effect("'auto' emits Anthropic cache markers on Anthropic-compatible routes", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: AnthropicCompatible.configure({ apiKey: "test", baseURL: "https://messages.example.test/v1" }).model(
             "compatible",
           ),
@@ -235,7 +235,7 @@ describe("applyCachePolicy", () => {
   messagesModels.forEach(([route, model]) =>
     it.effect(`'auto' emits cache markers on ${route}`, () =>
       Effect.gen(function* () {
-        const prepared = yield* compileRequest(LLM.request({ model, system: "Sys", prompt: "hi" }))
+        const prepared = yield* compileRequest(ai.request({ model, system: "Sys", prompt: "hi" }))
 
         expect(prepared.route).toBe(route)
         expect(prepared.body).toMatchObject({
@@ -249,7 +249,7 @@ describe("applyCachePolicy", () => {
   it.effect("'auto' is a no-op on OpenAI (implicit caching protocol)", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: openaiModel,
           system: "Sys",
           prompt: "hi",
@@ -268,7 +268,7 @@ describe("applyCachePolicy", () => {
   it.effect("'auto' is a no-op on Gemini (out-of-band caching protocol)", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: geminiModel,
           system: "Sys",
           prompt: "hi",
@@ -285,7 +285,7 @@ describe("applyCachePolicy", () => {
   it.effect("'auto' on Bedrock emits cachePoint markers in the right places", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: bedrockModel,
           system: [
             { type: "text", text: "Base agent" },
@@ -319,7 +319,7 @@ describe("applyCachePolicy", () => {
   it.effect("'none' disables auto placement even when manual hints exist", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: anthropicModel,
           system: "Sys",
           tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
@@ -338,7 +338,7 @@ describe("applyCachePolicy", () => {
   it.effect("granular object form: tools-only marks just tools", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: anthropicModel,
           system: "Sys",
           tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
@@ -364,7 +364,7 @@ describe("applyCachePolicy", () => {
         cache: manual,
       })
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: anthropicModel,
           tools: [
             duplicate("first"),
@@ -386,7 +386,7 @@ describe("applyCachePolicy", () => {
   it.effect("auto policy preserves manual CacheHints on other parts", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: anthropicModel,
           system: [
             { type: "text", text: "first system", cache: new CacheHint({ type: "ephemeral", ttl: "1h" }) },
@@ -409,7 +409,7 @@ describe("applyCachePolicy", () => {
 
   it.effect("auto policy stays within the four-breakpoint cap when preserving manual hints", () =>
     Effect.gen(function* () {
-      const request = LLM.request({
+      const request = ai.request({
         model: anthropicModel,
         system: [
           { type: "text", text: "Base agent" },
@@ -450,7 +450,7 @@ describe("applyCachePolicy", () => {
   )
 
   test("marks the final leaf inside a tool namespace", () => {
-    const request = LLM.request({
+    const request = ai.request({
       model: anthropicModel,
       tools: [
         {
@@ -476,7 +476,7 @@ describe("applyCachePolicy", () => {
   it.effect("a ttl-only policy keeps automatic placement", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({ model: anthropicModel, system: "Sys", prompt: "hi", cache: { ttl: "1h" } }),
+        ai.request({ model: anthropicModel, system: "Sys", prompt: "hi", cache: { ttl: "1h" } }),
       )
 
       expect(prepared.body).toMatchObject({
@@ -489,7 +489,7 @@ describe("applyCachePolicy", () => {
   it.effect("ttl in the policy flows through to wire markers", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: anthropicModel,
           system: "Sys",
           prompt: "hi",
@@ -506,7 +506,7 @@ describe("applyCachePolicy", () => {
   it.effect("messages: { tail: 2 } marks the last 2 message boundaries", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: anthropicModel,
           messages: [Message.user("u1"), Message.assistant("a1"), Message.user("u2"), Message.assistant("a2")],
           cache: { messages: { tail: 2 } },
@@ -524,7 +524,7 @@ describe("applyCachePolicy", () => {
   it.effect("'latest-assistant' marks the last assistant message", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        LLM.request({
+        ai.request({
           model: anthropicModel,
           messages: [Message.user("u1"), Message.assistant("a1"), Message.user("u2")],
           cache: { messages: "latest-assistant" },
@@ -542,7 +542,7 @@ describe("applyCachePolicy", () => {
     const compaction = CompactionPart.make({ provider: ProviderID.make("anthropic"), text: "summary" })
     const toolCall = ToolCallPart.make({ id: "tc_1", name: "lookup", input: {} })
 
-    const mixed = LLM.request({
+    const mixed = ai.request({
       model: anthropicModel,
       messages: [Message.assistant([toolCall, compaction])],
       cache: { messages: "latest-assistant" },
@@ -555,7 +555,7 @@ describe("applyCachePolicy", () => {
     })
     expect(appliedMixed.messages[0]?.content[1]).toEqual(compaction)
 
-    const compactionOnly = LLM.request({
+    const compactionOnly = ai.request({
       model: anthropicModel,
       messages: [Message.assistant([compaction])],
       cache: { messages: "latest-assistant" },
@@ -564,7 +564,7 @@ describe("applyCachePolicy", () => {
   })
 
   test("returns the same request reference when policy is a no-op (pure function)", () => {
-    const request = LLM.request({
+    const request = ai.request({
       model: anthropicModel,
       prompt: "hi",
       cache: "none",

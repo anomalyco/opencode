@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src/effect.js"
+import { ai } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
@@ -29,7 +29,7 @@ describe("Bedrock Converse options recorded", () => {
     () =>
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
-          LLM.request({
+          ai.request({
             id: "recorded_bedrock_options_claude",
             model: bedrock("us.anthropic.claude-sonnet-4-6", {
               effort: "high",
@@ -52,7 +52,7 @@ describe("Bedrock Converse options recorded", () => {
   recorded.effect.with("sends gpt-oss reasoning effort with the priority tier", { tags: ["reasoning"] }, () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           id: "recorded_bedrock_options_gpt_oss",
           model: bedrock("openai.gpt-oss-120b-1:0", {
             effort: "low",
@@ -74,7 +74,7 @@ describe("Bedrock Converse options recorded", () => {
   recorded.effect.with("sends Nova 2 reasoning effort", { tags: ["reasoning"] }, () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           id: "recorded_bedrock_options_nova",
           model: bedrock("us.amazon.nova-2-lite-v1:0", { effort: "low" }),
           prompt: "What is 17*23? Reply with the number only.",
@@ -92,7 +92,7 @@ describe("Bedrock Converse options recorded", () => {
   recorded.effect("constrains Claude output to a JSON schema", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           id: "recorded_bedrock_options_output_format",
           model: bedrock("us.anthropic.claude-sonnet-4-6", {
             outputFormat: {

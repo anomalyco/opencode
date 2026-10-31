@@ -18,27 +18,27 @@ export const scan = Effect.fn("SkillScan.scan")(function* (root: string) {
       entries.filter((entry) => !entry.name.startsWith(".") && !FSUtil.ignoredDirectories.includes(entry.name)),
       (entry) => {
         const target = path.join(item.directory, entry.name)
-        if (entry.type !== "symlink") return Effect.succeed({ name: entry.name, path: target, type: entry.type })
+        if (entry.type !== "SymbolicLink") return Effect.succeed({ name: entry.name, path: target, type: entry.type })
         return fs.stat(target).pipe(
-          Effect.map((info) => (info.type === "Directory" ? "directory" : info.type === "File" ? "file" : "other")),
-          Effect.orElseSucceed(() => "other" as const),
+          Effect.map((info) => info.type),
+          Effect.orElseSucceed(() => "Unknown" as const),
           Effect.map((type) => ({ name: entry.name, path: target, type })),
         )
       },
     )
-    const skill = children.find((child) => child.type === "file" && child.name === "SKILL.md")
+    const skill = children.find((child) => child.type === "File" && child.name === "SKILL.md")
     if (skill) {
       files.push(skill.path)
       continue
     }
     if (item.depth === 0)
       files.push(
-        ...children.filter((child) => child.type === "file" && child.name.endsWith(".md")).map((child) => child.path),
+        ...children.filter((child) => child.type === "File" && child.name.endsWith(".md")).map((child) => child.path),
       )
     if (item.depth < MAX_DEPTH)
       queue.push(
         ...children
-          .filter((child) => child.type === "directory")
+          .filter((child) => child.type === "Directory")
           .map((child) => ({ directory: child.path, depth: item.depth + 1 })),
       )
   }

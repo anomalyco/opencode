@@ -2,7 +2,7 @@ import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { define } from "@opencode/plugin/effect/plugin"
 // import { Deferred, Duration, Effect, Option, Schema, Semaphore, Stream } from "effect"
-import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
+import { Deferred, Effect, Equal, Option, Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { Server, ServerResponse } from "node:http"
 import { App } from "../../app.js"
@@ -224,12 +224,14 @@ export const ChatGPTPlugin = define({
         ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
       chatgpt = credential?.type === "oauth" && credential.methodID === methodID ? credential : undefined
+      const previous = source
       source = chatgpt ? connection : undefined
       // if (previous !== IntegrationConnection.key(source)) {
       //   const metadata = Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))
       //   const stored = metadata ? yield* ctx.storage.get(modelCacheKey(metadata.clientID)) : undefined
       //   available = Option.getOrUndefined(decodeCachedModels(stored))
       // }
+      return !Equal.equals(previous, source)
     })
 
     yield* ctx.integration.transform((editor) => {
@@ -357,7 +359,7 @@ export const ChatGPTPlugin = define({
     //     }),
     //   )
     // })
-    const reload = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
+    const reload = () => loading.withPermit(load().pipe(Effect.flatMap((changed) => (changed ? ctx.provider.reload() : Effect.void))))
     // .pipe(Effect.andThen(refreshModels().pipe(Effect.forkScoped, Effect.asVoid)))
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === integrationID),

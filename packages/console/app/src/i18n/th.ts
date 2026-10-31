@@ -112,8 +112,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "คุณยังสามารถเชื่อมต่อกับ",
   "home.faq.a3.p4.localLink": "โมเดล Local ของคุณ",
   "home.faq.q4": "ฉันสามารถใช้การสมัครสมาชิก AI ที่มีอยู่กับ OpenCode ได้หรือไม่?",
-  "home.faq.a4.p1":
-    "ได้ คุณสามารถใช้การสมัครสมาชิก ChatGPT Plus/Pro หรือ GitHub Copilot ของคุณได้ รวมถึงการสมัครสมาชิก Claude ผ่าน Claude Code",
+  "home.faq.a4.p1": "ได้ คุณสามารถใช้การสมัครสมาชิก ChatGPT Plus/Pro หรือ GitHub Copilot ของคุณได้",
   "home.faq.q5": "ฉันใช้ OpenCode ได้เฉพาะในเทอร์มินัลใช่หรือไม่?",
   "home.faq.a5.beforeDesktop": "ไม่อีกต่อไป! OpenCode มีแอปสำหรับ",
   "home.faq.a5.desktop": "เดสก์ท็อป",
@@ -296,7 +295,7 @@ export const dict = {
   "go.faq.a5.museRetention":
     "ราคาของ token ลดลงอย่างมาก โดยแลกกับการอนุญาตให้นำพรอมต์และผลลัพธ์ที่สร้างขึ้นของคุณไปใช้ฝึกโมเดล Meta ในอนาคต",
   "go.faq.a5.learnMore": "ดูข้อมูลเพิ่มเติม",
-  "go.faq.a5.deepseekRetention": "ข้อตกลง ZDR จะต่ออายุทุกเดือน ข้อตกลงปัจจุบันมีผลใช้ถึงวันที่ 31 ตุลาคม 2026",
+  "go.faq.a5.deepseekRetention": "ข้อตกลง ZDR จะต่ออายุทุกเดือน ข้อตกลงปัจจุบันมีผลใช้ถึงวันที่ 30 พฤศจิกายน 2026",
 
   "go.faq.q6": "ฉันสามารถเติมเครดิตได้หรือไม่?",
   "go.faq.a6": "หากคุณต้องการใช้งานเพิ่ม คุณสามารถเติมเครดิตในบัญชีของคุณได้",

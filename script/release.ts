@@ -171,7 +171,9 @@ includes V1 history merged into dev. Do not compare against V1 release tags or c
 only on commit titles. Write a
 user-facing changelog with sections for Core, TUI, Desktop, SDK, and Extensions, omitting empty sections and changes that
 are entirely internal. Group bug fixes separately from improvements. Preserve community contributor attribution when it
-is available from merged pull requests, but never thank authors listed in .github/TEAM_MEMBERS.
+is available from merged pull requests, but never thank authors listed in .github/TEAM_MEMBERS. Leave out changes to
+the @opencode/ai package in packages/ai unless they change how OpenCode itself behaves for users; then describe only
+that OpenCode behavior.
 
 Start the changelog with a "### Highlights" section: the few changes worth telling people about, written for humans.
 Pick 2 to 5 user-visible changes a user would notice, try, or share: new capabilities, clearly better workflows, or fixes

@@ -114,8 +114,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Ви навіть можете підключити свої",
   "home.faq.a3.p4.localLink": "локальні моделі",
   "home.faq.q4": "Чи можу я використовувати свої наявні AI-підписки з OpenCode?",
-  "home.faq.a4.p1":
-    "Так, ви можете використовувати підписки ChatGPT Plus/Pro або GitHub Copilot, а також підписку Claude через Claude Code.",
+  "home.faq.a4.p1": "Так, ви можете використовувати підписки ChatGPT Plus/Pro або GitHub Copilot.",
   "home.faq.q5": "Чи можна використовувати OpenCode лише в терміналі?",
   "home.faq.a5.beforeDesktop": "Вже ні! OpenCode тепер доступний як застосунок для",
   "home.faq.a5.desktop": "десктопа",
@@ -295,7 +294,7 @@ export const dict = {
   "go.faq.a5.gptRetention":
     "Журнали моніторингу зловживань створюються для всіх випадків використання функцій API та зберігаються до 30 днів.",
   "go.faq.a5.learnMore": "Докладніше",
-  "go.faq.a5.deepseekRetention": "Угода ZDR поновлюється щомісяця. Поточна угода дійсна до 31 жовтня 2026 року.",
+  "go.faq.a5.deepseekRetention": "Угода ZDR поновлюється щомісяця. Поточна угода дійсна до 30 листопада 2026 року.",
   "go.faq.a5.museRetention":
     "Значно знижені ціни на токени в обмін на дозвіл використовувати ваші промпти та відповіді для навчання майбутніх моделей Meta.",
 
