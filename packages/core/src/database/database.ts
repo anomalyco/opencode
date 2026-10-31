@@ -74,7 +74,14 @@ export function layer(options: Options = { path: ":memory:" }) {
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:") return provide(filename)
       const file = isAbsolute(filename) ? filename : join((yield* Global.Service).data, filename)
-      yield* Effect.promise(() => restrictToOwner(file))
+      const refused = yield* Effect.promise(() => restrictToOwner(file))
+      // The files stay readable by other users when they belong to one, so say it instead of leaving the
+      // looser permissions silent (#57032 review).
+      if (refused.length > 0)
+        yield* Effect.logWarning("Database files are readable by other users and cannot be restricted", {
+          files: refused,
+          hint: "chown them to the current user to enforce owner-only access",
+        })
       return provide(file)
     }),
   )
@@ -82,19 +89,26 @@ export function layer(options: Options = { path: ":memory:" }) {
 
 // SQLite creates new sidecars with the database's mode, but does not tighten existing sidecars.
 // Windows relies on the user profile directory's inherited ACLs instead of POSIX modes.
-async function restrictToOwner(filename: string) {
-  if (process.platform === "win32") return
+export async function restrictToOwner(
+  filename: string,
+  restrict: (file: string, mode: number) => Promise<void> = chmod,
+) {
+  if (process.platform === "win32") return []
   // Opening and closing an existing database can release another connection's POSIX locks.
   // Create missing files synchronously so another fiber cannot open one before it is restricted.
   if (!existsSync(filename)) closeSync(openSync(filename, "a", 0o600))
-  await chmod(filename, 0o600)
-  await Promise.all(
-    [`${filename}-wal`, `${filename}-shm`].map((file) =>
-      chmod(file, 0o600).catch((error: NodeJS.ErrnoException) => {
-        if (error.code !== "ENOENT") throw error
-      }),
-    ),
-  )
+  // Tightening is best effort. A database owned by another user, such as one left behind by an earlier
+  // `sudo opencode`, is still readable and writable, and failing here stopped startup entirely (#57032).
+  // Those paths are reported instead so the caller can say the files stay readable by other users.
+  const refused: string[] = []
+  const tighten = (file: string) =>
+    restrict(file, 0o600).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return
+      if (error.code === "EPERM" || error.code === "EACCES") return void refused.push(file)
+      throw error
+    })
+  await Promise.all([filename, `${filename}-wal`, `${filename}-shm`].map(tighten))
+  return refused
 }
 
 // The database service over an injected SqlClient, for runtimes that receive
