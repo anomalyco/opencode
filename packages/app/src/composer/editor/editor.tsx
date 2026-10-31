@@ -720,7 +720,7 @@ function ComposerAttachments(props: {
       <div data-component="composer-attachments" data-slot="composer-attachments" class="relative">
         <div
           data-slot="composer-attachments-scroll"
-          class="flex flex-nowrap gap-2 overflow-x-auto no-scrollbar px-2 pt-2 pb-1"
+          class="flex flex-wrap gap-2 max-h-40 overflow-y-auto no-scrollbar px-2 pt-2 pb-1"
         >
           <For each={props.comments ?? []}>
             {(comment) => (
@@ -865,14 +865,6 @@ function ComposerAttachments(props: {
             )}
           </For>
         </div>
-        <div
-          data-slot="composer-attachments-fade-left"
-          class="pointer-events-none absolute inset-y-0 start-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-base),transparent)] rtl:bg-[linear-gradient(to_left,var(--v2-background-bg-base),transparent)]"
-        />
-        <div
-          data-slot="composer-attachments-fade-right"
-          class="pointer-events-none absolute inset-y-0 end-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-base),transparent)] rtl:bg-[linear-gradient(to_right,var(--v2-background-bg-base),transparent)]"
-        />
         <Show when={editing()} keyed>
           {(current) => (
             <Show when={anchors[current.key]}>
