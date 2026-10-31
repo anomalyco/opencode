@@ -28,7 +28,6 @@ import {
   withUntypedFrames,
 } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
-import { effortUpdate } from "../effort-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -639,30 +638,32 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
   return yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter))
 })
 
-const DEFAULT_EFFORT = "medium"
+export const DEFAULT_EFFORT = "medium"
 
 const lowerMessages = Effect.fnUntraced(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
+  effortMarkers?: ReadonlyMap<number, string>,
 ) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
   const custom = OpenAIFreeform.tools(request)
   const customTool = (part: ToolCallPart | ToolResultPart) =>
     part.namespace === undefined ? custom.get(part.name) : undefined
+  const emitEffort = (index: number) => {
+    const effort = effortMarkers?.get(index)
+    if (effort === undefined) return
+    // Consecutive updates are rejected, so a newer one replaces its predecessor.
+    const last = input.at(-1)
+    if (last !== undefined && "type" in last && last.type === "configuration_update") input.pop()
+    input.push({ type: "configuration_update", reasoning: { effort } })
+  }
 
-  for (const message of request.messages) {
+  for (const [index, message] of request.messages.entries()) {
+    emitEffort(index)
     const rawMetadata = message.providerMetadata?.[providerMetadataKey]
     const metadata = rawMetadata === undefined ? undefined : yield* decodeMessageMetadata(rawMetadata)
     if (message.role === "system") {
-      const update = effortUpdate(message)
-      if (update) {
-        // Consecutive updates are rejected, so a newer one replaces its predecessor.
-        const last = input.at(-1)
-        if (last !== undefined && "type" in last && last.type === "configuration_update") input.pop()
-        input.push({ type: "configuration_update", reasoning: { effort: update.effort ?? DEFAULT_EFFORT } })
-        continue
-      }
       input.push({
         type: "message",
         role: "developer",
@@ -803,6 +804,7 @@ const lowerMessages = Effect.fnUntraced(function* (
       })
     }
   }
+  emitEffort(request.messages.length)
 
   return input
 })
@@ -810,11 +812,12 @@ const lowerMessages = Effect.fnUntraced(function* (
 export const lowerConversation = Effect.fnUntraced(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
+  effortMarkers?: ReadonlyMap<number, string>,
 ) {
   const instructions = ProviderShared.joinText(request.system)
   return {
     model: request.model.id,
-    input: yield* lowerMessages(request, adapter),
+    input: yield* lowerMessages(request, adapter, effortMarkers),
     ...(instructions ? { instructions } : {}),
   }
 })
@@ -1205,10 +1208,7 @@ const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResul
   ]
 }
 
-const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (
-  state: ParserState,
-  event: Event,
-) {
+const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (state: ParserState, event: Event) {
   if (event.item_id === undefined) return [state, NO_EVENTS] satisfies StepResult
   const tool = state.tools[event.item_id]
   if (!tool) return [state, NO_EVENTS] satisfies StepResult
@@ -1236,10 +1236,7 @@ const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (
   return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
-const onOutputItemDone = Effect.fnUntraced(function* (
-  state: ParserState,
-  item: NormalizedEvent["item"],
-) {
+const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: NormalizedEvent["item"]) {
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
   if (item.type === "compaction") {

@@ -231,41 +231,47 @@ Earlier work
     ])
   })
 
-  describe("model-switched", () => {
+  describe("assistant effort", () => {
     const ref = (variant?: string) =>
       Model.Ref.make({
         id: Model.ID.make("model"),
         providerID: Provider.ID.make("provider"),
         ...(variant === undefined ? {} : { variant: Model.VariantID.make(variant) }),
       })
-    const switched = (to: Model.Ref, previous?: Model.Ref) =>
-      SessionMessage.ModelSelected.make({
-        id: id("model"),
-        type: "model-switched",
-        model: to,
-        previous,
-        time: { created },
+    const reply = (modelRef: Model.Ref) =>
+      SessionMessage.Assistant.make({
+        id: id("assistant"),
+        type: "assistant",
+        agent: build,
+        model: modelRef,
+        content: [SessionMessage.AssistantText.make({ type: "text", text: "Answer" })],
+        time: { created, completed: created },
       })
 
-    test("records a same-model effort switch as an effort update", () => {
-      expect(toLLMMessages([switched(ref("low"), ref("high"))], ref("low"))).toEqual([
-        Message.effort({ effort: "low", previous: "high" }),
+    test("records the effort variant on same-model assistant messages", () => {
+      expect(toLLMMessages([reply(ref("high"))], ref("low"))).toEqual([
+        Message.make({ id: id("assistant"), role: "assistant", content: "Answer", effort: "high" }),
       ])
     })
 
-    test("maps the default variant and no variant to the model default effort", () => {
-      expect(toLLMMessages([switched(ref("low"), ref())], ref("low"))).toEqual([Message.effort({ effort: "low" })])
-      expect(toLLMMessages([switched(ref("default"), ref("max"))], ref())).toEqual([
-        Message.effort({ previous: "max" }),
-      ])
+    test("maps the default variant and no variant to null", () => {
+      expect(toLLMMessages([reply(ref())], ref("low"))[0]?.effort).toBeNull()
+      expect(toLLMMessages([reply(ref("default"))], ref())[0]?.effort).toBeNull()
     })
 
-    test("ignores switches that are not effort changes on the requested model", () => {
+    test("leaves effort unset across model switches, non-effort variants, and model-switched markers", () => {
       const other = Model.Ref.make({ id: Model.ID.make("other"), providerID: Provider.ID.make("provider") })
-      expect(toLLMMessages([switched(ref("low"))], ref("low"))).toEqual([])
-      expect(toLLMMessages([switched(ref("low"), other)], ref("low"))).toEqual([])
-      expect(toLLMMessages([switched(ref("thinking"), ref("high"))], ref("thinking"))).toEqual([])
-      expect(toLLMMessages([switched(ref("low"), ref("high"))], other)).toEqual([])
+      const switched = SessionMessage.ModelSelected.make({
+        id: id("model"),
+        type: "model-switched",
+        model: ref("low"),
+        previous: ref("high"),
+        time: { created },
+      })
+      expect(toLLMMessages([switched], ref("low"))).toEqual([])
+      expect(toLLMMessages([reply(other)], ref("low"))[0]?.effort).toBeUndefined()
+      expect(toLLMMessages([reply(ref("thinking"))], ref("low"))[0]?.effort).toBeUndefined()
+      expect(toLLMMessages([reply(ref("high"))], ref("thinking"))[0]?.effort).toBeUndefined()
     })
   })
 

@@ -257,7 +257,11 @@ describe("ChatGPTPlugin", () => {
       yield* addPlugin()
       yield* addLegacyPlugin()
       const integrations = yield* Integration.Service
-      expect((yield* integrations.get(Integration.ID.make("openai")))?.methods.map((method) => method.type === "oauth" && method.id)).toEqual([
+      expect(
+        (yield* integrations.get(Integration.ID.make("openai")))?.methods.map(
+          (method) => method.type === "oauth" && method.id,
+        ),
+      ).toEqual([
         Integration.MethodID.make("chatgpt-token-sharing"),
         Integration.MethodID.make("chatgpt-browser"),
         Integration.MethodID.make("chatgpt-headless"),
@@ -811,7 +815,12 @@ describe("ChatGPTPlugin", () => {
         "gpt-4.99",
       ])
         expect(yield* models.get(Provider.ID.openai, Model.ID.make(id))).toBeUndefined()
-      expect((yield* models.available()).filter((model) => model.providerID === Provider.ID.openai).map((model) => model.id).sort()).toEqual(
+      expect(
+        (yield* models.available())
+          .filter((model) => model.providerID === Provider.ID.openai)
+          .map((model) => model.id)
+          .sort(),
+      ).toEqual(
         [
           "gpt-5.5",
           "gpt-5.5-fast",
@@ -1100,18 +1109,8 @@ describe("ChatGPTPlugin", () => {
             Effect.flatMap((resolved) => compileRequest(ai.request({ model: resolved.model, messages }))),
             Effect.map((compiled) => compiled.body),
           )
-        const switched = [
-          Message.user("a"),
-          Message.assistant("b"),
-          Message.effort({ effort: "max", previous: "high" }),
-          Message.user("c"),
-        ]
-        const switchedBack = [
-          ...switched,
-          Message.assistant("d"),
-          Message.effort({ effort: "high", previous: "max" }),
-          Message.user("e"),
-        ]
+        const switched = [Message.user("a"), Message.assistant("b", { effort: "high" }), Message.user("c")]
+        const switchedBack = [...switched, Message.assistant("d", { effort: "max" }), Message.user("e")]
         const user = (text: string) => ({ role: "user", content: [{ type: "input_text", text }] })
         const assistant = (text: string) => ({ role: "assistant", content: [{ type: "output_text", text }] })
         const update = (effort: string) => ({ type: "configuration_update", reasoning: { effort } })

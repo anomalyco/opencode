@@ -1615,7 +1615,10 @@ describe("SessionRunnerLLM", () => {
         }),
       )
       yield* s.admit("Echo before moving")
-      yield* s.llm.push(TestLLM.toolCall("call-move", "echo", { text: "moving" }), TestLLM.text("Done", "text-after-move"))
+      yield* s.llm.push(
+        TestLLM.toolCall("call-move", "echo", { text: "moving" }),
+        TestLLM.text("Done", "text-after-move"),
+      )
       const tools = yield* s.blockTools()
       const run = yield* s.resume.pipe(Effect.forkChild)
       yield* tools.started
@@ -2300,7 +2303,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Fourth")
   })
 
-  scenario("records a same-model effort switch as a cache-preserving effort update", function* (s) {
+  scenario("preserves prompt cache across effort switches and reverts", function* (s) {
     s.currentModel = LanguageModel.make({ id: "claude-opus-5", provider: "anthropic", route: AnthropicMessages.route })
     const model = { id: ID.make("claude-opus-5"), providerID: Provider.ID.make("anthropic") }
     yield* s.bus.publish(SessionEvent.ModelSelected, {
@@ -2309,6 +2312,7 @@ describe("SessionRunnerLLM", () => {
     })
     yield* s.llm.push(TestLLM.text("Earlier answer", "text-effort-high"))
     yield* s.runPrompt("First")
+
     yield* s.bus.publish(SessionEvent.ModelSelected, {
       sessionID,
       model: { ...model, variant: Model.VariantID.make("low") },
@@ -2317,8 +2321,8 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(TestLLM.text("Later answer", "text-effort-low"))
     yield* s.runPrompt("Second")
 
-    expect(messageRoles(s.requests[1])).toEqual(["user", "assistant", "system", "user"])
-    expect(s.requests[1]?.messages[2]).toEqual(Message.effort({ effort: "low", previous: "high" }))
+    expect(messageRoles(s.requests[1])).toEqual(["user", "assistant", "user"])
+    expect(s.requests[1]?.messages[1]?.effort).toBe("high")
 
     const compiled = yield* compileRequest(s.requests[1]!)
     expect(compiled.body).toMatchObject({
@@ -2327,6 +2331,55 @@ describe("SessionRunnerLLM", () => {
         { role: "user" },
         { role: "assistant" },
         { role: "system", content: [], output_config: { effort: "low" } },
+        { role: "user" },
+      ],
+    })
+
+    // Switch to `max`, run a third turn, then fork before that third turn:
+    // `forked` inherits `session.model` (`max`) while its copied history ends at `low`.
+    yield* s.bus.publish(SessionEvent.ModelSelected, {
+      sessionID,
+      model: { ...model, variant: Model.VariantID.make("max") },
+    })
+    s.currentModel = LanguageModel.update(s.currentModel, { defaults: { providerOptions: { effort: "max" } } })
+    const third = yield* s.session.prompt({ sessionID, text: "Third", resume: false })
+    yield* s.llm.push(TestLLM.text("Third answer", "text-effort-max-1"))
+    yield* s.resume
+
+    const forked = yield* s.session.fork({ sessionID, before: third.id })
+    yield* s.llm.push(TestLLM.text("Forked answer", "text-effort-max-2"))
+    yield* s.session.prompt({ sessionID: forked.id, text: "Forked", resume: false })
+    yield* s.session.resume(forked.id)
+
+    const forkedCompiled = yield* compileRequest(s.requests.at(-1)!)
+    expect(forkedCompiled.body).toMatchObject({
+      output_config: { effort: "high" },
+      messages: [
+        { role: "user" },
+        { role: "assistant" },
+        { role: "system", content: [], output_config: { effort: "low" } },
+        { role: "user" },
+        { role: "assistant" },
+        { role: "system", content: [], output_config: { effort: "max" } },
+        { role: "user" },
+      ],
+    })
+
+    // Committed revert on the original session keeps the same frozen baseline and earlier marker.
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: third.id })
+    yield* s.llm.push(TestLLM.text("Reverted answer", "text-effort-max-3"))
+    yield* s.runPrompt("After revert")
+
+    const revertedCompiled = yield* compileRequest(s.requests.at(-1)!)
+    expect(revertedCompiled.body).toMatchObject({
+      output_config: { effort: "high" },
+      messages: [
+        { role: "user" },
+        { role: "assistant" },
+        { role: "system", content: [], output_config: { effort: "low" } },
+        { role: "user" },
+        { role: "assistant" },
+        { role: "system", content: [], output_config: { effort: "max" } },
         { role: "user" },
       ],
     })
@@ -5957,7 +6010,10 @@ describe("SessionRunnerLLM", () => {
     // the window instead of rejecting it.
     s.currentModel = recoveryModel
     yield* s.llm.push(
-      TestLLM.complete({ reason: { normalized: "length" }, usage: { inputTokens: 199_994, nonCachedInputTokens: 199_994, outputTokens: 0 } }),
+      TestLLM.complete({
+        reason: { normalized: "length" },
+        usage: { inputTokens: 199_994, nonCachedInputTokens: 199_994, outputTokens: 0 },
+      }),
       TestLLM.text("## Objective\n- summary", "summary"),
       TestLLM.text("Done", "done"),
     )

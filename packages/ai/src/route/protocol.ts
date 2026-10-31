@@ -41,7 +41,7 @@ export interface Protocol<Body, Frame, Event, State> {
   readonly body: ProtocolBody<Body>
   /** Response side: streaming state machine. */
   readonly stream: ProtocolStream<Frame, Event, State>
-  /** Whether `body.from` lowers `Message.effort(...)` markers; wrappers around another `body.from` must forward it. */
+  /** Whether `body.from` lowers per-assistant `Message.effort` updates; wrappers around another `body.from` must forward it. */
   readonly supportsEffortUpdates?: (request: LLMRequest) => boolean
   /** Tool schema sanitizer for every model on this protocol unless the model's compatibility sets one; wrappers around another `body.from` must forward it. */
   readonly sanitizer?: LanguageModelSanitizerCompatibility

@@ -1,25 +1,43 @@
 // Changing the top-level reasoning effort invalidates the provider prompt cache. Protocols with a native
-// per-message update keep it frozen and lower `Message.effort(...)` markers instead; other routes strip them.
-import { LLMRequest, type EffortPart, type Message } from "./schema/messages.js"
+// per-message update freeze the top-level effort to the first recorded assistant reply and emit markers
+// at the start of each later segment whose effort changed.
+import type { LLMRequest } from "./schema/messages.js"
 
-export const effortUpdate = (message: Message): EffortPart | undefined => {
-  if (message.role !== "system" || message.content.length !== 1) return undefined
-  const part = message.content[0]
-  return part.type === "effort" ? part : undefined
-}
+export const resolveEffortUpdates = (
+  request: LLMRequest,
+  requested: string | undefined,
+  defaultEffort: string,
+): { readonly effort: string | undefined; readonly markers: ReadonlyMap<number, string> } => {
+  const markers = new Map<number, string>()
+  if (!(request.model.route.supportsEffortUpdates?.(request) ?? false)) return { effort: requested, markers }
+  const first = request.messages.find((message) => message.role === "assistant" && message.effort !== undefined)
+  if (first === undefined) return { effort: requested, markers }
 
-export const stripEffortUpdates = (request: LLMRequest) => {
-  const messages = request.messages.filter((message) => effortUpdate(message) === undefined)
-  return messages.length === request.messages.length ? request : LLMRequest.update(request, { messages })
-}
+  const baseline = first.effort ?? null
+  const desired = requested ?? null
+  const messages = request.messages
+  let active = baseline
+  let segmentStart = 0
+  let prefilled = false
 
-export const applyEffortUpdates = (request: LLMRequest): LLMRequest =>
-  request.model.route.supportsEffortUpdates?.(request) ? request : stripEffortUpdates(request)
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]!
+    if (message.role !== "assistant") continue
+    let nextStart = i + 1
+    while (nextStart < messages.length && messages[nextStart]!.role === "tool") nextStart++
+    const isTrailingPrefill = message.effort === undefined && nextStart === messages.length
+    const target = isTrailingPrefill ? desired : message.effort
+    if (target !== undefined && segmentStart > 0 && target !== active) {
+      markers.set(segmentStart, target ?? defaultEffort)
+      active = target
+    }
+    if (isTrailingPrefill) prefilled = true
+    segmentStart = nextStart
+    i = nextStart - 1
+  }
+  if (!prefilled && segmentStart > 0 && desired !== active) {
+    markers.set(segmentStart, desired ?? defaultEffort)
+  }
 
-// Reverted or forked history can leave the last marker disagreeing with the requested effort.
-export const resolveEffortUpdates = (request: LLMRequest, current: string | undefined) => {
-  const updates = request.messages.flatMap((message) => effortUpdate(message) ?? [])
-  if (updates.length === 0) return { request, effort: current }
-  if (updates.at(-1)?.effort !== current) return { request: stripEffortUpdates(request), effort: current }
-  return { request, effort: updates[0]?.previous }
+  return { effort: baseline ?? undefined, markers }
 }

@@ -1224,7 +1224,6 @@ const estimateMessage = (message: Message) => message.content.reduce((sum, part)
 const estimatePart = (part: ContentPart): number => {
   // An encrypted native compaction has no locally measurable size.
   if (part.type === "compaction") return Token.estimate(part.text ?? "")
-  if (part.type === "effort") return 0
   if (part.type === "text" || part.type === "reasoning") return Token.estimate(part.text)
   if (part.type === "media") return estimateMedia(part.media.mediaType)
   if (part.type === "tool-call") return Token.estimate(part.name + (JSON.stringify(part.input) ?? ""))

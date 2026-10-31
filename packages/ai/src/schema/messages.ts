@@ -214,14 +214,6 @@ export const CompactionPart = withStatics(compactionPartSchema, {
     Schema.decodeUnknownSync(compactionPartSchema)({ type: "compaction", ...input }),
 })
 
-/** Reasoning effort changed here, from `previous` to `effort`; `undefined` is the model default. */
-export const EffortPart = Schema.Struct({
-  type: Schema.Literal("effort"),
-  effort: Schema.optional(ReasoningEffort),
-  previous: Schema.optional(ReasoningEffort),
-}).annotate({ identifier: "LLM.Content.Effort" })
-export type EffortPart = Schema.Schema.Type<typeof EffortPart>
-
 export const ContentPart = Schema.Union([
   TextPart,
   MediaPart,
@@ -229,7 +221,6 @@ export const ContentPart = Schema.Union([
   ToolResultPart,
   ReasoningPart,
   CompactionPart,
-  EffortPart,
 ]).pipe(Schema.toTaggedUnion("type"))
 export type ContentPart = Schema.Schema.Type<typeof ContentPart>
 
@@ -237,6 +228,8 @@ export class Message extends Schema.Class<Message>("LLM.Message")({
   id: Schema.optional(Schema.String),
   role: MessageRole,
   content: Schema.Array(ContentPart),
+  /** Effort used to generate an assistant reply; `null` records the model default. */
+  effort: Schema.optional(Schema.NullOr(ReasoningEffort)),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   providerMetadata: Schema.optional(ProviderMetadata),
   native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
@@ -267,7 +260,8 @@ export namespace Message {
 
   export const user = (content: ContentInput) => make({ role: "user", content })
 
-  export const assistant = (content: ContentInput) => make({ role: "assistant", content })
+  export const assistant = (content: ContentInput, options?: { readonly effort?: ReasoningEffort | null }) =>
+    make({ role: "assistant", content, ...options })
 
   /**
    * Add an operator-authored instruction at this chronological point in the
@@ -276,9 +270,6 @@ export namespace Message {
    * updates; pass that untrusted content through ordinary user/tool channels.
    */
   export const system = (content: SystemContentInput) => make({ role: "system", content })
-
-  export const effort = (input: { readonly effort?: ReasoningEffort; readonly previous?: ReasoningEffort }) =>
-    make({ role: "system", content: [{ type: "effort", effort: input.effort, previous: input.previous }] })
 
   export const tool = (result: ToolResultPart | Parameters<typeof ToolResultPart.make>[0]) =>
     make({ role: "tool", content: ["type" in result ? result : ToolResultPart.make(result)] })

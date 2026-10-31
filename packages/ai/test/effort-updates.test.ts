@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, Message, ToolCallPart } from "../src/effect.js"
 import { Auth } from "../src/route.js"
@@ -7,7 +7,6 @@ import { AnthropicMessages } from "../src/protocols/anthropic-messages.js"
 import { OpenAIResponses } from "../src/protocols/openai-responses.js"
 import { Gemini } from "../src/protocols/gemini.js"
 import { AmazonBedrockMantle, GoogleVertexMessages, OpenAI } from "../src/providers.js"
-import { applyEffortUpdates } from "../src/effort-updates.js"
 import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
@@ -25,8 +24,7 @@ const openai = (id: string, compatibility?: { readonly supportsEffortUpdates?: b
 const opus5 = anthropic("claude-opus-5")
 const astra = openai("gpt-6-astra")
 
-const lowFromHigh = Message.effort({ effort: "low", previous: "high" })
-const conversation = [Message.user("Before."), lowFromHigh, Message.user("After.")]
+const conversation = [Message.user("Before."), Message.assistant("First.", { effort: "high" }), Message.user("After.")]
 
 const systemMessages = (body: AnthropicMessages.AnthropicMessagesBody) =>
   body.messages.filter((message) => message.role === "system")
@@ -34,16 +32,8 @@ const systemMessages = (body: AnthropicMessages.AnthropicMessagesBody) =>
 const updates = (body: OpenAIResponses.OpenAIResponsesBody) =>
   body.input.filter((item) => "type" in item && item.type === "configuration_update")
 
-describe("applyEffortUpdates", () => {
-  test("keeps the request identity without markers and for protocols that lower them", () => {
-    const plain = ai.request({ model: opus5, prompt: "hi" })
-    expect(applyEffortUpdates(plain)).toBe(plain)
-
-    const supported = ai.request({ model: opus5, messages: conversation, providerOptions: { effort: "low" } })
-    expect(applyEffortUpdates(supported)).toBe(supported)
-  })
-
-  it.effect("compiles markers away for protocols without per-message effort", () =>
+describe("unsupported protocols", () => {
+  it.effect("ignores assistant effort annotations on protocols without per-message effort", () =>
     Effect.gen(function* () {
       const model = Gemini.route
         .with({
@@ -51,32 +41,47 @@ describe("applyEffortUpdates", () => {
           auth: Auth.header("x-goog-api-key", "test"),
         })
         .model({ id: "gemini-3.5-flash" })
-      const withMarkers = yield* compileRequest(ai.request({ model, messages: conversation }))
-      const withoutMarkers = yield* compileRequest(
-        ai.request({ model, messages: [Message.user("Before."), Message.user("After.")] }),
+      const withEffort = yield* compileRequest(ai.request({ model, messages: conversation }))
+      const plain = yield* compileRequest(
+        ai.request({ model, messages: [Message.user("Before."), Message.assistant("First."), Message.user("After.")] }),
       )
 
-      expect(withMarkers.body).toEqual(withoutMarkers.body)
+      expect(withEffort.body).toEqual(plain.body)
     }),
   )
 })
 
 describe("cache policy", () => {
-  it.effect("walks the tail breakpoint back past a trailing effort marker", () =>
+  it.effect("keeps the tail breakpoint on the preceding tool result when a trailing effort marker is emitted", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
           model: opus5,
-          messages: [Message.user("first"), Message.assistant("reply"), Message.user("latest"), lowFromHigh],
+          messages: [
+            Message.user("first"),
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })], { effort: "high" }),
+            Message.tool({ id: "call_1", name: "lookup", result: "ok" }),
+          ],
           providerOptions: { effort: "low" },
           cache: "auto",
         }),
       )
 
       expect(prepared.body.messages).toEqual([
-        { role: "user", content: [{ type: "text", text: "first" }] },
-        { role: "assistant", content: [{ type: "text", text: "reply" }] },
-        { role: "user", content: [{ type: "text", text: "latest", cache_control: { type: "ephemeral" } }] },
+        { role: "user", content: [{ type: "text", text: "first", cache_control: undefined }] },
+        { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }] },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: '"ok"',
+              is_error: undefined,
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+        },
         { role: "system", content: [], output_config: { effort: "low" } },
       ])
     }),
@@ -84,7 +89,7 @@ describe("cache policy", () => {
 })
 
 describe("Anthropic Messages effort updates", () => {
-  it.effect("lowers markers to per-turn system messages and freezes the top-level effort", () =>
+  it.effect("lowers switches to per-turn system messages and freezes the top-level effort", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({ model: opus5, messages: conversation, providerOptions: { effort: "low" }, cache: "none" }),
@@ -93,34 +98,99 @@ describe("Anthropic Messages effort updates", () => {
       expect(prepared.body.output_config).toEqual({ effort: "high" })
       expect(prepared.body.messages).toEqual([
         { role: "user", content: [{ type: "text", text: "Before." }] },
+        { role: "assistant", content: [{ type: "text", text: "First." }] },
         { role: "system", content: [], output_config: { effort: "low" } },
         { role: "user", content: [{ type: "text", text: "After." }] },
       ])
     }),
   )
 
-  it.effect("omits the frozen effort for the model default and sends `high` for a switch back to it", () =>
+  it.effect("preserves the frozen baseline and earlier markers after reverting or forking to an earlier turn", () =>
     Effect.gen(function* () {
-      const format = { type: "json_schema" as const, schema: { type: "object" } }
       const prepared = yield* compileRequest(
         ai.request({
           model: opus5,
           messages: [
             Message.user("One."),
-            Message.effort({ effort: "low" }),
+            Message.assistant("First.", { effort: "high" }),
             Message.user("Two."),
-            Message.effort({ previous: "low" }),
-            Message.user("Three."),
+            Message.assistant("Second.", { effort: "low" }),
+            Message.user("Forked follow-up."),
           ],
-          providerOptions: { output_config: { format } },
+          providerOptions: { effort: "max" },
           cache: "none",
         }),
       )
 
-      expect(prepared.body.output_config).toEqual({ format })
-      expect(systemMessages(prepared.body)).toEqual([
+      expect(prepared.body.output_config).toEqual({ effort: "high" })
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "One." }] },
+        { role: "assistant", content: [{ type: "text", text: "First." }] },
         { role: "system", content: [], output_config: { effort: "low" } },
-        { role: "system", content: [], output_config: { effort: "high" } },
+        { role: "user", content: [{ type: "text", text: "Two." }] },
+        { role: "assistant", content: [{ type: "text", text: "Second." }] },
+        { role: "system", content: [], output_config: { effort: "max" } },
+        { role: "user", content: [{ type: "text", text: "Forked follow-up." }] },
+      ])
+    }),
+  )
+
+  it.effect("omits the frozen effort for the model default and sends the model default when switching back", () =>
+    Effect.gen(function* () {
+      const format = { type: "json_schema" as const, schema: { type: "object" } }
+      for (const [id, expectedDefault] of [
+        ["claude-opus-5", "high"],
+        ["claude-sonnet-5-5", "high"],
+        ["claude-opus-5-5", "medium"],
+        ["claude-haiku-5-5", "medium"],
+      ] as const) {
+        const prepared = yield* compileRequest(
+          ai.request({
+            model: anthropic(id),
+            messages: [
+              Message.user("One."),
+              Message.assistant("First.", { effort: null }),
+              Message.user("Two."),
+              Message.assistant("Second.", { effort: "low" }),
+              Message.user("Three."),
+            ],
+            providerOptions: { output_config: { format } },
+            cache: "none",
+          }),
+        )
+
+        expect(prepared.body.output_config).toEqual({ format })
+        expect(systemMessages(prepared.body)).toEqual([
+          { role: "system", content: [], output_config: { effort: "low" } },
+          { role: "system", content: [], output_config: { effort: expectedDefault } },
+        ])
+      }
+    }),
+  )
+
+  it.effect("places an effort marker before a trailing unstamped assistant prefill", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: opus5,
+          messages: [
+            Message.user("Before."),
+            Message.assistant("First.", { effort: "high" }),
+            Message.user("After."),
+            Message.assistant("Summary:"),
+          ],
+          providerOptions: { effort: "low" },
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.output_config).toEqual({ effort: "high" })
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "Before." }] },
+        { role: "assistant", content: [{ type: "text", text: "First." }] },
+        { role: "system", content: [], output_config: { effort: "low" } },
+        { role: "user", content: [{ type: "text", text: "After." }] },
+        { role: "assistant", content: [{ type: "text", text: "Summary:" }] },
       ])
     }),
   )
@@ -146,15 +216,14 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
-  it.effect("moves a marker between a tool call and its result after the result", () =>
+  it.effect("places a mid-tool-loop effort switch after the tool result", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
           model: opus5,
           messages: [
             Message.user("Weather?"),
-            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
-            lowFromHigh,
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })], { effort: "high" }),
             Message.tool({ id: "call_1", name: "lookup", result: { temp: 72 } }),
           ],
           providerOptions: { effort: "low" },
@@ -171,15 +240,14 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
-  it.effect("releases a held system update next to an effort marker as one valid section", () =>
+  it.effect("releases a held system update after the user turn while keeping the effort marker before it", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
           model: opus5,
           messages: [
             Message.user("Fix it."),
-            Message.assistant("Done."),
-            lowFromHigh,
+            Message.assistant("Done.", { effort: "high" }),
             Message.system("Update."),
             Message.user("Next."),
           ],
@@ -195,25 +263,6 @@ describe("Anthropic Messages effort updates", () => {
         { role: "user", content: [{ type: "text", text: "Next." }] },
         { role: "system", content: [{ type: "text", text: "Update.", cache_control: undefined }] },
       ])
-    }),
-  )
-
-  it.effect("falls back to a plain top-level effort when history drifted from the current effort", () =>
-    Effect.gen(function* () {
-      const drifted = yield* compileRequest(
-        ai.request({ model: opus5, messages: conversation, providerOptions: { effort: "medium" }, cache: "none" }),
-      )
-      const plain = yield* compileRequest(
-        ai.request({
-          model: opus5,
-          messages: [Message.user("Before."), Message.user("After.")],
-          providerOptions: { effort: "medium" },
-          cache: "none",
-        }),
-      )
-
-      expect(drifted.body).toEqual(plain.body)
-      expect(drifted.body.output_config).toEqual({ effort: "medium" })
     }),
   )
 
@@ -234,7 +283,7 @@ describe("Anthropic Messages effort updates", () => {
     ["claude-sonnet-5-20260801", false],
     ["kimi-k2.5", false],
   ] as const) {
-    it.effect(`${supported ? "lowers" : "strips"} markers for ${id}`, () =>
+    it.effect(`${supported ? "lowers" : "omits"} markers for ${id}`, () =>
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
           ai.request({ model: anthropic(id), messages: conversation, providerOptions: { effort: "low" } }),
@@ -268,7 +317,7 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
-  it.effect("strips markers when thinking is disabled or between_tools", () =>
+  it.effect("uses top-level effort when thinking is disabled or between_tools", () =>
     Effect.gen(function* () {
       const sonnet = anthropic("claude-sonnet-5-5")
       const betweenTools = yield* compileRequest(
@@ -284,7 +333,7 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
-  it.effect("strips markers for Opus 5.0 on Bedrock Mantle Messages while lowering Opus 5.5", () =>
+  it.effect("omits markers for Opus 5.0 on Bedrock Mantle Messages while lowering Opus 5.5", () =>
     Effect.gen(function* () {
       const mantle = AmazonBedrockMantle.configure({ apiKey: "test", region: "us-east-1" })
       const opus50 = yield* compileRequest(
@@ -336,7 +385,7 @@ describe("Anthropic Messages effort updates", () => {
 })
 
 describe("OpenAI Responses effort updates", () => {
-  it.effect("lowers markers to configuration_update items and freezes reasoning.effort", () =>
+  it.effect("lowers switches to configuration_update items and freezes reasoning.effort", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({ model: astra, messages: conversation, providerOptions: { reasoningEffort: "low" } }),
@@ -345,21 +394,22 @@ describe("OpenAI Responses effort updates", () => {
       expect(prepared.body.reasoning).toEqual({ effort: "high" })
       expect(prepared.body.input).toEqual([
         { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "First." }] },
         { type: "configuration_update", reasoning: { effort: "low" } },
         { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
       ])
     }),
   )
 
-  it.effect("coalesces consecutive updates so the newest wins", () =>
+  it.effect("coalesces consecutive updates when an intermediate assistant message emits no items", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
           model: astra,
           messages: [
             Message.user("Before."),
-            Message.effort({ effort: "low", previous: "medium" }),
-            Message.effort({ effort: "xhigh", previous: "low" }),
+            Message.assistant("First.", { effort: "medium" }),
+            Message.assistant([], { effort: "low" }),
             Message.user("After."),
           ],
           providerOptions: { reasoningEffort: "xhigh" },
@@ -369,8 +419,33 @@ describe("OpenAI Responses effort updates", () => {
       expect(prepared.body.reasoning).toEqual({ effort: "medium" })
       expect(prepared.body.input).toEqual([
         { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "First." }] },
         { type: "configuration_update", reasoning: { effort: "xhigh" } },
         { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
+      ])
+    }),
+  )
+
+  it.effect("preserves the frozen baseline and earlier updates after reverting or forking to an earlier turn", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: astra,
+          messages: [
+            Message.user("One."),
+            Message.assistant("First.", { effort: "high" }),
+            Message.user("Two."),
+            Message.assistant("Second.", { effort: "low" }),
+            Message.user("Forked follow-up."),
+          ],
+          providerOptions: { reasoningEffort: "xhigh" },
+        }),
+      )
+
+      expect(prepared.body.reasoning).toEqual({ effort: "high" })
+      expect(updates(prepared.body)).toEqual([
+        { type: "configuration_update", reasoning: { effort: "low" } },
+        { type: "configuration_update", reasoning: { effort: "xhigh" } },
       ])
     }),
   )
@@ -382,9 +457,9 @@ describe("OpenAI Responses effort updates", () => {
           model: astra,
           messages: [
             Message.user("One."),
-            Message.effort({ effort: "low" }),
+            Message.assistant("First.", { effort: null }),
             Message.user("Two."),
-            Message.effort({ previous: "low" }),
+            Message.assistant("Second.", { effort: "low" }),
             Message.user("Three."),
           ],
         }),
@@ -398,43 +473,35 @@ describe("OpenAI Responses effort updates", () => {
     }),
   )
 
-  it.effect("falls back to a plain top-level effort when history drifted from the current effort", () =>
+  it.effect("omits updates when automatic context management or auto truncation is enabled", () =>
     Effect.gen(function* () {
-      const drifted = yield* compileRequest(
-        ai.request({ model: astra, messages: conversation, providerOptions: { reasoningEffort: "xhigh" } }),
-      )
-      const plain = yield* compileRequest(
-        ai.request({
-          model: astra,
-          messages: [Message.user("Before."), Message.user("After.")],
-          providerOptions: { reasoningEffort: "xhigh" },
-        }),
-      )
-
-      expect(drifted.body).toEqual(plain.body)
-      expect(drifted.body.reasoning).toEqual({ effort: "xhigh" })
-    }),
-  )
-
-  it.effect("strips markers when automatic context management is enabled", () =>
-    Effect.gen(function* () {
-      const prepared = yield* compileRequest(
+      const withCompaction = yield* compileRequest(
         ai.request({
           model: astra,
           messages: conversation,
           providerOptions: { reasoningEffort: "low", contextManagement: [{ type: "compaction" }] },
         }),
       )
+      const withTruncation = yield* compileRequest(
+        ai.request({
+          model: astra,
+          messages: conversation,
+          providerOptions: { reasoningEffort: "low", truncation: "auto" },
+        }),
+      )
 
-      expect(updates(prepared.body)).toEqual([])
-      expect(prepared.body.reasoning).toEqual({ effort: "low" })
-      expect(prepared.body.context_management).toEqual([{ type: "compaction" }])
+      expect(updates(withCompaction.body)).toEqual([])
+      expect(withCompaction.body.reasoning).toEqual({ effort: "low" })
+      expect(withCompaction.body.context_management).toEqual([{ type: "compaction" }])
+      expect(updates(withTruncation.body)).toEqual([])
+      expect(withTruncation.body.reasoning).toEqual({ effort: "low" })
+      expect(withTruncation.body.truncation).toBe("auto")
     }),
   )
 
-  it.effect("strips markers when the body overlay selects pro reasoning mode", () =>
+  it.effect("omits updates when pro reasoning mode is selected", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
+      const fromOverlay = yield* compileRequest(
         ai.request({
           model: OpenAI.configure({ apiKey: "fixture", http: { body: { reasoning: { mode: "pro" } } } }).responses(
             "gpt-6-sol",
@@ -443,24 +510,18 @@ describe("OpenAI Responses effort updates", () => {
           providerOptions: { reasoningEffort: "low" },
         }),
       )
-
-      expect(updates(prepared.body)).toEqual([])
-      expect(prepared.body.reasoning).toEqual({ effort: "low" })
-    }),
-  )
-
-  it.effect("strips markers when provider options select pro reasoning mode", () =>
-    Effect.gen(function* () {
-      const prepared = yield* compileRequest(
+      const fromOption = yield* compileRequest(
         ai.request({
-          model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-6-sol"),
+          model: astra,
           messages: conversation,
           providerOptions: { reasoningEffort: "low", reasoningMode: "pro" },
         }),
       )
 
-      expect(updates(prepared.body)).toEqual([])
-      expect(prepared.body.reasoning).toEqual({ effort: "low", mode: "pro" })
+      expect(updates(fromOverlay.body)).toEqual([])
+      expect(fromOverlay.body.reasoning).toEqual({ effort: "low" })
+      expect(updates(fromOption.body)).toEqual([])
+      expect(fromOption.body.reasoning).toEqual({ effort: "low", mode: "pro" })
     }),
   )
 
@@ -490,7 +551,7 @@ describe("OpenAI Responses effort updates", () => {
     ["gpt-6.x-sol", false],
     ["future-model", false],
   ] as const) {
-    it.effect(`${supported ? "lowers" : "strips"} markers for ${id}`, () =>
+    it.effect(`${supported ? "lowers" : "omits"} markers for ${id}`, () =>
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
           ai.request({ model: openai(id), messages: conversation, providerOptions: { reasoningEffort: "low" } }),
@@ -538,6 +599,12 @@ describe("OpenAI Responses effort updates", () => {
         expect(body.reasoning).toEqual({ effort: "high" })
         expect(body.input).toEqual([
           { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
+          {
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: [{ type: "output_text", text: "First." }],
+          },
           { type: "configuration_update", reasoning: { effort: "low" } },
           { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
           { type: "compaction_trigger" },
@@ -560,12 +627,18 @@ describe("OpenAI Responses effort updates", () => {
         expect(new URL(request.url).pathname).toEndWith("/responses/compact")
         expect(JSON.parse(text).input).toEqual([
           { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
+          {
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: [{ type: "output_text", text: "First." }],
+          },
           { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
         ])
         return respond(JSON.stringify({ object: "response.compaction", output: [checkpoint] }))
       }),
     ),
-  ).effect("drops markers from the compaction endpoint body", () =>
+  ).effect("omits configuration updates from the standalone compaction endpoint", () =>
     Effect.gen(function* () {
       const result = yield* ai.compact(compactRequest, { mechanism: "endpoint" })
       expect(result.replacement.map((message) => message.content[0]?.type)).toEqual(["compaction"])

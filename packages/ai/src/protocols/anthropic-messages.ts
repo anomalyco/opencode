@@ -28,7 +28,7 @@ import {
 } from "../schema/index.js"
 import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared, withUntypedFrames } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
-import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
+import { resolveEffortUpdates } from "../effort-updates.js"
 import * as Cache from "./utils/cache.js"
 import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -39,7 +39,14 @@ export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
 export const DEFAULT_MAX_TOKENS = 32_000
 const MIN_THINKING_BUDGET = 1_024
-const DEFAULT_EFFORT = "high"
+
+// Claude Opus 5.5 and Haiku 5.5 default to `medium`; other Claude models default to `high`.
+const defaultEffort = (id: string) => {
+  const version = claudeVersion(id)
+  return (version?.family === "opus" || version?.family === "haiku") && version.major === 5 && version.minor === 5
+    ? "medium"
+    : "high"
+}
 
 const SSE_EVENTS = new Set([
   "message",
@@ -900,7 +907,11 @@ const appendToUserTurn = (messages: AnthropicMessage[], block: AnthropicUserBloc
   else messages.push({ role: "user", content: [block] })
 }
 
-const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoints: Cache.Breakpoints) {
+const lowerMessages = Effect.fnUntraced(function* (
+  request: LLMRequest,
+  breakpoints: Cache.Breakpoints,
+  effortMarkers: ReadonlyMap<number, string>,
+) {
   const messages: AnthropicMessage[] = []
   const providerMetadataKey = request.model.route.providerMetadataKey ?? request.model.provider
   // Text updates stay where they are unless a user turn follows them; then they move after the latest
@@ -914,15 +925,18 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
       else appendToUserTurn(messages, yield* lowerWrappedSystemUpdate(update, breakpoints))
     }
   })
+  const emitEffort = (index: number) => {
+    const effort = effortMarkers.get(index)
+    if (effort === undefined) return
+    const last = messages.at(-1)
+    if (last?.role === "system" && last.content.length === 0 && last.output_config !== undefined) messages.pop()
+    // Accepted at any position, so the text-update placement rules do not apply.
+    messages.push({ role: "system", content: [], output_config: { effort } })
+  }
 
   for (const [index, message] of request.messages.entries()) {
+    emitEffort(index)
     if (message.role === "system") {
-      const update = effortUpdate(message)
-      if (update) {
-        // Accepted at any position, so the text-update placement rules do not apply.
-        messages.push({ role: "system", content: [], output_config: { effort: update.effort ?? DEFAULT_EFFORT } })
-        continue
-      }
       if (splitsLocalToolResults(request.messages, index))
         return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
       if (holdUpdates) held.push(message)
@@ -1015,6 +1029,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
       messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
     else messages.push({ role: "user", content })
   }
+  emitEffort(request.messages.length)
   yield* releaseHeld()
 
   return messages
@@ -1062,13 +1077,17 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const management = options.contextManagement
   const outputConfig = options.output_config ?? options.outputConfig
   const format = outputConfig?.format ?? undefined
-  const updates = resolveEffortUpdates(request, options.effort ?? outputConfig?.effort ?? undefined)
+  const updates = resolveEffortUpdates(
+    request,
+    options.effort ?? outputConfig?.effort ?? undefined,
+    defaultEffort(request.model.id),
+  )
   const generation = request.generation
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
-  const flattened = ProviderShared.flattenToolRequest(updates.request)
+  const flattened = ProviderShared.flattenToolRequest(request)
   const tools = flattened.tools.length === 0 ? undefined : flattened.tools.map((tool) => lowerTool(breakpoints, tool))
   // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
   const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
@@ -1081,7 +1100,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
           text: part.text,
           cache_control: cacheControl(breakpoints, part.cache),
         }))
-  const messages = yield* lowerMessages(flattened.request, breakpoints)
+  const messages = yield* lowerMessages(flattened.request, breakpoints, updates.markers)
   if (breakpoints.dropped > 0) {
     yield* Effect.logWarning(
       `Anthropic Messages: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${ANTHROPIC_BREAKPOINT_CAP} per request.`,
@@ -1406,10 +1425,7 @@ const onContentBlockDelta = Effect.fnUntraced(function* (
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onContentBlockStop = Effect.fnUntraced(function* (
-  state: ParserState,
-  event: AnthropicEvent,
-) {
+const onContentBlockStop = Effect.fnUntraced(function* (state: ParserState, event: AnthropicEvent) {
   if (event.index === undefined) return [state, NO_EVENTS] satisfies StepResult
   if (event.index in state.compactions) {
     const { [event.index]: content, ...compactions } = state.compactions

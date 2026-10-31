@@ -65,7 +65,6 @@ export {
   ToolResultPart,
   ReasoningPart,
   CompactionPart,
-  EffortPart,
   ContentPart,
   Message,
   Freeform,

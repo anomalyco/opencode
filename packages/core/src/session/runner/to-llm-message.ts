@@ -215,8 +215,10 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     .filter((message) => message !== undefined)
     .map(Message.tool)
   if (meaningful.length === 0) return results
+  const effort =
+    sameModel && variantEffort(model.variant) !== undefined ? variantEffort(message.model.variant) : undefined
   return [
-    Message.make({ id: message.id, role: "assistant", content: meaningful, metadata: message.metadata }),
+    Message.make({ id: message.id, role: "assistant", content: meaningful, effort, metadata: message.metadata }),
     ...results,
   ]
 }
@@ -224,28 +226,16 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
 const EFFORT_VARIANTS = new Set<string>(ReasoningEfforts)
 
 const variantEffort = (variant: Model.VariantID | undefined) => {
-  if (variant === undefined || variant === "default") return { effort: undefined }
-  return EFFORT_VARIANTS.has(variant) ? { effort: variant } : undefined
-}
-
-const modelSwitched = (message: SessionMessage.ModelSelected, model: Model.Ref): Message[] => {
-  const previous = message.previous
-  if (previous === undefined) return []
-  const same = (ref: Model.Ref) => ref.providerID === model.providerID && ref.id === model.id
-  if (!same(message.model) || !same(previous)) return []
-  const to = variantEffort(message.model.variant)
-  const from = variantEffort(previous.variant)
-  if (to === undefined || from === undefined) return []
-  return [Message.effort({ effort: to.effort, previous: from.effort })]
+  if (variant === undefined || variant === "default") return null
+  return EFFORT_VARIANTS.has(variant) ? variant : undefined
 }
 
 function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "idle":
-      return []
     case "model-switched":
-      return modelSwitched(message, model)
+      return []
     case "location-switched":
       return [
         Message.make({

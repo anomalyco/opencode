@@ -12,7 +12,6 @@
 // count against the four-breakpoint budget; auto only fills remaining slots.
 import { CacheHint, type CachePolicy, type CachePolicyObject, type CacheTTL } from "./schema/options.js"
 import { LLMRequest, Message, ToolDefinition, type ContentPart, type ToolEntry } from "./schema/messages.js"
-import { effortUpdate } from "./effort-updates.js"
 
 const AUTO: CachePolicyObject = {
   tools: true,
@@ -119,10 +118,9 @@ const markSystemBoundaries = (system: LLMRequest["system"], hint: CacheHint, bud
 const lastIndexOfRole = (messages: ReadonlyArray<Message>, role: Message["role"]): number =>
   messages.findLastIndex((m) => m.role === role)
 
-type CacheablePart = Exclude<ContentPart, { readonly type: "compaction" | "effort" }>
+type CacheablePart = Exclude<ContentPart, { readonly type: "compaction" }>
 
-const isCacheablePart = (part: ContentPart): part is CacheablePart =>
-  part.type !== "compaction" && part.type !== "effort"
+const isCacheablePart = (part: ContentPart): part is CacheablePart => part.type !== "compaction"
 
 // Mark the last text part of `messages[index]`. If no text part exists, mark
 // the last cacheable content part — that's the breakpoint position
@@ -162,15 +160,9 @@ const markMessages = (
     return markMessageAt(messages, lastIndexOfRole(messages, "user"), hint, budget)
   if (strategy === "latest-assistant")
     return markMessageAt(messages, lastIndexOfRole(messages, "assistant"), hint, budget)
-  let start = messages.length
-  let remaining = strategy.tail
-  while (remaining > 0 && start > 0) {
-    start -= 1
-    if (effortUpdate(messages[start]!) === undefined) remaining -= 1
-  }
+  const start = Math.max(0, messages.length - strategy.tail)
   let next = messages
-  for (let i = start; i < messages.length; i++)
-    if (effortUpdate(messages[i]!) === undefined) next = markMessageAt(next, i, hint, budget)
+  for (let i = start; i < messages.length; i++) next = markMessageAt(next, i, hint, budget)
   return next
 }
 

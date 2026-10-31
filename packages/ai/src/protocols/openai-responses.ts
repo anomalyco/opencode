@@ -162,9 +162,10 @@ const adapter = {
 } satisfies OpenResponses.ProviderAdapter
 
 // GPT-6 and later default to `configuration_update` support, except in `reasoning.mode: "pro"`
-// or alongside automatic `context_management` compaction.
+// or alongside automatic `context_management` compaction or `truncation: "auto"`.
 const supportsEffortUpdates = (request: LLMRequest) => {
   if (request.providerOptions?.contextManagement !== undefined) return false
+  if (request.providerOptions?.truncation === "auto") return false
   if (request.providerOptions?.reasoningMode === "pro") return false
   if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(request.http?.body?.reasoning)) return false
   const override = request.model.compatibility?.supportsEffortUpdates
@@ -183,7 +184,10 @@ const nativeImageTool = (tool: ToolDefinition) => {
   return Schema.is(OpenAIResponsesImageGenerationTool)(native) ? native : undefined
 }
 
-const lowerTool = Effect.fnUntraced(function* (tool: ToolDefinition, custom: ReadonlyMap<string, OpenAIFreeform.Custom>) {
+const lowerTool = Effect.fnUntraced(function* (
+  tool: ToolDefinition,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) {
   const native = nativeImageToolInput(tool)
   if (native !== undefined) {
     if (Schema.is(OpenAIResponsesImageGenerationTool)(native)) return native
@@ -196,7 +200,10 @@ const lowerTool = Effect.fnUntraced(function* (tool: ToolDefinition, custom: Rea
 
 // Native namespaces hold only function tools, so deeper levels flatten into
 // the leaf names the same way non-native protocols flatten the whole tree.
-const lowerToolEntry = Effect.fnUntraced(function* (tool: ToolEntry, custom: ReadonlyMap<string, OpenAIFreeform.Custom>) {
+const lowerToolEntry = Effect.fnUntraced(function* (
+  tool: ToolEntry,
+  custom: ReadonlyMap<string, OpenAIFreeform.Custom>,
+) {
   if (tool.type === "tool") return yield* lowerTool(tool, custom)
   // OpenAI requires a namespace description; fall back to a generic one so a
   // missing description never blocks the request.
@@ -236,11 +243,11 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   )(request.providerOptions?.contextManagement)
   const options = OpenResponsesOptions.resolve(request)
   const reasoning = Schema.decodeUnknownSync(ReasoningOptions)(request.providerOptions ?? {})
-  const updates = resolveEffortUpdates(request, options.reasoningEffort)
+  const updates = resolveEffortUpdates(request, options.reasoningEffort, OpenResponses.DEFAULT_EFFORT)
   const generation = OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort })
   const custom = OpenAIFreeform.tools(request)
   return {
-    ...(yield* OpenResponses.lowerConversation(updates.request, adapter)),
+    ...(yield* OpenResponses.lowerConversation(request, adapter, updates.markers)),
     ...generation,
     ...Cache.openAIRequestTTL(requestTTL(request)),
     ...(generation.reasoning || reasoning.reasoningMode || reasoning.reasoningContext
