@@ -29,6 +29,12 @@ export type PairingCode = typeof PairingCode.Type
 
 export const PairingSession = Schema.Struct({
   token: Schema.String,
+  // The computer's human name ("Alex's MacBook Pro") so clients can label the pairing. Absent when unknown.
+  device: Schema.optional(
+    Schema.Struct({
+      name: Schema.String,
+    }),
+  ),
 }).annotate({ identifier: "PairingSession" })
 export type PairingSession = typeof PairingSession.Type
 
