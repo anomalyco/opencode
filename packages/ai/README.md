@@ -55,8 +55,10 @@ Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployme
 `stream` runs one model call; `loop` runs the model's tool calls and calls the model again until it stops calling
 tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs. `until` is checked
 after each step that has tool calls, with every step's `LLMResponse`; returning `true` ends the loop without running
-them. `tool` takes a plain `async` execute; a throw or rejection goes back to the model as an error result, and
-`signal` aborts when the loop is interrupted.
+them. Tool arguments that are not valid JSON go back to the model as an error result so it can retry. A step that hits
+the output token limit ends the loop without running its tool calls, which may be cut off. A forced `toolChoice`
+applies to the first step only; later steps use `auto`. `tool` takes a plain `async` execute; a throw or rejection
+goes back to the model as an error result, and `signal` aborts when the loop is interrupted.
 `tool` from `@opencode/ai/effect` takes the same options (including an optional `success` schema) with an Effect execute:
 
 ```ts

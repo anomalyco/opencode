@@ -41,6 +41,10 @@ export const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<Dispat
   )
 }
 
+/** Settle a call the loop will not run, such as one with unparseable input, as an error result. */
+export const reject = (call: ToolCallPart, message: string): DispatchResult =>
+  result(call, { type: "error", value: message })
+
 const decodeAndExecute = (tool: Tool, call: ToolCallPart): Effect.Effect<ToolSettlement, ToolFailure> =>
   tool._decode(call.input).pipe(
     Effect.mapError((error) => new ToolFailure({ message: `Invalid tool input: ${error.message}` })),

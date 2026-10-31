@@ -14,6 +14,7 @@ import {
   SystemPart,
   type Finish,
   ToolChoice,
+  ToolCallPart,
   ToolEntry,
   type ContentPart,
   type LanguageModelProviderOptions,
@@ -21,7 +22,7 @@ import {
   withPartial,
 } from "./schema/index.js"
 import { tool, toDefinitions, type ExecutableTool, type Tool, type ToolSchema } from "./tool.js"
-import { ToolRuntime } from "./tool-runtime.js"
+import { reject, ToolRuntime } from "./tool-runtime.js"
 
 /** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
 export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
@@ -120,7 +121,9 @@ export type LoopInput<SelectedLanguageModel extends LanguageModel = LanguageMode
 
 /**
  * Stream model calls, running the model's tool calls between them, until a step has no client-executed tool calls,
- * reports a provider error, or `until` returns `true`. Each step's `step-start` and `step-finish` carry its step index.
+ * hits the output token limit, reports a provider error, or `until` returns `true`. Tool calls whose input is not
+ * valid JSON get an error result so the model can retry. A forced `toolChoice` applies to the first step only.
+ * Each step's `step-start` and `step-finish` carry its step index.
  * With `schema`, the model ends by calling the hidden answer tool, decoded into `object` on that step's `finish`.
  */
 export function loop<const Model extends LanguageModel, S extends OutputSchema>(
@@ -133,11 +136,6 @@ export function loop<const Model extends LanguageModel>(
 ): Stream.Stream<LLMEvent, AIError, Service>
 export function loop(input: LoopInput & { readonly schema?: OutputSchema }, options?: StreamOptions) {
   const { tools, until, ...rest } = input
-  // A step that calls the answer tool is final, even if it also called other tools.
-  const clientCalls = (response: LLMResponse, output: Tool | undefined) =>
-    output && response.toolCalls.some((call) => call.name === OBJECT_TOOL)
-      ? []
-      : response.toolCalls.filter((call) => call.providerExecuted !== true)
   const step = (
     request: LLMRequest,
     steps: ReadonlyArray<LLMResponse>,
@@ -153,7 +151,7 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
           state = LLMResponse.reduce(state, event)
           if (output === undefined || event.type !== "finish") return Effect.succeed(event)
           const response = LLMResponse.complete(state)
-          return response && clientCalls(response, output).length > 0
+          return response && pendingCalls(response, output).length > 0
             ? Effect.succeed(event)
             : withObject(output, event, state)
         }),
@@ -162,24 +160,41 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
           Stream.unwrap(
             Effect.gen(function* () {
               const response = LLMResponse.complete(state)
-              const calls = response ? clientCalls(response, output) : []
-              if (!response || calls.length === 0 || state.events.some(LLMEvent.is.providerError)) return Stream.empty
+              const pending = response ? pendingCalls(response, output) : []
+              if (!response || pending.length === 0 || state.events.some(LLMEvent.is.providerError)) return Stream.empty
               const done = [...steps, response]
               if (until?.({ steps: done })) return Stream.empty
-              const results = yield* Effect.forEach(calls, (call) => ToolRuntime.dispatch(tools, call), {
-                concurrency: "unbounded",
-              })
+              const results = yield* Effect.forEach(
+                pending,
+                (item) =>
+                  item.error === undefined
+                    ? ToolRuntime.dispatch(tools, item.call)
+                    : Effect.succeed(reject(item.call, item.error)),
+                { concurrency: "unbounded" },
+              )
+              const invalid = pending.flatMap((item) => (item.error === undefined ? [] : [item.call]))
               const next = LLMRequest.update(request, {
+                // A caller's forced tool choice applies to the first step only; the answer tool's stays forced.
+                toolChoice:
+                  output === undefined &&
+                  (request.toolChoice?.type === "required" || request.toolChoice?.type === "tool")
+                    ? new ToolChoice({
+                        type: "auto",
+                        disableParallelToolUse: request.toolChoice.disableParallelToolUse,
+                      })
+                    : request.toolChoice,
                 messages: [
                   ...request.messages,
-                  response.message,
-                  ...calls.map((call, i) =>
+                  invalid.length === 0
+                    ? response.message
+                    : new Message({ ...response.message, content: [...response.message.content, ...invalid] }),
+                  ...pending.map((item, i) =>
                     Message.tool({
-                      id: call.id,
-                      name: call.name,
-                      namespace: call.namespace,
+                      id: item.call.id,
+                      name: item.call.name,
+                      namespace: item.call.namespace,
                       result: results[i].result,
-                      providerMetadata: call.providerMetadata,
+                      providerMetadata: item.call.providerMetadata,
                     }),
                   ),
                 ],
@@ -200,6 +215,27 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
 }
 
 const OBJECT_TOOL = "generate_object"
+
+/**
+ * Client calls to answer before the next step. A call whose input was not valid JSON carries the error the model
+ * gets back, so it can retry. A step is final when it calls the answer tool, even alongside other tools, or when it
+ * hits the output token limit, which may have cut its calls off.
+ */
+const pendingCalls = (
+  response: LLMResponse,
+  output: Tool | undefined,
+): ReadonlyArray<{ readonly call: ToolCallPart; readonly error?: string }> => {
+  if (response.finishReason.normalized === "length") return []
+  if (output && response.toolCalls.some((call) => call.name === OBJECT_TOOL)) return []
+  return [
+    ...response.toolCalls.filter((call) => call.providerExecuted !== true).map((call) => ({ call })),
+    ...response.events.filter(LLMEvent.is.toolInputError).map((event) => ({
+      // Providers require an object input, so the call is replayed with an empty one.
+      call: ToolCallPart.make({ id: event.id, name: event.name, namespace: event.namespace, input: {} }),
+      error: `Invalid tool arguments: the input is not valid JSON. Received: ${event.raw}`,
+    })),
+  ]
+}
 
 type Input = (RequestInput & { readonly schema?: OutputSchema }) | LLMRequest
 

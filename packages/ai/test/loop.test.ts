@@ -126,6 +126,103 @@ describe("ai.loop", () => {
       expect(events.at(-1)?.type).toBe("finish")
     }),
   )
+
+  it.effect("sends unparseable tool input back to the model as an error result and continues", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.toolCalls(LLMEvent.toolInputError({ id: "call-1", name: "read_file", raw: '{"path": "a.txt"' })),
+        TestLLM.toolCall("call-2", "read_file", { path: "a.txt" }),
+        TestLLM.text("The file says hello.", "text-1"),
+      )
+
+      const events = yield* collect()
+      const requests = yield* client.requests()
+      const error = {
+        type: "error",
+        value: 'Invalid tool arguments: the input is not valid JSON. Received: {"path": "a.txt"',
+      } as const
+
+      expect(requests).toHaveLength(3)
+      expect(requests[1].messages[1].content).toEqual([
+        expect.objectContaining({ type: "tool-call", id: "call-1", name: "read_file", input: {} }),
+      ])
+      expect(requests[1].messages[2].content).toEqual([
+        expect.objectContaining({ type: "tool-result", id: "call-1", result: error }),
+      ])
+      expect(events.filter(LLMEvent.is.toolResult).map((event) => event.result)).toEqual([
+        error,
+        { type: "text", value: "hello" },
+      ])
+    }),
+  )
+
+  it.effect("stops at the output token limit without running the step's tool calls", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.complete(
+          { reason: { normalized: "length" } },
+          LLMEvent.toolCall({ id: "call-1", name: "read_file", input: { path: "a.txt" } }),
+          LLMEvent.toolInputError({ id: "call-2", name: "read_file", raw: '{"path": "b' }),
+        ),
+      )
+
+      const events = yield* collect()
+
+      expect(yield* client.requests()).toHaveLength(1)
+      expect(events.filter(LLMEvent.is.toolResult)).toHaveLength(0)
+      expect(events.at(-1)).toEqual(expect.objectContaining({ type: "finish", reason: { normalized: "length" } }))
+    }),
+  )
+
+  it.effect("forces the caller's toolChoice on the first step only", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.toolCall("call-1", "read_file", { path: "a.txt" }),
+        TestLLM.text("The file says hello.", "text-1"),
+      )
+
+      yield* ai
+        .loop({
+          model,
+          prompt: "Read the file.",
+          tools: { read_file },
+          toolChoice: { type: "required", disableParallelToolUse: true },
+        })
+        .pipe(Stream.runDrain)
+      const requests = yield* client.requests()
+
+      expect(requests.map((request) => ({ ...request.toolChoice }))).toEqual([
+        { type: "required", disableParallelToolUse: true },
+        { type: "auto", disableParallelToolUse: true },
+      ])
+    }),
+  )
+
+  it.effect("keeps the answer tool forced on every step with schema", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.toolCall("call-1", "read_file", { path: "a.txt" }),
+        TestLLM.toolCall("call-2", "generate_object", { text: "hello" }),
+      )
+
+      yield* ai
+        .loop({
+          model,
+          prompt: "Read the file.",
+          tools: { read_file },
+          toolChoice: "read_file",
+          schema: Schema.Struct({ text: Schema.String }),
+        })
+        .pipe(Stream.runDrain)
+
+      expect((yield* client.requests()).map((request) => request.toolChoice?.type)).toEqual(["required", "required"])
+    }),
+  )
+
   it.effect("stops after a step that reports a provider error without running its tools", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
