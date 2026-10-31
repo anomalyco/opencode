@@ -744,6 +744,20 @@ edits endpoint, so input images go to `/images/generations` as `input_references
 asset into owned bytes before the provider URL expires. Construct assets with `Media.bytes`, `Media.base64`,
 `Media.url`, `Media.ref(provider, id)`, `Media.fromDataUrl`, or `Media.file(path)`.
 
+File inputs (message `media` parts, image `images`, decision `media` parts) also take plain data: a `Uint8Array`,
+`ArrayBuffer`, `URL`, or a string holding a data URL, an http(s) URL or base64. Bytes and base64 are sniffed from
+magic bytes; pass `mediaType` when that fails:
+
+```ts
+ai.request({
+  model,
+  prompt: [
+    { type: "text", text: "Summarize this report" },
+    { type: "media", media: pdfBase64, mediaType: "application/pdf" },
+  ],
+})
+```
+
 Pass ordered image inputs to the same method for editing, composition, or image-conditioned generation:
 
 ```ts
@@ -765,8 +779,8 @@ const composed = Effect.gen(function* () {
 
 `Media.ref(provider, id)` represents provider file handles such as OpenAI file IDs or Gemini Files URIs; routes
 only forward refs that belong to their own provider (OpenAI, xAI, and Gemini images accept them). No shipped route
-returns a ref yet, and `asset.bytes()` / `materialize()` on a ref fail by design. Raw strings are not accepted as
-image inputs, avoiding ambiguity between base64, URLs, and provider IDs. Empty or omitted `images` uses text-to-image generation; a
+returns a ref yet, and `asset.bytes()` / `materialize()` on a ref fail by design. Empty or omitted `images` uses
+text-to-image generation; a
 non-empty array selects the provider's edit behavior (see the table above for routes that limit the count). OpenAI
 uses multipart for byte/data-URL edits and its JSON reference body for URL or file-ID edits. Inpainting is a
 provider option on the routes that support it (OpenAI):

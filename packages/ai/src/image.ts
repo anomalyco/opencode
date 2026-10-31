@@ -87,8 +87,10 @@ export type ImageModelOptions<Model> = Model extends ImageModel<infer Options> ?
 /** Input accepted by `ai.image.request`, `generate`, `stream` and `start`. An `ImageRequest` is also a valid input. */
 export type ImageRequestInput<Model extends ImageModel = ImageModel> = Omit<
   ImageRequest<Model>,
-  "providerOptions" | "http"
+  "images" | "providerOptions" | "http"
 > & {
+  /** Edit sources or style/subject references, in order: assets or plain data with a detectable type. */
+  readonly images?: ReadonlyArray<Media.Input>
   readonly providerOptions?: NoInfer<ImageModelOptions<Model>>
   readonly http?: HttpOptions.Input
 }
@@ -164,6 +166,7 @@ const collectResponse = (events: ReadonlyArray<ImageEvent>): Effect.Effect<Image
 /** Normalize image request input into a plain `ImageRequest`. */
 export const request = <const Model extends ImageModel>(input: ImageRequestInput<Model>): ImageRequest<Model> => ({
   ...input,
+  images: input.images?.map((image) => Media.make(image)),
   http: HttpOptions.make(input.http),
 })
 

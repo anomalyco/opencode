@@ -1,6 +1,6 @@
 export * as Media from "./media.js"
 
-import { Effect, FileSystem, Schema, SchemaGetter } from "effect"
+import { Effect, FileSystem, Result, Schema, SchemaGetter } from "effect"
 import { Base64 } from "effect/encoding"
 import { HttpClientRequest } from "effect/http"
 import { ProviderID } from "./schema/ids.js"
@@ -293,6 +293,41 @@ export const fromDataUrl = (dataUrl: string, options?: AssetOptions) => {
   const asset = parseDataUrl(dataUrl, options)
   if (asset === undefined) throw invalid("Media data URLs must contain a MIME type and base64 data")
   return asset
+}
+
+/** Plain file data: bytes, a URL, or a string holding a data URL, an http(s) URL or base64. */
+export type Data = Uint8Array | ArrayBuffer | URL | string
+
+/** What file inputs accept: an `Asset` or plain `Data`. */
+export type Input = Asset | Data
+
+/**
+ * Normalize file input into an `Asset`. Data URLs carry their media type and bytes or base64 are sniffed from magic
+ * bytes; `mediaType` is required when sniffing fails. Assets pass through unchanged.
+ */
+export const make = (input: Input, mediaType?: string): Asset => {
+  if (input instanceof Asset) return input
+  if (input instanceof ArrayBuffer) return make(new Uint8Array(input), mediaType)
+  if (input instanceof Uint8Array) return bytes(input, mediaType ?? requireMediaType(detectMediaType(input)))
+  const value = input instanceof URL ? input.href : input
+  if (/^data:/i.test(value)) {
+    const match = DATA_URL.exec(value)
+    if (match === null) throw invalid("Media data URLs must contain a MIME type and base64 data")
+    return base64(match[2], mediaType ?? match[1])
+  }
+  if (input instanceof URL || /^https?:\/\//i.test(value)) return url(value, { mediaType })
+  return base64(value, mediaType ?? requireMediaType(sniffBase64(value)))
+}
+
+// 64 characters decode to 48 bytes, enough for every signature `detectMediaType` reads.
+const sniffBase64 = (value: string) => {
+  const head = Result.getOrUndefined(Base64.decode(value.slice(0, 64)))
+  return head === undefined ? undefined : detectMediaType(head)
+}
+
+const requireMediaType = (detected: string | undefined) => {
+  if (detected === undefined) throw invalid("Media data needs a mediaType because its type cannot be detected")
+  return detected
 }
 
 /** Read a file through `FileSystem` and sniff its media type from magic bytes, then the extension. */
