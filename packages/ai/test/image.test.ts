@@ -243,7 +243,7 @@ describe("Image", () => {
     "decodes a response whose optional metadata fields are null instead of omitted (OpenAI-compatible hosts)",
     () =>
       Effect.gen(function* () {
-        const response = yield* Image.generate({
+        const response = yield* ai.image.generate({
           model: OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).image("gpt-image-2"),
           prompt: "A lighthouse",
         }).pipe(
@@ -277,7 +277,7 @@ describe("Image", () => {
 
   it.effect("decodes a response whose usage is null instead of omitted (OpenAI-compatible hosts)", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model: OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).image("gpt-image-2"),
         prompt: "A lighthouse",
       }).pipe(
