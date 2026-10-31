@@ -139,9 +139,11 @@ All paid models share one allowance, weighted by each model's monthly limit: the
 monthly window 100%. On Go Teams, each member has their own allowance; it is not
 shared across members.
 
-Each model's monthly limit below determines how heavily its usage counts toward that shared allowance. For example,
-on Go, $1 on a model with a $15 monthly limit counts as $4 of the $60 allowance. Each response reports how much the
-request counted, as [`opencode.allowance`](/console/api/inference#cost).
+Each model's monthly limit below determines how heavily its usage counts toward
+that shared allowance; the **Monthly limit** column is a weight, not a separate
+budget. For example, on Go, $1 on a model with a $15 monthly limit counts as $4 of
+the $60 allowance. Each response reports how much the request counted, as
+[`opencode.allowance`](/console/api/inference#cost).
 
 When any of the three limits is reached, every paid model is blocked until that limit resets. Free models continue to
 work.
