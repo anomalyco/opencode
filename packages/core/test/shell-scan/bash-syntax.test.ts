@@ -309,11 +309,14 @@ describe("Bash dialects", () => {
     expect(heads("ls @(foo|bar)", "bash")).toEqual(["ls"])
   })
 
-  // `q` matches both the flag character class and `q[-+]?`, so a run of `q`
-  // backtracks exponentially; without the deduplication this test never finishes.
+  // `q` and `-` already match the flag character class, so a `q[-+]?`-style
+  // alternative gives runs of `q`/`q-` a second parse each; without the
+  // deduplication this test never finishes.
   test("rejects a long run of zsh q flags without exponential backtracking", () => {
     expect(heads("echo ${(" + "q".repeat(40) + "!x}", "zsh")).toBe("opaque")
     expect(heads("echo ${(" + "q".repeat(40) + ")x}", "zsh")).toEqual(["echo"])
+    expect(heads("echo ${(" + "q-".repeat(30) + "!x}", "zsh")).toBe("opaque")
+    expect(heads("echo ${(" + "q-".repeat(30) + ")x}", "zsh")).toEqual(["echo"])
   })
 
   test.each([

@@ -108,9 +108,9 @@ const FUNCTION_BODY_RE =
 const DO_AHEAD_RE = /(?:[ \t\n;]|\\\n|#[^\n]*(?:\n|$))*(?:do(?=(?:\\\n)*(?:[ \t\n;{(]|$))|\{(?=(?:\\\n)*[ \t\n]))/y
 const NOFORK_OPEN_RE = /\$\{(?:\\\n)*(?:[ \t\n]|\|)/y
 // Zsh flags that neither evaluate nor glob a value; s and j take an argument between repeated delimiters.
-// `q` also appears in the character class, so it must not match a bare `q` here too (e.g. via `q[-+]?`):
-// two ways to match the same `q` make a run of them backtrack exponentially.
-const ZSH_SAFE_FLAGS_RE = /\$\{\((?:[@AaBbCcDEfFikLMmNnOopPqStUuVvWwXZz0-]|q[-+]|[js]([^({[<\\])(?:(?!\1)[^)])*\1)*\)/y
+// `q` and `-` are already in the character class, so the alternative must only cover `q+`; giving any
+// other `q…` string a second parse (e.g. via `q[-+]?`) makes runs of it backtrack exponentially.
+const ZSH_SAFE_FLAGS_RE = /\$\{\((?:[@AaBbCcDEfFikLMmNnOopPqStUuVvWwXZz0-]|q[+]|[js]([^({[<\\])(?:(?!\1)[^)])*\1)*\)/y
 const ZSH_QUOTED_FLAG_ARG_RE = /[js]([^({[<\\])(?:(?!\1)[^)])*\1/g
 const ZSH_GLOB_MODIFIER_RE = /(?:[\^=~#+]|\\\n)*~/y
 // Trailing Zsh glob qualifiers without code execution (e, +cmd), delimiters (f, u, g, P), modifiers (:), or math expressions.
