@@ -4,7 +4,7 @@ import { isRecord } from "./record.js"
 
 const decodeJson = Schema.decodeUnknownOption(Json)
 
-/** Error codes a provider error body carries, most specific location first, in their original case. */
+/** Error codes a provider error body carries, in their original case. The first is its primary code (`AIError.code`). */
 export function providerCodes(value: unknown) {
   const decoded = typeof value === "string" ? Option.getOrUndefined(decodeJson(value)) : value
   if (!isRecord(decoded)) return []
