@@ -1,12 +1,18 @@
-import type { AnyAuthClient, GoogleAuthOptions } from "google-auth-library"
+import type { GoogleAuthOptions } from "google-auth-library"
 import { Effect, Redacted } from "effect"
 import { Auth, MissingCredentialError } from "../route/auth.js"
 import { ProviderConfigurationError, ProviderID } from "../schema/index.js"
+import { isMissingPackage } from "../utils/optional-peer.js"
 
 const SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 const id = ProviderID.make("google-vertex")
 
-export const loadADCClient = async (project?: string) => {
+// Structural so published declarations do not reference the optional google-auth-library peer.
+interface ADCClient {
+  readonly getAccessToken: () => Promise<{ readonly token?: string | null }>
+}
+
+export const loadADCClient = async (project?: string): Promise<ADCClient> => {
   const { GoogleAuth } = await import("google-auth-library")
   // google-auth-library 10.5.0 ignores CLOUDSDK_CONFIG during ADC file discovery.
   // Fix this in shipped AI code: a repository-level Bun dependency patch would not
@@ -83,7 +89,7 @@ export const apiKey = (input: ApiKeyOptions & { readonly project?: string; reado
 }
 
 const adc = (project?: string) => {
-  let client: Promise<AnyAuthClient> | undefined
+  let client: Promise<ADCClient> | undefined
   const loadClient = () => {
     if (client) return client
     client = loadADCClient(project)
@@ -96,7 +102,13 @@ const adc = (project?: string) => {
         if (!token.token) throw new Error("Google ADC returned an empty access token")
         return Redacted.make(token.token)
       },
-      catch: () => new MissingCredentialError("Google Application Default Credentials"),
+      catch: (error) =>
+        isMissingPackage(error, "google-auth-library")
+          ? new MissingCredentialError(
+              "Google Application Default Credentials",
+              "Google Vertex Application Default Credentials need google-auth-library; install it, or pass an accessToken or apiKey",
+            )
+          : new MissingCredentialError("Google Application Default Credentials"),
     }),
   ).bearer()
 }

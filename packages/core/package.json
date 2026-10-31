@@ -97,6 +97,7 @@
   "dependencies": {
     "@ai-sdk/provider": "3.0.19",
     "@ai-sdk/provider-utils": "4.0.62",
+    "@aws-sdk/credential-providers": "3.1057.0",
     "@effect/sql-sqlite-bun": "catalog:",
     "@effect/sql-sqlite-node": "catalog:",
     "@ff-labs/fff-bun": "0.10.5",
@@ -121,6 +122,7 @@
     "effect": "catalog:",
     "fuzzysort": "3.1.0",
     "gitlab-ai-provider": "6.23.1",
+    "google-auth-library": "10.5.0",
     "gray-matter": "4.0.3",
     "htmlparser2": "8.0.2",
     "http-proxy-agent": "7.0.2",
