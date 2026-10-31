@@ -310,7 +310,11 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
             credentialID: id,
             error: error.code,
           })
-          return oauth
+          if (error.code === "invalid_grant" || !clientFromCredential(oauth)) return oauth
+          // The tokens stay, but the next sign-in must register a new client instead of reusing a rejected one.
+          const value = { ...oauth, metadata: { ...oauth.metadata, client: undefined } }
+          yield* credentials.update(id, { value })
+          return value
         }
         const tokens = OAuthTokensSchema.safeParse(
           yield* Effect.tryPromise(() => response.clone().json()).pipe(Effect.orElseSucceed(() => undefined)),

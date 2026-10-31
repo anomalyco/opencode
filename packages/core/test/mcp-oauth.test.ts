@@ -267,6 +267,32 @@ describe("MCP OAuth", () => {
     expect(stored?.type === "oauth" && stored.metadata?.issuer).toBe(server.url.href)
   })
 
+  test("drops a rejected client but keeps the tokens", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        if (new URL(request.url).pathname !== "/token") return new Response(null, { status: 404 })
+        return Response.json({ error: "invalid_client" }, { status: 401 })
+      },
+    })
+    // The rejection is remembered per credential and refresh token for the life of the process.
+    const refresh = crypto.randomUUID()
+    const saved = credential({ access: "expired", refresh, url: server.url.href })
+    const store = memoryCredentials([
+      new Credential.Info({ ...saved, value: { ...saved.value, metadata: { client: { client_id: "registered" } } } }),
+    ])
+    const config = new ConfigMCP.Remote({ type: "remote", url: server.url.href })
+    const oauthProvider = await connectProvider(config, store)
+
+    // Without the client, the SDK's retry asks for a login instead of presenting it again.
+    await expect(
+      auth(oauthProvider, { serverUrl: server.url.href, fetchFn: oauthProvider.send }).finally(() => server.stop(true)),
+    ).rejects.toThrow("requires a login before it can register a client")
+    const stored = store.rows.get(saved.id)?.value
+    expect(stored?.type === "oauth" && [stored.access, stored.refresh]).toEqual(["expired", refresh])
+    expect(stored?.type === "oauth" && stored.metadata?.client).toBeUndefined()
+  })
+
   test("reports needs_auth for an unauthorized server without registering a client", async () => {
     let registrations = 0
     const server = Bun.serve({
