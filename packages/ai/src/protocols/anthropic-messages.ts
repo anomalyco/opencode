@@ -192,8 +192,7 @@ const AnthropicServerToolUseBlock = Schema.Struct({
 })
 type AnthropicServerToolUseBlock = Schema.Schema.Type<typeof AnthropicServerToolUseBlock>
 
-// Server tool result blocks: web_search_tool_result, code_execution_tool_result,
-// and web_fetch_tool_result. The provider executes the tool and inlines the
+// Server tool result blocks. The provider executes the tool and inlines the
 // structured result into the assistant turn — there is no client tool_result
 // round-trip. We round-trip the structured `content` payload as opaque JSON so
 // the next request can echo it back when continuing the conversation.
@@ -201,6 +200,7 @@ const AnthropicServerToolResultType = Schema.Literals([
   "web_search_tool_result",
   "code_execution_tool_result",
   "web_fetch_tool_result",
+  "tool_search_tool_result",
 ])
 type AnthropicServerToolResultType = Schema.Schema.Type<typeof AnthropicServerToolResultType>
 
@@ -514,6 +514,7 @@ interface ParserState {
   readonly compactions: Readonly<Record<number, string | null>>
   readonly providerMetadataKey: string
   readonly tools: ToolStream.State<number>
+  readonly serverToolNames: Readonly<Record<string, string>>
   readonly reasoningSignatures: Readonly<Record<number, string>>
   readonly usage?: Usage
   readonly pendingFinish?: {
@@ -605,13 +606,13 @@ const lowerServerToolCall = (part: ToolCallPart): AnthropicServerToolUseBlock =>
   input: part.input,
 })
 
-// Server tool result blocks are typed by name. Anthropic ships three today;
-// extend this list when new server tools land. The block content is the
+// Server tool result blocks are typed by name. The block content is the
 // structured payload returned by the provider, which we round-trip as-is.
 const serverToolResultType = (name: string): AnthropicServerToolResultType | undefined => {
   if (name === "web_search") return "web_search_tool_result"
   if (name === "code_execution") return "code_execution_tool_result"
   if (name === "web_fetch") return "web_fetch_tool_result"
+  if (name === "tool_search_tool_regex" || name === "tool_search_tool_bm25") return "tool_search_tool_result"
   return undefined
 }
 
@@ -1212,27 +1213,32 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined, providerM
 // `providerExecuted: true`. The runtime appends it to the assistant message
 // for round-trip; downstream consumers can inspect `result.value` for the
 // structured payload.
-const SERVER_TOOL_RESULT_NAMES: Record<AnthropicServerToolResultType, string> = {
+const SERVER_TOOL_RESULT_NAMES = {
   web_search_tool_result: "web_search",
   code_execution_tool_result: "code_execution",
   web_fetch_tool_result: "web_fetch",
 }
 
-const isServerToolResultType = (type: string): type is AnthropicServerToolResultType => type in SERVER_TOOL_RESULT_NAMES
+const isServerToolResultType = Schema.is(AnthropicServerToolResultType)
 
-const serverToolResultEvent = (block: AnthropicStreamBlock, providerMetadataKey: string): LLMEvent | undefined => {
+const serverToolResultEvent = (block: AnthropicStreamBlock, state: ParserState): LLMEvent | undefined => {
   if (!block.type || !isServerToolResultType(block.type)) return undefined
+  const name =
+    block.type === "tool_search_tool_result"
+      ? state.serverToolNames[block.tool_use_id ?? ""]
+      : SERVER_TOOL_RESULT_NAMES[block.type]
+  if (!name) return undefined
   const errorPayload =
     ProviderShared.isRecord(block.content) && "type" in block.content ? String(block.content.type) : ""
   const isError = errorPayload.endsWith("_tool_result_error")
   return LLMEvent.toolResult({
     id: block.tool_use_id ?? "",
-    name: SERVER_TOOL_RESULT_NAMES[block.type],
+    name,
     result: isError ? { type: "error", value: block.content } : { type: "json", value: block.content },
     providerExecuted: true,
     // The complete payload is irreducible provider replay state: subsequent
     // stateless requests must round-trip the typed result block verbatim.
-    providerMetadata: providerMetadata(providerMetadataKey, { blockType: block.type, result: block.content }),
+    providerMetadata: providerMetadata(state.providerMetadataKey, { blockType: block.type, result: block.content }),
   })
 }
 
@@ -1259,6 +1265,12 @@ const onContentBlockStart = (
       {
         ...state,
         lifecycle,
+        // Regex and BM25 share a result block type. Retain the call name after
+        // content_block_stop removes its input accumulator from ToolStream.
+        serverToolNames:
+          block.type === "server_tool_use"
+            ? { ...state.serverToolNames, [block.id]: block.name ?? "" }
+            : state.serverToolNames,
         tools: ToolStream.start(state.tools, event.index, {
           id: block.id,
           name: block.name ?? "",
@@ -1332,7 +1344,7 @@ const onContentBlockStart = (
     ]
   }
 
-  const result = serverToolResultEvent(block, state.providerMetadataKey)
+  const result = serverToolResultEvent(block, state)
   if (!result) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
   return [{ ...state, lifecycle: Lifecycle.stepStart(state.lifecycle, events) }, [...events, result]]
@@ -1406,10 +1418,7 @@ const onContentBlockDelta = Effect.fnUntraced(function* (
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onContentBlockStop = Effect.fnUntraced(function* (
-  state: ParserState,
-  event: AnthropicEvent,
-) {
+const onContentBlockStop = Effect.fnUntraced(function* (state: ParserState, event: AnthropicEvent) {
   if (event.index === undefined) return [state, NO_EVENTS] satisfies StepResult
   if (event.index in state.compactions) {
     const { [event.index]: content, ...compactions } = state.compactions
@@ -1628,6 +1637,7 @@ export const protocol = Protocol.make({
       compactions: {},
       providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
       tools: ToolStream.empty<number>(),
+      serverToolNames: {},
       reasoningSignatures: {},
       lifecycle: Lifecycle.initial(),
     }),
