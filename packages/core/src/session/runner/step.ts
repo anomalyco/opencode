@@ -2,6 +2,7 @@ export * as SessionStep from "./step.js"
 
 import {
   AIError,
+  ContentPolicyError,
   InvalidProviderOutputError,
   LLMClient,
   LLMEvent,
@@ -182,8 +183,17 @@ export const make = Effect.gen(function* () {
                 }),
               })
             : undefined
-        const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
-        const llmError = llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined
+        // A content-filter finish is not retried by default, but a hook can recover it like other provider errors.
+        const contentFiltered =
+          Exit.isSuccess(stream) && recorded.finish?.finish === "content-filter" ? recorded.failure : undefined
+        const llmFailure =
+          streamFailure instanceof AIError
+            ? streamFailure
+            : (unknownFinish ??
+              (contentFiltered &&
+                new AIError({ reason: new ContentPolicyError({ message: contentFiltered.message }) })))
+        const llmError =
+          contentFiltered ?? (llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined)
         if (
           input.recoverContinuation &&
           llmFailure?.reason._tag === "Transport" &&
