@@ -342,6 +342,43 @@ describe("MCP OAuth", () => {
     ])
   })
 
+  test("replays a completed refresh for the same consumed token", async () => {
+    let requests = 0
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const body = new URLSearchParams(await request.text())
+        if (body.get("grant_type") !== "refresh_token") return new Response(null, { status: 404 })
+        requests++
+        if (body.get("refresh_token") !== "r1") return Response.json({ error: "invalid_grant" }, { status: 400 })
+        return Response.json({ access_token: "access", token_type: "Bearer", refresh_token: "r2" })
+      },
+    })
+    const fetchFn = await Effect.runPromise(McpOAuth.loggedFetch({ server: "test" }))
+    const options = () => ({
+      metadata: {
+        issuer: server.url.origin,
+        authorization_endpoint: `${server.url.origin}/authorize`,
+        token_endpoint: `${server.url.origin}/token`,
+        response_types_supported: ["code"],
+      },
+      clientInformation: { client_id: "client" },
+      refreshToken: "r1",
+      fetchFn,
+    })
+
+    try {
+      const first = await refreshAuthorization(new URL(server.url.origin), options())
+      // A second location reads the old token before the first response is persisted. It must reuse the
+      // completed response instead of sending r1 again, which the rotating server would reject.
+      const second = await refreshAuthorization(new URL(server.url.origin), options())
+      expect(requests).toBe(1)
+      expect(second).toEqual(first)
+    } finally {
+      server.stop(true)
+    }
+  })
+
   test("generates a loopback redirect URL when none is configured", async () => {
     expect(await authorize()).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/)
   })

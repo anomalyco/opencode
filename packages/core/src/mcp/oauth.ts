@@ -29,7 +29,11 @@ import { ErrorSummary } from "../util/error-summary.js"
 export const CLIENT_METADATA_URL = "https://opencode.ai/oauth/opencode/client.json"
 
 // Refresh tokens rotate, so concurrent refreshes of the same token share one request or the second gets invalid_grant.
+// A response is also replayed briefly after it completes: the next location can read the old token before the winner
+// has persisted the rotated one, and replaying the same response keeps that late caller from consuming the old token.
 const refreshes = new Map<string, ReturnType<FetchLike>>()
+const completed = new Map<string, { pending: ReturnType<FetchLike>; expires: number }>()
+const REFRESH_REPLAY_MS = 60_000
 
 const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
   if (!(init?.body instanceof URLSearchParams) || init.body.get("grant_type") !== "refresh_token") return undefined
@@ -45,11 +49,26 @@ const share = (pending: ReturnType<FetchLike>) => pending.then((response) => res
 const send: FetchLike = (url, init) => {
   const key = refreshKey(url, init)
   if (key === undefined) return base(url, init)
+  const previous = completed.get(key)
+  if (previous) {
+    if (previous.expires > Date.now()) return share(previous.pending)
+    completed.delete(key)
+  }
   const current = refreshes.get(key)
   if (current) return share(current)
-  const pending = base(url, init).finally(() => {
-    if (refreshes.get(key) === pending) refreshes.delete(key)
-  })
+  const pending = base(url, init)
+    .then((response) => {
+      // Only successful refreshes are safe to replay; a rejection must remain retryable.
+      if (response.ok)
+        completed.set(key, {
+          pending: Promise.resolve(response.clone()) as ReturnType<FetchLike>,
+          expires: Date.now() + REFRESH_REPLAY_MS,
+        })
+      return response
+    })
+    .finally(() => {
+      if (refreshes.get(key) === pending) refreshes.delete(key)
+    })
   refreshes.set(key, pending)
   return share(pending)
 }
