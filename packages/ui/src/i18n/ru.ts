@@ -278,7 +278,7 @@ export const dict = {
   "ui.messagePart.compaction.cancelled": "Компактизация сессии отменена",
   "ui.messagePart.compaction.interrupted": "Компактизация сессии прервана",
   "ui.messagePart.providerCompaction": "Сессия скомпактирована провайдером",
-  "ui.messagePart.compaction.usage": "{{input}} в · {{output}} из",
+  "ui.messagePart.compaction.usage": "вход: {{input}} · выход: {{output}}",
   "ui.messagePart.tools.used.one": "Использовано {{count}} {{tools}}",
   "ui.messagePart.tools.used.other": "Использовано {{count}} {{tools}}",
   "ui.tool.browser": "Браузер",
