@@ -806,6 +806,7 @@ export const dict = {
   "dialog.server.menu.remove": "Kaldır",
   "home.workspaceTip": "Değişiklikleri izole tutmak için sonraki oturumu yeni bir çalışma alanında başlatın",
   "session.tab.add": "Sekme ekle",
+  "session.tab.closeOthers": "Diğer sekmeleri kapat",
   "session.queue.attachments.one": "Artı {{count}} eklentisi",
   "session.queue.attachments.other": "Ayrıca {{count}} eklentileri",
   "settings.backToSettings": "Ayarlara geri dön",

@@ -1,10 +1,14 @@
 import { Effect, Schema } from "effect"
+import { fromJson } from "./data.js"
 import type { Extension } from "./extension.js"
 import { executeProgram } from "./interpreter/execute.js"
 import { extensionGlobals } from "./interpreter/extensions.js"
 import { globalNames } from "./interpreter/globals.js"
+import { scanTools } from "./scan.js"
 import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
+
+export { scanTools }
 
 /** A tool call admitted during an execution. */
 export type {
@@ -64,6 +68,8 @@ export type ExecuteOptions<
 > = Options<Provided, Extensions> & {
   /** Source for one program in the supported JavaScript subset. */
   code: string
+  /** Read-only JSON values bound in the program's outer global scope (shadowable by top-level declarations). */
+  bindings?: Readonly<Record<string, DataValue>>
 }
 
 /** A JSON value that can cross the confined interpreter boundary. */
@@ -128,7 +134,7 @@ export type Result = typeof Result.Type
 /** Reusable confined runtime over explicit tools. */
 export type Runtime<R = never> = {
   readonly catalog: ReadonlyArray<ToolDescription>
-  readonly execute: (code: string) => Effect.Effect<Result, never, R>
+  readonly execute: (code: string, bindings?: Readonly<Record<string, DataValue>>) => Effect.Effect<Result, never, R>
 }
 
 const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, minimum: number): number | undefined => {
@@ -150,7 +156,7 @@ export const execute = <
   const Extensions extends ReadonlyArray<Extension> = [],
 >(
   options: ExecuteOptions<Provided, Extensions>,
-): Effect.Effect<Result, never, Environment<Provided, Extensions>> => make(options).execute(options.code)
+): Effect.Effect<Result, never, Environment<Provided, Extensions>> => make(options).execute(options.code, options.bindings)
 
 /** Creates an Effect-native runtime over explicit, schema-described tools and extensions. */
 export const make = <
@@ -175,7 +181,10 @@ export const make = <
     get catalog() {
       return prepared.catalog
     },
-    execute: (code) =>
-      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => extensionGlobals(ctx, extensions)),
+    execute: (code, bindings) =>
+      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => [
+        ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
+        ...extensionGlobals(ctx, extensions),
+      ]),
   }
 }

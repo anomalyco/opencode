@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LLM, LLMRequest, Message, ToolCallPart, ToolDefinition } from "../src/effect.js"
+import { ai, LLMRequest, Message, ToolCallPart, ToolDefinition } from "../src/effect.js"
 import { OpenAIChat } from "../src/protocols.js"
 import { Auth } from "../src/route.js"
 import { sanitizeSurrogates } from "../src/utils/sanitize.js"
@@ -20,7 +20,7 @@ const sanitizeRequest = (request: LLMRequest) =>
 describe("sanitizeSurrogates", () => {
   test("replaces lone surrogates in nested message text, tool input, and tool output", () => {
     const sanitized = sanitizeRequest(
-      LLM.request({
+      ai.request({
         model,
         system: "system \uD800",
         tools: [tool],
@@ -46,7 +46,7 @@ describe("sanitizeSurrogates", () => {
 
   test("keeps clean requests equal and shares unchanged nested values", () => {
     const messages = [Message.user("hello \u{1F600}"), Message.assistant("hi")]
-    const request = LLM.request({
+    const request = ai.request({
       model,
       system: "system",
       tools: [tool],
@@ -72,7 +72,7 @@ describe("sanitizeSurrogates", () => {
     expect(output.metadata).toBe(input.metadata)
     expect(output.messages).not.toBe(input.messages)
 
-    const clean = LLM.request({ model, system: "system", tools: [tool], messages })
+    const clean = ai.request({ model, system: "system", tools: [tool], messages })
     expect(sanitizeRequest(clean)).toEqual(clean)
     expect(sanitizeSurrogates(LLMRequest.input(clean)).messages).toBe(clean.messages)
   })

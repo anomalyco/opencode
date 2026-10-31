@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { model } from "@opencode/ai/providers/openai"
-import { LLM } from "../src/effect.js"
+import { ai } from "../src/effect.js"
 import { Endpoint } from "../src/route/endpoint.js"
 
 const configuration = (provider: string, message: string) =>
@@ -60,9 +60,24 @@ describe("provider package entrypoints", () => {
 
   test("maps OpenRouter, DigitalOcean and Venice Responses entrypoints onto provider-owned routes", async () => {
     const providers = [
-      ["openrouter", "https://openrouter.ai/api/v1", await import("@opencode/ai/providers/openrouter/responses")],
-      ["digitalocean", "https://inference.do-ai.run/v1", await import("@opencode/ai/providers/digitalocean/responses")],
-      ["venice", "https://api.venice.ai/api/v1", await import("@opencode/ai/providers/venice/responses")],
+      [
+        "openrouter",
+        "https://openrouter.ai/api/v1",
+        "openrouter-responses",
+        await import("@opencode/ai/providers/openrouter/responses"),
+      ],
+      [
+        "digitalocean",
+        "https://inference.do-ai.run/v1",
+        "open-responses",
+        await import("@opencode/ai/providers/digitalocean/responses"),
+      ],
+      [
+        "venice",
+        "https://api.venice.ai/api/v1",
+        "open-responses",
+        await import("@opencode/ai/providers/venice/responses"),
+      ],
     ] as const
     const settings = {
       apiKey: "fixture",
@@ -70,11 +85,11 @@ describe("provider package entrypoints", () => {
       body: { future_option: true },
       reasoningEffort: "low",
     }
-    for (const [provider, baseURL, module] of providers) {
+    for (const [provider, baseURL, protocol, module] of providers) {
       const selected = module.model("gpt-5.4", settings)
       expect(selected.provider).toBe(provider)
       expect(selected.route.id).toBe(`${provider}-responses`)
-      expect(selected.route.protocol).toBe("open-responses")
+      expect(selected.route.protocol).toBe(protocol)
       expect(selected.route.endpoint).toMatchObject({ baseURL, path: "/responses" })
       expect(selected.route.defaults.headers).toEqual(settings.headers)
       expect(selected.route.defaults.http?.body).toEqual(settings.body)
@@ -291,7 +306,7 @@ describe("provider package entrypoints", () => {
       baseURL: "https://messages.example.test/v1",
     })
     expect(
-      Endpoint.render(selected.route.endpoint, { request: LLM.request({ model: selected }), body: {} }).toString(),
+      Endpoint.render(selected.route.endpoint, { request: ai.request({ model: selected }), body: {} }).toString(),
     ).toBe("https://messages.example.test/v1/messages")
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ metadata: { user_id: "user_1" } })

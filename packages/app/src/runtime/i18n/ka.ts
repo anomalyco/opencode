@@ -743,6 +743,7 @@ export const dict = {
   "toast.migration.progress.working.progress": "მონაცემების გადატანა {{current}}/{{total}}",
   "home.workspaceTip": "დაიწყეთ შემდეგი სესიას ახალი სამუშაო სივრცეში, რომ ცვლილებები განცალკევებულად შენარჩუნდეს",
   "session.tab.add": "ჩანართის დამატება",
+  "session.tab.closeOthers": "სხვა ჩანართების დახურვა",
   "session.queue.attachments.one": "დამატება {{count}} შემაგანთქმელი",
   "session.queue.attachments.other": "დამატება {{count}} შემაგანთქმელი",
   "settings.backToSettings": "წარსვლა დასაყენებლებში",

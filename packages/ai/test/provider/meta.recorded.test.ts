@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, LLMEvent, LLMRequest, LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -35,7 +35,7 @@ for (const api of ["responses", "chat"] as const) {
         { tags: ["text", "reasoning", "usage", `effort:${effort ?? "default"}`] },
         () =>
           Effect.gen(function* () {
-            const request = LLM.request({
+            const request = ai.request({
               model: meta[api](modelID),
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
               generation: { maxTokens: 1024 },
@@ -85,7 +85,7 @@ for (const api of ["responses", "chat"] as const) {
       { tags: ["tool", "tool-loop", "reasoning", "usage", "effort:low"] },
       () =>
         Effect.gen(function* () {
-          const request = LLM.request({
+          const request = ai.request({
             model: meta[api](modelID),
             prompt:
               "Look up the current weather in Paris using lookup_weather before answering. After receiving the result, report Paris's weather in one short sentence.",

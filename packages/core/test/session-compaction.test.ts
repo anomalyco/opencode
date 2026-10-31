@@ -15,6 +15,7 @@ import { llmClient } from "@opencode/core/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { EventTable } from "@opencode/core/event/sql"
+import { Instructions } from "@opencode/core/instructions/index"
 import { SessionCompaction } from "@opencode/core/session/compaction"
 import type { SessionContext } from "@opencode/core/session/context"
 import { MessageDecodeError } from "@opencode/core/session/error"
@@ -403,7 +404,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
         id: Agent.defaultID,
         info: { ...Agent.Info.default(Agent.defaultID), system: "You are a helpful assistant." },
       },
-      initial: "Project instructions.",
+      initial: [{ key: Instructions.Key.make("test/project"), text: "Project instructions." }],
       tools: {
         definitions: [
           ToolDefinition.make({ name: "read", description: "Read files", inputSchema: { type: "object" } }),
@@ -429,6 +430,12 @@ it.effect("auto compaction estimates current content against the buffered prompt
     expect(yield* due(native(231_200))).toBe(true)
     expect(yield* due(native(1_000_000, { context: 0, input: undefined, output: 0 }))).toBe(false)
 
+    // An input limit above the context window, as some catalogs and config overrides report, cannot be used in full.
+    const overstated = { context: 128_000, input: 272_000, output: 128_000 }
+    expect(yield* due(input(108_799, overstated))).toBe(false)
+    expect(yield* due(input(108_800, overstated))).toBe(true)
+    expect(yield* due(input(200_000, { context: 0, input: 272_000, output: 0 }))).toBe(false)
+
     // The summary's 16k output limit is more than 15% of a 100k window, so it sets the ceiling.
     const contextLimited = { context: 100_000, output: 10_000 }
     expect(yield* due(input(83_999, contextLimited))).toBe(false)
@@ -445,6 +452,15 @@ it.effect("auto compaction estimates current content against the buffered prompt
         yield* compaction.transform((editor) => editor.configure({ buffer: 100_000 }))
         expect(yield* due(input(60_000, contextLimited))).toBe(false)
         expect(yield* due(input(84_000, contextLimited))).toBe(true)
+      }),
+    )
+
+    // A percentage buffer is a share of the model's window.
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* compaction.transform((editor) => editor.configure({ buffer: "25%" }))
+        expect(yield* due(input(74_999, contextLimited))).toBe(false)
+        expect(yield* due(input(75_000, contextLimited))).toBe(true)
       }),
     )
 
@@ -552,7 +568,7 @@ const loaded = (session: Session.Info, messages: readonly SessionMessage.Info[])
   messages,
   model: resolved,
   agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
-  initial: "Session instructions",
+  initial: [{ key: Instructions.Key.make("test/session"), text: "Session instructions" }],
   tools: { definitions: [], execute: () => Effect.die("Compaction must not execute tools") },
 })
 

@@ -99,7 +99,7 @@ const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(f
     return FileAttachment.create({
       data: Base64.make(Buffer.from(blob.data).toString("base64")),
       mime: blob.mime,
-      source: { type: "inline" },
+      source: input.source ?? { type: "inline" },
       name: input.name,
       description: input.description,
       mention: input.mention,
@@ -109,7 +109,7 @@ const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(f
   const resolved = input.uri.startsWith("data:")
     ? {
         bytes: yield* decodeDataURL(input.uri, label),
-        source: { type: "inline" as const },
+        source: input.source ?? { type: "inline" as const },
         start: undefined,
         end: undefined,
         name: undefined,
@@ -196,9 +196,9 @@ const readFileAttachment = Effect.fn("SessionPrompt.readFileAttachment")(functio
     return {
       bytes: Buffer.from(
         entries
-          .filter((entry) => entry.type === "file" || entry.type === "directory")
-          .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "directory" ? -1 : 1))
-          .map((entry) => entry.name + (entry.type === "directory" ? path.sep : ""))
+          .filter((entry) => entry.type === "File" || entry.type === "Directory")
+          .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "Directory" ? -1 : 1))
+          .map((entry) => entry.name + (entry.type === "Directory" ? path.sep : ""))
           .join("\n"),
       ),
       source: { type: "uri" as const, uri },

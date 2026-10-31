@@ -1,6 +1,7 @@
 export * as SessionCompaction from "./compaction.js"
 
 import {
+  ai,
   AIError,
   type ContentPart,
   InvalidProviderOutputError,
@@ -23,6 +24,7 @@ import { Agent } from "../agent.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { llmClient } from "../effect/app-node-platform.js"
+import { Instructions } from "../instructions/index.js"
 import { Model } from "../model.js"
 import { State } from "../state.js"
 import { Token } from "../util/token.js"
@@ -40,8 +42,8 @@ import { SessionUsage } from "./usage.js"
 
 export type Settings = {
   auto: boolean
-  /** Tokens kept free below the model's limits before compacting. Unset keeps 15%, and at least 16k, free. */
-  buffer?: number
+  /** Room kept free below the model's limits before compacting: a share such as "20%", or tokens. Unset keeps 15%, and at least 16k, free. */
+  buffer?: number | string
   /** Tokens of recent conversation kept verbatim beside the summary. */
   keep: number
   /** Summarize in the background as the context nears the threshold, so automatic compaction can swap it in. */
@@ -269,7 +271,7 @@ export const layer = Layer.effect(
     /** The model that writes the summary, and the request size it aims for. */
     const selectModel = Effect.fnUntraced(function* (
       context: SessionContext.Loaded,
-      buffer: number | undefined,
+      buffer: Settings["buffer"],
       native: boolean,
     ) {
       const agent = native ? undefined : yield* agents.get(Agent.ID.make("compaction"))
@@ -379,7 +381,7 @@ export const layer = Layer.effect(
         firstID: context.messages[0]?.id,
         keepID: anchor.id,
         model: context.model.ref,
-        initial: context.initial,
+        initial: Instructions.join(context.initial),
         tailLimit: tailLimit(settings.keep, model.cap),
         failures,
         usage,
@@ -558,7 +560,7 @@ export const layer = Layer.effect(
         )
 
       const send = (request: LLMRequest) => {
-        if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
+        if (ai.canCompact(request, { mechanism: "trigger" })) {
           return Effect.gen(function* () {
             const history = yield* SessionHistory.load(db, context.session.id, "local").pipe(Effect.orDie)
             const retained = recentUserMessages(history, context.model, keep)
@@ -566,7 +568,7 @@ export const layer = Layer.effect(
             return yield* toResult([...retained, Message.assistant(response.checkpoint)], response.usage)
           })
         }
-        if (LLMClient.canCompact(request)) {
+        if (ai.canCompact(request)) {
           return llm
             .compact(request, { mechanism: "endpoint", http: prepared.options.http })
             .pipe(Effect.flatMap((response) => toResult(response.replacement, response.usage)))
@@ -949,7 +951,7 @@ export const node = makeLocationNode({
  * conversation: a compaction or revert since replaced its start, or the model or instructions changed.
  */
 const heldIndex = (held: Precomputed, context: SessionContext.Loaded) => {
-  if (held.firstID !== context.messages[0]?.id || held.initial !== context.initial) return -1
+  if (held.firstID !== context.messages[0]?.id || held.initial !== Instructions.join(context.initial)) return -1
   if (held.model.providerID !== context.model.ref.providerID || held.model.id !== context.model.ref.id) return -1
   if (held.model.variant !== context.model.ref.variant) return -1
   return context.messages.findIndex((message) => message.id === held.keepID)
@@ -1130,13 +1132,13 @@ export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
  * `RESERVE_MIN` when that is more. A summary request that must be shrunk is aimed at the same size. A window too small
  * to give up `RESERVE_MIN` keeps `RESERVE_SHARE`.
  */
-const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer: number | undefined) => {
-  // Unknown limits are reported as 0. An unknown input limit falls back to the context window; with no window at
-  // all, only a provider rejection can limit the request.
-  const window = limit.input || limit.context
+const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer: Settings["buffer"]) => {
+  // With no window at all, only a provider rejection can limit the request.
+  const window = inputWindow(limit)
   if (window <= 0) return Number.POSITIVE_INFINITY
+  const tokens = typeof buffer === "string" ? Math.round((window * Number.parseFloat(buffer)) / 100) : buffer
   // A buffer that leaves no room, such as one set for a larger model, is ignored.
-  if (buffer !== undefined && buffer < window) return window - buffer
+  if (tokens !== undefined && tokens < window) return window - tokens
   return window - Math.max(Math.floor(window * RESERVE_SHARE), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
 }
 
@@ -1145,7 +1147,15 @@ const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer
  * cannot generate that much. Zero for an unknown window.
  */
 const summaryRoom = (limit: SessionContext.Loaded["model"]["limit"], output = RESERVE_MIN) =>
-  Math.max(0, (limit.input || limit.context) - Math.min(RESERVE_MIN, output))
+  Math.max(0, inputWindow(limit) - Math.min(RESERVE_MIN, output))
+
+/**
+ * The largest prompt the model takes, or 0 when unknown. Unknown limits are reported as 0, and an unknown input limit
+ * falls back to the context window. The context window also holds the reply, so an input limit above it, as some
+ * catalogs and config overrides report, cannot be used in full.
+ */
+const inputWindow = (limit: SessionContext.Loaded["model"]["limit"]) =>
+  limit.input && limit.context ? Math.min(limit.input, limit.context) : limit.input || limit.context
 
 /**
  * Another provider's count may describe a native window this model cannot replay. History then holds the original

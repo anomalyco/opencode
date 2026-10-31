@@ -32,6 +32,8 @@ type Polling = {
 // and connects with its own methods, the same as the TUI.
 export const CONSOLE_INTEGRATION = "opencode"
 
+export const CLAUDE_AGENT_INTEGRATION = "claude-agent"
+
 // Same order as the TUI: browser and command sign-ins first, API keys last.
 export function connectMethods(integration: IntegrationInfo) {
   return integration.methods

@@ -52,8 +52,21 @@ export function SettingsNavigation(props: {
     props.onChange(value)
   }
 
+  let root: HTMLDivElement | undefined
+
+  // In the wide layout every page shares this scroller, so a newly opened page starts at its top. The scroll offset is
+  // DOM state, and a page opens from tabs, search, links between pages and history, so this follows the selected page
+  // instead of one event handler.
+  createEffect(
+    on(
+      () => props.value,
+      () => root?.scrollTo({ top: 0 }),
+      { defer: true },
+    ),
+  )
+
   return (
-    <Tabs orientation="vertical" variant="settings" value={props.value} onChange={change} class="settings">
+    <Tabs ref={root} orientation="vertical" variant="settings" value={props.value} onChange={change} class="settings">
       <div class="settings-mobile-nav">
         <div class="flex min-w-0 items-center">
           {/* Starts after the shell's 8px inset and this row's 16px padding. Its 32px height makes the row 48px tall,
@@ -116,7 +129,7 @@ export function SettingsNavigation(props: {
             <SettingsSearch />
           </Show>
           <Show when={!searchable() || !surface.search.state.query.trim()}>
-            <Tabs.List class="settings-nav-groups">
+            <Tabs.List class="settings-nav-groups" data-scrollable>
               <For each={props.groups}>
                 {(group) => (
                   <div class="settings-nav-group">

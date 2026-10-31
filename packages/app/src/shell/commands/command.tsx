@@ -60,7 +60,7 @@ function normalizeKey(key: string) {
 }
 
 export function keyFromKeyboardEvent(event: KeyboardEvent) {
-  const key = normalizeKey(bracketKey(event))
+  const key = normalizeKey(physicalKey(event))
 
   if (!event.altKey || /^[a-z0-9]$/.test(key)) return key
 
@@ -69,13 +69,19 @@ export function keyFromKeyboardEvent(event: KeyboardEvent) {
   return event.code.slice(3).toLowerCase()
 }
 
-// ⇧[ types { on US layouts, so ⇧⌘[ binds as written; a layout that types no ASCII there falls back to the physical key.
-function bracketKey(event: Pick<KeyboardEvent, "key" | "code">) {
+// ⇧[ types { and ⌥. types ≥ on US layouts. Keep ASCII layout mappings; non-ASCII falls back to the physical key.
+function physicalKey(event: Pick<KeyboardEvent, "key" | "code">) {
   if (event.key === "{" || event.key === "}") return event.key === "{" ? "[" : "]"
 
-  if (!/^[^\x00-\x7f]$/u.test(event.key) || !/^Bracket(Left|Right)$/.test(event.code)) return event.key
+  if (!/^[^\x00-\x7f]$/u.test(event.key)) return event.key
 
-  return event.code === "BracketLeft" ? "[" : "]"
+  if (event.code === "BracketLeft") return "["
+
+  if (event.code === "BracketRight") return "]"
+
+  if (event.code === "Period") return "."
+
+  return event.key
 }
 
 function signature(key: string, ctrl: boolean, meta: boolean, shift: boolean, alt: boolean) {

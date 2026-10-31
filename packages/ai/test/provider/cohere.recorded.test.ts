@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, SystemPart } from "../../src/effect.js"
+import { ai, LLMEvent, LLMRequest, SystemPart } from "../../src/effect.js"
 import { Cohere } from "../../src/providers/cohere.js"
 import { LLMClient } from "../../src/route.js"
 import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop } from "../recorded-scenarios.js"
@@ -14,7 +14,7 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: cohere.model("command-a-03-2025"),
           prompt: "Reply exactly: OK",
           generation: { maxTokens: 64 },
@@ -34,7 +34,7 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: cohere.model("command-a-reasoning-08-2025"),
           prompt: "What is 17 times 23? Answer briefly.",
           providerOptions: { thinking: { type: "enabled", tokenBudget: 128 } },
@@ -81,7 +81,7 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           model: cohere.chat("command-a-reasoning-08-2025"),
           prompt: "What is 17 times 23? Answer briefly.",
           providerOptions: { reasoningEffort: "high" },

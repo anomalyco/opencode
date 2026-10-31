@@ -13,6 +13,7 @@ import { Snapshot } from "@opencode/core/snapshot"
 import { Vcs } from "@opencode/core/vcs"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
+import { Npm } from "@opencode/util/npm"
 import { ServerFetch } from "./fetch"
 import type { ServerOptions } from "./options"
 
@@ -23,11 +24,12 @@ import type { ServerOptions } from "./options"
  *
  * - Database runs on the injected `DurableObjectStorage` SQLite.
  * - Watcher and fff are disabled through their existing option flags; pty, fff,
- *   shell-parser, and photon native modules resolve to inert stubs under the
- *   `workerd` bundle condition.
+ *   and photon native modules resolve to inert stubs under the `workerd` bundle
+ *   condition.
  * - Bare locations use a typed no-execution-plane process spawner; FileSystem,
  *   FileSystemSearch, and Pty fail with a clear defect until a remote sandbox
- *   backs them; Snapshot and Vcs degrade to no-op results.
+ *   backs them; Npm fails package installs with a typed workerd error; Snapshot
+ *   and Vcs degrade to no-op results.
  * - Config is injected as a string (no filesystem); plugin discovery is
  *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
  *
@@ -82,6 +84,7 @@ export function replacements(options: Options): LayerNode.Replacements {
     FileSystem.node.replace(fileSystemLayer),
     FileSystemSearch.node.replace(fileSystemSearchLayer),
     Pty.node.replace(ptyLayer),
+    Npm.node.replace(npmLayer),
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.
     ConfigPluginSource.node.replace(ConfigPluginSource.empty),
@@ -89,6 +92,26 @@ export function replacements(options: Options): LayerNode.Replacements {
 }
 
 const unavailable = (what: string) => Effect.die(new Error(`${what} is unavailable in the workerd profile`))
+
+const npmUnavailable = (what: string, pkg: string) =>
+  Effect.fail(
+    new Npm.InstallFailedError({
+      add: [pkg],
+      dir: "",
+      cause: new Error(`${what} is unavailable in the workerd profile`),
+    }),
+  )
+
+const npmLayer = Layer.succeed(
+  Npm.Service,
+  Npm.Service.of({
+    add: (pkg) => npmUnavailable("Npm.add", pkg),
+    resolve: (name) => Effect.succeed({ directory: "", name }),
+    check: () => Effect.succeed(false),
+    update: (pkg) => npmUnavailable("Npm.update", pkg),
+    which: () => Effect.undefined,
+  }),
+)
 
 // Vcs degrades to empty results, matching its behavior for locations without a
 // supported VCS, so read-only clients never need to special-case this runtime.

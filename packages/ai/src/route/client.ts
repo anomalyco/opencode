@@ -30,6 +30,7 @@ import {
   mergeGenerationOptions,
   mergeHttpOptions,
   mergeProviderOptions,
+  withPartial,
 } from "../schema/index.js"
 
 export interface RouteBody<Body> {
@@ -405,9 +406,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           provider: provider ?? routeInput.provider,
           providerMetadataKey:
             providerMetadataKey ??
-            (provider !== undefined && provider !== routeInput.provider
-              ? provider
-              : routeInput.providerMetadataKey),
+            (provider !== undefined && provider !== routeInput.provider ? provider : routeInput.providerMetadataKey),
           auth: auth ?? routeInput.auth,
           endpoint: endpoint ? Endpoint.merge(routeInput.endpoint, endpoint) : routeInput.endpoint,
           transport: (transport as Transport<Body, Prepared, Frame> | undefined) ?? routeInput.transport,
@@ -629,12 +628,19 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest, o
     }),
   )
 
-const generateWith = (stream: Interface["stream"]) =>
+export const generateWith = (stream: Interface["stream"]) =>
   Effect.fn("LLM.generate")(function* (request: LLMRequest, options?: StreamOptions) {
-    const state = yield* stream(request, options).pipe(Stream.runFold(LLMResponse.empty, LLMResponse.reduce))
+    let state = LLMResponse.empty()
+    yield* stream(request, options).pipe(
+      Stream.runForEach((event) => Effect.sync(() => (state = LLMResponse.reduce(state, event)))),
+      Effect.mapError((error) => withPartial(error, LLMResponse.partial(state))),
+    )
     const response = LLMResponse.complete(state)
     if (response) return response
-    return yield* incompleteStreamError(`${request.model.provider}/${request.model.route.id}`)
+    return yield* withPartial(
+      incompleteStreamError(`${request.model.provider}/${request.model.route.id}`),
+      LLMResponse.partial(state),
+    )
   })
 
 export function stream(request: LLMRequest, options?: StreamOptions): Stream.Stream<LLMEvent, AIError, Service> {
@@ -702,8 +708,6 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
 export const Route = { make } as const
 
 export const LLMClient = {
-  canCompact,
-  compact,
   Service,
   layer,
   stream,
