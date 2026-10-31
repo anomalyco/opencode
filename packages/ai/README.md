@@ -115,6 +115,23 @@ res.object.city
 `stream` puts `object` on its `finish` event; `loop` runs tools first and puts it on the final step's `finish`. A
 decode failure is an `AIError` whose `partial` holds the response.
 
+### Errors
+
+Every failure is an `AIError`. `reason._tag` names the kind (`RateLimit`, `InvalidRequest`, `Transport`, ...), and
+getters read the common fields without digging into `reason` or the raw body:
+
+```ts
+try {
+  await ai.generate({ model, prompt: "Hi" })
+} catch (error) {
+  if (!(error instanceof AIError)) throw error
+  error.status // HTTP status, when the failure came from a response
+  error.code // provider error code such as "model_not_found", when known
+  error.isRetryable // whether sending the same request again may succeed
+  error.retryAfterMs // delay the provider asked for, when known
+}
+```
+
 ### Raw provider events
 
 Set `includeRaw: true` on a request to also receive every provider frame as `{ type: "raw", data }`, in order and

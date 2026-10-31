@@ -3,6 +3,7 @@ import { NonNegativeInt } from "@opencode/schema"
 import { Tool } from "@opencode/schema/tool"
 import { ModelID, ProviderID, RouteID } from "./ids.js"
 import type { LLMResponse } from "./events.js"
+import { awsErrorType, providerCodes } from "../utils/provider-codes.js"
 
 export const ProviderFailureClassification = Schema.Literals(["context-overflow", "payload-too-large"])
 export type ProviderFailureClassification = typeof ProviderFailureClassification.Type
@@ -174,6 +175,67 @@ export class AIError extends Schema.TaggedError<AIError>()("AI.Error", {
 
   override get message(): string {
     return this.reason.message
+  }
+
+  /** HTTP status of the failed response, when the failure came from one. */
+  get status(): number | undefined {
+    return this.reason.http?.status
+  }
+
+  /** The provider's error code from the response body or `x-amzn-errortype`, or the transport's system error code. */
+  get code(): string | undefined {
+    if (this.reason._tag === "Transport" && this.reason.code !== undefined) return this.reason.code
+    return [
+      ...(this.reason.body === undefined ? [] : providerCodes(this.reason.body)),
+      ...awsErrorType(this.reason.http?.headers["x-amzn-errortype"]),
+    ][0]
+  }
+
+  /** Delay the provider asked for before retrying, from `retry-after` style headers. */
+  get retryAfterMs(): number | undefined {
+    if (this.reason._tag === "RateLimit") return this.reason.retryAfterMs ?? this.reason.rateLimit?.retryAfterMs
+    if (this.reason._tag === "QuotaExceeded" || this.reason._tag === "ProviderInternal") return this.reason.retryAfterMs
+    return undefined
+  }
+
+  /**
+   * Whether a failed call may succeed when sent again: rate limits, provider-side failures, transport failures that did
+   * not deliver an accepted write, and unrecognized failures. Callers decide which calls are safe to repeat.
+   */
+  get isRetryable(): boolean {
+    const override = this.reason.http?.headers["x-should-retry"]
+    if (override === "true") return true
+    if (override === "false") return false
+    switch (this.reason._tag) {
+      case "RateLimit":
+      case "ProviderInternal":
+        return true
+      // A WebSocket acknowledgment marks delivery accepted before model output may exist.
+      // Read failures can still recover; the caller chooses retry versus continuation from durable output.
+      case "Transport":
+        return (
+          this.reason.delivery !== "rejected" && (this.reason.delivery !== "accepted" || this.reason.operation === "read")
+        )
+      case "InvalidProviderOutput":
+        return this.reason.classification === "incomplete-stream"
+      // Unrecognized failures retry: classification records affirmative
+      // deterministic evidence, and transient failures are exactly the ones
+      // that arrive in shapes no classifier anticipates.
+      case "UnknownProvider":
+        return true
+      case "Authentication":
+      case "QuotaExceeded":
+      case "ContentPolicy":
+      case "InvalidRequest":
+      case "UnsupportedOperation":
+      case "NoRoute":
+      case "Timeout":
+        return false
+      default: {
+        const exhaustive: never = this.reason
+        return exhaustive
+      }
+    }
   }
 }
 

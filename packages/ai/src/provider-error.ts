@@ -12,8 +12,7 @@ import {
   type HttpContext,
   type HttpRateLimitDetails,
 } from "./schema/index.js"
-import { Json } from "./utils/json.js"
-import { isRecord } from "./utils/record.js"
+import { awsErrorType, providerCodes } from "./utils/provider-codes.js"
 
 const patterns = [
   /prompt is too long/i,
@@ -86,44 +85,8 @@ export const isContextOverflowFailure = (failure: unknown) =>
  * Whether a failed call may succeed when sent again: rate limits, provider-side failures, transport failures that did
  * not deliver an accepted write, and unrecognized failures. Callers decide which calls are safe to repeat.
  */
-export const isRetryable = (error: AIError) => {
-  const override = error.reason.http?.headers["x-should-retry"]
-  if (override === "true") return true
-  if (override === "false") return false
-  switch (error.reason._tag) {
-    case "RateLimit":
-    case "ProviderInternal":
-      return true
-    // A WebSocket acknowledgment marks delivery accepted before model output may exist.
-    // Read failures can still recover; the caller chooses retry versus continuation from durable output.
-    case "Transport":
-      return (
-        error.reason.delivery !== "rejected" &&
-        (error.reason.delivery !== "accepted" || error.reason.operation === "read")
-      )
-    case "InvalidProviderOutput":
-      return error.reason.classification === "incomplete-stream"
-    // Unrecognized failures retry: classification records affirmative
-    // deterministic evidence, and transient failures are exactly the ones
-    // that arrive in shapes no classifier anticipates.
-    case "UnknownProvider":
-      return true
-    case "Authentication":
-    case "QuotaExceeded":
-    case "ContentPolicy":
-    case "InvalidRequest":
-    case "UnsupportedOperation":
-    case "NoRoute":
-    case "Timeout":
-      return false
-    default: {
-      const exhaustive: never = error.reason
-      return exhaustive
-    }
-  }
-}
+export const isRetryable = (error: AIError) => error.isRetryable
 
-const decodeJson = Schema.decodeUnknownOption(Json)
 // OpenCode Zen reports account caps as typed 429/402 errors that are not throttles.
 const QUOTA_CODES = new Set([
   "insufficient_quota",
@@ -318,41 +281,4 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
   // Any remaining 4xx is a deterministic rejection of this request.
   if (input.status !== undefined && input.status >= 400 && input.status < 500) return new InvalidRequestError(details)
   return new UnknownProviderError(details)
-}
-
-function providerCodes(value: unknown) {
-  const decoded = typeof value === "string" ? Option.getOrUndefined(decodeJson(value)) : value
-  if (!isRecord(decoded)) return []
-  const error = isRecord(decoded.error) ? decoded.error : undefined
-  const inner = error && isRecord(error.innererror) ? error.innererror : undefined
-  const metadata = error && isRecord(error.metadata) ? error.metadata : undefined
-  const response = isRecord(decoded.response) ? decoded.response : undefined
-  const responseError = response && isRecord(response.error) ? response.error : undefined
-  const exception = isRecord(decoded.exception) ? decoded.exception : undefined
-  return [
-    decoded.code,
-    ...awsErrorType(decoded.__type),
-    ...awsErrorType(decoded.code),
-    decoded.error_type,
-    error?.code,
-    error?.type,
-    error?.status,
-    error?.error_type,
-    // Google `google.rpc.ErrorInfo` details carry the specific reason.
-    ...(Array.isArray(error?.details)
-      ? error.details.map((detail) => (isRecord(detail) ? detail.reason : undefined))
-      : []),
-    inner?.code,
-    metadata?.error_type,
-    responseError?.code,
-    response?.error_type,
-    exception?.type,
-  ].filter((value): value is string => typeof value === "string")
-}
-
-// AWS restJson1 reports the modeled error in `X-Amzn-Errortype`, `__type` or `code`, possibly
-// namespaced (`ns#Name`) or suffixed (`Name:uri`). Keep the shape name only.
-// https://smithy.io/2.0/aws/protocols/aws-restjson1-protocol.html#operation-error-serialization
-function awsErrorType(value: unknown) {
-  return typeof value === "string" ? [value.replace(/:.*/s, "").replace(/^[^#]*#/, "")] : []
 }
