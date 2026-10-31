@@ -144,3 +144,36 @@ the password can be changed.
 ```bash
 $ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
 ```
+
+### Docker
+
+The image entrypoint is `opencode`, which opens the TUI without a subcommand.
+Pass `serve` to run a foreground server, and bind to `0.0.0.0` inside the container
+so the published port can reach it:
+
+```bash
+export OPENCODE_PASSWORD="a-long-secret"
+docker run --rm \
+  -p 127.0.0.1:4096:4096 \
+  -e OPENCODE_PASSWORD \
+  -v opencode-data:/root/.local/share/opencode \
+  -v "$PWD:/workspace" \
+  -w /workspace \
+  ghcr.io/anomalyco/opencode:2.0.32 \
+  serve --hostname 0.0.0.0 --port 4096
+```
+
+This publishes the server only on the Docker host's loopback interface. The project
+is mounted at `/workspace`; the named data volume preserves sessions when the
+container is removed. With the image's default root user, data lives in
+`/root/.local/share/opencode`. If `OPENCODE_DB` points outside that volume, persist
+its containing directory too.
+
+From another terminal with the same `OPENCODE_PASSWORD`, verify the authenticated
+API:
+
+```bash
+curl --fail --user "opencode:$OPENCODE_PASSWORD" http://127.0.0.1:4096/api/info
+```
+
+For the older `2.0.0` image, use `/api/location` instead of `/api/info`.
