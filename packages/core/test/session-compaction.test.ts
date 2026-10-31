@@ -888,6 +888,31 @@ it.effect("compaction keeps the output limit for a request that fits its target"
   }),
 )
 
+it.effect("a small compaction buffer still leaves the summary the default reserve for its reply", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      requests = []
+      const compaction = yield* SessionCompaction.Service
+      // This buffer alone would cap the summary at 2k output, which a reasoning model can spend entirely thinking.
+      yield* compaction.transform((editor) => editor.configure({ buffer: 2_000 }))
+      const session = yield* insertSession(Session.ID.make("ses_small_buffer"))
+      const messages = [
+        SessionMessage.User.make({
+          id: SessionMessage.ID.create(),
+          type: "user",
+          text: "x".repeat(640_000),
+          time: { created: DateTime.makeUnsafe(0) },
+        }),
+      ]
+
+      expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
+      expect(requests).toHaveLength(1)
+      // 15% of the 200k window is kept free for the reply, rather than the 2k buffer.
+      expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 30_000 }))
+    }),
+  ),
+)
+
 it.effect("compaction hooks can supply the summary instead of the model", () =>
   Effect.gen(function* () {
     requests = []
@@ -1078,7 +1103,8 @@ for (const background of [false, true]) {
         system: normal.request.system,
         tools: normal.request.tools,
         messages: [...normal.request.messages, Message.user(SessionCompaction.buildPrompt(false))],
-        generation: { maxTokens: summaryBuffer },
+        // The buffer is below the default reserve, so the summary keeps the reserve for its own reply.
+        generation: { maxTokens: 30_000 },
       })
     }),
   )
@@ -1197,7 +1223,8 @@ it.effect("summary measured recovery reuses usage only for the matching agent", 
         ...toLLMMessages(fixture.context.messages, resolved.ref),
         Message.user(SessionCompaction.buildPrompt(false)),
       ],
-      generation: { maxTokens: summaryBuffer },
+      // The buffer is below the default reserve, so the summary keeps the reserve for its own reply.
+      generation: { maxTokens: 30_000 },
     })
   }),
 )

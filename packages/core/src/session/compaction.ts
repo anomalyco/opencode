@@ -281,11 +281,13 @@ export const layer = Layer.effect(
             .resolve({ ...context.session, model: agent.model }, catalog.available)
             .pipe(Effect.orElseSucceed(() => undefined)))) ??
         context.model
-      const ceiling = calculateCeiling(model.limit, buffer)
+      // `buffer` only reserves headroom for the last reply before compaction, so a summary request keeps the
+      // default reserve as well and its own reply has room to think even when `buffer` is small.
+      const ceiling = (limit: SessionContext.Loaded["model"]["limit"]) =>
+        native ? calculateCeiling(limit, buffer) : summaryCeiling(limit, buffer)
+      const aim = ceiling(model.limit)
       // An unknown window never triggers auto compaction, but the compaction request still needs a size to aim for.
-      const cap = Number.isFinite(ceiling)
-        ? ceiling
-        : calculateCeiling({ ...model.limit, context: UNKNOWN_WINDOW }, buffer)
+      const cap = Number.isFinite(aim) ? aim : ceiling({ ...model.limit, context: UNKNOWN_WINDOW })
       return { context: model === context.model ? context : { ...context, model }, cap }
     })
 
@@ -1141,6 +1143,14 @@ const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer
   if (tokens !== undefined && tokens < window) return window - tokens
   return window - Math.max(Math.floor(window * RESERVE_SHARE), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
 }
+
+/**
+ * The largest summary request that still leaves its reply the default reserve. `buffer` is headroom for the last
+ * reply before compaction, so a small one would cap the summary itself at the buffer size and a reasoning model
+ * could spend the whole budget thinking; the request therefore keeps at least the default reserve free.
+ */
+const summaryCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer: number | undefined) =>
+  Math.min(calculateCeiling(limit, buffer), calculateCeiling(limit, undefined))
 
 /**
  * The largest summary request that leaves `RESERVE_MIN` of the window for the summary, or less when the request
