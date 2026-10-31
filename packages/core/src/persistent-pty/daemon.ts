@@ -355,10 +355,10 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     Effect.gen(function* () {
       const current = yield* connect(false)
       if (!current) return undefined
-      return yield* request(value).pipe(
-        Effect.catch((error) => (error.kind === "connect" ? Effect.succeed(undefined) : Effect.fail(error))),
-      )
-    })
+      return yield* request(value)
+    }).pipe(
+      Effect.catch((error) => (error.kind === "connect" ? Effect.succeed(undefined) : Effect.fail(error))),
+    )
 
   const supports = Effect.fn("PersistentPty.daemon.supports")(function* (feature: string) {
     const current = yield* connect(false)

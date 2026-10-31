@@ -162,7 +162,7 @@ it.live("rejects incompatible daemons without replacing or killing them", () =>
   Effect.gen(function* () {
     const { root, directory } = yield* temporaryRuntime()
     const existing = yield* Effect.acquireRelease(
-      Effect.sync(() => spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"])),
+      Effect.sync(() => spawn("sleep", ["30"])),
       (child) =>
         Effect.promise(async () => {
           if (child.exitCode !== null || child.signalCode !== null) return
@@ -293,6 +293,17 @@ it.live("does not record span failures on requestIfRunning and supports when dae
     }
   }).pipe(Effect.provideService(Tracer.Tracer, tracer))
 })
+
+it.live("returns undefined on requestIfRunning when service.json exists but daemon is gone", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const deadSocket = path.join(directory, "dead.sock")
+    yield* Effect.promise(() => writeRegistration(directory, deadSocket))
+    const daemon = yield* makeDaemonTransport(root, "daemon")
+
+    expect(yield* daemon.requestIfRunning({ op: "list" })).toBeUndefined()
+  }),
+)
 
 function temporaryRuntime() {
   return Effect.gen(function* () {
