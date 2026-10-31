@@ -187,14 +187,18 @@ const zodJsonSchema = (schema: $ZodType, io: "input" | "output"): JsonSchema.Jso
       for (const child of Object.values(value)) hideStrandedParents(child)
       return
     }
-    if (zod.toJSONSchema !== undefined && zod.parent !== undefined) {
-      const parent = zod.parent
+    // `.describe()` and other clones point `_zod.parent` at the schema they derive from, so an
+    // argument can inherit an override through that link without carrying it itself. Follow
+    // parents as well as definitions so the overridden ancestor is found either way.
+    const parent = zod.parent
+    hideStrandedParents(parent)
+    hideStrandedParents(zod.def)
+    if (zod.toJSONSchema !== undefined && parent !== undefined) {
       zod.parent = undefined
       restore.push(() => {
         zod.parent = parent
       })
     }
-    hideStrandedParents(zod.def)
   }
   try {
     hideStrandedParents(schema)

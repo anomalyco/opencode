@@ -357,6 +357,36 @@ test("legacy Zod schemas with JSON Schema overrides still convert", () => {
   })
 })
 
+test("legacy Zod schemas cloned from an overridden parent still convert", () => {
+  const base = z.string().describe("Base")
+  base._zod.toJSONSchema = () => ({ type: "string", description: "Base" })
+  // `describe()` clones point at the overridden schema without carrying the override themselves.
+  const path = base.describe("File path")
+  const input = z.object({ args: z.object({ path }) })
+  Object.defineProperty(input, "~standard", {
+    value: { validate: (value: unknown) => ({ value }), vendor: "zod", version: 1 },
+  })
+  const tool: Info = {
+    name: "legacy-zod-clone",
+    description: "Legacy Zod tool with an overridden parent",
+    input,
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  expect(definition(tool).inputSchema).toEqual({
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    properties: {
+      args: {
+        type: "object",
+        properties: { path: { type: "string", description: "File path" } },
+        required: ["path"],
+      },
+    },
+    required: ["args"],
+  })
+})
+
 test("portable schema failures become tool failures", async () => {
   const input = {
     "~standard": {
