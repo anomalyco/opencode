@@ -6448,6 +6448,14 @@ describe("SessionRunnerLLM", () => {
     const context = yield* s.context
     expect(context.filter((message) => message.type === "assistant")).toHaveLength(RETRY_GAPS.length + 1)
     expect(context.filter((message) => message.type === "synthetic")).toHaveLength(0)
+
+    yield* s.llm.always(TestLLM.text("Continued after exhaustion", "after-exhaustion"))
+    yield* s.runPrompt("Continue please")
+    expect(s.requests.at(-1)?.messages).toMatchObject([
+      { role: "user", content: [{ type: "text", text: "Exhaust partial continuations" }] },
+      { role: "assistant", content: [{ type: "text", text: "Partial" }] },
+      { role: "user", content: [{ type: "text", text: "Continue please" }] },
+    ])
   })
 
   scenario("stops once the retry allowance is spent", function* (s) {

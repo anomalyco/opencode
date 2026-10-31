@@ -161,15 +161,22 @@ const isUncalledAbortedTool = (item: SessionMessage.AssistantTool) =>
 const isUnfinalizedReasoning = (native: Record<string, unknown> | undefined) =>
   native !== undefined && native.reasoningEncryptedContent === null && typeof native.signature !== "string"
 
-const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
+const assistant = (
+  message: SessionMessage.Assistant,
+  next: SessionMessage.Info | undefined,
+  model: Model.Ref,
+  providerMetadataKey: string,
+) => {
   const sameProvider = message.model.providerID === model.providerID
   const sameModel = sameProvider && message.model.id === model.id
   const hasRanTool = message.content.some(
     (item) => item.type === "tool" && (item.time.ran !== undefined || item.executed === true),
   )
-  // A provider or transport failure before any tool ran is retried from the prompt,
-  // so its broken partial output must not enter model history.
-  if (message.error !== undefined && message.error.type !== "aborted" && !hasRanTool) return []
+  // A zero-tool failure superseded by Outcome.Retry({ freshAssistant: true }) is retried from the
+  // prompt (`message.retry` before the fresh message starts, `next?.type === "assistant"` once it
+  // does). Terminal failures and legacy synthetic continuations keep visible text without native state.
+  const supersededByRetry = message.retry !== undefined || next?.type === "assistant"
+  if (message.error !== undefined && message.error.type !== "aborted" && !hasRanTool && supersededByRetry) return []
   const aborted = message.error?.type === "aborted"
   const nonAbortError = message.error !== undefined && !aborted
   const reasoningInterrupted = message.content.some(
@@ -273,7 +280,12 @@ const modelSwitched = (message: SessionMessage.ModelSelected, model: Model.Ref):
   return [Message.effort({ effort: to.effort, previous: from.effort })]
 }
 
-function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
+function toLLMMessage(
+  message: SessionMessage.Info,
+  next: SessionMessage.Info | undefined,
+  model: Model.Ref,
+  providerMetadataKey: string,
+): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "idle":
@@ -325,7 +337,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
         }),
       ]
     case "assistant":
-      return assistant(message, model, providerMetadataKey)
+      return assistant(message, next, model, providerMetadataKey)
     case "compaction": {
       if (message.status !== "completed") return []
       // History selection only keeps native windows the target model can replay.
@@ -355,4 +367,4 @@ export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
-) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))
+) => messages.flatMap((message, index) => toLLMMessage(message, messages[index + 1], model, providerMetadataKey))

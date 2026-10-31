@@ -1283,10 +1283,38 @@ Earlier work
       ],
     ])
 
-    const providerFailed = toLLMMessages(
+    const terminalFailed = toLLMMessages(
       [
         SessionMessage.Assistant.make({
           id: id("assistant-provider-failed"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Partial visible answer",
+              native: { phase: "commentary" },
+            }),
+          ],
+          error: { type: "provider.unknown", message: "Stream dropped" },
+          time: { created, completed: created },
+        }),
+      ],
+      Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
+    )
+    expect(terminalFailed[0]?.content).toEqual([
+      {
+        type: "text",
+        text: "Partial visible answer",
+        providerMetadata: undefined,
+      },
+    ])
+
+    const supersededFailed = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-superseded"),
           type: "assistant",
           agent: build,
           model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
@@ -1300,10 +1328,31 @@ Earlier work
           error: { type: "provider.unknown", message: "Stream dropped" },
           time: { created, completed: created },
         }),
+        SessionMessage.Assistant.make({
+          id: id("assistant-replacement"),
+          type: "assistant",
+          agent: build,
+          model: { id: Model.ID.make("same"), providerID: Provider.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantText.make({
+              type: "text",
+              text: "Clean retry answer",
+              native: { phase: "final_answer" },
+            }),
+          ],
+          time: { created, completed: created },
+        }),
       ],
       Model.Ref.make({ id: Model.ID.make("same"), providerID: Provider.ID.make("provider") }),
     )
-    expect(providerFailed).toEqual([])
+    expect(supersededFailed).toHaveLength(1)
+    expect(supersededFailed[0]?.content).toEqual([
+      {
+        type: "text",
+        text: "Clean retry answer",
+        providerMetadata: { provider: { phase: "final_answer" } },
+      },
+    ])
   })
 
   test("preserves assistant text provider state for the same model", () => {
