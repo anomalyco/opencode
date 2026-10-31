@@ -1,17 +1,21 @@
 import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect, test } from "bun:test"
 import { AIError, TransportError } from "@opencode/ai/effect"
+import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Instance } from "@opencode/core/instance/service"
 import { Job } from "@opencode/core/job"
+import { JobTable } from "@opencode/core/job/sql"
 import { KV } from "@opencode/core/kv"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
+import { Model } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
+import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
@@ -22,6 +26,8 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
+import { SubagentJob } from "@opencode/core/session/subagent-job"
+import { Money } from "@opencode/schema/money"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -785,6 +791,7 @@ describe("SessionRestart background recovery", () => {
                       .filter((message) => message.type === "synthetic")
                       .map((message) => message.text),
                   })
+                  yield* recordAssistantText(bus, sessionID, "Recovered result")
                   yield* Deferred.await(release)
                 }),
               { maxAttempts: 2 },
@@ -827,12 +834,16 @@ describe("SessionRestart background recovery", () => {
   it.effect("resumes a background subagent and notifies its parent exactly once", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
+      const bus = yield* Bus.Service
       const jobs = yield* Job.Service
       const parent = Session.ID.make("ses_subagent_recovery_parent")
       const child = Session.ID.make("ses_subagent_recovery_child")
       const unrelated = Session.ID.make("ses_subagent_unrelated_child")
       yield* seedSessions(database, [parent], { time_suspended: Date.now(), resume_attempts: 1 })
       yield* seedSessions(database, [child, unrelated], { parent_id: parent, time_suspended: Date.now() })
+      // Pre-upgrade subagent prompts had no `metadata.source`; `pending = true` preserves delivery on upgrade.
+      yield* seedInbox(database, child, ["steer"])
+      yield* SessionInbox.promote(database.db, bus, child, "steer")
       yield* jobs.start({
         id: child,
         type: "subagent",
@@ -861,6 +872,7 @@ describe("SessionRestart background recovery", () => {
           Effect.gen(function* () {
             drained.push(sessionID)
             if (sessionID === child) {
+              yield* recordAssistantText(bus, sessionID, "Recovered result")
               yield* Deferred.succeed(resumed, undefined)
               yield* Deferred.await(release)
               return
@@ -904,30 +916,19 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
-  it.effect("delivers a subagent result persisted before restart without rerunning the child", () =>
+  it.effect("delivers persisted subagent results in order after restart without rerunning the child", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
-      const jobs = yield* Job.Service
+      const bus = yield* Bus.Service
       const parent = Session.ID.make("ses_subagent_completed_parent")
       const child = Session.ID.make("ses_subagent_completed_child")
       yield* seedSessions(database, [parent])
       yield* seedSessions(database, [child], { parent_id: parent })
-      const complete = yield* Deferred.make<string>()
-      yield* jobs.start({
-        id: child,
-        type: "subagent",
-        recovery: {
-          kind: "subagent",
-          parentSessionID: parent,
-          childSessionID: child,
-          agent: "explore",
-          description: "Completed inspection",
-        },
-        run: Deferred.await(complete),
-      })
-      yield* jobs.background(child)
-      yield* Deferred.succeed(complete, "Recovered result")
-      yield* jobs.wait({ id: child })
+      yield* seedSubagentMarker(database, parent, child, "Completed inspection")
+      yield* recordAssistantText(bus, child, "First recovered result")
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: child })
+      yield* recordAssistantText(bus, child, "Second recovered result")
+      const settled = yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: child })
 
       const parentWoken = yield* Deferred.make<void>()
       const drained: Session.ID[] = []
@@ -948,40 +949,105 @@ describe("SessionRestart background recovery", () => {
 
       expect(drained).toEqual([parent])
       expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
-        { payload: { text: expect.stringContaining("Recovered result"), metadata: { state: "completed" } } },
+        { payload: { text: expect.stringContaining("First recovered result"), metadata: { state: "completed" } } },
+        { payload: { text: expect.stringContaining("Second recovered result"), metadata: { state: "completed" } } },
       ])
       expect(yield* restarted.pendingBackground).toEqual([])
+      expect(
+        yield* database.db.select().from(JobTable).where(eq(JobTable.child_session_id, child)).get(),
+      ).toMatchObject({
+        pending: false,
+        reported: SessionMessage.ID.fromEvent(settled.id),
+        dirty: false,
+      })
     }),
   )
+
+  for (const delivered of [false, true]) {
+    it.effect(`does not duplicate a legacy subagent notification already ${delivered ? "delivered" : "admitted"}`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const bus = yield* Bus.Service
+        const jobs = yield* Job.Service
+        const parent = Session.ID.make("ses_subagent_legacy_parent")
+        const child = Session.ID.make("ses_subagent_legacy_child")
+        yield* seedSessions(database, [parent])
+        yield* seedSessions(database, [child], { parent_id: parent })
+        yield* recordAssistantText(bus, child, "Legacy result")
+        yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: child })
+        yield* jobs.start({
+          id: child,
+          type: "subagent",
+          recovery: {
+            kind: "subagent",
+            parentSessionID: parent,
+            childSessionID: child,
+            agent: "explore",
+            description: "Legacy completion",
+          },
+          run: Effect.succeed("Legacy result"),
+        })
+        const backgrounded = yield* jobs.background(child)
+        yield* jobs.wait({ id: child })
+        const notificationID = backgrounded?.notificationID
+        if (!notificationID) return yield* Effect.die("notification ID missing")
+        const sessions = yield* Session.Service
+        yield* sessions.synthetic({
+          id: notificationID,
+          sessionID: parent,
+          text: "Legacy result already admitted",
+          metadata: { source: "subagent", childID: child, agent: "explore", state: "completed" },
+          resume: false,
+        })
+        if (delivered) yield* SessionInbox.promote(database.db, bus, parent, "steer")
+
+        const woken = yield* Deferred.make<void>()
+        const drained: Session.ID[] = []
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+        const context = yield* buildExecution(
+          scope,
+          ({ sessionID }) =>
+            Effect.sync(() => void drained.push(sessionID)).pipe(Effect.andThen(Deferred.succeed(woken, undefined))),
+          undefined,
+          restarted,
+        )
+        yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+        if (!delivered) yield* Deferred.await(woken)
+
+        expect(drained).toEqual(delivered ? [] : [parent])
+        expect(yield* restarted.pendingBackground).toEqual([])
+        expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(delivered ? 0 : 1)
+        if (!delivered) yield* SessionInbox.promote(database.db, bus, parent, "steer")
+        const messages = (yield* sessions.messages({ sessionID: parent })).filter((message) => message.type !== "idle")
+        expect(messages).toMatchObject([
+          {
+            id: notificationID,
+            type: "synthetic",
+            text: "Legacy result already admitted",
+            metadata: { state: "completed" },
+          },
+        ])
+      }),
+    )
+  }
 
   it.effect("retains a subagent completion marker when synthetic admission conflicts", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
+      const bus = yield* Bus.Service
       const admission = yield* SessionInbox.Service
-      const jobs = yield* Job.Service
       const sessions = yield* Session.Service
       const parent = Session.ID.make("ses_completion_conflict_parent")
       const child = Session.ID.make("ses_completion_conflict_child")
       yield* seedSessions(database, [parent])
       yield* seedSessions(database, [child], { parent_id: parent })
-      yield* jobs.start({
-        id: child,
-        type: "subagent",
-        recovery: {
-          kind: "subagent",
-          parentSessionID: parent,
-          childSessionID: child,
-          agent: "explore",
-          description: "Completed inspection",
-        },
-        run: Effect.succeed("Recovered result"),
-      })
-      yield* jobs.wait({ id: child })
-      yield* jobs.background(child)
-      const marker = (yield* jobs.pendingBackground)[0]
-      if (!marker) return yield* Effect.die("background record missing")
+      yield* seedSubagentMarker(database, parent, child, "Completed inspection")
+      yield* recordAssistantText(bus, child, "Recovered result")
+      const settled = yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: child })
       yield* admission.admit({
-        id: marker.notificationID,
+        id: SessionMessage.ID.make(`${SessionMessage.ID.fromEvent(settled.id)}_subagent`),
         sessionID: parent,
         item: { type: "user", payload: { text: "User input" }, delivery: "steer" },
       })
@@ -992,7 +1058,12 @@ describe("SessionRestart background recovery", () => {
       const exit = yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions.pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.SyntheticConflictError)
-      expect(yield* jobs.pendingBackground).toEqual([marker])
+      expect(
+        yield* database.db.select().from(JobTable).where(eq(JobTable.child_session_id, child)).get(),
+      ).toMatchObject({
+        reported: null,
+        dirty: true,
+      })
       expect(yield* sessions.inbox(parent)).toMatchObject([{ type: "user", payload: { text: "User input" } }])
     }),
   )
@@ -1002,7 +1073,6 @@ describe("SessionRestart background recovery", () => {
       Effect.gen(function* () {
         const database = yield* Database.Service
         const bus = yield* Bus.Service
-        const jobs = yield* Job.Service
         const parent = Session.ID.make("ses_subagent_budget_parent")
         const children = [
           Session.ID.make("ses_subagent_budget_child_1"),
@@ -1010,24 +1080,11 @@ describe("SessionRestart background recovery", () => {
         ]
         yield* seedSessions(database, [parent], { time_suspended: Date.now(), resume_attempts: resumeAttempts })
         yield* seedSessions(database, children, { parent_id: parent })
-        const complete = yield* Deferred.make<string>()
         for (const child of children) {
-          yield* jobs.start({
-            id: child,
-            type: "subagent",
-            recovery: {
-              kind: "subagent",
-              parentSessionID: parent,
-              childSessionID: child,
-              agent: "explore",
-              description: "Completed inspection",
-            },
-            run: Deferred.await(complete),
-          })
-          yield* jobs.background(child)
+          yield* seedSubagentMarker(database, parent, child, "Completed inspection")
+          yield* recordAssistantText(bus, child, "Recovered result")
+          yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: child })
         }
-        yield* Deferred.succeed(complete, "Recovered result")
-        yield* Effect.forEach(children, (id) => jobs.wait({ id }), { discard: true })
 
         const draining = yield* Deferred.make<number | undefined>()
         const release = yield* Deferred.make<void>()
@@ -1415,6 +1472,7 @@ function buildExecution(
     )
     return yield* Layer.buildWithScope(
       SessionRestart.layer(options).pipe(
+        Layer.provideMerge(Layer.fresh(SubagentJob.layer)),
         Layer.provideMerge(sessionLayer),
         Layer.provideMerge(Layer.fresh(SessionExecution.layer)),
         Layer.provide(Layer.succeed(Database.Service, database)),
@@ -1430,3 +1488,51 @@ function buildExecution(
     )
   })
 }
+
+function seedSubagentMarker(
+  database: Database.Interface,
+  parentSessionID: Session.ID,
+  childSessionID: Session.ID,
+  description: string,
+) {
+  const now = Date.now()
+  return database.db
+    .insert(JobTable)
+    .values({
+      notification_id: SessionMessage.ID.create(),
+      id: childSessionID,
+      session_id: parentSessionID,
+      child_session_id: childSessionID,
+      kind: "subagent",
+      title: description,
+      status: "completed",
+      recovery: { kind: "subagent", parentSessionID, childSessionID, agent: "explore", description },
+      pending: false,
+      reported: null,
+      dirty: false,
+      time_created: now,
+      time_updated: now,
+    })
+    .run()
+    .pipe(Effect.orDie)
+}
+
+const recordAssistantText = Effect.fnUntraced(function* (bus: Bus.Interface, sessionID: Session.ID, text: string) {
+  const assistantMessageID = SessionMessage.ID.create()
+  yield* bus.publish(SessionEvent.Step.Started, {
+    sessionID,
+    assistantMessageID,
+    agent: Agent.ID.make("explore"),
+    model: { id: Model.ID.make("test"), providerID: Provider.ID.make("test") },
+    started: 0,
+  })
+  yield* bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID, ordinal: 0 })
+  yield* bus.publish(SessionEvent.Text.Ended, { sessionID, assistantMessageID, ordinal: 0, text })
+  yield* bus.publish(SessionEvent.Step.Ended, {
+    sessionID,
+    assistantMessageID,
+    finish: "stop",
+    cost: Money.USD.zero,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  })
+})

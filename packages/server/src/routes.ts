@@ -30,6 +30,7 @@ import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
+import { SubagentJob } from "@opencode/core/session/subagent-job"
 import { Schedule } from "@opencode/core/schedule"
 import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
@@ -80,6 +81,7 @@ const applicationServiceNodes = [
   LocationServiceMap.node,
   LocationActivity.node,
   SessionRestart.node,
+  SubagentJob.node,
   Schedule.node,
   Workspace.node,
   FileWatch.node,

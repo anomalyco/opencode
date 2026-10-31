@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
-import { LanguageModel } from "@opencode/ai/effect"
+import { eq } from "drizzle-orm"
+import { Deferred, Effect, Exit, Fiber, Layer, Option, Queue, Schema, Scope, Stream } from "effect"
+import { AIError, InvalidRequestError, LanguageModel } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import path from "path"
@@ -20,7 +21,6 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Agent } from "@opencode/core/agent"
 import { Job } from "@opencode/core/job"
 import { JobTable } from "@opencode/core/job/sql"
-import { KV } from "@opencode/core/kv"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -37,6 +37,7 @@ import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Permission } from "@opencode/core/permission"
 import { SubagentTool } from "@opencode/core/tool/plugin/subagent"
 import { Tool } from "@opencode/core/tool"
+import { Watcher } from "@opencode/core/filesystem/watcher"
 import { tmpdir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
@@ -69,8 +70,12 @@ const executionNode = makeGlobalNode({
       const complete = Effect.fn("SubagentTest.complete")(function* (sessionID: Session.ID) {
         if (completed.has(sessionID)) return
         if ((yield* store.get(sessionID))?.title?.includes("fail")) {
-          yield* new SessionRunnerModel.ModelNotSelectedError({ sessionID })
-          return
+          const error = new SessionRunnerModel.ModelNotSelectedError({ sessionID })
+          yield* bus.publish(SessionEvent.Execution.Failed, {
+            sessionID,
+            error: { type: "model.unavailable", message: error.message },
+          })
+          return yield* error
         }
         completed.add(sessionID)
         const assistantMessageID = SessionMessage.ID.create()
@@ -99,6 +104,7 @@ const executionNode = makeGlobalNode({
           cost: Money.USD.zero,
           tokens,
         })
+        yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
       })
       return SessionExecution.Service.of({
         active: Effect.succeed(new Set()),
@@ -151,29 +157,108 @@ const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
   AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(subagentPluginSupervisor)]),
 )
-const completionIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
-    Global.node.replace(tempGlobalLayer),
-    offlineModels,
-    PluginSupervisor.node.replace(subagentPluginSupervisor),
-    LayerNodePlatform.llmClient.replace(TestLLM.testLayer({ fallback: TestLLM.text(childText, "completion") })),
-    SessionRunnerModel.node.replace(
-      Layer.succeed(SessionRunnerModel.Service, {
-        resolve: () =>
-          Effect.succeed(
-            SessionRunnerModel.resolved(
-              LanguageModel.make({ id: "child", provider: "test", route: OpenAIChat.route }),
-              {
-                capabilities: { tools: true, input: ["text"], output: ["text"] },
-                cost: [],
-                limit: { context: 200_000, output: 32_000 },
-              },
+const liveExecution = (fallback: TestLLM.Response, extraReplacements: LayerNode.Replacements = []) => {
+  const llm = TestLLM.testLayer({ fallback })
+  return Layer.merge(
+    llm,
+    AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, SubagentJob.node]), [
+      Global.node.replace(tempGlobalLayer),
+      offlineModels,
+      Watcher.node.replace(Watcher.configured({ enabled: false })),
+      PluginSupervisor.node.replace(subagentPluginSupervisor),
+      LayerNodePlatform.llmClient.replace(llm),
+      SessionRunnerModel.node.replace(
+        Layer.succeed(SessionRunnerModel.Service, {
+          resolve: () =>
+            Effect.succeed(
+              SessionRunnerModel.resolved(
+                LanguageModel.make({ id: "child", provider: "test", route: OpenAIChat.route }),
+                {
+                  capabilities: { tools: true, input: ["text"], output: ["text"] },
+                  cost: [],
+                  limit: { context: 200_000, output: 32_000 },
+                },
+              ),
             ),
-          ),
+        }),
+      ),
+      ...extraReplacements,
+    ]),
+  )
+}
+const completionIt = testEffect(liveExecution(TestLLM.text(childText, "completion")))
+
+const subagentRow = (database: Database.Interface, childID: Session.ID) =>
+  database.db.select().from(JobTable).where(eq(JobTable.child_session_id, childID)).get()
+
+// Launches a background child of a fresh parent and collects the synthetic messages the parent receives.
+const withBackgroundChild = <A, E, R>(
+  callID: string,
+  body: (child: {
+    readonly id: Session.ID
+    readonly parentID: Session.ID
+    readonly sessions: Session.Interface
+    readonly database: Database.Interface
+    readonly llm: TestLLM.TestInterface
+    readonly notifications: Queue.Queue<string>
+    readonly completed: (text: string) => string
+    readonly errored: (text: string) => string
+    readonly settle: Effect.Effect<void>
+  }) => Effect.Effect<A, E, R>,
+  responses: readonly TestLLM.Response[] = [],
+) =>
+  Effect.acquireRelease(
+    Effect.promise(() => tmpdir()),
+    (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+  ).pipe(
+    Effect.flatMap((dir) =>
+      Effect.gen(function* () {
+        const sessions = yield* Session.Service
+        const database = yield* Database.Service
+        const llm = yield* TestLLM.Test
+        if (responses.length > 0) yield* llm.push(...responses)
+        const parent = yield* sessions.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+          model: parentModel,
+          title: "Background child recipient",
+        })
+        yield* withSubagent(parent.location)
+        const locations = yield* LocationServiceMap.Service
+        const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+        const bus = yield* Bus.Service
+        const notifications = yield* Queue.unbounded<string>()
+        yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
+          event.data.sessionID === parent.id && event.data.item.type === "synthetic"
+            ? Queue.offer(notifications, event.data.item.payload.text).pipe(Effect.asVoid)
+            : Effect.void,
+        )
+        const result = yield* executeTool(registry, {
+          sessionID: parent.id,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: callID,
+            name: SubagentTool.name,
+            input: { agent: "reviewer", description: "background review", prompt: "review", background: true },
+          },
+        })
+        const id = outputSessionID(result.metadata)
+        return yield* body({
+          id,
+          parentID: parent.id,
+          sessions,
+          database,
+          llm,
+          notifications,
+          completed: (text) =>
+            `<subagent sessionID="${id}" state="completed" description="background review">\n${text}\n</subagent>`,
+          errored: (text) =>
+            `<subagent sessionID="${id}" state="error" description="background review">\n${text}\n</subagent>`,
+          settle: Effect.all([sessions.wait(id), sessions.wait(parent.id)], { discard: true }).pipe(Effect.orDie),
+        })
       }),
     ),
-  ]),
-)
+  )
 
 const withSubagent = (location: Location.Ref) =>
   Effect.gen(function* () {
@@ -232,17 +317,15 @@ describe("SubagentTool", () => {
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           const jobs = yield* Job.Service
+          const database = yield* Database.Service
           const bus = yield* Bus.Service
-          const admitted = yield* Deferred.make<Job.Background>()
+          const admitted = yield* Deferred.make<SessionMessage.ID>()
           const notifications: SessionMessage.ID[] = []
           yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
             Effect.gen(function* () {
               if (event.data.sessionID !== parent.id || event.data.item.type !== "synthetic") return
               notifications.push(event.data.inboxID)
-              const marker = (yield* jobs.pendingBackground).find((job) => job.notificationID === event.data.inboxID)
-              // The marker must survive until admission commits, not merely until delivery starts.
-              expect(marker?.status).toBe("completed")
-              if (marker) yield* Deferred.succeed(admitted, marker)
+              yield* Deferred.succeed(admitted, event.data.inboxID)
             }),
           )
 
@@ -256,52 +339,439 @@ describe("SubagentTool", () => {
               input: { agent: "reviewer", description: "background review", prompt: "review", background: true },
             },
           })
-          const marker = yield* Deferred.await(admitted)
+          const childID = outputSessionID(result.metadata)
+          const noticeID = yield* Deferred.await(admitted)
           yield* jobs.pendingBackground.pipe(Effect.repeat({ until: (pending) => pending.length === 0 }))
           yield* sessions.wait(parent.id)
           const messages = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
           expect(messages).toEqual([
             expect.objectContaining({
-              id: marker.notificationID,
+              id: noticeID,
               description: "background review",
-              text: `<subagent sessionID="${outputSessionID(result.metadata)}" state="completed" description="background review">\n${childText}\n</subagent>`,
+              text: `<subagent sessionID="${childID}" state="completed" description="background review">\n${childText}\n</subagent>`,
               metadata: {
                 source: "subagent",
-                childID: outputSessionID(result.metadata),
+                childID,
                 agent: "reviewer",
                 state: "completed",
               },
             }),
           ])
+          const saved = yield* subagentRow(database, childID)
+          expect(saved).toMatchObject({
+            session_id: parent.id,
+            child_session_id: childID,
+            kind: "subagent",
+            pending: false,
+            reported: expect.stringMatching(/^msg_/),
+            dirty: false,
+          })
 
-          // Reproduce a crash after admission but before acknowledgment using the real persisted row.
-          const database = yield* Database.Service
+          // Reproduce a crash after synthetic admission commits, before the saved marker advances.
           yield* database.db
-            .insert(JobTable)
-            .values({
-              notification_id: marker.notificationID,
-              id: marker.id,
-              session_id: parent.id,
-              child_session_id: outputSessionID(result.metadata),
-              kind: marker.recovery.kind,
-              title: "background review",
-              status: marker.status,
-              output: marker.output ?? null,
-              error: marker.error ?? null,
-              recovery: marker.recovery,
-            })
+            .update(JobTable)
+            .set({ reported: null, dirty: true })
+            .where(eq(JobTable.child_session_id, childID))
             .run()
           const restart = yield* SessionRestart.Service
           yield* restart.resumeSuspendedSessions
           yield* sessions.wait(parent.id)
-          expect(notifications).toEqual([marker.notificationID])
+          expect(notifications).toEqual([noticeID])
           expect((yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")).toEqual(
             messages,
           )
+          expect(yield* subagentRow(database, childID)).toMatchObject({
+            pending: false,
+            reported: saved?.reported,
+            dirty: false,
+          })
           expect(yield* jobs.pendingBackground).toEqual([])
         }),
       ),
     ),
+  )
+
+  for (const background of [true, false]) {
+    completionIt.live(
+      `notifies the parent when a ${background ? "background" : "foreground"} child continues after its initial report`,
+      () =>
+        Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+        ).pipe(
+          Effect.flatMap((dir) =>
+            Effect.gen(function* () {
+              const sessions = yield* Session.Service
+              const llm = yield* TestLLM.Test
+              yield* llm.push(TestLLM.text("Interim update.", "interim"))
+              const parent = yield* sessions.create({
+                location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+                model: parentModel,
+                title: "Continuation recipient",
+              })
+              yield* withSubagent(parent.location)
+              const locations = yield* LocationServiceMap.Service
+              const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+              const bus = yield* Bus.Service
+              const notifications = yield* Queue.unbounded<string>()
+              yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
+                event.data.sessionID === parent.id && event.data.item.type === "synthetic"
+                  ? Queue.offer(notifications, event.data.item.payload.text).pipe(Effect.asVoid)
+                  : Effect.void,
+              )
+
+              const result = yield* executeTool(registry, {
+                sessionID: parent.id,
+                ...toolIdentity,
+                call: {
+                  type: "tool-call",
+                  id: `call-continuation-${background}`,
+                  name: SubagentTool.name,
+                  input: {
+                    agent: "reviewer",
+                    description: "background review",
+                    prompt: "review",
+                    background,
+                  },
+                },
+              })
+              const childID = outputSessionID(result.metadata)
+              const framed = (text: string) =>
+                `<subagent sessionID="${childID}" state="completed" description="background review">\n${text}\n</subagent>`
+
+              if (background) {
+                expect(yield* Queue.take(notifications)).toBe(framed("Interim update."))
+              }
+              if (!background) {
+                expect(result.content).toEqual([
+                  {
+                    type: "text",
+                    text: `<subagent sessionID="${childID}" state="completed">\nInterim update.\n</subagent>`,
+                  },
+                ])
+              }
+              yield* Effect.all([sessions.wait(childID), sessions.wait(parent.id)], { discard: true })
+              expect(yield* Queue.size(notifications)).toBe(0)
+
+              // Something other than the subagent tool (a plugin or background shell) continues the child.
+              yield* sessions.synthetic({ sessionID: childID, text: "Continue from where you left off." })
+              const followUp = yield* Queue.take(notifications).pipe(Effect.timeoutOption("3 seconds"))
+              expect(Option.getOrUndefined(followUp)).toBe(framed(childText))
+              yield* Effect.all([sessions.wait(childID), sessions.wait(parent.id)], { discard: true })
+              expect(yield* Queue.size(notifications)).toBe(0)
+            }),
+          ),
+        ),
+    )
+  }
+
+  completionIt.live("does not wake the parent on empty successes, then reports the later text turn", () =>
+    withBackgroundChild(
+      "call-empty-continuations",
+      (child) =>
+        Effect.gen(function* () {
+          // Neither the initial empty step nor empty plugin retries wake the parent.
+          yield* child.settle
+          expect(yield* Queue.size(child.notifications)).toBe(0)
+
+          for (const _ of [1, 2]) {
+            yield* child.llm.push(TestLLM.stop())
+            yield* child.sessions.synthetic({ sessionID: child.id, text: "Continue from where you left off." })
+            yield* child.settle
+          }
+          expect(yield* Queue.size(child.notifications)).toBe(0)
+
+          yield* child.sessions.synthetic({ sessionID: child.id, text: "Continue from where you left off." })
+          const followUp = yield* Queue.take(child.notifications).pipe(Effect.timeoutOption("3 seconds"))
+          expect(Option.getOrUndefined(followUp)).toBe(child.completed(childText))
+          yield* child.settle
+          expect(yield* Queue.size(child.notifications)).toBe(0)
+        }),
+      [TestLLM.stop()],
+    ),
+  )
+
+  completionIt.live("reports a failed continuation to the parent", () =>
+    withBackgroundChild("call-failed-continuation", (child) =>
+      Effect.gen(function* () {
+        expect(yield* Queue.take(child.notifications)).toBe(child.completed(childText))
+        yield* child.settle
+
+        yield* child.llm.push(
+          Stream.fail(new AIError({ reason: new InvalidRequestError({ message: "provider boom" }) })),
+        )
+        yield* child.sessions.synthetic({ sessionID: child.id, text: "Continue from where you left off." })
+        const failed = yield* Queue.take(child.notifications).pipe(Effect.timeoutOption("3 seconds"))
+        expect(Option.getOrUndefined(failed)).toBe(child.errored("provider boom"))
+        yield* child.settle
+        expect(yield* Queue.size(child.notifications)).toBe(0)
+      }),
+    ),
+  )
+
+  completionIt.live("does not notify the parent when a continuation is interrupted", () =>
+    withBackgroundChild("call-interrupted-continuation", (child) =>
+      Effect.gen(function* () {
+        expect(yield* Queue.take(child.notifications)).toBe(child.completed(childText))
+
+        // The parent's own turn after the notification must not take the scripted response.
+        yield* child.settle
+        const requests = (yield* child.llm.requests()).length
+        yield* child.llm.push(Stream.never)
+        yield* child.sessions.synthetic({ sessionID: child.id, text: "Continue from where you left off." })
+        yield* child.llm.wait(requests + 1)
+        yield* child.sessions.interrupt(child.id)
+        yield* child.settle
+        expect(yield* Queue.size(child.notifications)).toBe(0)
+      }),
+    ),
+  )
+
+  completionIt.live("does not notify a parent being deleted while its child continues and cleans up markers", () =>
+    withBackgroundChild("call-deleted-parent", (child) =>
+      Effect.gen(function* () {
+        expect(yield* Queue.take(child.notifications)).toBe(child.completed(childText))
+        expect(yield* subagentRow(child.database, child.id)).toBeDefined()
+
+        // The parent's own turn after the notification must not take the scripted response.
+        yield* child.settle
+        const requests = (yield* child.llm.requests()).length
+        yield* child.llm.push(Stream.never)
+        yield* child.sessions.synthetic({ sessionID: child.id, text: "Continue from where you left off." })
+        yield* child.llm.wait(requests + 1)
+        yield* child.sessions.remove(child.parentID)
+        expect(yield* Queue.size(child.notifications)).toBe(0)
+        expect(Exit.isFailure(yield* child.sessions.get(child.id).pipe(Effect.exit))).toBe(true)
+        expect(yield* subagentRow(child.database, child.id)).toBeUndefined()
+      }),
+    ),
+  )
+
+  completionIt.live("cleans up the saved marker when the child session is deleted", () =>
+    withBackgroundChild("call-deleted-child", (child) =>
+      Effect.gen(function* () {
+        expect(yield* Queue.take(child.notifications)).toBe(child.completed(childText))
+        yield* child.settle
+        expect(yield* subagentRow(child.database, child.id)).toBeDefined()
+
+        yield* child.sessions.remove(child.id)
+        expect(yield* subagentRow(child.database, child.id)).toBeUndefined()
+      }),
+    ),
+  )
+
+  completionIt.live("still notifies the parent when a user steers a running background child", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const llm = yield* TestLLM.Test
+          const gate = yield* llm.gate()
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+            title: "Steered child recipient",
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const bus = yield* Bus.Service
+          const notifications = yield* Queue.unbounded<string>()
+          yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
+            event.data.sessionID === parent.id && event.data.item.type === "synthetic"
+              ? Queue.offer(notifications, event.data.item.payload.text).pipe(Effect.asVoid)
+              : Effect.void,
+          )
+
+          const launched = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-steered-child",
+              name: SubagentTool.name,
+              input: { agent: "reviewer", description: "background review", prompt: "review", background: true },
+            },
+          })
+          const childID = outputSessionID(launched.metadata)
+          yield* gate.started
+          // Steering into a turn the parent started keeps that turn owned by the subagent request.
+          yield* sessions.prompt({ sessionID: childID, text: "Also check edge cases." })
+          yield* llm.push(TestLLM.text("Steered final answer.", "steered"))
+          yield* gate.release
+
+          const delivered = yield* Queue.take(notifications).pipe(Effect.timeoutOption("3 seconds"))
+          expect(Option.getOrUndefined(delivered)).toBe(
+            `<subagent sessionID="${childID}" state="completed" description="background review">\nSteered final answer.\n</subagent>`,
+          )
+          yield* Effect.all([sessions.wait(childID), sessions.wait(parent.id)], { discard: true })
+          expect(yield* Queue.size(notifications)).toBe(0)
+        }),
+      ),
+    ),
+  )
+
+  completionIt.live("does not notify the parent when someone prompts a child directly", () =>
+    withBackgroundChild("call-direct-prompt", (child) =>
+      Effect.gen(function* () {
+        expect(yield* Queue.take(child.notifications)).toContain(childText)
+        yield* child.settle
+
+        yield* child.sessions.prompt({ sessionID: child.id, text: "One more question." })
+        yield* child.settle
+        expect(yield* Queue.size(child.notifications)).toBe(0)
+
+        // Later subagent continuations still report to the parent.
+        yield* child.llm.push(TestLLM.text("Back on task.", "resumed"))
+        yield* child.sessions.synthetic({ sessionID: child.id, text: "Background shell finished." })
+        const followUp = yield* Queue.take(child.notifications).pipe(Effect.timeoutOption("3 seconds"))
+        expect(Option.getOrUndefined(followUp)).toBe(child.completed("Back on task."))
+      }),
+    ),
+  )
+
+  completionIt.live("delivers multiple child turns in order without losing any", () =>
+    withBackgroundChild(
+      "call-ordered-turns",
+      (child) =>
+        Effect.gen(function* () {
+          expect(yield* Queue.take(child.notifications)).toBe(child.completed("turn one"))
+          yield* child.settle
+
+          // Pause the parent so both child follow-ups land and queue in order.
+          yield* child.llm.push(TestLLM.text("turn two", "t2"))
+          const second = yield* child.sessions.synthetic({ sessionID: child.id, text: "Step two." })
+          expect(yield* Queue.take(child.notifications)).toBe(child.completed("turn two"))
+          yield* child.settle
+
+          // Reverting turn two re-anchors `job.reported` to turn one so later turns still deliver.
+          yield* child.sessions.revert.stage({ sessionID: child.id, messageID: second.id, files: false })
+          yield* child.llm.push(TestLLM.text("turn three", "t3"))
+          yield* child.sessions.prompt({
+            sessionID: child.id,
+            metadata: { source: "subagent" },
+            text: "Step three.",
+          })
+          expect(yield* Queue.take(child.notifications)).toBe(child.completed("turn three"))
+          yield* child.settle
+          expect(yield* Queue.size(child.notifications)).toBe(0)
+        }),
+      [TestLLM.text("turn one", "t1")],
+    ),
+  )
+
+  testEffect(Layer.empty).live(
+    "preserves the saved marker across a server restart without repeating reported turns",
+    () =>
+      Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      ).pipe(
+        Effect.flatMap((dir) =>
+          Effect.gen(function* () {
+            const dbPath = path.join(dir.path, "restart.db")
+            const projectDir = path.join(dir.path, "project")
+            yield* Effect.promise(() => Bun.write(path.join(projectDir, ".keep"), ""))
+            const boot = (fallback: string) =>
+              liveExecution(TestLLM.text(fallback, "boot"), [
+                Database.node.replace(Database.configured({ path: dbPath })),
+              ])
+
+            // First server process: background child completes turn 1 and reports it.
+            const firstScope = yield* Scope.make()
+            const first = yield* Layer.buildWithScope(boot("before restart"), firstScope)
+            const { parentID, childID } = yield* Effect.gen(function* () {
+              const sessions = yield* Session.Service
+              const bus = yield* Bus.Service
+              const locations = yield* LocationServiceMap.Service
+              const parent = yield* sessions.create({
+                location: Location.Ref.make({ directory: AbsolutePath.make(projectDir) }),
+                model: parentModel,
+                title: "Restart parent",
+              })
+              yield* withSubagent(parent.location)
+              const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+              const notices = yield* Queue.unbounded<string>()
+              yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
+                event.data.sessionID === parent.id && event.data.item.type === "synthetic"
+                  ? Queue.offer(notices, event.data.item.payload.text).pipe(Effect.asVoid)
+                  : Effect.void,
+              )
+              const launched = yield* executeTool(registry, {
+                sessionID: parent.id,
+                ...toolIdentity,
+                call: {
+                  type: "tool-call",
+                  id: "call-across-restart",
+                  name: SubagentTool.name,
+                  input: { agent: "reviewer", description: "restart review", prompt: "review", background: true },
+                },
+              })
+              const id = outputSessionID(launched.metadata)
+              expect(yield* Queue.take(notices)).toBe(
+                `<subagent sessionID="${id}" state="completed" description="restart review">\nbefore restart\n</subagent>`,
+              )
+              yield* Effect.all([sessions.wait(id), sessions.wait(parent.id)], { discard: true })
+              return { parentID: parent.id, childID: id }
+            }).pipe(Effect.provide(first))
+            yield* Scope.close(firstScope, Exit.void)
+
+            // Second server process on the same SQLite database: turn 1 is not repeated, and turn 2 reports cleanly.
+            const secondScope = yield* Scope.make()
+            yield* Effect.addFinalizer(() => Scope.close(secondScope, Exit.void))
+            const second = yield* Layer.buildWithScope(boot("after restart"), secondScope)
+            yield* Effect.gen(function* () {
+              const sessions = yield* Session.Service
+              const restart = yield* SessionRestart.Service
+              const database = yield* Database.Service
+              const bus = yield* Bus.Service
+              yield* withSubagent(Location.Ref.make({ directory: AbsolutePath.make(projectDir) }))
+              const notices = yield* Queue.unbounded<string>()
+              yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
+                event.data.sessionID === parentID && event.data.item.type === "synthetic"
+                  ? Queue.offer(notices, event.data.item.payload.text).pipe(Effect.asVoid)
+                  : Effect.void,
+              )
+              yield* restart.resumeSuspendedSessions
+              expect(yield* Queue.size(notices)).toBe(0)
+
+              yield* sessions.synthetic({ sessionID: childID, text: "Continue after server restart." })
+              const afterRestart = yield* Queue.take(notices).pipe(Effect.timeoutOption("3 seconds"))
+              expect(Option.getOrUndefined(afterRestart)).toBe(
+                `<subagent sessionID="${childID}" state="completed" description="restart review">\nafter restart\n</subagent>`,
+              )
+              yield* Effect.all([sessions.wait(childID), sessions.wait(parentID)], { discard: true })
+              expect(yield* Queue.size(notices)).toBe(0)
+
+              // Simulate a crash before two completed child turns were reported: catch-up reconciles both in order.
+              const llm = yield* TestLLM.Test
+              const reportedBeforeCatchUp = (yield* subagentRow(database, childID))?.reported ?? null
+              yield* llm.push(TestLLM.text("missed one", "m1"))
+              yield* sessions.synthetic({ sessionID: childID, text: "First missed turn." })
+              expect(yield* Queue.take(notices)).toContain("missed one")
+              yield* Effect.all([sessions.wait(childID), sessions.wait(parentID)], { discard: true })
+
+              yield* llm.push(TestLLM.text("missed two", "m2"))
+              yield* sessions.synthetic({ sessionID: childID, text: "Second missed turn." })
+              expect(yield* Queue.take(notices)).toContain("missed two")
+              yield* Effect.all([sessions.wait(childID), sessions.wait(parentID)], { discard: true })
+
+              // Rewinding the marker before those two turns reconciles both idempotently on restart without duplicates.
+              yield* database.db
+                .update(JobTable)
+                .set({ reported: reportedBeforeCatchUp, dirty: true })
+                .where(eq(JobTable.child_session_id, childID))
+                .run()
+              yield* restart.resumeSuspendedSessions
+              expect(yield* Queue.size(notices)).toBe(0)
+              expect((yield* subagentRow(database, childID))?.dirty).toBe(false)
+            }).pipe(Effect.provide(second))
+          }),
+        ),
+      ),
   )
 
   productionIt.live("registers globally while resolving agents from the caller location", () =>
@@ -619,7 +1089,7 @@ describe("SubagentTool", () => {
           yield* jobs.start({
             id: child.id,
             type: SubagentTool.name,
-            run: Deferred.await(gate).pipe(Effect.as("done")),
+            run: Deferred.await(gate).pipe(Effect.andThen(sessions.resume(child.id)), Effect.as("done")),
           })
           const notified = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
             Stream.filter((event) => event.data.sessionID === parent.id && event.data.item.type === "synthetic"),

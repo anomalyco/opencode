@@ -98,12 +98,6 @@ export const Plugin = define({
                     agent: selected.id,
                     model: model ?? selected.info?.model ?? parent.model,
                   })
-                  yield* sessions.prompt({
-                    ...input.prompt,
-                    sessionID: child.id,
-                    text: ["You are a subagent spawned by another session.", text].join("\n"),
-                    resume: false,
-                  })
                   const recovery = {
                     kind: "subagent" as const,
                     parentSessionID: parent.id,
@@ -111,6 +105,14 @@ export const Plugin = define({
                     agent: selected.id,
                     description: command.description ?? name,
                   }
+                  yield* subagents.track(recovery)
+                  yield* sessions.prompt({
+                    ...input.prompt,
+                    metadata: { source: "subagent" },
+                    sessionID: child.id,
+                    text: ["You are a subagent spawned by another session.", text].join("\n"),
+                    resume: false,
+                  })
                   yield* subagents.start(recovery)
                   yield* subagents.background(recovery)
                   return

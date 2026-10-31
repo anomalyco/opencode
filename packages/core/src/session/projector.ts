@@ -25,6 +25,7 @@ import { Project } from "@opencode/schema/project"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import type { SessionSchema } from "./schema.js"
 import { SessionHistory } from "./history.js"
+import { JobTable } from "../job/sql.js"
 import { ProjectTable } from "../project/sql.js"
 
 type DatabaseService = Database.Interface["db"]
@@ -209,7 +210,10 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
       .orderBy(asc(SessionMessageTable.seq))
       .limit(ForkBatchSize)
       .all()
-      .pipe(Effect.orDie, Effect.flatMap((rows) => SessionHistory.withParts(db, rows)))
+      .pipe(
+        Effect.orDie,
+        Effect.flatMap((rows) => SessionHistory.withParts(db, rows)),
+      )
     if (rows.length === 0) break
 
     const values = yield* Effect.forEach(rows, (row) =>
@@ -531,6 +535,14 @@ function projectIdle(
       .where(eq(SessionTable.id, event.data.sessionID))
       .run()
       .pipe(Effect.orDie)
+    if (outcome !== "interrupted") {
+      yield* db
+        .update(JobTable)
+        .set({ dirty: true })
+        .where(and(eq(JobTable.child_session_id, event.data.sessionID), eq(JobTable.kind, "subagent")))
+        .run()
+        .pipe(Effect.orDie)
+    }
   })
 }
 
@@ -646,6 +658,11 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Deleted, (event) =>
       Effect.gen(function* () {
         yield* SessionBlob.releaseSession(db, event.data.sessionID)
+        yield* db
+          .delete(JobTable)
+          .where(or(eq(JobTable.session_id, event.data.sessionID), eq(JobTable.child_session_id, event.data.sessionID)))
+          .run()
+          .pipe(Effect.orDie)
         yield* db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie)
       }),
     )
@@ -906,6 +923,19 @@ const layer = Layer.effectDiscard(
           .update(SessionTable)
           .set({ revert: null, time_updated: event.created })
           .where(eq(SessionTable.id, event.data.sessionID))
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .update(JobTable)
+          .set({
+            reported: sql`(select ${SessionMessageTable.id} from ${SessionMessageTable} where ${SessionMessageTable.session_id} = ${event.data.sessionID} and ${SessionMessageTable.type} = 'idle' order by ${SessionMessageTable.seq} desc limit 1)`,
+          })
+          .where(
+            and(
+              eq(JobTable.child_session_id, event.data.sessionID),
+              sql`${JobTable.reported} is not null and not exists (select 1 from ${SessionMessageTable} where ${SessionMessageTable.session_id} = ${event.data.sessionID} and ${SessionMessageTable.id} = ${JobTable.reported})`,
+            ),
+          )
           .run()
           .pipe(Effect.orDie)
         yield* InstructionState.rewind(db, event.data.sessionID, boundary.seq)
