@@ -10,13 +10,14 @@
 /** @jsxImportSource @opentui/solid */
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { TextBuffer, TextBufferView } from "@opentui/core"
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { OneCellSpinner } from "../component/one-cell-spinner"
 import { WORK_SPINNERS, SEED_LAUNCH, SEED_MONO } from "../ui/one-cell-motion"
 import { entrySplashLayout } from "./splash"
 import {
   RUN_SUBAGENT_PANEL_ROWS,
   RunAgentSelectBody,
+  RunPickerBody,
   RunCommandMenuBody,
   RunModelSelectBody,
   RunQueuedPromptSelectBody,
@@ -53,7 +54,9 @@ import type {
   MiniSettings,
   PermissionReply,
   QueuedPromptAction,
+  RunAction,
   RunAgent,
+  RunPicker,
   RunCommand,
   RunInput,
   RunPrompt,
@@ -124,6 +127,9 @@ type RunFooterViewProps = {
   onMiniSettingChange: (change: MiniSettingChange) => void | Promise<void>
   onSubagentSelect?: (sessionID: string | undefined) => void
   onSubagentInterrupt?: (sessionID: string) => void
+  actions?: () => RunAction[]
+  picker?: () => RunPicker | undefined
+  prefill?: () => RunPrompt | undefined
 }
 
 export function RunFooterView(props: RunFooterViewProps) {
@@ -158,6 +164,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const modeling = createMemo(() => active().type === "prompt" && route().type === "model")
   const varianting = createMemo(() => active().type === "prompt" && route().type === "variant")
   const setting = createMemo(() => active().type === "prompt" && route().type === "settings")
+  const picking = createMemo(() => active().type === "prompt" && route().type === "picker")
   const panel = createMemo(
     () =>
       active().type === "permission" ||
@@ -168,6 +175,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       agenting() ||
       modeling() ||
       varianting() ||
+      picking() ||
       setting(),
   )
   const selected = createMemo(() => {
@@ -299,6 +307,18 @@ export function RunFooterView(props: RunFooterViewProps) {
     openRoute({ type: "variant" })
   }
 
+  // The runtime hands over a new picker object each time it wants the list shown.
+  createEffect(on(() => props.picker?.(), (picker) => picker && openRoute({ type: "picker" }), { defer: true }))
+  createEffect(
+    on(
+      () => props.prefill?.(),
+      (prompt) => {
+        if (prompt) composer.replacePrompt(prompt)
+      },
+      { defer: true },
+    ),
+  )
+
   const openSettings = () => {
     openRoute({ type: "settings" })
   }
@@ -364,6 +384,8 @@ export function RunFooterView(props: RunFooterViewProps) {
     openTab(next.sessionID)
   }
   const [promptRows, setPromptRows] = createSignal(1)
+  // A prefilled menu action borrows the composer; the draft it replaced comes back once that command is sent.
+  let stashed: { command: string; draft: RunPrompt } | undefined
   const composer = createPromptState({
     directory: props.directory,
     findFiles: props.findFiles,
@@ -382,7 +404,14 @@ export function RunFooterView(props: RunFooterViewProps) {
     history: props.history,
     queuedPrompts: queue,
     onQueuedPromptSteer: (inboxID) => queuedPromptAction("steer", inboxID),
-    onSubmit: props.onSubmit,
+    onSubmit: async (prompt) => {
+      const borrowed = stashed
+      stashed = undefined
+      const sent = await props.onSubmit(prompt)
+      if (sent && borrowed && prompt.text.trim().startsWith(`/${borrowed.command}`))
+        composer.replacePrompt(borrowed.draft)
+      return sent
+    },
     onCycle: props.onCycle,
     onInterrupt: props.onInterrupt,
     onEditorOpen: props.onEditorOpen,
@@ -678,6 +707,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       current.type !== "model" &&
       current.type !== "variant" &&
       current.type !== "settings" &&
+      current.type !== "picker" &&
       current.type !== "queued-menu" &&
       current.type !== "subagent-menu"
     ) {
@@ -774,6 +804,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             onContentChange={composer.onContentChange}
                             onSizeChange={composer.onSizeChange}
                             bind={composer.bind}
+                            menu={menu}
                           />
                         </Match>
                         <Match when={selectingSubagent()}>
@@ -825,6 +856,18 @@ export function RunFooterView(props: RunFooterViewProps) {
                             queued={queuedPrompts}
                             variants={props.variants}
                             variantCycle={variantCycle()}
+                            actions={props.actions}
+                            onAction={(action) => {
+                              closePanel()
+                              if (!action.prefill) {
+                                composer.submitText(`/${action.command}`)
+                                return
+                              }
+                              // Replace rather than append: the text must start with the slash to run locally.
+                              const draft = composer.current()
+                              if (draft.text.trim() || draft.parts.length) stashed = { command: action.command, draft }
+                              composer.replacePrompt({ text: `/${action.command} `, parts: [] })
+                            }}
                             onClose={closePanel}
                             onAgent={openAgent}
                             onModel={openModel}
@@ -858,6 +901,19 @@ export function RunFooterView(props: RunFooterViewProps) {
                             }}
                             onExit={props.onExit}
                             clearShortcut={shortcut("app.clear")}
+                            mono={props.mono}
+                          />
+                        </Match>
+                        <Match when={picking()}>
+                          <RunPickerBody
+                            theme={theme}
+                            picker={() => props.picker?.()}
+                            onClose={closePanel}
+                            onSelect={(id) => {
+                              const picker = props.picker?.()
+                              closePanel()
+                              void picker?.onSelect(id)
+                            }}
                             mono={props.mono}
                           />
                         </Match>
@@ -942,6 +998,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                                   formStates.delete(input.formID)
                                 }}
                                 mono={props.mono}
+                                screenReader={props.tuiConfig.screen_reader}
                               />
                             )}
                           </For>
@@ -955,6 +1012,7 @@ export function RunFooterView(props: RunFooterViewProps) {
 
             <Show when={!panel() && menu()}>
               <RunFooterMenu
+                cursor
                 theme={theme}
                 items={composer.options}
                 selected={composer.selected}

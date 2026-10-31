@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { measureEditText, type BoxRenderable, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
+import { measureEditText, type BoxRenderable, type Renderable, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import {
@@ -45,9 +45,17 @@ export function RunFormBody(props: {
   state?: FormBodyState
   onState?: (state: FormBodyState) => void
   mono?: boolean
+  screenReader?: boolean
 }) {
   const renderer = useRenderer()
   const dims = useTerminalDimensions()
+  // Screen readers announce the line under the terminal cursor, so park it on the selected choice.
+  const parkCursor = (active: boolean) =>
+    props.screenReader && active
+      ? function (this: Renderable) {
+          renderer.setCursorPosition(this.x + 1, this.y + 1, true)
+        }
+      : undefined
   const [size, setSize] = createSignal(dims())
   const [contentHeight, setContentHeight] = createSignal(1)
   const [viewportHeight, setViewportHeight] = createSignal(0)
@@ -281,8 +289,10 @@ export function RunFormBody(props: {
     const total = rows().length + (custom() ? 1 : 0)
     const digit = Number(event.name)
     if (!Number.isNaN(digit) && digit >= 1 && digit <= Math.min(total, 9)) {
-      choose(digit - 1)
+      // Screen reader users need Enter to confirm, so a digit only moves the selection.
       event.preventDefault()
+      if (props.screenReader) return setState((previous) => formSetSelected(previous, digit - 1))
+      choose(digit - 1)
       return
     }
     if (event.name === "up" || event.name === "k") {
@@ -435,6 +445,7 @@ export function RunFormBody(props: {
                             choices.set(index(), item)
                           }}
                           onSizeChange={revealChoice}
+                          renderAfter={parkCursor(active())}
                           flexShrink={0}
                           flexDirection="row"
                           gap={1}
@@ -483,6 +494,7 @@ export function RunFormBody(props: {
                         choices.set(rows().length, item)
                       }}
                       onSizeChange={revealChoice}
+                      renderAfter={parkCursor(state().selected === rows().length)}
                       flexShrink={0}
                       flexDirection="row"
                       gap={1}
