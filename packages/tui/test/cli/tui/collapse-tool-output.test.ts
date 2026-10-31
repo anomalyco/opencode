@@ -16,6 +16,7 @@ test("limits command input and output to the same line budget", () => {
 test("counts patch lines without the file headers", () => {
   const patch = ["Index: a.ts", "===", "--- a.ts", "+++ a.ts", "@@ -1,2 +1,2 @@", "-one", "+uno", " two", ""].join("\n")
 
-  expect(patchBodyLines(patch)).toBe(4)
+  expect(patchBodyLines(patch)).toBe(3)
+  expect(patchBodyLines(`${patch.trimEnd()}\n@@ -9 +9 @@\n-x\n+y\n\\ No newline at end of file`)).toBe(5)
   expect(patchBodyLines("Index: a.ts\n")).toBe(0)
 })
