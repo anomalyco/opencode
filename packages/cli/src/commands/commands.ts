@@ -448,8 +448,12 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       globalFlags: ServerFlags,
       commands: [
         Spec.make("list", {
-          description: "List top-level sessions in the current project, newest first",
+          description: "List top-level sessions, newest first (current project unless --all)",
           params: {
+            all: Flag.Boolean("all").pipe(
+              Flag.withDescription("List sessions across all projects"),
+              Flag.withDefault(false),
+            ),
             maxCount: Flag.Int("max-count").pipe(
               Flag.withAlias("n"),
               Flag.withSchema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
