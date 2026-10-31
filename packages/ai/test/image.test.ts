@@ -10,7 +10,7 @@ const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   ImageClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
 
 describe("Image", () => {
-  for (const provider of [OpenAI, Google, XAI, ZAI]) {
+  for (const provider of [openai, google, xai, zai]) {
     const model = provider.configure({ apiKey: "test", baseURL: "https://image.test" }).image("image-model")
     for (const body of ['{"data":42,"candidates":42,"opaque":{"nested":[1,2]},"trace":"outer"}', '{"invalid":']) {
       it.effect(`retains ${model.provider} image response body and decode cause: ${body}`, () =>
