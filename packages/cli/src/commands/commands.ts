@@ -264,6 +264,21 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             ),
           },
         }),
+        Spec.make("remove", {
+          description: "Remove an MCP server from your configuration (not its credentials)",
+          params: {
+            name: Argument.String("name").pipe(Argument.withDescription("Name of the MCP server"), Argument.optional),
+            local: Flag.Boolean("local").pipe(
+              Flag.withDescription("Only consider project and inherited configuration"),
+              Flag.withDefault(false),
+            ),
+            global: Flag.Boolean("global").pipe(
+              Flag.withDescription("Only consider global configuration"),
+              Flag.withDefault(false),
+            ),
+            yes: Flag.Boolean("yes").pipe(Flag.withDescription("Skip confirmation"), Flag.withDefault(false)),
+          },
+        }),
         Spec.make("auth", {
           description: "Authenticate with an OAuth-capable remote MCP server",
           globalFlags: ServerFlags,
