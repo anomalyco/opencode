@@ -181,7 +181,7 @@ describe("session tabs", () => {
     expect(moveSessionTabHistory(history, tabs, undefined, -1).sessionID).toBe("b")
   })
 
-  test("returns to the previous selected open tab after closing the active tab", () => {
+  test("history skips tabs that are no longer open", () => {
     const tabs = ["a", "b", "c"].map((sessionID) => ({ sessionID }))
     const history = ["a", "c"].reduce(recordSessionTabHistory, { entries: [], index: -1 })
     const closed = closeSessionTab(tabs, "b")

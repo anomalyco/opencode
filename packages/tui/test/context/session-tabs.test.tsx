@@ -331,6 +331,29 @@ test("keeps each visited session open", async () => {
   }
 })
 
+test("closing the active tab selects its neighbor instead of the previously visited tab", async () => {
+  const setup = await renderSessionTabs("first", { persisted: ["first", "second", "third", "fourth"] })
+  try {
+    await wait(() => setup.tabs.tabs().length === 4)
+    setup.route.navigate({ type: "session", sessionID: "fourth" })
+    await wait(() => setup.tabs.current() === "fourth")
+    setup.route.navigate({ type: "session", sessionID: "second" })
+    await wait(() => setup.tabs.current() === "second")
+
+    setup.tabs.close()
+    await wait(() => setup.tabs.tabs().length === 3)
+    await wait(() => setup.tabs.current() === "third")
+
+    setup.route.navigate({ type: "session", sessionID: "fourth" })
+    await wait(() => setup.tabs.current() === "fourth")
+    setup.tabs.close()
+    await wait(() => setup.tabs.tabs().length === 2)
+    await wait(() => setup.tabs.current() === "third")
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("lists closed tabs newest first and reopens a selected entry", async () => {
   const setup = await renderSessionTabs("first", { persisted: ["first", "second", "third"] })
   try {
