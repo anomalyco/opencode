@@ -278,9 +278,11 @@ describe("VLLMPlugin", () => {
             requests.splice(0)
             yield* config.setEntries([configuration({ baseURL }), configuration({ apiKey: "next-secret" })])
             yield* bus.publish(Event.Updated, {})
+            yield* eventually(providers.get(providerID), (provider) => provider?.settings?.apiKey === "next-secret")
             yield* eventually(
-              providers.get(providerID),
-              (provider) => provider?.settings?.apiKey === "next-secret",
+              Effect.sync(() => requests),
+              (items) =>
+                items.some((item) => item.authorization === "Bearer next-secret" && item.path === "/proxy/v1/models"),
             )
             expect(requests).toContainEqual({ authorization: "Bearer next-secret", path: "/proxy/health" })
             expect(requests).toContainEqual({ authorization: "Bearer next-secret", path: "/proxy/v1/models" })
