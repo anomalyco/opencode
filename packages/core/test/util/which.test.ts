@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import whichPkg from "which"
 import { which } from "@opencode/core/util/which"
 import { tmpdir } from "../fixture/tmpdir"
 
@@ -85,6 +86,36 @@ describe("util.which", () => {
     await fs.writeFile(file, "@echo off\r\n")
 
     expect(which("pathext", { PATH: bin, PATHEXT: ".CMD" })).toBe(file)
+  })
+
+  test("finds what the which package finds on windows", async () => {
+    if (process.platform !== "win32") return
+
+    await using tmp = await tmpdir()
+    const bin = path.join(tmp.path, "bin")
+    const spaced = path.join(tmp.path, "other dir")
+    const file = path.join(tmp.path, "not-a-directory")
+    await fs.mkdir(bin)
+    await fs.mkdir(spaced)
+    await fs.writeFile(path.join(bin, "tool.CMD"), "@echo off\r\n")
+    await fs.writeFile(path.join(spaced, "tool.exe"), "")
+    await fs.writeFile(path.join(spaced, "notes.txt"), "")
+    await fs.writeFile(file, "")
+    const PATH = [file, `"${spaced}"`, bin, "C:\\invalid<>entry"].join(";")
+    const commands = [
+      "tool",
+      "tool.exe",
+      "tool.cmd",
+      "notes.txt",
+      "missing",
+      path.join(bin, "tool.CMD"),
+      path.join(spaced, "tool"),
+    ]
+    for (const command of commands)
+      for (const PATHEXT of [".COM;.EXE;.BAT;.CMD", ".cmd;.CMD;.exe", ".EXE;", undefined])
+        expect(which(command, { PATH, PATHEXT })).toBe(
+          whichPkg.sync(command, { nothrow: true, path: PATH, pathExt: PATHEXT }),
+        )
   })
 
   test("uses Windows Path casing fallback", async () => {

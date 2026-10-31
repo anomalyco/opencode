@@ -82,12 +82,9 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
     }),
     status: Effect.fn("VcsGit.status")(function* () {
       const git = ctx.git
-      const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
+      // Against an unborn HEAD the stats list nothing, so they run with the status instead of after a HEAD check.
       const [list, stats] = yield* Effect.all(
-        [
-          statusItems(ctx).pipe(Effect.map((result) => result.list)),
-          ref ? git.stats(ctx.directory, ref) : Effect.succeed([] as Stat[]),
-        ],
+        [statusItems(ctx).pipe(Effect.map((result) => result.list)), git.stats(ctx.directory, "HEAD")],
         { concurrency: 2 },
       )
       const map = nums(stats)
@@ -119,10 +116,16 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
         return yield* track(ctx, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined, options)
       }
 
-      if (!(yield* git.hasHead(ctx.directory))) {
-        return mode === "committed" ? [] : yield* track(ctx, undefined, options)
-      }
-      const base = options?.base ?? (yield* git.defaultBranch(ctx.directory))?.ref
+      // The default branch only matters with a HEAD, but reading both in one round saves one.
+      const [head, root] = yield* Effect.all(
+        [
+          git.hasHead(ctx.directory),
+          options?.base === undefined ? git.defaultBranch(ctx.directory) : Effect.succeed(undefined),
+        ],
+        { concurrency: 2 },
+      )
+      if (!head) return mode === "committed" ? [] : yield* track(ctx, undefined, options)
+      const base = options?.base ?? root?.ref
       const ref = base ? yield* git.mergeBase(ctx.directory, base) : undefined
       if (!ref) {
         return yield* new DiffError({
@@ -189,6 +192,13 @@ const kind = (code: string): Kind => {
 
 const nuls = (text: string) => text.split("\0").filter(Boolean)
 
+const primary = (remotes: readonly string[]) => {
+  if (remotes.includes("origin")) return "origin"
+  if (remotes.length === 1) return remotes[0]
+  if (remotes.includes("upstream")) return "upstream"
+  return remotes[0]
+}
+
 const numstat = (text: string) =>
   nuls(text).flatMap((item) => {
     const a = item.indexOf("\t")
@@ -241,19 +251,15 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
       .filter(Boolean)
   })
 
-  const configured = Effect.fnUntraced(function* (cwd: string, list: string[]) {
-    const result = yield* run(["config", "init.defaultBranch"], { cwd })
-    const name = result.text().trim()
-    if (!name || !list.includes(name)) return
-    return { name, ref: name }
-  })
-
-  const primary = Effect.fnUntraced(function* (cwd: string) {
-    const list = yield* lines(["remote"], { cwd })
-    if (list.includes("origin")) return "origin"
-    if (list.length === 1) return list[0]
-    if (list.includes("upstream")) return "upstream"
-    return list[0]
+  const remoteHead = Effect.fnUntraced(function* (cwd: string, remote: string) {
+    const head = yield* run(["symbolic-ref", `refs/remotes/${remote}/HEAD`], { cwd })
+    if (head.exitCode !== 0) return
+    const ref = head
+      .text()
+      .trim()
+      .replace(/^refs\/remotes\//, "")
+    const name = ref.startsWith(`${remote}/`) ? ref.slice(`${remote}/`.length) : ""
+    if (name) return { name, ref }
   })
 
   const branch = Effect.fn("VcsGit.branch")(function* (cwd: string) {
@@ -282,22 +288,24 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   })
 
   const defaultBranch = Effect.fn("VcsGit.defaultBranch")(function* (cwd: string) {
-    const remote = yield* primary(cwd)
-    if (remote) {
-      const head = yield* run(["symbolic-ref", `refs/remotes/${remote}/HEAD`], { cwd })
-      if (head.exitCode === 0) {
-        const ref = head
-          .text()
-          .trim()
-          .replace(/^refs\/remotes\//, "")
-        const name = ref.startsWith(`${remote}/`) ? ref.slice(`${remote}/`.length) : ""
-        if (name) return { name, ref }
-      }
-    }
+    // Each round of Git commands costs ~40ms on Windows. The primary remote is almost always origin, so its HEAD is
+    // read alongside the remote list, and a clone answers in one round.
+    const [remotes, origin] = yield* Effect.all([lines(["remote"], { cwd }), remoteHead(cwd, "origin")], {
+      concurrency: 2,
+    })
+    const remote = primary(remotes)
+    const head = remote === "origin" ? origin : remote ? yield* remoteHead(cwd, remote) : undefined
+    if (head) return head
 
-    const list = yield* lines(["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads"], { cwd })
-    const next = yield* configured(cwd, list)
-    if (next) return next
+    const [list, configured] = yield* Effect.all(
+      [
+        lines(["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads"], { cwd }),
+        text(["config", "init.defaultBranch"], { cwd }),
+      ],
+      { concurrency: 2 },
+    )
+    const name = configured.trim()
+    if (name && list.includes(name)) return { name, ref: name }
     if (list.includes("main")) return { name: "main", ref: "main" }
     if (list.includes("master")) return { name: "master", ref: "master" }
   })
@@ -684,21 +692,6 @@ const merge = (...lists: Item[][]) => {
 
 const emptyBatch = () => ({ patches: new Map<string, string>(), capped: false })
 
-const batchPatches = Effect.fnUntraced(function* (ctx: Ctx, ref: string, list: Item[], options?: GitDiffOptions) {
-  if (list.length === 0) return emptyBatch()
-
-  const result = yield* ctx.git.patchAll(ctx.directory, ref, {
-    target: options?.target,
-    context: options?.context ?? PATCH_CONTEXT_LINES,
-    maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
-  })
-
-  return {
-    patches: chunksByFile(result, (index) => list[index]?.file),
-    capped: result.truncated,
-  }
-})
-
 const nativePatch = Effect.fnUntraced(function* (
   ctx: Ctx,
   ref: string | undefined,
@@ -794,13 +787,20 @@ const files = Effect.fnUntraced(function* (
 })
 
 const diffAgainstRef = Effect.fnUntraced(function* (ctx: Ctx, ref: string, options?: GitDiffOptions) {
-  const [list, stats, extra] = yield* Effect.all(
+  // Patch chunks name their own files and only fall back to the change list, so the batched patch shares its round
+  // instead of costing another (~40ms on Windows).
+  const [list, stats, extra, patch] = yield* Effect.all(
     [
       ctx.git.diff(ctx.directory, ref, options?.target),
       ctx.git.stats(ctx.directory, ref, options?.target),
       options?.target ? Effect.succeed({ list: [], more: undefined }) : statusItems(ctx, options?.untracked),
+      ctx.git.patchAll(ctx.directory, ref, {
+        target: options?.target,
+        context: options?.context ?? PATCH_CONTEXT_LINES,
+        maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
+      }),
     ],
-    { concurrency: 3 },
+    { concurrency: 4 },
   )
   const rows = yield* files(
     ctx,
@@ -810,7 +810,9 @@ const diffAgainstRef = Effect.fnUntraced(function* (ctx: Ctx, ref: string, optio
       extra.list.filter((item) => item.code === "??"),
     ),
     nums(stats),
-    yield* batchPatches(ctx, ref, list, options),
+    list.length === 0
+      ? emptyBatch()
+      : { patches: chunksByFile(patch, (index) => list[index]?.file), capped: patch.truncated },
     options,
   )
   return withMore(rows, extra.more)
