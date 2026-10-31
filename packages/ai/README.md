@@ -131,11 +131,15 @@ import { ai, LLMEvent } from "@opencode/ai/effect"
 const flagged = (data: unknown) =>
   typeof data === "object" && data !== null && "type" in data && data.type === "moderation.flagged"
 
-const events = ai.stream({ model, prompt: "Say hello.", includeRaw: true }).pipe(
-  Stream.map((event) =>
-    event.type === "raw" && flagged(event.data) ? LLMEvent.providerError({ message: "Flagged by moderation" }) : event,
-  ),
-)
+const events = ai
+  .stream({ model, prompt: "Say hello.", includeRaw: true })
+  .pipe(
+    Stream.map((event) =>
+      event.type === "raw" && flagged(event.data)
+        ? LLMEvent.providerError({ message: "Flagged by moderation" })
+        : event,
+    ),
+  )
 ```
 
 ### Google Interactions
@@ -150,11 +154,13 @@ live under `providerMetadata.vertex`. The default is still full-history replay w
 
 ```ts
 const model = Google.configure({ apiKey }).interactions("gemini-3.8-flash")
-const response = yield* ai.generate({
-  model,
-  prompt: "Say hello.",
-  providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto", store: true },
-})
+const response =
+  yield *
+  ai.generate({
+    model,
+    prompt: "Say hello.",
+    providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto", store: true },
+  })
 ```
 
 Interactions supports text output, streamed function calls, native tool results, thought signatures, and multimodal
@@ -561,6 +567,31 @@ Chat, Responses and Images. `configure({ baseURL })` replaces the selected API's
 use `https://api.minimax.cn/v1` for the mainland China platform. `minimax.image("image-01")` (also
 `@opencode/ai/providers/minimax/images`) generates images; see [MiniMax images](#minimax-images).
 
+## OpenCode Zen
+
+OpenCode Zen serves each model over one API family. Pick the method that matches the model; `OpenCode.model` is
+Chat Completions, which most Zen models use. Every API reads `OPENCODE_API_KEY` and sends it as a bearer token.
+
+```ts
+import { OpenCode } from "@opencode/ai/providers"
+
+const zen = OpenCode.configure({ apiKey: process.env.OPENCODE_API_KEY })
+zen.model("glm-5.3") // also zen.chat("glm-5.3")
+zen.responses("gpt-5-nano")
+zen.messages("claude-haiku-5-5")
+zen.gemini("gemini-3.5-flash-lite")
+```
+
+| Method      | Entrypoint                                  | Base URL                                      |
+| ----------- | ------------------------------------------- | --------------------------------------------- |
+| `chat`      | `@opencode/ai/providers/opencode/chat`      | `https://opencode.ai/inference/openai/v1`     |
+| `responses` | `@opencode/ai/providers/opencode/responses` | `https://opencode.ai/inference/openai/v1`     |
+| `messages`  | `@opencode/ai/providers/opencode/messages`  | `https://opencode.ai/inference/anthropic/v1`  |
+| `gemini`    | `@opencode/ai/providers/opencode/gemini`    | `https://opencode.ai/inference/google/v1beta` |
+
+`configure({ baseURL })` replaces the selected API's base, including its version prefix. Free models only answer
+from inside OpenCode; other clients get HTTP 403. `OpenCode.decision` is covered in [Decisions](#decisions).
+
 ## Meta
 
 Use Meta's direct [Model API](https://dev.meta.ai/docs/overview) with `META_API_KEY`:
@@ -669,18 +700,18 @@ Common fields are portable in shape, not in support. Some routes approximate `as
 size they offer; others fail with a typed `AIError` before any network call rather than dropping them, so check this
 table before swapping only the `model`:
 
-| Provider              | `n` | `aspect`             | `resolution`          | `images`                         | Moved to `providerOptions`                         |
-| --------------------- | --- | -------------------- | --------------------- | -------------------------------- | -------------------------------------------------- |
-| OpenAI                | ✓¹  | nearest size         | nearest size          | ✓                                | `size`, `outputFormat`, `mask`                     |
-| Google (Gemini)       | 1   | ✓                    | ✓ (`0.5K` as `512`)   | ✓ (no public URLs)               | `seed`                                             |
-| xAI                   | ✓   | ✓                    | `1k`/`2k`             | ✓                                | none                                               |
-| Meta                  | ✓   | ✓ (hint)             | ignored               | ✓                                | `size`, `outputFormat`                             |
-| Z.ai                  | ✗   | width × height       | width × height        | ✗                                | `size`                                             |
-| Alibaba               | ✓   | width × height       | width × height        | ✓                                | `size`, `seed`                                     |
-| MiniMax               | ✓   | preset or w × h⁴     | preset or w × h⁴      | 1 (portrait subject)             | `aspect_ratio`, `width`, `height`, `seed`          |
-| Vercel AI Gateway     | ✓   | as OpenAI³           | as OpenAI³            | per model                        | as OpenAI                                          |
-| OpenRouter            | ✓   | ✓ (`aspect_ratio`)   | tier⁵                 | per model⁵                       | `size`, `outputFormat` (no `mask`)                 |
-| Cloudflare Workers AI | 1   | width × height²      | width × height²       | ✗                                | `width`, `height`, `seed`                          |
+| Provider              | `n` | `aspect`           | `resolution`        | `images`             | Moved to `providerOptions`                |
+| --------------------- | --- | ------------------ | ------------------- | -------------------- | ----------------------------------------- |
+| OpenAI                | ✓¹  | nearest size       | nearest size        | ✓                    | `size`, `outputFormat`, `mask`            |
+| Google (Gemini)       | 1   | ✓                  | ✓ (`0.5K` as `512`) | ✓ (no public URLs)   | `seed`                                    |
+| xAI                   | ✓   | ✓                  | `1k`/`2k`           | ✓                    | none                                      |
+| Meta                  | ✓   | ✓ (hint)           | ignored             | ✓                    | `size`, `outputFormat`                    |
+| Z.ai                  | ✗   | width × height     | width × height      | ✗                    | `size`                                    |
+| Alibaba               | ✓   | width × height     | width × height      | ✓                    | `size`, `seed`                            |
+| MiniMax               | ✓   | preset or w × h⁴   | preset or w × h⁴    | 1 (portrait subject) | `aspect_ratio`, `width`, `height`, `seed` |
+| Vercel AI Gateway     | ✓   | as OpenAI³         | as OpenAI³          | per model            | as OpenAI                                 |
+| OpenRouter            | ✓   | ✓ (`aspect_ratio`) | tier⁵               | per model⁵           | `size`, `outputFormat` (no `mask`)        |
+| Cloudflare Workers AI | 1   | width × height²    | width × height²     | ✗                    | `width`, `height`, `seed`                 |
 
 ✓ lowers natively; ✗ fails whenever the field is set (including `n: 1`); `1` means `n > 1` fails. "width × height"
 computes a size the provider accepts and fails when the request falls outside its limits. ¹ `ai.image.stream` on OpenAI
@@ -851,11 +882,13 @@ and emits `image-partial` events before each final `image`; `ai.image.generate` 
 import { Stream } from "effect"
 import { ImageEvent } from "@opencode/ai/effect"
 
-const previews = ai.image.stream({
-  model: openai.image("gpt-image-2"),
-  prompt: "A lighthouse at dusk",
-  providerOptions: { partialImages: 2 },
-}).pipe(Stream.runForEach((event) => (ImageEvent.is.imagePartial(event) ? showPreview(event.image) : Effect.void)))
+const previews = ai.image
+  .stream({
+    model: openai.image("gpt-image-2"),
+    prompt: "A lighthouse at dusk",
+    providerOptions: { partialImages: 2 },
+  })
+  .pipe(Stream.runForEach((event) => (ImageEvent.is.imagePartial(event) ? showPreview(event.image) : Effect.void)))
 ```
 
 The provider may send fewer previews than requested when the final image is ready first.
@@ -1484,7 +1517,7 @@ const gateway = CloudflareAIGateway.configure({
 
 For a provider that needs no key, such as a local server, pass `apiKey: false`: the package skips the environment lookup and sends no auth header (Amazon Bedrock and Google Vertex keep their own auth).
 
-Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock (Converse and Mantle), Azure OpenAI, Alibaba, Baseten, Cerebras, Cohere, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, DigitalOcean, Fireworks, Groq, Meta, MiniMax, Mistral, Moonshot, OpenRouter, TogetherAI, Venice, Vercel AI Gateway, xAI, Z.ai, and Z.ai Coding Plan. TypeSafe AI and OpenCode expose decision models only. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
+Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock (Converse and Mantle), Azure OpenAI, Alibaba, Baseten, Cerebras, Cohere, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, DigitalOcean, Fireworks, Groq, Meta, MiniMax, Mistral, Moonshot, OpenRouter, TogetherAI, Venice, Vercel AI Gateway, xAI, Z.ai, and Z.ai Coding Plan. TypeSafe AI exposes decision models only. OpenCode Zen serves Chat Completions, Responses, Anthropic Messages and Gemini models plus decisions. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
 
 Each named provider owns its module, endpoint, authentication, and route setup. Providers with the same wire format compose the shared protocol directly:
 

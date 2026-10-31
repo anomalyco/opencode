@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "gemini-3.5-flash-lite",
+    "tags": [
+      "prefix:opencode-gemini",
+      "provider:opencode",
+      "protocol:gemini",
+      "tool",
+      "usage"
+    ],
+    "name": "opencode-gemini/calls-a-tool",
+    "recordedAt": "2026-10-31T17:03:39.465Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://opencode.ai/inference/google/v1beta/models/gemini-3.5-flash-lite:streamGenerateContent?alt=sse",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"Use get_weather to look up the current weather in Paris.\"}]}],\"tools\":[{\"functionDeclarations\":[{\"name\":\"get_weather\",\"description\":\"Get the current weather in a city\",\"parametersJsonSchema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"enum\":[\"Paris\"]}},\"required\":[\"city\"],\"additionalProperties\":false}}]}],\"toolConfig\":{\"functionCallingConfig\":{\"mode\":\"ANY\",\"allowedFunctionNames\":[\"get_weather\"]}},\"generationConfig\":{\"maxOutputTokens\":2048}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"createTime\":\"2026-10-31T17:03:38.993774Z\",\"responseId\":\"ah_mau7TPI7Mw-UP2rG64QU\",\"modelVersion\":\"gemini-3.5-flash-lite\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"thoughtSignature\":\"AY89a19SOHQYFx9j01ZIhre1/5sbRWdxA4isKYD5nj9RpIsOSeAwPnOftp/8A2XxJXJksQoErd3w0aFmcnbqXJr6MfVOB8EWyOpyEO5HNDxb2LAMRl5RI7I23R8=\",\"functionCall\":{\"id\":\"call_507591\",\"name\":\"get_weather\",\"args\":{\"city\":\"Paris\"}}}]}}],\"usageMetadata\":{}}\n\ndata: {\"createTime\":\"2026-10-31T17:03:38.993774Z\",\"responseId\":\"ah_mau7TPI7Mw-UP2rG64QU\",\"modelVersion\":\"gemini-3.5-flash-lite\",\"candidates\":[{\"finishReason\":\"STOP\",\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"\"}]}}],\"usageMetadata\":{\"candidatesTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":16}],\"promptTokensDetails\":[{\"modality\":\"TEXT\",\"tokenCount\":41}],\"candidatesTokenCount\":16,\"promptTokenCount\":41,\"totalTokenCount\":57,\"cost\":0.0000523,\"opencode\":{\"billing_source\":\"balance\",\"list_cost\":0.0000523,\"tokens\":{\"input\":41,\"output\":16,\"reasoning\":0,\"cache_read\":0,\"cache_write_5m\":0,\"cache_write_1h\":0}}}}\n\n"
+      }
+    }
+  ]
+}

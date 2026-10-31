@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "claude-haiku-5-5",
+    "tags": [
+      "prefix:opencode-messages",
+      "provider:opencode",
+      "protocol:anthropic-messages",
+      "tool",
+      "usage"
+    ],
+    "name": "opencode-messages/calls-a-tool",
+    "recordedAt": "2026-10-31T17:03:37.099Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://opencode.ai/inference/anthropic/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"claude-haiku-5-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Use get_weather to look up the current weather in Paris.\"}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get the current weather in a city\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"enum\":[\"Paris\"]}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"tool_choice\":{\"type\":\"tool\",\"name\":\"get_weather\"},\"stream\":true,\"max_tokens\":2048,\"thinking\":{\"type\":\"adaptive\",\"block_binding\":{\"prefix_mismatch_behavior\":\"drop_block\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_011CgagCqz87GQBuA51FBLpg\",\"type\":\"message\",\"role\":\"assistant\",\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"model\":\"claude-haiku-5-5\",\"content\":[],\"usage\":{\"input_tokens\":530,\"output_tokens\":16,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0}}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_017rHLX1pnk6g6tLMgs9vsNm\",\"name\":\"get_weather\",\"input\":{},\"caller\":{\"type\":\"direct\"}}}\n\nevent: ping\ndata: {\"type\":\"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\": \\\"Pari\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"s\\\"}\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":530,\"output_tokens\":34,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens_details\":{\"thinking_tokens\":0},\"cost\":0.00007,\"opencode\":{\"billing_source\":\"balance\",\"list_cost\":0.00007,\"tokens\":{\"input\":530,\"output\":34,\"reasoning\":0,\"cache_read\":0,\"cache_write_5m\":0,\"cache_write_1h\":0}}}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}
