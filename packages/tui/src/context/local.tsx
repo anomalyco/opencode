@@ -26,6 +26,7 @@ import { useData } from "./data"
 import { usePermission } from "./permission"
 import { useLocation } from "./location"
 import { parse } from "../util/model"
+import { modelLabelKey, modelLabels, modelName, modelProviderName } from "../util/model-label"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -351,6 +352,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }),
       )
 
+      const labels = createMemo(() => modelLabels(providers() ?? [], models() ?? []))
+
       return {
         current: currentModel,
         selection: currentSelection,
@@ -404,11 +407,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               reasoning: false,
             }
           }
-          const provider = providers()?.find((item) => item.id === value.providerID)
           const info = models()?.find((item) => item.providerID === value.providerID && item.id === value.modelID)
+          const label = labels().get(modelLabelKey(value.providerID, value.modelID))
           return {
-            provider: provider?.name ?? value.providerID,
-            model: info?.name ?? `${value.modelID} (unavailable)`,
+            provider: label ? label.provider : modelProviderName(value.providerID, providers() ?? []),
+            model: label?.model ?? (info ? modelName(info.name) : `${value.modelID} (unavailable)`),
             reasoning: (info?.variants?.length ?? 0) !== 0,
           }
         }),

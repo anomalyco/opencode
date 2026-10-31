@@ -51,6 +51,8 @@ export function runProviders(providers: CurrentProvider[], models: CurrentModel[
     grouped.set(provider.id, {
       id: provider.id,
       name: provider.name,
+      canonical: provider.canonical,
+      integrationID: provider.integrationID,
       models: {},
     })
   }
