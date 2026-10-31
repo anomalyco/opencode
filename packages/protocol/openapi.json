@@ -13367,6 +13367,134 @@
         "summary": "View local artifact"
       }
     },
+    "/api/experimental/job": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.job.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Session.ID"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to background jobs owned by this session."
+            },
+            "required": false
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Job.Kind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by background job kind (shell, subagent, or image)."
+            },
+            "required": false
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Job.Status"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by job status (running, completed, error, or cancelled)."
+            },
+            "required": false
+          },
+          {
+            "name": "descendants",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "When sessionID is set, also include background jobs owned by child and nested subagent sessions."
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Job.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List active and unconsumed background jobs, optionally filtered by owning session, descendants, or kind. Experimental: may change without compatibility guarantees.",
+        "summary": "List background jobs"
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
@@ -19799,6 +19927,140 @@
           }
         },
         "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
+      "Job.Image": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["image"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          },
+          "path": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time", "path", "model"],
+        "additionalProperties": false
+      },
+      "Job.Info": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Job.Shell"
+          },
+          {
+            "$ref": "#/components/schemas/Job.Subagent"
+          },
+          {
+            "$ref": "#/components/schemas/Job.Image"
+          }
+        ]
+      },
+      "Job.Kind": {
+        "type": "string",
+        "enum": ["shell", "subagent", "image"]
+      },
+      "Job.Shell": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["shell"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          },
+          "shellID": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time", "shellID", "command"],
+        "additionalProperties": false
+      },
+      "Job.Status": {
+        "type": "string",
+        "enum": ["running", "completed", "error", "cancelled"]
+      },
+      "Job.Subagent": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["subagent"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          },
+          "childSessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time", "childSessionID", "agent", "description"],
+        "additionalProperties": false
+      },
+      "Job.Time": {
+        "type": "object",
+        "properties": {
+          "started": {
+            "type": "number",
+            "description": "Start time in milliseconds since the Unix epoch"
+          },
+          "completed": {
+            "type": "number"
+          }
+        },
+        "required": ["started"],
         "additionalProperties": false
       },
       "Location.PublicInfo": {
