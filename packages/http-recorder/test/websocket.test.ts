@@ -148,6 +148,125 @@ describe("WebSocket", () => {
     expect(received).toEqual({ headers: { authorization: "Bearer fixture" } })
   })
 
+  test("constructor recording applies URL transforms only to the connection", async () => {
+    using directory = tempDirectory("http-recorder-websocket-url-")
+    const urls: string[] = []
+    const recorder = HttpRecorder.layerWebSocketConstructor("websocket/url-record", {
+      directory: directory.path,
+      redact: {
+        url: (raw) => {
+          urls.push(raw)
+          const url = new URL(raw)
+          url.pathname = "/accounts/fixture"
+          return url.toString()
+        },
+        jsonFields: ["account_id"],
+        body: (body) => body.replace("volatile-id", "fixture-id"),
+      },
+    }).pipe(Layer.provide(Layer.succeed(Socket.WebSocketConstructor, (url) => new EchoWebSocket(url))))
+
+    const received = await withEnvironment("CI", undefined, () =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const socket = yield* Socket.makeWebSocket("wss://echo.example.test/accounts/private?key=fixture-key")
+          const writer = yield* socket.writer
+          const received: string[] = []
+          yield* runString(
+            socket,
+            (message) => {
+              received.push(message)
+              return writer.write(new Socket.CloseEvent(1000, "complete")).pipe(Effect.orDie)
+            },
+            writer.write('{"id":"volatile-id","token":"fixture-token","account_id":"private"}').pipe(Effect.orDie),
+          )
+          return received
+        }).pipe(Effect.scoped, Effect.provide(recorder)),
+      ),
+    )
+
+    expect(received).toEqual(['{"id":"volatile-id","token":"fixture-token","account_id":"private"}'])
+    expect(urls).toEqual(["wss://echo.example.test/accounts/private?key=%5BREDACTED%5D"])
+    expect(readCassette(`${directory.path}/websocket/url-record.json`).interactions).toEqual([
+      {
+        transport: "websocket",
+        connection: {
+          sequence: 0,
+          url: "wss://echo.example.test/accounts/fixture?key=%5BREDACTED%5D",
+          protocols: [],
+          close: { code: 1000, reason: "complete" },
+        },
+        events: [
+          {
+            direction: "client",
+            kind: "text",
+            body: '{"id":"fixture-id","token":"[REDACTED]","account_id":"[REDACTED]"}',
+          },
+          {
+            direction: "server",
+            kind: "text",
+            body: '{"id":"fixture-id","token":"[REDACTED]","account_id":"[REDACTED]"}',
+          },
+        ],
+      },
+    ])
+  })
+
+  test("constructor replay applies URL transforms only to the connection", async () => {
+    using directory = tempDirectory("http-recorder-websocket-url-")
+    await seedCassetteDirectory(directory.path, "websocket/url-replay", [
+      {
+        transport: "websocket",
+        connection: {
+          sequence: 0,
+          url: "wss://echo.example.test/accounts/fixture?key=%5BREDACTED%5D",
+          protocols: [],
+          close: { code: 1000, reason: "complete" },
+        },
+        events: [
+          { direction: "client", kind: "text", body: '{"token":"[REDACTED]"}' },
+          { direction: "server", kind: "text", body: '{"token":"[REDACTED]"}' },
+        ],
+      },
+    ])
+    const urls: string[] = []
+    const recorder = HttpRecorder.layerWebSocketConstructor("websocket/url-replay", {
+      directory: directory.path,
+      redact: {
+        url: (raw) => {
+          urls.push(raw)
+          const url = new URL(raw)
+          url.pathname = "/accounts/fixture"
+          return url.toString()
+        },
+      },
+    }).pipe(
+      Layer.provide(
+        Layer.succeed(Socket.WebSocketConstructor, () => {
+          throw new Error("unexpected live WebSocket construction")
+        }),
+      ),
+    )
+
+    const received = await Effect.runPromise(
+      Effect.gen(function* () {
+        const socket = yield* Socket.makeWebSocket("wss://echo.example.test/accounts/other?key=replacement-key")
+        const writer = yield* socket.writer
+        const received: string[] = []
+        yield* runString(
+          socket,
+          (message) => {
+            received.push(message)
+          },
+          writer.write('{"token":"replacement-token"}').pipe(Effect.orDie),
+        )
+        return received
+      }).pipe(Effect.scoped, Effect.provide(recorder)),
+    )
+
+    expect(received).toEqual(['{"token":"[REDACTED]"}'])
+    expect(urls).toEqual(["wss://echo.example.test/accounts/other?key=%5BREDACTED%5D"])
+  })
+
   test("constructor replay validates dynamic URLs and protocols without opening a live socket", async () => {
     using directory = tempDirectory("http-recorder-websocket-constructor-")
     await seedCassetteDirectory(directory.path, "websocket/constructor", [
@@ -262,6 +381,7 @@ describe("WebSocket", () => {
             directory: directory.path,
             metadata: { provider: "test" },
             mode: "record",
+            redact: { url: (url) => new URL(url).toString() },
           }).pipe(Layer.provide(Layer.succeed(Socket.Socket, upstream))),
         ),
       ),
