@@ -38,7 +38,7 @@ describe("auth command", () => {
     expect(logout.stdout).toContain("opencode auth logout [flags] [<target>] [<credential>]")
   })
 
-  test("lists stored and environment connections", async () => {
+  test("lists distinct stored credential IDs without changing JSON connections", async () => {
     const requests: string[] = []
     using server = authServer((request, url) => {
       if (url.pathname === "/api/integration") {
@@ -50,6 +50,7 @@ describe("auth command", () => {
               methods: [],
               connections: [
                 { type: "credential", method: "key", id: "cred_test", label: "default" },
+                { type: "credential", method: "key", id: "cred_other", label: "default" },
                 { type: "env", name: "ANTHROPIC_API_KEY" },
               ],
             },
@@ -61,18 +62,32 @@ describe("auth command", () => {
     }, requests)
 
     const result = await cli(["auth", "list", "--format", "json", "--server", server.url.toString()])
+    expect(requests).toContain("/api/model/default")
+    expect(requests.indexOf("/api/model/default")).toBeLessThan(requests.indexOf("/api/integration"))
+    const table = await cli(["auth", "list", "--server", server.url.toString()])
     expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
+    expect({ exitCode: table.exitCode, stderr: table.stderr }).toEqual({ exitCode: 0, stderr: "" })
+    expect(
+      table.stdout
+        .trim()
+        .split("\n")
+        .map((line) => line.split(/\s{2,}/)),
+    ).toEqual([
+      ["Anthropic", "default", "stored", "cred_test"],
+      ["Anthropic", "default", "stored", "cred_other"],
+      ["Anthropic", "ANTHROPIC_API_KEY", "environment", "-"],
+    ])
     expect(JSON.parse(result.stdout)).toEqual([
       {
         id: "anthropic",
         name: "Anthropic",
         connections: [
           { type: "credential", method: "key", id: "cred_test", label: "default" },
+          { type: "credential", method: "key", id: "cred_other", label: "default" },
           { type: "env", name: "ANTHROPIC_API_KEY" },
         ],
       },
     ])
-    expect(requests.indexOf("/api/model/default")).toBeLessThan(requests.indexOf("/api/integration"))
   })
 
   test("lists OpenCode Go before Zen and preserves the remaining integration order", async () => {
