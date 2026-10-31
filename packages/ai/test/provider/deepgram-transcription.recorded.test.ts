@@ -18,7 +18,7 @@ const recorded = recordedTests({
 describe("Deepgram Transcription recorded", () => {
   recorded.effect("transcribes raw audio with speakers and word timestamps", () =>
     Effect.gen(function* () {
-      const request = Transcription.request({ model, audio: yield* audio, diarize: true, timestamps: "word" })
+      const request = { model, audio: yield* audio, diarize: true, timestamps: "word" } as const
       const response = yield* Transcription.generate(request)
 
       expect(response.text).toMatch(TRANSCRIPT)

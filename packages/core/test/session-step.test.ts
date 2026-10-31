@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { ai, LanguageModel, LLMEvent } from "@opencode/ai/effect"
+import { LanguageModel, LLMEvent, LLMRequest } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode/ai/testing"
 import { Agent } from "@opencode/core/agent"
@@ -107,7 +107,7 @@ for (const fixture of [
           model,
           prepared: {
             retry: () => Effect.void,
-            request: ai.request({ model: model.model, prompt: "Run one tool", toolChoice: fixture.toolChoice }),
+            request: LLMRequest.from({ model: model.model, prompt: "Run one tool", toolChoice: fixture.toolChoice }),
             options: {},
             executeTool: () =>
               Effect.sync(() => {
@@ -209,7 +209,7 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
       model,
       prepared: {
         retry: () => Effect.void,
-        request: ai.request({ model: model.model, prompt: "Hello" }),
+        request: LLMRequest.from({ model: model.model, prompt: "Hello" }),
         options: {},
         executeTool: () => Effect.die("no tools"),
       },

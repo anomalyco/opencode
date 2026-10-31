@@ -24,7 +24,7 @@ import type { Prepared } from "../../src/protocols/open-responses-channel.js"
 
 declare const webSocket: WebSocketChannelExecutor
 const model = OpenAI.configure().responses("fixture")
-const request = ai.request({ model, prompt: "hello" })
+const request = LLMRequest.from({ model, prompt: "hello" })
 ai.compact(request, { mechanism: "endpoint" }).pipe(Effect.map((result) => result satisfies CompactionResponse))
 ai.compact(request, { mechanism: "trigger", webSocket }).pipe(
   Effect.map((result) => {
@@ -49,7 +49,7 @@ for (const selected of [
   LanguageModel.make(LanguageModel.input(model)),
   LanguageModel.update(model, { defaults: { generation: { maxTokens: 100 } } }),
 ]) {
-  ai.compact(ai.request({ model: selected }), { mechanism: "trigger" })
+  ai.compact({ model: selected }, { mechanism: "trigger" })
 }
 ai.compact(new LLMRequest(LLMRequest.input(request)), { mechanism: "trigger" })
 ai.compact(LLMRequest.update(request, { messages: [] }), { mechanism: "trigger" })
@@ -57,24 +57,27 @@ ai.compact(LLMRequest.update(request, { messages: [] }), { mechanism: "trigger" 
 const azure = Azure.configure({ resourceName: "fixture" }).responses("fixture")
 const xai = XAI.configure().responses("fixture")
 // @ts-expect-error Azure must not inherit OpenAI's trigger operation.
-ai.compact(ai.request({ model: azure }), { mechanism: "trigger" })
-ai.compact(ai.request({ model: Azure.responsesModel("fixture", { resourceName: "fixture" }) }), {
-  // @ts-expect-error Azure's package entrypoint must preserve its narrower capability.
-  mechanism: "trigger",
-})
+ai.compact({ model: azure }, { mechanism: "trigger" })
+ai.compact(
+  { model: Azure.responsesModel("fixture", { resourceName: "fixture" }) },
+  {
+    // @ts-expect-error Azure's package entrypoint must preserve its narrower capability.
+    mechanism: "trigger",
+  },
+)
 // @ts-expect-error xAI endpoint support does not imply trigger support.
-ai.compact(ai.request({ model: xai }), { mechanism: "trigger" })
+ai.compact({ model: xai }, { mechanism: "trigger" })
 // @ts-expect-error xAI's package entrypoint must preserve its narrower capability.
-ai.compact(ai.request({ model: XAI.model("fixture", {}) }), { mechanism: "trigger" })
+ai.compact({ model: XAI.model("fixture", {}) }, { mechanism: "trigger" })
 
 const unsupported = {
-  bedrock: ai.request({ model: AmazonBedrock.configure().model("fixture") }),
-  mantle: ai.request({ model: AmazonBedrockMantle.configure().responses("fixture") }),
-  anthropic: ai.request({ model: Anthropic.configure().model("fixture") }),
-  openai: ai.request({ model: OpenAI.configure().chat("fixture") }),
-  azure: ai.request({ model: Azure.configure({ resourceName: "fixture" }).chat("fixture") }),
-  xai: ai.request({ model: XAI.configure().chat("fixture") }),
-  compatible: ai.request({
+  bedrock: LLMRequest.from({ model: AmazonBedrock.configure().model("fixture") }),
+  mantle: LLMRequest.from({ model: AmazonBedrockMantle.configure().responses("fixture") }),
+  anthropic: LLMRequest.from({ model: Anthropic.configure().model("fixture") }),
+  openai: LLMRequest.from({ model: OpenAI.configure().chat("fixture") }),
+  azure: LLMRequest.from({ model: Azure.configure({ resourceName: "fixture" }).chat("fixture") }),
+  xai: LLMRequest.from({ model: XAI.configure().chat("fixture") }),
+  compatible: LLMRequest.from({
     model: OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
   }),
 }
@@ -94,14 +97,17 @@ ai.compact(unsupported.xai, { mechanism: "trigger" })
 ai.compact(unsupported.compatible, { mechanism: "trigger" })
 // @ts-expect-error Changing the model replaces its capability.
 ai.compact(LLMRequest.update(request, { model: azure }), { mechanism: "trigger" })
-ai.compact(ai.request({ model: LanguageModel.update(model, { route: azure.route }) }), {
-  // @ts-expect-error Changing the route replaces its capability.
-  mechanism: "trigger",
-})
 ai.compact(
-  ai.request({
+  { model: LanguageModel.update(model, { route: azure.route }) },
+  {
+    // @ts-expect-error Changing the route replaces its capability.
+    mechanism: "trigger",
+  },
+)
+ai.compact(
+  {
     model: model.route.with({ compact: { endpoint: model.route.compact.endpoint } }).model({ id: "fixture" }),
-  }),
+  },
   // @ts-expect-error Replacing route operations does not retain the old trigger capability.
   { mechanism: "trigger" },
 )
@@ -110,13 +116,9 @@ declare const dynamic: LLMRequest
 declare const patch: Partial<LLMRequest.Input>
 declare const routePatch: RoutePatch<OpenAIResponsesBody, Prepared>
 // @ts-expect-error A dynamic operation override cannot preserve trigger support.
-ai.compact(ai.request({ model: model.route.with(routePatch).model({ id: "fixture" }) }), {
-  mechanism: "trigger",
-})
+ai.compact({ model: model.route.with(routePatch).model({ id: "fixture" }) }, { mechanism: "trigger" })
 // @ts-expect-error Explicitly removing operations removes trigger support.
-ai.compact(ai.request({ model: model.route.with({ compact: undefined }).model({ id: "fixture" }) }), {
-  mechanism: "trigger",
-})
+ai.compact({ model: model.route.with({ compact: undefined }).model({ id: "fixture" }) }, { mechanism: "trigger" })
 // @ts-expect-error Dynamic models must be narrowed.
 ai.compact(dynamic, { mechanism: "trigger" })
 if (ai.canCompact(dynamic, { mechanism: "trigger" })) {
@@ -140,7 +142,7 @@ void AI.ai.compact(request, { mechanism: "trigger", webSocket, signal: AbortSign
 // @ts-expect-error Endpoint compaction does not accept a WebSocket executor.
 void AI.ai.compact(request, { webSocket })
 // @ts-expect-error Azure must not inherit OpenAI's trigger operation.
-void AI.ai.compact(ai.request({ model: azure }), { mechanism: "trigger" })
+void AI.ai.compact({ model: azure }, { mechanism: "trigger" })
 // @ts-expect-error OpenAI Chat does not expose explicit compaction.
 void AI.ai.compact(unsupported.openai)
 // @ts-expect-error Dynamic models must be narrowed.

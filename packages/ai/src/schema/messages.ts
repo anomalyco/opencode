@@ -9,6 +9,7 @@ import {
   JsonSchema,
   LanguageModelSchema,
   type LanguageModel,
+  type LanguageModelProviderOptions,
   ProviderMetadata,
   ProviderOptions,
   ReasoningEffort,
@@ -435,6 +436,36 @@ export class LLMRequest<Model extends LanguageModel = LanguageModel> extends Sch
 export namespace LLMRequest {
   export type Input<Model extends LanguageModel = LanguageModel> = Omit<typeof requestSchema.Type, "model"> & {
     readonly model: Model
+  }
+
+  /** Plain input accepted by `ai.generate`, `ai.stream` and `ai.compact`, normalized by `from`. */
+  export type FromInput<Model extends LanguageModel = LanguageModel> = Omit<
+    Input,
+    "model" | "system" | "messages" | "tools" | "toolChoice" | "generation" | "http" | "providerOptions"
+  > & {
+    readonly model: Model
+    readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
+    readonly prompt?: string | ContentPart | ReadonlyArray<ContentPart>
+    readonly messages?: ReadonlyArray<Message | Message.Input>
+    readonly tools?: ReadonlyArray<ToolEntryInput>
+    readonly toolChoice?: ToolChoice.Input
+    readonly generation?: GenerationOptions.Input
+    readonly providerOptions?: NoInfer<LanguageModelProviderOptions<Model>>
+    readonly http?: HttpOptions.Input
+  }
+
+  export const from = <const Model extends LanguageModel>(input: FromInput<Model>) => {
+    const { system, prompt, messages, tools, toolChoice, generation, providerOptions, http, ...rest } = input
+    return new LLMRequest({
+      ...rest,
+      system: SystemPart.content(system),
+      messages: [...(messages?.map(Message.make) ?? []), ...(prompt === undefined ? [] : [Message.user(prompt)])],
+      tools: tools?.map(ToolEntry.make) ?? [],
+      toolChoice: toolChoice ? ToolChoice.make(toolChoice) : undefined,
+      generation: generation === undefined ? undefined : GenerationOptions.make(generation),
+      providerOptions,
+      http: HttpOptions.make(http),
+    })
   }
 
   export const input = <Model extends LanguageModel>(request: LLMRequest<Model>): Input<Model> => ({

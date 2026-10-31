@@ -1,11 +1,11 @@
-import { ai } from "../../src/effect.js"
 import { GoogleVertexMessages } from "../../src/providers.js"
+import { LLMRequest } from "../../src/effect.js"
 
 const model = GoogleVertexMessages.configure({ accessToken: "test", project: "project" }).model("claude")
 
-ai.request({ model, prompt: "Hello", providerOptions: { effort: "medium" } })
+LLMRequest.from({ model, prompt: "Hello", providerOptions: { effort: "medium" } })
 
-ai.request({
+LLMRequest.from({
   model,
   prompt: "Hello",
   // @ts-expect-error Vertex Anthropic effort must be a string.

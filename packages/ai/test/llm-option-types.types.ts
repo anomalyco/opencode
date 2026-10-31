@@ -6,6 +6,7 @@ import {
   type LanguageModelProviderOptions,
   type LLMClientService,
   type ProviderOptions,
+  LLMRequest,
 } from "../src/effect.js"
 import { AI } from "../src/index.js"
 import { OpenAIChat } from "../src/protocols.js"
@@ -28,19 +29,19 @@ type StreamRequirements<T> = T extends Stream.Stream<infer _A, infer _E, infer R
 type Equal<A, B> = [A, B] extends [B, A] ? true : false
 type Assert<T extends true> = T
 
-ai.request({ model, prompt: "Hello", providerOptions: { mode: "fast" } })
-ai.request({ model, prompt: "Hello", providerOptions: { future: { option: true } } })
+LLMRequest.from({ model, prompt: "Hello", providerOptions: { mode: "fast" } })
+LLMRequest.from({ model, prompt: "Hello", providerOptions: { future: { option: true } } })
 
-const generated = ai.generate(ai.request({ model, prompt: "Hello" }))
+const generated = ai.generate({ model, prompt: "Hello" })
 type GenerateRequirements = Assert<Equal<Requirements<typeof generated>, LLMClientService>>
-const streamed = ai.stream(ai.request({ model, prompt: "Hello" }))
+const streamed = ai.stream({ model, prompt: "Hello" })
 type StreamClientRequirements = Assert<Equal<StreamRequirements<typeof streamed>, LLMClientService>>
 const generatedFromInput = ai.generate({ model, prompt: "Hello", providerOptions: { mode: "fast" } })
 type InputGenerateRequirements = Assert<Equal<Requirements<typeof generatedFromInput>, LLMClientService>>
 const streamedFromInput = ai.stream({ model, prompt: "Hello", providerOptions: { mode: "thorough" } })
 type InputStreamRequirements = Assert<Equal<StreamRequirements<typeof streamedFromInput>, LLMClientService>>
 
-ai.request({
+LLMRequest.from({
   model,
   prompt: "Hello",
   // @ts-expect-error Known provider options preserve their value types.
@@ -88,7 +89,7 @@ type LoopObjectValue = Assert<
 >
 
 declare const generic: LanguageModel
-ai.request({ model: generic, prompt: "Hello", providerOptions: { arbitrary: { option: true } } })
+LLMRequest.from({ model: generic, prompt: "Hello", providerOptions: { arbitrary: { option: true } } })
 
 const options: LanguageModelProviderOptions<typeof model> = { mode: "fast" }
 void (options satisfies LanguageModelProviderOptions<typeof model>)
@@ -109,8 +110,8 @@ void AI.ai
   .then((response) => response.object.answer satisfies string)
 void AI.ai.generate({ model, prompt: "Hello", providerOptions: { mode: "fast" } })
 void AI.ai.stream({ model, prompt: "Hello", providerOptions: { mode: "thorough" } })
-void AI.ai.generate(AI.ai.request({ model, prompt: "Hello" }))
-void AI.ai.stream(AI.ai.request({ model, prompt: "Hello" }))
+void AI.ai.generate({ model, prompt: "Hello" })
+void AI.ai.stream({ model, prompt: "Hello" })
 // @ts-expect-error Promise direct input keeps the selected model's provider option types.
 void AI.ai.generate({ model, prompt: "Hello", providerOptions: { mode: "slow" } })
 // @ts-expect-error Promise stream input keeps the selected model's provider option types.

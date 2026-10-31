@@ -17,7 +17,7 @@ const response = await ai.generate(input)
 console.log(response.text)
 const generated = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
 await ai.write(generated.image, "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
-for await (const event of ai.stream(ai.request(input))) {
+for await (const event of ai.stream(input)) {
   // LLMEvent
 }
 ```
@@ -46,8 +46,8 @@ const program = Effect.gen(function* () {
 await Effect.runPromise(program.pipe(Effect.provide(AIClient.layer)))
 ```
 
-Run `ai.stream(...)` instead of `generate` when you want incremental `LLMEvent`s. Both accept input or a prebuilt
-`ai.request(...)`. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
+Run `ai.stream(...)` instead of `generate` when you want incremental `LLMEvent`s. Both accept plain input or a prebuilt
+`LLMRequest`. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
 Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
 ### Tool loop
@@ -316,7 +316,7 @@ Chat Completions (`.model` or `.chat`), Anthropic-compatible Messages (`.message
 Responses (`.responses`). These routes use HTTP/SSE.
 
 ```ts
-import { ai } from "@opencode/ai/effect"
+import { LLMRequest } from "@opencode/ai/effect"
 import { Alibaba } from "@opencode/ai/providers"
 
 const alibaba = Alibaba.configure({
@@ -325,7 +325,7 @@ const alibaba = Alibaba.configure({
   // workspaceID: "llm-your-workspace", // use a workspace-dedicated endpoint
 })
 
-const request = ai.request({
+const request = LLMRequest.from({
   model: alibaba.model("qwen3.8-max"),
   prompt: "Explain this design.",
   providerOptions: { reasoningEffort: "medium" },
@@ -396,11 +396,11 @@ hours. A complete `baseURL` for images includes `/api/v1`.
 the existing `.image(...)` selector provides image generation.
 
 ```ts
-import { ai } from "@opencode/ai/effect"
+import { LLMRequest } from "@opencode/ai/effect"
 import { ZAI, ZAICodingPlan } from "@opencode/ai/providers"
 
 const zai = ZAI.configure({ apiKey: process.env.ZAI_API_KEY })
-const request = ai.request({
+const request = LLMRequest.from({
   model: zai.model("glm-5.3"), // also zai.chat("glm-5.3")
   prompt: "Explain this design.",
   providerOptions: {
@@ -410,7 +410,7 @@ const request = ai.request({
 })
 
 const coding = ZAICodingPlan.configure({ apiKey: process.env.ZAI_API_KEY })
-const messages = ai.request({
+const messages = LLMRequest.from({
   model: coding.messages("glm-5.3"),
   prompt: "Explain this design.",
   providerOptions: { effort: "high" },
@@ -462,24 +462,24 @@ Package entrypoints are `@opencode/ai/providers/zai`, `zai/chat`, `zai-coding-pl
 Moonshot defaults to Chat Completions, with Messages and Responses selectors for Kimi K3:
 
 ```ts
-import { ai } from "@opencode/ai/effect"
+import { LLMRequest } from "@opencode/ai/effect"
 import { Moonshot } from "@opencode/ai/providers"
 
 const moonshot = Moonshot.configure({ apiKey: process.env.MOONSHOT_API_KEY })
 
-const request = ai.request({
+const request = LLMRequest.from({
   model: moonshot.model("kimi-k3"), // also moonshot.chat("kimi-k3")
   prompt: "Explain the tradeoffs in this design.",
   providerOptions: { reasoningEffort: "high" },
 })
 
-const messages = ai.request({
+const messages = LLMRequest.from({
   model: moonshot.messages("kimi-k3"),
   prompt: "Explain the tradeoffs in this design.",
   providerOptions: { effort: "high" },
 })
 
-const responses = ai.request({
+const responses = LLMRequest.from({
   model: moonshot.responses("kimi-k3"),
   prompt: "Explain the tradeoffs in this design.",
   providerOptions: { reasoningEffort: "high" },
@@ -528,14 +528,14 @@ import { ai, AIClient } from "@opencode/ai/effect"
 import { MiniMax } from "@opencode/ai/providers"
 
 const minimax = MiniMax.configure({ apiKey: process.env.MINIMAX_API_KEY })
-const request = ai.request({
+const program = ai.generate({
   model: minimax.model("MiniMax-M3"), // also minimax.messages("MiniMax-M3")
   prompt: "What is 173 multiplied by 219?",
   providerOptions: { thinking: { type: "adaptive" } },
   generation: { maxTokens: 1536 },
 })
 
-const response = await Effect.runPromise(ai.generate(request).pipe(Effect.provide(AIClient.layer)))
+const response = await Effect.runPromise(program.pipe(Effect.provide(AIClient.layer)))
 console.log(response.text)
 ```
 
@@ -563,10 +563,11 @@ use `https://api.minimax.cn/v1` for the mainland China platform. `minimax.image(
 Use Meta's direct [Model API](https://dev.meta.ai/docs/overview) with `META_API_KEY`:
 
 ```ts
+import { LLMRequest } from "@opencode/ai/effect"
 import { Meta } from "@opencode/ai/providers"
 
 const meta = Meta.configure() // or Meta.configure({ apiKey })
-const request = ai.request({
+const request = LLMRequest.from({
   model: meta.responses("muse-spark-1.3"), // meta.model(...) also selects Responses
   prompt: "What is 173 multiplied by 219? Reply with the integer.",
   providerOptions: { reasoningEffort: "low" },
@@ -632,7 +633,7 @@ Meta Responses is explicitly HTTP/SSE-only and does not use WebSockets, even whe
 
 ## Image generation
 
-Use `ai.image.generate` with an image model for direct asset generation. `ai.image.request` mirrors `ai.request`: the
+Use `ai.image.generate` with an image model for direct asset generation. Its input mirrors `ai.generate`: the
 model comes from the facade's `.image(...)` selector (mirroring `.responses(...)`), common fields
 (`images`, `n`, `aspect`, `resolution`) lower natively or fail typed, and `providerOptions` is inferred from the
 selected model. `aspect` is a ratio such as `"16:9"`; `resolution` is a size tier (`"1K"` is about 1024×1024 pixels
@@ -864,13 +865,11 @@ Conversational image generation remains part of the LLM interaction. OpenAI Resp
 
 ```ts
 const program = Effect.gen(function* () {
-  const response = yield* ai.generate(
-    ai.request({
-      model: OpenAI.configure({ apiKey }).responses("gpt-5"),
-      prompt: "Design a solarpunk rooftop garden, then show me.",
-      tools: [OpenAI.imageGeneration({ quality: "high" })],
-    }),
-  )
+  const response = yield* ai.generate({
+    model: OpenAI.configure({ apiKey }).responses("gpt-5"),
+    prompt: "Design a solarpunk rooftop garden, then show me.",
+    tools: [OpenAI.imageGeneration({ quality: "high" })],
+  })
 
   return response.message
 })
@@ -882,19 +881,19 @@ The hosted result is represented as a provider-executed tool call and a tool res
 
 Everything below is exported from `@opencode/ai/effect` unless noted.
 
-- **`ai.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
+- **`LLMRequest.from({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
 - **`ai.generate` / `ai.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
 - **`ai.loop`** — stream model calls, running `tool(...)` tools between them until the model stops calling tools.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
-- **`ai.image.request` / `generate` / `stream` / `start` / `resume`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model.
+- **`ai.image.generate` / `stream` / `start` / `resume`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
-- **`ai.decision.request` / `ai.decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
+- **`ai.decision.generate`** — typed predicate, choice, and score questions over text, JSON, and media input; `DecisionClient` is its Effect service and layer.
 - **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
-- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`request`, `generate`, `stream`, `loop`, `compact`, `canCompact`) at the top level plus `image` and `decision` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer?, clients? })` builds a client over a custom executor or test layers. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
+- **`@opencode/ai`** (Promise root) — a default `ai` with the text calls (`generate`, `stream`, `loop`, `compact`, `canCompact`) at the top level plus `image` and `decision` (plus `experimental.video`, `experimental.speech`, and `experimental.transcription`) as Promise / `AsyncIterable` APIs, `run(effect)` for any package Effect, plus `file`, `write`, `bytes`, `base64`, and `materialize` for assets. `AI.make({ layer?, clients? })` builds a client over a custom executor or test layers. The same `ai` from `@opencode/ai/effect` returns `Effect` and `Stream`.
 - **`@opencode/ai/experimental`** — APIs that may change without compatibility guarantees: `Video`, `Speech`, `Transcription`, `Extraction`, and `Realtime`. See [Experimental](#experimental).
 
 ## Experimental
@@ -1263,7 +1262,7 @@ const compacted = Effect.gen(function* () {
 })
 ```
 
-From the Promise API, `await ai.compact(request)` takes the same request and options (plus `signal`) and returns the same result.
+Like `generate`, `ai.compact` and `ai.canCompact` take plain input or an `LLMRequest`. From the Promise API, `await ai.compact(request)` takes the same input and options (plus `signal`) and returns the same result.
 
 `replacement` replaces the complete input window. Do not append it to the original transcript or extract only the encrypted item: the provider may retain additional messages in its output. Retained user and assistant messages remain ordinary messages with typed text, media, or reasoning parts, in their original order. Provider-specific message IDs, status, and phase use `providerMetadata`, not a raw output array hidden in an assistant message. Unsupported returned item types fail explicitly.
 
@@ -1321,7 +1320,7 @@ import { Effect } from "effect"
 import { ai, LLMClient, LLMRequest, Message } from "@opencode/ai/effect"
 import { OpenAI } from "@opencode/ai/providers"
 
-const request = ai.request({
+const request = LLMRequest.from({
   model: OpenAI.configure({ apiKey }).responses("gpt-5.3-codex"),
   messages,
   providerOptions: {
@@ -1397,7 +1396,7 @@ Requests below a provider's minimum cacheable size simply do not produce a reusa
 ### Opting out
 
 ```ts
-ai.request({
+ai.generate({
   model,
   system,
   prompt: "one-off question",
@@ -1423,7 +1422,7 @@ An object with placement fields places exactly those breakpoints. An object with
 `ttl` is a duration in models.dev's format (`<number>` followed by `ms`, `s`, `m`, `h` or `d`). It is sent to the provider as given, so use one the provider accepts. Leaving it unset keeps the provider default.
 
 ```ts
-ai.request({ model, system, prompt, cache: { ttl: "1h" } })
+ai.generate({ model, system, prompt, cache: { ttl: "1h" } })
 ```
 
 | Protocol                                                                  | How `ttl` is sent                                                                          |
@@ -1441,7 +1440,7 @@ OpenAI's two fields cover different models: `prompt_cache_retention` (`"in_memor
 Inline `CacheHint` (`{ type: "ephemeral", ttl? }`) on any text / system / tool / tool-result part overrides automatic placement. The auto policy preserves manual hints, counts them against Anthropic and Bedrock's four-breakpoint limit, and only fills the remaining slots.
 
 ```ts
-ai.request({
+ai.generate({
   model,
   system: [
     { type: "text", text: "stable system prompt", cache: { type: "ephemeral" } },
@@ -1568,7 +1567,7 @@ Route/provider defaults are overridden by request-level values for each axis.
 The selected model supplies the provider-specific option type, so per-request overrides stay flat while the canonical runtime request remains provider-neutral:
 
 ```ts
-ai.request({
+ai.generate({
   model,
   prompt,
   providerOptions: {

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { Content } from "@opencode/schema/tool"
 import { Effect, Schema, Stream } from "effect"
 import {
-  ai,
   GenerationOptions,
   LLMEvent,
   LLMRequest,
@@ -30,7 +29,7 @@ const model = OpenAIChat.route
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 
-const baseRequest = ai.request({
+const baseRequest = LLMRequest.from({
   id: "req_1",
   model,
   prompt: "Use the tool.",
@@ -679,7 +678,7 @@ describe("LLMClient tools", () => {
       )
 
       yield* TestToolRuntime.runTools({
-        request: ai.request({
+        request: LLMRequest.from({
           model: OpenAIResponses.route
             .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
             .model({ id: "gpt-5.5" }),

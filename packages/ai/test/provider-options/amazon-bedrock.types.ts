@@ -1,9 +1,9 @@
-import { ai } from "../../src/effect.js"
+import { LLMRequest } from "../../src/effect.js"
 import { AmazonBedrock } from "../../src/providers.js"
 
 const model = AmazonBedrock.provider.model("us.anthropic.claude-sonnet-4-6")
 
-ai.request({
+LLMRequest.from({
   model,
   prompt: "Hello",
   providerOptions: {
@@ -18,14 +18,14 @@ ai.request({
 
 AmazonBedrock.model("us.amazon.nova-2-lite-v1:0", { effort: "low", serviceTier: "flex" })
 
-ai.request({
+LLMRequest.from({
   model,
   prompt: "Hello",
   // @ts-expect-error Bedrock thinking modes are a fixed union.
   providerOptions: { thinking: { type: "automatic" } },
 })
 
-ai.request({
+LLMRequest.from({
   model,
   prompt: "Hello",
   // @ts-expect-error Converse request metadata values are strings.

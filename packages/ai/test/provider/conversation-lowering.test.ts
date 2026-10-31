@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, Message } from "../../src/effect.js"
+import { Message, LLMRequest } from "../../src/effect.js"
 import { OpenAI } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { it } from "../lib/effect.js"
@@ -8,7 +8,7 @@ import { it } from "../lib/effect.js"
 it.effect("conversation lowering excludes generation settings and tool definitions", () =>
   Effect.gen(function* () {
     const body = yield* OpenResponses.lowerConversation(
-      ai.request({
+      LLMRequest.from({
         model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
         system: "Keep the context",
         messages: [Message.user("hello"), Message.assistant("hi")],

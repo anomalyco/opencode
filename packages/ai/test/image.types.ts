@@ -9,6 +9,7 @@ import {
   Media,
 } from "../src/effect.js"
 import type { Service } from "../src/image-client.js"
+import { request } from "../src/image.js"
 import { Anthropic, Google, OpenAI, XAI, ZAI } from "../src/providers.js"
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
@@ -164,14 +165,14 @@ ai.image.generate({ model: openai, prompt: "A lighthouse", images: [{ type: "byt
 // @ts-expect-error Masks are media assets, not strings.
 ai.image.generate({ model: openai, prompt: "A lighthouse", providerOptions: { mask: "https://example.com/mask.png" } })
 
-const request = ai.image.request({
+const built = request({
   model: google,
   prompt: "A lighthouse",
   providerOptions: { imageSize: "1K", futureOption: true },
 })
-const typedRequest: ImageRequestFor<GoogleLikeOptions> = request
+const typedRequest: ImageRequestFor<GoogleLikeOptions> = built
 void typedRequest
-const generated = ImageClient.generate(request)
+const generated = ImageClient.generate(built)
 type GenerateRequirements = Assert<Equal<Requirements<typeof generated>, Service>>
 void (true satisfies GenerateRequirements)
 

@@ -10,6 +10,7 @@ import {
   type VideoRequestFor,
 } from "../src/experimental.js"
 import type { Service } from "../src/video-client.js"
+import { request } from "../src/video.js"
 import { Anthropic, Google, OpenAI, Runway, XAI } from "../src/providers.js"
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
@@ -94,10 +95,10 @@ const widenVideo = <Options extends VideoOptions>(model: VideoModel<Options>): V
 void widenVideo
 Video.generate({ model: generic, prompt: "A kitten", providerOptions: { arbitrary: true } })
 
-const request = Video.request({ model: veo, prompt: "A kitten", providerOptions: { personGeneration: "allow_all" } })
-const typedRequest: VideoRequestFor<VeoLikeOptions> = request
+const built = request({ model: veo, prompt: "A kitten", providerOptions: { personGeneration: "allow_all" } })
+const typedRequest: VideoRequestFor<VeoLikeOptions> = built
 void typedRequest
-const started = VideoClient.start(request)
+const started = VideoClient.start(built)
 type StartRequirements = Assert<Equal<Requirements<typeof started>, Service>>
 type StartSuccess = Assert<Equal<Success<typeof started>, Generation<VideoResponse>>>
 void (true satisfies StartRequirements)

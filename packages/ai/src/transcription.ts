@@ -226,7 +226,6 @@ export const resume = (
 ): Effect.Effect<Generation<TranscriptionResponse>, AIError, Service> => TranscriptionClient.resume(model, token)
 
 export const Transcription = {
-  request,
   generate,
   stream,
   start,

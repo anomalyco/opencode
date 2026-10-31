@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import { ai, DecisionClient, DecisionModel, type DecisionModelRoute, type DecisionRequestInput } from "../src/effect.js"
 import type { Service } from "../src/decision-client.js"
+import { request } from "../src/decision.js"
 import { Baseten, OpenAI, OpenCode, OpenRouter, TypeSafeAI } from "../src/providers.js"
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
@@ -8,7 +9,7 @@ type Success<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : nev
 type Equal<A, B> = [A, B] extends [B, A] ? true : false
 type Assert<T extends true> = T
 
-const request = ai.decision.request({
+const built = request({
   model: TypeSafeAI.configure({ apiKey: "test" }).decision("jev-latest"),
   input: { ticket: "refund" },
   questions: [
@@ -18,7 +19,7 @@ const request = ai.decision.request({
   ],
 })
 
-const result = DecisionClient.generate(request)
+const result = DecisionClient.generate(built)
 type Answers = Success<typeof result>["answers"]
 type Topic = Exclude<Answers[0], { readonly type: "error" }>
 type Choice = Assert<Equal<Topic["choice"], "billing" | true>>

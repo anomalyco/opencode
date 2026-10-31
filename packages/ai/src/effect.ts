@@ -7,7 +7,6 @@ import { Video } from "./video.js"
 
 /** The Effect API: the same shape as `ai` from `@opencode/ai`, returning `Effect` and `Stream`. */
 export const ai = {
-  request: LLM.request,
   generate: LLM.generate,
   stream: LLM.stream,
   loop: LLM.loop,

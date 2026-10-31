@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, SchemaGetter } from "effect"
-import { ai } from "../src/effect.js"
+import { LLMRequest } from "../src/effect.js"
 import { AnthropicMessages, Gemini, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema.js"
 import { toDefinitions, tool } from "../src/tool.js"
@@ -158,7 +158,7 @@ describe("tool schema projections", () => {
     it.effect(`${scenario.route.id} prepares empty Effect Struct tools alongside nonempty and raw schemas`, () =>
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
-          ai.request({
+          LLMRequest.from({
             model: scenario.route.with({ auth: Auth.bearer("test") }).model({ id: "test-model" }),
             prompt: "Use a tool.",
             tools: toDefinitions({
@@ -282,7 +282,7 @@ describe("tool schema projections", () => {
       })
       const parameters = (inputSchema: Record<string, unknown>, model = route.model({ id: "gpt-6-luna" })) =>
         compileRequest(
-          ai.request({
+          LLMRequest.from({
             model,
             prompt: "Use the tool.",
             tools: [{ name: "lookup", description: "Lookup data.", inputSchema }],
@@ -342,7 +342,7 @@ describe("tool schema projections", () => {
       }
       const parameters = (model: ReturnType<typeof route.model>) =>
         compileRequest(
-          ai.request({
+          LLMRequest.from({
             model,
             prompt: "Use the tool.",
             tools: [{ name: "lookup", description: "Lookup data.", inputSchema: original }],
@@ -375,7 +375,7 @@ describe("tool schema projections", () => {
         .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
         .model({ id: "kimi-k2", compatibility: { sanitizer: "moonshot" } })
       const prepared = yield* compileRequest(
-        ai.request({
+        LLMRequest.from({
           model,
           prompt: "Use the tool.",
           tools: [

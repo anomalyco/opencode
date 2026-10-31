@@ -1,10 +1,10 @@
-import { ai } from "../../src/effect.js"
 import { Anthropic } from "../../src/providers.js"
+import { LLMRequest } from "../../src/effect.js"
 
 const model = Anthropic.provider.model("claude-sonnet-4-5")
 
-ai.request({ model, prompt: "Hello", providerOptions: { thinking: { type: "adaptive" } } })
-ai.request({
+LLMRequest.from({ model, prompt: "Hello", providerOptions: { thinking: { type: "adaptive" } } })
+LLMRequest.from({
   model,
   prompt: "Hello",
   providerOptions: {
@@ -13,7 +13,7 @@ ai.request({
     cacheControl: { type: "ephemeral", ttl: "30m" },
   },
 })
-ai.request({
+LLMRequest.from({
   model,
   prompt: "Hello",
   providerOptions: {
@@ -22,7 +22,7 @@ ai.request({
   },
 })
 
-ai.request({
+LLMRequest.from({
   model,
   prompt: "Hello",
   // @ts-expect-error Anthropic thinking modes are a fixed union.

@@ -2,8 +2,6 @@ import { Effect, JsonSchema, Schema, Stream } from "effect"
 import { tryRequest } from "./media-model.js"
 import { LLMClient, Service, type StreamOptions } from "./route/client.js"
 import {
-  GenerationOptions,
-  HttpOptions,
   InvalidProviderOutputError,
   AIError,
   LLMEvent,
@@ -11,33 +9,16 @@ import {
   LLMResponse,
   Message,
   LanguageModel,
-  SystemPart,
   type Finish,
   ToolChoice,
-  ToolEntry,
-  type ContentPart,
-  type LanguageModelProviderOptions,
-  type ToolEntryInput,
   withPartial,
 } from "./schema/index.js"
 import { tool, toDefinitions, type ExecutableTool, type Tool, type ToolSchema } from "./tool.js"
 import { ToolRuntime } from "./tool-runtime.js"
 
-/** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
-export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageModel> = Omit<
-  ConstructorParameters<typeof LLMRequest>[0],
-  "model" | "system" | "messages" | "tools" | "toolChoice" | "generation" | "http" | "providerOptions"
-> & {
-  readonly model: SelectedLanguageModel
-  readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
-  readonly prompt?: string | ContentPart | ReadonlyArray<ContentPart>
-  readonly messages?: ReadonlyArray<Message | Message.Input>
-  readonly tools?: ReadonlyArray<ToolEntryInput>
-  readonly toolChoice?: ToolChoice.Input
-  readonly generation?: GenerationOptions.Input
-  readonly providerOptions?: NoInfer<LanguageModelProviderOptions<SelectedLanguageModel>>
-  readonly http?: HttpOptions.Input
-}
+/** Input accepted by `generate`, `stream` and `compact`, normalized into the canonical `LLMRequest` class. */
+export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageModel> =
+  LLMRequest.FromInput<SelectedLanguageModel>
 
 /** An Effect Schema decodes and types `object`; a raw JSON Schema leaves it `unknown`. */
 export type OutputSchema = ToolSchema<any> | JsonSchema.JsonSchema
@@ -208,7 +189,7 @@ const prepare = (input: Input) => {
   if (input instanceof LLMRequest) return Effect.succeed({ request: input, output: undefined })
   const { schema, ...rest } = input
   return tryRequest(() => {
-    const base = request(rest)
+    const base = LLMRequest.from(rest)
     if (schema === undefined) return { request: base, output: undefined }
     const description = "Return the structured result by calling this tool."
     const output: Tool = Schema.isSchema(schema)
@@ -247,32 +228,6 @@ const withObject = (output: Tool, event: Finish, state: LLMResponse.State): Effe
   return response === undefined
     ? Effect.succeed(event)
     : decodeObject(output, response).pipe(Effect.map((object) => ({ ...event, object })))
-}
-
-export const request = <const SelectedLanguageModel extends LanguageModel>(
-  input: RequestInput<SelectedLanguageModel>,
-) => {
-  const {
-    system: requestSystem,
-    prompt,
-    messages,
-    tools,
-    toolChoice: requestToolChoice,
-    generation: requestGeneration,
-    providerOptions: requestProviderOptions,
-    http: requestHttp,
-    ...rest
-  } = input
-  return new LLMRequest({
-    ...rest,
-    system: SystemPart.content(requestSystem),
-    messages: [...(messages?.map(Message.make) ?? []), ...(prompt === undefined ? [] : [Message.user(prompt)])],
-    tools: tools?.map(ToolEntry.make) ?? [],
-    toolChoice: requestToolChoice ? ToolChoice.make(requestToolChoice) : undefined,
-    generation: requestGeneration === undefined ? undefined : GenerationOptions.make(requestGeneration),
-    providerOptions: requestProviderOptions,
-    http: HttpOptions.make(requestHttp),
-  })
 }
 
 export { canCompact, compact } from "./route/client.js"

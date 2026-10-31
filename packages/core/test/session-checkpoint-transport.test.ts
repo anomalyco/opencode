@@ -78,7 +78,7 @@ const fixture = (mode: "success" | "invalid" | "fallback") =>
       http,
       opens: () => server.state.opens,
       disconnect: () => disconnect?.(),
-      request: ai.request({
+      request: LLMRequest.from({
         model: configure({
           apiKey: "fixture",
           baseURL: server.url.replace(/^ws/, "http").replace(/responses$/, ""),

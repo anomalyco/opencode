@@ -9,14 +9,14 @@ import { fixedResponse } from "./lib/http.js"
 test("runtime capability checks follow model and route updates", () => {
   const supported = OpenAI.configure({ apiKey: "test" }).responses("fixture")
   const unsupported = Anthropic.configure({ apiKey: "test" }).model("fixture")
-  const request = ai.request({ model: supported, prompt: "hello" })
+  const request = LLMRequest.from({ model: supported, prompt: "hello" })
   expect(ai.canCompact(request)).toBe(true)
   expect(ai.canCompact(LLMRequest.update(request, { messages: [] }))).toBe(true)
   expect(ai.canCompact(LLMRequest.update(request, { model: unsupported }))).toBe(false)
-  expect(ai.canCompact(ai.request({ model: LanguageModel.update(supported, { route: unsupported.route }) }))).toBe(
+  expect(ai.canCompact(LLMRequest.from({ model: LanguageModel.update(supported, { route: unsupported.route }) }))).toBe(
     false,
   )
-  expect(ai.canCompact(ai.request({ model: LanguageModel.update(supported, { route: undefined }) }))).toBe(true)
+  expect(ai.canCompact(LLMRequest.from({ model: LanguageModel.update(supported, { route: undefined }) }))).toBe(true)
 })
 
 test("explicit compaction serializes a replacement window without a messages alias", () => {
@@ -82,7 +82,7 @@ testEffect(fixedResponse("")).effect(
   "explicit compaction on a route without a compact endpoint fails with UnsupportedOperation",
   () =>
     Effect.gen(function* () {
-      const request = ai.request({
+      const request = LLMRequest.from({
         model: Anthropic.configure({ apiKey: "test" }).model("fixture"),
         prompt: "hello",
       })

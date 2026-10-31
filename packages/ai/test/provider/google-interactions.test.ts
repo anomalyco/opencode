@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, isRetryable } from "../../src/effect.js"
+import { isRetryable, LLMRequest } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { it } from "../lib/effect.js"
@@ -12,7 +12,7 @@ const model = Google.configure({ apiKey: "test", baseURL: "https://generativelan
 )
 
 const generate = (...events: ReadonlyArray<unknown>) =>
-  LLMClient.generate(ai.request({ model, prompt: "Hi" })).pipe(Effect.provide(fixedResponse(sseEvents(...events))))
+  LLMClient.generate(LLMRequest.from({ model, prompt: "Hi" })).pipe(Effect.provide(fixedResponse(sseEvents(...events))))
 
 describe("Google Interactions", () => {
   it.effect("classifies premature EOF before interaction.completed as an incomplete stream", () =>

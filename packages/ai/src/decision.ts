@@ -313,6 +313,5 @@ export function generate(input: DecisionRequest | DecisionRequestInput) {
 }
 
 export const Decision = {
-  request,
   generate,
 } as const

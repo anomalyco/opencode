@@ -124,7 +124,7 @@ describe("AI promise client", () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor(seen) })
 
-    const request = ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })
+    const request = { model: openai.chat("gpt-4o-mini"), prompt: "Say hello." }
     const text = await ai.generate(request)
     expect(text.text).toBe("Hello world")
     expect((await ai.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe(
@@ -135,10 +135,6 @@ describe("AI promise client", () => {
     expect(image.image).toBeInstanceOf(Media.Asset)
     expect(image.image.mediaType).toBe("image/png")
     expect(await ai.run(image.image.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
-    const requested = await ai.image.generate(
-      ai.image.request({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" }),
-    )
-    expect(requested.image.mediaType).toBe("image/png")
 
     const deltas: Array<string> = []
     for await (const event of ai.stream(request)) {
@@ -160,7 +156,6 @@ describe("AI promise client", () => {
     expect(seen).toEqual([
       "https://openai.test/v1/chat/completions",
       "https://openai.test/v1/chat/completions",
-      "https://openai.test/v1/images/generations",
       "https://openai.test/v1/images/generations",
       "https://openai.test/v1/chat/completions",
       "https://openai.test/v1/chat/completions",
@@ -220,10 +215,10 @@ describe("AI promise client", () => {
     await Array.fromAsync(ai.loop({ ...request, tools: {} }, options))
     expect(seen).toEqual(Array(3).fill("https://openai.test/v1/chat/completions"))
 
-    const responses = ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
+    const responses = { model: openai.responses("gpt-5"), prompt: "Hello" }
     expect(ai.canCompact(responses)).toBe(true)
     expect(ai.canCompact(responses, { mechanism: "trigger" })).toBe(true)
-    expect(ai.canCompact(ai.request(request))).toBe(false)
+    expect(ai.canCompact(request)).toBe(false)
     await ai.dispose()
   })
 
@@ -320,7 +315,7 @@ describe("AI promise client", () => {
     const ai = AI.make({ layer: executor([]) })
 
     const failure = await ai
-      .generate(ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" }))
+      .generate({ model: openai.responses("gpt-5"), prompt: "Hello" })
       .then(() => undefined)
       .catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(AIError)
@@ -340,7 +335,7 @@ describe("AI promise client", () => {
     const controller = new AbortController()
     controller.abort()
     const aborted = await ai
-      .generate(ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }), { signal: controller.signal })
+      .generate({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }, { signal: controller.signal })
       .then(() => "completed")
       .catch(() => "aborted")
     expect(aborted).toBe("aborted")
@@ -529,7 +524,7 @@ describe("AI promise client", () => {
         ),
       ),
     })
-    const request = ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
+    const request = { model: openai.responses("gpt-5"), prompt: "Hello" }
 
     const compacted = await ai.compact(request)
     expect(compacted.replacement.flatMap((message) => message.content.map((part) => part.type))).toEqual([
@@ -544,7 +539,7 @@ describe("AI promise client", () => {
 
     const unsupported = await ai
       // @ts-expect-error Untyped callers on routes without a compact endpoint must reject with AIError.
-      .compact(ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }))
+      .compact({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" })
       .catch((error: unknown) => error)
     expect(unsupported instanceof AIError && unsupported.reason._tag).toBe("UnsupportedOperation")
     expect(paths).toHaveLength(2)

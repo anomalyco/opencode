@@ -67,7 +67,7 @@ testEffect(
         http: { body: { instructions: "default instructions" } },
       },
     })
-    const request = ai.request({
+    const request = LLMRequest.from({
       model: route.model({ id: "fixture" }),
       prompt: "hello",
       system: "system instructions",
@@ -121,7 +121,7 @@ for (const model of [
     ),
   ).effect(`${model.provider} validates tools but ignores unrelated unsupported generation settings`, () =>
     Effect.gen(function* () {
-      const request = ai.request({
+      const request = LLMRequest.from({
         model,
         system: "Keep the context",
         messages: [
@@ -231,7 +231,7 @@ for (const model of [
     ),
   ).effect(`${model.route.id} retains messages, reasoning, and media through typed conversation parts`, () =>
     Effect.gen(function* () {
-      const request = ai.request({
+      const request = LLMRequest.from({
         model,
         prompt: "hello",
       })
@@ -280,32 +280,30 @@ for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: 
       }),
     ),
   ).effect(`compact preserves supported request controls${overlay ? " with HTTP overrides" : ""}`, () =>
-    ai.compact(
-      ai.request({
-        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
-        prompt: "hello",
-        promptCacheKey: "affinity",
-        providerOptions: {
-          serviceTier: "flex",
-          reasoningEffort: "low",
-          textVerbosity: "low",
-          include: ["reasoning.encrypted_content"],
-          parallelToolCalls: false,
+    ai.compact({
+      model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+      prompt: "hello",
+      promptCacheKey: "affinity",
+      providerOptions: {
+        serviceTier: "flex",
+        reasoningEffort: "low",
+        textVerbosity: "low",
+        include: ["reasoning.encrypted_content"],
+        parallelToolCalls: false,
+      },
+      generation: { maxTokens: 100 },
+      tools: [{ name: "lookup", description: "Lookup", inputSchema: {} }],
+      http: {
+        body: {
+          stream: true,
+          store: false,
+          text: { format: { type: "json_object" } },
+          prompt_cache_retention: "24h",
+          prompt_cache_options: { mode: "explicit", ttl: "30m" },
+          ...overlay,
         },
-        generation: { maxTokens: 100 },
-        tools: [{ name: "lookup", description: "Lookup", inputSchema: {} }],
-        http: {
-          body: {
-            stream: true,
-            store: false,
-            text: { format: { type: "json_object" } },
-            prompt_cache_retention: "24h",
-            prompt_cache_options: { mode: "explicit", ttl: "30m" },
-            ...overlay,
-          },
-        },
-      }),
-    ),
+      },
+    }),
   )
 }
 
@@ -347,7 +345,10 @@ for (const item of [
       Effect.gen(function* () {
         const error = yield* ai
           .compact(
-            ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+            LLMRequest.from({
+              model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
+              prompt: "hello",
+            }),
           )
           .pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidProviderOutput")
@@ -383,7 +384,7 @@ for (const model of [
     ),
   ).effect(`${model.provider} preserves retained image detail through serialization and replay`, () =>
     Effect.gen(function* () {
-      const request = ai.request({ model, prompt: "hello" })
+      const request = LLMRequest.from({ model, prompt: "hello" })
       const compacted = yield* ai.compact(request)
       const codec = Schema.fromJsonString(Schema.Array(Message))
       const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
@@ -395,7 +396,7 @@ for (const model of [
 testEffect(fixedResponse("must not execute")).effect("xAI rejects automatic compaction options", () =>
   Effect.gen(function* () {
     const request = LLMRequest.update(
-      ai.request({ model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"), prompt: "hello" }),
+      LLMRequest.from({ model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"), prompt: "hello" }),
       { providerOptions: { contextManagement: [{ type: "compaction" }] } },
     )
     const error = yield* LLMClient.generate(request).pipe(Effect.flip)
@@ -447,7 +448,7 @@ for (const model of [
     ),
   ).effect(`${model.provider} explicitly compacts and replays the entire canonical window`, () =>
     Effect.gen(function* () {
-      const request = ai.request({ model, prompt: "original", system: "system", http: { body: { store: false } } })
+      const request = LLMRequest.from({ model, prompt: "original", system: "system", http: { body: { store: false } } })
       const compacted = yield* ai.compact(request)
       expect(compacted.usage?.totalTokens).toBe(1010)
       expect(compacted.replacement.map((message) => message.role)).toEqual(["user", "assistant"])
@@ -471,7 +472,7 @@ for (const model of [
     () =>
       Effect.gen(function* () {
         // @ts-expect-error Untyped callers must still receive the runtime capability error.
-        const error = yield* ai.compact(ai.request({ model, prompt: "hello" })).pipe(Effect.flip)
+        const error = yield* ai.compact({ model, prompt: "hello" }).pipe(Effect.flip)
         expect(error.reason._tag).toBe("UnsupportedOperation")
         expect(error.message).toContain("does not support explicit compaction")
         if (error.reason._tag === "UnsupportedOperation") expect(error.reason.operation).toBe("compact")
@@ -484,7 +485,9 @@ testEffect(
 ).effect("invalid explicit compaction preserves the original response and HTTP context", () =>
   Effect.gen(function* () {
     const error = yield* ai
-      .compact(ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }))
+      .compact(
+        LLMRequest.from({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+      )
       .pipe(Effect.flip)
     expect(error.reason._tag).toBe("InvalidProviderOutput")
     expect(error.reason.body).toContain("original payload")

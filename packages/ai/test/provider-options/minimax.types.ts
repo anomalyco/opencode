@@ -1,25 +1,25 @@
-import { ai } from "../../src/effect.js"
 import { MiniMax } from "../../src/providers.js"
+import { LLMRequest } from "../../src/effect.js"
 
 const minimax = MiniMax.configure()
 
-ai.request({ model: minimax.model("MiniMax-M3"), providerOptions: { thinking: { type: "adaptive" } } })
-ai.request({ model: minimax.chat("MiniMax-M3"), providerOptions: { thinking: { type: "disabled" } } })
-ai.request({ model: minimax.chat("MiniMax-M3"), providerOptions: { reasoningSplit: false } })
-ai.request({ model: minimax.responses("MiniMax-M3"), providerOptions: { reasoningEffort: "minimal" } })
-ai.request({ model: minimax.responses("MiniMax-M3"), providerOptions: { reasoningEffort: "future-effort" } })
+LLMRequest.from({ model: minimax.model("MiniMax-M3"), providerOptions: { thinking: { type: "adaptive" } } })
+LLMRequest.from({ model: minimax.chat("MiniMax-M3"), providerOptions: { thinking: { type: "disabled" } } })
+LLMRequest.from({ model: minimax.chat("MiniMax-M3"), providerOptions: { reasoningSplit: false } })
+LLMRequest.from({ model: minimax.responses("MiniMax-M3"), providerOptions: { reasoningEffort: "minimal" } })
+LLMRequest.from({ model: minimax.responses("MiniMax-M3"), providerOptions: { reasoningEffort: "future-effort" } })
 
-ai.request({
+LLMRequest.from({
   model: minimax.model("MiniMax-M3"),
   // @ts-expect-error MiniMax Messages has no documented effort setting.
   providerOptions: { effort: "high" },
 })
-ai.request({
+LLMRequest.from({
   model: minimax.chat("MiniMax-M3"),
   // @ts-expect-error Chat reasoning_split is a boolean.
   providerOptions: { reasoningSplit: "true" },
 })
-ai.request({
+LLMRequest.from({
   model: minimax.responses("MiniMax-M3"),
   // @ts-expect-error MiniMax Responses uses reasoning effort rather than Messages thinking.
   providerOptions: { thinking: { type: "adaptive" } },

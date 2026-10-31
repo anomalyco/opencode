@@ -4,7 +4,7 @@ import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { Auth } from "../src/route.js"
 import { AI } from "../src/index.js"
 
-const request = ai.request({
+const request = LLMRequest.from({
   model: OpenAIChat.route.with({ auth: Auth.bearer("fixture") }).model({ id: "gpt-4o-mini" }),
   prompt: "Use the tool.",
 })

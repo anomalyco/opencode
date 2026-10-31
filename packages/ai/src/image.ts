@@ -202,7 +202,6 @@ export const resume = (model: ImageModel, token: unknown): Effect.Effect<Generat
   ImageClient.resume(model, token)
 
 export const Image = {
-  request,
   generate,
   stream,
   start,

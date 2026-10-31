@@ -1,11 +1,11 @@
-import { ai } from "../../src/effect.js"
 import { AnthropicCompatible } from "../../src/providers.js"
+import { LLMRequest } from "../../src/effect.js"
 
 const model = AnthropicCompatible.configure({ baseURL: "https://example.com" }).model("claude")
 
-ai.request({ model, prompt: "Hello", providerOptions: { effort: "high" } })
+LLMRequest.from({ model, prompt: "Hello", providerOptions: { effort: "high" } })
 
-ai.request({
+LLMRequest.from({
   model,
   prompt: "Hello",
   // @ts-expect-error Anthropic effort must be a string.

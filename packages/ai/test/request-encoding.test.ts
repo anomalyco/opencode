@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { gunzipSync, zstdDecompressSync } from "node:zlib"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { ai, type RequestEncoding } from "../src/effect.js"
+import { type RequestEncoding, LLMRequest } from "../src/effect.js"
 import { LLMClient } from "../src/route.js"
 import { configure } from "../src/providers/openai.js"
 import { dynamicResponse } from "./lib/http.js"
@@ -27,7 +27,7 @@ const send = (prompt: string, encoding?: RequestEncoding) =>
         })
       }),
     )
-    yield* LLMClient.generate(ai.request({ model, prompt, http: encoding ? { encoding } : undefined })).pipe(
+    yield* LLMClient.generate(LLMRequest.from({ model, prompt, http: encoding ? { encoding } : undefined })).pipe(
       Effect.provide(server),
     )
     return seen[0]

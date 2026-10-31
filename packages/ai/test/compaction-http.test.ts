@@ -72,7 +72,7 @@ testEffect(runtimeLayer(FetchHttpClient.layer)).live("compaction and a tool loop
     const model = OpenAI.configure({ apiKey: "fixture", baseURL: `http://127.0.0.1:${server.port}/v1` }).responses(
       "fixture",
     )
-    const request = ai.request({
+    const request = LLMRequest.from({
       model,
       prompt: "original",
       tools: [{ name: "lookup", description: "Lookup a number", inputSchema: { type: "object", properties: {} } }],

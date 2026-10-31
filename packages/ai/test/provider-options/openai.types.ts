@@ -1,20 +1,20 @@
-import { ai } from "../../src/effect.js"
 import { OpenAI } from "../../src/providers.js"
+import { LLMRequest } from "../../src/effect.js"
 
 const selected = OpenAI.responses("gpt-5")
 const chat = OpenAI.chat("gpt-4o-mini")
 
-ai.request({ model: selected, prompt: "Hello", providerOptions: { reasoningEffort: "high" } })
-ai.request({ model: selected, prompt: "Hello", providerOptions: { reasoningEffort: "experimental" } })
-ai.request({ model: selected, prompt: "Hello", providerOptions: { textVerbosity: "low" } })
-ai.request({ model: selected, prompt: "Hello", providerOptions: { textVerbosity: "verbose" } })
-ai.request({ model: selected, prompt: "Hello", providerOptions: { serviceTier: "scale" } })
-ai.request({ model: selected, prompt: "Hello", providerOptions: { serviceTier: "ultrafast" } })
-ai.request({ model: selected, prompt: "Hello", providerOptions: { serviceTier: "future-tier" } })
-ai.request({ model: chat, prompt: "Hello", providerOptions: { reasoningEffort: "max" } })
-ai.request({ model: chat, prompt: "Hello", providerOptions: { reasoningEffort: "experimental" } })
+LLMRequest.from({ model: selected, prompt: "Hello", providerOptions: { reasoningEffort: "high" } })
+LLMRequest.from({ model: selected, prompt: "Hello", providerOptions: { reasoningEffort: "experimental" } })
+LLMRequest.from({ model: selected, prompt: "Hello", providerOptions: { textVerbosity: "low" } })
+LLMRequest.from({ model: selected, prompt: "Hello", providerOptions: { textVerbosity: "verbose" } })
+LLMRequest.from({ model: selected, prompt: "Hello", providerOptions: { serviceTier: "scale" } })
+LLMRequest.from({ model: selected, prompt: "Hello", providerOptions: { serviceTier: "ultrafast" } })
+LLMRequest.from({ model: selected, prompt: "Hello", providerOptions: { serviceTier: "future-tier" } })
+LLMRequest.from({ model: chat, prompt: "Hello", providerOptions: { reasoningEffort: "max" } })
+LLMRequest.from({ model: chat, prompt: "Hello", providerOptions: { reasoningEffort: "experimental" } })
 
-ai.request({
+LLMRequest.from({
   model: selected,
   prompt: "Hello",
   // @ts-expect-error OpenAI reasoning effort must be a string.

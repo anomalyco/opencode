@@ -1,38 +1,38 @@
-import { ai } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
+import { LLMRequest } from "../../src/effect.js"
 
 const provider = Alibaba.configure({ region: "ap-southeast-1" })
 Alibaba.configure({ baseURL: "https://gateway.example/v1" })
 Alibaba.configure({ region: "eu-central-1", workspaceID: "llm-workspace" })
-ai.request({
+LLMRequest.from({
   model: provider.chat("qwen3.8-max"),
   providerOptions: { reasoningEffort: "future", enableThinking: true, preserveThinking: false, toolStream: true },
 })
-ai.request({
+LLMRequest.from({
   model: provider.messages("qwen3.8-max"),
   providerOptions: { effort: "xhigh", thinking: { type: "enabled" } },
 })
-ai.request({
+LLMRequest.from({
   model: provider.messages("qwen3.7-plus"),
   providerOptions: { thinking: { type: "enabled", budgetTokens: 512 } },
 })
-ai.request({
+LLMRequest.from({
   model: provider.responses("qwen3.8-max"),
   providerOptions: { reasoningEffort: "low", enableThinking: true, store: true, previousResponseId: "resp_previous" },
 })
 // @ts-expect-error Region or complete base URL is required.
 Alibaba.configure({ apiKey: "fixture" })
-ai.request({
+LLMRequest.from({
   model: provider.chat("qwen3.8-max"),
   // @ts-expect-error Thinking toggle is a boolean.
   providerOptions: { enableThinking: "true" },
 })
-ai.request({
+LLMRequest.from({
   model: provider.messages("qwen3.8-max"),
   // @ts-expect-error Messages uses effort.
   providerOptions: { reasoningEffort: "high" },
 })
-ai.request({
+LLMRequest.from({
   model: provider.responses("qwen3.8-max"),
   // @ts-expect-error Responses does not use Chat thinking budgets.
   providerOptions: { thinkingBudget: 512 },

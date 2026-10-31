@@ -1,6 +1,6 @@
 export * as Generate from "./generate.js"
 
-import { ai, AIError, DecisionClient, ImageClient, LLMClient, Media } from "@opencode/ai/effect"
+import { ai, AIError, DecisionClient, ImageClient, LLMClient, Media, LLMRequest } from "@opencode/ai/effect"
 import type { DecisionRequest, DecisionResult, ImageRequest, ImageResult } from "@opencode/schema/generate"
 import { Money } from "@opencode/schema/money"
 import { SessionID } from "@opencode/schema/session-id"
@@ -113,7 +113,7 @@ export const layer = Layer.effect(
         return yield* new UnavailableError({ message: "No model specified and no supported model is available" })
       const response = yield* llm
         .generate(
-          ai.request({
+          LLMRequest.from({
             model: resolved.model,
             prompt: input.prompt,
             // Gateways require session attribution even for a stateless call; no Session is stored.
@@ -151,7 +151,7 @@ export const layer = Layer.effect(
         .resolveImage(input.model)
         .pipe(Effect.mapError((error) => resolutionError(input.model, "image", error)))
       if (!model) return yield* missing(input.model, "image")
-      // `ai.image.generate` turns an invalid request into a typed error; building it with `ai.image.request` would throw.
+      // `ai.image.generate` turns an invalid request into a typed error instead of throwing.
       const response = yield* ai.image.generate({
         model,
         prompt: input.prompt,

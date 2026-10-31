@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { ai, LLMRequest, LLMResponse } from "../src/effect.js"
+import { LLMRequest, LLMResponse } from "../src/effect.js"
 import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { LanguageModel } from "../src/schema/index.js"
@@ -84,7 +84,7 @@ const gemini = Route.make({
 })
 const configuredGemini = gemini.with({ endpoint: { baseURL: "https://fake.local" } })
 
-const request = ai.request({
+const request = LLMRequest.from({
   id: "req_1",
   model: LanguageModel.make({
     id: "fake-model",

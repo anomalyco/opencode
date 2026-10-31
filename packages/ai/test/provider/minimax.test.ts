@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
-import { ai } from "../../src/effect.js"
+import { LLMRequest } from "../../src/effect.js"
 import { MiniMax } from "../../src/providers.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
@@ -26,7 +26,7 @@ describe("MiniMax provider", () => {
         { model: minimax.chat("MiniMax-M3"), path: "/v1/chat/completions" },
         { model: minimax.responses("MiniMax-M3"), path: "/v1/responses" },
       ]) {
-        const request = ai.request({ model: item.model, prompt: "Hello" })
+        const request = LLMRequest.from({ model: item.model, prompt: "Hello" })
         const compiled = yield* compileRequest(request)
         expect(item.model.provider).toBe("minimax")
         expect(item.model.route.providerMetadataKey).toBe("minimax")
@@ -51,7 +51,7 @@ describe("MiniMax provider", () => {
         baseURL: "https://gateway.example/anthropic/v1",
         auth: Auth.header("x-api-key", "gateway-key"),
       }).model("custom-model")
-      const request = ai.request({ model, prompt: "Hello" })
+      const request = LLMRequest.from({ model, prompt: "Hello" })
       const compiled = yield* compileRequest(request)
       expect(Endpoint.render(model.route.endpoint, { request, body: compiled.body }).toString()).toBe(
         "https://gateway.example/anthropic/v1/messages",
@@ -73,12 +73,12 @@ describe("MiniMax provider", () => {
     Effect.gen(function* () {
       const minimax = MiniMax.configure({ apiKey: "fixture" })
       const messages = yield* compileRequest(
-        ai.request({ model: minimax.model("MiniMax-M3"), providerOptions: { thinking: { type: "adaptive" } } }),
+        LLMRequest.from({ model: minimax.model("MiniMax-M3"), providerOptions: { thinking: { type: "adaptive" } } }),
       )
       expect(messages.body.thinking).toEqual({ type: "adaptive" })
       expect(messages.body.output_config).toBeUndefined()
       const chat = yield* compileRequest(
-        ai.request({
+        LLMRequest.from({
           model: minimax.chat("MiniMax-M3"),
           generation: { maxTokens: 128 },
           providerOptions: { thinking: { type: "disabled" }, reasoningSplit: false },
@@ -92,7 +92,7 @@ describe("MiniMax provider", () => {
       })
       expect(chat.body.store).toBeUndefined()
       const responses = yield* compileRequest(
-        ai.request({ model: minimax.responses("MiniMax-M3"), providerOptions: { reasoningEffort: "minimal" } }),
+        LLMRequest.from({ model: minimax.responses("MiniMax-M3"), providerOptions: { reasoningEffort: "minimal" } }),
       )
       expect(responses.body.reasoning).toEqual({ effort: "minimal" })
       expect(responses.body.include).toBeUndefined()

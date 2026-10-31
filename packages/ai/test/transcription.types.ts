@@ -32,9 +32,9 @@ Transcription.generate({ model: deepgram, audio, providerOptions: { keyterm: "Op
 // @ts-expect-error Timestamp granularity is a closed set.
 Transcription.generate({ model: deepgram, audio, timestamps: "character" })
 // @ts-expect-error Audio is required.
-Transcription.request({ model: deepgram })
+Transcription.generate({ model: deepgram })
 // @ts-expect-error Speech models cannot be used for transcription requests.
-Transcription.request({ model: OpenAI.configure({ apiKey: "test" }).speech("gpt-4o-mini-tts"), audio })
+Transcription.generate({ model: OpenAI.configure({ apiKey: "test" }).speech("gpt-4o-mini-tts"), audio })
 
 const streamed = Transcription.stream({
   model: OpenAI.configure({ apiKey: "test" }).transcription("gpt-transcribe"),

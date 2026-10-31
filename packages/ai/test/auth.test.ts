@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
-import { ai } from "../src/effect.js"
+import { LLMRequest } from "../src/effect.js"
 import { Auth } from "../src/route/auth.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { LanguageModel } from "../src/schema/index.js"
 import { it } from "./lib/effect.js"
 
-const request = ai.request({
+const request = LLMRequest.from({
   id: "req_auth",
   model: LanguageModel.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route }),
   prompt: "hello",

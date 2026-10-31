@@ -199,7 +199,6 @@ export function stream(input: SpeechRequest | SpeechRequestInput) {
 }
 
 export const Speech = {
-  request,
   generate,
   stream,
 } as const

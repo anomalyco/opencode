@@ -15,7 +15,7 @@ const openai = OpenAI.configure({
   apiKey: "test",
   providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },
 }).responses("gpt-5.3-codex")
-ai.compact(ai.request({ model: openai, prompt: "hello" }))
+ai.compact({ model: openai, prompt: "hello" })
 
 for (const model of [
   OpenAI.configure().responses("fixture"),
@@ -28,15 +28,15 @@ for (const model of [
   LanguageModel.update(openai, { defaults: { generation: { maxTokens: 100 } } }),
   LanguageModel.make(LanguageModel.input(openai)),
 ]) {
-  ai.compact(ai.request({ model, prompt: "hello" }))
+  ai.compact({ model, prompt: "hello" })
 }
 
 const unsupported = {
-  anthropic: ai.request({ model: Anthropic.configure().model("fixture") }),
-  openaiChat: ai.request({ model: OpenAI.configure().chat("fixture") }),
-  azureChat: ai.request({ model: Azure.configure({ resourceName: "test" }).chat("fixture") }),
-  xaiChat: ai.request({ model: XAI.configure().chat("fixture") }),
-  compatible: ai.request({
+  anthropic: LLMRequest.from({ model: Anthropic.configure().model("fixture") }),
+  openaiChat: LLMRequest.from({ model: OpenAI.configure().chat("fixture") }),
+  azureChat: LLMRequest.from({ model: Azure.configure({ resourceName: "test" }).chat("fixture") }),
+  xaiChat: LLMRequest.from({ model: XAI.configure().chat("fixture") }),
+  compatible: LLMRequest.from({
     model: OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
   }),
 }
@@ -55,7 +55,7 @@ LLMClient.Service.use((client) => {
   return client.compact(unsupported.anthropic)
 })
 
-const request = ai.request({ model: openai, prompt: "hello" })
+const request = LLMRequest.from({ model: openai, prompt: "hello" })
 ai.compact(LLMRequest.update(request, { messages: [Message.user("continue")] }))
 ai.compact(new LLMRequest(LLMRequest.input(request)))
 const switched = LLMRequest.update(request, { model: Anthropic.configure().model("fixture") })
@@ -64,12 +64,12 @@ ai.compact(switched)
 ai.compact(LLMRequest.update(switched, { model: openai }))
 ai.compact(
   // @ts-expect-error Replacing the route also replaces compaction capability.
-  ai.request({ model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }) }),
+  LLMRequest.from({ model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }) }),
 )
 
 declare const dynamicModel: LanguageModel
 declare const dynamicPatch: Partial<LLMRequest.Input>
-const dynamicRequest = ai.request({ model: dynamicModel, prompt: "hello" })
+const dynamicRequest = LLMRequest.from({ model: dynamicModel, prompt: "hello" })
 // @ts-expect-error A dynamically selected model must be narrowed first.
 ai.compact(dynamicRequest)
 if (ai.canCompact(dynamicRequest)) ai.compact(dynamicRequest)
@@ -99,7 +99,7 @@ if (checkpoint.text !== undefined) {
 checkpoint.encrypted
 // @ts-expect-error Compaction parts do not contain a generic provider payload.
 checkpoint.value
-ai.compact(ai.request({ model: openai, prompt: "hello" })).pipe(
+ai.compact({ model: openai, prompt: "hello" }).pipe(
   Effect.map((result) => {
     result.replacement satisfies ReadonlyArray<Message>
     // @ts-expect-error The replacement window is named explicitly; the old field is not an alias.
@@ -108,7 +108,7 @@ ai.compact(ai.request({ model: openai, prompt: "hello" })).pipe(
     result.message
   }),
 )
-ai.request({
+LLMRequest.from({
   model: openai,
   providerOptions: {
     // @ts-expect-error A token threshold is numeric.
@@ -116,7 +116,7 @@ ai.request({
   },
 })
 const anthropic = Anthropic.configure().model("claude-opus-4-6")
-ai.request({
+LLMRequest.from({
   model: anthropic,
   providerOptions: {
     contextManagement: {
@@ -124,7 +124,7 @@ ai.request({
     },
   },
 })
-ai.request({
+LLMRequest.from({
   model: anthropic,
   providerOptions: {
     // @ts-expect-error A pause setting is boolean.

@@ -1,12 +1,12 @@
-import { ai } from "../../src/effect.js"
 import { XAI } from "../../src/providers.js"
+import { LLMRequest } from "../../src/effect.js"
 
 const model = XAI.provider.model("grok-4")
 
-ai.request({ model, prompt: "Hello", providerOptions: { reasoningEffort: "high" } })
-ai.request({ model, prompt: "Hello", providerOptions: { reasoningEffort: "experimental" } })
+LLMRequest.from({ model, prompt: "Hello", providerOptions: { reasoningEffort: "high" } })
+LLMRequest.from({ model, prompt: "Hello", providerOptions: { reasoningEffort: "experimental" } })
 
-ai.request({
+LLMRequest.from({
   model,
   prompt: "Hello",
   // @ts-expect-error xAI's OpenAI-compatible reasoning effort must be a string.

@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
-import { ai, Auth, LLMClient, Message } from "../../src/effect.js"
+import { Auth, LLMClient, Message, LLMRequest } from "../../src/effect.js"
 import { OpenAI, Venice } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { Endpoint } from "../../src/route/endpoint.js"
@@ -18,7 +18,7 @@ it.effect("Venice owns its endpoint, environment auth, aliases, and SDK-compatib
   Effect.gen(function* () {
     expect(Venice.provider.model).toBe(Venice.provider.chat)
     const selected = Venice.chat("qwen3-6-27b")
-    const request = ai.request({ model: selected, prompt: "Hello", promptCacheKey: "session-123" })
+    const request = LLMRequest.from({ model: selected, prompt: "Hello", promptCacheKey: "session-123" })
     const compiled = yield* compileRequest(request)
     const url = Endpoint.render(selected.route.endpoint, { request, body: compiled.body }).toString()
     expect(url).toBe("https://api.venice.ai/api/v1/chat/completions")
@@ -49,7 +49,7 @@ it.effect("Venice owns its endpoint, environment auth, aliases, and SDK-compatib
 it.effect("Venice lowers typed options, model defaults, and explicit reasoning overrides", () =>
   Effect.gen(function* () {
     const compiled = yield* compileRequest(
-      ai.request({
+      LLMRequest.from({
         model: Venice.configure({ apiKey: "fixture", providerOptions: { reasoningEffort: "low" } }).model(
           "qwen3-6-27b",
         ),
@@ -97,10 +97,11 @@ it.effect("Venice lowers typed options, model defaults, and explicit reasoning o
     expect(compiled.body.reasoning_effort).toBeUndefined()
     expect(compiled.body.max_tokens).toBeUndefined()
     expect(
-      (yield* compileRequest(ai.request({ model, providerOptions: { reasoning: { enabled: false } } }))).body.reasoning,
+      (yield* compileRequest(LLMRequest.from({ model, providerOptions: { reasoning: { enabled: false } } }))).body
+        .reasoning,
     ).toEqual({ enabled: false })
     expect(
-      (yield* compileRequest(ai.request({ model, cache: "none", promptCacheKey: "session-123" }))).body
+      (yield* compileRequest(LLMRequest.from({ model, cache: "none", promptCacheKey: "session-123" }))).body
         .prompt_cache_key,
     ).toBeUndefined()
   }),
@@ -111,7 +112,7 @@ it.effect("Venice hides encrypted trailers across every marker split while prese
     const marker = "__ENCRYPTED_REASONING__"
     for (const split of Array.from({ length: marker.length + 1 }, (_, index) => index)) {
       const raw = `Visible summary\n${marker}id=rs_123\nopaque-payload`
-      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
+      const response = yield* LLMClient.generate(LLMRequest.from({ model, prompt: "Hello" })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -140,7 +141,9 @@ it.effect("Venice hides encrypted trailers across every marker split while prese
           .map((event) => event.text)
           .join(""),
       ).toBe("Visible summary\n")
-      const replay = yield* compileRequest(ai.request({ model, messages: [Message.user("Hello"), response.message] }))
+      const replay = yield* compileRequest(
+        LLMRequest.from({ model, messages: [Message.user("Hello"), response.message] }),
+      )
       expect(replay.body.messages).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -165,13 +168,13 @@ it.effect("Venice hides encrypted trailers across every marker split while prese
 it.effect("Venice preserves opaque-only reasoning and does not eat an incomplete marker prefix", () =>
   Effect.gen(function* () {
     for (const scalar of ["__ENCRYPTED_REASONING__opaque", "normal _", "normal __ENCRYPTED_"]) {
-      const response = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
+      const response = yield* LLMClient.generate(LLMRequest.from({ model, prompt: "Hello" })).pipe(
         Effect.provide(
           fixedResponse(sseEvents(frame({ reasoning_content: scalar }), frame({ content: "42" }, "stop"))),
         ),
       )
       expect(response.reasoning).toBe(scalar.startsWith("__ENCRYPTED_REASONING__") ? "" : scalar)
-      const body = (yield* compileRequest(ai.request({ model, messages: [response.message] }))).body
+      const body = (yield* compileRequest(LLMRequest.from({ model, messages: [response.message] }))).body
       expect(body.messages).toEqual(expect.arrayContaining([expect.objectContaining({ reasoning_content: scalar })]))
     }
   }),
@@ -179,7 +182,7 @@ it.effect("Venice preserves opaque-only reasoning and does not eat an incomplete
 
 it.effect("Venice encrypted trailers do not change the base OpenAI Chat protocol", () =>
   LLMClient.generate(
-    ai.request({ model: OpenAI.configure({ apiKey: "fixture" }).chat("gpt-4o"), prompt: "Hello" }),
+    LLMRequest.from({ model: OpenAI.configure({ apiKey: "fixture" }).chat("gpt-4o"), prompt: "Hello" }),
   ).pipe(
     Effect.provide(
       fixedResponse(
@@ -195,7 +198,7 @@ it.effect("Venice encrypted trailers do not change the base OpenAI Chat protocol
 
 it.effect("Venice keeps late Gemini signatures attached to the correct parallel call", () =>
   Effect.gen(function* () {
-    const response = yield* LLMClient.generate(ai.request({ model, prompt: "Lookup" })).pipe(
+    const response = yield* LLMClient.generate(LLMRequest.from({ model, prompt: "Lookup" })).pipe(
       Effect.provide(
         fixedResponse(
           sseEvents(
@@ -214,7 +217,9 @@ it.effect("Venice keeps late Gemini signatures attached to the correct parallel 
     expect(response.toolCalls).toHaveLength(2)
     expect(response.toolCalls[0].providerMetadata?.venice?.thoughtSignature).toBe("signed-first-call")
     expect(response.toolCalls[1].providerMetadata?.venice?.thoughtSignature).toBeUndefined()
-    const replay = yield* compileRequest(ai.request({ model, messages: [Message.user("Lookup"), response.message] }))
+    const replay = yield* compileRequest(
+      LLMRequest.from({ model, messages: [Message.user("Lookup"), response.message] }),
+    )
     expect(replay.body.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -230,14 +235,14 @@ it.effect("Venice keeps late Gemini signatures attached to the correct parallel 
 
 it.effect("Venice preserves message signatures even for identical answers and empty intervening messages", () =>
   Effect.gen(function* () {
-    const response = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
+    const response = yield* LLMClient.generate(LLMRequest.from({ model, prompt: "Hello" })).pipe(
       Effect.provide(
         fixedResponse(
           sseEvents(frame({ content: "42" }), frame({ thought_signature: "second-signature" }), frame({}, "stop")),
         ),
       ),
     )
-    const request = ai.request({
+    const request = LLMRequest.from({
       model,
       messages: [
         Message.assistant([
@@ -256,7 +261,7 @@ it.effect("Venice preserves message signatures even for identical answers and em
 
 it.effect("Venice merges signed Claude reasoning without losing its final signature", () =>
   Effect.gen(function* () {
-    const response = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
+    const response = yield* LLMClient.generate(LLMRequest.from({ model, prompt: "Hello" })).pipe(
       Effect.provide(
         fixedResponse(
           sseEvents(
@@ -287,7 +292,7 @@ it.effect("Venice merges signed Claude reasoning without losing its final signat
       ),
     )
     expect(response.reasoning).toBe("Think carefully")
-    expect((yield* compileRequest(ai.request({ model, messages: [response.message] }))).body.messages).toEqual(
+    expect((yield* compileRequest(LLMRequest.from({ model, messages: [response.message] }))).body.messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           reasoning_details: [
@@ -306,7 +311,7 @@ it.effect("Venice merges signed Claude reasoning without losing its final signat
 )
 
 it.effect("Venice maps cache-write usage and retains the raw wire spelling", () =>
-  LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
+  LLMClient.generate(LLMRequest.from({ model, prompt: "Hello" })).pipe(
     Effect.provide(
       fixedResponse(
         sseEvents(frame({ content: "42" }, "stop"), {
@@ -341,7 +346,7 @@ it.effect("Venice maps cache-write usage and retains the raw wire spelling", () 
 
 it.effect("Venice surfaces HTTP string errors and streaming validation details without losing the payload", () =>
   Effect.gen(function* () {
-    const http = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
+    const http = yield* LLMClient.generate(LLMRequest.from({ model, prompt: "Hello" })).pipe(
       Effect.provide(
         fixedResponse('{"error":"Specified model not found"}', {
           status: 404,
@@ -356,7 +361,7 @@ it.effect("Venice surfaces HTTP string errors and streaming validation details w
       error: "Invalid request parameters",
       issues: [{ message: "Unsupported value", path: ["reasoning", "effort"] }],
     }
-    const streamed = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
+    const streamed = yield* LLMClient.generate(LLMRequest.from({ model, prompt: "Hello" })).pipe(
       Effect.provide(fixedResponse(sseEvents(payload))),
       Effect.result,
     )

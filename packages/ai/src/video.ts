@@ -204,7 +204,6 @@ export function stream(input: VideoRequest | VideoRequestInput, options?: AwaitO
 }
 
 export const Video = {
-  request,
   start,
   generate,
   resume,

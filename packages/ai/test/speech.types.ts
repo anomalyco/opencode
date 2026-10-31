@@ -24,9 +24,9 @@ Speech.generate({ model: elevenlabs, text: "Hello", providerOptions: { voice_set
 // @ts-expect-error Voices are provider-native strings or `{ id }` objects.
 Speech.generate({ model: elevenlabs, text: "Hello", voice: { name: "George" } })
 // @ts-expect-error Image models cannot be used for speech requests.
-Speech.request({ model: OpenAI.configure({ apiKey: "test" }).image("gpt-image-2"), text: "Hello" })
+Speech.generate({ model: OpenAI.configure({ apiKey: "test" }).image("gpt-image-2"), text: "Hello" })
 // @ts-expect-error Video models cannot be used for speech requests.
-Speech.request({ model: Runway.configure({ apiKey: "test" }).video("gen4.5"), text: "Hello" })
+Speech.generate({ model: Runway.configure({ apiKey: "test" }).video("gen4.5"), text: "Hello" })
 
 const streamed = Speech.stream({ model: elevenlabs, text: "Hello" })
 type StreamEvent = Assert<Equal<StreamItem<typeof streamed>, SpeechEvent>>

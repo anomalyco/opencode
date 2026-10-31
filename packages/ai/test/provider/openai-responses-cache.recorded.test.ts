@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai } from "../../src/effect.js"
+import { LLMRequest } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import * as OpenAI from "../../src/providers/openai.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
@@ -14,7 +14,7 @@ const model = OpenAI.configure({
 // `CacheHint` is a no-op for the wire body. The stable signal is the
 // `prompt_cache_key` routing hint, which keeps repeated calls on the same shard
 // so cache hits are observable.
-const cacheRequest = ai.request({
+const cacheRequest = LLMRequest.from({
   id: "recorded_openai_responses_cache",
   model,
   system: LARGE_CACHEABLE_SYSTEM,

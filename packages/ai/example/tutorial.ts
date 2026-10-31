@@ -50,7 +50,7 @@ const model = openai.responses("gpt-4o-mini")
 //     and query params. Prefer typed `providerOptions` when a field is stable.
 //
 // Route/provider options are defaults. Request options override them for this call.
-const request = ai.request({
+const request = LLMRequest.from({
   model,
   system: "You are concise and practical.",
   prompt: "Tell me a joke",
@@ -96,7 +96,7 @@ const tools = {
 }
 
 const streamWithTools = Effect.gen(function* () {
-  const request = ai.request({
+  const request = LLMRequest.from({
     model,
     prompt: "Use get_weather for San Francisco, then answer in one sentence.",
     generation: { maxTokens: 80, temperature: 0 },

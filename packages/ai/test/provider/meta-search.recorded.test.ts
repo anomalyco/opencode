@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMEvent, LLMRequest, Message } from "../../src/effect.js"
+import { LLMEvent, LLMRequest, Message } from "../../src/effect.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -21,7 +21,7 @@ for (const api of ["responses", "messages"] as const) {
     { protocol: `meta-${api}` },
     () =>
       Effect.gen(function* () {
-        const request = ai.request({
+        const request = LLMRequest.from({
           model: meta[api]("muse-spark-1.3"),
           prompt:
             "Use web search to find NASA's page identifying the first person to walk on the Moon. Answer in one sentence with a source citation.",

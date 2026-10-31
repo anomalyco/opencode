@@ -16,7 +16,7 @@ it.effect("Meta selects Messages and lowers native search alongside ordinary fun
     expect(model.route.endpoint).toMatchObject({ baseURL: "https://gateway.example/v1", path: "/messages" })
     expect(MetaMessages.protocol.stream).toBe(AnthropicMessages.protocol.stream)
     const compiled = yield* compileRequest(
-      ai.request({
+      LLMRequest.from({
         model,
         prompt: "Search",
         tools: [
@@ -62,7 +62,7 @@ it.effect("Meta rejects unsupported native tools instead of sending them as loca
       { model: Meta.messages("muse-spark-1.3"), tool: Meta.webSearch({ searchContextSize: "low" }) },
     ]) {
       const error = yield* compileRequest(
-        ai.request({ model: input.model, prompt: "Hello", tools: [input.tool] }),
+        LLMRequest.from({ model: input.model, prompt: "Hello", tools: [input.tool] }),
       ).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
     }
@@ -151,7 +151,7 @@ for (const streamed of [false, true]) {
     () =>
       Effect.gen(function* () {
         const item = { type: "image_generation_call", id: "ig_signed", status: "completed", result: "iVBORw0KGgo=" }
-        const request = ai.request({
+        const request = LLMRequest.from({
           model: Meta.configure({ apiKey: "fixture" }).responses("muse-image-1.0"),
           prompt: "Draw",
         })
@@ -194,7 +194,7 @@ it.effect("Meta rejects malformed image data from terminal-only Responses output
   Effect.gen(function* () {
     const error = yield* ai
       .generate(
-        ai.request({ model: Meta.configure({ apiKey: "fixture" }).responses("muse-image-1.0"), prompt: "Draw" }),
+        LLMRequest.from({ model: Meta.configure({ apiKey: "fixture" }).responses("muse-image-1.0"), prompt: "Draw" }),
       )
       .pipe(
         Effect.provide(

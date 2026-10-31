@@ -10,6 +10,7 @@ import { applyCachePolicy } from "../cache-policy.js"
 import { applyEffortUpdates } from "../effort-updates.js"
 import { normalizeToolHistory } from "../tool-history.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
+import { tryRequest } from "../media-model.js"
 import * as ProviderShared from "../protocols/shared.js"
 import { ToolSchemaProjection } from "../protocols/utils/tool-schema.js"
 import type { LanguageModelSanitizerCompatibility, ProtocolID, ProviderOptions } from "../schema/index.js"
@@ -213,12 +214,17 @@ export interface TriggerCompactOptions extends StreamOptions {
   readonly mechanism: "trigger"
 }
 
+type CompactionModel = LanguageModel<ProviderOptions, { readonly endpoint: CompactOperation }>
+type CheckpointModel = LanguageModel<ProviderOptions, { readonly trigger: TriggerCompactOperation }>
+
 // Keep the required route shape explicit: the schema class's self type erases its model parameter in assignability.
-export type CompactionRequest = LLMRequest & {
-  readonly model: LanguageModel<ProviderOptions, { readonly endpoint: CompactOperation }>
+export type CompactionRequest = LLMRequest & { readonly model: CompactionModel }
+export type CheckpointRequest = LLMRequest & { readonly model: CheckpointModel }
+export type CompactionInput<Model extends LanguageModel = LanguageModel> = LLMRequest.FromInput<Model> & {
+  readonly model: CompactionModel
 }
-export type CheckpointRequest = LLMRequest & {
-  readonly model: LanguageModel<ProviderOptions, { readonly trigger: TriggerCompactOperation }>
+export type CheckpointInput<Model extends LanguageModel = LanguageModel> = LLMRequest.FromInput<Model> & {
+  readonly model: CheckpointModel
 }
 
 export interface CompactMethod<R = never> {
@@ -226,18 +232,18 @@ export interface CompactMethod<R = never> {
   (request: CompactionRequest, options?: EndpointCompactOptions): Effect.Effect<CompactionResponse, AIError, R>
 }
 
-export function canCompact(
-  request: LLMRequest,
+export function canCompact<const Input extends { readonly model: LanguageModel }>(
+  input: Input,
   options?: { readonly mechanism?: "endpoint" },
-): request is CompactionRequest
-export function canCompact(
-  request: LLMRequest,
+): input is Input & { readonly model: CompactionModel }
+export function canCompact<const Input extends { readonly model: LanguageModel }>(
+  input: Input,
   options: { readonly mechanism: "trigger" },
-): request is CheckpointRequest
-export function canCompact(request: LLMRequest, options?: { readonly mechanism?: string }) {
-  if (options?.mechanism === "trigger") return request.model.route.compact?.trigger !== undefined
+): input is Input & { readonly model: CheckpointModel }
+export function canCompact(input: { readonly model: LanguageModel }, options?: { readonly mechanism?: string }) {
+  if (options?.mechanism === "trigger") return input.model.route.compact?.trigger !== undefined
   if (options?.mechanism !== undefined && options.mechanism !== "endpoint") return false
-  return request.model.route.compact?.endpoint !== undefined
+  return input.model.route.compact?.endpoint !== undefined
 }
 
 const unsupportedCompaction = (request: LLMRequest, mechanism: string | undefined) => {
@@ -657,16 +663,20 @@ export function generate(request: LLMRequest, options?: StreamOptions): Effect.E
   })
 }
 
-export function compact(
-  request: CheckpointRequest,
+export function compact<const Model extends LanguageModel>(
+  input: CheckpointInput<Model> | CheckpointRequest,
   options: TriggerCompactOptions,
 ): Effect.Effect<CompactionCheckpointResponse, AIError, Service>
-export function compact(
-  request: CompactionRequest,
+export function compact<const Model extends LanguageModel>(
+  input: CompactionInput<Model> | CompactionRequest,
   options?: EndpointCompactOptions,
 ): Effect.Effect<CompactionResponse, AIError, Service>
-export function compact(request: LLMRequest, options?: EndpointCompactOptions | TriggerCompactOptions) {
+export function compact(
+  input: LLMRequest.FromInput | LLMRequest,
+  options?: EndpointCompactOptions | TriggerCompactOptions,
+) {
   return Effect.gen(function* () {
+    const request = input instanceof LLMRequest ? input : yield* tryRequest(() => LLMRequest.from(input))
     const client = yield* Service
     if (options?.mechanism === "trigger" && canCompact(request, options)) return yield* client.compact(request, options)
     if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request))

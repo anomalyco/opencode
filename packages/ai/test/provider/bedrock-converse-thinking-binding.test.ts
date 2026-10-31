@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, GenerationOptions, LanguageModel } from "../../src/effect.js"
+import { GenerationOptions, LanguageModel, LLMRequest } from "../../src/effect.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
@@ -13,7 +13,7 @@ const bedrock = (id: string, settings: Parameters<typeof AmazonBedrock.model>[1]
 
 const fields = (model: LanguageModel, generation?: GenerationOptions) =>
   compileRequest(
-    ai.request({
+    LLMRequest.from({
       id: "req_1",
       model,
       system: "You are concise.",

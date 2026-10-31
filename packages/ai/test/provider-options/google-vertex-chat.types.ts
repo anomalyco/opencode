@@ -1,7 +1,7 @@
-import { ai } from "../../src/effect.js"
 import { GoogleVertexChat } from "../../src/providers.js"
+import { LLMRequest } from "../../src/effect.js"
 
 const model = GoogleVertexChat.configure({ accessToken: "test", project: "project" }).model("gemini")
 
-ai.request({ model, prompt: "Hello", providerOptions: { serviceTier: "priority" } })
-ai.request({ model, prompt: "Hello", providerOptions: { serviceTier: "future-tier" } })
+LLMRequest.from({ model, prompt: "Hello", providerOptions: { serviceTier: "priority" } })
+LLMRequest.from({ model, prompt: "Hello", providerOptions: { serviceTier: "future-tier" } })

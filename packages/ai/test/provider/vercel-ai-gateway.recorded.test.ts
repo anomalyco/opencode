@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, LLMClient, LLMEvent, LLMRequest } from "../../src/effect.js"
+import { LLMClient, LLMEvent, LLMRequest } from "../../src/effect.js"
 import { isRetryable } from "../../src/provider-error.js"
 import { VercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
 import { recordedTests } from "../recorded-test.js"
@@ -87,7 +87,7 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(
-        ai.request({
+        LLMRequest.from({
           model: VercelAIGateway.configure({ apiKey: "invalid-gateway-key" }).messages("anthropic/claude-sonnet-5.5"),
           prompt: "Hello",
           generation: { maxTokens: 32 },
@@ -103,7 +103,7 @@ recorded.effect(
   "automatically caches distinct Claude system blocks",
   () =>
     Effect.gen(function* () {
-      const request = ai.request({
+      const request = LLMRequest.from({
         model: gateway.messages("anthropic/claude-sonnet-5.5"),
         system: [
           {

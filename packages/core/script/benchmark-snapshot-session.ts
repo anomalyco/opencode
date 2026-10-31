@@ -11,7 +11,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { ai, LanguageModel, LLMEvent } from "@opencode/ai/effect"
+import { LanguageModel, LLMEvent, LLMRequest } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { TestLLM } from "@opencode/ai/testing"
 import { Global } from "@opencode/util/global"
@@ -147,7 +147,7 @@ const run = (snapshots: Layer.Layer<Snapshot.Service>) =>
           model,
           prepared: {
             retry: () => Effect.void,
-            request: ai.request({ model: model.model, prompt: "bench" }),
+            request: LLMRequest.from({ model: model.model, prompt: "bench" }),
             options: {},
             executeTool: (input) =>
               Effect.gen(function* () {

@@ -6,7 +6,9 @@ import { Image, type ImageModel, type ImageRequest, type ImageRequestInput } fro
 import { LLM } from "./llm.js"
 import { Media } from "./media.js"
 import {
+  type CheckpointInput,
   type CheckpointRequest,
+  type CompactionInput,
   type CompactionRequest,
   type EndpointCompactOptions,
   type StreamOptions,
@@ -156,19 +158,22 @@ export const make = <R = never>(options: Options<R> = {}) => {
     return iterate(LLM.loop(input, options), options)
   }
 
-  function compact(
-    request: CheckpointRequest,
+  function compact<const Model extends LanguageModel>(
+    input: CheckpointInput<Model> | CheckpointRequest,
     options: TriggerCompactOptions & RunOptions,
   ): Promise<CompactionCheckpointResponse>
-  function compact(request: CompactionRequest, options?: EndpointCompactOptions & RunOptions): Promise<CompactionResponse>
-  // The overloads pair each request type with its mechanism; `LLM.compact` checks the route's capability at runtime.
+  function compact<const Model extends LanguageModel>(
+    input: CompactionInput<Model> | CompactionRequest,
+    options?: EndpointCompactOptions & RunOptions,
+  ): Promise<CompactionResponse>
+  // The overloads pair each input with its mechanism; `LLM.compact` checks the route's capability at runtime.
   function compact(
-    request: CheckpointRequest | CompactionRequest,
+    input: RequestInput | LLMRequest,
     options?: (TriggerCompactOptions | EndpointCompactOptions) & RunOptions,
   ) {
     return options?.mechanism === "trigger"
-      ? run(LLM.compact(request as CheckpointRequest, options), options)
-      : run(LLM.compact(request as CompactionRequest, options), options)
+      ? run(LLM.compact(input as CheckpointRequest, options), options)
+      : run(LLM.compact(input as CompactionRequest, options), options)
   }
 
   const handle = <Response>(generation: Generation<Response>): GenerationHandle<Response> => ({
@@ -221,7 +226,6 @@ export const make = <R = never>(options: Options<R> = {}) => {
         options,
       )
     },
-    request: LLM.request,
     generate,
     stream,
     /** Stream model calls, running their tool calls, until the model stops calling tools or `until` is true. */
@@ -230,7 +234,6 @@ export const make = <R = never>(options: Options<R> = {}) => {
     compact,
     canCompact: LLM.canCompact,
     image: {
-      request: Image.request,
       generate: <const Model extends ImageModel>(
         input: ImageRequestInput<Model> | ImageRequest,
         options?: AwaitOptions & RunOptions,
@@ -245,7 +248,6 @@ export const make = <R = never>(options: Options<R> = {}) => {
         run(Image.resume(model, token), options).then(handle),
     },
     decision: {
-      request: Decision.request,
       generate: <const Model extends DecisionModel, const Questions extends DecisionQuestions>(
         input: DecisionRequestInput<Model, Questions>,
         options?: RunOptions,
@@ -254,7 +256,6 @@ export const make = <R = never>(options: Options<R> = {}) => {
     /** Experimental: may change without compatibility guarantees. */
     experimental: {
       speech: {
-        request: Speech.request,
         generate: <const Model extends SpeechModel>(
           input: SpeechRequestInput<Model> | SpeechRequest,
           options?: RunOptions,
@@ -265,7 +266,6 @@ export const make = <R = never>(options: Options<R> = {}) => {
         ) => iterate(Speech.stream(input), options),
       },
       transcription: {
-        request: Transcription.request,
         generate: <const Model extends TranscriptionModel>(
           input: TranscriptionRequestInput<Model> | TranscriptionRequest,
           options?: AwaitOptions & RunOptions,
@@ -282,7 +282,6 @@ export const make = <R = never>(options: Options<R> = {}) => {
           run(Transcription.resume(model, token), options).then(handle),
       },
       video: {
-        request: Video.request,
         start: <const Model extends VideoModel>(input: VideoRequestInput<Model> | VideoRequest, options?: RunOptions) =>
           run(Video.start(input), options).then(handle),
         generate: <const Model extends VideoModel>(

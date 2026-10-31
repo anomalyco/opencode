@@ -18,7 +18,7 @@ const recorded = recordedTests({
 describe("ElevenLabs Transcription recorded", () => {
   recorded.effect("transcribes audio with word timestamps", () =>
     Effect.gen(function* () {
-      const request = Transcription.request({ model, audio: yield* audio, timestamps: "word" })
+      const request = { model, audio: yield* audio, timestamps: "word" } as const
       const response = yield* Transcription.generate(request)
 
       expect(response.text).toMatch(TRANSCRIPT)

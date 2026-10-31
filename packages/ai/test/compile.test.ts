@@ -1,14 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
-import {
-  ai,
-  LLMRequest,
-  Message,
-  ToolCallPart,
-  ToolDefinition,
-  ToolNamespace,
-} from "../src/effect.js"
+import { LLMRequest, Message, ToolCallPart, ToolDefinition, ToolNamespace } from "../src/effect.js"
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
@@ -63,7 +56,7 @@ describe("request option precedence", () => {
         },
       })
       const prepared = yield* compileRequest(
-        ai.request({
+        LLMRequest.from({
           model,
           prompt: "Say hello.",
           generation: { maxTokens: 30, topP: 0.9, stop: ["request"] },
@@ -87,7 +80,7 @@ describe("request option precedence", () => {
 
   it.effect("keeps the last tool definition for duplicate names", () =>
     Effect.gen(function* () {
-      const request = ai.request({
+      const request = LLMRequest.from({
         model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
         prompt: "Use a tool.",
       })
@@ -117,7 +110,7 @@ describe("request option precedence", () => {
   it.effect("deduplicates tools within each namespace", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.request({
+        LLMRequest.from({
           model: OpenAIResponses.route.model({ id: "gpt-5.4" }),
           tools: [
             ToolDefinition.make({ name: "crm", description: "Top-level CRM tool", inputSchema: {} }),
@@ -171,7 +164,7 @@ describe("request option precedence", () => {
   it.effect("normalizes tool history before protocol lowering", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
-        ai.request({
+        LLMRequest.from({
           model: OpenAIChat.route.model({ id: "gpt-4o-mini" }),
           messages: [
             Message.assistant(ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })),
@@ -190,7 +183,7 @@ describe("request option precedence", () => {
 
   it.effect("applies model HTTP defaults before request HTTP overlays", () =>
     LLMClient.generate(
-      ai.request({
+      LLMRequest.from({
         model: OpenAIChat.route
           .with({
             endpoint: { baseURL: "https://api.openai.test/v1/" },
@@ -244,7 +237,7 @@ describe("request option precedence", () => {
 
   it.effect("transforms the final HTTP request after serialization and authentication", () =>
     LLMClient.generate(
-      ai.request({
+      LLMRequest.from({
         model: OpenAIChat.route
           .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("fresh-key") })
           .model({ id: "gpt-4o-mini" }),
@@ -285,7 +278,7 @@ describe("request option precedence", () => {
   it.effect("transforms the HTTP response before protocol decoding", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        ai.request({
+        LLMRequest.from({
           model: OpenAIChat.route
             .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
             .model({ id: "gpt-4o-mini" }),
@@ -324,7 +317,7 @@ describe("request option precedence", () => {
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)
       const response = yield* LLMClient.generate(
-        ai.request({
+        LLMRequest.from({
           model: OpenAIChat.route
             .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("stale") })
             .model({ id: "gpt-4o-mini" }),
@@ -360,7 +353,7 @@ describe("request option precedence", () => {
 
   it.effect("sanitizes outbound JSON without an HTTP overlay", () =>
     LLMClient.generate(
-      ai.request({
+      LLMRequest.from({
         model: OpenAIChat.route
           .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
           .model({ id: "gpt-4o-mini" }),
@@ -384,7 +377,7 @@ describe("request option precedence", () => {
 
   it.effect("sanitizes unpaired surrogates throughout outbound JSON", () =>
     LLMClient.generate(
-      ai.request({
+      LLMRequest.from({
         model: OpenAIChat.route
           .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
           .model({ id: "gpt-4o-mini" }),
@@ -427,7 +420,7 @@ describe("request option precedence", () => {
 
   it.effect("applies raw body overlays after protocol lowering", () =>
     LLMClient.generate(
-      ai.request({
+      LLMRequest.from({
         model: OpenAIChat.route
           .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
           .model({ id: "gpt-4o-mini" }),
@@ -455,9 +448,9 @@ describe("request option precedence", () => {
         auth: Auth.header("x-api-key", "test"),
       })
       const model = route.model({ id: "claude-sonnet-4-5" })
-      const withoutMaxTokens = yield* compileRequest(ai.request({ model, prompt: "Say hello.", cache: "none" }))
+      const withoutMaxTokens = yield* compileRequest(LLMRequest.from({ model, prompt: "Say hello.", cache: "none" }))
       const withMaxTokens = yield* compileRequest(
-        ai.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 8_000 } }),
+        LLMRequest.from({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 8_000 } }),
       )
 
       expect(withoutMaxTokens.body.max_tokens).toBe(32_000)

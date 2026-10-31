@@ -69,7 +69,7 @@ recorded.effect.with(
   { protocol: "meta-responses", tags: ["hosted", "continuation", "editing"] },
   () =>
     Effect.gen(function* () {
-      const request = ai.request({
+      const request = LLMRequest.from({
         model: meta.responses(modelID),
         prompt: "A simple flat black square centered on a plain white background. No text.",
         tools: [

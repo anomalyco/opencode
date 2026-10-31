@@ -29,14 +29,12 @@ describe("OpenAI Responses image generation recorded", () => {
           partialImages: 0,
         }),
       ]
-      const response = yield* ai.generate(
-        ai.request({
-          model: openai.responses("gpt-5-mini"),
-          messages: [initial],
-          tools,
-          toolChoice: "image_generation",
-        }),
-      )
+      const response = yield* ai.generate({
+        model: openai.responses("gpt-5-mini"),
+        messages: [initial],
+        tools,
+        toolChoice: "image_generation",
+      })
 
       const result = response.events.find(LLMEvent.is.toolResult)
       expect(result).toBeDefined()
@@ -49,14 +47,12 @@ describe("OpenAI Responses image generation recorded", () => {
       expect(result.result.value[0].mime).toBe("image/jpeg")
       expect(result.result.value[0].uri.startsWith("data:image/jpeg;base64,")).toBe(true)
 
-      const edited = yield* ai.generate(
-        ai.request({
-          model: openai.responses("gpt-5-mini"),
-          messages: [initial, response.message, Message.user("Now make the triangle blue.")],
-          tools,
-          toolChoice: "image_generation",
-        }),
-      )
+      const edited = yield* ai.generate({
+        model: openai.responses("gpt-5-mini"),
+        messages: [initial, response.message, Message.user("Now make the triangle blue.")],
+        tools,
+        toolChoice: "image_generation",
+      })
       const editedResult = edited.events.find(LLMEvent.is.toolResult)
       expect(editedResult?.result.type).toBe("content")
       if (editedResult?.result.type !== "content") return
