@@ -8,9 +8,9 @@ import { tmpdir } from "./fixture/fixture"
 import { waitForHighlightedFrame } from "./fixture/frame"
 
 // The whole-app fixture needs the package's 30-second budget for its cold app import.
-test.each([100, 48])(
-  "scrolling up into older history never flashes the inserted rows at width %s",
-  async (width) => {
+test.each([100, 48].flatMap((width) => [false, true].map((child) => ({ width, child }))))(
+  "scrolling up into older history never flashes: $width columns, child=$child",
+  async ({ width, child }) => {
     await using state = await tmpdir()
     const setup = await createTestRenderer({ width, height: 30, kittyKeyboard: true })
     await setup.renderer.setupTerminal()
@@ -19,11 +19,13 @@ test.each([100, 48])(
       id: "ses_history_reveal",
       title: "History reveal",
       projectID: "proj_test",
+      parentID: child ? "ses_history_parent" : undefined,
       location: { directory },
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       time: { created: 0, updated: 0 },
     }
+    const parent = { ...session, id: "ses_history_parent", parentID: undefined, title: "Parent fixture" }
     const model = { providerID: "fixture", id: "fixture" }
     const messages: SessionMessageInfo[] = Array.from({ length: 60 }, (_, turn) => [
       { type: "user" as const, id: `user-${turn}`, text: `Turn ${turn} prompt`, time: { created: turn * 10 } },
@@ -40,7 +42,14 @@ test.each([100, 48])(
     // The first page (turns 40-59) overfills the mounted tail, so scrolling up first mounts its hidden
     // rows, then loads turns 30-39 from the server. Both insert rows above the reader.
     const calls = createFetch((url) => {
-      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === "/api/session") return json({ data: child ? [parent, session] : [session], cursor: {} })
+      if (url.pathname === `/api/session/${parent.id}`) return json({ data: parent })
+      if (
+        url.pathname === `/api/session/${parent.id}/message` ||
+        url.pathname === `/api/session/${parent.id}/inbox` ||
+        url.pathname === `/api/session/${parent.id}/permission`
+      )
+        return json({ data: [], cursor: {} })
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
       if (url.pathname === `/api/session/${session.id}/message`) {
         const cursor = url.searchParams.get("cursor")
