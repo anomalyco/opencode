@@ -8,7 +8,7 @@ import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 import { LayoutProvider } from "@/shell/state/layout"
 import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
-import { requireServerKey } from "./session"
+import { serverKey } from "./session"
 import { PluginAttachment } from "@/runtime/plugin/root"
 
 export const File = lazy(() => import("@opencode/session-ui/file").then((module) => ({ default: module.File })))
@@ -72,6 +72,7 @@ export function AppRoutes() {
       />
       <Route path="/new-session" component={DraftRoute} />
       {ComponentsLab && <Route path="/components" component={ComponentsLab} />}
+      <Route path="*" component={Home} />
     </Route>
   )
 }
@@ -80,9 +81,13 @@ function TargetServerRoute(props: ParentProps) {
   const params = useParams<{ serverKey: string }>()
   const global = useGlobal()
 
-  const connection = createMemo(() =>
-    global.servers.list().find((item) => ServerConnection.key(item) === requireServerKey(params.serverKey)),
-  )
+  const connection = createMemo(() => {
+    const key = serverKey(params.serverKey)
+
+    if (!key) return
+
+    return global.servers.list().find((item) => ServerConnection.key(item) === key)
+  })
 
   return (
     <Show when={connection()} keyed>

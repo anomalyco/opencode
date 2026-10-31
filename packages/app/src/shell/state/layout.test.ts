@@ -10,6 +10,14 @@ test.each(["settings", "connect"] as const)("%s has its own layout route", (type
   expect(currentRoute(`/${type}`, "")).toEqual({ type })
 })
 
+test("unknown paths fall back to home", () => {
+  expect(currentRoute("/foo", "")).toEqual({ type: "home" })
+})
+
+test("invalid server keys fall back to home", () => {
+  expect(currentRoute("/server/not-base64/session/ses_1", "")).toEqual({ type: "home" })
+})
+
 describe("layout persistence", () => {
   const schema = Persistence.withInitial(layoutPersistence, initialLayout(ServerConnection.Key.make("local")))
   const decode = Schema.decodeUnknownSync(schema)
