@@ -41,10 +41,15 @@ it.live(
       yield* sdk.register(
         Plugin.define({
           id: "slow-plugin",
-          effect: () =>
+          effect: (ctx) =>
             Effect.gen(function* () {
               yield* Deferred.succeed(started, undefined)
               yield* Deferred.await(release)
+              yield* ctx.integration.transform((editor) =>
+                editor.update("late-integration", (integration) => {
+                  integration.name = "Late integration"
+                }),
+              )
             }),
         }),
       )
@@ -58,7 +63,11 @@ it.live(
           return handler(
             new Request(url, {
               method,
-              headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+              headers: {
+                authorization: `Basic ${btoa("opencode:secret")}`,
+                ...(method === "POST" ? { "content-type": "application/json" } : {}),
+              },
+              ...(method === "POST" ? { body: JSON.stringify({ methodID: "missing" }) } : {}),
               signal,
             }),
           )
@@ -69,6 +78,15 @@ it.live(
       const agents = yield* request("GET", "/api/agent").pipe(Effect.forkScoped)
       yield* Deferred.await(started)
       const integrations = yield* request("GET", "/api/integration").pipe(Effect.forkScoped)
+      const integration = yield* request("GET", "/api/integration/late-integration").pipe(
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      const oauth = yield* request("GET", "/api/integration/late-integration/connect/oauth/missing").pipe(
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      const command = yield* request("POST", "/api/integration/late-integration/connect/command").pipe(
+        Effect.forkScoped({ startImmediately: true }),
+      )
       const get = yield* request("GET", "/api/provider/custom").pipe(Effect.timeout("2 seconds"))
       expect(get.status).toBe(404)
       expect(yield* Effect.promise(() => get.json())).toMatchObject({
@@ -77,6 +95,9 @@ it.live(
       })
       expect(providers.pollUnsafe()).toBeUndefined()
       expect(agents.pollUnsafe()).toBeUndefined()
+      expect(integration.pollUnsafe()).toBeUndefined()
+      expect(oauth.pollUnsafe()).toBeUndefined()
+      expect(command.pollUnsafe()).toBeUndefined()
       yield* Deferred.succeed(release, undefined)
       const list = yield* Fiber.join(providers)
       expect(list.status).toBe(200)
@@ -97,6 +118,15 @@ it.live(
       expect(yield* Effect.promise(() => discovered.json())).toMatchObject({
         data: expect.arrayContaining([expect.objectContaining({ id: "opencode" })]),
       })
+      const item = yield* Fiber.join(integration)
+      expect(item.status).toBe(200)
+      expect(yield* Effect.promise(() => item.json())).toMatchObject({ data: { id: "late-integration" } })
+      const attempt = yield* Fiber.join(oauth)
+      expect(attempt.status).toBe(404)
+      expect(yield* Effect.promise(() => attempt.json())).toMatchObject({ _tag: "IntegrationAttemptNotFoundError" })
+      const commandResult = yield* Fiber.join(command)
+      expect(commandResult.status).toBe(404)
+      expect(yield* Effect.promise(() => commandResult.json())).toMatchObject({ _tag: "IntegrationMethodNotFoundError" })
     }),
   15_000,
 )

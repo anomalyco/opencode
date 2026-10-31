@@ -1,5 +1,4 @@
 import { Integration } from "@opencode/core/integration"
-import { Plugin } from "@opencode/core/plugin"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Api } from "../api"
@@ -9,7 +8,7 @@ import {
   IntegrationNotFoundError,
   InvalidRequestError,
 } from "@opencode/protocol/errors"
-import { response } from "../location"
+import { awaitPlugins, response } from "../location"
 import { WellKnown } from "@opencode/core/wellknown"
 import { Config } from "@opencode/core/config"
 import { ManagedPolicy } from "@opencode/core/managed-policy"
@@ -54,7 +53,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
       .handle(
         "integration.list",
         Effect.fn(function* () {
-          yield* Plugin.awaitActivation
+          yield* awaitPlugins
           const service = yield* Integration.Service
           const current = yield* statements()
           return yield* response(
@@ -75,6 +74,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
       .handle(
         "integration.get",
         Effect.fn(function* (ctx) {
+          yield* awaitPlugins
           const service = yield* Integration.Service
           const integration = yield* service.get(ctx.params.integrationID)
           if (!integration)
@@ -106,6 +106,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
       .handle(
         "integration.connect.key",
         Effect.fn(function* (ctx) {
+          yield* awaitPlugins
           yield* requireConnectable(ctx.params.integrationID)
           const service = yield* Integration.Service
           if (!(yield* service.get(ctx.params.integrationID)))
@@ -127,6 +128,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
       .handle(
         "integration.connect.external",
         Effect.fn(function* (ctx) {
+          yield* awaitPlugins
           yield* requireConnectable(ctx.params.integrationID)
           const service = yield* Integration.Service
           if (!(yield* service.get(ctx.params.integrationID)))
@@ -148,6 +150,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
       .handle(
         "integration.oauth.connect",
         Effect.fn(function* (ctx) {
+          yield* awaitPlugins
           yield* requireConnectable(ctx.params.integrationID)
           const service = yield* Integration.Service
           return yield* response(
@@ -165,6 +168,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
       .handle(
         "integration.oauth.status",
         Effect.fn(function* (ctx) {
+          yield* awaitPlugins
           const service = yield* Integration.Service
           if (!(yield* service.get(ctx.params.integrationID)))
             return yield* new IntegrationNotFoundError({
@@ -193,6 +197,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
       .handle(
         "integration.oauth.complete",
         Effect.fn(function* (ctx) {
+          yield* awaitPlugins
           const service = yield* Integration.Service
           if (!(yield* service.get(ctx.params.integrationID)))
             return yield* new IntegrationNotFoundError({
@@ -242,6 +247,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
       .handle(
         "integration.command.connect",
         Effect.fn(function* (ctx) {
+          yield* awaitPlugins
           yield* requireConnectable(ctx.params.integrationID)
           const service = yield* Integration.Service
           const integration = yield* service.get(ctx.params.integrationID)
@@ -270,6 +276,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
       .handle(
         "integration.command.status",
         Effect.fn(function* (ctx) {
+          yield* awaitPlugins
           const service = yield* Integration.Service
           if (!(yield* service.get(ctx.params.integrationID)))
             return yield* new IntegrationNotFoundError({
