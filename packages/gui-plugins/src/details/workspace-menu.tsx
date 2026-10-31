@@ -6,11 +6,13 @@ import { createStore } from "solid-js/store"
 import { For, onCleanup, Show, type ComponentProps, type JSX } from "solid-js"
 import { createKeyed, usePlugin, type Project, type MountedSession } from "@opencode/plugin/gui"
 import { workspaceDirectories } from "./paths"
+import type { LocationMoves } from "./location-move"
 
 export function SessionWorkspaceMenu(props: {
   session: MountedSession
   project: Project
   directory: string
+  moves: LocationMoves
   placement?: ComponentProps<typeof Menu>["placement"]
   class?: string
   /** Renders as a submenu of an enclosing `Menu`. */
@@ -20,11 +22,11 @@ export function SessionWorkspaceMenu(props: {
   const ctx = usePlugin()
   const data = () => props.session.server.data
 
-  const [store, setStore] = createStore<{ selected: string | undefined; directories: string[] }>({
-    selected: undefined,
+  const [store, setStore] = createStore<{ directories: string[] }>({
     directories: workspaceDirectories(props.project),
   })
 
+  const pending = () => props.moves.pending(props.session.key)
   const blocked = () => data().session.status(props.session.id) === "running"
   const currentWorkspace = () => store.directories.find((workspace) => containsDirectory(workspace, props.directory))
 
@@ -73,10 +75,9 @@ export function SessionWorkspaceMenu(props: {
   }
 
   const move = async (selection: "create" | string) => {
-    if (store.selected || blocked()) return
+    if (blocked() || !props.moves.begin(props.session.key)) return
     const client = props.session.server.client
     const sessionID = props.session.id
-    setStore("selected", selection)
 
     try {
       const destination = selection === "create" ? await createWorktree(client, props.directory) : selection
@@ -91,7 +92,7 @@ export function SessionWorkspaceMenu(props: {
         description: error instanceof Error ? error.message : ctx.t("common.requestFailed"),
       })
     } finally {
-      setStore("selected", undefined)
+      props.moves.end(props.session.key)
     }
   }
 
@@ -99,12 +100,12 @@ export function SessionWorkspaceMenu(props: {
     <Menu.Group>
       <Menu.GroupLabel>{ctx.t("move.menu")}</Menu.GroupLabel>
       <Show when={comparablePath(props.directory) !== comparablePath(props.project.worktree)}>
-        <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(props.project.worktree)}>
+        <Menu.Item disabled={pending() || blocked()} onSelect={() => void move(props.project.worktree)}>
           <Icon name="monitor" class="text-v2-icon-icon-muted" />
           {ctx.t("workspace.local")}
         </Menu.Item>
       </Show>
-      <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move("create")}>
+      <Menu.Item disabled={pending() || blocked()} onSelect={() => void move("create")}>
         <Icon name="plus" class="text-v2-icon-icon-muted" />
         {ctx.t("workspace.new")}
       </Menu.Item>
@@ -118,7 +119,7 @@ export function SessionWorkspaceMenu(props: {
             <Menu.SubContent class="max-h-[66.667dvh] w-[200px] overflow-y-auto !pb-0 [&>[data-component=menu-v2-item]:last-child]:mb-0.5 [@media(max-height:600px)]:max-h-[calc(100dvh-48px)]">
               <For each={workspaces()}>
                 {(workspace) => (
-                  <Menu.Item disabled={!!store.selected || blocked()} onSelect={() => void move(workspace)}>
+                  <Menu.Item disabled={pending() || blocked()} onSelect={() => void move(workspace)}>
                     <Icon name="outline-worktree" class="text-v2-icon-icon-muted" />
                     <span class="min-w-0 flex-1 truncate">{getFilename(workspace)}</span>
                   </Menu.Item>
