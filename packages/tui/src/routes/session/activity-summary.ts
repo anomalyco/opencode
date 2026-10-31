@@ -6,7 +6,13 @@ import type {
 } from "@opencode/client"
 import { canonicalToolName, executeCalls } from "../../util/tool-display"
 import { visitEntries } from "./anchor-view"
-import { instructionPaths, type PartRef, type SessionEntry, type SessionNode } from "./grouping/session"
+import {
+  instructionPaths,
+  isInstructionUpdate,
+  type PartRef,
+  type SessionEntry,
+  type SessionNode,
+} from "./grouping/session"
 import { reasoningContent } from "./message-parts"
 import { resolvePart } from "./rows"
 
@@ -38,7 +44,10 @@ export function summarizeActivity(
   const files = new Set(
     entries.flatMap((entry) => (entry.type === "message" ? instructionPaths(message(entry.messageID)) : [])),
   )
-  const summary = activitySummary(items, files.size, closed)
+  const updates = entries.filter(
+    (entry) => entry.type === "message" && isInstructionUpdate(message(entry.messageID)),
+  ).length
+  const summary = activitySummary(items, files.size, closed, updates)
   const current = items.find((item) => isActive(item, closed))
   return { ...summary, label: summary.label || (current ? busyLabel(current.part) : "") }
 }
@@ -55,11 +64,11 @@ export function busyLabel(part: Item["part"]) {
  * Low verbosity's activity summary, e.g. "3 commands, 1 edit, 2 thoughts, 4 reads".
  * The label counts only finished work; running items are reported through `active`.
  * Code-mode `execute` counts its finished nested calls rather than itself.
- * Instructions count distinct loaded files, matching the instruction subgroup.
+ * Instruction loads count distinct files; updates count notices, not changed sources.
  * Once a later row closes the group, its thoughts count as finished, as in Medium.
  */
-export function activitySummary(items: readonly Item[], instructions: number, closed = false) {
-  const counts = { command: 0, edit: 0, thought: 0, read: 0, tool: 0, instruction: instructions }
+export function activitySummary(items: readonly Item[], instructions: number, closed = false, updates = 0) {
+  const counts = { command: 0, edit: 0, thought: 0, read: 0, tool: 0, instruction: instructions, other: updates }
   items.forEach((item) => {
     if (item.part.type === "reasoning") {
       // Redacted-only reasoning renders nothing, so it isn't a visible thought.
