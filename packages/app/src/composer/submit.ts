@@ -427,8 +427,6 @@ function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, va
     })
   const optimisticBusy = !input.adapter.working()
 
-  const background = value.delivery === "steer" && !optimisticBusy ? session.background?.() : undefined
-
   if (optimisticBusy) session.data.session.setStatus(session.id, "running")
 
   const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
@@ -440,18 +438,12 @@ function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, va
     sending,
     // The composer settles after clearing its captured draft; a quote settles before removing only its context.
     settle(result: Awaited<typeof sending>, restore: () => boolean) {
-      const admitted =
+      return (
         result.ok ||
         failSubmission(input, session, "prompt", result.error, restore, value.id, () => {
           if (optimisticBusy) session.data.session.setStatus(session.id, "idle")
         })
-
-      if (!admitted) return false
-
-      // Move blocking work only once the steer is admitted, so the next step can read it from the inbox.
-      void background?.move()
-
-      return true
+      )
     },
   }
 }
