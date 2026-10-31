@@ -528,7 +528,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const resolve = (files: Files, value: string, base?: string) => {
     const root = files.root.replaceAll("\\", "/").replace(/\/+$/, "")
 
-    if (/^[a-z]:\//i.test(value) || value.startsWith("/")) return files.resolve(value)
+    if (/^skill:\/\//i.test(value) || /^[a-z]:\//i.test(value) || value.startsWith("/")) return files.resolve(value)
 
     const relative = resolveArtifactPath(base ?? "", value)
 

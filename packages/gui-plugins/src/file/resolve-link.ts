@@ -25,7 +25,7 @@ export function parseFileLink(href: string): ParsedFileLink {
 }
 
 export function isAbsoluteLink(path: string) {
-  return /^[a-z]:\//i.test(path) || path.startsWith("/")
+  return /^skill:\/\//i.test(path) || /^[a-z]:\//i.test(path) || path.startsWith("/")
 }
 
 /**
@@ -101,10 +101,20 @@ function normalizeRelativeSegments(input: string, decode: boolean): string {
 
   if (!trimmed) return ""
 
-  const unc = trimmed.startsWith("//")
+  const skill = /^skill:\/\//i.test(trimmed)
+  const unc = !skill && trimmed.startsWith("//")
   const driveMatch = trimmed.match(/^([a-z]:)\/(.*)$/i)
-  const prefix = unc ? "//" : driveMatch ? `${driveMatch[1]}/` : trimmed.startsWith("/") ? "/" : ""
-  const rest = unc ? trimmed.slice(2) : driveMatch ? (driveMatch[2] ?? "") : prefix ? trimmed.slice(1) : trimmed
+  const prefix = skill ? "skill://" : unc ? "//" : driveMatch ? `${driveMatch[1]}/` : trimmed.startsWith("/") ? "/" : ""
+
+  const rest = skill
+    ? trimmed.slice("skill://".length)
+    : unc
+      ? trimmed.slice(2)
+      : driveMatch
+        ? (driveMatch[2] ?? "")
+        : prefix
+          ? trimmed.slice(1)
+          : trimmed
 
   const out = rest.split("/").reduce<string[]>((acc, part) => {
     if (!part || part === ".") return acc
