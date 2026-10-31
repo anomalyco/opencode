@@ -29,8 +29,9 @@ export type OpenApiSchema = {
 export type OpenApiContent = Record<string, { schema?: OpenApiSchema }>
 
 export type OpenApiParameter = {
-  name: string
-  in: string
+  $ref?: string
+  name?: string
+  in?: string
   description?: string
   required?: boolean
   schema?: OpenApiSchema
@@ -48,6 +49,16 @@ export type OpenApiOperation = {
     content?: OpenApiContent
   }
   responses?: Record<string, { description?: string; content?: OpenApiContent }>
+}
+
+const parameterReferencePrefix = "#/components/parameters/"
+
+export function resolveOpenApiParameter(
+  parameter: OpenApiParameter,
+  parameters?: Record<string, OpenApiParameter>,
+): OpenApiParameter {
+  if (!parameter.$ref?.startsWith(parameterReferencePrefix)) return parameter
+  return parameters?.[parameter.$ref.slice(parameterReferencePrefix.length)] ?? parameter
 }
 
 export function openApiSchemaLabel(schema?: OpenApiSchema): string {

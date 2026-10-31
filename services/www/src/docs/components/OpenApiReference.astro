@@ -1,18 +1,27 @@
 ---
 import openapi from "../../../../../packages/protocol/openapi.json"
-import type { OpenApiOperation, OpenApiSchema } from "../lib/openapi"
-import { openApiSchemaLabel } from "../lib/openapi"
+import type { OpenApiOperation, OpenApiParameter, OpenApiSchema } from "../lib/openapi"
+import { openApiSchemaLabel, resolveOpenApiParameter } from "../lib/openapi"
 import OpenApiSchemaView from "./OpenApiSchema.astro"
 
 const methods = ["get", "post", "put", "patch", "delete", "options", "head"] as const
 type Method = (typeof methods)[number]
 
+const parameters = (openapi.components as { parameters?: Record<string, OpenApiParameter> }).parameters
 const paths = openapi.paths as unknown as Record<string, Partial<Record<Method, OpenApiOperation>>>
 const operations = Object.entries(paths).flatMap(([path, item]) =>
   methods.flatMap((method) => {
     const operation = item[method]
     if (!operation) return []
-    return [{ ...operation, path, method, id: operation.operationId ?? `${method}-${path}`.replace(/[^a-z0-9]+/gi, "-") }]
+    return [
+      {
+        ...operation,
+        parameters: operation.parameters?.map((parameter) => resolveOpenApiParameter(parameter, parameters)),
+        path,
+        method,
+        id: operation.operationId ?? `${method}-${path}`.replace(/[^a-z0-9]+/gi, "-"),
+      },
+    ]
   }),
 )
 const groups = [...new Set(operations.map((operation) => operation.tags?.[0] ?? "other"))].map((tag) => ({
