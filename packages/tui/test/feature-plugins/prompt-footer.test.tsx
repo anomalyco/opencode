@@ -9,7 +9,8 @@ import { PromptFooter } from "../../src/feature-plugins/prompt/footer"
 test("prompt footer separates simultaneous subagent, shell, and usage status", async () => {
   const color = RGBA.fromInts(200, 200, 200)
   const subdued = RGBA.fromInts(100, 100, 100)
-  const dispatched: string[] = []
+  const dispatched: [string, string | undefined][] = []
+  const [activeSubagent, setActiveSubagent] = createSignal(true)
   const context = {
     location: { directory: "/workspace" },
     theme: {
@@ -21,14 +22,14 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
     keymap: {
       shortcuts: (id: string) =>
         id === "session.child.first" ? ["ctrl+j"] : id === "command.palette.show" ? ["ctrl+p"] : [],
-      dispatch: (id: string) => dispatched.push(id),
+      dispatch: (id: string, input?: string) => dispatched.push([id, input]),
     },
     client: { rpc: () => ({ get: () => Promise.resolve(null), events: { on: () => () => {} } }) },
     data: {
       on: () => () => {},
       session: {
         family: () => ["session", "child"],
-        status: (id: string) => (id === "child" ? "running" : "idle"),
+        status: (id: string) => (id === "child" && activeSubagent() ? "running" : "idle"),
         get: () => ({ id: "session", location: { directory: "/workspace" } }),
         cost: () => 1,
         message: { list: () => [] },
@@ -60,7 +61,23 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
     expect((live as TextRenderable).fg.toInts()).toEqual(color.toInts())
 
     await app.mockMouse.click(2, 0)
-    expect(dispatched).toEqual(["session.child.first"])
+    await app.mockMouse.click(9, 0)
+    await app.mockMouse.click(23, 0)
+    expect(dispatched).toEqual([
+      ["session.child.first", "subagents"],
+      ["session.child.first", "subagents"],
+      ["session.child.first", "subagents"],
+    ])
+
+    setActiveSubagent(false)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("ctrl+j 1 shell · $1.00")
+    await app.mockMouse.click(2, 0)
+    await app.mockMouse.click(9, 0)
+    expect(dispatched.slice(-2)).toEqual([
+      ["session.child.first", "shell"],
+      ["session.child.first", "shell"],
+    ])
   } finally {
     app.renderer.destroy()
   }
