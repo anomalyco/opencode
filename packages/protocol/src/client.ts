@@ -75,6 +75,10 @@ export const groupNames = {
 export const clientNamespace = (endpoint: { readonly path: string }) =>
   endpoint.path === "/api/experimental" || endpoint.path.startsWith("/api/experimental/") ? "experimental" : undefined
 
+// Marketplace starts experimental; it has never shipped a stable client path to preserve.
+export const clientAliases = (endpoint: { readonly path: string }) =>
+  !endpoint.path.startsWith("/api/experimental/marketplace")
+
 export const promiseOmitEndpoints = new Set([
   "pty.connect",
   "persistentPty.connect",

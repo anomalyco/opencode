@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { compile } from "@opencode/httpapi-codegen"
 import {
   ClientApi,
+  clientAliases,
   clientNamespace,
   effectOmitEndpoints,
   groupNames,
@@ -14,7 +15,7 @@ import { OpenCode as PromiseOpenCode } from "../src/promise/index"
 
 // The pre-experimental paths stay until the next minor.
 const aliases = (omitEndpoints: ReadonlySet<string>) =>
-  compile(ClientApi, { groupNames, omitEndpoints, namespace: clientNamespace, aliases: true }).aliases ?? []
+  compile(ClientApi, { groupNames, omitEndpoints, namespace: clientNamespace, aliases: clientAliases }).aliases ?? []
 
 const at = (root: unknown, path: ReadonlyArray<string>) =>
   path.reduce<unknown>((parent, key) => (parent as Record<string, unknown> | undefined)?.[key], root)
