@@ -416,6 +416,98 @@ This starts an HTTP server that provides API access to opencode functionality wi
 
 ---
 
+### service
+
+Manage the background server. OpenCode starts one for your user account and every local client connects to it — it owns sessions, configuration, integrations, permissions, and tool execution.
+
+```bash
+opencode service [command]
+```
+
+---
+
+#### start
+
+Start the background server.
+
+```bash
+opencode service start
+```
+
+---
+
+#### restart
+
+Restart the background server.
+
+```bash
+opencode service restart
+```
+
+---
+
+#### status
+
+Show background server status.
+
+```bash
+opencode service status
+```
+
+---
+
+#### stop
+
+Stop the background server.
+
+```bash
+opencode service stop
+```
+
+---
+
+#### get
+
+Get service configuration.
+
+```bash
+opencode service get hostname
+```
+
+---
+
+#### set
+
+Set service configuration.
+
+```bash
+opencode service set hostname 0.0.0.0
+```
+
+Set the allowed CORS origins, replacing the current list. The value is a comma-separated list of HTTP(S) origins, written without paths or trailing slashes.
+
+```bash
+opencode service set cors https://app.example.com,https://admin.example.com
+```
+
+Pass an environment variable to the server process.
+
+```bash
+opencode service set env OPENCODE_LOG_LEVEL DEBUG
+```
+
+---
+
+#### unset
+
+Unset service configuration.
+
+```bash
+opencode service unset hostname
+```
+
+---
+
 ### session
 
 Manage OpenCode sessions.
