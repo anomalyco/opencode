@@ -484,32 +484,38 @@ export const layer = Layer.effect(
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
-      const windowSized = (request: LLMRequest) =>
+      // Compare the window room for the request's own estimate, not the cap: the cap also reflects budget cuts.
+      const windowSized = (request: LLMRequest, size?: Estimate) =>
         request.generation?.maxTokens !== undefined &&
-        request.generation.maxTokens < SessionModelRequest.outputLimit(context.model.limit)
+        SessionModelRequest.outputLimit(
+          context.model.limit,
+          size ?? { measured: 0, estimated: estimateRequest(request) },
+        ) < SessionModelRequest.outputLimit(context.model.limit)
       const send = (request: LLMRequest, size?: Estimate) =>
         Effect.gen(function* () {
+          const promptedSize = size && { ...size, estimated: size.estimated + Token.estimate(prompt) }
           const prompted = fitOutput(
             LLMRequest.update(request, { messages: [...request.messages, Message.user(prompt)] }),
             context.model.limit,
-            size && { ...size, estimated: size.estimated + Token.estimate(prompt) },
+            promptedSize,
           )
-          const reply = yield* stream(context, prompted, prepared.options, background, windowSized(prompted))
+          const reply = yield* stream(context, prompted, prepared.options, background, windowSized(prompted, promptedSize))
           if (filled(reply.text)) return reply
 
+          const nudgedSize = size && { ...size, estimated: size.estimated + Token.estimate(prompt) + Token.estimate(NUDGE) }
           const nudged = fitOutput(
             LLMRequest.update(prompted, { messages: [...prompted.messages, Message.user(NUDGE)] }),
             context.model.limit,
-            size && { ...size, estimated: size.estimated + Token.estimate(prompt) + Token.estimate(NUDGE) },
+            nudgedSize,
           )
-          const retry = yield* stream(context, nudged, prepared.options, background, windowSized(nudged))
+          const retry = yield* stream(context, nudged, prepared.options, background, windowSized(nudged, nudgedSize))
           if (filled(retry.text)) return retry
           const blank = retry.text.trim() === ""
           return yield* Effect.fail(
             blank
               ? fail(
                   { type: "compaction.failed", message: "Compaction produced no summary" },
-                  limitKind(retry.usage, context.model.limit, nudged.generation?.maxTokens, windowSized(nudged)),
+                  limitKind(retry.usage, context.model.limit, nudged.generation?.maxTokens, windowSized(nudged, nudgedSize)),
                 )
               : fail({ type: "compaction.failed", message: "Compaction summary did not match the required template" }),
           )
@@ -1214,7 +1220,7 @@ const limitKind = (
     const output = usage.outputTokens ?? 0
     if (input + output >= Math.floor(window * WINDOW_REACH_SHARE) && (requested === undefined || output < requested))
       return "window-limited"
-    if (requested !== undefined && output >= requested) return "output-limited"
+    if (requested !== undefined && output >= requested) return windowSized ? "window-limited" : "output-limited"
   }
   return windowSized ? "window-limited" : "unknown"
 }

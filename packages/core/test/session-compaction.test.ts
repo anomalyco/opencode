@@ -1187,6 +1187,27 @@ it.effect("a summary capped for the window is retried when the provider reports 
   }),
 )
 
+it.effect("a summary capped for the window is retried when the reported usage stops at the cap", () =>
+  Effect.gen(function* () {
+    const fixture = yield* summaryFixture([
+      textUser("Earlier question"),
+      measured("Earlier answer", 16_000),
+      textUser("Latest question"),
+    ])
+    const narrow = { ...resolved, limit: { context: 20_000, output: 16_000 } }
+    reply = (_request, attempt) =>
+      attempt === 1 ? { finish: "length", usage: { inputTokens: 16_500, outputTokens: 3_000 } } : undefined
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        reply = undefined
+      }),
+    )
+    expect(yield* fixture.run({ ...fixture.context, model: narrow })).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(2)
+    expect(requests[0].generation?.maxTokens).toBe(3_000)
+  }),
+)
+
 it.effect("summary output-limit failures give up after the shrink ladder is spent", () =>
   Effect.gen(function* () {
     const fixture = yield* summaryFixture([
