@@ -39,16 +39,6 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   update: Schema.Literals(["disable", "notify", "auto"]).pipe(optional).annotate({
     description: "Disable updates, notify when one is available, or install updates automatically",
   }),
-  share: Schema.Literals(["manual", "auto", "disabled"]).pipe(optional).annotate({
-    description: "Control whether sessions may be shared manually, automatically, or not at all",
-  }),
-  enterprise: Schema.Struct({
-    url: Schema.String.pipe(optional),
-  })
-    .pipe(optional)
-    .annotate({
-      description: "Enterprise sharing service configuration",
-    }),
   username: Schema.String.pipe(optional).annotate({
     description: "Username displayed in conversations and used for telemetry identity",
   }),
