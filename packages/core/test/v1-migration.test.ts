@@ -1168,7 +1168,9 @@ describe("V1Migration database workflow", () => {
     )
   })
 
-  test.each(["/tmp/orphan", "."])("reassigns V1 sessions with missing projects and directory %s", async (directory) => {
+  test.each(["missing", "."])("reassigns V1 sessions with missing projects and directory %s", async (input) => {
+    await using tmp = await tmpdir()
+    const directory = input === "missing" ? path.join(tmp.path, "missing") : input
     await database(
       Effect.gen(function* () {
         const { db } = yield* Database.Service
@@ -1250,6 +1252,62 @@ describe("V1Migration database workflow", () => {
           { id: "ses_plain", project_id: owners.plain.id, path: "", title: "Test" },
           { id: "ses_repo", project_id: owners.repo.id, path: "pkg/a", title: "Test" },
         ])
+      }),
+    )
+  })
+
+  test("repairs V1 global sessions left by a completed import", async () => {
+    await using tmp = await tmpdir()
+    const plain = path.join(tmp.path, "plain")
+    const repo = path.join(tmp.path, "repo")
+    const missing = path.join(tmp.path, "missing")
+    await fs.mkdir(plain, { recursive: true })
+    await fs.mkdir(path.join(repo, "pkg", "a"), { recursive: true })
+    await initRepo(repo)
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        const projects = yield* Project.Service
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('global', '/', 1, 2, '[]')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO kv (key, value, time_created, time_updated) VALUES ('migration.v1-v2', '{"phase":"completed"}', 1, 1)`,
+        )
+        const sessions = [
+          { id: "ses_plain", directory: plain, v1: true },
+          { id: "ses_repo", directory: path.join(repo, "pkg", "a"), v1: true },
+          { id: "ses_missing", directory: missing, v1: true },
+          { id: "ses_native", directory: plain, v1: false },
+        ]
+        yield* Effect.forEach(sessions, (input) =>
+          Effect.gen(function* () {
+            if (input.v1)
+              yield* db.run(sql`
+                INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+                VALUES (${input.id}, 'global', ${input.id}, ${input.directory}, 'Test', '1', 1, 2)
+              `)
+            yield* db.run(sql`
+              INSERT INTO session_v2 (id, project_id, slug, directory, title, version, time_created, time_updated)
+              VALUES (${input.id}, 'global', ${input.id}, ${input.directory}, 'Test', '1', 1, 2)
+            `)
+          }),
+        )
+
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        const owners = {
+          plain: yield* projects.resolve(AbsolutePath.make(plain)),
+          repo: yield* projects.resolve(AbsolutePath.make(repo)),
+        }
+        expect(yield* db.all(sql`SELECT id, project_id, path, time_updated FROM session_v2 ORDER BY id`)).toEqual([
+          { id: "ses_missing", project_id: "global", path: null, time_updated: 2 },
+          { id: "ses_native", project_id: "global", path: null, time_updated: 2 },
+          { id: "ses_plain", project_id: owners.plain.id, path: "", time_updated: 2 },
+          { id: "ses_repo", project_id: owners.repo.id, path: "pkg/a", time_updated: 2 },
+        ])
+        expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2.global-sessions'`)).toEqual({
+          value: '{"phase":"completed"}',
+        })
       }),
     )
   })
