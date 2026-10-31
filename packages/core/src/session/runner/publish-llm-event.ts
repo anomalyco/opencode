@@ -60,6 +60,8 @@ const INPUT_FAILURES = {
 export interface StepRecord {
   /** The model produced visible output this attempt, which bars transparent retries and overflow recovery. */
   readonly outputStarted: boolean
+  /** At least one tool call finished streaming and entered execution or hosted settlement. */
+  readonly toolCalled: boolean
   readonly providerFailed: boolean
   /** The step's recorded assistant failure, if any. */
   readonly failure?: SessionError.Error
@@ -643,6 +645,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     /** Immutable snapshot of everything recorded for this step so far. */
     record: (): StepRecord => ({
       outputStarted,
+      toolCalled: Iterable.some(tools.values(), (tool) => tool.called),
       providerFailed,
       failure: stepFailure,
       finish: stepSettlement,
