@@ -296,6 +296,34 @@ describe("freeform tools", () => {
     }),
   )
 
+  it.effect("replays an unadvertised custom call as a normalized function without its custom item id", () =>
+    Effect.gen(function* () {
+      const messages = [
+        Message.assistant([
+          ToolCallPart.make({
+            id: "call_unknown",
+            name: "browser.tabs.open",
+            input: { code: "ZZ123" },
+            providerMetadata: { openai: { itemId: "ctc_unknown", custom: true } },
+          }),
+        ]),
+        Message.tool({ id: "call_unknown", name: "browser.tabs.open", result: "unavailable" }),
+      ]
+      const response = yield* compileRequest(LLM.request({ model: responses, messages, tools: lark }))
+      expect(response.body.input).toMatchObject([
+        { type: "function_call", call_id: "call_unknown", name: "browser_tabs_open" },
+        { type: "function_call_output", call_id: "call_unknown" },
+      ])
+      expect(response.body.input[0]).not.toHaveProperty("id")
+
+      const chatRequest = yield* compileRequest(LLM.request({ model: chat, messages, tools: lark }))
+      expect(chatRequest.body.messages).toMatchObject([
+        { role: "assistant", tool_calls: [{ type: "function", function: { name: "browser_tabs_open" } }] },
+        { role: "tool", tool_call_id: "call_unknown" },
+      ])
+    }),
+  )
+
   it.effect("rejects freeform tools without exactly one required string parameter", () =>
     Effect.sync(() => {
       const make = (parameters: Schema.Struct<Schema.Struct.Fields>) =>
