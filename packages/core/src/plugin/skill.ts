@@ -11,14 +11,18 @@ import { Config } from "../config.js"
 import os from "os"
 import opencodeContent from "./skill/opencode.md" with { type: "text" }
 import reportContent from "./skill/report.md" with { type: "text" }
+import guidedReviewContent from "./skill/guided-review.md" with { type: "text" }
 
 export const OpencodeContent = opencodeContent
 export const ReportContent = reportContent
+export const GuidedReviewContent = guidedReviewContent
 
 export const OpencodeDescription =
   "Use this skill for any question about OpenCode itself, including how OpenCode works, using or configuring it, migrating from V1 to V2, troubleshooting it, developing plugins or integrations, using the OpenCode SDK, clients, server, or API, and contributing to the OpenCode codebase. Also use it for OpenCode agents, commands, skills, tools, permissions, MCP servers, providers, models, themes, keybinds, formatters, the CLI, TUI, desktop app, and web app."
 const REPORT_DESCRIPTION =
   "Use when the user wants to report an opencode issue or bug. Collect standard diagnostics, add user-specific reproduction context, and publish the issue with GitHub CLI."
+const GUIDED_REVIEW_DESCRIPTION =
+  "Use when the user wants code changes reviewed (uncommitted changes, a commit, a branch, or a pull request) and wants to understand them, not just get a list of findings. Delegates the review to a subagent, then explains what the change does, where it fits in the codebase, and why each finding matters, in plain language for a reader who does not know the codebase."
 
 export const Plugin = define({
   id: "opencode.skill",
@@ -41,6 +45,15 @@ export const Plugin = define({
           description: REPORT_DESCRIPTION,
           path: AbsolutePath.make("/builtin/report.md"),
           content: reportContent,
+        }),
+      )
+      editor.add(
+        Skill.Info.make({
+          id: Skill.ID.make("guided-review"),
+          name: Skill.Name.make("Guided Review"),
+          description: GUIDED_REVIEW_DESCRIPTION,
+          path: AbsolutePath.make("/builtin/guided-review.md"),
+          content: GuidedReviewContent,
         }),
       )
     })
