@@ -163,7 +163,7 @@ export const Info = Schema.Struct({
       }),
       verbosity: Schema.optional(Schema.Literals(["low", "medium", "high"])).annotate({
         description:
-          "Transcript detail level: low summarizes each run of tools and thoughts, high opens exploration and instruction groups",
+          "Transcript detail level: low summarizes each run of tools and thoughts, high opens exploration and instruction groups and long file contents and diffs",
       }),
       image_preview: Schema.optional(Schema.Boolean).annotate({
         description: "Show user attachment and tool-result images in the session transcript",
