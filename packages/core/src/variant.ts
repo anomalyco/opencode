@@ -356,6 +356,8 @@ const anthropicMessages: Protocol = (model, support) => {
 
 const minimaxMessages: Protocol = (model, support) => {
   if (/minimax[-.]?m2(?:[.-]|$)/i.test(modelID(model))) return []
+  if (support.type === "effort" && support.values !== undefined)
+    return efforts(support.values, (effort) => ({ body: { output_config: { effort } } }))
   const configurable = support.type === "toggle" || (support.type === "effort" && support.values === undefined)
   if (!configurable) return []
   return toggle({ settings: { thinking: { type: "disabled" } } }, { settings: { thinking: { type: "adaptive" } } })
