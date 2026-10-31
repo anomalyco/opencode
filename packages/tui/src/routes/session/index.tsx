@@ -2003,13 +2003,16 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const data = useData()
   const local = useLocal()
   const theme = useTheme()
-  const model = createMemo(
-    () =>
+  const model = createMemo(() => {
+    const id = `${props.message.model.providerID}/${props.message.model.id}`
+    if (config.data.session.model_label === "id") return id
+    return (
       ctx
         .models()
         .find((model) => model.providerID === props.message.model.providerID && model.id === props.message.model.id)
-        ?.name ?? `${props.message.model.providerID}/${props.message.model.id}`,
-  )
+        ?.name ?? id
+    )
+  })
   const messages = createMemo(() => data.session.message.list(ctx.sessionID))
   const turn = () => ({ index: ctx.messageIndex(props.message.id), legacy: ctx.legacyTurns() })
   const duration = createMemo(() => SessionTurn.duration(messages(), props.message, turn()))
