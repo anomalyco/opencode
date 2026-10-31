@@ -19,7 +19,6 @@ import {
   type ElicitResult,
   type GetPromptResult,
   type Implementation,
-  type OAuthClientProvider,
   type Prompt,
   type ReadResourceResult,
   type Resource,
@@ -31,6 +30,7 @@ import { Cause, Clock, Duration, Effect, Exit, Schedule, Schema } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { isRecord } from "@opencode/util/record"
+import type { McpOAuth } from "./oauth.js"
 import { McpStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
@@ -177,7 +177,7 @@ export const connect = Effect.fnUntraced(function* (
   config: typeof ConfigMCP.Server.Type | Attached,
   directory: string,
   // Remote only. A provider with no stored token and a no-op redirect ends in UnauthorizedError → needs_auth.
-  authProvider?: OAuthClientProvider,
+  authProvider?: McpOAuth.Provider,
   elicitation?: ElicitationHandler,
   clientInfo: Implementation = { name: "opencode", version: "unknown" },
 ) {
@@ -301,7 +301,7 @@ export const connect = Effect.fnUntraced(function* (
     if (!URL.canParse(config.url))
       return yield* new ConnectError({ server, message: `Invalid MCP URL for "${server}"` })
     const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
-    const fetch = yield* McpOAuth.loggedFetch({ server, directory })
+    const fetch = yield* McpOAuth.loggedFetch({ server, directory }, authProvider?.send)
     // Servers that bundle their own Code Mode (Cloudflare and others) expose raw tools when asked
     // with ?codemode=false, which is what our Code Mode wants. The configured URL stays the OAuth identity.
     const url = new URL(config.url)
