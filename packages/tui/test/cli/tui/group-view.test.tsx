@@ -6,8 +6,10 @@ import { addDefaultParsers, type TextRenderable } from "@opentui/core"
 import parsers from "../../../src/parsers-config"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { ConfigProvider } from "../../../src/config"
-import { ThemeProvider } from "../../../src/context/theme"
+import { ThemeProvider, type ThemeSource } from "../../../src/context/theme"
 import { SessionGroupView } from "../../../src/routes/session/group-view"
+import opencodeSource from "../../../src/theme/assets/opencode.json" with { type: "json" }
+import type { ThemeV1Json } from "@opencode/theme/tui/v1"
 import { createTimelineAnchors, groupID, type AnchorTarget } from "../../../src/routes/session/anchors"
 import { context } from "../../../src/routes/session/render-context"
 import type { SessionEntry, SessionGroup } from "../../../src/routes/session/grouping/session"
@@ -300,10 +302,56 @@ test("failed low activity uses a disclosure icon and keeps details expandable", 
   }
 })
 
+test("collapsed reasoning header uses theme thinkingOpacity", async () => {
+  const quarter = structuredClone(opencodeSource as ThemeV1Json)
+  quarter.theme.background = "none"
+  quarter.theme.warning = "#00ff00"
+  quarter.theme.thinkingOpacity = 0.25
+  const message: SessionMessageAssistant = {
+    id: "a",
+    type: "assistant",
+    agent: "build",
+    model: { providerID: "fixture", id: "fixture" },
+    time: { created: 0, completed: 2 },
+    content: [{ type: "reasoning", text: "**Title**\n\nBody", time: { created: 0, completed: 2 } }],
+  }
+  const app = await mount({
+    row: {
+      type: "group",
+      kind: "reasoning",
+      size: 1,
+      completed: true,
+      children: [{ type: "entry", size: 1, entry: { type: "part", ref: { messageID: "a", partID: "reasoning:0" } } }],
+    },
+    anchors: createTimelineAnchors(),
+    config: createTuiResolvedConfig({ animations: false, theme: { name: "quarter", mode: "dark" } }),
+    source: { discover: () => Promise.resolve({ quarter }) },
+    expanded: () => false,
+    setExpanded: () => {},
+    message: () => message,
+    entry: () => <text />,
+  })
+
+  try {
+    app.renderer.start()
+    await app.waitForFrame(
+      (frame) => frame.includes("+ Thought") && app.captureSpans().lines[0]?.spans[0]?.bg.a === 0,
+    )
+    const span = app
+      .captureSpans()
+      .lines.flatMap((line) => line.spans)
+      .find((item) => item.text.includes("Thought"))
+    expect(span?.fg.toInts()).toEqual([0, 64, 0, 255])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 function mount(input: {
   row: SessionGroup
   anchors: ReturnType<typeof createTimelineAnchors>
   config: ReturnType<typeof createTuiResolvedConfig>
+  source?: ThemeSource
   expanded: (id: string) => boolean
   setExpanded: (id: string, value: boolean) => void
   message: (id: string) => SessionMessageInfo | undefined
@@ -313,7 +361,7 @@ function mount(input: {
     () => (
       <TestTuiContexts>
         <ConfigProvider config={input.config}>
-          <ThemeProvider mode="dark" source={emptyThemeSource}>
+          <ThemeProvider mode="dark" source={input.source ?? emptyThemeSource}>
             <context.Provider
               value={{
                 width: 40,
