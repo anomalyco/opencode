@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { mkdir, readFile, rename } from "node:fs/promises"
+import { mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
 import { Cause, Data, Duration, Effect, Schema, Semaphore } from "effect"
@@ -160,6 +160,43 @@ export interface DaemonTransport {
   ) => Effect.Effect<DaemonAttachment, DaemonError>
 }
 
+const pruneStale = (root: string, activeID?: string) =>
+  Effect.tryPromise(async () => {
+    const entries = await readdir(root, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      if (activeID && entry.name === activeID) continue
+      const dir = path.join(root, entry.name)
+      try {
+        const servicePath = path.join(dir, "service.json")
+        const content = await readFile(servicePath, "utf8").catch(() => null)
+        if (content === null) {
+          const info = await stat(dir).catch(() => null)
+          if (info && Date.now() - info.mtimeMs > 10 * 60 * 1000) {
+            await rm(dir, { recursive: true, force: true }).catch(() => {})
+          }
+          continue
+        }
+        const decoded = JSON.parse(content)
+        if (typeof decoded.pid === "number") {
+          const isAlive = (() => {
+            try {
+              process.kill(decoded.pid, 0)
+              return true
+            } catch (error: unknown) {
+              return typeof error === "object" && error !== null && "code" in error && error.code === "EPERM"
+            }
+          })()
+          if (!isAlive) {
+            await rm(dir, { recursive: true, force: true }).catch(() => {})
+          }
+        }
+      } catch {
+        // Ignore single directory inspection errors
+      }
+    }
+  }).pipe(Effect.ignore)
+
 export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport")(function* (
   root: string,
   initialID: string,
@@ -178,6 +215,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       owner?.socket.destroy()
     }),
   )
+  yield* pruneStale(root, id)
 
   const claim = (current: Registration, ticket?: string) =>
     Effect.tryPromise({
@@ -205,9 +243,23 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
 
   const discover = Effect.fn("PersistentPty.daemon.discover")(function* (directory = path.join(root, id)) {
     const value = yield* Effect.tryPromise({
-      try: () => readFile(path.join(directory, "service.json"), "utf8"),
+      try: () =>
+        readFile(path.join(directory, "service.json"), "utf8").catch((error: unknown) => {
+          if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+            return null
+          }
+          throw error
+        }),
       catch: (cause) => failure("connect", cause),
     })
+    if (value === null) {
+      if (path.resolve(directory) === path.resolve(root, id)) {
+        if (registration || owner) {
+          abandon()
+        }
+      }
+      return undefined
+    }
     const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Registration))(value).pipe(
       Effect.mapError((cause) => failure("protocol", cause)),
     )
@@ -260,7 +312,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
             return Effect.succeed(undefined)
           }),
         )
-        if (found) {
+        if (found?.value) {
           yield* claim(found.value)
           return found.value
         }
@@ -295,6 +347,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     owner = undefined
     registration = undefined
     id = crypto.randomUUID()
+    void Effect.runPromise(pruneStale(root, id))
   }
 
   const connect = Effect.fn("PersistentPty.daemon.connect")(function* (shouldStart: boolean) {
@@ -304,11 +357,15 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       Effect.gen(function* () {
         if (registration) return registration
         const found = yield* discover().pipe(
-          Effect.catch((error) => {
+          Effect.catch((error: DaemonError) => {
             if (shouldStart && error.kind === "connect") return start()
             return Effect.fail(error)
           }),
         )
+        if (!found) {
+          if (shouldStart) return yield* start()
+          return yield* Effect.fail(new DaemonError({ kind: "connect", message: "PTY daemon is not running" }))
+        }
         if (!owner) yield* claim(found)
         registration = found
         return found
@@ -319,7 +376,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
   const attempt = Effect.fn("PersistentPty.daemon.request-attempt")(function* (value: object, shouldStart: boolean) {
     const current = yield* connect(shouldStart)
     return yield* oneShot(current, value).pipe(
-      Effect.catch((error) => {
+      Effect.catch((error: DaemonError) => {
         if (error.kind === "registration" && registration === current) registration = undefined
         return Effect.fail(error)
       }),
@@ -328,7 +385,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
 
   const request = Effect.fn("PersistentPty.daemon.request")(function* (value: object, shouldStart = false) {
     return yield* attempt(value, shouldStart).pipe(
-      Effect.catch((error) => {
+      Effect.catch((error: DaemonError) => {
         if (error.kind === "registration") return attempt(value, shouldStart)
         if (error.kind !== "connect") return Effect.fail(error)
         registration = undefined
@@ -339,13 +396,41 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
   })
 
   const requestIfRunning = (value: object) =>
-    request(value).pipe(
-      Effect.catch((error) => (error.kind === "connect" ? Effect.succeed(undefined) : Effect.fail(error))),
-    )
+    Effect.gen(function* () {
+      if (closed) return undefined
+      for (let i = 0; i < 2; i++) {
+        if (!registration) {
+          const found = yield* discover()
+          if (!found) return undefined
+          if (!owner) yield* claim(found)
+          registration = found
+        }
+        const response = yield* oneShot(registration, value).pipe(
+          Effect.catch((error: DaemonError) => {
+            if (error.kind === "registration") {
+              registration = undefined
+              return Effect.succeed("retry" as const)
+            }
+            if (error.kind === "connect") {
+              registration = undefined
+              return Effect.succeed(undefined)
+            }
+            return Effect.fail(error)
+          }),
+        )
+        if (response !== "retry") return response
+      }
+      return undefined
+    })
 
   const supports = Effect.fn("PersistentPty.daemon.supports")(function* (feature: string) {
-    const current = yield* connect(false)
-    return current.features?.includes(feature) ?? false
+    if (!registration) {
+      const found = yield* discover()
+      if (!found) return false
+      if (!owner) yield* claim(found)
+      registration = found
+    }
+    return registration.features?.includes(feature) ?? false
   })
 
   const shutdown = Effect.gen(function* () {
@@ -355,7 +440,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     const deadline = Date.now() + 5_000
     while (Date.now() < deadline) {
       const running = yield* discover().pipe(
-        Effect.as(true),
+        Effect.map((found) => found !== undefined),
         Effect.orElseSucceed(() => false),
       )
       if (!running) return response
@@ -400,13 +485,13 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
         try: () => subscribePromise(current, terminalID, input),
         catch: (cause) => (cause instanceof DaemonError ? cause : failure("connect", cause)),
       }).pipe(
-        Effect.catch((error) => {
+        Effect.catch((error: DaemonError) => {
           if (error.kind === "registration" && registration === current) registration = undefined
           return Effect.fail(error)
         }),
       )
     })
-    return yield* attempt.pipe(Effect.catch((error) => (error.kind === "registration" ? attempt : Effect.fail(error))))
+    return yield* attempt.pipe(Effect.catch((error: DaemonError) => (error.kind === "registration" ? attempt : Effect.fail(error))))
   })
 
   // A replacement must own its inherited daemon before the server becomes ready. Terminals are
@@ -419,6 +504,8 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       // Older releases put the daemon directory outside the root; its directory name is still the ID.
       id = path.basename(inherited.directory)
       found = yield* discover(inherited.directory)
+      if (!found)
+        return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart handoff expired" }))
       if (found.instance_id !== inherited.instanceID)
         return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart daemon changed" }))
       if (path.resolve(inherited.directory) !== path.resolve(root, id))
