@@ -5,6 +5,7 @@ import { DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
 import { useRoute } from "../context/route"
 import { useLocal } from "../context/local"
 import { useClipboard } from "../context/clipboard"
+import { clipboardFeedback } from "../util/clipboard-feedback"
 import { useToast } from "../ui/toast"
 import { describeOS, describeTerminal } from "../util/system"
 import { useTuiApp } from "../context/runtime"
@@ -41,9 +42,9 @@ export function DialogDebug() {
       .join("\n")
     void clipboard
       .write(text)
-      .then(() => {
-        setCopied(true)
-        toast.show({ message: "Debug info copied to clipboard", variant: "info" })
+      .then((result) => {
+        setCopied(result === "written")
+        toast.show(clipboardFeedback(result, { message: "Debug info copied to clipboard", variant: "info" }))
       })
       .catch(toast.error)
   }

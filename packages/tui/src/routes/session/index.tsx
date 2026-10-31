@@ -79,6 +79,7 @@ import { Composer } from "./composer"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
+import { clipboardFeedback } from "../../util/clipboard-feedback"
 import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
@@ -1306,7 +1307,9 @@ export function Session(props: {
       run: () => {
         clipboard
           .write(route.sessionID)
-          .then(() => toast.show({ message: "Session ID copied to clipboard!", variant: "success" }))
+          .then((result) =>
+            toast.show(clipboardFeedback(result, { message: "Session ID copied to clipboard!", variant: "success" })),
+          )
           .catch(() => toast.show({ message: "Failed to copy session ID", variant: "error" }))
         dialog.clear()
       },
@@ -1321,8 +1324,10 @@ export function Session(props: {
           if (!sessionData) return
           const transcript = await client.api.experimental.session.export({ sessionID: sessionData.id })
           const content = formatSessionTranscript(transcript.info, transcript.messages, true)
-          await clipboard.write(content)
-          toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
+          const result = await clipboard.write(content)
+          toast.show(
+            clipboardFeedback(result, { message: "Session transcript copied to clipboard!", variant: "success" }),
+          )
         } catch {
           toast.show({ message: "Failed to copy session transcript", variant: "error" })
         }
@@ -1355,9 +1360,9 @@ export function Session(props: {
               : JSON.stringify(transcript, null, 2) + EOL
 
           if (options.action === "copy") {
-            await clipboard.write(content)
+            const result = await clipboard.write(content)
             dialog.clear()
-            toast.show({ message: "Copied to clipboard", variant: "success" })
+            toast.show(clipboardFeedback(result, { message: "Copied to clipboard", variant: "success" }))
             return
           }
 

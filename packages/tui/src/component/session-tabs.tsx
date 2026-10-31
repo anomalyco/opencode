@@ -24,6 +24,7 @@ import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useData } from "../context/data"
 import { useClipboard } from "../context/clipboard"
+import { clipboardFeedback } from "../util/clipboard-feedback"
 import { useTheme } from "../context/theme"
 import {
   adaptiveSessionTabLayout,
@@ -398,7 +399,11 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
               run: () =>
                 void clipboard
                   .write(sessionID)
-                  .then(() => toast.show({ message: "Session ID copied to clipboard", variant: "info" }))
+                  .then((result) =>
+                    toast.show(
+                      clipboardFeedback(result, { message: "Session ID copied to clipboard", variant: "info" }),
+                    ),
+                  )
                   .catch(toast.error),
             },
             { title: "Close", run: () => props.tabs.close(sessionID) },

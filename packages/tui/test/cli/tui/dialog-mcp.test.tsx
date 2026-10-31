@@ -11,9 +11,10 @@ import { LocationProvider, useLocation } from "../../../src/context/location"
 import { RouteProvider, useRoute } from "../../../src/context/route"
 import { ThemeProvider } from "../../../src/context/theme"
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
-import { ToastProvider } from "../../../src/ui/toast"
+import { Toast, ToastProvider } from "../../../src/ui/toast"
 import { createApi, createEventStream, createFetch, json } from "../../fixture/tui-client"
 import { emptyThemeSource } from "../../fixture/fixture"
+import type { ClipboardService } from "../../../src/context/clipboard"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
@@ -29,6 +30,31 @@ test.each(["enter", "space"])("starts OAuth with %s for an MCP server requiring 
 
     expect(fixture.oauth).toBe(1)
     expect(fixture.connect).toBe(0)
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+test.each(["written", "attempted"] as const)("OAuth copy reports %s accurately", async (result) => {
+  const copied: string[] = []
+  const fixture = await renderMcp({
+    clipboard: {
+      read: async () => undefined,
+      write: async (text) => {
+        copied.push(text)
+        return result
+      },
+    },
+  })
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Sign in required"))
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitForFrame((frame) => frame.includes("Waiting for authorization"))
+    fixture.app.mockInput.pressKey("c")
+    const message = result === "written" ? "Copied to clipboard" : "Copy sent to terminal"
+    await fixture.app.waitForFrame((frame) => frame.includes(message))
+    expect(copied).toEqual(["https://linear.example.com/oauth"])
+    if (result === "attempted") expect(fixture.app.captureCharFrame()).not.toContain("Copied to clipboard")
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -62,7 +88,11 @@ test("opens an investigation draft for a failed MCP server at its originating lo
   }
 })
 
-async function renderMcp(options?: { failed?: boolean; location?: { directory: string; workspaceID?: string } }) {
+async function renderMcp(options?: {
+  failed?: boolean
+  location?: { directory: string; workspaceID?: string }
+  clipboard?: ClipboardService
+}) {
   const events = createEventStream()
   let oauth = 0
   let connect = 0
@@ -138,7 +168,7 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
 
   const app = await testRender(
     () => (
-      <TestTuiContexts>
+      <TestTuiContexts clipboard={options?.clipboard}>
         <ConfigProvider config={createTuiResolvedConfig()}>
           <Keymap.Provider>
             <ToastProvider>
@@ -149,6 +179,7 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
                       <ThemeProvider mode="dark" source={emptyThemeSource}>
                         <DialogProvider>
                           <Probe />
+                          <Toast />
                         </DialogProvider>
                       </ThemeProvider>
                     </LocationProvider>

@@ -5,6 +5,7 @@ import { createMemo, createSignal, Show } from "solid-js"
 import { Spinner } from "../../component/spinner"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
+import { clipboardFeedback } from "../../util/clipboard-feedback"
 import { Keymap } from "../../context/keymap"
 import { useTheme, useThemes } from "../../context/theme"
 import { usePlugin } from "../../plugin/context"
@@ -104,7 +105,10 @@ export function Answer(props: {
   const copy = () => {
     void clipboard
       .write(props.answer)
-      .then(() => setCopied(true))
+      .then((result) => {
+        setCopied(result === "written")
+        if (result === "attempted") toast.show(clipboardFeedback(result))
+      })
       .catch(toast.error)
   }
 

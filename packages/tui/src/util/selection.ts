@@ -1,5 +1,6 @@
 import type { SelectionBehavior } from "@opentui/core"
 import type { ClipboardService } from "../context/clipboard"
+import { clipboardFeedback } from "./clipboard-feedback"
 
 type Toast = {
   show: (input: { message: string; variant: "info" | "success" | "warning" | "error" }) => void
@@ -55,7 +56,7 @@ export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardServi
 
   clipboard
     .write(clipboardText)
-    .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+    .then((result) => toast.show(clipboardFeedback(result)))
     .catch(toast.error)
 
   // Copy never clears selection, including empty releases: clearing also resets multi-click history.
