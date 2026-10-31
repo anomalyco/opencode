@@ -19,6 +19,26 @@ OpenCode 使用 `permission` 配置来决定某个操作是否应自动运行、
 
 ---
 
+## 自动模式
+
+用 `--auto` 启动 OpenCode，可以自动批准那些没有被显式拒绝的权限请求。
+
+```bash
+opencode --auto
+```
+
+[`opencode run`](/docs/cli#run) 也可以配合自动模式使用。
+
+```bash
+opencode run --auto "Refactor this module"
+```
+
+显式的 `"deny"` 规则仍然会生效。自动模式只改变那些原本需要审批的请求。
+
+在 TUI 中，打开命令面板并选择 **Enable auto-approve permissions** 或 **Disable auto-approve permissions** 来切换模式。自动模式开启时，提示符会在当前代理旁显示一个淡化的 `auto` 指示符。
+
+---
+
 ## 配置
 
 你可以全局设置权限（使用 `*`），并覆盖特定工具的权限。
