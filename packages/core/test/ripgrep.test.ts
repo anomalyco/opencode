@@ -2,13 +2,15 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { Ripgrep } from "@opencode/core/ripgrep"
 import { RipgrepBinary } from "@opencode/core/ripgrep/binary"
 import { RelativePath } from "@opencode/core/schema"
+import { Global } from "@opencode/util/global"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
-import { testEffect } from "./lib/effect"
+import { refuseNetwork, testEffect } from "./lib/effect"
 import { tempLocationLayer } from "./fixture/location"
 
 const it = testEffect(AppNodeBuilder.build(Ripgrep.node, [Location.node.replace(tempLocationLayer)]))
@@ -200,5 +202,34 @@ describe("RipgrepBinary.verify", () => {
     expect(() => RipgrepBinary.verify(bytes, "ripgrep.tar.gz", "0".repeat(64))).toThrow(
       "ripgrep download ripgrep.tar.gz failed SHA-256 verification",
     )
+  })
+})
+
+describe("RipgrepBinary.filepath", () => {
+  // An empty PATH leaves global.bin as the only source and network is refused, so this only passes when the versioned
+  // binary is reused without a download.
+  test("reuses the managed binary for the pinned version and ignores an unversioned one", async () => {
+    await using tmp = await tmpdir()
+    const bin = path.join(tmp.path, "bin")
+    const exe = process.platform === "win32" ? ".exe" : ""
+    const managed = path.join(bin, `rg-${RipgrepBinary.VERSION}${exe}`)
+    await fs.mkdir(bin)
+    await fs.writeFile(path.join(bin, `rg${exe}`), "older build")
+    await fs.writeFile(managed, "pinned build")
+
+    const previous = process.env.PATH
+    process.env.PATH = path.join(tmp.path, "empty")
+    try {
+      const filepath = await Effect.gen(function* () {
+        return yield* (yield* RipgrepBinary.Service).filepath
+      }).pipe(
+        Effect.provide(AppNodeBuilder.build(RipgrepBinary.node, [Global.node.replace(Global.layerWith({ bin }))])),
+        Effect.provideService(FetchHttpClient.Fetch, refuseNetwork([])),
+        Effect.runPromise,
+      )
+      expect(filepath).toBe(managed)
+    } finally {
+      process.env.PATH = previous
+    }
   })
 })
