@@ -166,14 +166,31 @@ const load = Effect.fn("PluginModule.load")(function* (
   } satisfies Generation
 })
 
+// Bun reports build failures as a non-enumerable `BuildMessage` with a `position`, so Effect's
+// default promise rejection path loses the file and line that make the failure actionable.
+const loadFailure = (entrypoint: string, cause: unknown) => {
+  const first = cause instanceof AggregateError ? cause.errors[0] : cause
+  const error = first instanceof Error ? first : undefined
+  const position =
+    error && "position" in error
+      ? (error.position as { file?: unknown; line?: unknown; column?: unknown } | undefined)
+      : undefined
+  const file = typeof position?.file === "string" ? position.file : entrypoint
+  const line = typeof position?.line === "number" ? `:${position.line}` : ""
+  const column = typeof position?.column === "number" ? `:${position.column}` : ""
+  return `Plugin failed to load ${file}${line}${column}: ${error?.message ?? String(first)}`
+}
+
 const loadServer = Effect.fn("PluginModule.loadServer")(function* (
   entrypoint: string,
   sources: ReturnType<typeof createPluginSources> | undefined,
   revision: string | undefined,
 ) {
-  const loaded = yield* Effect.promise(() =>
-    sources ? sources.read(entrypoint) : Host.load(entrypoint).then((module) => ({ module, version: revision })),
-  )
+  const loaded = yield* Effect.tryPromise({
+    try: () =>
+      sources ? sources.read(entrypoint) : Host.load(entrypoint).then((module) => ({ module, version: revision })),
+    catch: (cause) => new LoadError({ message: loadFailure(entrypoint, cause), cause }),
+  })
   const value = (yield* Schema.decodeUnknownEffect(Module)(loaded.module).pipe(
     Effect.mapError(
       (cause) =>
