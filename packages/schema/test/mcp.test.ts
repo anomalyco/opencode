@@ -15,6 +15,30 @@ describe("Mcp resources", () => {
     })
   })
 
+  test("decodes remote TLS trust config and omits unset fields on encode", () => {
+    const decoded = Schema.decodeUnknownSync(Mcp.RemoteConfig)({
+      type: "remote",
+      url: "https://192.168.1.1/mcp",
+      tls: { ca_file: "~/.config/mcp/ca.pem", fingerprint: "SHA256:AA:BB" },
+    })
+    expect(Schema.encodeSync(Mcp.RemoteConfig)(decoded)).toEqual({
+      type: "remote",
+      url: "https://192.168.1.1/mcp",
+      tls: { ca_file: "~/.config/mcp/ca.pem", fingerprint: "SHA256:AA:BB" },
+    })
+    const bare = Schema.decodeUnknownSync(Mcp.RemoteConfig)({ type: "remote", url: "https://example.com/mcp" })
+    expect(Schema.encodeSync(Mcp.RemoteConfig)(bare)).toEqual({ type: "remote", url: "https://example.com/mcp" })
+  })
+
+  test("rejects non-string TLS trust fields", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(Mcp.RemoteConfig)({ type: "remote", url: "https://example.com/mcp", tls: { ca_pem: 1 } }),
+    ).toThrow()
+    expect(() =>
+      Schema.decodeUnknownSync(Mcp.RemoteConfig)({ type: "remote", url: "https://example.com/mcp", tls: "pin" }),
+    ).toThrow()
+  })
+
   test("preserves text and base64 blob contents", () => {
     expect(
       Schema.decodeUnknownSync(Mcp.ResourceContent)({
