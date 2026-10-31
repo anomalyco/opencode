@@ -282,6 +282,33 @@ This will force opencode to download the most recent versions of provider packag
 
 ---
 
+### Cerebras: `reasoning_content ... is unsupported` after the first message
+
+If the first message in a session works but every later request fails with a 400 like:
+
+```
+Bad Request: messages.2.assistant.reasoning_content: property 'messages.2.assistant.reasoning_content' is unsupported
+```
+
+the provider is replaying assistant reasoning under the wrong field name. Cerebras reasoning models (Qwen, GPT-OSS) always think, and Cerebras expects prior reasoning in the `reasoning` field. The generic `@ai-sdk/openai-compatible` package sends it back as `reasoning_content` (the DeepSeek convention), which Cerebras rejects; opencode retries the request, so the session looks stuck.
+
+To resolve this, use the dedicated Cerebras package for the provider, which converts the field:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "cerebras": {
+      "npm": "@ai-sdk/cerebras"
+    }
+  }
+}
+```
+
+Or connect with the built-in Cerebras provider via `/connect` — it already uses the right package. Custom `baseURL` and `headers` options work the same with `@ai-sdk/cerebras` as with the generic package.
+
+---
+
 ### Copy/paste not working on Linux
 
 Linux users need to have one of the following clipboard utilities installed for copy/paste functionality to work:
