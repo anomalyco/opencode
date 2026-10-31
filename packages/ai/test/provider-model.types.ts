@@ -19,6 +19,8 @@ Groq.model("llama-3.3-70b-versatile")
 OpenRouter.decisionModel("openai/gpt-5")
 XAI.model("grok-4")
 OpenCode.decisionModel("decision")
+OpenCode.model("glm-5.3")
+OpenCode.responsesModel("gpt-5-nano", { reasoningEffort: "low" })
 
 OpenAI.model("gpt-5", { apiKey: "key" })
 Anthropic.model("claude-sonnet-4-6", { apiKey: "key" })
