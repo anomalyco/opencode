@@ -7,7 +7,20 @@ import type { Session } from "@opencode/schema/session"
 import type { Transport } from "@modelcontextprotocol/client"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
+import {
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  FiberSet,
+  Latch,
+  Layer,
+  Schema,
+  Scope,
+  Semaphore,
+  Stream,
+  Types,
+} from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -19,6 +32,7 @@ import { Location } from "../location.js"
 import { waitForAbort } from "@opencode/util/process"
 import { State } from "../state.js"
 import type { McpClient } from "./client.js"
+import { matchesSubscribedUri, resourceUpdateText } from "./subscription.js"
 
 export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export type ServerName = typeof ServerName.Type
@@ -100,6 +114,12 @@ type AttachedEntry = {
 
 // Bounds re-listing the tools of an attached connection that takes over the top of its stack.
 const FALLBACK_LIST_TIMEOUT = "5 seconds"
+
+const emptyEntry = (config: Mcp.ServerConfig, status: Status): ServerEntry => ({
+  config,
+  status,
+  startup: Latch.makeUnsafe(),
+})
 
 // MCP elicitations are Location-scoped, not Session-scoped: the server cannot attribute them to a
 // persisted session row, so their forms are owned by this opaque sentinel session identifier.
@@ -453,6 +473,67 @@ export const layer = (options?: Options) =>
         connection.onResourcesChanged(() => live(bus.publish(McpEvent.ResourcesChanged, { server: name })))
       }
 
+      // One listen for every configured URI. The ack can take the SDK request timeout, so this forks
+      // into the server scope and does not hold startup. Closing that scope aborts an in-flight listen.
+      const listenForResourceUpdates = (name: ServerName, entry: ServerEntry, connection: McpClient.Connection) =>
+        Effect.gen(function* () {
+          const uris = [...new Set(entry.config.subscriptions ?? [])]
+          const scope = entry.scope
+          if (uris.length === 0 || !scope) return
+          const reads = new Map<string, { pending: boolean }>()
+          const live = whenLive(name, entry, connection)
+          connection.onResourceUpdated((uri) => {
+            if (!uris.some((subscribed) => matchesSubscribedUri(subscribed, uri))) return
+            const current = reads.get(uri)
+            if (current) {
+              current.pending = true
+              return
+            }
+            const state = { pending: false }
+            reads.set(uri, state)
+            live(
+              Effect.gen(function* () {
+                while (true) {
+                  state.pending = false
+                  // The notification carries only the URI. The spec's next step is resources/read.
+                  const read = yield* connection.readResource({ uri }).pipe(
+                    Effect.tapError((error) =>
+                      Effect.logWarning("failed to re-read MCP resource after update", {
+                        server: name,
+                        uri,
+                        error: error.message,
+                      }),
+                    ),
+                    Effect.orElseSucceed(() => undefined),
+                  )
+                  const text = read
+                    ? resourceUpdateText(
+                        read.contents.flatMap((part) =>
+                          "text" in part && part.text ? [{ type: "text" as const, text: part.text }] : [],
+                        ),
+                      )
+                    : undefined
+                  yield* bus.publish(McpEvent.ResourceUpdated, {
+                    server: name,
+                    uri,
+                    ...(text ? { text } : {}),
+                  })
+                  // A burst collapses into this in-flight read plus one trailing read. Check and delete
+                  // with no yield between them so another notification cannot start a second read.
+                  if (state.pending) continue
+                  reads.delete(uri)
+                  return
+                }
+              }),
+            )
+          })
+          yield* connection.subscribeResources(uris).pipe(
+            Scope.provide(scope),
+            Effect.forkIn(scope, { startImmediately: true }),
+            Effect.asVoid,
+          )
+        })
+
       const startServer = (name: ServerName, entry: ServerEntry) =>
         Effect.gen(function* () {
           // Announce the handshake so connect() and credential reconnects don't show a stale
@@ -485,13 +566,14 @@ export const layer = (options?: Options) =>
             entry.client = result.value.connection
             entry.tools = result.value.tools.map((tool) => toTool(name, entry, tool))
             entry.prompts = []
-            entry.status = { status: "connected" }
             watch(name, entry, result.value.connection)
+            entry.status = { status: "connected" }
             yield* Effect.logInfo("mcp connected", { server: name, tools: entry.tools.length })
             // The tool registry reads on this event; a late-connecting server has no other way to appear.
             yield* bus.publish(McpEvent.ToolsChanged, { server: name })
             yield* bus.publish(McpEvent.ResourcesChanged, { server: name })
             yield* bus.publish(McpEvent.StatusChanged, { server: name })
+            yield* listenForResourceUpdates(name, entry, result.value.connection)
             whenLive(name, entry, result.value.connection)(refreshPrompts(name, entry, result.value.connection))
             return
           }
@@ -531,11 +613,7 @@ export const layer = (options?: Options) =>
       const replaceServer = Effect.fnUntraced(function* (name: ServerName, serverConfig: Mcp.ServerConfig) {
         const previous = entries.get(name)
         if (previous) yield* disposeServer(name, previous)
-        const entry: ServerEntry = {
-          config: serverConfig,
-          status: { status: "pending" },
-          startup: Latch.makeUnsafe(),
-        }
+        const entry = emptyEntry(serverConfig, { status: "pending" })
         entries.set(name, entry)
         yield* Effect.gen(function* () {
           yield* register(name, entry)
@@ -666,11 +744,7 @@ export const layer = (options?: Options) =>
         const servers = state.get().servers
         if (!applied && entries.size === 0) {
           for (const [name, server] of servers) {
-            entries.set(name, {
-              config: server,
-              status: { status: "pending" },
-              startup: Latch.makeUnsafe(),
-            })
+            entries.set(name, emptyEntry(server, { status: "pending" }))
           }
           yield* Effect.forEach(entries, ([name, entry]) => register(name, entry), { discard: true })
           applied = servers

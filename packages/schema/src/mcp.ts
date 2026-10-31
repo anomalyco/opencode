@@ -16,6 +16,10 @@ export class TimeoutConfig extends Schema.Class<TimeoutConfig>("Mcp.TimeoutConfi
   }),
 }) {}
 
+const subscriptions = Schema.Array(Schema.String).pipe(optional).annotate({
+  description: "Resource URIs to subscribe to. OpenCode listens for MCP resource update notifications for these URIs.",
+})
+
 export type Protocol = typeof Protocol.Type
 export const Protocol = Schema.Literals(["legacy", "auto", "2026-07-28"]).annotate({
   identifier: "Mcp.Protocol",
@@ -36,6 +40,7 @@ export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   }),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
+  subscriptions,
 }) {}
 
 export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
@@ -61,6 +66,7 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
   }),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
+  subscriptions,
 }) {}
 
 export const ServerConfig = Schema.Union([LocalConfig, RemoteConfig]).pipe(Schema.toTaggedUnion("type"))

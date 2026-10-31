@@ -89,12 +89,96 @@ type ResourceTemplatePage = {
   nextCursor?: string
 }
 
+function subscriptionReady(body: unknown, response: Response) {
+  if (typeof body !== "object" || body === null || !("method" in body)) return false
+  if (body.method === "resources/subscribe") return true
+  if (body.method !== "subscriptions/listen") return false
+  return response.headers.get("content-type")?.includes("text/event-stream") === true
+}
+
+// One SSE frame per pull. `onHandled` runs on the pull after a resources/updated frame, which is
+// the first point at which the client has already dispatched that frame.
+function watchResourceUpdates(response: Response, onHandled: () => void) {
+  if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) return response
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  const encoder = new TextEncoder()
+  let buffer = ""
+  let delivered = false
+  const stream = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (delivered) {
+        delivered = false
+        onHandled()
+      }
+      while (frameEnd(buffer) === undefined) {
+        const chunk = await reader.read()
+        if (chunk.done) {
+          if (buffer.length > 0) controller.enqueue(encoder.encode(buffer))
+          controller.close()
+          return
+        }
+        buffer += decoder.decode(chunk.value, { stream: true })
+      }
+      const end = frameEnd(buffer) ?? buffer.length
+      const frame = buffer.slice(0, end)
+      buffer = buffer.slice(end)
+      if (frame.includes("notifications/resources/updated")) delivered = true
+      controller.enqueue(encoder.encode(frame))
+    },
+    cancel(reason) {
+      return reader.cancel(reason)
+    },
+  })
+  return new Response(stream, { status: response.status, headers: response.headers })
+}
+
+function frameEnd(buffer: string) {
+  const crlf = buffer.indexOf("\r\n\r\n")
+  const lf = buffer.indexOf("\n\n")
+  if (crlf !== -1 && (lf === -1 || crlf < lf)) return crlf + 4
+  if (lf === -1) return undefined
+  return lf + 2
+}
+
+async function rpcMessage(request: Request) {
+  if (request.method !== "POST") return undefined
+  const body: unknown = await request.clone().json()
+  if (typeof body !== "object" || body === null || !("method" in body) || typeof body.method !== "string")
+    return undefined
+  return body as { method: string; id?: unknown }
+}
+
+function acknowledgedListen(id: unknown, uris: readonly string[]) {
+  const ack = {
+    jsonrpc: "2.0",
+    method: "notifications/subscriptions/acknowledged",
+    params: {
+      notifications: { resourceSubscriptions: [...uris] },
+      _meta: { "io.modelcontextprotocol/subscriptionId": id },
+    },
+  }
+  return new Response(`event: message\ndata: ${JSON.stringify(ack)}\n\n`, {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  })
+}
+
+function rejectedListen(id: unknown) {
+  return Response.json({
+    jsonrpc: "2.0",
+    id,
+    error: { code: -32603, message: "busy" },
+  })
+}
+
 function resourceServer(
   input: {
     /** Serve 2026-07-28 only through createMcpHandler; the default is a sessionful legacy transport. */
     modern?: boolean
     resources?: boolean
     listChanged?: boolean
+    subscribe?: boolean
     emptyElicitation?: boolean
     urlElicitation?: boolean
     /**
@@ -105,6 +189,10 @@ function resourceServer(
     /** Legacy servers give up on the URL elicitation after this many milliseconds. */
     elicitationTimeout?: number
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
+    /** Fires once the server has a resource subscription that can deliver updates. */
+    onSubscriptionOpen?: () => void
+    /** Fires after the client has consumed one `notifications/resources/updated` frame. */
+    onResourceUpdateHandled?: () => void
   } = {},
 ) {
   return Effect.acquireRelease(
@@ -119,6 +207,7 @@ function resourceServer(
           { uri: "docs://logo", blob: "aGVsbG8=", mimeType: "image/png" },
         ] as Array<{ uri: string; text: string; mimeType?: string } | { uri: string; blob: string; mimeType?: string }>,
         resourceLists: 0,
+        subscriptions: [] as string[],
         resourceReads: [] as string[],
         templatesUnsupported: false,
         missing: [] as string[],
@@ -143,7 +232,9 @@ function resourceServer(
             capabilities: {
               tools: {},
               prompts: {},
-              ...(input.resources === false ? {} : { resources: { listChanged: input.listChanged } }),
+              ...(input.resources === false
+                ? {}
+                : { resources: { listChanged: input.listChanged, subscribe: input.subscribe } }),
             },
             instructions: "Use the resources tools.",
           },
@@ -242,6 +333,11 @@ function resourceServer(
             if (state.missing.includes(request.params.uri)) return Promise.reject(new Error("Resource not found"))
             return Promise.resolve({ contents: state.contents })
           })
+          protocol.setRequestHandler("resources/subscribe", (request) => {
+            state.subscriptions.push(request.params.uri)
+            return Promise.resolve({})
+          })
+          protocol.setRequestHandler("resources/unsubscribe", () => Promise.resolve({}))
         }
         return protocol
       }
@@ -256,6 +352,7 @@ function resourceServer(
       }
       let current = await build()
       const modern = input.modern ? createMcpHandler(server, { legacy: "reject" }) : undefined
+      let subscriptionOpen = false
       const http = Bun.serve({
         port: 0,
         fetch: async (request) => {
@@ -266,7 +363,15 @@ function resourceServer(
           if (typeof body === "object" && body !== null && "method" in body && body.method === "initialize") {
             state.initializations += 1
           }
-          return (await input.respond?.(request)) ?? modern?.fetch(request) ?? current.transport.handleRequest(request)
+          const custom = await input.respond?.(request)
+          if (custom) return custom
+          const response = (await modern?.fetch(request)) ?? (await current.transport.handleRequest(request))
+          if (!subscriptionOpen && input.onSubscriptionOpen && subscriptionReady(body, response)) {
+            subscriptionOpen = true
+            input.onSubscriptionOpen()
+          }
+          if (!input.onResourceUpdateHandled) return response
+          return watchResourceUpdates(response, input.onResourceUpdateHandled)
         },
       })
       return {
@@ -275,6 +380,8 @@ function resourceServer(
         clientVersion: () => current.protocol.getClientVersion(),
         sendResourceListChanged: () =>
           modern ? Promise.resolve(modern.notify.resourcesChanged()) : current.protocol.sendResourceListChanged(),
+        sendResourceUpdated: (uri: string) =>
+          modern ? Promise.resolve(modern.notify.resourceUpdated(uri)) : current.protocol.sendResourceUpdated({ uri }),
         completeElicitation: () => current.protocol.createElicitationCompletionNotifier("elicitation-test")(),
         restart: async () => {
           await current.protocol.close().catch(() => {})
@@ -301,6 +408,8 @@ function resourceMcpLayer(
     subscribe?: Bus.Interface["subscribe"]
     environment?: Layer.Layer<Environment.Service>
     published?: string[]
+    events?: Array<{ type: string; data: unknown }>
+    onEvent?: (event: { type: string; data: unknown }) => void
   },
 ) {
   const directory = AbsolutePath.make(import.meta.dir)
@@ -355,6 +464,9 @@ function resourceMcpLayer(
               data,
             } as Payload<typeof definition>
             overrides?.published?.push(event.type)
+            const recorded = { type: event.type, data }
+            overrides?.events?.push(recorded)
+            overrides?.onEvent?.(recorded)
             if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
             return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
           },
@@ -1266,6 +1378,276 @@ test("lists, reads, and reports MCP resource changes", async () => {
         connection.onResourcesChanged(() => Deferred.doneUnsafe(changed, Exit.void))
         yield* Effect.promise(server.sendResourceListChanged)
         yield* Deferred.await(changed)
+      }),
+    ),
+  )
+})
+
+describe.each([
+  ["legacy", undefined],
+  ["modern", "2026-07-28"],
+] as const)("MCP resource subscriptions over the %s protocol", (era, protocol) => {
+  test("delivers updates for subscribed resources", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const server = yield* resourceServer({ modern: era === "modern", subscribe: true })
+          const connection = yield* connect(
+            "resources",
+            new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol }),
+            import.meta.dir,
+          )
+          const updated = yield* Deferred.make<string>()
+          connection.onResourceUpdated((uri) => Deferred.doneUnsafe(updated, Exit.succeed(uri)))
+          expect(yield* connection.subscribeResources(["docs://readme"])).toEqual({ honored: ["docs://readme"] })
+          if (era === "legacy") expect(server.state.subscriptions).toEqual(["docs://readme"])
+          yield* Effect.promise(() => server.sendResourceUpdated("docs://readme"))
+          expect(yield* Deferred.await(updated)).toBe("docs://readme")
+        }),
+      ),
+    )
+  })
+
+  test("publishes the re-read text for a configured resource", async () => {
+    const opened = Deferred.makeUnsafe<void>()
+    const updated = Deferred.makeUnsafe<{ type: string; data: unknown }>()
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const server = yield* resourceServer({
+            modern: era === "modern",
+            subscribe: true,
+            onSubscriptionOpen: () => Deferred.doneUnsafe(opened, Exit.void),
+          })
+          yield* Effect.gen(function* () {
+            yield* settled(yield* Mcp.Service)
+            yield* Deferred.await(opened).pipe(Effect.timeout("2 seconds"))
+            yield* Effect.promise(() => server.sendResourceUpdated("docs://other"))
+            yield* Effect.promise(() => server.sendResourceUpdated("docs://readme"))
+            expect(yield* Deferred.await(updated).pipe(Effect.timeout("2 seconds"))).toEqual({
+              type: McpEvent.ResourceUpdated.type,
+              data: { server: "resources", uri: "docs://readme", text: "hello" },
+            })
+          }).pipe(
+            Effect.provide(
+              resourceMcpLayer(
+                new ConfigMCP.Remote({
+                  type: "remote",
+                  url: server.url,
+                  oauth: false,
+                  protocol,
+                  subscriptions: ["docs://readme"],
+                }),
+                undefined,
+                undefined,
+                {
+                  onEvent: (event) => {
+                    if (event.type !== McpEvent.ResourceUpdated.type) return
+                    Deferred.doneUnsafe(updated, Exit.succeed(event))
+                  },
+                },
+              ),
+            ),
+          )
+        }),
+      ),
+    )
+  })
+
+  test("reads a burst of updates once, then once more for whatever arrived during that read", async () => {
+    const opened = Deferred.makeUnsafe<void>()
+    const reading = Deferred.makeUnsafe<void>()
+    const handled = Deferred.makeUnsafe<void>()
+    const release = Deferred.makeUnsafe<void>()
+    const published = Deferred.makeUnsafe<void>()
+    let reads = 0
+    let updates = 0
+    let handledUpdates = 0
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const server = yield* resourceServer({
+            modern: era === "modern",
+            subscribe: true,
+            onSubscriptionOpen: () => Deferred.doneUnsafe(opened, Exit.void),
+            onResourceUpdateHandled: () => {
+              handledUpdates += 1
+              // One update starts the read; the other three must be consumed before that read returns.
+              if (handledUpdates === 4) Deferred.doneUnsafe(handled, Exit.void)
+            },
+            respond: async (request) => {
+              const message = await rpcMessage(request)
+              if (message?.method !== "resources/read") return undefined
+              reads += 1
+              if (reads !== 1) return undefined
+              Deferred.doneUnsafe(reading, Exit.void)
+              await Effect.runPromise(Deferred.await(release))
+              return undefined
+            },
+          })
+          yield* Effect.gen(function* () {
+            yield* settled(yield* Mcp.Service)
+            yield* Deferred.await(opened).pipe(Effect.timeout("2 seconds"))
+            yield* Effect.promise(() => server.sendResourceUpdated("docs://readme"))
+            yield* Deferred.await(reading).pipe(Effect.timeout("2 seconds"))
+            yield* Effect.promise(() =>
+              Promise.all([1, 2, 3].map(() => server.sendResourceUpdated("docs://readme"))),
+            )
+            yield* Deferred.await(handled).pipe(Effect.timeout("2 seconds"))
+            Deferred.doneUnsafe(release, Exit.void)
+            yield* Deferred.await(published).pipe(Effect.timeout("2 seconds"))
+            expect(reads).toBe(2)
+            expect(server.state.resourceReads).toEqual(["docs://readme", "docs://readme"])
+          }).pipe(
+            Effect.provide(
+              resourceMcpLayer(
+                new ConfigMCP.Remote({
+                  type: "remote",
+                  url: server.url,
+                  oauth: false,
+                  protocol,
+                  subscriptions: ["docs://readme"],
+                }),
+                undefined,
+                undefined,
+                {
+                  onEvent: (event) => {
+                    if (event.type !== McpEvent.ResourceUpdated.type) return
+                    updates += 1
+                    if (updates === 2) Deferred.doneUnsafe(published, Exit.void)
+                  },
+                },
+              ),
+            ),
+          )
+        }),
+      ),
+    )
+  })
+})
+
+test("connects while a resource listen is still opening and aborts it on disconnect", async () => {
+  const started = Deferred.makeUnsafe<AbortSignal>()
+  const aborted = Deferred.makeUnsafe<void>()
+  let listened: { method: string; id?: unknown; params?: { notifications?: { resourceSubscriptions?: string[] } } } | undefined
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({
+          modern: true,
+          subscribe: true,
+          respond: async (request) => {
+            const message = await rpcMessage(request)
+            if (message?.method !== "subscriptions/listen") return undefined
+            listened = message as typeof listened
+            Deferred.doneUnsafe(started, Exit.succeed(request.signal))
+            await new Promise<void>((resolve) => {
+              const finish = () => {
+                Deferred.doneUnsafe(aborted, Exit.void)
+                resolve()
+              }
+              if (request.signal.aborted) return finish()
+              request.signal.addEventListener("abort", finish, { once: true })
+            })
+            return new Response(null, { status: 499 })
+          },
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          expect(yield* settled(service).pipe(Effect.timeout("2 seconds"))).toEqual({ status: "connected" })
+          const signal = yield* Deferred.await(started).pipe(Effect.timeout("2 seconds"))
+          expect(signal.aborted).toBe(false)
+          expect(listened?.params?.notifications?.resourceSubscriptions).toEqual(["docs://readme", "docs://logo"])
+          expect(yield* service.resources({ server: "resources" }).pipe(Effect.timeout("2 seconds"))).toEqual({
+            resources: [],
+            templates: [],
+          })
+          yield* service.disconnect("resources")
+          yield* Deferred.await(aborted).pipe(Effect.timeout("2 seconds"))
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Remote({
+                type: "remote",
+                url: server.url,
+                oauth: false,
+                protocol: "2026-07-28",
+                subscriptions: ["docs://readme", "docs://logo"],
+              }),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+})
+
+test("fails the first resource listen immediately", async () => {
+  let listens = 0
+  const again = Deferred.makeUnsafe<void>()
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({
+          modern: true,
+          subscribe: true,
+          respond: async (request) => {
+            const message = await rpcMessage(request)
+            if (message?.method !== "subscriptions/listen") return undefined
+            listens += 1
+            if (listens === 2) Deferred.doneUnsafe(again, Exit.void)
+            return rejectedListen(message.id)
+          },
+        })
+        const connection = yield* connect(
+          "resources",
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" }),
+          import.meta.dir,
+        )
+        expect(yield* connection.subscribeResources(["docs://readme"])).toEqual({ honored: [] })
+        expect(listens).toBe(1)
+        const extra = yield* Deferred.await(again).pipe(Effect.timeout("500 millis"), Effect.exit)
+        expect(Exit.isFailure(extra)).toBe(true)
+        expect(listens).toBe(1)
+      }),
+    ),
+  )
+})
+
+test("retries a dropped resource listen with bounded backoff", async () => {
+  const attempts: number[] = []
+  const stable = Deferred.makeUnsafe<void>()
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({
+          modern: true,
+          subscribe: true,
+          respond: async (request) => {
+            const message = await rpcMessage(request)
+            if (message?.method !== "subscriptions/listen") return undefined
+            attempts.push(Date.now())
+            if (attempts.length === 1) return acknowledgedListen(message.id, ["docs://readme"])
+            if (attempts.length < 4) return rejectedListen(message.id)
+            Deferred.doneUnsafe(stable, Exit.void)
+            return undefined
+          },
+        })
+        const connection = yield* connect(
+          "resources",
+          new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" }),
+          import.meta.dir,
+        )
+        expect(yield* connection.subscribeResources(["docs://readme"])).toEqual({ honored: ["docs://readme"] })
+        yield* Deferred.await(stable).pipe(Effect.timeout("8 seconds"))
+        expect(attempts.length).toBe(4)
+        const firstGap = attempts[1] - attempts[0]
+        const secondGap = attempts[2] - attempts[1]
+        const thirdGap = attempts[3] - attempts[2]
+        expect(firstGap).toBeGreaterThanOrEqual(800)
+        expect(secondGap).toBeGreaterThanOrEqual(200)
+        expect(thirdGap).toBeGreaterThanOrEqual(400)
+        expect(thirdGap).toBeGreaterThan(secondGap)
       }),
     ),
   )

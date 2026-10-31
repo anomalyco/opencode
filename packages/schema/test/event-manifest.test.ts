@@ -68,7 +68,12 @@ describe("public event manifest", () => {
     ])
     expect(Form.Event.Definitions).toEqual([Form.Event.Created, Form.Event.Replied, Form.Event.Cancelled])
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
-    expect(McpEvent.Definitions).toEqual([McpEvent.ToolsChanged, McpEvent.ResourcesChanged, McpEvent.StatusChanged])
+    expect(McpEvent.Definitions).toEqual([
+      McpEvent.ToolsChanged,
+      McpEvent.ResourcesChanged,
+      McpEvent.ResourceUpdated,
+      McpEvent.StatusChanged,
+    ])
     expect(EventManifest.Latest.has("mcp.browser.open.failed")).toBe(false)
     expect(EventManifest.Durable.get("session.step.ended.1")).toBe(SessionEvent.Step.Ended)
     expect(EventManifest.Durable.has("session.step.ended.2")).toBe(false)

@@ -27,7 +27,7 @@ import {
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
-import { Cause, Clock, Duration, Effect, Exit, Schedule, Schema } from "effect"
+import { Cause, Clock, Deferred, Duration, Effect, Exit, Schedule, Schema, Scope } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { McpStdio } from "./stdio.js"
@@ -147,6 +147,19 @@ export interface Connection {
   readonly onToolsChanged: (callback: () => void) => void
   readonly onPromptsChanged: (callback: () => void) => void
   readonly onResourcesChanged: (callback: () => void) => void
+  readonly onResourceUpdated: (callback: (uri: string) => void) => void
+  /**
+   * Subscribes to update notifications for these resource URIs. On a 2026-07-28 connection that is one
+   * `subscriptions/listen` stream; on a legacy connection it is `resources/subscribe` per URI.
+   * `honored` is the subset the server acknowledged. The stream stays open until its scope closes and
+   * is reopened when the server drops it, because the server keeps no subscription state across reconnects.
+   * A failed reopen keeps retrying with bounded backoff while the scope is open. The first open fails
+   * fast. Closing the scope aborts an in-flight listen (`notifications/cancelled` on 2026-07-28,
+   * `resources/unsubscribe` on legacy).
+   */
+  readonly subscribeResources: (
+    uris: readonly string[],
+  ) => Effect.Effect<{ readonly honored: readonly string[] }, never, Scope.Scope>
 }
 
 /** An MCP server reached over a transport someone else already opened, such as a client socket. */
@@ -176,6 +189,7 @@ export const connect = Effect.fnUntraced(function* (
   // Attached clients run ordinary SDK servers over the initialize handshake.
   const protocol = config.type === "attached" ? "legacy" : config.protocol
   const changed = { tools: () => {}, prompts: () => {}, resources: () => {} }
+  let resourceUpdated = (_uri: string) => {}
   const listChanged = (key: keyof typeof changed) => ({
     autoRefresh: false,
     debounceMs: 0,
@@ -238,6 +252,11 @@ export const connect = Effect.fnUntraced(function* (
         runPromise(elicitation.complete({ server, elicitationID: notification.params.elicitationId })),
       )
     }
+    // Registered before connect so it is in place before either era delivers notifications/resources/updated.
+    // listChanged owns the list_changed handlers; this one is a different method and does not replace them.
+    client.setNotificationHandler("notifications/resources/updated", (notification) => {
+      resourceUpdated(notification.params.uri)
+    })
 
     // The SDK validates tools/list as a whole, so one malformed tool would fail every tool on the server.
     // The SDK runs a handler set on the transport before connect ahead of its own, on the same message,
@@ -450,6 +469,105 @@ export const connect = Effect.fnUntraced(function* (
       onResourcesChanged: (callback) => {
         changed.resources = callback
       },
+      onResourceUpdated: (callback) => {
+        resourceUpdated = callback
+      },
+      subscribeResources: (uris) =>
+        Effect.gen(function* () {
+          const unique = [...new Set(uris)]
+          if (unique.length === 0) return { honored: [] }
+          // Legacy era only: per-URI resources/subscribe. 2026-07-28 delivers updates on subscriptions/listen.
+          if (client.getProtocolEra() !== "modern") {
+            const results = yield* Effect.forEach(
+              unique,
+              (uri) =>
+                request("subscribe to MCP resource", (signal) => client.subscribeResource({ uri }, { signal })).pipe(
+                  Effect.as(uri),
+                  Effect.catch(() => Effect.succeed(undefined)),
+                ),
+              { concurrency: "unbounded" },
+            )
+            const honored = results.flatMap((uri) => (uri ? [uri] : []))
+            if (honored.length > 0)
+              yield* Effect.addFinalizer(() =>
+                Effect.forEach(
+                  honored,
+                  (uri) =>
+                    request("unsubscribe from MCP resource", (signal) =>
+                      client.unsubscribeResource({ uri }, { signal }),
+                    ).pipe(Effect.ignore),
+                  { concurrency: "unbounded", discard: true },
+                ),
+              )
+            return { honored }
+          }
+
+          const ready = yield* Deferred.make<readonly string[]>()
+          const announce = (honored: readonly string[]) =>
+            Deferred.isDone(ready).pipe(
+              Effect.flatMap((done) => (done ? Effect.void : Deferred.succeed(ready, honored))),
+            )
+          yield* Effect.gen(function* () {
+            let current: { close: () => Promise<void> } | undefined
+            let reopening = false
+            let attempt = 0
+            yield* Effect.addFinalizer(() =>
+              Effect.promise(() => current?.close() ?? Promise.resolve()).pipe(Effect.ignore),
+            )
+            while (true) {
+              // The fiber signal aborts an in-flight listen when the scope closes. Closing the
+              // transport rejects that listen as a normal error, so give the abort a turn to land
+              // before treating it as a failure worth retrying.
+              let aborted = false
+              let caller: AbortSignal | undefined
+              const opened = yield* Effect.tryPromise({
+                try: (signal) => {
+                  caller = signal
+                  signal.addEventListener("abort", () => {
+                    aborted = true
+                  })
+                  return client.listen({ resourceSubscriptions: unique }, { signal })
+                },
+                catch: (error) => error,
+              }).pipe(Effect.exit)
+              if (Exit.isFailure(opened)) {
+                if (!(aborted || caller?.aborted || Cause.hasInterruptsOnly(opened.cause))) yield* Effect.yieldNow
+                if (aborted || caller?.aborted || Cause.hasInterruptsOnly(opened.cause)) return
+                const error = Cause.squash(opened.cause)
+                // The transport going away settles every listen; reconnect opens a new one.
+                if (error instanceof SdkError && error.code === SdkErrorCode.ConnectionClosed) return
+                const wrapped = failure(error)
+                yield* Effect.logWarning("failed to listen for MCP resource updates", {
+                  server,
+                  error: wrapped.message,
+                })
+                if (!reopening) {
+                  yield* announce([])
+                  return
+                }
+                const delay = Math.min(4_000, 250 * 2 ** attempt)
+                attempt += 1
+                yield* Effect.sleep(Duration.millis(delay))
+                continue
+              }
+              reopening = true
+              attempt = 0
+              current = opened.value
+              const honored = [...(opened.value.honoredFilter.resourceSubscriptions ?? [])]
+              yield* Effect.logInfo("subscribed to MCP resources", {
+                server,
+                uris: unique,
+                honored,
+              })
+              yield* announce(honored)
+              const reason = yield* Effect.promise(() => opened.value.closed)
+              current = undefined
+              if (reason !== "remote") return
+              yield* Effect.sleep("1 second")
+            }
+          }).pipe(Effect.forkScoped({ startImmediately: true }))
+          return { honored: yield* Deferred.await(ready) }
+        }),
     }
     return connection
   }

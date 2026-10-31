@@ -20222,6 +20222,12 @@
           },
           "protocol": {
             "$ref": "#/components/schemas/Mcp.Protocol"
+          },
+          "subscriptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": ["type", "command"],
@@ -20314,6 +20320,12 @@
           },
           "protocol": {
             "$ref": "#/components/schemas/Mcp.Protocol"
+          },
+          "subscriptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": ["type", "url"],
