@@ -77,6 +77,21 @@ describe("ShellScan adversarial corpus", () => {
     expect(performance.now() - start).toBeLessThan(500)
   })
 
+  // `q` is matched by both the flag class and `q[-+]?`, so a run of q flags had exponentially
+  // many ways to match. Keep q, q-, q+ and repeated qq working in linear time.
+  test("scans repeated Zsh q flags in bounded time", () => {
+    const start = performance.now()
+    expect(ShellScan.scan("echo ${(" + "q".repeat(26) + "!x}", "zsh").kind).toBe("opaque")
+    expect(performance.now() - start).toBeLessThan(500)
+  })
+
+  test.each(["echo ${(qq)x}", "echo ${(q-)x}", "echo ${(q+@)x}", "echo ${(q)x}"])(
+    "keeps Zsh q flags scanned: %s",
+    (input) => {
+      expect(ShellScan.scan(input, "zsh").kind).toBe("scanned")
+    },
+  )
+
   test.each([
     ['pwsh --command "Remove-Item victim.txt"', ["pwsh"]],
     ["Import-Module ./evil.psm1", ["Import-Module"]],

@@ -108,7 +108,8 @@ const FUNCTION_BODY_RE =
 const DO_AHEAD_RE = /(?:[ \t\n;]|\\\n|#[^\n]*(?:\n|$))*(?:do(?=(?:\\\n)*(?:[ \t\n;{(]|$))|\{(?=(?:\\\n)*[ \t\n]))/y
 const NOFORK_OPEN_RE = /\$\{(?:\\\n)*(?:[ \t\n]|\|)/y
 // Zsh flags that neither evaluate nor glob a value; s and j take an argument between repeated delimiters.
-const ZSH_SAFE_FLAGS_RE = /\$\{\((?:[@AaBbCcDEfFikLMmNnOopPqStUuVvWwXZz0-]|q[-+]?|[js]([^({[<\\])(?:(?!\1)[^)])*\1)*\)/y
+// `q` is covered by `q[-+]?`; listing it in the class as well makes runs of q backtrack exponentially.
+const ZSH_SAFE_FLAGS_RE = /\$\{\((?:[@AaBbCcDEfFikLMmNnOopPStUuVvWwXZz0-]|q[-+]?|[js]([^({[<\\])(?:(?!\1)[^)])*\1)*\)/y
 const ZSH_QUOTED_FLAG_ARG_RE = /[js]([^({[<\\])(?:(?!\1)[^)])*\1/g
 const ZSH_GLOB_MODIFIER_RE = /(?:[\^=~#+]|\\\n)*~/y
 // Trailing Zsh glob qualifiers without code execution (e, +cmd), delimiters (f, u, g, P), modifiers (:), or math expressions.
