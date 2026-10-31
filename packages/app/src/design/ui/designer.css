@@ -1,0 +1,104 @@
+@layer components {
+  [data-slot="ui-designer"] {
+    background: var(--v2-background-bg-base);
+  }
+
+  [data-slot="ui-designer-chat"] {
+    display: flex;
+    flex-direction: column;
+    width: 276px;
+    min-width: 0;
+    min-height: 0;
+    border-inline-end: 1px solid var(--v2-border-border-muted);
+    background: var(--v2-background-bg-base);
+  }
+
+  [data-slot="ui-designer-inspector"] {
+    display: flex;
+    flex-direction: column;
+    width: 288px;
+    min-width: 0;
+    min-height: 0;
+    border-inline-start: 1px solid var(--v2-border-border-muted);
+    background: var(--v2-background-bg-base);
+  }
+
+  [data-slot="ui-chat-message"] {
+    overflow-wrap: anywhere;
+  }
+
+  [data-slot="ui-preview"] {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    background: var(--v2-background-bg-deep);
+  }
+
+  [data-slot="ui-preview-toolbar"] {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 44px;
+    padding-inline: 12px;
+    border-bottom: 1px solid var(--v2-border-border-muted);
+    background: var(--v2-background-bg-base);
+  }
+
+  [data-slot="ui-preview-stage"] {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    min-height: 0;
+    flex: 1;
+    overflow: auto;
+    padding: 18px;
+  }
+
+  [data-slot="ui-preview-frame"] {
+    width: 100%;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid var(--v2-border-border-muted);
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: var(--v2-elevation-floating);
+    transition: width 180ms ease-out;
+  }
+
+  [data-slot="ui-preview-stage"][data-device="tablet"] [data-slot="ui-preview-frame"] {
+    width: min(820px, 100%);
+  }
+
+  [data-slot="ui-preview-stage"][data-device="phone"] [data-slot="ui-preview-frame"] {
+    width: min(390px, 100%);
+  }
+
+  [data-slot="ui-preview-iframe"] {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    border: 0;
+    background: #ffffff;
+  }
+
+  [data-slot="ui-designer"] [data-slot="design-prompt"] {
+    flex-shrink: 0;
+    padding: 10px;
+    border-top: 1px solid var(--v2-border-border-muted);
+    background: var(--v2-background-bg-base);
+  }
+
+  @media (max-width: 1180px) {
+    [data-slot="ui-designer-chat"] {
+      width: 248px;
+    }
+
+    [data-slot="ui-designer-inspector"] {
+      width: 260px;
+    }
+  }
+}

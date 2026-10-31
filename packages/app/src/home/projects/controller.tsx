@@ -1,3 +1,4 @@
+import { useNavigate } from "@solidjs/router"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { useServerActionsController } from "@/servers/registry/controller"
 import { useSettingsCommand } from "@/settings/command"
@@ -22,6 +23,7 @@ export const HomeServersSchema = Schema.Struct({
 })
 
 export function createHomeProjectsController(home: HomeController) {
+  const navigate = useNavigate()
   const platform = usePlatform()
   const pickDirectory = useDirectoryPicker()
   const dialog = useDialog()
@@ -168,6 +170,7 @@ export function createHomeProjectsController(home: HomeController) {
     },
     utility: {
       settings: openSettings,
+      design: () => navigate("/design"),
       help: () => platform.openExternal("https://opencode.ai/desktop-feedback"),
     },
   }

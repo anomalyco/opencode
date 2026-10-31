@@ -1,5 +1,6 @@
 import { Show, startTransition, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useNavigate } from "@solidjs/router"
 import { createMediaQuery } from "@solid-primitives/media"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -45,6 +46,7 @@ export default function Layout(props: ParentProps) {
   const global = useGlobal()
   const servers = useServers()
   const tabs = useTabs()
+  const navigate = useNavigate()
   const mobile = createMediaQuery("(max-width: 767px)")
 
   const [state, setState] = createStore<{
@@ -187,6 +189,15 @@ export default function Layout(props: ParentProps) {
           />
         ))
       },
+    },
+  ])
+  command.register("design", () => [
+    {
+      id: "design.open",
+      title: language.t("design.open"),
+      category: language.t("command.category.view"),
+      keybind: "mod+alt+d",
+      onSelect: () => navigate("/design"),
     },
   ])
   command.register("commands", () => [

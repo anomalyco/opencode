@@ -391,6 +391,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 case "settings":
                 case "connect":
                 case "components":
+                case "design":
                 case "home": {
                   const selection = layout.home.selection()
 
@@ -605,7 +606,11 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             const currentTitle = () => {
               const tab = currentTab()
 
-              if (!tab) return language.t("home.title")
+              if (!tab) {
+                const route = layout.route()
+
+                return route.type === "design" ? language.t("design.title") : language.t("home.title")
+              }
 
               if (tab.type === "draft") return language.t("session.tab.session")
               const value = session()
@@ -663,7 +668,12 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                         class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:outline-none [app-region:no-drag]"
                         aria-label={language.t("titlebar.tabs")}
                       >
-                        <Show when={currentTab()} fallback={<Icon name="grid-plus" class="shrink-0" />}>
+                        <Show
+                          when={currentTab()}
+                          fallback={
+                            <Icon name={layout.route().type === "design" ? "cube" : "grid-plus"} class="shrink-0" />
+                          }
+                        >
                           {(tab) => (
                             <span
                               data-slot="project-avatar-slot"

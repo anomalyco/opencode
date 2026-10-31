@@ -54,6 +54,7 @@ export function Home() {
         <HomeUtilityNav
           class="flex"
           onOpenSettings={projects.utility.settings}
+          onOpenDesign={projects.utility.design}
           onOpenHelp={projects.utility.help}
           language={projects.copy.language}
         />

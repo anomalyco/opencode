@@ -1,0 +1,32 @@
+@layer components {
+  [data-slot="design-viewport"] {
+    background:
+      radial-gradient(ellipse at 50% 35%, var(--v2-background-bg-layer-01) 0%, transparent 62%),
+      linear-gradient(180deg, var(--v2-background-bg-base) 0%, var(--v2-background-bg-deep) 100%);
+    isolation: isolate;
+    contain: layout paint;
+  }
+
+  [data-slot="design-viewport"]::before {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    content: "";
+    pointer-events: none;
+    background-image: radial-gradient(var(--v2-border-border-muted) 0.5px, transparent 0.5px);
+    background-size: 22px 22px;
+    opacity: 0.28;
+    mask-image: radial-gradient(ellipse at center, black 15%, transparent 78%);
+  }
+
+  [data-slot="design-viewport-canvas"] {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: block;
+    width: 100%;
+    height: 100%;
+    outline: none;
+    touch-action: none;
+  }
+}

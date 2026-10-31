@@ -45,6 +45,7 @@
     "@tailwindcss/vite": "4.3.3",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/three": "0.186.0",
     "@typescript/native": "catalog:",
     "diff": "catalog:",
     "ghostty-web": "github:anomalyco/ghostty-web#e91e38a9ceb13c566ddfa15185a9393849f712a9",
@@ -86,6 +87,7 @@
     "effect": "catalog:",
     "fuzzysort": "catalog:",
     "qr-scanner": "1.4.2",
-    "solid-js": "catalog:"
+    "solid-js": "catalog:",
+    "three": "0.186.1"
   }
 }
