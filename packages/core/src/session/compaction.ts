@@ -95,7 +95,10 @@ type Result = {
 
 type Failure = {
   readonly error: SessionError.Error
+  readonly kind: "unknown" | "output-limit" | "empty-reply"
 }
+
+const fail = (error: SessionError.Error, kind: Failure["kind"] = "unknown") => ({ error, kind })
 
 type Prepared = Effect.Success<ReturnType<SessionModelRequest.Interface["compaction"]>>
 
@@ -123,9 +126,11 @@ type Precomputed = {
   readonly fiber: Fiber.Fiber<Result, Failure>
 }
 
-const NOTHING_TO_COMPACT: Failure = { error: { type: "compaction.unavailable", message: "Nothing to compact yet" } }
+const NOTHING_TO_COMPACT = fail({ type: "compaction.unavailable", message: "Nothing to compact yet" })
 /** After each "too long" rejection, the next attempt aims at this share of the first rejected request's size. */
 const SHRINK_STEPS = [0.85, 0.7, 0.5, 0.35]
+const isShrinkableFailure = (failure: Failure) =>
+  failure.kind === "output-limit" || failure.kind === "empty-reply"
 // The least of the window kept free for the last reply before compaction and for the summary itself.
 const RESERVE_MIN = 16_000
 /**
@@ -494,14 +499,12 @@ export const layer = Layer.effect(
           )
           const retry = yield* stream(context, nudged, prepared.options, background)
           if (filled(retry.text)) return retry
-          return yield* Effect.fail<Failure>({
-            error: {
-              type: "compaction.failed",
-              message: retry.text.trim()
-                ? "Compaction summary did not match the required template"
-                : "Compaction produced no summary",
-            },
-          })
+          const blank = retry.text.trim() === ""
+          return yield* Effect.fail(
+            blank
+              ? fail({ type: "compaction.failed", message: "Compaction produced no summary" }, "empty-reply")
+              : fail({ type: "compaction.failed", message: "Compaction summary did not match the required template" }),
+          )
         })
 
       const overhead = Token.estimate(prompt) + Token.estimate(NUDGE)
@@ -546,8 +549,7 @@ export const layer = Layer.effect(
     ): Effect.fn.Return<Result, Failure> {
       const context = trigger.context
       if (!context.messages.some(SessionRecentText.messageToText)) return yield* Effect.fail(NOTHING_TO_COMPACT)
-      const unsupported = (message: string) =>
-        Effect.fail<Failure>({ error: { type: "provider.unsupported-operation", message } })
+      const unsupported = (message: string) => Effect.fail(fail({ type: "provider.unsupported-operation", message }))
       const prepared = yield* prepare(context, context.messages, budget, "session")
 
       const toResult = (window: ReadonlyArray<Message>, usage: Usage | undefined) =>
@@ -589,8 +591,8 @@ export const layer = Layer.effect(
      * each shortening the transcript again from scratch, and a rejection after those gives up. A "payload too large"
      * rejection is about bytes, which inline media almost always accounts for, so one on the unchanged request resends
      * it as text, which carries no media, without counting; one on text counts as "too long". Other provider errors
-     * resend the same request under the session's retry policy. A `Failure` from `send` is a reply that cannot be
-     * used, and is never retried.
+     * resend the same request under the session's retry policy. A reply that filled the output limit, or produced no
+     * text, shrinks the next input, which leaves it more room; other `Failure`s from `send` are never retried.
      */
     const deliver = Effect.fnUntraced(function* (
       trigger: Trigger,
@@ -612,6 +614,17 @@ export const layer = Layer.effect(
       let asText = false
       let fit = shrink.fit
 
+      const shrinkNext = (request: LLMRequest, size?: Estimate): boolean => {
+        const step = SHRINK_STEPS[rejections]
+        if (step === undefined) return false
+        rejected ??= size ? total(size) : estimateRequest(request)
+        if (size) asText = true
+        target = Math.floor(rejected * step)
+        fit = target
+        rejections++
+        return true
+      }
+
       while (true) {
         const measured = rejections === 0 ? shrink.measured : undefined
         const unchanged = asText
@@ -630,20 +643,23 @@ export const layer = Layer.effect(
               ? flattenAndDropOldest(shrink.history, context, Number.POSITIVE_INFINITY)
               : shrink.history)
         if (!request) {
-          return yield* Effect.fail<Failure>({
-            error: {
+          return yield* Effect.fail(
+            fail({
               type: "compaction.failed",
               message:
                 "The compaction request cannot be reduced further without losing the latest exchange or checkpoint",
-            },
-          })
+            }),
+          )
         }
 
         const size = request === prepared.request ? measured : undefined
         const attempt = yield* Effect.result(send(request, size))
         if (Result.isSuccess(attempt)) return attempt.success
         const cause = attempt.failure
-        if (!(cause instanceof AIError)) return yield* Effect.fail(cause)
+        if (!(cause instanceof AIError)) {
+          if (isShrinkableFailure(cause) && shrinkNext(request, size)) continue
+          return yield* Effect.fail(cause)
+        }
         const error = toSessionError(cause)
         const tooLarge = cause.reason._tag === "InvalidRequest" && cause.reason.classification === "payload-too-large"
 
@@ -653,14 +669,7 @@ export const layer = Layer.effect(
         }
 
         if (tooLarge || isContextOverflowFailure(cause)) {
-          const step = SHRINK_STEPS[rejections]
-          if (step === undefined) return yield* Effect.fail<Failure>({ error })
-          rejected ??= size ? total(size) : estimateRequest(request)
-          // The characters can still say the rejected request fits, so it only goes out again as text.
-          if (size) asText = true
-          target = Math.floor(rejected * step)
-          fit = target
-          rejections++
+          if (!shrinkNext(request, size)) return yield* Effect.fail(fail(error))
           continue
         }
 
@@ -672,7 +681,7 @@ export const layer = Layer.effect(
           hook: prepared.retry,
           retry: SessionRunnerRetry.isRetryable(cause),
         })
-        if (!decision.retry) return yield* Effect.fail<Failure>({ error })
+        if (!decision.retry) return yield* Effect.fail(fail(error))
         yield* Effect.sleep(decision.delay)
       }
     })
@@ -766,7 +775,7 @@ export const layer = Layer.effect(
       background?: Background,
     ) => {
       const sessionID = context.session.id
-      const unusable = (error: SessionError.Error) => Effect.fail<Failure>({ error })
+      const unusable = (error: SessionError.Error) => Effect.fail(fail(error))
 
       return llm.stream(request, options).pipe(
         Stream.runFoldEffect(
@@ -810,10 +819,12 @@ export const layer = Layer.effect(
                   new AIError({ reason: new UnknownProviderError({ message: "Compaction generation failed" }) }),
                 )
               case "length":
-                return unusable({
-                  type: "compaction.failed",
-                  message: "Compaction summary reached the output token limit",
-                })
+                return Effect.fail(
+                  fail(
+                    { type: "compaction.failed", message: "Compaction summary reached the output token limit" },
+                    "output-limit",
+                  ),
+                )
               case "content-filter":
                 return unusable(contentFilterError("Compaction summary was blocked by the provider", event.reason))
               default:
@@ -931,7 +942,7 @@ export const layer = Layer.effect(
           Effect.onInterrupt(() =>
             trigger.reason === "manual"
               ? Effect.void
-              : publish(trigger, { error: { type: "compaction.interrupted", message: "Compaction was interrupted" } }),
+              : publish(trigger, fail({ type: "compaction.interrupted", message: "Compaction was interrupted" })),
           ),
           Effect.ensuring(Effect.sync(() => spent.delete(trigger.context.session.id))),
         ),
