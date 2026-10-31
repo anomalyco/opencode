@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import {
   OpenCode,
+  type ModelInfo,
   type EventSubscribeOutput,
   type SessionMessageAssistantTool,
   type SessionMessageInfo,
 } from "@opencode/client/promise"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { runNonInteractivePrompt } from "../../src/run/noninteractive"
 
 type V2Event = EventSubscribeOutput
@@ -218,8 +221,18 @@ async function run(input: {
   messages?: (inboxID: string) => SessionMessageInfo[]
   wait?: () => Promise<void>
   terminalDelay?: number
+  models?: ModelInfo[]
+  modelUnavailable?: boolean
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+  spyOn(sdk.model, "list").mockImplementation(() =>
+    input.modelUnavailable
+      ? Promise.reject(new Error("unavailable"))
+      : ok({
+          location: { ...location, project: { id: "proj_1", directory: location.directory } },
+          data: input.models ?? [],
+        }),
+  )
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
   let wake: (() => void) | undefined
   const wait = Promise.withResolvers<void>()
@@ -313,6 +326,34 @@ afterEach(() => {
 })
 
 describe("runNonInteractivePrompt", () => {
+  test("uses the model display name from the matching provider in default banners", async () => {
+    const models = ["other", "test"].map((providerID) => ({
+      ...Model.Info.default(Provider.ID.make(providerID), Model.ID.make("test-model")),
+      name: providerID === "test" ? "Custom Model Name" : "Wrong Provider Model",
+    }))
+    for (const compatibility of [undefined, "v1"] as const) {
+      const output = await capture({
+        models,
+        compatibility,
+        turn: (messageID) => [prompted(messageID), stepStarted(), executionFailed("Execution failed")],
+      })
+      expect(output.stderr).toContain("> build · Custom Model Name")
+      expect(output.stderr).not.toContain("> build · test-model")
+      expect(output.stderr).not.toContain("Wrong Provider Model")
+    }
+  })
+
+  test("falls back to the model id when the catalog is unavailable or the model is absent", async () => {
+    for (const modelUnavailable of [false, true]) {
+      const output = await capture({
+        modelUnavailable,
+        turn: (messageID) => [prompted(messageID), stepStarted(), settled()],
+      })
+      expect(output.stderr).toContain("> build · test-model")
+      expect(output.exitCode).toBe(0)
+    }
+  })
+
   test("keeps formatted tool output and compact tool metadata in JSON", async () => {
     const output = await capture({ format: "json", turn: successfulGrep })
     const events = output.stdout
