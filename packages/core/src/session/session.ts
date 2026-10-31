@@ -1,14 +1,15 @@
 export * as Session from "./session.js"
 
-import { DateTime, Effect, Fiber, Scope } from "effect"
-import type { Agent } from "@opencode/schema/agent"
-import type { Model } from "@opencode/schema/model"
+import { Cause, DateTime, Effect, Fiber, Option, Scope } from "effect"
 import type { Permission } from "@opencode/schema/permission"
 import { Event } from "@opencode/schema/event"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Agent } from "../agent.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
+import { Model } from "../model.js"
+import { Plugin } from "../plugin/service.js"
 import { ShellResult } from "../shell/result.js"
 import type { Skill } from "../skill.js"
 import {
@@ -25,6 +26,7 @@ import { SessionInbox } from "./inbox.js"
 import { SessionMessage } from "./message.js"
 import { SessionPrompt } from "./prompt.js"
 import { SessionRevert } from "./revert.js"
+import { SessionRunnerModel } from "./runner/model.js"
 import { SessionShell } from "./shell.js"
 import { SessionSkill } from "./skill.js"
 import { SessionSchema } from "./schema.js"
@@ -96,25 +98,62 @@ export const make = Effect.fn("Session.make")(function* () {
     yield* get(sessionID)
     yield* bus.publish(SessionEvent.Permissions, { sessionID, permissions: input.permissions })
   })
+  const resolveInLocation = <A, E>(session: SessionSchema.Info, effect: Effect.Effect<A | undefined, E>) =>
+    Effect.gen(function* () {
+      const plugin = yield* Effect.serviceOption(Plugin.Service)
+      if (Option.isSome(plugin)) yield* plugin.value.awaitActivation
+      return yield* effect
+    }).pipe(
+      instances.provide(session),
+      Effect.catchCause((cause) =>
+        Cause.hasInterrupts(cause)
+          ? Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
+          : Effect.succeed(undefined),
+      ),
+    )
   const switchAgent = Effect.fn("Session.switchAgent")(function* (
     sessionID: SessionSchema.ID,
     input: { agent: Agent.ID },
   ) {
     const session = yield* get(sessionID)
-    yield* bus.publish(SessionEvent.AgentSelected, { sessionID, agent: input.agent, previous: session.agent })
+    const previous =
+      session.agent ??
+      (yield* resolveInLocation(
+        session,
+        Effect.gen(function* () {
+          const agents = yield* Effect.serviceOption(Agent.Service)
+          if (Option.isNone(agents)) return undefined
+          const selected = yield* agents.value.select(session.agent)
+          return selected.id
+        }),
+      ))
+    if (previous === input.agent) return
+    yield* bus.publish(SessionEvent.AgentSelected, { sessionID, agent: input.agent, previous })
   })
   const switchModel = Effect.fn("Session.switchModel")(function* (
     sessionID: SessionSchema.ID,
     input: { model: Model.Ref },
   ) {
     const session = yield* get(sessionID)
+    const previous =
+      session.model ??
+      (yield* resolveInLocation(
+        session,
+        Effect.gen(function* () {
+          const runner = yield* Effect.serviceOption(SessionRunnerModel.Service)
+          const models = yield* Effect.serviceOption(Model.Service)
+          if (Option.isNone(runner) || Option.isNone(models)) return undefined
+          const resolved = yield* runner.value.resolve(session, models.value.available)
+          return resolved.ref
+        }),
+      ))
     if (
-      session.model?.providerID === input.model.providerID &&
-      session.model.id === input.model.id &&
-      (session.model.variant ?? "default") === (input.model.variant ?? "default")
+      previous?.providerID === input.model.providerID &&
+      previous.id === input.model.id &&
+      (previous.variant ?? "default") === (input.model.variant ?? "default")
     )
       return
-    yield* bus.publish(SessionEvent.ModelSelected, { sessionID, model: input.model, previous: session.model })
+    yield* bus.publish(SessionEvent.ModelSelected, { sessionID, model: input.model, previous })
   })
   const mutatePending = (
     sessionID: SessionSchema.ID,
