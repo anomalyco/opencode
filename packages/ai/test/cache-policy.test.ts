@@ -13,6 +13,7 @@ import {
   Meta,
   MiniMax,
   Moonshot,
+  ZAI,
   ZAICodingPlan,
 } from "../src/providers.js"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
@@ -229,6 +230,7 @@ describe("applyCachePolicy", () => {
     ["meta-messages", Meta.configure({ apiKey: "test" }).messages("muse-spark-1.3")],
     ["minimax-messages", MiniMax.configure({ apiKey: "test" }).model("MiniMax-M3")],
     ["moonshot-messages", Moonshot.configure({ apiKey: "test" }).messages("kimi-k3")],
+    ["zai-messages", ZAI.configure({ apiKey: "test" }).messages("glm-5.3")],
     ["zai-coding-messages", ZAICodingPlan.configure({ apiKey: "test" }).messages("glm-5.3")],
   ] as const
 

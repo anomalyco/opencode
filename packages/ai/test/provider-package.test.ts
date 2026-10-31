@@ -151,6 +151,8 @@ describe("provider package entrypoints", () => {
     const modules = await Promise.all([
       import("@opencode/ai/providers/zai"),
       import("@opencode/ai/providers/zai/chat"),
+      import("@opencode/ai/providers/zai/messages"),
+      import("@opencode/ai/providers/zai/responses"),
       import("@opencode/ai/providers/zai-coding-plan"),
       import("@opencode/ai/providers/zai-coding-plan/chat"),
       import("@opencode/ai/providers/zai-coding-plan/messages"),
@@ -159,6 +161,8 @@ describe("provider package entrypoints", () => {
     const routes = [
       "zai-chat",
       "zai-chat",
+      "zai-messages",
+      "zai-responses",
       "zai-coding-chat",
       "zai-coding-chat",
       "zai-coding-messages",
@@ -172,7 +176,7 @@ describe("provider package entrypoints", () => {
     }
     modules.forEach((module, index) => {
       const selected = module.model("glm-5.3", settings)
-      expect(selected.provider).toBe(index < 2 ? "zai" : "zai-coding-plan")
+      expect(selected.provider).toBe(index < 4 ? "zai" : "zai-coding-plan")
       expect(selected.route.id).toBe(routes[index])
       expect(selected.route.endpoint.baseURL).toBe(settings.baseURL)
       expect(selected.route.defaults.headers).toEqual(settings.headers)
