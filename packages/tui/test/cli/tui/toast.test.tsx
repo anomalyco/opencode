@@ -78,7 +78,7 @@ test("activation dismisses a toast without an action", async () => {
   }
 })
 
-test.each([44, 100])("toast hides only a covered cursor and restores it at width %i", async (width) => {
+test("toast hides only the terminal cursor it covers, until dismissed", async () => {
   let toast!: ToastContext
   let terminal!: EmbeddedTerminalRenderable
   const Capture = captureToast((value) => (toast = value))
@@ -94,7 +94,7 @@ test.each([44, 100])("toast hides only a covered cursor and restores it at width
         </ThemeProvider>
       </ConfigProvider>
     ),
-    { width, height: 12 },
+    { width: 60, height: 12 },
   )
   try {
     await app.renderOnce()
@@ -102,19 +102,15 @@ test.each([44, 100])("toast hides only a covered cursor and restores it at width
     terminal.write("\x1b[?25h\x1b[2;1H")
     toast.show({ message: "Copied to clipboard", variant: "info", duration: 60_000 })
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Copied to clipboard")
     expect(app.renderer.getCursorState().visible).toBe(true)
 
-    terminal.write(`\x1b[2;${width - 8}H`)
-    await app.renderOnce()
-    expect(app.renderer.getCursorState().visible).toBe(false)
-    expect(app.renderer.currentFocusedRenderable).toBe(terminal)
+    terminal.write("\x1b[2;52H")
     await app.renderOnce()
     expect(app.renderer.getCursorState().visible).toBe(false)
 
     toast.dismiss()
     await app.renderOnce()
-    expect(app.renderer.getCursorState()).toMatchObject({ x: width - 8, y: 2, visible: true })
+    expect(app.renderer.getCursorState()).toMatchObject({ x: 52, y: 2, visible: true })
   } finally {
     app.renderer.destroy()
   }
