@@ -2,7 +2,7 @@ export * as WarmingPlugin from "./warming.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
-import type { Model } from "@opencode/schema/model"
+import type { Provider } from "@opencode/schema/provider"
 import type { Session } from "@opencode/schema/session"
 import { Clock, Duration, Effect, Scope, Stream } from "effect"
 import { Config } from "../config.js"
@@ -18,23 +18,28 @@ export const Plugin = define({
   id: "opencode.warming",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
-    const autoInterval = Effect.fn("WarmingPlugin.autoInterval")(function* (event: SessionHooks["context"]) {
-      const model: Model.Info | undefined = yield* resolveModel(ctx, event).pipe(Effect.orElseSucceed(() => undefined))
-      const ttl = cacheTTL(model?.settings?.cache?.ttl)
-      return ttl === undefined ? undefined : Duration.millis(ttl * 0.9)
-    })
+    const modelTTL = (event: SessionHooks["context"]) =>
+      resolveModel(ctx, event).pipe(
+        Effect.map((model) => model.settings?.cache?.ttl),
+        Effect.orElseSucceed(() => undefined),
+      )
     const loadSettings = Effect.fn("WarmingPlugin.loadSettings")(function* (event: SessionHooks["context"]) {
       const warming = Config.latest(yield* config.entries(), "warming")
       if (!warming) return
-      const configured = warming === true ? defaults : { ...defaults, ...warming }
-      const interval = configured.interval === "auto" ? yield* autoInterval(event) : configured.interval
-      // "auto" pings just before the model's cache expires; a model without a known cache lifetime isn't warmed.
+      const settings = warming === true ? defaults : { ...defaults, ...warming }
+      const interval = settings.interval === "auto" ? autoInterval(yield* modelTTL(event)) : settings.interval
+      // "auto" doesn't warm a model without a cache.ttl.
       if (interval === undefined) return
-      const settings = { ...configured, interval }
-      const millis = Duration.toMillis(settings.interval)
-      const duration = Duration.toMillis(settings.duration)
-      if (Number.isFinite(millis) && millis > 0 && Number.isFinite(duration) && duration > 0) return settings
-      yield* Effect.logWarning("warming interval and duration must be finite positive durations")
+      const { duration } = settings
+      const valid =
+        Duration.isFinite(duration) &&
+        Duration.isGreaterThan(interval, Duration.zero) &&
+        Duration.isLessThan(interval, duration)
+      if (valid) return { ...settings, interval }
+      yield* Effect.logWarning("warming interval must be positive and shorter than a finite duration", {
+        interval,
+        duration,
+      })
     })
 
     const scope = yield* Scope.Scope
@@ -150,8 +155,8 @@ export const Plugin = define({
 
 const units = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }
 
-/** Milliseconds in a cache TTL such as "5m" or "1h". */
-function cacheTTL(ttl: string | undefined) {
-  const match = ttl?.match(/^(\d+)(ms|s|m|h|d)$/)
-  return match ? Number(match[1]) * units[match[2] as keyof typeof units] : undefined
+/** 90% of a cache TTL such as "5m", so the ping lands before the cache expires. */
+function autoInterval(ttl: Provider.CacheTTL | undefined) {
+  const match = ttl?.match(/^([\d.]+)(ms|s|m|h|d)$/)
+  if (match) return Duration.millis(Number(match[1]) * units[match[2] as keyof typeof units] * 0.9)
 }

@@ -69,12 +69,14 @@ warmed.
 ```
 
 The interval must be shorter than `duration`, so raise `duration` for long
-cache lifetimes such as `"1h"`.
+cache lifetimes such as `"1h"`. Otherwise OpenCode skips warming and logs a
+warning.
 
 ## Durations
 
 `interval` and `duration` accept duration strings. Both must resolve to finite
-values greater than zero; otherwise OpenCode skips warming and logs a warning.
+values greater than zero, and `interval` must be shorter than `duration`;
+otherwise OpenCode skips warming and logs a warning.
 
 ```jsonc title="opencode.jsonc"
 {
