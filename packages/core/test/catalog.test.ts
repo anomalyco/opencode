@@ -13,6 +13,11 @@ import { ModelResolver } from "@opencode/core/model-resolver"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
+import { Database } from "@opencode/core/database/database"
+import { ProjectTable } from "@opencode/core/project/sql"
+import { SessionTable } from "@opencode/core/session/sql"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
@@ -26,7 +31,7 @@ const locationLayer = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make("test") })),
 )
 const modelLayer = AppNodeBuilder.build(
-  LayerNode.group([Provider.node, Model.node, Bus.node, Credential.node, Integration.node]),
+  LayerNode.group([Provider.node, Model.node, Bus.node, Credential.node, Integration.node, Database.node]),
   [Location.node.replace(locationLayer)],
 )
 const it = testEffect(modelLayer)
@@ -645,6 +650,48 @@ describe("Provider and Model", () => {
       configured = false
       yield* models.reload()
       expect((yield* models.default())?.id).toBe(newest)
+    }),
+  )
+
+  it.effect("defaults to the most recently used top-level session model", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const db = (yield* Database.Service).db
+      const providerID = Provider.ID.make("test")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, () => {})
+        ;["old", "used", "child", "new"].forEach((id, index) =>
+          editor.models.update(providerID, Model.ID.make(id), (model) => {
+            model.time.released = index
+          }),
+        )
+      })
+      expect((yield* models.default())?.id).toBe(Model.ID.make("new"))
+
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+      const session = (id: string, model: string, updated: number, parent?: string) => ({
+        id: Session.ID.make(id),
+        project_id: Project.ID.global,
+        parent_id: parent === undefined ? undefined : Session.ID.make(parent),
+        slug: id,
+        directory: AbsolutePath.make("/project"),
+        version: "test",
+        model: { providerID, id: model },
+        time_created: updated,
+        time_updated: updated,
+      })
+      yield* db
+        .insert(SessionTable)
+        .values([session("ses_a", "old", 1), session("ses_b", "used", 2), session("ses_c", "child", 3, "ses_b")])
+        .run()
+      expect((yield* models.default())?.id).toBe(Model.ID.make("used"))
+
+      yield* models.transform((editor) => editor.default.set(providerID, Model.ID.make("old")))
+      expect((yield* models.default())?.id).toBe(Model.ID.make("old"))
     }),
   )
 
