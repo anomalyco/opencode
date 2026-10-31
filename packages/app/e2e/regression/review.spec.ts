@@ -770,6 +770,21 @@ test("artifact actions copy and download content, switch source, and follow the 
   const source = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80"/></svg>'
   const table = 'name,role\n"Jensen, Oliver",Researcher\nIsabella,Support'
 
+  const notes = [
+    "---",
+    "description: Release checklist",
+    "mode: primary",
+    "---",
+    "",
+    "# Notes",
+    "",
+    "A document with a visible top edge.",
+    "",
+    "---",
+    "",
+    "Trailing section.",
+  ].join("\n")
+
   const workspace = await openSession(page, {
     name: "ArtifactActions",
     fileList: () => [],
@@ -778,7 +793,7 @@ test("artifact actions copy and download content, switch source, and follow the 
 
       if (path === "data.csv") return { content: table }
 
-      if (path === "notes.md") return { content: "# Notes\n\nA document with a visible top edge." }
+      if (path === "notes.md") return { content: notes }
 
       return { type: "binary", content: "AAEC", encoding: "base64" }
     },
@@ -790,7 +805,10 @@ test("artifact actions copy and download content, switch source, and follow the 
           agent: "build",
           model: { id: "test", providerID: "opencode" },
           content: [
-            { type: "text", text: "[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin)" },
+            {
+              type: "text",
+              text: "---\ndescription: Chat heading\n---\n\n[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin)",
+            },
           ],
           time: { created: 1, completed: 2 },
         },
@@ -866,9 +884,13 @@ test("artifact actions copy and download content, switch source, and follow the 
   expect(download.suggestedFilename()).toBe("data.csv")
   expect(await readFile((await download.path())!, "utf8")).toBe(table)
 
+  await expect(page.getByRole("heading", { name: "description: Chat heading", exact: true })).toBeVisible()
   await page.getByRole("link", { name: "Notes", exact: true }).click()
   await expect(panel.getByRole("heading", { name: "Notes", exact: true })).toBeVisible()
   const paper = panel.locator('[data-slot="artifact-markdown-page"]')
+  await expect(paper.getByRole("heading")).toHaveText(["Notes"])
+  await expect(paper.locator("code.language-yaml")).toHaveText("description: Release checklist\nmode: primary")
+  await expect(paper.locator("hr")).toHaveCount(1)
   await expect(paper).toHaveCSS("border-radius", "8px")
   await expect(paper).toHaveAttribute("data-component", "document-surface")
   expect(await paper.evaluate((element) => getComputedStyle(element, "::after").borderTopStyle)).toBe("solid")
@@ -876,6 +898,13 @@ test("artifact actions copy and download content, switch source, and follow the 
   const bar = (await toolbar.boundingBox())!
   expect(surface.y - bar.y - bar.height).toBe(1)
   await expect(panel.getByRole("group", { name: "Preview controls", exact: true })).toHaveCount(0)
+  await copy.click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(notes)
+  await page.getByRole("button", { name: "Dismiss", exact: true }).click()
+  await sourceAction.click()
+  await expect(paper).toHaveCount(0)
+  await expect(panel.locator('diffs-container [data-line="1"]')).toHaveText("---")
+  await expect(panel.locator('diffs-container [data-line="2"]')).toContainText("description: Release checklist")
 
   await page.getByRole("link", { name: "Binary", exact: true }).click()
   await expect(panel.getByText(/Binary file/)).toBeVisible()
