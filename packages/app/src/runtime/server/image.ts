@@ -25,12 +25,18 @@ export async function readLocalImage(
   const type = types.get(path.match(/\.([^./]+)$/)?.[1]?.toLowerCase() ?? "")
 
   if (!type) return
-  const absolute = drive || path.startsWith("/")
+  // A single leading separator is drive-root-relative on Windows, which reads from the process drive instead
+  // of the project; a URL-style reference names a file under the workspace directory. Double separators are
+  // UNC paths, and full drive paths stay absolute.
+  const windows = /^[a-z]:[/\\]/i.test(directory) || directory.startsWith("\\\\")
+  const workspaceRelative = !drive && windows && /^[\\/]/.test(path) && !/^[/\\]{2}/.test(path)
+  const absolute = drive || (path.startsWith("/") && !workspaceRelative)
 
   // Scope absolute images to their parent, including files outside the project.
+  // The trailing separator from getDirectory keeps "/" and "C:/" valid, like the file model.
   const bytes = await api.file.read(
     {
-      path: absolute ? getFilename(path) : path,
+      path: absolute ? getFilename(path) : workspaceRelative ? path.replace(/^[/\\]+/, "") : path,
       location: { directory: absolute ? getDirectory(path) : directory },
     },
     { signal },
