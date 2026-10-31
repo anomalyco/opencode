@@ -194,6 +194,7 @@ test("shows a pending permission dock", async ({ page }) => {
 
   const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
   await expect(permission).toBeVisible()
+  await expect(permission.getByText("Run shell commands", { exact: true })).toBeVisible()
   await expect(permission.getByText("git status")).toBeVisible()
   await expect(permission.getByText("git diff")).toBeVisible()
   await expect(permission.locator('[data-slot="permission-footer-actions"] button')).toHaveCount(3)

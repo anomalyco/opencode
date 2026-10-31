@@ -1150,6 +1150,8 @@ export const dict = {
   "settings.permissions.tool.list.description": "List files within a directory",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "Run shell commands",
+  "settings.permissions.tool.shell.title": "Shell",
+  "settings.permissions.tool.shell.description": "Run shell commands",
   "settings.permissions.tool.task.title": "Task",
   "settings.permissions.tool.task.description": "Launch sub-agents",
   "settings.permissions.tool.skill.title": "Skill",
