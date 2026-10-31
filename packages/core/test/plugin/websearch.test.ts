@@ -5,6 +5,7 @@ import { WebSearch } from "@opencode/core/websearch"
 import { WebSearchExa } from "@opencode/core/plugin/websearch/exa"
 import { WebSearchFirecrawl } from "@opencode/core/plugin/websearch/firecrawl"
 import { WebSearchParallel } from "@opencode/core/plugin/websearch/parallel"
+import { WebSearchSearxng } from "@opencode/core/plugin/websearch/searxng"
 import { WebSearchTavily } from "@opencode/core/plugin/websearch/tavily"
 import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
 import { host, integrationHost, webSearchHost } from "./host"
@@ -43,6 +44,7 @@ describe("built-in web search providers", () => {
     WebSearchFirecrawl.Plugin,
     WebSearchTavily.Plugin,
     WebSearchTinyFish.Plugin,
+    WebSearchSearxng.Plugin,
   ].forEach((plugin) => {
     it.effect(`releases rate-limited HTTP requests for ${plugin.id} before caching their errors`, () =>
       Effect.gen(function* () {
@@ -50,6 +52,15 @@ describe("built-in web search providers", () => {
         const integrations = yield* Integration.Service
         const websearch = yield* WebSearch.Service
         yield* plugin.effect(host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }))
+        // SearXNG's account is a server address: without one it fails before
+        // any request, so the shared 429 path needs a configured server.
+        if (plugin.id === "opencode.websearch.searxng") {
+          yield* integrations.connection.external({
+            integrationID: Integration.ID.make("searxng"),
+            methodID: Integration.MethodID.make("server"),
+            answer: { url: "http://localhost:8080" },
+          })
+        }
         yield* websearch.select("random")
         expect(yield* websearch.query({ query: "limited" }).pipe(Effect.flip)).toBeInstanceOf(WebSearch.RequestError)
         expect(signals).toHaveLength(1)
@@ -368,6 +379,58 @@ describe("built-in web search providers", () => {
         body: { method: "tools/call" },
       })
       expect(requests[3]?.headers["x-tinyfish-access-mode"]).toBeUndefined()
+    }),
+  )
+
+  it.effect("searches a SearXNG server configured by its URL form", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          results: [
+            {
+              url: "https://effect.website/docs",
+              title: "Effect docs",
+              content: "Effect documentation",
+              publishedDate: "2026-07-25T00:00:00.000Z",
+            },
+            { title: "A result without a URL is dropped" },
+          ],
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchSearxng.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(yield* integrations.get(Integration.ID.make("searxng"))).toMatchObject({
+        id: "searxng",
+        name: "SearXNG",
+        methods: [
+          { id: "server", type: "external" },
+          { type: "env", names: ["SEARXNG_URL"] },
+        ],
+      })
+
+      yield* integrations.connection.external({
+        integrationID: Integration.ID.make("searxng"),
+        methodID: Integration.MethodID.make("server"),
+        answer: { url: "http://localhost:8080" },
+      })
+      expect(yield* websearch.query({ query: "effect docs", providerID: WebSearch.ID.make("searxng") })).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("searxng"),
+          results: [
+            {
+              url: "https://effect.website/docs",
+              title: "Effect docs",
+              content: "Effect documentation",
+              time: { published: Date.parse("2026-07-25T00:00:00.000Z") },
+            },
+          ],
+        }),
+      )
+      expect(requests[0]?.url).toBe("http://localhost:8080/search?q=effect+docs&format=json")
     }),
   )
 })
