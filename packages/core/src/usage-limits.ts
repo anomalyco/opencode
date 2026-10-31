@@ -34,30 +34,47 @@ export const layer = Layer.effect(
 
     const get = Effect.fn("UsageLimits.get")(function* () {
       const connection = yield* integrations.connection.active(Integration.ID.make("opencode"))
-      if (!connection) return undefined
-      const credential = yield* integrations.connection
-        .resolve(connection)
-        .pipe(Effect.mapError((error) => new UnavailableError({ message: error.message })))
-      if (!credential || credential.type === "external") return undefined
-      const workspaceID = credential.metadata?.orgID
-      if (typeof workspaceID !== "string") return undefined
-      const server = ConsoleAccess.server(credential)
-      const [budgets, go] = yield* Effect.all(
-        [readBudgets(http, server, credential), readGo(http, server, credential, workspaceID)],
-        { concurrency: 2 },
+      const credential = connection
+        ? yield* integrations.connection
+            .resolve(connection)
+            .pipe(Effect.mapError((error) => new UnavailableError({ message: error.message })))
+        : undefined
+      const workspaceID =
+        credential && credential.type !== "external" && typeof credential.metadata?.orgID === "string"
+          ? credential.metadata.orgID
+          : undefined
+      const server = credential ? ConsoleAccess.server(credential) : undefined
+      const [budgets, go, meta] = yield* Effect.all(
+        [
+          workspaceID && server && credential && credential.type !== "external"
+            ? readBudgets(http, server, credential)
+            : Effect.succeed([]),
+          workspaceID && server && credential && credential.type !== "external"
+            ? readGo(http, server, credential, workspaceID)
+            : Effect.succeed(undefined),
+          readMeta(http),
+        ],
+        { concurrency: 3 },
       ).pipe(
         Effect.timeoutOrElse({
           duration: Duration.seconds(15),
-          orElse: () => Effect.fail(new UnavailableError({ message: "OpenCode Console usage limits timed out" })),
+          orElse: () => Effect.fail(new UnavailableError({ message: "Usage limits timed out" })),
         }),
       )
+      if (!workspaceID && !meta) return undefined
       return {
         workspace: {
-          id: workspaceID,
-          ...(typeof credential.metadata?.orgName === "string" ? { name: credential.metadata.orgName } : {}),
-          usageURL: `${server}/${workspaceID}/activity/overview`,
+          id: workspaceID ?? "meta",
+          ...(credential?.metadata?.orgName && typeof credential.metadata.orgName === "string"
+            ? { name: credential.metadata.orgName }
+            : {}),
+          usageURL:
+            workspaceID && server
+              ? `${server}/${workspaceID}/activity/overview`
+              : "https://api.meta.ai/usage",
         },
         ...(go === undefined ? {} : { go }),
+        ...(meta === undefined ? {} : { meta }),
         budgets,
       }
     })
@@ -189,4 +206,43 @@ function readGo(
 
 function meter(value: typeof GoMeter.Type) {
   return { percent: value.percent, limited: value.status === "rate-limited", resetsAt: value.resetsAt.getTime() }
+}
+
+/**
+ * Meta API quota, polled from a compatible usage endpoint when configured.
+ * Meta publishes no stable usage endpoint; its per-response `x-ratelimit-*`
+ * headers are the live quota signal and raw per-request cost already flows
+ * through `SessionUsage.record`. Set `META_USAGE_URL` (GET, bearer
+ * `META_API_KEY`) to surface a monthly meter in `UsageLimits.Info.meta`;
+ * unset means no meter, 403/404 means no allowance to show.
+ */
+const MetaUsage = Schema.Struct({
+  usage: Schema.Struct({ monthly: GoMeter }),
+})
+
+function readMeta(http: HttpClient.HttpClient) {
+  const url = process.env.META_USAGE_URL
+  const key = process.env.META_API_KEY
+  if (!url || !key) return Effect.succeed(undefined)
+  return HttpClient.withScope(http)
+    .execute(
+      HttpClientRequest.get(url).pipe(
+        HttpClientRequest.acceptJson,
+        HttpClientRequest.bearerToken(key),
+      ),
+    )
+    .pipe(
+      Effect.flatMap((response) =>
+        response.status === 403 || response.status === 404
+          ? Effect.succeed(undefined)
+          : HttpClientResponse.filterStatusOk(response).pipe(
+              Effect.flatMap(HttpClientResponse.schemaBodyJson(MetaUsage)),
+              Effect.map((body) => ({ monthly: meter(body.usage.monthly) })),
+            ),
+      ),
+      Effect.scoped,
+      Effect.mapError(
+        (error) => new UnavailableError({ message: `Meta usage is unavailable: ${error.message}` }),
+      ),
+    )
 }

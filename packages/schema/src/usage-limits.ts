@@ -62,6 +62,12 @@ export const Budget = Schema.Struct({
   resetsAt: Instant,
 }).annotate({ identifier: "UsageLimits.Budget" })
 
+/** The Meta API quota meter, when a compatible usage endpoint is configured. */
+export interface Meta extends Schema.Schema.Type<typeof Meta> {}
+export const Meta = Schema.Struct({
+  monthly: Meter,
+}).annotate({ identifier: "UsageLimits.Meta" })
+
 /** The usage limits of the OpenCode Console workspace a location is signed in to. */
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
@@ -72,5 +78,6 @@ export const Info = Schema.Struct({
     usageURL: Schema.String,
   }),
   go: Go.pipe(optional),
+  meta: Meta.pipe(optional),
   budgets: Schema.Array(Budget),
 }).annotate({ identifier: "UsageLimits.Info" })
