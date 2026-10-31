@@ -12,13 +12,16 @@ import { sseEvents } from "../lib/sse.js"
 const Json = Schema.fromJsonString(Schema.Unknown)
 const decodeJson = Schema.decodeUnknownSync(Json)
 
-const model = OpenAICompatibleChat.route
-  .with({
-    provider: "deepseek",
-    endpoint: { baseURL: "https://api.deepseek.test/v1/", query: { "api-version": "2026-01-01" } },
-    auth: Auth.bearer("test-key"),
-  })
-  .model({ id: "deepseek-chat" })
+const route = OpenAICompatibleChat.route.with({
+  provider: "deepseek",
+  endpoint: { baseURL: "https://api.deepseek.test/v1/", query: { "api-version": "2026-01-01" } },
+  auth: Auth.bearer("test-key"),
+})
+
+const model = route.model({ id: "deepseek-chat" })
+
+// Text-embedded tool call recovery is opt-in per model, so recovery tests request the compatible flag.
+const recoveryModel = route.model({ id: "deepseek-chat", compatibility: { recoverTextToolCalls: true } })
 
 const request = LLM.request({
   id: "req_1",
@@ -552,6 +555,7 @@ describe("OpenAI-compatible Chat route", () => {
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, {
+          model: recoveryModel,
           tools: [ToolDefinition.make({ name: "write", description: "Write a file", inputSchema: { type: "object" } })],
         }),
       ).pipe(
@@ -568,11 +572,97 @@ describe("OpenAI-compatible Chat route", () => {
 
       // Recovery executes the call but leaves the model text untouched, including the embedded JSON.
       expect(response.text).toBe('Sure. Writing the file:{"name":"write","arguments":{"path":"hello.txt","content":"hi"}}')
-      expect(response.toolCalls).toMatchObject([
-        { id: "recovered-1", name: "write", input: { path: "hello.txt", content: "hi" } },
-      ])
+      expect(response.toolCalls).toHaveLength(1)
+      expect(response.toolCalls[0]).toMatchObject({ name: "write", input: { path: "hello.txt", content: "hi" } })
+      expect(response.toolCalls[0]!.id.startsWith("recovered-")).toBe(true)
       const types = response.events.map((event) => event.type)
       expect(types.indexOf("tool-call")).toBeLessThan(types.indexOf("step-finish"))
+    }),
+  )
+
+  it.effect("recovers `tool_name` keyed calls", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          model: recoveryModel,
+          tools: [ToolDefinition.make({ name: "write", description: "Write a file", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: '{"tool_name":"write","arguments":{"path":"a"}}' }),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toHaveLength(1)
+      expect(response.toolCalls[0]).toMatchObject({ name: "write", input: { path: "a" } })
+    }),
+  )
+
+  it.effect("leaves text naming an unoffered tool alone", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          model: recoveryModel,
+          tools: [ToolDefinition.make({ name: "write", description: "Write a file", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              // Not a tool call at all, like personalities someone might record as `{"name": ...}` JSON.
+              deltaChunk({ content: '{"name":"John","input":{"age":3}}' }),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toHaveLength(0)
+    }),
+  )
+
+  it.effect("does not recover without opting in", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "write", description: "Write a file", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: '{"name":"write","arguments":{"path":"hello.txt"}}' }),
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toHaveLength(0)
+    }),
+  )
+
+  it.effect("gives recovered calls unique ids", () =>
+    Effect.gen(function* () {
+      const recover = LLMClient.generate(
+        LLMRequest.update(request, {
+          model: recoveryModel,
+          tools: [ToolDefinition.make({ name: "write", description: "Write a file", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(sseEvents(deltaChunk({ content: '{"name":"write","arguments":{}}' }), deltaChunk({}, "stop"))),
+        ),
+      )
+      const [first, second] = yield* Effect.all([recover, recover], { concurrency: 2 })
+
+      expect(first.toolCalls[0]!.id.startsWith("recovered-")).toBe(true)
+      expect(first.toolCalls[0]!.id).not.toBe(second.toolCalls[0]!.id)
     }),
   )
 
@@ -580,6 +670,7 @@ describe("OpenAI-compatible Chat route", () => {
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         LLMRequest.update(request, {
+          model: recoveryModel,
           tools: [ToolDefinition.make({ name: "write", description: "Write a file", inputSchema: { type: "object" } })],
         }),
       ).pipe(

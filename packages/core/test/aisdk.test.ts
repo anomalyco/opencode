@@ -1222,6 +1222,12 @@ it.effect("falls back to the status alone for malformed response bodies", () =>
 
 const tool = (name: string) => ({ name, description: `find ${name}`, inputSchema: {} })
 
+// Text-embedded tool call recovery is opt-in per model, so recovery tests request the compatible flag.
+const recovering = (packageName: string): Model.RuntimeInfo => ({
+  ...model(packageName),
+  compatibility: { recoverTextToolCalls: true },
+})
+
 it.effect("recovers tool calls a provider emitted as plain text", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
@@ -1242,14 +1248,18 @@ it.effect("recovers tool calls a provider emitted as plain text", () =>
       }
     })
 
-    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const resolved = yield* aisdk.model(recovering("@ai-sdk/gateway"))
     const response = yield* LLMClient.generate(
       LLM.request({ model: resolved, prompt: "Think", tools: [tool("read")] }),
     ).pipe(Effect.provide(client))
 
-    expect(response.toolCalls).toMatchObject([
-      { type: "tool-call", id: "recovered-1", name: "read", input: { path: "pixel.png" } },
-    ])
+    expect(response.toolCalls).toHaveLength(1)
+    expect(response.toolCalls[0]).toMatchObject({
+      type: "tool-call",
+      name: "read",
+      input: { path: "pixel.png" },
+    })
+    expect(response.toolCalls[0]!.id.startsWith("recovered-")).toBe(true)
   }),
 )
 
@@ -1270,14 +1280,17 @@ it.effect("recovers string-encoded arguments", () =>
       }
     })
 
-    const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
+    const resolved = yield* aisdk.model(recovering("@ai-sdk/anthropic"))
     const response = yield* LLMClient.generate(
       LLM.request({ model: resolved, prompt: "Think", tools: [tool("lookup")] }),
     ).pipe(Effect.provide(client))
 
-    expect(response.toolCalls).toMatchObject([
-      { type: "tool-call", id: "recovered-1", name: "lookup", input: { query: "Effect" } },
-    ])
+    expect(response.toolCalls).toHaveLength(1)
+    expect(response.toolCalls[0]).toMatchObject({
+      type: "tool-call",
+      name: "lookup",
+      input: { query: "Effect" },
+    })
   }),
 )
 
@@ -1299,14 +1312,17 @@ it.effect("recovers arguments carrying javascript-style escapes", () =>
       }
     })
 
-    const resolved = yield* aisdk.model(model("@ai-sdk/anthropic"))
+    const resolved = yield* aisdk.model(recovering("@ai-sdk/anthropic"))
     const response = yield* LLMClient.generate(
       LLM.request({ model: resolved, prompt: "Think", tools: [tool("edit")] }),
     ).pipe(Effect.provide(client))
 
-    expect(response.toolCalls).toMatchObject([
-      { type: "tool-call", id: "recovered-1", name: "edit", input: { newString: "print('It's a draw!')" } },
-    ])
+    expect(response.toolCalls).toHaveLength(1)
+    expect(response.toolCalls[0]).toMatchObject({
+      type: "tool-call",
+      name: "edit",
+      input: { newString: "print('It's a draw!')" },
+    })
   }),
 )
 
@@ -1329,7 +1345,7 @@ it.effect("keeps streamed tool parts even when text quotes a tool call", () =>
       }
     })
 
-    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const resolved = yield* aisdk.model(recovering("@ai-sdk/gateway"))
     const response = yield* LLMClient.generate(
       LLM.request({ model: resolved, prompt: "Think", tools: [tool("read")] }),
     ).pipe(Effect.provide(client))
@@ -1356,7 +1372,7 @@ it.effect("does not recover tool calls without offered tools", () =>
       }
     })
 
-    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const resolved = yield* aisdk.model(recovering("@ai-sdk/gateway"))
     const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Think" })).pipe(
       Effect.provide(client),
     )

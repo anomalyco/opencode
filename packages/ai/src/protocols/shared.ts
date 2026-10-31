@@ -1,5 +1,5 @@
 import { Tool } from "@opencode/schema/tool"
-import { Effect, Option, Predicate, Schema, SchemaGetter, SchemaTransformation } from "effect"
+import { Effect, Option, Predicate, Schema, SchemaGetter, SchemaTransformation, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/http"
 import { Media } from "../media.js"
 import {
@@ -460,21 +460,25 @@ function compressBody(text: string, encoding: RequestEncoding | undefined) {
 
 /**
  * Some providers, notably local servers without native tool-call streaming (e.g. OpenVINO Model Server, Ollama),
- * emit tool calls as model text instead of tool stream parts. When tools were offered but the step streamed no tool
- * part, the step boundary synthesizes the calls embedded in the accumulated text so downstream consumers execute
- * them like provider-emitted calls.
+ * emit tool calls as model text instead of tool stream parts. When a model's `recoverTextToolCalls` compatibility is
+ * set and the step streamed no tool part, the step boundary synthesizes the calls embedded in the accumulated text so
+ * downstream consumers execute them like provider-emitted calls. Names are filtered to the offered tools, so text
+ * merely quoting a call shape, or naming an unoffered tool, is left alone.
  */
 const TOOL_CALL_TEXT_PATTERN = /"(?:tool_)?name"\s*:\s*"([^"]+)"\s*,\s*"(?:arguments|parameters|input)"\s*:\s*/g
 
 const decodeJsonText = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 export const recoverToolCalls = (text: string): ReadonlyArray<Extract<LLMEvent, { type: "tool-call" }>> => {
-  if (!text.includes(`"name"`)) return []
+  if (!/"(?:tool_)?name"/.test(text)) return []
   const calls: Extract<LLMEvent, { type: "tool-call" }>[] = []
   for (const match of text.matchAll(TOOL_CALL_TEXT_PATTERN)) {
     const input = recoverToolInput(text, (match.index ?? 0) + match[0].length)
     if (input === undefined) continue
-    calls.push(LLMEvent.toolCall({ id: `recovered-${calls.length + 1}`, name: match[1]!, input }))
+    // The id repeats in provider-bound history on multi-step streams, so it must never collide across steps.
+    calls.push(
+      LLMEvent.toolCall({ id: `recovered-${crypto.randomUUID().replaceAll("-", "")}`, name: match[1]!, input }),
+    )
   }
   return calls
 }
@@ -532,20 +536,30 @@ function jsonObjectExtent(text: string, start: number): string | undefined {
 /**
  * Per-step scanner that returns events a consumer must publish ahead of each event. Text accumulates per fragment
  * (following the authoritative `text-end` replacement semantics), and a `step-finish` after no tool part yields the
- * recovered tool calls so they precede the step settlement. Publish only what `step` returns plus the event itself.
+ * recovered tool calls — filtered to the offered tools — so they precede the step settlement. Publish only what `step`
+ * returns plus the event itself. Only defined when the model's compatibility opts into `recoverTextToolCalls` with
+ * tools offered.
  */
 export interface ToolCallRecovery {
   step: (event: LLMEvent) => ReadonlyArray<LLMEvent>
 }
 
 export const toolCallRecovery = (request: LLMRequest): ToolCallRecovery | undefined => {
+  if (request.model.compatibility?.recoverTextToolCalls !== true) return undefined
   if (request.tools.length === 0 || request.toolChoice?.type === "none") return undefined
+  const toolNames = new Set(flattenTools(request.tools).map((tool) => tool.name))
   const fragments = new Map<string, string[]>()
-  const order: string[] = []
+  let order: string[] = []
   let toolSeen = false
   return {
     step: (event) => {
       switch (event.type) {
+        case "step-start": {
+          fragments.clear()
+          order = []
+          toolSeen = false
+          return []
+        }
         case "text-delta": {
           if (!fragments.has(event.id)) order.push(event.id)
           const fragment = fragments.get(event.id) ?? []
@@ -566,7 +580,7 @@ export const toolCallRecovery = (request: LLMRequest): ToolCallRecovery | undefi
         case "step-finish": {
           if (toolSeen) return []
           const text = order.map((id) => (fragments.get(id) ?? []).join("")).join("")
-          return recoverToolCalls(text)
+          return recoverToolCalls(text).filter((call) => toolNames.has(call.name))
         }
         default:
           return []
@@ -574,5 +588,17 @@ export const toolCallRecovery = (request: LLMRequest): ToolCallRecovery | undefi
     },
   }
 }
+
+/** Publishes recovered tool-call events ahead of the events the stream emits, then each event itself. */
+export const toolCallRecoveryStream = <E, R>(
+  stream: Stream.Stream<LLMEvent, E, R>,
+  recovery: ToolCallRecovery | undefined,
+): Stream.Stream<LLMEvent, E, R> =>
+  recovery === undefined
+    ? stream
+    : stream.pipe(
+        Stream.mapEffect((event) => Effect.succeed([...recovery.step(event), event])),
+        Stream.flatMap(Stream.fromIterable),
+      )
 
 export * as ProviderShared from "./shared.js"

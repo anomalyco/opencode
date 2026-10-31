@@ -236,6 +236,8 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   supportsThinkingBlockBinding: Schema.optional(Schema.Boolean),
   /** Supports per-message effort updates. Overrides model-ID detection. */
   supportsEffortUpdates: Schema.optional(Schema.Boolean),
+  /** Recover tool calls the model emitted as assistant text, for hosts without native tool-call streams (e.g. local servers). Recovery is opt-in and filters recovered names to the offered tools. */
+  recoverTextToolCalls: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace LanguageModelCompatibility {

@@ -409,8 +409,13 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     model: (input) =>
       LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
-    streamPrepared: (prepared, _request, _runtime, options) =>
-      streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
+    streamPrepared: (prepared, request, _runtime, options) =>
+      // Text-embedded tool calls are recovered at the step boundary when the model opts in, using the same
+      // shared scanner the native routes ride.
+      ProviderShared.toolCallRecoveryStream(
+        streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
+        ProviderShared.toolCallRecovery(request),
+      ),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,
@@ -709,14 +714,7 @@ function metadataProviderOptions(input: ProviderMetadata | undefined): SharedV3P
 }
 
 function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions, http?: HttpMiddleware) {
-  const state: StreamState = {
-    step: 0,
-    toolNames: {},
-    open: {},
-    toolSeen: false,
-    hasTools: (options.tools ?? []).length > 0 && options.toolChoice?.type !== "none",
-    text: [],
-  }
+  const state: StreamState = { step: 0, toolNames: {}, open: {} }
   return Stream.concat(
     Stream.make(LLMEvent.stepStart({ index: state.step })),
     Stream.unwrap(
@@ -748,12 +746,6 @@ type StreamState = {
   step: number
   toolNames: Record<string, string>
   open: Partial<Record<Fragment, string>>
-  /** Whether a tool part was observed in the current step, which suppresses text-embedded tool call recovery. */
-  toolSeen: boolean
-  /** Whether the request offered tools at all, since recovery is meaningless for tool-less requests. */
-  hasTools: boolean
-  /** Accumulated text of the current step, used to recover tool calls some providers emit as plain text. */
-  text: string[]
 }
 
 function streamPartEvents(
@@ -771,7 +763,6 @@ function streamPartEvents(
     case "text-start":
       return Effect.succeed(openFragment(state, "text", event.id, providerMetadata(event.providerMetadata)))
     case "text-delta":
-      state.text.push(event.delta)
       return Effect.succeed([
         ...openFragment(state, "text", event.id),
         LLMEvent.textDelta({
@@ -796,7 +787,6 @@ function streamPartEvents(
     case "reasoning-end":
       return Effect.succeed(closeFragment(state, "reasoning", event.id, providerMetadata(event.providerMetadata)))
     case "tool-input-start":
-      state.toolSeen = true
       state.toolNames[event.id] = event.toolName
       return Effect.succeed([
         LLMEvent.toolInputStart({
@@ -819,7 +809,6 @@ function streamPartEvents(
         }),
       ])
     case "tool-call":
-      state.toolSeen = true
       state.toolNames[event.toolCallId] = event.toolName
       return ProviderShared.parseToolInput("aisdk", event.toolName, event.input).pipe(
         Effect.map((input) => [
@@ -854,14 +843,8 @@ function streamPartEvents(
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
       ])
-    case "finish": {
-      // The step boundary is the recovery point: only here is it certain that the whole step streamed no tool parts
-      // while the provider was offered tools, so text-embedded calls are synthesized ahead of the step settlement.
-      const recovered = recoverToolCalls(state)
-      state.toolSeen = false
-      state.text = []
+    case "finish":
       return Effect.succeed([
-        ...recovered,
         LLMEvent.stepFinish({
           index: state.step++,
           reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
@@ -874,7 +857,6 @@ function streamPartEvents(
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
       ])
-    }
     case "error":
       return Effect.fail(llmError(event.error, "read"))
   }
@@ -901,14 +883,6 @@ function closeFragment(state: StreamState, kind: Fragment, id: string, providerM
 
 function fragmentEnd(kind: Fragment, id: string, providerMetadata?: ProviderMetadata) {
   return kind === "text" ? LLMEvent.textEnd({ id, providerMetadata }) : LLMEvent.reasoningEnd({ id, providerMetadata })
-}
-
-// Some providers, notably local Ollama models without native tool-call streaming, emit tool calls as model text
-// instead of tool stream parts. When tools were offered but no tool part arrived in the whole step, the finish boundary
-// synthesizes the calls from the step's accumulated text so downstream consumers execute them like provider calls.
-function recoverToolCalls(state: StreamState): ReadonlyArray<LLMEvent> {
-  if (!state.hasTools || state.toolSeen) return []
-  return ProviderShared.recoverToolCalls(state.text.join(""))
 }
 
 function usage(input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["usage"]): UsageInput | undefined {
