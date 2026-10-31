@@ -424,7 +424,6 @@ for (const model of [
             input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "original" }] }],
             instructions: "system",
             include: ["reasoning.encrypted_content"],
-            ...(model.id === "gpt-5.3-codex" ? { reasoning: { effort: "medium", summary: "auto" } } : {}),
           })
           return respond(
             JSON.stringify({

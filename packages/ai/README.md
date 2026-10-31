@@ -592,8 +592,8 @@ For server-managed history, override `store: true, include: []` and send the res
 `http: { body: { previous_response_id: responseID } }` with only the new input.
 Chat Completions redacts private reasoning and cannot carry it between calls.
 Responses and Chat support only `toolChoice: "auto"` (the default). Messages also accepts `"none"`;
-its documented forced `"any"` choice currently returns HTTP 400. Messages defaults to adaptive thinking
-with `display: "omitted"`, preserving encrypted `redacted_thinking` in `response.message`. Use
+its documented forced `"any"` choice currently returns HTTP 400. Without a `thinking` option, the Messages API
+thinks adaptively and returns encrypted `redacted_thinking`, preserved in `response.message`. Use
 `providerOptions: { effort: "low" }` for depth or `thinking: { type: "enabled", budgetTokens: 1024 }`
 for budget compatibility (with `generation.maxTokens > 1024`).
 

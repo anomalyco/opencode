@@ -2176,22 +2176,21 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("requests encrypted reasoning by default for GPT-5 reasoning models", () =>
+  it.effect("requests encrypted reasoning without reasoning settings by default for GPT-5 models", () =>
     Effect.gen(function* () {
-      // The native OpenAI facade configures GPT-5 stateless (store: false) with
-      // reasoningSummary: "auto" by default. Without `include`, a follow-up
-      // turn cannot replay reasoning state, so the facade also opts into
-      // `reasoning.encrypted_content` automatically.
+      // The native OpenAI facade configures GPT-5 stateless (store: false).
+      // Without `include`, a follow-up turn cannot replay reasoning state, so
+      // the facade opts into `reasoning.encrypted_content` automatically.
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-5.2"),
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-5.4"),
           prompt: "hi",
         }),
       )
 
       expect(prepared.body.store).toBe(false)
       expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
-      expect(prepared.body.reasoning).toEqual({ effort: "medium", summary: "auto" })
+      expect(prepared.body.reasoning).toBeUndefined()
     }),
   )
 

@@ -304,6 +304,22 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("sends no reasoning settings by default for GPT-5 models", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-5.4"),
+          prompt: "Hello",
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      )
+
+      expect(prepared.body.store).toBe(false)
+      expect(prepared.body).not.toHaveProperty("reasoning_effort")
+      expect(prepared.body).not.toHaveProperty("reasoning")
+    }),
+  )
+
   it.effect("keeps valid Chat options when a sibling option is malformed", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
