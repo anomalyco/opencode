@@ -6,7 +6,9 @@ import {
   delivered,
   durableEvent,
   ephemeralEvent,
+  failed,
   permissionAsked,
+  rpcError,
   startSession,
   succeeded,
   textDelta,
@@ -161,6 +163,54 @@ describe("acp turn events over the wire", () => {
       { sessionID: acp.sessionId, formID: "frm_question", message: ACPElicitation.UnshownQuestionMessage },
     ])
     expect(acp.elicitations).toEqual([])
+  })
+
+  test("reports a lost outcome when the session goes idle without a terminal event", async () => {
+    const idle = Promise.withResolvers<void>()
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), textDelta(sessionID, "msg_held", "working")],
+      wait: () => idle.promise,
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "hello")
+    await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk")
+    await acp.until(() => acp.server.waits.length === 1, "the session idle poll")
+    expect(acp.server.waits).toEqual([acp.sessionId])
+    idle.resolve()
+    expect(await rpcError(prompt)).toMatchObject({
+      code: -32603,
+      message: expect.stringContaining("went idle"),
+    })
+  })
+
+  test("reports the outcome that lands after the session goes idle", async () => {
+    const idle = Promise.withResolvers<void>()
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), textDelta(sessionID, "msg_held", "working")],
+      wait: () => idle.promise,
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "hello")
+    await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk")
+    await acp.until(() => acp.server.waits.length === 1, "the session idle poll")
+    idle.resolve()
+    acp.server.send(failed(acp.sessionId, { type: "provider.rate-limit", message: "slow down" }))
+
+    expect(await rpcError(prompt)).toMatchObject({
+      code: -32603,
+      message: expect.stringContaining("slow down"),
+    })
+  })
+
+  test("reports an execution failure that arrives before the prompt is delivered", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID }) => [failed(sessionID, { type: "provider.rate-limit", message: "slow down" })],
+    })
+
+    expect(await rpcError(acp.prompt(acp.sessionId, "hello"))).toMatchObject({
+      code: -32603,
+      message: expect.stringContaining("slow down"),
+    })
   })
 })
 
