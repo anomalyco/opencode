@@ -302,7 +302,16 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
-      const proc = launch(command.command, command.args, opts)
+      // A spawn refusal (e.g. EPERM from uv_spawn) throws synchronously; only the async `error` event
+      // reaches the typed handler below, so map the throw through the same PlatformError here — otherwise
+      // it escapes the callback as a defect and no caller's typed-failure handling sees it.
+      let proc: NodeChildProcess.ChildProcess
+      try {
+        proc = launch(command.command, command.args, opts)
+      } catch (err) {
+        resume(Effect.fail(toPlatformError("spawn", toError(err), command)))
+        return Effect.void
+      }
       let settle = () => {}
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
