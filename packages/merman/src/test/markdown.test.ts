@@ -175,7 +175,7 @@ flowchart LR
   expect(captureCharFrame()).toContain("flowchart LR")
 })
 
-test("keeps the last valid Mermaid diagram while a fence is streaming", async () => {
+test("keeps the last valid Mermaid diagram for incomplete streams and falls back for cycles", async () => {
   const testRenderer = await setup({ width: 80, height: 12 })
   const markdown = new MarkdownRenderable(renderer, {
     id: "markdown-streaming-mermaid",
@@ -184,6 +184,7 @@ flowchart LR
   A[Stable] --> B[Previous]
 \`\`\``,
     syntaxStyle,
+    treeSitterClient,
     streaming: true,
     internalBlockMode: "top-level",
     renderNode: createMermaidMarkdownRenderer(renderer),
@@ -209,6 +210,30 @@ flowchart LR
 \`\`\``
   await renderMarkdown(markdown, testRenderer.renderOnce)
   expect(testRenderer.captureCharFrame()).toContain("Current")
+
+  const cyclic = `flowchart TD
+subgraph A
+subgraph A
+Z[Later]
+end
+end`
+  const content = (source: string) => ["Before", "", "```mermaid", source, "```", "", "After"].join("\n")
+  const sourceFrame = () =>
+    testRenderer
+      .captureCharFrame()
+      .split("\n")
+      .map((line) => line.trim())
+      .join("\n")
+  markdown.content = content(cyclic)
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+  expect(sourceFrame()).toContain(cyclic)
+  expect(sourceFrame()).toContain("Before")
+  expect(sourceFrame()).toContain("After")
+  expect(sourceFrame()).not.toContain("Current")
+
+  markdown.content = content(cyclic + "\nZ -->")
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+  expect(sourceFrame()).toContain(cyclic + "\nZ -->")
 })
 
 test("renders the valid prefix of an interrupted Mermaid fence", async () => {
