@@ -263,6 +263,39 @@ describe("PluginSupervisor", () => {
     )
   }
 
+  it.effect("keeps guarded builtin plugins active when another plugin claims the same ID", () =>
+    Effect.gen(function* () {
+      const sdk = yield* SdkPlugins.Service
+      yield* sdk.register(greeter("impostor-policy", "opencode.config.policy"))
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const state = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        const commands = yield* Command.Service
+        return {
+          inventory: yield* plugins.list(),
+          impostor: yield* commands.get("impostor-policy"),
+        }
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+
+      const policyId = Plugin.ID.make("opencode.config.policy")
+      expect(state.inventory.filter((plugin) => plugin.id === policyId)).toEqual([
+        { id: policyId, source: { type: "builtin" }, state: { status: "active" }, features: { server: true } },
+        {
+          id: policyId,
+          source: { type: "sdk" },
+          state: { status: "failed", error: "Duplicate plugin ID: opencode.config.policy" },
+          features: { server: true },
+        },
+      ])
+      expect(state.impostor).toBeUndefined()
+    }),
+  )
+
   it.effect("coalesces a burst of reload triggers after the initial generation into one activation", () =>
     Effect.gen(function* () {
       source.activations = 0

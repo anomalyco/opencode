@@ -66,7 +66,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     )
     if ("blocked" in plugin) {
       const previous = packages.get(operation.target)
-      if (previous) enabled.delete(previous.id)
+      if (previous && !PluginInternal.guarded.has(previous.id)) enabled.delete(previous.id)
       packages.delete(operation.target)
       failures.delete(operation.target)
       continue
@@ -90,7 +90,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     }
     failures.delete(operation.target)
     const previous = packages.get(operation.target)
-    if (previous) enabled.delete(previous.id)
+    if (previous && !PluginInternal.guarded.has(previous.id)) enabled.delete(previous.id)
     packages.set(operation.target, plugin)
     enabled.add(plugin.id)
   }
@@ -102,11 +102,20 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   ]
   // Registry activation dies on a duplicate ID, which would drop the whole generation including builtins.
   // Keep the first occurrence in boot order and report later ones like any other plugin setup failure.
-  const duplicate = (plugin: Plugin.Generation, index: number) =>
-    ordered.findIndex((other) => other.id === plugin.id) !== index
+  // Guarded internal plugins live in `post` so their transforms run last, but must still win over
+  // earlier packages or SDK plugins that claim the same ID.
+  const guarded = (plugin: Plugin.Generation) =>
+    plugin.source?.type === "builtin" && PluginInternal.guarded.has(plugin.id)
+  const winner = (id: string) => {
+    const index = ordered.findIndex((other) => other.id === id && guarded(other))
+    return index === -1 ? ordered.findIndex((other) => other.id === id) : index
+  }
+  const duplicate = (plugin: Plugin.Generation, index: number) => winner(plugin.id) !== index
+  const kept = ordered.filter((plugin, index) => !duplicate(plugin, index))
+  const active = new Set(kept)
   return {
-    plugins: ordered.filter((plugin, index) => !duplicate(plugin, index)),
-    packages: new Map([...packages].filter(([, plugin]) => enabled.has(plugin.id))),
+    plugins: kept,
+    packages: new Map([...packages].filter(([, plugin]) => active.has(plugin))),
     failures: [
       ...failures.values(),
       ...ordered.filter(duplicate).map((plugin) => ({
