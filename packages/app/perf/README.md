@@ -40,9 +40,10 @@ strobe report experiment <exp_…> --open
 
 - `build` and `serve` are how strobe builds and serves the web app for each variant.
 - `apps` are the desktop profiles. Strobe gives every launch a private home; a profile adds what the desktop needs on
-  top, following `packages/desktop/script/bench-startup.ts`: its own database and config, a private service port, the
-  user's service registration as guarded state (strobe stops if it changes), and the `opencode://` key, which strobe
-  saves and restores around each launch. The Dev channel has no profile on purpose. A source build is packed with
+  top, following `packages/desktop/script/bench-startup.ts`: its own database and config, a private service port, a
+  file where the updater keeps its download cache (otherwise an older channel downloads the next release mid-run and
+  looks like it idles at 10% CPU), the user's service registration as guarded state (strobe stops if it changes), and
+  the `opencode://` key, which strobe saves and restores around each launch. The Dev channel has no profile on purpose. A source build is packed with
   `OPENCODE_CHANNEL=beta` or `prod` and passed as `exe:<path>`.
 
 ## Write a case

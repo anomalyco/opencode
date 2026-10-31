@@ -8,13 +8,18 @@
         "macos": "/Applications/OpenCode.app/Contents/MacOS/OpenCode"
       },
       "unset": ["OPENCODE_*", "OTEL_*", "SENTRY_*"],
-      "offline": true,
       "env": {
         "OPENCODE_DB": "{home}/.local/share/opencode/opencode.db",
-        "OPENCODE_CONFIG_DIR": "{home}/.config/opencode"
+        "OPENCODE_CONFIG_DIR": "{home}/.config/opencode",
+        "HTTP_PROXY": "http://127.0.0.1:9",
+        "HTTPS_PROXY": "http://127.0.0.1:9",
+        "NO_PROXY": "localhost,127.0.0.1,::1"
       },
       "dirs": [".local/share/opencode"],
-      "files": { ".config/opencode/service.json": { "port": "{port}" } },
+      "files": {
+        ".config/opencode/service.json": { "port": "{port}" },
+        "AppData/Local/@opencodedesktop-updater": "a file, not a folder: the updater cannot stage a download while strobe measures"
+      },
       "guard": [{ "file": "~/.local/state/opencode/service.json", "pid": "pid", "url": "url" }],
       "protocols": ["opencode"]
     },
