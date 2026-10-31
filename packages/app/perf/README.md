@@ -46,6 +46,14 @@ strobe query <rec_…> heap              # live objects by class, retained sizes
 strobe query <base rec>..<head rec> heap   # which classes grew or shrank
 ```
 
+Is something leaking? Three heap snapshots over a recording (start, middle, end); the suspects are objects from the
+first half that are still alive at the end, with what keeps them alive:
+
+```sh
+strobe record app:opencode --probes memory --for 60s
+strobe query <rec_…> leaks
+```
+
 Every timed pair also records `main.script`, `main.style` and `main.layout`, so "where main-thread time went" has
 intervals too. Names and paths come from the build's source maps (`sourcemap: true` in the app's Vite config).
 
