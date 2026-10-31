@@ -684,7 +684,7 @@ test("Extensions lists open config files and skills in a side tab and start setu
     mcp: [{ name: "atlas-search", status: { status: "connected" } }],
     plugins: [],
     skills: [
-      { id: "opencode", name: "OpenCode", path: "/builtin/opencode.md", content: "# Built-in OpenCode guide" },
+      { id: "opencode", name: "OpenCode", path: "skill://opencode/SKILL.md", content: "# Built-in OpenCode guide" },
       { id: "release-notes", name: "release-notes", path: skill, content: "Release notes" },
     ],
     configEntries: [
@@ -699,12 +699,12 @@ test("Extensions lists open config files and skills in a side tab and start setu
     fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
   })
 
-  await page.route(/\/api\/fs\/read\/opencode\.md(\?|$)/, (route) => {
+  await page.route(/\/api\/fs\/read\/SKILL\.md(\?|$)/, (route) => {
     builtinReads += 1
 
     return route.fulfill({
       status: 404,
-      json: { message: "Location not found: /builtin" },
+      json: { message: "Location not found: skill://opencode" },
       headers: cors,
     })
   })
@@ -728,7 +728,7 @@ test("Extensions lists open config files and skills in a side tab and start setu
   await row("Skills").hover()
   await list("Skills").getByRole("button", { name: "OpenCode", exact: true }).click()
   await expect(summary).toBeHidden()
-  await expect(page.getByRole("tab", { name: "opencode.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByRole("tab", { name: "SKILL.md", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(page.getByRole("heading", { name: "Built-in OpenCode guide", exact: true })).toBeVisible()
   await expect(page.getByText("Failed to load file", { exact: true })).toHaveCount(0)
   expect(builtinReads).toBe(0)
@@ -737,7 +737,8 @@ test("Extensions lists open config files and skills in a side tab and start setu
   await row("Skills").hover()
   await list("Skills").getByRole("button", { name: "release-notes", exact: true }).click()
   await expect(summary).toBeHidden()
-  await expect(page.getByRole("tab", { name: "SKILL.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByRole("tab", { name: "SKILL.md", selected: true, exact: true })).toBeVisible()
+  await expect(page.getByText("contents:.opencode/skills/release-notes/SKILL.md", { exact: true })).toBeVisible()
 
   // An empty list offers a draft session in the global configuration's directory, its prompt filled in.
   await trigger.click()
