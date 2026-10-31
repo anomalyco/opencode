@@ -2462,18 +2462,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
@@ -2695,18 +2688,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }
