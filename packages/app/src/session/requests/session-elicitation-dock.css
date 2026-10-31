@@ -1,4 +1,8 @@
 [data-component="session-elicitation-dock"] {
+  [data-slot="question-text"] {
+    white-space: pre-wrap;
+  }
+
   [data-slot="elicitation-fields"] {
     display: flex;
     flex-direction: column;

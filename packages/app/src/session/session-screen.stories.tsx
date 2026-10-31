@@ -188,7 +188,12 @@ export const McpElicitationRequest = {
           id: "frm_elicitation_preview",
           sessionID: "global",
           title: "release is requesting input",
-          metadata: { kind: "mcp-elicitation", server: "release", message: "Publish v2.4.0 to the selected channel?" },
+          metadata: {
+            kind: "mcp-elicitation",
+            server: "release",
+            message:
+              "Publish v2.4.0 to the selected channel?\n\n  npm publish --tag beta\n  npm view my-package version\n\nRelease notes: **beta** <release>\nhttps://example.com/releases/v2.4.0/approval?token=0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz",
+          },
           fields: [
             { key: "approve", type: "boolean", title: "Approve publish", required: true },
             {
