@@ -85,6 +85,22 @@ for await (const event of events) {
 }
 ```
 
+`input` and structured-output `schema` also take a [Standard Schema](https://standardschema.dev), such as one from Zod
+4.2+ or ArkType, which validates and types the arguments. The JSON Schema sent to the model comes from the schema's
+[Standard JSON Schema](https://standardschema.dev/json-schema) export; a schema without one (a plain Valibot schema;
+wrap it in `toStandardJsonSchema` from `@valibot/to-json-schema`) throws when the tool is built:
+
+```ts
+import { z } from "zod"
+
+const weather = tool({
+  name: "weather",
+  description: "Get the weather.",
+  input: z.object({ city: z.string() }),
+  execute: ({ city }) => getWeather(city),
+})
+```
+
 ### Freeform tools
 
 A tool with exactly one required string parameter can set `freeform`, so the model writes that parameter as raw text

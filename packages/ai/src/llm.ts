@@ -1,4 +1,4 @@
-import { Effect, JsonSchema, Schema, Stream } from "effect"
+import { Effect, Stream } from "effect"
 import { tryRequest } from "./media-model.js"
 import { LLMClient, Service, type StreamOptions } from "./route/client.js"
 import {
@@ -20,7 +20,7 @@ import {
   type ToolEntryInput,
   withPartial,
 } from "./schema/index.js"
-import { tool, type ExecutableTool, type Tool, type ToolSchema } from "./tool.js"
+import { tool, type ExecutableTool, type Tool, type ToolInput, type ToolInputType } from "./tool.js"
 import { ToolRuntime } from "./tool-runtime.js"
 
 /** Input accepted by `LLM.request`, normalized into the canonical `LLMRequest` class. */
@@ -40,10 +40,10 @@ export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageM
   readonly http?: HttpOptions.Input
 }
 
-/** An Effect Schema decodes and types `object`; a raw JSON Schema leaves it `unknown`. */
-export type OutputSchema = ToolSchema<any> | JsonSchema.JsonSchema
+/** An Effect Schema or a Standard Schema with a JSON Schema export validates and types `object`; a raw JSON Schema leaves it `unknown`. */
+export type OutputSchema = ToolInput
 
-export type OutputType<S extends OutputSchema> = S extends Schema.Top ? Schema.Schema.Type<S> : unknown
+export type OutputType<S extends OutputSchema> = ToolInputType<S>
 
 export type ObjectInput<
   S extends OutputSchema,
