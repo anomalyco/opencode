@@ -1,5 +1,6 @@
 import type { LocationGetOutput, ModelRef, OpenCodeClient, SessionInfo } from "@opencode/client/promise"
 import { Model } from "@opencode/schema/model"
+import path from "node:path"
 import { errorMessage } from "./util/error"
 
 const SESSION_PAGE_LIMIT = 50
@@ -149,7 +150,14 @@ async function startLocation(input: {
     .catch((error) => {
       throw new SessionTargetMutationError(error)
     })
-  return { directory: created.directory }
+  // Start in the same subfolder of the new worktree, or its root when that folder is not checked in.
+  const subfolder = path.relative(base.project.directory, base.directory)
+  if (!subfolder || subfolder.startsWith("..")) return { directory: created.directory }
+  const directory = path.join(created.directory, subfolder)
+  return resolveLocation(input.client, { directory }, input.signal).then(
+    () => ({ directory }),
+    () => ({ directory: created.directory }),
+  )
 }
 
 export function findSession(client: OpenCodeClient, sessionID: string, signal?: AbortSignal) {
