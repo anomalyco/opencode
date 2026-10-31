@@ -7,7 +7,12 @@ import type { PermissionReply, PermissionRequest } from "@opencode/client"
 import { SplitBorder } from "../../ui/border"
 import { useData } from "../../context/data"
 import { filetype } from "../../util/filetype"
-import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } from "../../util/permission"
+import {
+  permissionAlwaysLines,
+  permissionOptionLabel,
+  permissionPresentation,
+  permissionSessionLines,
+} from "../../util/permission"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig, useCursorStyle } from "../../config"
 import { Keymap } from "../../context/keymap"
@@ -221,9 +226,15 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               instance={props.request.id}
               header={header()}
               body={(option) => (
-                <Show when={option === "always"} fallback={presentationBody()}>
+                <Show when={option === "always" || option === "session"} fallback={presentationBody()}>
                   <box paddingLeft={1} gap={1}>
-                    <For each={permissionAlwaysLines(props.request)}>
+                    <For
+                      each={
+                        option === "session"
+                          ? permissionSessionLines(props.request)
+                          : permissionAlwaysLines(props.request)
+                      }
+                    >
                       {(line, index) => <text fg={index() === 0 ? theme.text.muted : theme.text.base}>{line}</text>}
                     </For>
                   </box>
@@ -233,16 +244,21 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 props.request.save?.length
                   ? {
                       once: permissionOptionLabel("once"),
+                      session: permissionOptionLabel("session"),
                       always: permissionOptionLabel("always"),
                       reject: permissionOptionLabel("reject"),
                     }
-                  : { once: permissionOptionLabel("once"), reject: permissionOptionLabel("reject") }
+                  : {
+                      once: permissionOptionLabel("once"),
+                      session: permissionOptionLabel("session"),
+                      reject: permissionOptionLabel("reject"),
+                    }
               }
               escapeKey="reject"
               fullscreen
               onSelect={(option) => {
-                if (option === "always") {
-                  reply("always")
+                if (option === "always" || option === "session") {
+                  reply(option)
                   return
                 }
                 if (option === "reject") {
