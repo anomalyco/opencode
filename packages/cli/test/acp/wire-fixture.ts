@@ -224,6 +224,7 @@ export function makeSession(
   id: string,
   input: {
     readonly cwd?: string
+    readonly parentID?: string
     readonly agent?: string
     readonly model?: ModelRef
     readonly cost?: number
@@ -233,6 +234,7 @@ export function makeSession(
   return {
     id,
     projectID: "global",
+    ...(input.parentID ? { parentID: input.parentID } : {}),
     ...(input.agent ? { agent: input.agent } : {}),
     ...(input.model ? { model: input.model } : {}),
     cost: input.cost ?? 0,
