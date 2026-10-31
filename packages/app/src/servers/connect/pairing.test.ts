@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { pairPageLink } from "@opencode/util/pairing-link"
 import { bareServerAddress, legacyPairingLink, pairingLink } from "./pairing"
 
 describe("pairing link", () => {
@@ -18,6 +19,14 @@ describe("pairing link", () => {
       urls: ["http://192.168.1.2:49374", "http://100.64.0.3:49374"],
       code: "abc_DEF-123",
     })
+  })
+
+  test("reads every server address from opencode.ai/pair QR links", () => {
+    const urls = ["http://192.168.1.2:49374", "https://r1.example.opentunnel.xyz"]
+
+    expect(pairingLink(pairPageLink({ code: "abc_DEF-123", urls }))).toEqual({ urls, code: "abc_DEF-123" })
+    expect(pairingLink(pairPageLink({ code: "a/b", urls }))).toBeUndefined()
+    expect(pairingLink(pairPageLink({ code: "abc", urls: [] }))).toBeUndefined()
   })
 
   test("rejects other URLs", () => {

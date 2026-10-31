@@ -4,6 +4,7 @@ import { Loader } from "@opencode/ui/loader"
 import { Switch } from "@opencode/ui/switch"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createMemo, createSignal, onCleanup, Show, type Accessor, type JSX } from "solid-js"
+import { pairPageLink } from "@opencode/util/pairing-link"
 import { renderSVG } from "@opencode/util/qr"
 import { usePlugin, type Live, type IpcClient } from "@opencode/plugin/gui"
 import type { Pairing } from "./contract"
@@ -299,12 +300,12 @@ function DialogPairing(props: {
     </Button>
   )
 
-  // The QR code carries the remote address as `opencode pair --remote` prints it, {"code","urls"} JSON, which the
-  // app's scanner reads.
+  // The QR code carries the remote address as `opencode pair --remote` prints it: an https://opencode.ai/pair link,
+  // which the phone's own camera opens in the OpenCode app and the app's scanner reads.
   const qr = createMemo(() => {
     if (!code.isSuccess || !tunnel.isSuccess) return
 
-    return renderSVG(JSON.stringify({ code: code.data.code, urls: [tunnel.data] }), {
+    return renderSVG(pairPageLink({ code: code.data.code, urls: [tunnel.data] }), {
       border: 4,
       blackColor: "currentColor",
       whiteColor: "transparent",
