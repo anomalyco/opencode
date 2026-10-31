@@ -29,7 +29,7 @@ export { ImageClient } from "./image-client.js"
 export { Auth } from "./route/auth.js"
 export { ProviderPackage } from "./provider-package.js"
 export { isContextOverflow, isContextOverflowFailure, isRetryable } from "./provider-error.js"
-export type { Interface as LLMClientShape, LLMClientService } from "./route/client.js"
+export type { LLMClientService } from "./route/client.js"
 export {
   ProtocolID,
   RouteID,
@@ -105,7 +105,6 @@ export {
   InvalidRequestError,
   UnsupportedOperationError,
   ProviderConfigurationError,
-  NoRouteError,
   AuthenticationError,
   RateLimitError,
   QuotaExceededError,
@@ -189,7 +188,7 @@ export type {
 } from "./generation.js"
 export { ToolFailure, emptyInputJsonSchema, toDefinitions, tool } from "./tool.js"
 export { ToolRuntime } from "./tool-runtime.js"
-export type { DispatchResult as ToolDispatchResult, ToolSettlement } from "./tool-runtime.js"
+export type { ToolSettlement } from "./tool-runtime.js"
 export type {
   ExecutableTool,
   Tool,
@@ -201,7 +200,3 @@ export type {
   ToolToModelOutput,
 } from "./tool.js"
 export type { LLM } from "./llm.js"
-export type {
-  Definition as ProviderPackageDefinition,
-  Settings as ProviderPackageSettings,
-} from "./provider-package.js"

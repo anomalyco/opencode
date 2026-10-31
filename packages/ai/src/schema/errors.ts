@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { NonNegativeInt } from "@opencode/schema"
 import { Tool } from "@opencode/schema/tool"
-import { ModelID, ProviderID, RouteID } from "./ids.js"
+import { ProviderID, RouteID } from "./ids.js"
 import type { LLMResponse } from "./events.js"
 
 export const ProviderFailureClassification = Schema.Literals(["context-overflow", "payload-too-large"])
@@ -63,13 +63,6 @@ export class ProviderConfigurationError extends Schema.TaggedError<ProviderConfi
 )("ProviderConfiguration", {
   provider: ProviderID,
   message: Schema.String,
-}) {}
-
-export class NoRouteError extends Schema.TaggedError<NoRouteError>("AI.Error.NoRoute")("NoRoute", {
-  ...ReasonFields,
-  route: RouteID,
-  provider: ProviderID,
-  model: ModelID,
 }) {}
 
 export class AuthenticationError extends Schema.TaggedError<AuthenticationError>("AI.Error.Authentication")(
@@ -147,7 +140,6 @@ export class TimeoutError extends Schema.TaggedError<TimeoutError>("AI.Error.Tim
 export const AIErrorReason = Schema.Union([
   InvalidRequestError,
   UnsupportedOperationError,
-  NoRouteError,
   AuthenticationError,
   RateLimitError,
   QuotaExceededError,

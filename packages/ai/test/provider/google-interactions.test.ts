@@ -134,6 +134,30 @@ describe("Google Interactions", () => {
     }),
   )
 
+  it.effect("classifies plain-string stream error payloads by their message", () =>
+    Effect.gen(function* () {
+      const rateLimited = { event_type: "error", error: "Rate limit exceeded, too many requests" }
+      const rateLimitError = yield* generate(rateLimited).pipe(Effect.flip)
+      expect(rateLimitError.reason).toMatchObject({
+        _tag: "RateLimit",
+        message: "Rate limit exceeded, too many requests",
+        body: JSON.stringify(rateLimited),
+      })
+
+      const overflow = { event_type: "error", error: "prompt is too long" }
+      const overflowError = yield* generate(overflow).pipe(Effect.flip)
+      expect(overflowError.reason).toMatchObject({
+        _tag: "InvalidRequest",
+        message: "prompt is too long",
+        classification: "context-overflow",
+        body: JSON.stringify(overflow),
+      })
+
+      const bare = yield* generate({ event_type: "error" }).pipe(Effect.flip)
+      expect(bare.reason).toMatchObject({ _tag: "UnknownProvider", message: "Google Interactions stream error" })
+    }),
+  )
+
   it.effect("classifies blocked Interactions generations as non-retryable content policy errors", () =>
     Effect.gen(function* () {
       const codes = [

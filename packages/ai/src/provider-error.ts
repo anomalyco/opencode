@@ -75,7 +75,7 @@ export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&
   (patterns.some((pattern) => pattern.test(message)) || /^4(?:00|13)\s*(status code)?\s*\(no body\)/i.test(message))
 
-export const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
+const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
 
 export const isContextOverflowFailure = (failure: unknown) =>
   failure instanceof AIError
@@ -113,7 +113,6 @@ export const isRetryable = (error: AIError) => {
     case "ContentPolicy":
     case "InvalidRequest":
     case "UnsupportedOperation":
-    case "NoRoute":
     case "Timeout":
       return false
     default: {

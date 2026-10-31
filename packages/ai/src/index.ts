@@ -408,7 +408,6 @@ export {
   InvalidRequestError,
   UnsupportedOperationError,
   ProviderConfigurationError,
-  NoRouteError,
   AuthenticationError,
   RateLimitError,
   QuotaExceededError,
