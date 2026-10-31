@@ -948,6 +948,58 @@ Selecting a router model is a drop-in replacement for any other model — OpenCo
 
 ---
 
+### Fikra API
+
+Fikra API is a hosted OpenAI-compatible endpoint that serves open-weight models DeepSeek-first (DeepSeek V4.1 Flash, GLM 5.3, Kimi K3, Qwen 3.8, and more) behind one `/v1`, with per-token pricing. See [Fikra pricing](https://fikraapi.co.ke/pricing) for lane rates.
+
+It is not part of OpenCode's built-in provider list yet, so it loads as a custom provider in your OpenCode config.
+
+1. Head over to [fikraapi.co.ke](https://fikraapi.co.ke), sign in, top up once to activate the account, and create an API key.
+
+2. Export the key so OpenCode can read it:
+
+   ```bash
+   export FIKRA_API_KEY="fk_live_..."
+   ```
+
+3. Add the provider to your OpenCode config:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "fikra": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "Fikra API",
+         "options": {
+           "baseURL": "https://api.fikraapi.co.ke/v1",
+           "apiKey": "{env:FIKRA_API_KEY}"
+         },
+         "models": {
+           "deepseek-v4.1-flash-1017": {
+             "name": "DeepSeek V4.1 Flash 1017",
+             "limit": { "context": 1048576, "output": 393216 }
+           },
+           "deepseek-v4.1-flash": {
+             "name": "DeepSeek V4.1 Flash",
+             "limit": { "context": 1048576, "output": 384000 }
+           },
+           "glm-5.3-flash": { "name": "GLM 5.3 Flash" },
+           "kimi-k3": { "name": "Kimi K3" }
+         }
+       }
+     }
+   }
+   ```
+
+4. Run the `/models` command and pick a Fikra lane like _DeepSeek V4.1 Flash 1017_.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### Fireworks AI
 
 1. Head over to the [Fireworks AI console](https://app.fireworks.ai/), create an account, and click **Create API Key**.
