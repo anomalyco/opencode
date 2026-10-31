@@ -534,7 +534,7 @@ describe("Git capture", () => {
       expect(yield* service.tree.files({ repository, from: before, to: trees[0]! })).toEqual([
         RelativePath.make("a.txt"),
       ])
-      expect((yield* traced(trace)).filter((command) => command === "ls-files").length).toBeLessThanOrEqual(2)
+      expect((yield* traced(trace)).filter((command) => command === "status").length).toBeLessThanOrEqual(2)
     }),
   )
 
@@ -549,7 +549,7 @@ describe("Git capture", () => {
       const first = yield* capture({ maximumUntrackedFileBytes: 4 })
       const trace = path.join(root.path, "trace")
       expect(yield* withEnv({ GIT_TRACE: trace }, () => capture({ maximumUntrackedFileBytes: 4 }))).toBe(first)
-      expect((yield* traced(trace)).toSorted()).toEqual(["diff-files", "ls-files"])
+      expect(yield* traced(trace)).toEqual(["status"])
       const entries = yield* Effect.promise(() =>
         $`git --git-dir ${root.path}/storage ls-tree --name-only ${first}`.text(),
       )
@@ -588,6 +588,56 @@ describe("Git capture", () => {
       expect((yield* Effect.promise(() => fs.readdir(storage))).filter((entry) => entry.startsWith("sharedindex."))).toEqual(
         [],
       )
+    }),
+  )
+
+  it.live("filters a scoped scan by path and moves the store's HEAD to a snapshot after a large change", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      const project = path.join(root.path, "project")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(project)
+        await initRepo(project)
+        await Bun.write(path.join(project, "scope", "deleted.txt"), "deleted\n")
+        await Bun.write(path.join(project, "scope", "kept.txt"), "kept\n")
+        await $`git add . && git commit -q -m initial`.cwd(project).quiet()
+      })
+      const git = yield* Git.Service
+      const source = yield* git.repo.discover(AbsolutePath.make(project))
+      if (!source) throw new Error("Repository not found")
+      const repository = yield* git.repo.create({
+        worktree: source.worktree,
+        gitDirectory: AbsolutePath.make(path.join(root.path, "storage")),
+        seed: source,
+      })
+      const capture = () => git.tree.capture({ repository, scopes: [RelativePath.make("scope")], ignores: source })
+      const before = yield* capture()
+      yield* Effect.promise(async () => {
+        await fs.rm(path.join(project, "scope", "deleted.txt"))
+        await Bun.write(path.join(project, "scope", "with space.txt"), "added\n")
+        await Bun.write(path.join(project, "scope-sibling", "outside.txt"), "outside\n")
+        await Promise.all(
+          Array.from({ length: 1100 }, (_, index) =>
+            Bun.write(path.join(project, "scope", "many", `f${index}.txt`), `${index}\n`),
+          ),
+        )
+      })
+      const after = yield* capture()
+      const files = yield* git.tree.files({ repository, from: before, to: after })
+      expect(files.filter((file) => !file.startsWith("scope/many/"))).toEqual([
+        RelativePath.make("scope/deleted.txt"),
+        RelativePath.make("scope/with space.txt"),
+      ])
+      expect(files).toHaveLength(1102)
+      // Status now sees more than a thousand index entries missing from the unborn HEAD.
+      expect(yield* capture()).toBe(after)
+      const head = yield* Effect.promise(() =>
+        $`git --git-dir ${repository.gitDirectory} rev-parse ${"HEAD^{tree}"}`.text(),
+      )
+      expect(head.trim()).toBe(after)
     }),
   )
 })
