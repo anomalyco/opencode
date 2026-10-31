@@ -62,6 +62,62 @@ describe("shell", () => {
     ])
   })
 
+  test("injects directory pruning preamble when prune is enabled", () => {
+    const shArgs = ShellSelect.args("/bin/bash", "ls -la", { prune: true })
+    expect(shArgs[0]).toBe("-c")
+    expect(shArgs[1]).toContain("ls()")
+    expect(shArgs[1]).toContain("node_modules")
+    expect(shArgs[1]).toContain("ls -la")
+
+    const psArgs = ShellSelect.args("pwsh", "ls", { prune: true })
+    expect(psArgs).toContain("-Command")
+    expect(psArgs[4]).toContain("function Get-ChildItem")
+    expect(psArgs[4]).toContain("node_modules")
+    expect(psArgs[4]).toContain("ls")
+
+    const rawArgs = ShellSelect.args("/bin/bash", "ls", { prune: false })
+    expect(rawArgs).toEqual(["-c", "ls"])
+  })
+
+  test("prunes noisy directories during real shell execution", async () => {
+    await using directory = await tmpdir()
+    await fs.mkdir(path.join(directory.path, "node_modules", "lodash"), { recursive: true })
+    await fs.mkdir(path.join(directory.path, "src"), { recursive: true })
+    await fs.writeFile(path.join(directory.path, "src", "index.js"), "code")
+
+    const shell = process.platform === "win32" ? "powershell" : "/bin/sh"
+    const cmd = process.platform === "win32" ? "Get-ChildItem" : "ls"
+
+    // Default execution without prune shows node_modules
+    const rawArgs = ShellSelect.args(shell, cmd, { prune: false })
+    const { spawnSync } = await import("child_process")
+    const rawRun = spawnSync(shell, rawArgs, { cwd: directory.path, encoding: "utf8" })
+    expect(rawRun.stdout).toContain("node_modules")
+
+    // Pruned execution excludes node_modules from table listing and shows notice
+    const prunedArgs = ShellSelect.args(shell, cmd, { prune: true })
+    const prunedRun = spawnSync(shell, prunedArgs, { cwd: directory.path, encoding: "utf8" })
+    expect(prunedRun.stdout).toContain("src")
+    expect(prunedRun.stdout).toContain("[OpenCode: Pruned")
+    const dirEntries = prunedRun.stdout.split(/\r?\n/).filter(line => /^[d\-][a-z\-]{4,}/i.test(line.trim()))
+    expect(dirEntries.some(line => line.includes("node_modules"))).toBe(false)
+    expect(dirEntries.some(line => line.includes("src"))).toBe(true)
+
+    if (process.platform === "win32") {
+      // Test dynamic parameter -Directory with pruning
+      const dirArgs = ShellSelect.args("powershell", "Get-ChildItem -Directory", { prune: true })
+      const dirRun = spawnSync("powershell", dirArgs, { cwd: directory.path, encoding: "utf8" })
+      expect(dirRun.stdout).toContain("src")
+      expect(dirRun.stdout).toContain("[OpenCode: Pruned")
+
+      // Test -All override
+      const allArgs = ShellSelect.args("powershell", "Get-ChildItem -All", { prune: true })
+      const allRun = spawnSync("powershell", allArgs, { cwd: directory.path, encoding: "utf8" })
+      const allEntries = allRun.stdout.split(/\r?\n/).filter(line => /^[d\-][a-z\-]{4,}/i.test(line.trim()))
+      expect(allEntries.some(line => line.includes("node_modules"))).toBe(true)
+    }
+  })
+
   if (process.platform !== "win32") {
     test("resolves the environment shell without retaining a removed executable", async () => {
       await withShell(undefined, async () => {
