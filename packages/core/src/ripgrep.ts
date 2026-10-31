@@ -91,11 +91,11 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ri
 
 const failure = (message: string, cause?: unknown) => new Error({ message, cause })
 
+// A backslash is a literal character in Unix file names; only Windows reports separators that way.
 const normalizePath = (value: string) =>
-  value
-    .replace(/^(?:\.[\\/])+/u, "")
-    .replace(/^[\\/]+/u, "")
-    .replaceAll("\\", "/")
+  process.platform === "win32"
+    ? value.replace(/^(?:\.[\\/])+/u, "").replace(/^[\\/]+/u, "").replaceAll("\\", "/")
+    : value.replace(/^(?:\.\/)+/u, "").replace(/^\/+/u, "")
 
 const isInvalidPattern = (stderr: string) =>
   stderr.includes("regex parse error") || stderr.includes("error parsing regex")
