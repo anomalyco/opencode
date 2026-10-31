@@ -2,7 +2,7 @@ export * as ShellSelect from "./select.js"
 
 import path from "path"
 import { readFile } from "fs/promises"
-import { statSync } from "fs"
+import { closeSync, openSync, readSync, statSync } from "fs"
 import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -122,13 +122,52 @@ function select(file: string | undefined, options?: Options, opts?: { compatible
   return fallback(bin)
 }
 
+const bashForGit = new Map<string, string | false>()
+
+// Git for Windows keeps bash at <root>/bin/bash.exe, but `git` may be
+// <root>/cmd/git.exe or <root>/mingw64/bin/git.exe. MSYS2 keeps it at <root>/usr/bin/bash.exe.
+function bashNear(start: string) {
+  let dir = path.dirname(start)
+  for (let i = 0; i < 6; i++) {
+    const file = ["bin/bash.exe", "usr/bin/bash.exe"].find((rel) => stat(path.join(dir, rel))?.size)
+    if (file) return path.join(dir, file)
+    const parent = path.dirname(dir)
+    if (parent === dir) return
+    dir = parent
+  }
+}
+
+function gitExecPath(git: string) {
+  try {
+    const fd = openSync(git, "r")
+    const header = Buffer.alloc(2)
+    const read = readSync(fd, header, 0, 2, 0)
+    closeSync(fd)
+    if (read < 2 || header.toString() !== "MZ") return
+    const result = Bun.spawnSync({ cmd: [git, "--exec-path"], stdout: "pipe", stderr: "ignore" })
+    if (result.exitCode !== 0) return
+    const text = result.stdout.toString().trim()
+    return text || undefined
+  } catch {
+    return
+  }
+}
+
 export function gitbash(options?: Options, bin?: string) {
   if (process.platform !== "win32") return
   if (options?.gitbash) return options.gitbash
   const git = findExecutable("git", bin)
   if (!git) return
-  const file = path.join(git, "..", "..", "bin", "bash.exe")
-  if (stat(file)?.size) return file
+  const cached = bashForGit.get(git)
+  if (cached === false) return
+  if (cached && stat(cached)?.size) return cached
+  let file = bashNear(git)
+  if (!file) {
+    const exec = gitExecPath(git)
+    if (exec) file = bashNear(exec)
+  }
+  bashForGit.set(git, file || false)
+  return file
 }
 
 function fallback(bin?: string) {
