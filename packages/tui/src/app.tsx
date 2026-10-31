@@ -293,7 +293,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       })
       renderer.setMaxListeners(15)
       yield* Effect.acquireRelease(
-        Effect.sync(() => guardTerminalResize(renderer, consoleViewport())),
+        Effect.sync(() => guardTerminalResize(renderer, consoleViewport(), (message, error) => log("error", message, { error }))),
         (restore) => Effect.sync(restore),
       )
       const clipboard = yield* Effect.acquireRelease(
