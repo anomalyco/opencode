@@ -29,8 +29,26 @@ test("keeps a reported zero cost, as for a request a subscription covered", () =
   })
 })
 
-test("stores the effective context size while pricing all billed input tokens", () => {
+test("keeps billed token and cache breakdown separate from effective context size", () => {
+  const recorded = SessionUsage.record(
+    new Usage({
+      nonCachedInputTokens: 2_000,
+      cacheReadInputTokens: 8_000,
+      cacheWriteInputTokens: 50,
+      contextTokens: 10_050,
+    }),
+    costs,
+  )
+  expect(recorded).toEqual({
+    tokens: { input: 2_000, output: 0, reasoning: 0, cache: { read: 8_000, write: 50 } },
+    contextTokens: 10_050,
+    cost: Money.USD.make(0.002),
+  })
+})
+
+test("prices all fallback attempts while reporting the answering attempt's context", () => {
   const recorded = SessionUsage.record(new Usage({ nonCachedInputTokens: 947, contextTokens: 412 }), costs)
-  expect(recorded.tokens.input + recorded.tokens.cache.read + recorded.tokens.cache.write).toBe(412)
+  expect(recorded.tokens.input).toBe(947)
+  expect(recorded.contextTokens).toBe(412)
   expect(recorded.cost).toBe(Money.USD.make(0.000947))
 })

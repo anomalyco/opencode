@@ -1397,6 +1397,7 @@ export type SessionStepEnded = {
     native?: SessionMessageNative1
     cost: MoneyUSD
     tokens: TokenUsageInfo
+    contextTokens?: number
     snapshot?: SnapshotID
     files?: Array<RelativePath>
   }
@@ -1418,6 +1419,7 @@ export type SessionStepFailed = {
     native?: SessionMessageNative1
     cost?: MoneyUSD
     tokens?: TokenUsageInfo
+    contextTokens?: number
     snapshot?: SnapshotID
     files?: Array<RelativePath>
   }
@@ -2649,6 +2651,7 @@ export type SessionMessageAssistant = {
   native?: SessionMessageNative
   cost?: MoneyUSD
   tokens?: TokenUsageInfo
+  contextTokens?: number
   error?: SessionStructuredError
   retry?: SessionMessageAssistantRetry
 }
