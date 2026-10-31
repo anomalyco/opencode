@@ -1,8 +1,11 @@
 export * as SessionRunnerLLM from "./llm.js"
 
-import { Message } from "@opencode/ai/effect"
+import { type LLMRequest, Message } from "@opencode/ai/effect"
+import type { Model } from "@opencode/schema/model"
+import type { TokenUsage } from "@opencode/schema/token-usage"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
-import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
+import { Cause, Clock, Effect, Exit, FiberMap, Layer, LogLevel, Stream } from "effect"
+import { CacheProbe } from "../cache-probe.js"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { LocationLifecycle } from "../../location-lifecycle.js"
@@ -57,6 +60,39 @@ const layer = Layer.effect(
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
+    // Outlives a drain so the first Step of the next turn can still be compared, which is where idle expiry shows up.
+    const cacheProbe = new CacheProbe.Tracker()
+    yield* bus.subscribe(SessionEvent.Deleted).pipe(
+      Stream.runForEach((event) => Effect.sync(() => cacheProbe.delete(event.data.sessionID))),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+
+    /** Debug only: logs why a Step read back less of the prompt cache than the previous Step left behind. */
+    const probeCache = Effect.fnUntraced(function* (
+      sessionID: SessionSchema.ID,
+      step: number,
+      ref: Model.Ref,
+      request: LLMRequest,
+    ) {
+      const model = `${ref.providerID}/${ref.id}${ref.variant ? `#${ref.variant}` : ""}`
+      const print = cacheProbe.observe({ request, model, at: yield* Clock.currentTimeMillis })
+      if (!print) return undefined
+      return (tokens: TokenUsage.Info) => {
+        const miss = cacheProbe.settle(sessionID, print, tokens)
+        if (!miss) return Effect.void
+        return Effect.logDebug("prompt cache miss", {
+          sessionID,
+          step,
+          model,
+          missed: miss.missed,
+          read: tokens.cache.read,
+          write: tokens.cache.write,
+          reason: miss.reason,
+          ...(miss.detail ? { detail: miss.detail } : {}),
+          ...(miss.idle ? { idle: miss.idle } : {}),
+        })
+      }
+    })
 
     const drain = Effect.fn("SessionRunner.drain")(function* (input: Parameters<Interface["drain"]>[0]) {
       const sessionID = input.sessionID
@@ -280,6 +316,9 @@ const layer = Layer.effect(
               executeTool: prepared.executeTool,
             })),
           )
+        const onUsage = (yield* LogLevel.isEnabled("Debug"))
+          ? yield* probeCache(sessionID, step, loaded.model.ref, prepared.request)
+          : undefined
         const outcome = yield* steps.attempt({
           isLocationClosed: lifecycle.isClosed,
           sessionID,
@@ -308,6 +347,7 @@ const layer = Layer.effect(
                   .pipe(Effect.map((result) => result.status === "completed"))
               : Effect.succeed(false),
           ),
+          onUsage,
         })
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: Effect.fnUntraced(function* (outcome) {

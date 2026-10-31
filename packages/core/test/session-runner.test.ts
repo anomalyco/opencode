@@ -77,7 +77,23 @@ import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
 import { ID, Model } from "@opencode/core/model"
 import { Location } from "@opencode/core/location"
 import { Provider } from "@opencode/core/provider"
-import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
+import {
+  Cause,
+  Context,
+  DateTime,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Logger,
+  LogLevel,
+  Queue,
+  References,
+  Schema,
+  Scope,
+  Stream,
+} from "effect"
 import { TestClock } from "effect/testing"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -7173,4 +7189,60 @@ describe("SessionRunnerLLM", () => {
     if (!(defect instanceof Error)) return
     expect(defect.message).toBe("Tool input delta before start: call-1")
   })
+})
+
+describe("prompt cache probe", () => {
+  const cached = (id: string, cache: { read: number; write: number }) =>
+    TestLLM.complete(
+      {
+        reason: { normalized: "stop" },
+        usage: {
+          inputTokens: 10 + cache.read + cache.write,
+          nonCachedInputTokens: 10,
+          cacheReadInputTokens: cache.read,
+          cacheWriteInputTokens: cache.write,
+        },
+      },
+      LLMEvent.textStart({ id }),
+      LLMEvent.textDelta({ id, text: "Done" }),
+      LLMEvent.textEnd({ id }),
+    )
+
+  const logged: unknown[] = []
+  const capture = Logger.make((options) => {
+    const message = Array.isArray(options.message) ? options.message : [options.message]
+    if (message[0] === "prompt cache miss") logged.push(message[1])
+  })
+  const at = (level: LogLevel.LogLevel) =>
+    testEffect(
+      layer.pipe(
+        Layer.provide(Layer.succeed(References.MinimumLogLevel, level)),
+        Layer.provide(Logger.layer([capture])),
+      ),
+    )
+  const run = Effect.gen(function* () {
+    logged.length = 0
+    const s = yield* setup
+    yield* s.llm.push(cached("first", { read: 0, write: 50_000 }))
+    yield* s.runPrompt("First")
+    yield* s.llm.push(cached("second", { read: 0, write: 50_100 }))
+    yield* s.runPrompt("Second")
+    return logged
+  })
+
+  at("Debug").effect(
+    "logs why a step missed the prompt cache at debug level",
+    Effect.gen(function* () {
+      expect(yield* run).toEqual([
+        expect.objectContaining({ sessionID, step: 1, missed: 50_010, read: 0, reason: "provider-eviction" }),
+      ])
+    }),
+  )
+
+  at("Info").effect(
+    "does nothing above debug level",
+    Effect.gen(function* () {
+      expect(yield* run).toEqual([])
+    }),
+  )
 })
