@@ -1,7 +1,7 @@
 export * as ConvertClaudeStream from "./convert-claude-stream.js"
 
-import type { JSONObject, LanguageModelV3FunctionTool, LanguageModelV3StreamPart } from "@ai-sdk/provider"
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk"
+import type { LanguageModelV3FunctionTool, LanguageModelV3StreamPart } from "@ai-sdk/provider"
+import type { SDKMessage, SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk"
 import { Provider } from "@opencode/schema/provider"
 import { ClaudeUsage } from "./usage.js"
 import { ToolNames } from "../tools/names.js"
@@ -15,15 +15,15 @@ export function make(tools: readonly LanguageModelV3FunctionTool[]) {
   let messageID = ""
   let calledTools = false
   let metadata: Record<string, { sessionID: string; messageID: string }> | undefined
-  // The latest plan usage Claude Code reported. Steps carry it so plugins can show usage without polling for it.
-  let rateLimit: JSONObject | undefined
+  // Plugins read plan usage from step metadata instead of polling Anthropic for it.
+  let rateLimit: SDKRateLimitInfo | undefined
   const finishMetadata = () => (rateLimit ? { [Provider.ID.claudeAgent]: { rateLimit } } : undefined)
 
   return (message: SDKMessage): LanguageModelV3StreamPart[] => {
     const parts: LanguageModelV3StreamPart[] = []
     const error = failure(message)
     if (error) return [{ type: "error", error }]
-    if (message.type === "rate_limit_event") rateLimit = JSON.parse(JSON.stringify(message.rate_limit_info))
+    if (message.type === "rate_limit_event") rateLimit = message.rate_limit_info
     if (message.type === "stream_event" && message.parent_tool_use_id === null) {
       const event = message.event
       switch (event.type) {

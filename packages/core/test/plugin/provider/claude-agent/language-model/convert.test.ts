@@ -38,9 +38,10 @@ describe("Claude conversions", () => {
       type: "finish",
       providerMetadata: { "claude-agent": { rateLimit: recorded.message.rate_limit_info } },
     })
-    const silent = ConvertClaudeStream.make([])(Recorder.result("text")).at(-1)
-    expect(silent).toMatchObject({ type: "finish" })
-    expect(silent?.type === "finish" && silent.providerMetadata).toBeUndefined()
+    expect(ConvertClaudeStream.make([])(Recorder.result("text")).at(-1)).toMatchObject({
+      type: "finish",
+      providerMetadata: undefined,
+    })
   })
 
   test("utility calls keep system instructions separate from conversation content and omit thinking", () => {
