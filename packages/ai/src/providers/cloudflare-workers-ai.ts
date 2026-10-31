@@ -3,12 +3,14 @@ import { CloudflareRunExtraction } from "../experimental/cloudflare-run-extracti
 import { CloudflareRunDecisions } from "../protocols/cloudflare-run-decisions.js"
 import { CloudflareWorkersAIImages } from "../protocols/cloudflare-workers-ai-images.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
+import { OpenResponses } from "../protocols/open-responses.js"
 import { AuthOptions, type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import { ProviderConfigurationError, ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
+import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("cloudflare-workers-ai")
 export const authEnvVars = ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"] as const
@@ -21,11 +23,11 @@ type WorkersAIURL = AtLeastOne<{
 export type Config = WorkersAIURL &
   Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
-    readonly providerOptions?: OpenAIProviderOptionsInput
+    readonly providerOptions?: OpenAIProviderOptionsInput | OpenResponsesProviderOptionsInput
   }
 
-export type Settings = ProviderPackage.Settings &
-  OpenAIProviderOptionsInput &
+export type Settings<Options = OpenAIProviderOptionsInput> = ProviderPackage.Settings &
+  Options &
   WorkersAIURL & {
     readonly apiKey?: string | false
   }
@@ -62,12 +64,25 @@ export const route = Route.make({
   framing: OpenAIChat.framing,
 })
 
-export const routes = [route]
+// Workers AI answers `/responses` only with the complete Response, not a stream.
+const responsesRoute = Route.make({
+  id: "cloudflare-workers-ai-responses",
+  provider: id,
+  providerMetadataKey: "cloudflare-workers-ai",
+  protocol: OpenResponses.protocol,
+  endpoint: Endpoint.path("/responses"),
+  transport: OpenResponses.documentTransport,
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+})
+
+export const routes = [route, responsesRoute]
 
 export const configure = (input: Config) => {
   const { accountId: _accountId, apiKey: _apiKey, auth: _auth, baseURL: _baseURL, ...defaults } = input
   const auth = AuthOptions.bearer(input, authEnvVars)
-  const configured = route.with({ ...defaults, endpoint: { baseURL: baseURL(input) }, auth })
+  const options = { ...defaults, endpoint: { baseURL: baseURL(input) }, auth }
+  const configured = route.with(options)
+  const configuredResponses = responsesRoute.with(options)
   // The Run API base is derived per call so a chat-only configuration without an account still constructs.
   const runDeployment = () => MediaRoute.deployment({ ...input, baseURL: runBaseURL(input) }, auth)
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -83,6 +98,8 @@ export const configure = (input: Config) => {
   return {
     id,
     model: (modelID: string | ModelID) => configured.model<OpenAIProviderOptionsInput>({ id: modelID }),
+    responses: (modelID: string | ModelID) =>
+      configuredResponses.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     decision,
     image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
       CloudflareWorkersAIImages.model({ ...runDeployment(), id: modelID, providerOptions }),
@@ -97,6 +114,10 @@ export const provider = { id, configure }
 
 export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
+export const responsesModel: ProviderPackage.Model<
+  Settings<OpenResponsesProviderOptionsInput>,
+  OpenResponsesProviderOptionsInput
+> = (modelID, settings) => configure(config(settings)).responses(modelID)
 export const imageModel = (modelID: string, settings: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)
@@ -106,7 +127,7 @@ export const decisionModel = (modelID: string, settings: Settings) => {
   return configure(input).decision(modelID, input.providerOptions)
 }
 
-function config(settings: Settings) {
+function config(settings: Settings<Config["providerOptions"]>) {
   const { accountId: _, apiKey, baseURL: _url, body, headers, ...providerOptions } = settings
   return {
     apiKey,

@@ -1495,6 +1495,12 @@ const deepseek = DeepSeek.configure({ apiKey }).model("deepseek-chat")
 const fireworks = Fireworks.configure({ apiKey }).model("accounts/fireworks/models/my-model")
 ```
 
+Fireworks, Groq, and Cloudflare Workers AI also select their Responses API with `responses(modelID)`, or through
+`providers/fireworks/responses`, `providers/groq/responses`, and `providers/cloudflare-workers-ai/responses`. They use
+the provider-neutral Open Responses protocol with `store: false`. Groq rejects `include`, so its reasoning is not
+replayed as encrypted content. Workers AI returns the complete Response instead of a stream, and its endpoint rejects
+`function_call_output` input, so tool results cannot be sent back on that route.
+
 The former `OpenAICompatible.baseten`, `.cerebras`, `.deepinfra`, `.deepseek`, `.fireworks`, `.groq`, and `.togetherai` presets are replaced by the top-level `Baseten`, `Cerebras`, `DeepInfra`, `DeepSeek`, `Fireworks`, `Groq`, and `TogetherAI` exports. Use `CloudflareAIGateway` and `CloudflareWorkersAI` directly; each has its own module. `OpenAICompatible` configures generic endpoints with an explicit `baseURL`.
 
 ### Provider entrypoints
