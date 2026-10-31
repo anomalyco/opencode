@@ -4,6 +4,7 @@ import {
   DISPOSED_STEER_ARRIVAL_STATE,
   INITIAL_STEER_ARRIVAL_STATE,
   shouldGrowUserMessage,
+  shouldSnapUserRun,
   transitionSteerArrival,
   type SteerArrivalState,
 } from "./steer-arrival-machine"
@@ -18,8 +19,8 @@ const assistant = (userMessageID: string, messageID: string) =>
     previousAssistantPart: false,
   })
 
-const sync = (state: SteerArrivalState, rows: TimelineRow.TimelineRow[], busy = true, sessionID = "ses_1") =>
-  transitionSteerArrival(state, { type: "sync", sessionID, rows, busy })
+const sync = (state: SteerArrivalState, rows: TimelineRow.TimelineRow[], busy = true, sessionID = "ses_1", at = 0) =>
+  transitionSteerArrival(state, { type: "sync", sessionID, rows, busy, at })
 
 const rendered = (state: SteerArrivalState, messageID: string) =>
   transitionSteerArrival(state, { type: "rendered", messageID })
@@ -84,6 +85,21 @@ describe("transitionSteerArrival", () => {
     expect(sync(loaded, [...page])).toBe(loaded)
     expect(sync(loaded, [...page], false)).toBe(loaded)
     expect(sync(steered, [...page, user("m51")])).toBe(steered)
+  })
+
+  test("snaps a run only right after a steer lands, not when one is delivered into the run above", () => {
+    const loaded = sync(INITIAL_STEER_ARRIVAL_STATE, page, true, "ses_1", 1000)
+    const steered = sync(loaded, [...page, user("m51")], true, "ses_1", 2000)
+
+    expect(shouldSnapUserRun(loaded, 1000)).toBe(false)
+    expect(shouldSnapUserRun(steered, 2050)).toBe(true)
+    expect(shouldSnapUserRun(steered, 2100)).toBe(false)
+
+    // A delivery or reply changes the rows without a new steer, so the run springs.
+    const replied = sync(steered, [...page, user("m51"), assistant("m51", "a51")], true, "ses_1", 3000)
+
+    expect(shouldSnapUserRun(replied, 3000)).toBe(false)
+    expect(shouldSnapUserRun(DISPOSED_STEER_ARRIVAL_STATE, 2000)).toBe(false)
   })
 
   test("starts over on another session and stops after disposal", () => {
