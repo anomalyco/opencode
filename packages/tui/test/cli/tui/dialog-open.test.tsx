@@ -8,10 +8,12 @@ import { createSignal, onMount } from "solid-js"
 import type { SessionInfo } from "@opencode/client"
 import { DialogOpen, DialogOpenKey } from "../../../src/component/dialog-open"
 import { ConfigProvider } from "../../../src/config"
+import { ArgsProvider } from "../../../src/context/args"
 import { ClientProvider } from "../../../src/context/client"
 import { DataProvider, useData } from "../../../src/context/data"
 import { Keymap } from "../../../src/context/keymap"
 import { LocationProvider, useLocation } from "../../../src/context/location"
+import { PermissionProvider } from "../../../src/context/permission"
 import { RouteProvider, useRoute } from "../../../src/context/route"
 import { TuiAppProvider } from "../../../src/context/runtime"
 import { SessionTabsProvider } from "../../../src/context/session-tabs"
@@ -984,29 +986,33 @@ async function renderOpen(
     () => (
       <TestTuiContexts paths={{ state }}>
         <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
-          <StorageProvider>
-            <ConfigProvider config={createTuiResolvedConfig()}>
-              <Keymap.Provider>
-                <ToastProvider>
-                  <RouteProvider>
-                    <ClientProvider api={createApi(calls.fetch)}>
-                      <DataProvider directory={process.cwd()}>
-                        <LocationProvider>
-                          <SessionTabsProvider>
-                            <ThemeProvider mode="dark" source={emptyThemeSource}>
-                              <DialogProvider>
-                                <Probe />
-                              </DialogProvider>
-                            </ThemeProvider>
-                          </SessionTabsProvider>
-                        </LocationProvider>
-                      </DataProvider>
-                    </ClientProvider>
-                  </RouteProvider>
-                </ToastProvider>
-              </Keymap.Provider>
-            </ConfigProvider>
-          </StorageProvider>
+          <ArgsProvider>
+            <StorageProvider>
+              <ConfigProvider config={createTuiResolvedConfig()}>
+                <Keymap.Provider>
+                  <ToastProvider>
+                    <RouteProvider>
+                      <ClientProvider api={createApi(calls.fetch)}>
+                        <PermissionProvider>
+                          <DataProvider directory={process.cwd()}>
+                            <LocationProvider>
+                              <SessionTabsProvider>
+                                <ThemeProvider mode="dark" source={emptyThemeSource}>
+                                  <DialogProvider>
+                                    <Probe />
+                                  </DialogProvider>
+                                </ThemeProvider>
+                              </SessionTabsProvider>
+                            </LocationProvider>
+                          </DataProvider>
+                        </PermissionProvider>
+                      </ClientProvider>
+                    </RouteProvider>
+                  </ToastProvider>
+                </Keymap.Provider>
+              </ConfigProvider>
+            </StorageProvider>
+          </ArgsProvider>
         </TuiAppProvider>
       </TestTuiContexts>
     ),
