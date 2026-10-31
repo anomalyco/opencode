@@ -245,3 +245,80 @@ describe("SessionModelRequest.boundImages", () => {
     })
   })
 })
+
+// tenant-codebox#119: a media type the platform cannot classify (no modality —
+// `application/octet-stream` from an MCP filesystem tool is the live case) used
+// to pass straight through to the provider, which then rejected the ENTIRE
+// request (OpenAI Chat: "does not support media type application/octet-stream")
+// and poisoned every later turn of the session.
+describe("SessionModelRequest.unsupportedParts — unknown media types", () => {
+  test("replaces a media part whose type has no modality", () => {
+    const messages = unsupportedParts(
+      [
+        Message.user([
+          Message.text("What is in this file?"),
+          { type: "media", media: Media.base64("AAEC", "application/octet-stream"), filename: "blob.bin" },
+        ]),
+      ],
+      capabilities(["text", "image"]),
+    )
+
+    expect(messages[0]?.content).toEqual([
+      Message.text("What is in this file?"),
+      Message.text(
+        'ERROR: Cannot read "blob.bin" (this model does not support application/octet-stream input). Inform the user.',
+      ),
+    ])
+  })
+
+  test("replaces an unknown media type nested in a tool result", () => {
+    const messages = unsupportedParts(
+      [
+        Message.tool(
+          ToolResultPart.make({
+            id: "call_1",
+            name: "files_read_media_file",
+            result: {
+              type: "content",
+              value: [
+                { type: "text", text: "File read successfully" },
+                {
+                  type: "file",
+                  uri: "data:application/octet-stream;base64,AAEC",
+                  mime: "application/octet-stream",
+                  name: "report.xlsx",
+                },
+              ],
+            },
+          }),
+        ),
+      ],
+      capabilities(["text", "image"]),
+    )
+
+    expect(messages[0]?.content[0]).toMatchObject({
+      type: "tool-result",
+      result: {
+        type: "content",
+        value: [
+          { type: "text", text: "File read successfully" },
+          {
+            type: "text",
+            text: 'ERROR: Cannot read "report.xlsx" (this model does not support application/octet-stream input). Inform the user.',
+          },
+        ],
+      },
+    })
+  })
+
+  test("leaves a modality the model DOES accept untouched", () => {
+    const messages = unsupportedParts(
+      [Message.user([{ type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: "logo.png" }])],
+      capabilities(["text", "image"]),
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: "logo.png" },
+    ])
+  })
+})

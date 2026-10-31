@@ -140,7 +140,15 @@ const unsupportedMedia = (
   provider: string | undefined,
 ) => {
   const modality = mimeToModality(mime)
-  if (!modality) return
+  // A media type with NO modality (e.g. the `application/octet-stream` an MCP
+  // filesystem tool returns for a non-image file) cannot be carried by the
+  // provider protocols at all: the OpenAI-Chat protocol rejects the WHOLE
+  // request with it and every later turn of that session fails
+  // (tenant-codebox#119). Convert it to the same visible note as an unsupported
+  // modality, so the part never reaches the wire — and so a session that was
+  // already poisoned recovers on its next turn.
+  if (!modality)
+    return `ERROR: Cannot read ${name ? `"${name}"` : mime} (this model does not support ${mime} input). Inform the user.`
   const unsupported = !capabilities.input.some((item) => item.startsWith(modality))
     ? modality
     : provider === "xai" && modality === "image" && !XAI_IMAGE_MIMES.has(mime.toLowerCase())
