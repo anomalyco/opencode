@@ -55,7 +55,7 @@ const setup = (sessionID: SessionSchema.ID) =>
         id: sessionID,
         project_id: Project.ID.global,
         slug: "instruction-state-test",
-        directory: "/project",
+        directory: AbsolutePath.make("/project"),
         title: "Instruction state test",
         version: "test",
       })

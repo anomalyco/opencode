@@ -109,7 +109,7 @@ describe("Session.log", () => {
           id: sessionID,
           project_id: Project.ID.global,
           slug: "empty-log",
-          directory: "/project",
+          directory: AbsolutePath.make("/project"),
           title: "Empty log",
           version: "test",
         })

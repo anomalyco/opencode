@@ -522,7 +522,7 @@ const insertSession = (id: Session.ID, parentID?: Session.ID) =>
         parent_id: parentID,
         project_id: Project.ID.global,
         slug: id,
-        directory: "/project",
+        directory: AbsolutePath.make("/project"),
         title: "test",
         version: "test",
       })

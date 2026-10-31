@@ -141,7 +141,7 @@ const insertSession = (id: Session.ID, title?: string, created?: number, model?:
         id,
         project_id: Project.ID.global,
         slug: id,
-        directory: "/project",
+        directory: AbsolutePath.make("/project"),
         title,
         model,
         time_created: created,
@@ -489,7 +489,7 @@ it.effect("generates a title for an explicitly requested child session", () =>
         project_id: Project.ID.global,
         parent_id: Session.ID.make("ses_title_parent"),
         slug: sessionID,
-        directory: "/project",
+        directory: AbsolutePath.make("/project"),
         version: "test",
       })
       .onConflictDoNothing()
