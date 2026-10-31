@@ -904,7 +904,7 @@ and the Promise client exposes it under `ai.experimental`.
 
 - **`Video`**, **`Speech`**, and **`Transcription`** — media generation and speech-to-text, with `VideoClient`,
   `SpeechClient`, and `TranscriptionClient` as their Effect services. Promise: `ai.experimental.video`, `.speech`, and
-  `.transcription`. Testing: `TestVideo`, `TestSpeech`, and `TestTranscription`.
+  `.transcription`.
 - **`Extraction`** — typed values read out of text.
 - **`Realtime`** — `Realtime.connect` starts an OpenAI, xAI, or Gemini voice session and returns a WebRTC answer SDP or
   a short-lived WebSocket URL and token.
