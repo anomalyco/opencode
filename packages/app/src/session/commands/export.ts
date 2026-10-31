@@ -43,6 +43,9 @@ export function sessionExportFilename(session: { id: string; title?: string; slu
   const clean = name
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/gi, "-")
+    // Filesystems cap a filename at 255 bytes. Cap the cleaned name before the trailing-dash
+    // trim so slicing cannot leave a trailing dash, and so ".json" always fits.
+    .slice(0, 250)
     .replace(/^-+|-+$/g, "")
 
   return `${clean || session.id}.json`
