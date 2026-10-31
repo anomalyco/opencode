@@ -1,0 +1,49 @@
+{
+  "name": "code-coach",
+  "displayName": "Code Coach",
+  "description": "A silent side-coach that watches your edits and nudges you before bad habits ship. No model, no network, no excuses.",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onView:code-coach.welcome"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsWelcome": [
+      {
+        "viewpoint": "code-coach.welcome",
+        "activationEvents": "onView:code-coach.welcome",
+        "group": "1_high",
+        "contents": "Code Coach is watching your edits. Save a file to start."
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "code-coach.welcome",
+          "name": "Code Coach"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "code-coach.openSettings",
+        "title": "Code Coach: Open Settings"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -p ./ --watch",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "oxlint src",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.90.0",
+    "@types/bun": "^1.2.0"
+  }
+}

@@ -554,6 +554,18 @@
         "typescript": "catalog:",
       },
     },
+    "packages/plugins/code-coach": {
+      "name": "@opencode/plugin-code-coach",
+      "version": "2.2.0",
+      "devDependencies": {
+        "@tsconfig/bun": "1.0.9",
+        "@types/bun": "1.4.3",
+        "@typescript/native": "npm:typescript@7.1.0-beta",
+      },
+      "peerDependencies": {
+        "@opencode/plugin": "^2.0.27 || ^0.0.0-dev",
+      },
+    },
     "packages/plugins/figma": {
       "name": "@opencode/plugin-figma",
       "version": "2.2.5",
@@ -1927,6 +1939,8 @@
     "@opencode/plugin": ["@opencode/plugin@workspace:packages/plugin"],
 
     "@opencode/plugin-browser": ["@opencode/plugin-browser@workspace:packages/plugin-browser"],
+
+    "@opencode/plugin-code-coach": ["@opencode/plugin-code-coach@workspace:packages/plugins/code-coach"],
 
     "@opencode/plugin-figma": ["@opencode/plugin-figma@workspace:packages/plugins/figma"],
 
