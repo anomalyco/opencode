@@ -1834,7 +1834,11 @@ export type CredentialCreateOperation<E = never> = (
   input: CredentialCreateInput,
 ) => Effect.Effect<CredentialCreateOutput, E>
 
-export type CredentialUpdateInput = { readonly credentialID: Credential.ID; readonly label: string }
+export type CredentialUpdateInput = {
+  readonly credentialID: Credential.ID
+  readonly label: string
+  readonly value?: Credential.Value | undefined
+}
 export type CredentialUpdateOutput = void
 export type CredentialUpdateOperation<E = never> = (
   input: CredentialUpdateInput,

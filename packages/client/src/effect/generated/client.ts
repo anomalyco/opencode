@@ -1219,7 +1219,7 @@ const EndpointCredentialUpdate = (raw: RawClient["server.credential"]) => (input
   preserveEffect<CredentialUpdateOutput>()(
     raw["credential.update"]({
       params: { credentialID: input["credentialID"] },
-      payload: { label: input["label"] },
+      payload: { label: input["label"], value: input["value"] },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
