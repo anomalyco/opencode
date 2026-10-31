@@ -74,6 +74,12 @@ export const make = Effect.gen(function* () {
     // The start snapshot only has to exist before local tools run, which cannot happen before Step.Started,
     // so it is captured while the provider request is in flight instead of delaying it.
     const pendingStartSnapshot = yield* snapshots.capture().pipe(Effect.forkScoped)
+    const started = yield* Clock.currentTimeMillis
+    let firstOutputAt: number | undefined
+    yield* Effect.annotateCurrentSpan({
+      "gen_ai.provider.name": input.model.ref.providerID,
+      "gen_ai.request.model": input.model.ref.id,
+    })
     const publisher = createLLMEventPublisher(bus, {
       sessionID: input.sessionID,
       assistantMessageID: input.assistantMessageID,
@@ -81,7 +87,7 @@ export const make = Effect.gen(function* () {
       model: input.model.ref,
       providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
       pendingSnapshot: Fiber.join(pendingStartSnapshot),
-      started: yield* Clock.currentTimeMillis,
+      started,
     })
     const toolRuns: Array<{
       readonly call: ToolCall
@@ -119,6 +125,8 @@ export const make = Effect.gen(function* () {
             return
           }
           yield* publisher.publish(event)
+          if (firstOutputAt === undefined && publisher.record().outputStarted)
+            firstOutputAt = yield* Clock.currentTimeMillis
           if (event.type !== "tool-call" || event.providerExecuted) return
           toolRuns.push({
             call: event,
@@ -184,6 +192,17 @@ export const make = Effect.gen(function* () {
             : undefined
         const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
         const llmError = llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined
+        const tokens = recorded.finish?.usage
+        yield* Effect.annotateCurrentSpan({
+          ...(firstOutputAt === undefined ? {} : { "opencode.llm.first_output_ms": firstOutputAt - started }),
+          ...(recorded.finish === undefined ? {} : { "gen_ai.response.finish_reasons": [recorded.finish.finish] }),
+          ...(tokens?.inputTokens === undefined ? {} : { "gen_ai.usage.input_tokens": tokens.inputTokens }),
+          ...(tokens?.outputTokens === undefined ? {} : { "gen_ai.usage.output_tokens": tokens.outputTokens }),
+          ...(tokens?.cacheReadInputTokens === undefined
+            ? {}
+            : { "gen_ai.usage.cache_read.input_tokens": tokens.cacheReadInputTokens }),
+          ...(llmFailure === undefined ? {} : { "error.type": llmFailure.reason._tag }),
+        })
         if (
           input.recoverContinuation &&
           llmFailure?.reason._tag === "Transport" &&
