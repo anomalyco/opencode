@@ -30,14 +30,13 @@ export function shouldRetryEnsure(version: string | undefined, message: string) 
   )
 }
 
-export function stageName(version: string, arch = process.arch) {
-  return `${version}-${arch}`.replace(/[^a-zA-Z0-9._-]/g, "-")
+export function stageName(version: string, channel: string, arch = process.arch) {
+  return `${version}-${arch}-${channel}`.replace(/[^a-zA-Z0-9._-]/g, "-")
 }
 
-export function keptStages(bundledVersion: string, runningVersion?: string, arch = process.arch) {
-  const stages = [stageName(bundledVersion, arch)]
+export function stageRetention(runningVersion: string, arch = process.arch) {
+  // The registration omits the CLI channel, including for a server still using a legacy stage.
+  const legacy = `${runningVersion}-${arch}`.replace(/[^a-zA-Z0-9._-]/g, "-")
 
-  if (runningVersion && runningVersion !== bundledVersion) stages.push(stageName(runningVersion, arch))
-
-  return stages
+  return { keep: [legacy], keepPrefix: `${legacy}-` }
 }
