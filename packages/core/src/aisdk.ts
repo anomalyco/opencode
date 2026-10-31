@@ -409,8 +409,13 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     model: (input) =>
       LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
-    streamPrepared: (prepared, _request, _runtime, options) =>
-      streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
+    streamPrepared: (prepared, request, _runtime, options) =>
+      // Text-embedded tool calls are recovered at the step boundary when the model opts in, using the same
+      // shared scanner the native routes ride.
+      ProviderShared.toolCallRecoveryStream(
+        streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
+        ProviderShared.toolCallRecovery(request),
+      ),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,

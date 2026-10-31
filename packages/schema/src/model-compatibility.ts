@@ -44,6 +44,8 @@ export const Compatibility = Schema.Struct({
   supportsThinkingBlockBinding: Schema.Boolean.pipe(optional),
   /** Anthropic Messages and OpenAI Responses: supports per-message effort updates. Overrides model-ID detection. */
   supportsEffortUpdates: Schema.Boolean.pipe(optional),
+  /** Recover tool calls the model emitted as assistant text, for hosts without native tool-call streams (e.g. local servers). */
+  recoverTextToolCalls: Schema.Boolean.pipe(optional),
   /** System One: where the decision host reads media. Unset keeps the route default. */
   mediaInput: MediaInput.pipe(optional),
 }).annotate({ identifier: "Model.Compatibility" })
