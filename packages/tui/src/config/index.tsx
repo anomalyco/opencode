@@ -154,6 +154,9 @@ export const Info = Schema.Struct({
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
         description: "Session sidebar visibility; 'auto' shows it when space permits",
       }),
+      sidebar_id: Schema.optional(Schema.Boolean).annotate({
+        description: "Show the session ID below the session title in the sidebar",
+      }),
       scrollbar: Schema.optional(Schema.Boolean).annotate({ description: "Show the session transcript scrollbar" }),
       thinking: Schema.optional(Schema.Literals(["show", "hide"])).annotate({
         description: "Show or hide model reasoning by default",
