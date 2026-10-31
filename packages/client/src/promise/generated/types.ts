@@ -274,6 +274,17 @@ export type McpResourceTemplate = {
   mimeType?: string
 }
 
+export type McpTrustedHost = { host: string; port: number; fingerprint: string; subject: string; validTo: number }
+
+export type McpTrustResult = {
+  host: string
+  port: number
+  fingerprint: string
+  subject: string
+  validTo: number
+  replaced: boolean
+}
+
 export type PtyTicketConnectToken = { ticket: string; expires_in: number }
 
 export type CredentialKey = { type: "key"; key: string; metadata?: { [x: string]: JsonValue } }
@@ -776,6 +787,8 @@ export type McpServer = {
 }
 
 export type McpResourceCatalog = { resources: Array<McpResource>; templates: Array<McpResourceTemplate> }
+
+export type McpTrustInspect = { cert: McpTrustedHost; stored?: McpTrustedHost }
 
 export type Project = {
   id: ProjectID
@@ -2423,6 +2436,7 @@ export type ConfigEntry =
                   codemode?: boolean
                   timeout?: { startup?: number; catalog?: number; execution?: number }
                   protocol?: McpProtocol
+                  tls?: { ca_file?: string; ca_pem?: string; fingerprint?: string }
                 }
           }
         }
@@ -4082,6 +4096,7 @@ export type ExperimentalMcpAddInput = {
         readonly codemode?: boolean
         readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
         readonly protocol?: "legacy" | "auto" | "2026-07-28"
+        readonly tls?: { readonly ca_file?: string; readonly ca_pem?: string; readonly fingerprint?: string }
       }
 }
 
@@ -4107,6 +4122,22 @@ export type ExperimentalMcpDisconnectInput = {
 }
 
 export type ExperimentalMcpDisconnectOutput = void
+
+export type ExperimentalMcpTrustInspectInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly url: string
+}
+
+export type ExperimentalMcpTrustInspectOutput = { location: LocationPublicRef; data: McpTrustInspect }
+
+export type ExperimentalMcpTrustPinInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly url: string
+  readonly force?: boolean | undefined
+  readonly expectFingerprint?: string | undefined
+}
+
+export type ExperimentalMcpTrustPinOutput = { location: LocationPublicRef; data: McpTrustResult }
 
 export type ExperimentalMcpClientTokenInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
@@ -4906,6 +4937,18 @@ export type McpDisconnectInput = ExperimentalMcpDisconnectInput
 
 /** @deprecated Use `ExperimentalMcpDisconnectOutput`. Removed in the next minor. */
 export type McpDisconnectOutput = ExperimentalMcpDisconnectOutput
+
+/** @deprecated Use `ExperimentalMcpTrustInspectInput`. Removed in the next minor. */
+export type McpTrustInspectInput = ExperimentalMcpTrustInspectInput
+
+/** @deprecated Use `ExperimentalMcpTrustInspectOutput`. Removed in the next minor. */
+export type McpTrustInspectOutput = ExperimentalMcpTrustInspectOutput
+
+/** @deprecated Use `ExperimentalMcpTrustPinInput`. Removed in the next minor. */
+export type McpTrustPinInput = ExperimentalMcpTrustPinInput
+
+/** @deprecated Use `ExperimentalMcpTrustPinOutput`. Removed in the next minor. */
+export type McpTrustPinOutput = ExperimentalMcpTrustPinOutput
 
 /** @deprecated Use `ExperimentalMcpClientTokenInput`. Removed in the next minor. */
 export type McpClientTokenInput = ExperimentalMcpClientTokenInput

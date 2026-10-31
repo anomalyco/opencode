@@ -158,6 +158,10 @@ import type {
   ExperimentalMcpConnectOutput,
   ExperimentalMcpDisconnectInput,
   ExperimentalMcpDisconnectOutput,
+  ExperimentalMcpTrustInspectInput,
+  ExperimentalMcpTrustInspectOutput,
+  ExperimentalMcpTrustPinInput,
+  ExperimentalMcpTrustPinOutput,
   ExperimentalMcpClientTokenInput,
   ExperimentalMcpClientTokenOutput,
   CredentialListOutput,
@@ -1308,6 +1312,34 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+        trust: {
+          inspect: (input: ExperimentalMcpTrustInspectInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalMcpTrustInspectOutput>(
+              {
+                method: "POST",
+                path: `/api/experimental/mcp/trust/inspect`,
+                query: { location: input["location"] },
+                body: { url: input["url"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+          pin: (input: ExperimentalMcpTrustPinInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalMcpTrustPinOutput>(
+              {
+                method: "POST",
+                path: `/api/experimental/mcp/trust`,
+                query: { location: input["location"] },
+                body: { url: input["url"], force: input["force"], expectFingerprint: input["expectFingerprint"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+        },
         client: {
           token: (input: ExperimentalMcpClientTokenInput, requestOptions?: RequestOptions) =>
             request<ExperimentalMcpClientTokenOutput>(
@@ -2731,6 +2763,13 @@ export function make(options: ClientOptions) {
       connect: client.experimental.mcp.connect,
       /** @deprecated Use `client.experimental.mcp.disconnect`. Removed in the next minor. */
       disconnect: client.experimental.mcp.disconnect,
+      /** @deprecated Use `client.experimental.mcp.trust`. Removed in the next minor. */
+      trust: {
+        /** @deprecated Use `client.experimental.mcp.trust.inspect`. Removed in the next minor. */
+        inspect: client.experimental.mcp.trust.inspect,
+        /** @deprecated Use `client.experimental.mcp.trust.pin`. Removed in the next minor. */
+        pin: client.experimental.mcp.trust.pin,
+      },
       /** @deprecated Use `client.experimental.mcp.client`. Removed in the next minor. */
       client: {
         /** @deprecated Use `client.experimental.mcp.client.token`. Removed in the next minor. */

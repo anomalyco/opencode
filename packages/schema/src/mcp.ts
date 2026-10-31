@@ -1,7 +1,7 @@
 export * as Mcp from "./mcp.js"
 
 import { Schema } from "effect"
-import { optional, PositiveInt } from "./schema.js"
+import { DateTimeUtcFromMillis, optional, PositiveInt } from "./schema.js"
 import { IntegrationID } from "./integration-id.js"
 
 export class TimeoutConfig extends Schema.Class<TimeoutConfig>("Mcp.TimeoutConfig")({
@@ -50,6 +50,20 @@ export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
   }),
 }) {}
 
+export class TlsConfig extends Schema.Class<TlsConfig>("Mcp.TlsConfig")({
+  ca_file: Schema.String.pipe(optional).annotate({
+    description:
+      "Path to a PEM-encoded CA certificate file to trust for this server. Relative paths resolve from the workspace; ~ expands to the home directory.",
+  }),
+  ca_pem: Schema.String.pipe(optional).annotate({
+    description: "Inline PEM-encoded CA certificate content to trust for this server.",
+  }),
+  fingerprint: Schema.String.pipe(optional).annotate({
+    description:
+      "SHA256 fingerprint of the server certificate to pin. Format: 'SHA256:XX:XX:...', 'XX:XX:...', or bare hex.",
+  }),
+}) {}
+
 export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")({
   type: Schema.Literal("remote"),
   url: Schema.String,
@@ -61,10 +75,39 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
   }),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
+  tls: TlsConfig.pipe(optional).annotate({
+    description:
+      "TLS trust for this server: a custom CA and/or a pinned certificate fingerprint. Applies to this server only.",
+  }),
 }) {}
 
 export const ServerConfig = Schema.Union([LocalConfig, RemoteConfig]).pipe(Schema.toTaggedUnion("type"))
 export type ServerConfig = typeof ServerConfig.Type
+
+export interface TrustedHost extends Schema.Schema.Type<typeof TrustedHost> {}
+export const TrustedHost = Schema.Struct({
+  host: Schema.String,
+  port: PositiveInt,
+  fingerprint: Schema.String,
+  subject: Schema.String,
+  validTo: DateTimeUtcFromMillis,
+}).annotate({ identifier: "Mcp.TrustedHost" })
+
+export interface TrustInspect extends Schema.Schema.Type<typeof TrustInspect> {}
+export const TrustInspect = Schema.Struct({
+  cert: TrustedHost,
+  stored: optional(TrustedHost),
+}).annotate({ identifier: "Mcp.TrustInspect" })
+
+export interface TrustResult extends Schema.Schema.Type<typeof TrustResult> {}
+export const TrustResult = Schema.Struct({
+  host: Schema.String,
+  port: PositiveInt,
+  fingerprint: Schema.String,
+  subject: Schema.String,
+  validTo: DateTimeUtcFromMillis,
+  replaced: Schema.Boolean,
+}).annotate({ identifier: "Mcp.TrustResult" })
 
 const Connected = Schema.Struct({ status: Schema.Literal("connected") }).annotate({
   identifier: "Mcp.Status.Connected",
