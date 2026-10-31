@@ -93,7 +93,20 @@ export const layer = (options?: Options) =>
         if (owner && !owner.revert) yield* execution.wake(sessionID)
       })
 
-      const prepareResume = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+      const prepareResume = Effect.fnUntraced(function* (
+        sessionID: SessionSchema.ID,
+        options?: {
+          /**
+           * A candidate was selected from its pending inbox row, not from a claim. Re-check the row
+           * here: `execution.resume` is a forced, input-scoped drain, and a forced drain with nothing
+           * promotable would spin between boundaries instead of completing.
+           */
+          readonly requireResumable?: boolean
+        },
+      ) {
+        // A candidate can lose its last eligible row to a concurrent delivery or a sibling sweep
+        // before this runs. Check before counting an attempt, so a no-op never spends budget.
+        if (options?.requireResumable && (yield* SessionInbox.resumable(db, sessionID)).length === 0) return false
         // Durable before the resume runs, so a crash inside the resumed turn is
         // counted by the next sweep and the budget cannot be dodged.
         const attempts = yield* store.countResume(sessionID)
@@ -119,12 +132,17 @@ export const layer = (options?: Options) =>
           ])
           return false
         }
-        yield* bus.publish(SessionEvent.Synthetic, {
-          sessionID,
-          text: CONTINUE_AFTER_SERVER_RESTART,
-          description: "Continuing after restart",
-          metadata: { notice: "restart" },
-        })
+        // Only a claimed Session was actually working when the process died, so only it gets the
+        // "continue where you left off" notice. A row-only candidate never started a turn: its
+        // pending prompt is the instruction, and a synthetic admitted ahead of it would promote
+        // first and misdescribe what happened.
+        if (!options?.requireResumable)
+          yield* bus.publish(SessionEvent.Synthetic, {
+            sessionID,
+            text: CONTINUE_AFTER_SERVER_RESTART,
+            description: "Continuing after restart",
+            metadata: { notice: "restart" },
+          })
         return true
       })
 
@@ -397,9 +415,20 @@ export const layer = (options?: Options) =>
               yield* store.release(recovery.childSessionID)
             }
           }
+          // Delivery scope for recovery. A recovered row only ever requests a drain the live path
+          // would also have run: `execution.wake` after an admission is input-scoped, so the
+          // recovered drain is `resume` (forced, input-scoped) exactly like the wake that was lost.
+          // Steer-scoped bypasses stay live-path only: `interrupt({ resume: true })` parks queued
+          // prompts, and restart must not promote work the live path would leave parked.
+          const candidates = (yield* store.listResumableInbox()).filter((sessionID) => !active.has(sessionID))
+          // An unclaimed candidate still belongs in the early suppression set: a background child
+          // that completes now could otherwise wake this parent before recovery accounts for it.
+          // This is the *decision* set; the resume loop re-reads claims after background recovery.
           // Early notices wait for recovery's accounting, including Sessions that exhaust their budget.
           const suspended = new Set(
-            [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
+            [...(yield* store.listSuspended()), ...children, ...candidates].filter(
+              (sessionID) => !active.has(sessionID),
+            ),
           )
           const state = { defer: true }
           const wakes = new Set<SessionSchema.ID>()
@@ -461,12 +490,22 @@ export const layer = (options?: Options) =>
             { discard: true },
           )
 
-          // A directly driven child can also settle and wake its parent. Account for every
-          // claimed execution before starting any of them, leaving running jobs to SubagentJob.
+          // A directly driven child can also settle and wake its parent. Account for every claimed
+          // execution, and every unclaimed candidate holding a pending intent, before starting any
+          // of them: a resumed turn settling mid-sweep must not wake its parent past that budget.
+          // Running jobs are left to SubagentJob, which owns their children's recovery.
           const resumed = yield* execution.active
-          const direct = yield* Effect.filter(
+          const claimed = new Set(
             (yield* store.listSuspended()).filter((sessionID) => !resumed.has(sessionID) && !children.has(sessionID)),
-            prepareResume,
+          )
+          const direct = yield* Effect.filter(
+            Array.from(new Set([...claimed, ...candidates])).filter(
+              (sessionID) => !resumed.has(sessionID) && !children.has(sessionID),
+            ),
+            // A claim resumes on its own, exactly as before: it marks an execution that was already
+            // in flight. Only a row-only candidate needs an eligible row still to deliver, since
+            // `resume` is a forced drain that would otherwise spin between boundaries.
+            (sessionID) => prepareResume(sessionID, { requireResumable: !claimed.has(sessionID) }),
           )
           yield* Effect.forEach(
             direct,

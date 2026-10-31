@@ -457,6 +457,29 @@ export const projectResumeRetired = Effect.fn("SessionInbox.projectResumeRetired
     .pipe(Effect.orDie)
 })
 
+/**
+ * Pending rows an automated drain may resume: admission asked for execution and no recovery has
+ * retired them. Ordered like every other inbox read so the oldest work goes first.
+ */
+export const resumable = Effect.fn("SessionInbox.resumable")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  return yield* db
+    .select({ id: SessionInboxTable.id, delivery: SessionInboxTable.delivery, type: SessionInboxTable.type })
+    .from(SessionInboxTable)
+    .where(
+      and(
+        eq(SessionInboxTable.session_id, sessionID),
+        eq(SessionInboxTable.resume, true),
+        eq(SessionInboxTable.resume_retired, false),
+      ),
+    )
+    .orderBy(asc(SessionInboxTable.enqueued_seq))
+    .all()
+    .pipe(Effect.orDie)
+})
+
 /** Highest admission sequence this Session has, the boundary recovery captures before deciding. */
 export const latestEnqueuedSeq = Effect.fn("SessionInbox.latestEnqueuedSeq")(function* (
   db: DatabaseService,

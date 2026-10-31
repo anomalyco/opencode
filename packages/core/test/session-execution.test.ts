@@ -33,7 +33,7 @@ import { SubagentCompletion } from "@opencode/core/session/subagent-completion"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Logger, Scope } from "effect"
 import { asc, desc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
-import { drain } from "./lib/clock"
+import { advance, drain } from "./lib/clock"
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -210,6 +210,31 @@ describe("SessionExecution lifecycle", () => {
       yield* execution.interrupt(sessionID)
       expect(reason?.()).toBe("user")
       yield* execution.awaitIdle(sessionID)
+    }),
+  )
+
+  it.effect("retires the eligible rows a user interrupt decided on, but not the successor it wakes", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_interrupt_retire")
+      yield* seedSessions(database, [sessionID])
+      yield* seedInbox(database, sessionID, [{ delivery: "steer", resume: true }])
+
+      const draining = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () =>
+        Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never)),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+      yield* Deferred.await(draining)
+
+      expect(yield* execution.interrupt(sessionID, { resume: false })).toBeTrue()
+      yield* execution.awaitIdle(sessionID)
+
+      // The row that existed at the decision is retired; it stays pending, unconsumed.
+      expect((yield* pendingInbox(database, sessionID)).map((row) => row.retired)).toEqual([true])
     }),
   )
 
@@ -463,6 +488,192 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  it.effect("resumes a prompt admitted without a claim, exactly once", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_unclaimed_prompt")
+      // The bug: the receipt exists but the process died before the started hook wrote a claim,
+      // so `listSuspended` (claimed top-level only) cannot see it.
+      yield* seedSessions(database, [sessionID])
+      yield* seedInbox(database, sessionID, [{ delivery: "steer", resume: true }])
+
+      const drained: string[] = []
+      const started = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, ({ sessionID: id }) =>
+        Effect.sync(() => void drained.push(id)).pipe(Effect.andThen(Deferred.succeed(started, undefined))),
+      )
+      const restart = Context.get(context, SessionRestart.Service)
+
+      yield* restart.resumeSuspendedSessions
+      yield* Deferred.await(started)
+      expect(drained).toEqual([sessionID])
+      // Recovery went through the same durable accounting as a claimed turn.
+      expect(yield* attempts(database, sessionID)).toBe(1)
+
+      // A second sweep must not run it again while the row is still pending and eligible.
+      drained.length = 0
+      yield* restart.resumeSuspendedSessions
+      yield* drain
+      expect(drained).toEqual([])
+    }),
+  )
+
+  it.effect("gives the restart notice only to a claimed Session, never a row-only candidate", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const claimed = Session.ID.make("ses_notice_claimed")
+      const candidate = Session.ID.make("ses_notice_candidate")
+      yield* seedSessions(database, [claimed], { time_suspended: Date.now() })
+      yield* seedSessions(database, [candidate])
+      yield* seedInbox(database, candidate, [{ delivery: "steer", resume: true }])
+
+      const notices: string[] = []
+      yield* bus.project(SessionEvent.Synthetic, (event) =>
+        Effect.sync(() => void notices.push(event.data.description ?? "")),
+      )
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.void)
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* drain
+
+      // Only the claimed Session was working when the process died, so only it is told so. The
+      // candidate's pending prompt is the instruction; a notice ahead of it would promote first.
+      expect(notices).toEqual(["Continuing after restart"])
+    }),
+  )
+
+  it.effect("never resumes an admit-only or retired receipt", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const admitOnly = Session.ID.make("ses_unclaimed_admit_only")
+      const alreadyRetired = Session.ID.make("ses_unclaimed_retired")
+      yield* seedSessions(database, [admitOnly, alreadyRetired])
+      yield* seedInbox(database, admitOnly, [{ delivery: "steer", resume: false }])
+      yield* seedInbox(database, alreadyRetired, [{ delivery: "steer", resume: true }])
+      yield* database.db
+        .update(SessionInboxTable)
+        .set({ resume_retired: true })
+        .where(eq(SessionInboxTable.session_id, alreadyRetired))
+        .run()
+        .pipe(Effect.orDie)
+
+      const drained: string[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, ({ sessionID: id }) => Effect.sync(() => void drained.push(id)))
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* drain
+
+      expect(drained).toEqual([])
+      expect(yield* attempts(database, admitOnly)).toBe(0)
+      expect(yield* attempts(database, alreadyRetired)).toBe(0)
+    }),
+  )
+
+  it.effect("resumes a claimed turn and an unclaimed candidate in one pass without duplicating either", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const claimed = Session.ID.make("ses_union_claimed")
+      const candidate = Session.ID.make("ses_union_candidate")
+      yield* seedSessions(database, [claimed], { time_suspended: Date.now() })
+      yield* seedSessions(database, [candidate])
+      yield* seedInbox(database, candidate, [{ delivery: "steer", resume: true }])
+
+      const drained: string[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, ({ sessionID: id }) =>
+        Effect.sync(() => void drained.push(id)).pipe(Effect.andThen(Effect.never)),
+      )
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      // Both recoveries are forked; poll for the pair rather than waiting on a shared signal.
+      yield* advance(() => drained.length === 2)
+
+      // One ID union: the claimed Session appears once even though it is also a candidate shape,
+      // and the candidate runs a forced input-scoped drain like the wake it lost.
+      expect(drained.toSorted()).toEqual([candidate, claimed].toSorted())
+      expect(drained).toHaveLength(2)
+    }),
+  )
+
+  it.effect("resumes a claimed Session on its claim alone when its own row was consumed", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_union_overlap")
+      const child = Session.ID.make("ses_union_overlap_child")
+      // One Session that is BOTH claimed and holds an eligible row: the overlap the union exists for.
+      yield* seedSessions(database, [sessionID], { time_suspended: Date.now() })
+      yield* seedInbox(database, sessionID, [{ delivery: "steer", resume: true }])
+      yield* seedSessions(database, [child], { parent_id: sessionID })
+
+      // A completed child notice forces recovery through `jobs.get` between candidate selection and
+      // accounting. Consume the row from there: the exact window where the claim must still win.
+      const jobs = yield* Job.make.pipe(Scope.provide(yield* Scope.make()))
+      const consumed = yield* Deferred.make<void>()
+      const observing: Job.Interface = {
+        ...jobs,
+        get: (id) =>
+          Effect.gen(function* () {
+            if (!(yield* Deferred.isDone(consumed))) {
+              yield* database.db
+                .delete(SessionInboxTable)
+                .where(eq(SessionInboxTable.session_id, sessionID))
+                .run()
+                .pipe(Effect.orDie)
+              yield* Deferred.succeed(consumed, undefined)
+            }
+            return yield* jobs.get(id)
+          }),
+      }
+      // Seed the durable background record the sweep reads at boot.
+      yield* database.db
+        .insert(JobTable)
+        .values({
+          notification_id: SessionMessage.ID.make("msg_union_overlap_notice"),
+          id: "call_union_overlap",
+          session_id: sessionID,
+          child_session_id: child,
+          kind: "subagent",
+          title: "Overlap",
+          status: "completed",
+          output: "done",
+          recovery: {
+            kind: "subagent",
+            parentSessionID: sessionID,
+            childSessionID: child,
+            agent: "general",
+            description: "Overlap",
+          },
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const drained: string[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID: id }) => Effect.sync(() => void drained.push(id)).pipe(Effect.andThen(Effect.never)),
+        undefined,
+        observing,
+        undefined,
+        true,
+      )
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* advance(() => drained.length > 0)
+
+      // The eligibility row was consumed mid-sweep; only the child's suppressed notice remains, so
+      // the claim is the only thing that can explain this recovery.
+      expect(yield* Deferred.isDone(consumed)).toBe(true)
+      expect((yield* pendingInbox(database, sessionID)).filter((row) => row.resume)).toEqual([])
+      expect(drained).toContain(sessionID)
+    }),
+  )
+
   it.effect("counts every resume durably and never consumes the claim it recovers", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -522,7 +733,62 @@ describe("SessionExecution lifecycle", () => {
   )
 })
 
-describe("SessionRestart crash matrix", () => {})
+describe("SessionRestart crash matrix", () => {
+  it.effect("a crash after counting but before the claim stays discoverable with its budget", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_crash_after_count")
+      yield* seedSessions(database, [sessionID])
+      yield* seedInbox(database, sessionID, [{ delivery: "steer", resume: true }])
+
+      // Boot one: the sweep counts the attempt, then the process dies inside the resumed turn.
+      const running = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const first = yield* buildExecution(scope, () =>
+        Deferred.succeed(running, undefined).pipe(Effect.andThen(Effect.never)),
+      )
+      yield* Context.get(first, SessionRestart.Service).resumeSuspendedSessions
+      yield* advance(() => true)
+      // The budget is durable before the drain runs, so death anywhere after this keeps it.
+      expect(yield* attempts(database, sessionID)).toBe(1)
+      yield* Scope.close(scope, Exit.void)
+
+      // Boot two, as a fresh process: drop the claim so only the pending row identifies the work.
+      // This is the crash the fix targets — admitted, counted, never claimed.
+      yield* database.db
+        .update(SessionTable)
+        .set({ time_suspended: null })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      expect((yield* pendingInbox(database, sessionID)).map((row) => [row.resume, row.retired])).toEqual([
+        [true, false],
+      ])
+
+      const drained: string[] = []
+      const scope2 = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope2, Exit.void))
+      // Observe the budget from inside the drain: a drain that completes terminalizes and releases,
+      // which resets the counter by design, so read it at the moment recovery hands over.
+      const seen: Array<number | undefined> = []
+      const second = yield* buildExecution(scope2, ({ sessionID: id }) =>
+        Effect.gen(function* () {
+          drained.push(id)
+          seen.push(yield* attempts(database, id))
+          // Hold the turn open so the terminal cannot reset the counter before we assert.
+          yield* Effect.never
+        }),
+      )
+      yield* Context.get(second, SessionRestart.Service).resumeSuspendedSessions
+      yield* advance(() => drained.length > 0)
+
+      // Discovered through the pending row alone, and the budget continued rather than restarting.
+      expect(drained).toEqual([sessionID])
+      expect(seen).toEqual([2])
+    }),
+  )
+})
 
 describe("SessionRestart retirement settles the decision", () => {
   it.effect("a second sweep counts nothing, fails nothing, and drains nothing after exhaustion", () =>

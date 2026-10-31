@@ -113,7 +113,7 @@ export const layer = Layer.effect(
       ),
     })
     // Why a Session's execution is being interrupted, read from the coordinator once it exists.
-    let interruption: (sessionID: SessionSchema.ID) => InterruptReason | undefined = () => undefined
+    let interruption: (sessionID: SessionSchema.ID) => Interruption | undefined = () => undefined
     const drain = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
       force: boolean,
@@ -130,7 +130,9 @@ export const layer = Layer.effect(
           continuation,
           promotable,
           stepped,
-          interruption: () => interruption(sessionID),
+          // The runner only needs to tell a user's stop from a teardown; the admission boundary
+          // stays in the coordinator's own interruption record.
+          interruption: () => interruption(sessionID)?.reason,
         }),
       ).pipe(
         instances.provide(session),
