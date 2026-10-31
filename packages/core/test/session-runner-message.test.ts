@@ -528,6 +528,39 @@ Earlier work
     ])
   })
 
+  test("uses audio and video attachments as provider media", () => {
+    const audio = Base64.make("UklGRiQAAABXQVZF")
+    const video = Base64.make("AAAAGGZ0eXBtcDQy")
+    const location = path.resolve("/project/clip.mp4")
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-audio-video"),
+          type: "user",
+          text: "Describe these clips",
+          files: [
+            FileAttachment.make({ data: audio, mime: "audio/wav", source: { type: "inline" }, name: "tone.wav" }),
+            FileAttachment.make({
+              data: video,
+              mime: "video/mp4",
+              source: { type: "uri", uri: pathToFileURL(location).href },
+              name: "clip.mp4",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Describe these clips" },
+      { type: "media", media: Media.base64(audio, "audio/wav"), filename: "tone.wav" },
+      { type: "text", text: `Attached file: ${location}` },
+      { type: "media", media: Media.base64(video, "video/mp4"), filename: "clip.mp4" },
+    ])
+  })
+
   test("exposes admitted local image source paths before provider media", () => {
     const data = Base64.make("AAECAw==")
     const location = path.resolve("/project/IMG_3480.JPG")
