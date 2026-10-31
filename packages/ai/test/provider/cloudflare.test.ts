@@ -327,4 +327,37 @@ describe("Cloudflare", () => {
       )
     }),
   )
+  it.effect("replays complete Workers AI Responses documents as stream events", () =>
+    Effect.gen(function* () {
+      const model = CloudflareWorkersAI.configure({ accountId: "test-account", apiKey: "test-token" }).responses(
+        "@cf/openai/gpt-oss-20b",
+      )
+      const reply = (body: object) =>
+        dynamicResponse((input) =>
+          Effect.sync(() => {
+            expect(decodeJson(input.text)).toMatchObject({ stream: false, store: false })
+            return input.respond(JSON.stringify(body), { headers: { "content-type": "application/json" } })
+          }),
+        )
+      const incomplete = yield* ai.generate(ai.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          reply({
+            id: "resp_1",
+            status: "incomplete",
+            incomplete_details: { reason: "max_output_tokens" },
+            output: [{ id: "msg_1", type: "message", content: [{ type: "output_text", text: "Hel" }] }],
+            usage: { input_tokens: 3, output_tokens: 1, total_tokens: 4 },
+          }),
+        ),
+      )
+      expect(incomplete.text).toBe("Hel")
+      expect(incomplete.finishReason.normalized).toBe("length")
+      expect(incomplete.usage.outputTokens).toBe(1)
+
+      const failed = yield* ai
+        .generate(ai.request({ model, prompt: "Say hello." }))
+        .pipe(Effect.provide(reply({ error: { code: "invalid_prompt", message: "Bad prompt" } })), Effect.flip)
+      expect(failed.message).toContain("Bad prompt")
+    }),
+  )
 })

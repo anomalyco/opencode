@@ -202,6 +202,14 @@ test("spells xAI Responses variants with catalog effort levels", () => {
   )
 })
 
+test("spells Groq Responses variants as effort only", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/groq/responses", "openai/gpt-oss-20b"), [
+      { type: "effort", values: ["low", "medium", "high"] },
+    ]),
+  ).toEqual(["low", "medium", "high"].map((effort) => ({ id: effort, settings: { reasoningEffort: effort } })))
+})
+
 test("spells Chat Completions variants for direct providers", () => {
   expect(
     resolve(model("@opencode/ai/providers/deepseek", "deepseek-v4-flash"), [

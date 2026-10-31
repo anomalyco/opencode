@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "@cf/openai/gpt-oss-20b",
+    "tags": [
+      "prefix:cloudflare-workers-ai-responses",
+      "provider:cloudflare-workers-ai",
+      "protocol:open-responses",
+      "text",
+      "usage"
+    ],
+    "name": "cloudflare-workers-ai-responses/generates-text",
+    "recordedAt": "2026-10-31T17:15:04.580Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/{account}/ai/v1/responses",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"@cf/openai/gpt-oss-20b\",\"input\":[{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Reply exactly: OK\"}]}],\"stream\":false,\"max_output_tokens\":256,\"store\":false,\"include\":[\"reasoning.encrypted_content\"]}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"id\":\"id-1793466904617\",\"created_at\":1793466904,\"incomplete_details\":null,\"instructions\":null,\"metadata\":null,\"model\":\"@cf/openai/gpt-oss-20b\",\"object\":\"response\",\"output\":[{\"id\":\"rs_f800171d173d46e3b751fa6db1595bda\",\"summary\":[],\"type\":\"reasoning\",\"content\":[{\"text\":\"We must reply exactly \\\"OK\\\". The user says: \\\"Reply exactly: OK\\\". So we must output exactly \\\"OK\\\". No extra spaces or lines. Just the text OK. Should we add newline? The instruction: Reply exactly: OK. Usually means we should output \\\"OK\\\". Could be line break? There's no ambiguity. We output \\\"OK\\\".\",\"type\":\"reasoning_text\"}],\"encrypted_content\":null,\"status\":null},{\"id\":\"msg_de90f0cc23a2492a99044fcee827118b\",\"content\":[{\"annotations\":[],\"text\":\"OK\",\"type\":\"output_text\",\"logprobs\":null}],\"role\":\"assistant\",\"status\":\"completed\",\"type\":\"message\"}],\"input_messages\":null,\"output_messages\":null,\"parallel_tool_calls\":true,\"temperature\":1,\"tool_choice\":\"auto\",\"tools\":[],\"top_p\":1,\"background\":false,\"max_output_tokens\":256,\"max_tool_calls\":null,\"previous_response_id\":null,\"prompt\":null,\"reasoning\":null,\"service_tier\":\"auto\",\"status\":\"completed\",\"text\":null,\"top_logprobs\":null,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":69,\"output_tokens\":82,\"total_tokens\":151,\"neurons\":3.4909055999999996},\"user\":null}"
+      }
+    }
+  ]
+}

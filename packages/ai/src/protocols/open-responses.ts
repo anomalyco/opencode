@@ -1,6 +1,8 @@
-import { Effect, Option, Schema } from "effect"
+import { Effect, Option, Schema, Stream } from "effect"
 import type { Content } from "@opencode/schema/tool"
-import { HttpTransport } from "../route/transport/index.js"
+import { Framing } from "../route/framing.js"
+import { HttpTransport, type Transport } from "../route/transport/index.js"
+import type { HttpPrepared } from "../route/transport/http.js"
 import { Protocol } from "../route/protocol.js"
 import {
   AIError,
@@ -1570,5 +1572,47 @@ export const protocol = Protocol.make({
 })
 
 export const httpTransport = HttpTransport.sseJson.with<OpenResponsesBody>()
+
+const documentHttpTransport = HttpTransport.httpJson<OpenResponsesBody, string>({
+  framing: {
+    id: "open-responses-document",
+    frame: (bytes) =>
+      Framing.document.frame(bytes).pipe(
+        Stream.mapEffect((document) => ProviderShared.parseJson(ADAPTER, document, `Invalid ${NAME} response`)),
+        Stream.flatMap((response) => Stream.fromIterable(documentEvents(response).map(ProviderShared.encodeJson))),
+      ),
+  },
+})
+
+/**
+ * For hosts whose Responses endpoint only returns the complete Response object: sends
+ * `stream: false` and replays the Response as the item and terminal events a stream ends with.
+ */
+export const documentTransport: Transport<OpenResponsesBody, HttpPrepared<string>, string> = {
+  ...documentHttpTransport,
+  id: "http-json/open-responses-document",
+  prepare: (input) =>
+    documentHttpTransport.prepare({
+      ...input,
+      encodeBody: (body) => ProviderShared.encodeJson({ ...body, stream: false }),
+    }),
+}
+
+const documentEvents = (response: unknown) => {
+  if (!ProviderShared.isRecord(response)) return [{ type: "error", error: response }]
+  if (!Array.isArray(response.output)) return [{ ...response, type: "error" }]
+  return [
+    ...response.output.map((item, output_index) => ({ type: "response.output_item.done", output_index, item })),
+    {
+      type:
+        response.status === "incomplete"
+          ? "response.incomplete"
+          : response.status === "failed"
+            ? "response.failed"
+            : "response.completed",
+      response,
+    },
+  ]
+}
 
 export * as OpenResponses from "./open-responses.js"

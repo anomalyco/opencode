@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "@cf/openai/gpt-oss-20b",
+    "tags": [
+      "prefix:cloudflare-workers-ai-responses",
+      "provider:cloudflare-workers-ai",
+      "protocol:open-responses",
+      "tool"
+    ],
+    "name": "cloudflare-workers-ai-responses/calls-a-tool",
+    "recordedAt": "2026-10-31T17:15:05.412Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/{account}/ai/v1/responses",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"@cf/openai/gpt-oss-20b\",\"input\":[{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"What is the weather in Paris?\"}]}],\"instructions\":\"Use the get_weather tool.\",\"stream\":false,\"max_output_tokens\":256,\"store\":false,\"include\":[\"reasoning.encrypted_content\"],\"tools\":[{\"type\":\"function\",\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}]}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"id\":\"id-1793466905302\",\"created_at\":1793466905,\"incomplete_details\":null,\"instructions\":\"Use the get_weather tool.\",\"metadata\":null,\"model\":\"@cf/openai/gpt-oss-20b\",\"object\":\"response\",\"output\":[{\"id\":\"rs_cb3c0cd97ddf40a3827a82eccb248682\",\"summary\":[],\"type\":\"reasoning\",\"content\":[{\"text\":\"We need to call the function get_weather with city \\\"Paris\\\".\",\"type\":\"reasoning_text\"}],\"encrypted_content\":null,\"status\":null},{\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\",\"call_id\":\"call_473df6f332b746b0bcb388fa7a049377\",\"name\":\"get_weather\",\"type\":\"function_call\",\"id\":\"fc_473df6f332b746b0bcb388fa7a049377\",\"status\":null}],\"input_messages\":null,\"output_messages\":null,\"parallel_tool_calls\":true,\"temperature\":1,\"tool_choice\":\"auto\",\"tools\":[{\"name\":\"get_weather\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false,\"type\":\"function\",\"description\":\"Get current weather for a city.\"}],\"top_p\":1,\"background\":false,\"max_output_tokens\":256,\"max_tool_calls\":null,\"previous_response_id\":null,\"prompt\":null,\"reasoning\":null,\"service_tier\":\"auto\",\"status\":\"completed\",\"text\":null,\"top_logprobs\":null,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":133,\"output_tokens\":37,\"total_tokens\":170,\"neurons\":3.4272693},\"user\":null}"
+      }
+    }
+  ]
+}
