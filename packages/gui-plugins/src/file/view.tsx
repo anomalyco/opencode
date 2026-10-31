@@ -11,6 +11,7 @@ import { LineCommentOverflowIcon } from "@opencode/ui/line-comment"
 import { Menu } from "@opencode/ui/menu"
 import { createKeyed, usePlugin, type LineRange, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
 import { artifactKind } from "@opencode/util/artifact"
+import { ArtifactToolbar } from "./artifact-toolbar"
 import ArtifactView from "./artifact-view"
 import { useShared } from "./context"
 import { fileTabPath } from "./path"
@@ -511,7 +512,20 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       <Switch>
         <Match when={current()?.loaded ? current()?.content : undefined}>
           {(value) => (
-            <Show when={artifact()} fallback={codeView()}>
+            <Show
+              when={artifact()}
+              fallback={
+                <>
+                  <ArtifactToolbar
+                    session={props.session}
+                    screen={props.screen}
+                    path={path() ?? ""}
+                    text={contents()}
+                  />
+                  {codeView()}
+                </>
+              }
+            >
               <ArtifactView
                 session={props.session}
                 screen={props.screen}
