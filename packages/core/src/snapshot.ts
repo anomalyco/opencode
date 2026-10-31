@@ -2,7 +2,7 @@ export * as Snapshot from "./snapshot.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
-import { Clock, Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
+import { Clock, Context, Duration, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "./git.js"
@@ -87,7 +87,8 @@ const layer = Layer.effect(
       }),
     })
     // Cache a scope-owned fiber so caller cancellation stops waiting without poisoning shared initialization.
-    const repositoryFiber = yield* Effect.cached(
+    // Invalidate a failed attempt rather than its successful result, so one bad create does not wedge the location.
+    const [repositoryFiber, invalidateRepository] = yield* Effect.cachedInvalidateWithTTL(
       Effect.gen(function* () {
         const source = yield* git.repo.discover(location.project.directory)
         if (!source) return yield* new Error({ operation: "capture", message: "Project is not a Git repository" })
@@ -102,8 +103,14 @@ const layer = Layer.effect(
               .pipe(Effect.mapError((cause) => failure("capture", cause)))
         return { source, worktree, snapshotRepository }
       }).pipe(Effect.forkIn(lifetime)),
+      Duration.infinity,
     )
-    const repository = repositoryFiber.pipe(Effect.uninterruptible, Effect.flatMap(Fiber.join))
+    // Invalidate only a failed initialization: caller interruption must keep the shared attempt alive.
+    const repository = repositoryFiber.pipe(
+      Effect.uninterruptible,
+      Effect.flatMap(Fiber.join),
+      Effect.tapError(() => invalidateRepository),
+    )
 
     const scope = Effect.fnUntraced(function* (worktree: AbsolutePath) {
       if (!FSUtil.contains(worktree, location.directory))

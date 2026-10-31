@@ -82,6 +82,63 @@ describe("Snapshot", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("retries repository initialization after a failed create", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+            await initGit(project)
+          })
+
+          const git = yield* Git.Service.pipe(Effect.provide(AppNodeBuilder.build(Git.node)))
+          const location = yield* Location.Service.pipe(
+            Effect.provide(
+              AppNodeBuilder.build(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) }))),
+            ),
+          )
+          let creations = 0
+          const instrumented = Git.Service.of({
+            ...git,
+            repo: {
+              ...git.repo,
+              create: (input) => {
+                creations++
+                if (creations === 1)
+                  return Effect.fail(
+                    new Git.OperationError({
+                      operation: "create",
+                      directory: input.gitDirectory,
+                      message: "simulated failure",
+                    }),
+                  )
+                return git.repo.create(input)
+              },
+            },
+          })
+          const layer = AppNodeBuilder.build(Snapshot.node, [
+            Location.node.replace(Layer.succeed(Location.Service, location)),
+            Global.node.replace(Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })),
+            Git.node.replace(Layer.succeed(Git.Service, instrumented)),
+          ])
+
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            expect(yield* snapshot.capture()).toBeUndefined()
+            expect(creations).toBe(1)
+            expect(yield* snapshot.capture()).toBeDefined()
+            expect(creations).toBe(2)
+            expect(yield* snapshot.capture()).toBeDefined()
+            expect(creations).toBe(2)
+          }).pipe(Effect.provide(layer))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   testEffect(Layer.empty).live("captures and restores Location-scoped changes", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
