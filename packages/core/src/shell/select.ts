@@ -161,11 +161,34 @@ function info(file: string, options?: Options, bin?: string): Item {
   }
 }
 
+// PowerShell encodes stdout with the console code page. Commands are spawned without a
+// console, so that lookup fails and PowerShell falls back to the system ANSI code page
+// (GBK on Chinese Windows). Every reader decodes UTF-8, so pin the encoding before the
+// command runs. Assigning OutputEncoding also sets the console code page, so native
+// children emit UTF-8 too; SetOut alone would leave native output on the ANSI code page.
+export const PS_UTF8 =
+  "[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding;"
+
 export function args(file: string, command: string) {
   const n = name(file)
   if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
+  if (ps(file)) {
+    // `using` statements must be the first statement in a script, so they cannot follow
+    // the encoding setup. Those commands keep the default encoding; they rarely print
+    // non-ASCII output.
+    const prefix = process.platform === "win32" && !startsWithUsing(command) ? `${PS_UTF8} ` : ""
+    return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", `${prefix}${command}`]
+  }
   return ["-c", command]
+}
+
+function startsWithUsing(command: string) {
+  for (const line of command.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith("#")) continue
+    return /^using\s+(namespace|module|assembly)\b/i.test(trimmed)
+  }
+  return false
 }
 
 // Resolve afresh so removing a shell does not leave terminals using a stale cached path.
