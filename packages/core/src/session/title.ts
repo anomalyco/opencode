@@ -14,6 +14,7 @@ import { SessionEvent } from "./event.js"
 import { SessionHistory } from "./history.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
+import type { SessionStored } from "./stored.js"
 import { SessionUsage } from "./usage.js"
 import { SessionStore } from "./store.js"
 
@@ -35,6 +36,19 @@ const messagePrompt = (text: string) =>
   `Here is the first message of the conversation:\n\n<message>\n${text}\n</message>\n\nReply with only the title.`
 const conversationPrompt = (text: string) =>
   `Here is the conversation so far:\n\n<conversation>\n${text}\n</conversation>\n\nReply with only the title.`
+const attachmentText = (file: SessionStored.File) => {
+  const label = `Attached file: ${file.name ?? file.mime}`
+  if (file.mime !== "text/plain" || !("data" in file)) return label
+  return `${label}\n${Buffer.from(file.data, "base64").toString("utf8").slice(0, MAX_FIRST_MESSAGE_LENGTH)}`
+}
+const firstMessageText = (message: {
+  readonly text: string
+  readonly files?: ReadonlyArray<SessionStored.File>
+}) =>
+  [message.text, ...(message.files?.map(attachmentText) ?? [])]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, MAX_FIRST_MESSAGE_LENGTH)
 export const isUntitled = (session: SessionSchema.Info) =>
   isExactRootFallback({
     title: session.title,
@@ -107,10 +121,11 @@ export const layer = Layer.effect(
       if (!session) return
       const firstUser = yield* SessionHistory.firstUserMessage(db, session.id)
       if (!firstUser) return
+      const firstText = firstMessageText(firstUser)
       const text = !isUntitled(session)
         ? yield* store.context(session.id).pipe(
             Effect.map((messages) => {
-              const original = `Original request:\n${firstUser.text.slice(0, MAX_FIRST_MESSAGE_LENGTH)}`
+              const original = `Original request:\n${firstText}`
               const recent = messages
                 .flatMap((message) => {
                   if (message.type === "user" && message.id !== firstUser.id) return [`User: ${message.text.trim()}`]
@@ -127,9 +142,9 @@ export const layer = Layer.effect(
               const budget = MAX_CONTEXT_LENGTH - conversationPrompt("").length - prefix.length
               return conversationPrompt(`${prefix}${recent.slice(-budget)}`)
             }),
-            Effect.orElseSucceed(() => messagePrompt(firstUser.text)),
+            Effect.orElseSucceed(() => messagePrompt(firstText)),
           )
-        : messagePrompt(firstUser.text)
+        : messagePrompt(firstText)
       const selection = yield* context.selectTitle(session)
       if (!selection) return
       const title =

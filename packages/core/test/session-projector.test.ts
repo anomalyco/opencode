@@ -1189,7 +1189,11 @@ describe("SessionProjector", () => {
         },
       })
 
-      expect(yield* SessionHistory.firstUserMessage(db, sessionID)).toEqual({ id: userID, text: "user attachment" })
+      expect(yield* SessionHistory.firstUserMessage(db, sessionID)).toEqual({
+        id: userID,
+        text: "user attachment",
+        files: [{ uri, mime: "application/pdf", source: { type: "inline" }, name: "spec.pdf" }],
+      })
       expect(yield* SessionInbox.nextPromotable(db, sessionID, "input")).toEqual({
         id: inboxID,
         type: "user",

@@ -34,6 +34,7 @@ import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
+import type { FileAttachment } from "@opencode/schema/prompt"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
@@ -152,14 +153,14 @@ const insertSession = (id: Session.ID, title?: string, created?: number, model?:
       .pipe(Effect.orDie)
   })
 
-const prompt = (sessionID: Session.ID, text: string) =>
+const prompt = (sessionID: Session.ID, text: string, files?: ReadonlyArray<FileAttachment>) =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const messageID = SessionMessage.ID.create()
     yield* bus.publish(SessionEvent.InboxEnqueued, {
       sessionID,
       inboxID: messageID,
-      item: { type: "user", payload: { text }, delivery: "steer" },
+      item: { type: "user", payload: { text, ...(files ? { files } : {}) }, delivery: "steer" },
     })
     yield* bus.publish(SessionEvent.InboxDelivered, {
       sessionID,
@@ -451,6 +452,63 @@ it.effect("generates from the first user message after later messages exist", ()
     expect(JSON.stringify(requests[0]?.messages)).toContain("First message")
     expect(JSON.stringify(requests[0]?.messages)).not.toContain("Second message")
     expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("generates a title from the first message's attachments when its text is empty", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_attachments")
+    yield* insertSession(sessionID)
+    const body = "The checkout total ignores the discount code applied in the cart."
+    const binary = Buffer.from("not readable as text").toString("base64")
+    yield* prompt(sessionID, "", [
+      {
+        data: Buffer.from(body).toString("base64"),
+        mime: "text/plain",
+        source: { type: "inline" },
+        name: "message.txt",
+      },
+      { data: binary, mime: "application/pdf", source: { type: "inline" }, name: "discount-rules.pdf" },
+    ])
+
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+
+    expect(requests).toHaveLength(1)
+    expect(JSON.stringify(requests[0]?.messages)).toContain(body)
+    expect(JSON.stringify(requests[0]?.messages)).toContain("discount-rules.pdf")
+    expect(JSON.stringify(requests[0]?.messages)).not.toContain(binary)
+  }),
+)
+
+it.effect("caps the combined first message text", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_attachments_capped")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "ORIGINAL_GOAL", [
+      {
+        data: Buffer.from("a".repeat(2_000)).toString("base64"),
+        mime: "text/plain",
+        source: { type: "inline" },
+        name: "first.txt",
+      },
+      {
+        data: Buffer.from("OMITTED_TAIL").toString("base64"),
+        mime: "text/plain",
+        source: { type: "inline" },
+        name: "second.txt",
+      },
+    ])
+
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+
+    expect(requests).toHaveLength(1)
+    expect(JSON.stringify(requests[0]?.messages)).toContain("ORIGINAL_GOAL")
+    expect(JSON.stringify(requests[0]?.messages)).toContain("a".repeat(100))
+    expect(JSON.stringify(requests[0]?.messages)).not.toContain("OMITTED_TAIL")
   }),
 )
 
