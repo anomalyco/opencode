@@ -246,7 +246,7 @@ export const dict = {
   "ui.question.review.notAnswered": "(non répondu)",
   "ui.question.multiHint": "Sélectionnez tout ce qui s'applique",
   "ui.question.custom.placeholder": "Tapez votre réponse…",
-
+  "ui.question.custom.answerPlaceholder": "Tapez votre réponse…",
   "ui.fileSearch.placeholder": "Rechercher",
   "ui.fileSearch.previousMatch": "Précédent",
   "ui.fileSearch.nextMatch": "Suivant",
