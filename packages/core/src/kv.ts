@@ -1,7 +1,7 @@
 export * as KV from "./kv.js"
 
-import { and, asc, eq, gt, gte, lt } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { and, asc, eq, gt, gte, lt, sql } from "drizzle-orm"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Database } from "./database/database.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { KVTable } from "./kv/sql.js"
@@ -39,12 +39,22 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     return Service.of({
       get: Effect.fn("KV.get")(function* (key) {
-        return (yield* db
-          .select({ value: KVTable.value })
+        // Read the column as text: the JSON column mode decodes inside the query, so one
+        // malformed row would fail every read of the table with no way to recover.
+        const row = yield* db
+          .select({ value: sql<string>`${KVTable.value}` })
           .from(KVTable)
           .where(eq(KVTable.key, key))
           .get()
-          .pipe(Effect.orDie))?.value
+          .pipe(Effect.orDie)
+        if (row === undefined) return undefined
+        const value = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json))(row.value)
+        if (Option.isSome(value)) return value.value
+        // The entry is already unreadable and always regenerable, so drop it instead of
+        // failing every start on the same row.
+        yield* Effect.logWarning("discarding kv entry that is not valid JSON", { key })
+        yield* db.delete(KVTable).where(eq(KVTable.key, key)).run().pipe(Effect.orDie)
+        return undefined
       }),
       set: Effect.fn("KV.set")(function* (key, value) {
         yield* db
