@@ -72,6 +72,56 @@ opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
 opencode service start
 ```
 
+## Client certificates
+
+When a gateway requires mutual TLS, list the hosts that should receive a client certificate under
+`network.client_certificates`. OpenCode presents the matching certificate on model requests to those hosts, and to no
+other host. Other requests, such as web fetches and instruction or skill URLs from configuration, never present it, so a
+fetched page cannot use the machine's identity.
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "network": {
+    "client_certificates": [
+      {
+        "hosts": ["llm.company.example", "*.ai.company.example"],
+        "cert": "/etc/company/opencode-client.pem",
+        "key": "/etc/company/opencode-client.key",
+        "passphrase_file": "/etc/company/opencode-client.pass",
+      },
+    ],
+  },
+}
+```
+
+- `hosts` are hostnames or bracketed IPv6 addresses, without a scheme, port, or path, matched against the request's
+  hostname. `*` and `?` are wildcards that also match dots, so `*.company.example` matches `llm.company.example` and
+  `a.b.company.example` but not `company.example`. Write internationalized domains in their ASCII (`xn--`) form.
+- `cert` and `key` are PEM files. Paths can be absolute, start with `~/`, or be relative to the configuration file.
+  OpenCode reads the files for each request, so a rotated certificate applies without a restart.
+- `passphrase_file` is the path to a file holding the passphrase of an encrypted key, with any trailing newline ignored.
+  Give the path itself, not a `{file:...}` reference, which would put the passphrase into the configuration.
+- The last entry whose `hosts` match is used, so list broad patterns first and specific hosts after them.
+
+The certificate is the machine's identity, so a repository cannot choose where it is presented: `network` in project
+`opencode.json(c)` and `.opencode/` files is ignored with a warning. Every other source applies with the usual
+[precedence](/config#locations), so managed preferences (`ai.opencode.managed`) and the system directory
+(`/etc/opencode`, `/Library/Application Support/opencode`, `%ProgramData%\opencode`) override the global
+`~/.config/opencode/opencode.json(c)`. The highest-ranked source that sets `network.client_certificates` replaces the
+others, and changes apply like any other configuration.
+
+Requests that present a client certificate do not follow redirects, because a redirect would present it to the host the
+server names. They also fail when an `https://` proxy applies, because the proxy's own TLS handshake would receive the
+certificate. Add the gateway to `NO_PROXY`, or use an `http://` proxy, which only tunnels the connection.
+
+The server's own certificate is still verified against the system trust store; add a private certificate authority with
+`NODE_EXTRA_CA_CERTS`, described in [Certificates](#certificates).
+
+Client certificates are not yet presented by remote MCP servers, the WebSocket transport, or AI SDK provider packages
+that OpenCode runs without translating to a native provider. The Node.js build of OpenCode fails requests to a matching
+host instead of sending them without the certificate.
+
 ## Foreground
 
 `--standalone` and `serve` use the environment of their own process. `opencode service set env` does not configure these

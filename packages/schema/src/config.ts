@@ -13,6 +13,7 @@ import { ConfigFormatter } from "./config/formatter.js"
 import { ConfigLSP } from "./config/lsp.js"
 import { ConfigMCP } from "./config/mcp.js"
 import { ConfigModel } from "./config/model.js"
+import { ConfigNetwork } from "./config/network.js"
 import { ConfigPlugin } from "./config/plugin.js"
 import { ConfigPolicy } from "./config/policy.js"
 import { ConfigProvider } from "./config/provider.js"
@@ -111,6 +112,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   warming: ConfigWarming.Warming.pipe(optional).annotate({
     description: "Keep recently active sessions warm with transient model requests (default: false)",
+  }),
+  network: ConfigNetwork.Info.pipe(optional).annotate({
+    description: "Outbound network settings for the machine. Project-level values are ignored",
   }),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(optional),
   experimental: ConfigExperimental.Info.pipe(optional),

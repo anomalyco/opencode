@@ -16526,6 +16526,18 @@
               }
             ]
           },
+          "network": {
+            "type": "object",
+            "properties": {
+              "client_certificates": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Config.Network.ClientCertificateEncoded"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
           "providers": {
             "type": "object",
             "additionalProperties": {
@@ -16949,6 +16961,30 @@
             "additionalProperties": false
           }
         },
+        "additionalProperties": false
+      },
+      "Config.Network.ClientCertificateEncoded": {
+        "type": "object",
+        "properties": {
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Hostnames that receive this certificate, without scheme or port. `*` and `?` match any characters"
+          },
+          "cert": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "passphrase_file": {
+            "type": "string"
+          }
+        },
+        "required": ["hosts", "cert", "key"],
         "additionalProperties": false
       },
       "Config.Patch": {

@@ -176,6 +176,23 @@ Project-level values are ignored.
 }
 ```
 
+### Network
+
+Present a client certificate to gateways that require mutual TLS. Set this in managed or global configuration;
+project-level values are ignored.
+
+```jsonc
+{
+  "network": {
+    "client_certificates": [
+      { "hosts": ["llm.company.example"], "cert": "/etc/company/client.pem", "key": "/etc/company/client.key" },
+    ],
+  },
+}
+```
+
+See the [network guide](/network#client-certificates) for host matching, precedence, and limits.
+
 ### Username
 
 Set a username. OpenCode accepts this field but does not display it in
