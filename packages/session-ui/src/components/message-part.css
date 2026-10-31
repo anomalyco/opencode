@@ -1461,11 +1461,16 @@
     flex-direction: column;
     gap: 2px;
     margin-top: 8px;
+    max-height: 160px;
+    overflow-y: auto;
 
     code {
       font-family: var(--v2-font-family-code);
       font-size: 13px;
-      line-height: var(--line-height-base);
+      font-weight: 440;
+      letter-spacing: -0.04px;
+      line-height: var(--line-height-compact);
+      white-space: pre-wrap;
     }
   }
 
