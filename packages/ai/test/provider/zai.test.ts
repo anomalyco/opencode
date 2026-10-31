@@ -21,6 +21,8 @@ it.effect("ZAI owns standard and Coding Plan endpoints and bearer credentials", 
     expect(ZAICodingPlan.provider.model).toBe(ZAICodingPlan.provider.chat)
     for (const item of [
       { model: ZAI.chat("glm-5.3"), path: "/paas/v4/chat/completions", provider: "zai" },
+      { model: ZAI.messages("glm-5.3"), path: "/anthropic/v1/messages", provider: "zai" },
+      { model: ZAI.responses("glm-5.3"), path: "/v1/responses", provider: "zai" },
       { model: ZAICodingPlan.chat("glm-5.3"), path: "/coding/paas/v4/chat/completions", provider: "zai-coding-plan" },
       { model: ZAICodingPlan.messages("glm-5.3"), path: "/anthropic/v1/messages", provider: "zai-coding-plan" },
       { model: ZAICodingPlan.responses("glm-5.3"), path: "/v1/responses", provider: "zai-coding-plan" },

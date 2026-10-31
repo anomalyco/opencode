@@ -615,6 +615,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/meta/responses": openaiResponses,
   "@opencode/ai/providers/minimax/responses": openaiResponses,
   "@opencode/ai/providers/moonshot/responses": openaiResponses,
+  "@opencode/ai/providers/zai/responses": openaiResponses,
   "@opencode/ai/providers/zai-coding-plan/responses": openaiResponses,
 
   "@opencode/ai/providers/openai-compatible/responses": openResponses,
@@ -664,6 +665,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/minimax": minimaxMessages,
   "@opencode/ai/providers/minimax/messages": minimaxMessages,
   "@opencode/ai/providers/moonshot/messages": moonshotMessages,
+  "@opencode/ai/providers/zai/messages": zaiMessages,
   "@opencode/ai/providers/zai-coding-plan/messages": zaiMessages,
 
   "@opencode/ai/providers/google": gemini,
