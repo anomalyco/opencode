@@ -416,6 +416,7 @@
   &:has(:focus-visible) [data-slot="user-message-copy-wrapper"],
   [data-slot="user-message-copy-wrapper"]:has([data-expanded], [data-closing]),
   &:has([data-slot="user-message-body"]:hover) [data-slot="user-message-meta-tail"],
+  &:has([data-slot="user-message-copy-wrapper"] button):hover [data-slot="user-message-meta-tail"],
   &:has(:focus-visible) [data-slot="user-message-meta-tail"] {
     opacity: 1;
     pointer-events: auto;
