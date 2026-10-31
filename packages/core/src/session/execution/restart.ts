@@ -3,12 +3,14 @@ export * as SessionRestart from "./restart.js"
 import { Context, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../../bus.js"
+import { Database } from "../../database/database.js"
 import { Job } from "../../job.js"
 import { Session } from "../../session.js"
 import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
+import { SessionInbox } from "../inbox.js"
 import { ImageNotice } from "../../image/notice.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
@@ -72,30 +74,60 @@ export const layer = (options?: Options) =>
       const bus = yield* Bus.Service
       const jobs = yield* Job.Service
       const sessions = yield* Session.Service
+      const db = (yield* Database.Service).db
       const scope = yield* Effect.scope
       const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
 
-      const prepareResume = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+      const prepareResume = Effect.fnUntraced(function* (
+        sessionID: SessionSchema.ID,
+        options?: {
+          /**
+           * A candidate was selected from its pending inbox row, not from a claim. Re-check the row
+           * here: `execution.resume` is a forced, input-scoped drain, and a forced drain with nothing
+           * promotable would spin between boundaries instead of completing.
+           */
+          readonly requireResumable?: boolean
+        },
+      ) {
+        // A candidate can lose its last eligible row to a concurrent delivery or a sibling sweep
+        // before this runs. Check before counting an attempt, so a no-op never spends budget.
+        if (options?.requireResumable && (yield* SessionInbox.resumable(db, sessionID)).length === 0) return false
         // Durable before the resume runs, so a crash inside the resumed turn is
         // counted by the next sweep and the budget cannot be dodged.
         const attempts = yield* store.countResume(sessionID)
         if (attempts === undefined) return false
         if (attempts > maxAttempts) {
           // Terminalize instead: the release hook clears the claim and resets the
-          // counter atomically with the terminal event.
-          yield* bus.publish(
+          // counter atomically with the terminal event. Retirement rides in the same
+          // transaction and is scoped to the rows that existed at this decision, so a
+          // prompt admitted while this turn settles stays eligible.
+          const through = yield* SessionInbox.latestEnqueuedSeq(db, sessionID)
+          const terminal = [
             SessionEvent.Execution.Failed,
             { sessionID, error: RESUME_EXHAUSTED },
             { commit: () => store.release(sessionID) },
-          )
+          ] as const
+          if (through === undefined) {
+            yield* bus.publish(...terminal)
+            return false
+          }
+          yield* bus.publishAll([
+            terminal,
+            [SessionEvent.InboxResumeRetired, { sessionID, reason: "exhausted", through } as const, undefined] as const,
+          ])
           return false
         }
-        yield* bus.publish(SessionEvent.Synthetic, {
-          sessionID,
-          text: CONTINUE_AFTER_SERVER_RESTART,
-          description: "Continuing after restart",
-          metadata: { notice: "restart" },
-        })
+        // Only a claimed Session was actually working when the process died, so only it gets the
+        // "continue where you left off" notice. A row-only candidate never started a turn: its
+        // pending prompt is the instruction, and a synthetic admitted ahead of it would promote
+        // first and misdescribe what happened.
+        if (!options?.requireResumable)
+          yield* bus.publish(SessionEvent.Synthetic, {
+            sessionID,
+            text: CONTINUE_AFTER_SERVER_RESTART,
+            description: "Continuing after restart",
+            metadata: { notice: "restart" },
+          })
         return true
       })
 
@@ -227,9 +259,19 @@ export const layer = (options?: Options) =>
               ? [background.recovery.childSessionID]
               : [],
           )
-          // Early notices wait for recovery's accounting, including Sessions that exhaust their budget.
+          // Delivery scope for recovery (B3). A recovered row only ever requests a drain the live
+          // path would also have run: `execution.wake` after an admission is input-scoped, so the
+          // recovered drain is `resume` (forced, input-scoped) exactly like the wake that was lost.
+          // Steer-scoped bypasses stay live-path only: `interrupt({ resume: true })` parks queued
+          // prompts, and restart must not promote work the live path would leave parked.
+          const candidates = (yield* store.listResumableInbox()).filter((sessionID) => !active.has(sessionID))
+          // C5: an unclaimed candidate still belongs in the early suppression set. A background child
+          // that completes now could otherwise wake this parent before recovery accounts for it.
+          // This is the *decision* set; the resume loop re-reads claims after background recovery.
           const suspended = new Set(
-            [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
+            [...(yield* store.listSuspended()), ...children, ...candidates].filter(
+              (sessionID) => !active.has(sessionID),
+            ),
           )
           yield* store.releaseChildClaims(children)
           yield* Effect.forEach(
@@ -245,13 +287,22 @@ export const layer = (options?: Options) =>
           )
 
           // Background completion can wake a parent, so inspect local ownership only after recovery.
+          // C5: the fresh union reconciles the decision set with what recovery actually left behind.
           const resumed = yield* execution.active
+          const claimed = yield* store.listSuspended()
+          const claimedSet = new Set(claimed)
+          const unique = Array.from(new Set([...claimed, ...candidates]))
           yield* Effect.forEach(
-            (yield* store.listSuspended()).filter((sessionID) => !resumed.has(sessionID)),
+            unique.filter((sessionID) => !resumed.has(sessionID)),
             (sessionID) =>
-              execution
-                .resume(sessionID)
-                .pipe(Effect.ignore, Effect.forkIn(scope), Effect.when(prepareResume(sessionID))),
+              execution.resume(sessionID).pipe(
+                Effect.ignore,
+                Effect.forkIn(scope),
+                // A claim resumes on its own, exactly as before: it marks an execution that was
+                // already in flight. Only a row-only candidate needs an eligible row still to
+                // deliver, since `resume` is a forced drain that would otherwise spin.
+                Effect.when(prepareResume(sessionID, { requireResumable: !claimedSet.has(sessionID) })),
+              ),
             { concurrency: "unbounded", discard: true },
           )
           // Async observers consult this set at delivery; later completions wake parents normally.
@@ -264,5 +315,5 @@ export const layer = (options?: Options) =>
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node],
+  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node, Database.node],
 })

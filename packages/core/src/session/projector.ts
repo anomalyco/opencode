@@ -764,6 +764,7 @@ const layer = Layer.effectDiscard(
           id: event.data.inboxID,
           sessionID: event.data.sessionID,
           item: event.data.item,
+          resume: event.data.resume,
           timeCreated: event.created,
         })
         yield* db
@@ -785,6 +786,12 @@ const layer = Layer.effectDiscard(
         id: event.data.inboxID,
         sessionID: event.data.sessionID,
         delivery: event.data.delivery,
+      }),
+    )
+    yield* bus.project(SessionEvent.InboxResumeRetired, (event) =>
+      SessionInbox.projectResumeRetired(db, {
+        sessionID: event.data.sessionID,
+        through: event.data.through,
       }),
     )
     yield* bus.project(SessionEvent.Execution.Started, (event) =>

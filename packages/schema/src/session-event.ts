@@ -223,6 +223,12 @@ export const InboxEnqueued = Event.durable({
   schema: {
     ...InboxRef,
     item: SessionInbox.Item,
+    /**
+     * Admission requested automatic execution, recorded before that wake is attempted so restart
+     * recovery can resume a row whose execution claim was never written. Absent (and therefore
+     * ineligible) for legacy events and for admit-only admissions.
+     */
+    resume: Schema.Boolean.pipe(optional),
   },
 })
 export type InboxEnqueued = typeof InboxEnqueued.Type
@@ -240,6 +246,22 @@ export const InboxDeliveryChanged = Event.durable({
   schema: { ...InboxRef, delivery: SessionInbox.Delivery },
 })
 export type InboxDeliveryChanged = typeof InboxDeliveryChanged.Type
+
+/**
+ * Recovery gives up on automatic execution of the pending rows it selected. `through` is the
+ * admission watermark captured when recovery decided, so rows admitted afterwards — including the
+ * successor a live interruption wakes — stay eligible instead of being retired by a terminal.
+ */
+export const InboxResumeRetired = Event.durable({
+  type: "session.inbox.resume.retired",
+  ...options,
+  schema: {
+    ...Base,
+    reason: Schema.Literals(["exhausted", "interrupted"]),
+    through: Event.Seq,
+  },
+})
+export type InboxResumeRetired = typeof InboxResumeRetired.Type
 
 export namespace Execution {
   export const Started = Event.durable({ type: "session.execution.started", ...options, schema: Base })
@@ -710,6 +732,7 @@ export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
   UsageRecorded,
   MessageContentUpdated,
+  InboxResumeRetired,
 )
 export const EphemeralDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "ephemeral"),

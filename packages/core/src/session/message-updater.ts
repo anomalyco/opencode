@@ -477,6 +477,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
       "session.revert.staged": () => Effect.void,
       "session.revert.cleared": () => Effect.void,
       "session.revert.committed": () => Effect.void,
+      "session.inbox.resume.retired": () => Effect.void,
     }),
   )
   return project(event)

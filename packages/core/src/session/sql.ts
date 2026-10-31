@@ -141,6 +141,16 @@ export const SessionInboxTable = sqliteTable(
       .notNull(),
     delivery: text().$type<SessionInbox.Delivery>().notNull(),
     enqueued_seq: integer().notNull(),
+    /**
+     * Admission requested automatic execution, recorded before that wake is attempted so a row whose
+     * execution claim was never written stays recoverable. Legacy rows default to ineligible.
+     */
+    resume: integer({ mode: "boolean" }).notNull().default(false),
+    /**
+     * Recovery gave up on this row's automatic execution. Retirement is scoped by the admission
+     * watermark recorded on the terminal, so rows admitted later stay eligible.
+     */
+    resume_retired: integer({ mode: "boolean" }).notNull().default(false),
     time_created: integer()
       .notNull()
       .$default(() => Date.now()),

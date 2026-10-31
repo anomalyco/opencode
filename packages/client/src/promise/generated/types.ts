@@ -1613,6 +1613,16 @@ export type SessionUsageRecorded = {
   data: { sessionID: SessionID; source: "title" | "compaction"; cost: MoneyUSD; tokens: TokenUsageInfo }
 }
 
+export type SessionInboxResumeRetired = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.inbox.resume.retired"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; reason: "exhausted" | "interrupted"; through: EventSeq }
+}
+
 export type LocationShutdown = {
   id: EventID
   created: number
@@ -2677,7 +2687,7 @@ export type SessionInboxEnqueued = {
   type: "session.inbox.enqueued"
   durable: { aggregateID: string; seq: EventSeq; version: 1 }
   location?: LocationRef
-  data: { sessionID: SessionID; inboxID: SessionMessageID; item: SessionInboxItem }
+  data: { sessionID: SessionID; inboxID: SessionMessageID; item: SessionInboxItem; resume?: boolean }
 }
 
 export type SessionMessageAssistantContentEncoded =
@@ -2791,6 +2801,7 @@ export type SessionEventDurable =
   | SessionRevertCommitted
   | SessionUsageRecorded
   | SessionMessageContentUpdated
+  | SessionInboxResumeRetired
 
 export type V2Event =
   | LocationShutdown

@@ -162,6 +162,15 @@ const setup = Effect.gen(function* () {
 })
 
 const admitted = (id: SessionMessage.ID) => Database.Service.use(({ db }) => SessionInbox.find(db, id))
+const admittedResume = (id: SessionMessage.ID) =>
+  Database.Service.use(({ db }) =>
+    db
+      .select({ resume: SessionInboxTable.resume })
+      .from(SessionInboxTable)
+      .where(eq(SessionInboxTable.id, id))
+      .get()
+      .pipe(Effect.orDie),
+  )
 const admittedCount = Database.Service.use(({ db }) =>
   db
     .select()
@@ -353,6 +362,62 @@ describe("Session.prompt", () => {
         payload: { text: "Fix the failing tests" },
         delivery: "steer",
       })
+    }),
+  )
+
+  it.effect("records the execution intent before attempting the wake", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+
+      // The durable intent is what restart recovery reads when the process dies before the
+      // execution claim is written, so it must be stored by admission alone.
+      const resuming = yield* session.prompt({ sessionID, text: "resume me" })
+      const admitOnly = yield* session.prompt({ sessionID, text: "admit only", resume: false })
+
+      expect(yield* admittedResume(resuming.id)).toEqual({ resume: true })
+      expect(yield* admittedResume(admitOnly.id)).toEqual({ resume: false })
+    }),
+  )
+
+  it.effect("keeps the first recorded intent while the wake follows the current call", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+
+      // Durable fact frozen at first admission; the advisory wake follows the retry's own argument.
+      for (const [first, retry, wakes] of [
+        [false, true, [sessionID]],
+        [true, false, []],
+      ] as const) {
+        const id = SessionMessage.ID.create()
+        const admitted = yield* session.prompt({ sessionID, id, text: "retry me", resume: first })
+        wakeCalls.length = 0
+
+        yield* session.prompt({ sessionID, id, text: "retry me", resume: retry })
+
+        expect(yield* admittedResume(admitted.id)).toEqual({ resume: first })
+        expect(wakeCalls).toEqual([...wakes])
+      }
+    }),
+  )
+
+  it.effect("holds a synthetic under a staged revert without recording a resume intent", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const boundary = yield* session.prompt({ sessionID, text: "boundary", resume: false })
+      yield* SessionInbox.promote(db, bus, sessionID, "steer")
+      yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+        sessionID,
+        revert: { messageID: boundary.id, files: [] },
+      })
+
+      const completion = yield* session.synthetic({ sessionID, text: "stale completion" })
+
+      expect(yield* admittedResume(completion.id)).toEqual({ resume: false })
     }),
   )
 

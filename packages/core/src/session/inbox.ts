@@ -1,6 +1,6 @@
 export * as SessionInbox from "./inbox.js"
 
-import { and, asc, eq, or } from "drizzle-orm"
+import { and, asc, desc, eq, lte, or } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import {
@@ -192,6 +192,12 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
     readonly item: Item & { readonly type: Type }
+    /**
+     * Records that this admission requested automatic execution, so restart recovery can resume the
+     * row when the process dies before the execution claim is written. Omitted records no intent:
+     * the row stays ineligible, like a legacy row. A retried ID keeps the intent it first recorded.
+     */
+    readonly resume?: boolean
   }) {
     const existing = yield* reconcile({ ...request, type: request.item.type, delivery: request.item.delivery })
     if (existing !== undefined) return existing
@@ -200,6 +206,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
         inboxID: request.id,
         sessionID: request.sessionID,
         item: request.item,
+        resume: request.resume,
       })
       .pipe(
         Effect.map((event) =>
@@ -304,6 +311,8 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
     readonly sessionID: SessionSchema.ID
     readonly item: Item
     readonly timeCreated: number
+    /** Absent means the admission recorded no automatic-execution intent, as legacy rows do. */
+    readonly resume?: boolean
   },
 ) {
   const message = yield* db
@@ -330,6 +339,7 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
       payload,
       delivery: request.item.delivery,
       enqueued_seq: request.enqueuedSeq,
+      resume: request.resume ?? false,
       time_created: request.timeCreated,
     })
     .onConflictDoNothing()
@@ -423,6 +433,68 @@ export const projectDeliveryChanged = Effect.fn("SessionInbox.projectDeliveryCha
       to: input.delivery,
     }),
 )
+
+/**
+ * Retires the rows recovery selected, scoped to the admission watermark it captured. A row admitted
+ * after that boundary — including the successor steering wake after a live interruption — stays
+ * eligible, mirroring how the live coordinator claims only the wakes recorded so far.
+ */
+export const projectResumeRetired = Effect.fn("SessionInbox.projectResumeRetired")(function* (
+  db: DatabaseService,
+  input: { readonly sessionID: SessionSchema.ID; readonly through: number },
+) {
+  yield* db
+    .update(SessionInboxTable)
+    .set({ resume_retired: true })
+    .where(
+      and(
+        eq(SessionInboxTable.session_id, input.sessionID),
+        eq(SessionInboxTable.resume, true),
+        lte(SessionInboxTable.enqueued_seq, input.through),
+      ),
+    )
+    .run()
+    .pipe(Effect.orDie)
+})
+
+/**
+ * Pending rows an automated drain may resume: admission asked for execution and no recovery has
+ * retired them. Ordered like every other inbox read so the oldest work goes first.
+ */
+export const resumable = Effect.fn("SessionInbox.resumable")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  return yield* db
+    .select({ id: SessionInboxTable.id, delivery: SessionInboxTable.delivery, type: SessionInboxTable.type })
+    .from(SessionInboxTable)
+    .where(
+      and(
+        eq(SessionInboxTable.session_id, sessionID),
+        eq(SessionInboxTable.resume, true),
+        eq(SessionInboxTable.resume_retired, false),
+      ),
+    )
+    .orderBy(asc(SessionInboxTable.enqueued_seq))
+    .all()
+    .pipe(Effect.orDie)
+})
+
+/** Highest admission sequence this Session has, the boundary recovery captures before deciding. */
+export const latestEnqueuedSeq = Effect.fn("SessionInbox.latestEnqueuedSeq")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const row = yield* db
+    .select({ seq: SessionInboxTable.enqueued_seq })
+    .from(SessionInboxTable)
+    .where(eq(SessionInboxTable.session_id, sessionID))
+    .orderBy(desc(SessionInboxTable.enqueued_seq))
+    .limit(1)
+    .get()
+    .pipe(Effect.orDie)
+  return row?.seq
+})
 
 const listRows = (db: DatabaseService, sessionID: SessionSchema.ID) =>
   db

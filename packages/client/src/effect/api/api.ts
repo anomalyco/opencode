@@ -797,6 +797,7 @@ export type ExperimentalSessionLogOutput =
             readonly sessionID: Session.ID
             readonly inboxID: SessionMessage.ID
             readonly item: SessionInbox.Item
+            readonly resume?: boolean | undefined
           }
         }
       | {
@@ -1411,6 +1412,21 @@ export type ExperimentalSessionLogOutput =
             readonly sessionID: Session.ID
             readonly messageID: SessionMessage.ID
             readonly content: ReadonlyArray<SessionMessage.AssistantContentEncoded>
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.inbox.resume.retired"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly reason: "exhausted" | "interrupted"
+            readonly through: Event.Seq
           }
         }
     )
