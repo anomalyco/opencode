@@ -32,7 +32,10 @@ const runtime = Layer.effect(
     const windows = yield* mainWindows()
     const createWindow = windows.create
     const restoreWindows = windows.restore
-    const pendingDeepLinks: string[] = []
+    const initialDeepLinks = process.argv.filter((arg) => arg.startsWith("opencode://"))
+    const pendingDeepLinks = [...initialDeepLinks]
+
+    if (initialDeepLinks.length > 0) runFork(Effect.logInfo("deep link received via argv", { urls: initialDeepLinks }))
     let shutdownReady = false
     let quitRequested = false
 
@@ -55,7 +58,6 @@ const runtime = Layer.effect(
 
     const emitDeepLinks = (urls: string[]) => {
       if (!urls.length) return
-      pendingDeepLinks.push(...urls)
 
       const target = urls.flatMap((url) => {
         const id = consoleReturnWindow(url)
@@ -67,6 +69,7 @@ const runtime = Layer.effect(
       const win = target ?? getLastFocusedWindow()
 
       if (win) emitIpcEvent(win.webContents, new DeepLinksOpened({ urls }))
+      else pendingDeepLinks.push(...urls)
 
       return win
     }
