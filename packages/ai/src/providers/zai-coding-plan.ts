@@ -1,20 +1,17 @@
 import type { ProviderPackage } from "../provider-package.js"
-import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
-import { OpenResponses } from "../protocols/open-responses.js"
 import { ZAIChat } from "../protocols/zai-chat.js"
-import { ZAIMessages } from "../protocols/zai-messages.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { Framing } from "../route/framing.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
+import { ZAI } from "./zai.js"
 
 export const id = ProviderID.make("zai-coding-plan")
 
 export type ChatOptionsInput = ZAIChat.OptionsInput
-export type MessagesOptionsInput = ZAIMessages.OptionsInput
-export type ResponsesOptionsInput = { readonly reasoningEffort?: ZAIChat.ReasoningEffort }
+export type MessagesOptionsInput = ZAI.MessagesOptionsInput
+export type ResponsesOptionsInput = ZAI.ResponsesOptionsInput
 
 export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
@@ -37,23 +34,9 @@ const chatRoute = Route.make({
   endpoint: Endpoint.path("/chat/completions", { baseURL: "https://api.z.ai/api/coding/paas/v4" }),
   framing: OpenAIChat.framing,
 })
-const messagesRoute = Route.make({
-  id: "zai-coding-messages",
-  provider: id,
-  providerMetadataKey: "zai",
-  protocol: ZAIMessages.protocol,
-  endpoint: Endpoint.path("/messages", { baseURL: "https://api.z.ai/api/anthropic/v1" }),
-  framing: AnthropicMessages.framing,
-  headers: () => ({ "anthropic-version": "2023-06-01" }),
-})
-const responsesRoute = Route.make({
-  id: "zai-coding-responses",
-  provider: id,
-  providerMetadataKey: "zai",
-  protocol: OpenResponses.protocol,
-  endpoint: Endpoint.path("/responses", { baseURL: "https://api.z.ai/api/v1" }),
-  framing: Framing.sse,
-})
+// The Coding Plan shares the pay-as-you-go Messages and Responses endpoints; only Chat has its own base URL.
+const messagesRoute = ZAI.messagesRoute.with({ id: "zai-coding-messages", provider: id, providerMetadataKey: "zai" })
+const responsesRoute = ZAI.responsesRoute.with({ id: "zai-coding-responses", provider: id, providerMetadataKey: "zai" })
 
 export const routes = [chatRoute, messagesRoute, responsesRoute]
 

@@ -67,17 +67,18 @@ test("spells Messages variants for each provider", () => {
     { id: "xhigh", settings: { effort: "xhigh", thinking: { type: "enabled" } } },
   ])
 
-  expect(
-    resolve(model("@opencode/ai/providers/zai-coding-plan/messages", "glm-5.3"), [
-      { type: "toggle" },
-      { type: "effort", values: ["low", "high", "max"] },
-      { type: "budget_tokens", min: 1024 },
-    ]),
-  ).toEqual([
-    { id: "low", settings: { effort: "low", thinking: { type: "enabled" } } },
-    { id: "high", settings: { effort: "high", thinking: { type: "enabled" } } },
-    { id: "max", settings: { effort: "max", thinking: { type: "enabled" } } },
-  ])
+  for (const pkg of ["@opencode/ai/providers/zai/messages", "@opencode/ai/providers/zai-coding-plan/messages"])
+    expect(
+      resolve(model(pkg, "glm-5.3"), [
+        { type: "toggle" },
+        { type: "effort", values: ["low", "high", "max"] },
+        { type: "budget_tokens", min: 1024 },
+      ]),
+    ).toEqual([
+      { id: "low", settings: { effort: "low", thinking: { type: "enabled" } } },
+      { id: "high", settings: { effort: "high", thinking: { type: "enabled" } } },
+      { id: "max", settings: { effort: "max", thinking: { type: "enabled" } } },
+    ])
 })
 
 test("recognizes Claude version spellings and future models", () => {
@@ -553,9 +554,5 @@ test("reads models.dev v2 reasoning as variant support", () => {
   expect(Variant.supports({ supported: true })).toEqual([])
   expect(
     Variant.supports({ supported: true, toggle: true, effort: ["default", "low"], budget: { min: 1024, max: 8000 } }),
-  ).toEqual([
-    { type: "toggle" },
-    { type: "effort", values: ["low"] },
-    { type: "budget_tokens", min: 1024, max: 8000 },
-  ])
+  ).toEqual([{ type: "toggle" }, { type: "effort", values: ["low"] }, { type: "budget_tokens", min: 1024, max: 8000 }])
 })

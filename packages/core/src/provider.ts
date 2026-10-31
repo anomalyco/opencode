@@ -170,6 +170,8 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/zai", () => import("@opencode/ai/providers/zai")],
   ["@opencode/ai/providers/zai/chat", () => import("@opencode/ai/providers/zai/chat")],
   ["@opencode/ai/providers/zai/images", () => import("@opencode/ai/providers/zai/images")],
+  ["@opencode/ai/providers/zai/messages", () => import("@opencode/ai/providers/zai/messages")],
+  ["@opencode/ai/providers/zai/responses", () => import("@opencode/ai/providers/zai/responses")],
   ["@opencode/ai/providers/zai-coding-plan", () => import("@opencode/ai/providers/zai-coding-plan")],
   ["@opencode/ai/providers/zai-coding-plan/chat", () => import("@opencode/ai/providers/zai-coding-plan/chat")],
   ["@opencode/ai/providers/zai-coding-plan/messages", () => import("@opencode/ai/providers/zai-coding-plan/messages")],
