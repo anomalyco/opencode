@@ -1,10 +1,15 @@
 import { describe, expect, test } from "bun:test"
+import { mkdirSync, writeFileSync } from "fs"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
 import { Money } from "@opencode/schema/money"
 import { Effect, Fiber, Layer, Ref, Scope, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
 import { Bus } from "@opencode/core/bus"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
@@ -192,6 +197,8 @@ const makeMockClient = (state: Ref.Ref<MockState>) =>
 
 interface MockCache {
   readonly values: Map<string, KV.Value>
+  // The Global cache directory, unique per test so cache files never leak between tests.
+  readonly dir: string
 }
 
 const makeMockKV = (cache: MockCache) =>
@@ -201,15 +208,20 @@ const makeMockKV = (cache: MockCache) =>
     remove: (key) => Effect.sync(() => cache.values.delete(key)).pipe(Effect.asVoid),
   })
 
+const cacheNodes = (cache: MockCache, kv = makeMockKV(cache)) => [
+  KV.node.replace(kv),
+  Global.node.replace(Global.layerWith({ cache: cache.dir })),
+]
+
 const buildLayer = (state: Ref.Ref<MockState>, cache: MockCache, options: ModelsDev.Options = { fetch: false }) =>
   // Layer.fresh is required because the ModelsDev implementation is a module-level Layer constant,
   // and Effect.provide uses a process-global MemoMap by default — without fresh,
-  // every test would reuse the cachedInvalidateWithTTL state from the first run.
+  // every test would reuse the cached catalog from the first run.
   Layer.fresh(
     AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Bus.node]), [
       ModelsDev.node.replace(ModelsDev.configured(options)),
       LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
-      KV.node.replace(makeMockKV(cache)),
+      ...cacheNodes(cache),
     ]),
   )
 
@@ -222,13 +234,30 @@ const makeFailingWriteKV = (cache: MockCache) =>
     remove: (key) => Effect.sync(() => cache.values.delete(key)).pipe(Effect.asVoid),
   })
 
-const makeCache = (): MockCache => ({ values: new Map() })
+const makeCache = (): MockCache => ({
+  values: new Map(),
+  dir: path.join(os.tmpdir(), `models-dev-${crypto.randomUUID()}`),
+})
 
-const writeCacheText = (cache: MockCache, text: string, updatedAt = Date.now()) =>
-  cache.values.set(cacheKey, { updatedAt, digest: bodyDigest(text), body: text })
+const cacheFile = (cache: MockCache) => path.join(cache.dir, "models-dev-v2-catalog.json")
+
+const readCacheFile = (cache: MockCache) => fs.readFile(cacheFile(cache), "utf8").catch(() => undefined)
+
+// The cache as written today: the body in a file and only metadata in KV.
+const writeCacheText = (cache: MockCache, text: string, updatedAt = Date.now()) => {
+  mkdirSync(cache.dir, { recursive: true })
+  writeFileSync(cacheFile(cache), text)
+  cache.values.set(metaKey, { updatedAt, digest: bodyDigest(text) })
+}
 
 const writeCache = (cache: MockCache, data: object, updatedAt?: number) =>
   writeCacheText(cache, JSON.stringify(data), updatedAt)
+
+// The body kept in KV, as older versions did and as the fallback without a usable filesystem does.
+const writeKVCacheText = (cache: MockCache, text: string, updatedAt = Date.now()) => {
+  cache.values.set(cacheKey, { updatedAt, digest: bodyDigest(text), body: text })
+  cache.values.set(metaKey, { updatedAt, digest: bodyDigest(text) })
+}
 
 const provided = <A, E>(
   state: Ref.Ref<MockState>,
@@ -702,7 +731,7 @@ describe("ModelsDev Service", () => {
         AppNodeBuilder.build(ModelsDev.node, [
           ModelsDev.node.replace(ModelsDev.configured({ url: "https://mirror.example", fetch: true, snapshot: false })),
           LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, client)),
-          KV.node.replace(makeMockKV(makeCache())),
+          ...cacheNodes(makeCache()),
         ]),
       )
       const [beta] = yield* ModelsDev.Service.use((service) => service.get()).pipe(Effect.provide(layer))
@@ -747,15 +776,14 @@ describe("ModelsDev Service", () => {
   it.live("get() recovers from a corrupted KV entry by fetching a fresh catalog", () =>
     Effect.gen(function* () {
       const cache = makeCache()
-      writeCacheText(cache, "{")
+      writeKVCacheText(cache, "{")
       const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
       const context = yield* Layer.build(buildLayer(state, cache, { fetch: true, snapshot: false }))
       const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(Effect.provide(context))
       expect(result).toEqual(fixture2Snapshot)
-      expect(cache.values.get(cacheKey)).toMatchObject({
-        body: JSON.stringify(fixture2),
-        digest: bodyDigest(JSON.stringify(fixture2)),
-      })
+      expect(yield* Effect.promise(() => readCacheFile(cache))).toBe(JSON.stringify(fixture2))
+      expect(cache.values.has(cacheKey)).toBe(false)
+      expect(cache.values.get(metaKey)).toMatchObject({ digest: bodyDigest(JSON.stringify(fixture2)) })
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
     }),
@@ -769,7 +797,7 @@ describe("ModelsDev Service", () => {
         AppNodeBuilder.build(ModelsDev.node, [
           ModelsDev.node.replace(ModelsDev.configured({ fetch: true, snapshot: false })),
           LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
-          KV.node.replace(makeFailingWriteKV(cache)),
+          ...cacheNodes(cache, makeFailingWriteKV(cache)),
         ]),
       )
       const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(Effect.provide(layer))
@@ -847,10 +875,8 @@ describe("ModelsDev Service", () => {
       )
       expect(result.before).toEqual(fixtureSnapshot)
       expect(result.after).toEqual(fixture2Snapshot)
-      expect(cache.values.get(cacheKey)).toMatchObject({
-        body: JSON.stringify(fixture2),
-        digest: bodyDigest(JSON.stringify(fixture2)),
-      })
+      expect(yield* Effect.promise(() => readCacheFile(cache))).toBe(JSON.stringify(fixture2))
+      expect(cache.values.get(metaKey)).toMatchObject({ digest: bodyDigest(JSON.stringify(fixture2)) })
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
       expect(final.calls[0].url).toContain(ModelsDev.catalogPath)
@@ -903,10 +929,8 @@ describe("ModelsDev Service", () => {
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
       expect(after).toEqual(fixture2Snapshot)
-      expect(cache.values.get(cacheKey)).toMatchObject({
-        body: JSON.stringify(fixture2),
-        digest: bodyDigest(JSON.stringify(fixture2)),
-      })
+      expect(yield* Effect.promise(() => readCacheFile(cache))).toBe(JSON.stringify(fixture2))
+      expect(cache.values.get(metaKey)).toMatchObject({ digest: bodyDigest(JSON.stringify(fixture2)) })
     }),
   )
 
@@ -959,7 +983,7 @@ describe("ModelsDev Service", () => {
     Effect.gen(function* () {
       const cache = makeCache()
       writeCache(cache, fixture, Date.now() - 10 * 60 * 1000)
-      const body = cache.values.get(cacheKey)
+      const file = yield* Effect.promise(() => fs.stat(cacheFile(cache)))
       // The server serves a byte-identical body, so the refresh still hits
       // the network but must only record the check time, not publish Refreshed.
       const state = yield* Ref.make(initialState)
@@ -986,7 +1010,7 @@ describe("ModelsDev Service", () => {
       )
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
-      expect(cache.values.get(cacheKey)).toBe(body)
+      expect((yield* Effect.promise(() => fs.stat(cacheFile(cache)))).mtimeMs).toBe(file.mtimeMs)
       expect(cache.values.get(metaKey)).toMatchObject({ digest: bodyDigest(JSON.stringify(fixture)) })
       expect(Date.now() - (cache.values.get(metaKey) as { updatedAt: number }).updatedAt).toBeLessThan(60 * 1000)
     }),
@@ -1004,7 +1028,7 @@ describe("ModelsDev Service", () => {
           yield* svc.refresh(true)
           const meta = cache.values.get(metaKey) as { updatedAt: number }
           cache.values.set(metaKey, { ...meta, updatedAt: Date.now() - 10 * 60 * 1000 })
-          const body = cache.values.get(cacheKey)
+          const body = yield* Effect.promise(() => readCacheFile(cache))
           yield* Ref.update(state, (s) => ({ ...s, status: 304 }))
           const bus = yield* Bus.Service
           const event = yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
@@ -1026,7 +1050,8 @@ describe("ModelsDev Service", () => {
       )
       const final = yield* Ref.get(state)
       expect(final.calls.map((call) => call.ifNoneMatch)).toEqual([undefined, 'W/"v1"'])
-      expect(cache.values.get(cacheKey)).toBe(body)
+      expect(body).toBe(JSON.stringify(fixture))
+      expect(yield* Effect.promise(() => readCacheFile(cache))).toBe(body)
       expect(cache.values.get(metaKey)).toMatchObject({ etag: 'W/"v1"' })
       expect(Date.now() - (cache.values.get(metaKey) as { updatedAt: number }).updatedAt).toBeLessThan(60 * 1000)
     }),
@@ -1059,7 +1084,8 @@ describe("ModelsDev Service", () => {
         }),
       )
       // The rewritten entry now carries a digest, so later identical bodies stay quiet.
-      expect(cache.values.get(cacheKey)).toMatchObject({ digest: bodyDigest(JSON.stringify(fixture)) })
+      expect(cache.values.get(metaKey)).toMatchObject({ digest: bodyDigest(JSON.stringify(fixture)) })
+      expect(cache.values.has(cacheKey)).toBe(false)
     }),
   )
 
@@ -1081,6 +1107,137 @@ describe("ModelsDev Service", () => {
       // retryTransient retries 5xx, so calls may be > 1.
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBeGreaterThanOrEqual(1)
+    }),
+  )
+
+  it.live("get() serves the catalog a refresh parsed without reading the cache back", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCache(cache, fixture)
+      const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
+      const result = yield* provided(
+        state,
+        cache,
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          expect(yield* svc.get()).toEqual(fixtureSnapshot)
+          yield* svc.refresh(true)
+          // With the stored copy gone, get() can only answer from what refresh parsed.
+          yield* Effect.promise(() => fs.rm(cacheFile(cache)))
+          cache.values.clear()
+          return yield* svc.get()
+        }),
+      )
+      expect(result).toEqual(fixture2Snapshot)
+    }),
+  )
+
+  it.live("caches the body in a file and boots from it", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      const state = yield* Ref.make(initialState)
+      yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((s) => s.refresh(true)),
+      )
+      expect(yield* Effect.promise(() => readCacheFile(cache))).toBe(JSON.stringify(fixture))
+      expect(cache.values.has(cacheKey)).toBe(false)
+      expect(cache.values.get(metaKey)).toMatchObject({ digest: bodyDigest(JSON.stringify(fixture)) })
+      const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(
+        Effect.provide(buildLayer(state, cache, { fetch: false, snapshot: false })),
+      )
+      expect(result).toEqual(fixtureSnapshot)
+      expect((yield* Ref.get(state)).calls.length).toBe(1)
+    }),
+  )
+
+  it.live("keeps the body in KV when the cache file can't be written", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      // A file where the cache directory belongs leaves nowhere to write the cache file.
+      writeFileSync(cache.dir, "")
+      const state = yield* Ref.make(initialState)
+      yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((s) => s.refresh(true)),
+      )
+      expect(cache.values.get(cacheKey)).toMatchObject({
+        body: JSON.stringify(fixture),
+        digest: bodyDigest(JSON.stringify(fixture)),
+      })
+      const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(
+        Effect.provide(buildLayer(state, cache, { fetch: false, snapshot: false })),
+      )
+      expect(result).toEqual(fixtureSnapshot)
+      expect(cache.values.has(cacheKey)).toBe(true)
+      expect((yield* Ref.get(state)).calls.length).toBe(1)
+    }),
+  )
+
+  it.live("falls back to the bundled snapshot when the cache file is corrupt and refetches", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCacheText(cache, JSON.stringify(fixture2).slice(0, 20))
+      const state = yield* Ref.make(initialState)
+      const result = yield* provided(
+        state,
+        cache,
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          const bundled = yield* svc.get()
+          // The metadata is still fresh, but without a body it can't skip the fetch.
+          yield* svc.refresh(false)
+          return { bundled, refreshed: yield* svc.get() }
+        }),
+      )
+      expect(result.bundled.find((snapshot) => snapshot.info.id === "anthropic")).toBeDefined()
+      expect(result.refreshed).toEqual(fixtureSnapshot)
+      expect(yield* Effect.promise(() => readCacheFile(cache))).toBe(JSON.stringify(fixture))
+      expect((yield* Ref.get(state)).calls.length).toBe(1)
+    }),
+  )
+
+  it.live("moves a catalog cached in KV by older versions into the cache file", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeKVCacheText(cache, JSON.stringify(fixture))
+      const state = yield* Ref.make(initialState)
+      const result = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((s) => s.get()),
+      )
+      expect(result).toEqual(fixtureSnapshot)
+      expect(yield* Effect.promise(() => readCacheFile(cache))).toBe(JSON.stringify(fixture))
+      expect(cache.values.has(cacheKey)).toBe(false)
+      expect(cache.values.get(metaKey)).toMatchObject({ digest: bodyDigest(JSON.stringify(fixture)) })
+      expect((yield* Ref.get(state)).calls).toEqual([])
+    }),
+  )
+
+  it.live("refetches when the metadata describes a different body than the cache file holds", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      writeCache(cache, fixture)
+      // A migration or an older version can replace the file after the metadata was written.
+      cache.values.set(metaKey, { updatedAt: Date.now(), digest: bodyDigest(JSON.stringify(fixture2)), etag: 'W/"v2"' })
+      const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
+      const result = yield* provided(
+        state,
+        cache,
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          const before = yield* svc.get()
+          yield* svc.refresh(false)
+          return { before, after: yield* svc.get() }
+        }),
+      )
+      expect(result.before).toEqual(fixtureSnapshot)
+      expect(result.after).toEqual(fixture2Snapshot)
+      expect((yield* Ref.get(state)).calls.map((call) => call.ifNoneMatch)).toEqual([undefined])
+      expect(yield* Effect.promise(() => readCacheFile(cache))).toBe(JSON.stringify(fixture2))
     }),
   )
 })

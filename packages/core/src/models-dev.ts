@@ -1,4 +1,5 @@
-import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore } from "effect"
+import path from "path"
+import { Cause, Context, Duration, Effect, Layer, Option, Ref, Result, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { MaxTokensField, MediaInput } from "@opencode/schema/model-compatibility"
@@ -7,6 +8,7 @@ import { Money } from "@opencode/schema/money"
 import { App } from "./app.js"
 import { Hash } from "@opencode/util/hash"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { Bus } from "./bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
@@ -478,12 +480,14 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mo
 
 const CatalogJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
 const decodeCatalog = (text: string) => Schema.decodeUnknownEffect(CatalogJson)(text)
+// The body lives in a cache file when the filesystem allows it; this KV form is
+// the fallback without one, and how older versions stored it.
 const Cache = Schema.Struct({
   updatedAt: Schema.Number,
   // Digest of the raw body, persisted so refresh() can skip republishing a
   // byte-identical catalog. Optional for entries written before it existed.
   digest: Schema.optional(Schema.String),
-  body: CatalogJson,
+  body: Schema.String,
 })
 const CacheMeta = Schema.Struct({
   updatedAt: Schema.Number,
@@ -550,23 +554,68 @@ export const layer = (options?: Options) =>
       const key = cacheKey(source)
       const metaKey = `${key}:meta`
       const ttl = Duration.minutes(5)
+      const file = path.join((yield* Global.Service).cache, `${key.replaceAll(":", "-")}.json`)
       const lock = Semaphore.makeUnsafe(1)
+      const loading = Semaphore.makeUnsafe(1)
+      // The catalog get() serves, with the digest of the body it was parsed from.
+      const current = yield* Ref.make<
+        { readonly snapshots: readonly Snapshot[]; readonly digest?: string } | undefined
+      >(undefined)
       // The v1 catalog was cached under unversioned keys; free that multi-MB row.
       yield* kv.remove(key.replace("models-dev:v2:", "models-dev:"))
       yield* kv.remove(`${key.replace("models-dev:v2:", "models-dev:")}:meta`)
 
       const loadFromCache = Effect.fnUntraced(function* () {
+        const text = yield* fs.readFileStringSafe(file).pipe(Effect.orElseSucceed(() => undefined))
+        if (text !== undefined) {
+          const catalog = yield* decodeCatalog(text).pipe(Effect.option)
+          if (Option.isSome(catalog)) return { catalog: catalog.value, digest: bodyDigest(text) }
+          yield* Effect.logWarning("Discarding corrupt models.dev cache file", { file })
+          yield* fs.remove(file, { force: true }).pipe(Effect.ignore)
+        }
         const value = yield* kv.get(key)
-        const cached = Schema.decodeUnknownOption(Cache)(value)
-        if (Option.isSome(cached))
-          return {
-            catalog: cached.value.body,
-            updatedAt: cached.value.updatedAt,
-            digest: cached.value.digest,
-          }
         if (value === undefined) return
+        const cached = Option.getOrUndefined(Schema.decodeUnknownOption(Cache)(value))
+        const catalog = cached ? yield* decodeCatalog(cached.body).pipe(Effect.option) : Option.none()
+        if (cached && Option.isSome(catalog)) {
+          // A body kept in KV by an older version, or while the file couldn't be written, moves to the file.
+          if (yield* writeFile(cached.body)) yield* kv.remove(key)
+          return { catalog: catalog.value, digest: bodyDigest(cached.body) }
+        }
         yield* kv.remove(key)
         yield* kv.remove(metaKey)
+      })
+
+      // Written to a temporary file and renamed so a crash never leaves a truncated cache.
+      const writeFile = (text: string) => {
+        const temporary = `${file}.${crypto.randomUUID()}.tmp`
+        return fs.writeWithDirs(temporary, text).pipe(
+          Effect.andThen(fs.rename(temporary, file)),
+          Effect.as(true),
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterruptsOnly(cause),
+            (cause) =>
+              Effect.gen(function* () {
+                yield* Effect.logWarning("Failed to write models.dev cache file", { cause })
+                // An older file would otherwise shadow the body the KV fallback now holds.
+                yield* fs.remove(temporary, { force: true }).pipe(Effect.ignore)
+                yield* fs.remove(file, { force: true }).pipe(Effect.ignore)
+                return false
+              }),
+          ),
+        )
+      }
+
+      // The metadata is written apart from the body, so it only counts while the stored body
+      // still matches its digest. The file can be lost (workerd keeps files per isolate),
+      // deleted as corrupt, or overwritten by a migration or an older version.
+      const storedMatches = Effect.fnUntraced(function* (digest: string | undefined) {
+        if (digest === undefined) return false
+        if ((yield* Ref.get(current))?.digest === digest) return true
+        const text = yield* fs.readFileStringSafe(file).pipe(Effect.orElseSucceed(() => undefined))
+        if (text !== undefined) return bodyDigest(text) === digest
+        const cached = Option.getOrUndefined(Schema.decodeUnknownOption(Cache)(yield* kv.get(key)))
+        return cached !== undefined && bodyDigest(cached.body) === digest
       })
 
       const fetchPath = (path: string, etag?: string) =>
@@ -604,16 +653,18 @@ export const layer = (options?: Options) =>
         kv.set(metaKey, { updatedAt, ...(digest ? { digest } : {}), ...(etag ? { etag } : {}) })
 
       // Best-effort: a cache-write failure must never kill catalog
-      // population. The payload has outgrown some KV backends' per-value
-      // limits (Durable Object SQLite caps values at 2 MB and the catalog
-      // passed it in Aug 2026); a boot without a cache hit just refetches.
+      // population. Without a usable filesystem the body falls back to KV,
+      // which some backends reject (Durable Object SQLite caps values at 2 MB
+      // and the catalog passed it in Aug 2026); a boot without a cache hit
+      // just refetches.
       const writeCache = Effect.fn("ModelsDev.writeCache")(function* (
         text: string,
         etag: string | undefined,
-        digest = bodyDigest(text),
+        digest: string,
       ) {
         const updatedAt = Date.now()
-        yield* kv.set(key, { updatedAt, digest, body: text }).pipe(
+        const written = yield* writeFile(text)
+        yield* (written ? kv.remove(key) : kv.set(key, { updatedAt, digest, body: text })).pipe(
           Effect.andThen(writeMeta(updatedAt, digest, etag)),
           Effect.catchCauseIf(
             (cause) => !Cause.hasInterruptsOnly(cause),
@@ -625,39 +676,54 @@ export const layer = (options?: Options) =>
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const response = yield* fetchApi()
         const catalog = yield* decodeCatalog(response.text)
-        yield* writeCache(response.text, response.etag)
-        return catalog
+        const digest = bodyDigest(response.text)
+        yield* writeCache(response.text, response.etag, digest)
+        return { catalog, digest }
       })
 
       const populate = Effect.gen(function* () {
         const fromFile = yield* loadFromFile
-        if (fromFile) return yield* normalize(fromFile)
+        if (fromFile) return { snapshots: yield* normalize(fromFile) }
         const cached = options?.file ? undefined : yield* loadFromCache()
-        if (cached) return yield* normalize(cached.catalog)
+        if (cached) return { snapshots: yield* normalize(cached.catalog), digest: cached.digest }
         const bundled = yield* loadSnapshot
-        if (bundled) return bundled
-        if (!fetch) return []
-        const catalog = yield* lock.withPermit(
+        if (bundled) return { snapshots: bundled }
+        if (!fetch) return { snapshots: [] }
+        const loaded = yield* lock.withPermit(
           Effect.gen(function* () {
             const stored = options?.file ? undefined : yield* loadFromCache()
-            if (stored) return stored.catalog
+            if (stored) return stored
             return yield* fetchAndWrite()
           }),
         )
-        return yield* normalize(catalog)
+        return { snapshots: yield* normalize(loaded.catalog), digest: loaded.digest }
       }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
-      const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
-
-      const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
+      const get = (): Effect.Effect<readonly Snapshot[]> =>
+        Effect.flatMap(Ref.get(current), (loaded) =>
+          loaded
+            ? Effect.succeed(loaded.snapshots)
+            : loading.withPermit(
+                Effect.gen(function* () {
+                  const ready = yield* Ref.get(current)
+                  if (ready) return ready.snapshots
+                  const next = yield* populate
+                  // A refresh that finished meanwhile holds newer data than this load.
+                  return yield* Ref.modify(current, (value) =>
+                    value ? [value.snapshots, value] : [next.snapshots, next],
+                  )
+                }),
+              ),
+        )
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
         yield* lock
           .withPermit(
             Effect.gen(function* () {
-              const stored = Option.getOrUndefined(
+              const meta = Option.getOrUndefined(
                 Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
               )
+              const stored = meta && (yield* storedMatches(meta.digest)) ? meta : undefined
               if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
               const response = yield* fetchApi(force ? undefined : stored?.etag).pipe(
                 Effect.catchIf(
@@ -666,17 +732,18 @@ export const layer = (options?: Options) =>
                 ),
               )
               const digest = response && bodyDigest(response.text)
-              // models.dev rarely changes between polls; skip invalidation and
-              // the Refreshed event for a byte-identical body so downstream
-              // provider/model update listeners stay quiet.
+              // models.dev rarely changes between polls; skip replacing the
+              // catalog and the Refreshed event for a byte-identical body so
+              // downstream provider/model update listeners stay quiet.
               if (!force && stored && (!response || stored.digest === digest)) {
                 yield* writeMeta(Date.now(), stored.digest, response?.etag ?? stored.etag)
                 return
               }
-              if (!response) return
-              yield* decodeCatalog(response.text)
+              if (!response || !digest) return
+              const catalog = yield* decodeCatalog(response.text)
               yield* writeCache(response.text, response.etag, digest)
-              yield* invalidate
+              // A configured file still wins over the fetched catalog, so get() rereads it.
+              yield* Ref.set(current, options?.file ? undefined : { snapshots: yield* normalize(catalog), digest })
               yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
             }),
           )
@@ -699,7 +766,7 @@ export function configured(options?: Options) {
   return makeGlobalNode({
     service: Service,
     layer: layer(options),
-    deps: [FSUtil.node, Bus.node, App.node, KV.node, httpClient],
+    deps: [FSUtil.node, Global.node, Bus.node, App.node, KV.node, httpClient],
   })
 }
 
