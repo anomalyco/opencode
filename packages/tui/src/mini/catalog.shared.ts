@@ -31,6 +31,7 @@ function runAgent(input: CurrentAgent): RunAgent {
   return {
     id: input.id,
     name: input.name,
+    model: input.model && { providerID: input.model.providerID, modelID: input.model.id, variant: input.model.variant },
     description: input.description,
     mode: input.mode,
     hidden: input.hidden,

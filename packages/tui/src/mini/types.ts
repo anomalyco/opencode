@@ -22,6 +22,7 @@ import type {
   SessionMessageAssistantTool,
 } from "@opencode/client/promise"
 import type { Config } from "../config"
+import type { ModelPreferenceModel } from "../model-preference"
 import type { Todo } from "../util/todo"
 import type { CliRenderer } from "@opentui/core"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
@@ -102,6 +103,7 @@ export type QueuedPromptAction = "steer" | "queue" | "cancel"
 export type RunAgent = {
   id: string
   name: string
+  model?: ModelPreferenceModel & { variant?: string }
   description?: string
   mode: "subagent" | "primary" | "all"
   hidden: boolean
@@ -160,7 +162,8 @@ export type MiniHost = {
     }
   }
   preferences: {
-    resolveVariant(model: RunInput["model"]): Promise<string | undefined>
+    recentModels(): Promise<ModelPreferenceModel[]>
+    variant(model: RunInput["model"]): Promise<string | undefined>
     saveVariant(model: RunInput["model"], variant: string | undefined): Promise<void>
   }
 }
