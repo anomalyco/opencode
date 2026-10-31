@@ -1,13 +1,15 @@
 import { For, Match, Show, Switch, createUniqueId } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
-import { type TabLayout, useSettings } from "@/settings/model"
+import { inboxLayoutAvailable, type TabLayout, useSettings } from "@/settings/model"
 import "./interface-mode.css"
 
-const modes = [
-  { id: "top", layout: "horizontal" },
-  { id: "side", layout: "vertical" },
-  { id: "inbox", layout: "inbox" },
-] as const satisfies { id: string; layout: TabLayout }[]
+const modes = (
+  [
+    { id: "top", layout: "horizontal" },
+    { id: "side", layout: "vertical" },
+    { id: "inbox", layout: "inbox" },
+  ] as const satisfies { id: string; layout: TabLayout }[]
+).filter((mode) => mode.id !== "inbox" || inboxLayoutAvailable)
 
 export function InterfaceModeSetting() {
   const language = useLanguage()
