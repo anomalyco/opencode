@@ -202,3 +202,5 @@ export const imageModel = (modelID: string, settings: Settings) => {
   return configure(input).image(modelID, input.providerOptions)
 }
 export const model = responsesModel
+export const responses = responsesModel
+export const chat = chatModel
