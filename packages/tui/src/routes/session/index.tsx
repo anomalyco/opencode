@@ -387,7 +387,6 @@ export function Session(props: {
     firstJump()?.()
     if (!scroll || scroll.isDestroyed) return
     scroll.verticalScrollBar.off("change", updateAwayFromBottom)
-    scroll.content.off("resize", pinResize)
     saveScrollAnchor(true)
   })
   const [prompt, setPrompt] = createSignal<PromptRef>()
@@ -407,24 +406,13 @@ export function Session(props: {
     })
   }
 
-  // Older rows inserted above the reader grow the content from the top. Scrolling past them after
-  // layout instead of during it draws one frame at the stale offset, flashing the oldest inserted row.
-  let pinned: { height: number } | undefined
-  const pinResize = () => {
-    if (!pinned) return
-    // Sticky scroll has already moved a reader who follows the bottom to the new bottom.
-    if (!scroll.stickyScroll || scroll.scrollTop < scroll.scrollHeight - scroll.viewport.height)
-      scroll.scrollBy(scroll.scrollHeight - pinned.height)
-    pinned.height = scroll.scrollHeight
-  }
-  /** Treats content growth until layout settles as rows inserted above the reader. */
+  // Pin an existing row before publication. Total height also counts streamed output below the
+  // reader, which must not move their viewport when it arrives alongside the older rows.
   const pinAbove = () => {
     if (!scroll || scroll.isDestroyed) return
-    const pin = { height: scroll.scrollHeight }
-    pinned = pin
-    afterLayout(() => {
-      if (pinned === pin) pinned = undefined
-    })
+    if (scroll.stickyScroll && scroll.scrollTop >= scroll.scrollHeight - scroll.viewport.height) return
+    const node = scroll.getChildren().find((node) => node.height > 0 && node.y + node.height > scroll.viewport.y)
+    if (node) afterLayout(scroll.anchor(node))
   }
 
   // Tail-first transcript mounting: only the newest rows mount when the session opens. Older rows
@@ -1538,7 +1526,6 @@ export function Session(props: {
                   scroll = r
                   props.scrollRef?.(r)
                   scroll.verticalScrollBar.on("change", updateAwayFromBottom)
-                  scroll.content.on("resize", pinResize)
                 }}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,
