@@ -977,7 +977,7 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.effect("ignores 403 responses that are not a Console SSO error", () =>
+  it.effect("ignores 403 responses that are not a recognized Console rejection", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const state: { body: Response | undefined } = { body: undefined }
@@ -1007,7 +1007,7 @@ describe("OpencodePlugin", () => {
 
           for (const body of [
             () => new Response("<html>Forbidden</html>", { status: 403, headers: { "content-type": "text/html" } }),
-            () => Response.json({ _tag: "Forbidden", orgId: "org", connectionId: "ssoconn" }, { status: 403 }),
+            () => Response.json({ _tag: "Denied", orgId: "org" }, { status: 403 }),
           ]) {
             state.body = body()
             yield* TestClock.adjust("1 minute")
@@ -1015,6 +1015,70 @@ describe("OpencodePlugin", () => {
             expect((yield* integrations.get(Integration.ID.make("opencode")))?.connections[0]?.status).toBeUndefined()
             expect(yield* consolePolicies(config)).toEqual([sudo])
           }
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("reports a restricted Console workspace from a 403 Forbidden config body", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const server = Bun.serve({
+          port: 0,
+          fetch: () => Response.json({ _tag: "Forbidden" }, { status: 403 }),
+        })
+        return { server }
+      }),
+      ({ server }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const hooks = yield* PluginHooks.Service
+          const integrations = yield* Integration.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "secret",
+              metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
+            }),
+          })
+          yield* addPlugin().pipe(inProcess(server))
+          yield* drain
+
+          // The connection carries the restriction with the console URL where the user can check it.
+          expect((yield* integrations.get(Integration.ID.make("opencode")))?.connections[0]?.status).toEqual({
+            status: "restricted",
+            message: "Your OpenCode Console workspace is restricted",
+            url: `${server.url.origin}/console`,
+          })
+
+          // Inference rejections are explained with the restriction instead of the raw upstream body.
+          const rejected = (providerID: Provider.ID) =>
+            hooks
+              .trigger("session", "http.response", {
+                sessionID: Session.ID.make("ses_console"),
+                agent: Agent.ID.make("build"),
+                model: Model.Ref.make({ providerID, id: Model.ID.make("model") }),
+                kind: "primary",
+                request: new Request("https://inference.example/v1/responses"),
+                response: Response.json(
+                  { error: { type: "permission_error", message: "Workspace access denied" } },
+                  { status: 403 },
+                ),
+              })
+              .pipe(
+                Effect.flatMap((event) =>
+                  Effect.promise(async () => ({ status: event.response.status, body: await event.response.json() })),
+                ),
+                inProcess(server),
+              )
+          const denied = { status: 403, body: { error: { type: "permission_error", message: "Workspace access denied" } } }
+          const explained = {
+            status: 403,
+            body: { error: { type: "authentication_error", message: "Your OpenCode Console workspace is restricted." } },
+          }
+          expect(yield* rejected(Provider.ID.opencode)).toEqual(explained)
+          expect(yield* rejected(Provider.ID.anthropic)).toEqual(denied)
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
