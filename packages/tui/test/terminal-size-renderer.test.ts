@@ -5,16 +5,16 @@ import { guardTerminalResize } from "../src/terminal-size"
 // Bun reports an inverted console viewport as 2^64 - 29, printed as 2^64.
 const INVERTED_WIDTH = 18446744073709552000
 
-// Inverted until repair() runs. Its real size matches the renderer.
-function fakeViewport() {
+// Inverted until repair() runs. `fixed` decides whether repair() makes it valid.
+function fakeViewport(fixed: boolean) {
   let repaired = false
   return {
     repairs: 0,
     valid: () => repaired,
     size: () => ({ width: 120, height: 30 }),
     repair() {
-      repaired = true
       this.repairs++
+      if (fixed) repaired = true
     },
   }
 }
@@ -37,40 +37,42 @@ test("a bogus resize reading never reaches the native renderer", async () => {
   setup.renderer.destroy()
 })
 
-test("an inverted viewport is repaired on the clock, then the layout is rebuilt", async () => {
+test("a viewport the repair cannot fix restarts the renderer on the alternate screen", async () => {
+  const clock = new ManualClock()
+  const setup = await createTestRenderer({ width: 120, height: 30, clock, screenMode: "alternate-screen" })
+  setup.renderer.pause()
+  const suspend = spyOn(setup.renderer, "suspend").mockResolvedValue(undefined)
+  const resume = spyOn(setup.renderer, "resume").mockResolvedValue(undefined)
+  const viewport = fakeViewport(false)
+  const restore = guardTerminalResize(setup.renderer, viewport)
+
+  clock.advance(500)
+  restore()
+
+  expect(viewport.repairs).toBe(1)
+  expect(suspend).toHaveBeenCalledTimes(1)
+  suspend.mockRestore()
+  resume.mockRestore()
+  setup.renderer.destroy()
+})
+
+test("a viewport that recovers at the current size restarts the renderer once", async () => {
   const clock = new ManualClock()
   const setup = await createTestRenderer({ width: 120, height: 30, clock })
   setup.renderer.pause()
-  const viewport = fakeViewport()
-  const resize = spyOn(setup.renderer.root, "resize")
+  const suspend = spyOn(setup.renderer, "suspend").mockResolvedValue(undefined)
+  const resume = spyOn(setup.renderer, "resume").mockResolvedValue(undefined)
+  const viewport = fakeViewport(true)
   const restore = guardTerminalResize(setup.renderer, viewport)
 
   clock.advance(500)
   expect(viewport.repairs).toBe(1)
-  expect(resize).not.toHaveBeenCalled()
+  expect(suspend).not.toHaveBeenCalled()
 
   clock.advance(500)
   restore()
-  expect(viewport.repairs).toBe(1)
-  expect(resize).toHaveBeenCalledTimes(1)
-  resize.mockRestore()
-  setup.renderer.destroy()
-})
-
-test("a same-size resize right after a repair rebuilds the layout once", async () => {
-  const clock = new ManualClock()
-  const setup = await createTestRenderer({ width: 120, height: 30, clock })
-  setup.renderer.pause()
-  const resize = spyOn(setup.renderer.root, "resize")
-  const restore = guardTerminalResize(setup.renderer, fakeViewport())
-
-  clock.advance(500)
-  setup.renderer.requestResize(120, 30)
-  expect(resize).toHaveBeenCalledTimes(1)
-
-  clock.advance(500)
-  restore()
-  expect(resize).toHaveBeenCalledTimes(1)
-  resize.mockRestore()
+  expect(suspend).toHaveBeenCalledTimes(1)
+  suspend.mockRestore()
+  resume.mockRestore()
   setup.renderer.destroy()
 })

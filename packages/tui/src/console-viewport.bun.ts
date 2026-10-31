@@ -2,10 +2,6 @@ import { dlopen, FFIType, ptr } from "bun:ffi"
 
 const STD_OUTPUT_HANDLE = -11
 
-// Conhost ignores SetConsoleWindowInfo on the alternate screen buffer, so leaving
-// and re-entering the alternate screen is what recreates a valid viewport.
-const RECREATE_ALTERNATE_SCREEN = "\x1b[?1049l\x1b[?1049h"
-
 // conhost can leave `srWindow` inverted (Left past Right) after a maximize and a
 // title-bar drag. The buffer width still matches the window, so it is the real size.
 export function consoleViewport() {
@@ -46,7 +42,7 @@ export function consoleViewport() {
       if (!view) return undefined
       return { width: view.bufferWidth, height: view.bottom - view.top + 1 }
     },
-    repair(alternate: boolean) {
+    repair() {
       const view = read()
       if (!view) return
       // Restore the horizontal extent to the buffer width; top and bottom are kept.
@@ -57,9 +53,6 @@ export function consoleViewport() {
       rectView.setInt16(4, view.bufferWidth - 1, true)
       rectView.setInt16(6, view.bottom, true)
       kernel32.symbols.SetConsoleWindowInfo(handle, 1, ptr(rect))
-      // Only the alternate screen needs re-entering; on the main screen the
-      // repair above is enough. Writing this outside the renderer is a known risk.
-      if (alternate && !valid()) process.stdout.write(RECREATE_ALTERNATE_SCREEN)
     },
   }
 }
