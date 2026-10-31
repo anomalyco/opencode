@@ -322,7 +322,8 @@ download_and_install() {
         fi
     fi
 
-    tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
+    # Keep Windows paths out of tar's archive and directory arguments.
+    (cd "$tmp_dir" && tar -xzf "$filename")
     local installed_binary="$APP"
     if [ "$os" = "windows" ]; then
         installed_binary="$APP.exe"
