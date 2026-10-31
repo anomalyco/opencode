@@ -4,6 +4,9 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { useConfig } from "../../config"
 import { useData } from "../../context/data"
 import { useClient } from "../../context/client"
+import { abort } from "@opencode/util/abort"
+import { retrySessionSync } from "../../util/session-sync"
+import { errorMessage } from "../../util/error"
 import {
   append,
   completePrevious,
@@ -44,7 +47,11 @@ export async function completeGroupBoundary(input: {
   }
 }
 
-export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
+export function createSessionRows(
+  sessionID: Accessor<string>,
+  onSynced?: (sessionID: string) => void,
+  onError?: (message: string) => void,
+) {
   const data = useData()
   const client = useClient()
   const config = useConfig()
@@ -119,12 +126,13 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   createEffect(
     on([sessionID, () => client.connection.status()], ([id, status]) => {
       if (status !== "connected") return
+      const controller = new AbortController()
+      onCleanup(() => abort(controller))
       rebuild()
       void data.session.pending.sync(id).catch(() => undefined)
-      void data.session.message
-        .sync(id)
+      void retrySessionSync(() => data.session.message.sync(id), controller.signal)
         .then(async () => {
-          if (sessionID() !== id) return
+          if (controller.signal.aborted) return
           rebuild()
           // Restoration waits for complete boundary groups so saved group IDs resolve.
           await completeGroupBoundary({
@@ -132,11 +140,14 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
             messages: () => data.session.message.list(id).length,
             more: () => data.session.message.more(id),
             loadMore: () => data.session.message.loadMore(id),
-            active: () => sessionID() === id,
+            active: () => !controller.signal.aborted && sessionID() === id,
           }).catch(() => undefined)
-          if (sessionID() === id) onSynced?.(id)
+          if (!controller.signal.aborted) onSynced?.(id)
         })
-        .catch(() => undefined)
+        .catch((error) => {
+          if (controller.signal.aborted) return
+          onError?.(errorMessage(error))
+        })
     }),
   )
 

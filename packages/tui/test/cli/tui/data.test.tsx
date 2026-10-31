@@ -749,6 +749,8 @@ test("reconnects the event stream and resyncs active data", async () => {
   let resolveActive!: (response: Response) => void
   let resolveMessages!: (response: Response) => void
   const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/session-stale") return json({ data: sessionInfo("session-stale", undefined) })
+    if (url.pathname === "/api/session/session-new") return json({ data: sessionInfo("session-new", undefined) })
     if (url.pathname === "/api/event") {
       requests.event++
       return events.v2()
@@ -1330,6 +1332,7 @@ test("tracks session status from active sessions and execution events", async ()
   const events = createEventStream()
   let settled = false
   const calls = createFetch((url) => {
+    if (url.pathname === "/api/session/session-active") return json({ data: sessionInfo("session-active", undefined) })
     if (url.pathname === "/api/session/active") return json({ data: { "session-active": { type: "running" } } })
     if (url.pathname === "/api/session/session-live")
       return json({

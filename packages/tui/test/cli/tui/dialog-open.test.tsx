@@ -616,6 +616,7 @@ const recentSession = {
 test("sessions remain selectable while projects are still loading", async () => {
   const projects = Promise.withResolvers<Response>()
   const fixture = await renderOpen((url) => {
+    if (url.pathname === `/api/session/${recentSession.id}`) return json({ data: recentSession })
     if (url.pathname === "/api/session") return json({ data: [recentSession], cursor: {} })
     if (url.pathname === "/api/project") return projects.promise
     return undefined
@@ -656,8 +657,19 @@ test("shows hydrated sessions immediately without waiting for either read", asyn
 
 test("keeps an uncached moved session in the first successful refresh", async () => {
   const response = Promise.withResolvers<Response>()
+  const metadata = Promise.withResolvers<Response>()
   const destination = { directory: "/fixture/destination" }
-  const fixture = await renderOpen((url) => (url.pathname === "/api/session" ? response.promise : undefined))
+  const moved = {
+    ...recentSession,
+    location: destination,
+    projectID: "proj_destination",
+    time: { created: 1, updated: 3 },
+  }
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/session") return response.promise
+    if (url.pathname === `/api/session/${recentSession.id}`) return metadata.promise
+    return undefined
+  })
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("Refreshing"))
     fixture.emit({
@@ -679,9 +691,7 @@ test("keeps an uncached moved session in the first successful refresh", async ()
     expect(fixture.data.session.get(recentSession.id)).toBeUndefined()
     response.resolve(
       json({
-        data: [
-          { ...recentSession, location: destination, projectID: "proj_destination", time: { created: 1, updated: 3 } },
-        ],
+        data: [moved],
         cursor: {},
       }),
     )
@@ -692,6 +702,8 @@ test("keeps an uncached moved session in the first successful refresh", async ()
     expect(fixture.location.ref).toEqual(destination)
   } finally {
     response.resolve(json({ data: [], cursor: {} }))
+    metadata.resolve(json({ data: moved }))
+    await fixture.data.session.sync(recentSession.id)
     await fixture.dispose()
   }
 })
@@ -853,6 +865,27 @@ test("option arrows stay in the only visible section", async () => {
 
 test("surfaces sessions awaiting permissions or questions at the top with attention icons", async () => {
   const remote = { directory: "/tmp/opencode/remote" }
+  const sessions = [
+    ...Array.from({ length: 9 }, (_, index) => ({
+      ...recentSession,
+      id: `ses_recent_${index + 1}`,
+      title: `Recent session ${index + 1}`,
+      time: { created: 1, updated: 100 - index },
+    })),
+    {
+      ...recentSession,
+      id: "ses_parent_question",
+      title: "Parent awaiting question",
+      location: remote,
+      time: { created: 1, updated: 5 },
+    },
+    {
+      ...recentSession,
+      id: "ses_blocked_permission",
+      title: "Old session awaiting permission",
+      time: { created: 1, updated: 1 },
+    },
+  ]
   const fixture = await renderOpen((url) => {
     if (url.pathname === "/api/session/active") {
       return json({
@@ -899,31 +932,10 @@ test("surfaces sessions awaiting permissions or questions at the top with attent
         ],
       })
     }
-    if (url.pathname !== "/api/session") return undefined
-    return json({
-      data: [
-        ...Array.from({ length: 9 }, (_, index) => ({
-          ...recentSession,
-          id: `ses_recent_${index + 1}`,
-          title: `Recent session ${index + 1}`,
-          time: { created: 1, updated: 100 - index },
-        })),
-        {
-          ...recentSession,
-          id: "ses_parent_question",
-          title: "Parent awaiting question",
-          location: remote,
-          time: { created: 1, updated: 5 },
-        },
-        {
-          ...recentSession,
-          id: "ses_blocked_permission",
-          title: "Old session awaiting permission",
-          time: { created: 1, updated: 1 },
-        },
-      ],
-      cursor: {},
-    })
+    if (url.pathname === "/api/session") return json({ data: sessions, cursor: {} })
+    const session = sessions.find((session) => url.pathname === `/api/session/${session.id}`)
+    if (session) return json({ data: session })
+    return undefined
   })
 
   try {
@@ -933,9 +945,7 @@ test("surfaces sessions awaiting permissions or questions at the top with attent
         value.includes("? Parent awaiting question") &&
         value.includes("Recent session 1"),
     )
-    expect(frame.indexOf("? Parent awaiting question")).toBeLessThan(
-      frame.indexOf("! Old session awaiting permission"),
-    )
+    expect(frame.indexOf("? Parent awaiting question")).toBeLessThan(frame.indexOf("! Old session awaiting permission"))
     expect(frame.indexOf("! Old session awaiting permission")).toBeLessThan(frame.indexOf("Recent session 1"))
 
     fixture.app.mockInput.pressEnter()
