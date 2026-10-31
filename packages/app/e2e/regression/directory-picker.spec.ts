@@ -37,3 +37,22 @@ test("the folder picker's tree scrolls with the mouse wheel inside the modal", a
   await page.mouse.wheel(0, 300)
   await expect.poll(scrollTop).toBeGreaterThan(0)
 })
+
+test("a suggestion keeps a trailing space in its directory", async ({ page }) => {
+  const directory = "/projects/example"
+
+  await openSettings(page, {
+    name: "Picker",
+    directory,
+    findFiles: ({ query }) => (query.includes("foo") ? [fileNode(directory, "foo ", "directory")] : []),
+    seed: { tabs: [] },
+  })
+  await page.getByTestId("settings-screen").getByRole("tab", { name: "Projects", exact: true }).click()
+  await page.getByRole("button", { name: "Add project", exact: true }).click()
+  const picker = page.getByRole("dialog", { name: "Open project", exact: true })
+  const input = picker.getByRole("combobox")
+
+  await input.fill("foo")
+  await picker.getByRole("option", { name: /foo/ }).click()
+  await expect(input).toHaveValue("/projects/example/foo /")
+})
