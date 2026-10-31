@@ -80,7 +80,7 @@ describe("KV", () => {
     }),
   )
 
-  it.effect("discards a stored value that is not valid JSON", () =>
+  it.effect("reports a stored value that is not valid JSON as a miss", () =>
     Effect.gen(function* () {
       const kv = yield* KV.Service
       const { db } = yield* Database.Service
@@ -89,7 +89,29 @@ describe("KV", () => {
       )
 
       expect(yield* kv.get("corrupt:json")).toBeUndefined()
-      expect(yield* db.all("SELECT key FROM kv WHERE key = 'corrupt:json'")).toEqual([])
+      // The read does not own the row: an unreadable entry stays until a caller overwrites it.
+      expect(yield* db.all("SELECT key FROM kv WHERE key = 'corrupt:json'")).toHaveLength(1)
+      yield* kv.set("corrupt:json", { recovered: true })
+      expect(yield* kv.get("corrupt:json")).toEqual({ recovered: true })
+    }),
+  )
+
+  it.effect("skips unreadable entries while scanning", () =>
+    Effect.gen(function* () {
+      const kv = yield* KV.Service
+      const { db } = yield* Database.Service
+      yield* kv.set("scan:corrupt/a", { order: 1 })
+      yield* db.run(
+        `INSERT INTO kv (key, value, time_created, time_updated) VALUES ('scan:corrupt/b', '{oops', 0, 0)`,
+      )
+      yield* kv.set("scan:corrupt/c", { order: 3 })
+
+      expect(yield* kv.scan({ prefix: "scan:corrupt/" })).toEqual({
+        entries: [
+          { key: "scan:corrupt/a", value: { order: 1 } },
+          { key: "scan:corrupt/c", value: { order: 3 } },
+        ],
+      })
     }),
   )
 

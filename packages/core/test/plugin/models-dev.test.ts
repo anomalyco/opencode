@@ -8,6 +8,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
+import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { ModelsDev } from "@opencode/core/models-dev"
@@ -1369,11 +1370,18 @@ describe("ModelsDevPlugin", () => {
       yield* db.run(
         `INSERT INTO kv (key, value, time_created, time_updated) VALUES ('models-dev:v2:catalog', '{"a":\\&}', 0, 0)`,
       )
+      yield* db.run(
+        `INSERT INTO kv (key, value, time_created, time_updated) VALUES ('models-dev:v2:catalog:meta', '{"updatedAt":1,"digest":"stale","etag":"W/\\"stale\\""}', 0, 0)`,
+      )
+      const kv = yield* KV.Service
       const modelsDev = yield* ModelsDev.Service
       expect((yield* modelsDev.get()).length).toBeGreaterThan(0)
+      // Both rows are gone, so the next refresh cannot answer with the stale ETag or digest.
+      expect(yield* kv.get("models-dev:v2:catalog")).toBeUndefined()
+      expect(yield* kv.get("models-dev:v2:catalog:meta")).toBeUndefined()
     }).pipe(
       Effect.provide(
-        AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Database.node]), [
+        AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Database.node, KV.node]), [
           ModelsDev.node.replace(ModelsDev.configured({ fetch: false })),
         ]),
       ),
