@@ -96,7 +96,7 @@ it.effect("Meta package selectors preserve overrides and Chat token policy on cu
         ai.request({
           model,
           prompt: "Hello",
-          generation: { maxTokens: 64 },
+          maxTokens: 64,
           providerOptions: { store: true, include: [] },
         }),
       )

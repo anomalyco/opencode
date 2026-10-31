@@ -37,7 +37,7 @@ const program = Effect.gen(function* () {
     model: openai.responses("gpt-4o-mini"), // `.chat(...)` selects the Chat Completions API instead
     system: "You are concise.",
     prompt: "Say hello in one short sentence.",
-    generation: { maxTokens: 40 },
+    maxTokens: 40,
   })
   console.log(response.text)
 })
@@ -578,7 +578,7 @@ const request = ai.request({
   model: minimax.model("MiniMax-M3"), // also minimax.messages("MiniMax-M3")
   prompt: "What is 173 multiplied by 219?",
   providerOptions: { thinking: { type: "adaptive" } },
-  generation: { maxTokens: 1536 },
+  maxTokens: 1536,
 })
 
 const response = await Effect.runPromise(ai.generate(request).pipe(Effect.provide(AIClient.layer)))
@@ -616,7 +616,7 @@ const request = ai.request({
   model: meta.responses("muse-spark-1.3"), // meta.model(...) also selects Responses
   prompt: "What is 173 multiplied by 219? Reply with the integer.",
   providerOptions: { reasoningEffort: "low" },
-  generation: { maxTokens: 1024 },
+  maxTokens: 1024,
 })
 ```
 
@@ -1606,7 +1606,7 @@ Additional provider entrypoints include:
 
 Request options in order of stability:
 
-1. **`generation`** — portable knobs (`maxTokens`, `temperature`, `topP`, `topK`, penalties, seed, stop).
+1. **Portable knobs** — `maxTokens`, `temperature`, `topP`, `topK`, `frequencyPenalty`, `presencePenalty`, `seed` and `stop`, at the top level of a text request. `GENERATION_KEYS` lists them.
 2. **`promptCacheKey`** — stable cache affinity lowered by every protocol that supports it.
 3. **`providerOptions: { ... }`** — flat options inferred from the selected model (OpenAI `store`, Anthropic `thinking`, Gemini `thinkingConfig`, OpenRouter routing).
 4. **`http: { body, headers, query }`** — last-resort serializable overlays merged into the final HTTP request. Reach for this only when a stable typed path doesn't yet exist.

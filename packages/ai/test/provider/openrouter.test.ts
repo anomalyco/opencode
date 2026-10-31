@@ -340,7 +340,7 @@ describe("OpenRouter", () => {
             model: OpenRouter.configure({ apiKey: "test-key" }).model("qwen/qwen3.8-flash"),
             cache: "none",
             prompt: "Hello",
-            ...(maxTokens === undefined ? {} : { generation: { maxTokens } }),
+            ...(maxTokens === undefined ? {} : { maxTokens }),
             providerOptions: { reasoning: value },
           }),
         ).pipe(Effect.map((prepared) => prepared.body.reasoning))

@@ -447,17 +447,16 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
   const flattened = ProviderShared.flattenToolRequest(request)
   const hasTools = flattened.tools.length > 0
-  const generation = request.generation
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const generationConfig = {
-    maxOutputTokens: generation?.maxTokens,
-    temperature: generation?.temperature,
-    topP: generation?.topP,
-    topK: generation?.topK,
-    frequencyPenalty: generation?.frequencyPenalty,
-    presencePenalty: generation?.presencePenalty,
-    seed: generation?.seed,
-    stopSequences: generation?.stop,
+    maxOutputTokens: request.maxTokens,
+    temperature: request.temperature,
+    topP: request.topP,
+    topK: request.topK,
+    frequencyPenalty: request.frequencyPenalty,
+    presencePenalty: request.presencePenalty,
+    seed: request.seed,
+    stopSequences: request.stop,
     // Gemini accepts a budget above `maxOutputTokens`, but thinking then leaves the answer empty.
     thinkingConfig:
       options.thinkingConfig === undefined
@@ -470,7 +469,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
                 ? undefined
                 : ProviderShared.fitThinkingBudget(
                     options.thinkingConfig.thinkingBudget,
-                    generation?.maxTokens,
+                    request.maxTokens,
                     MIN_THINKING_BUDGET,
                   ),
           },

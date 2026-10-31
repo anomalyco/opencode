@@ -59,7 +59,9 @@ describe("request option precedence", () => {
         ai.request({
           model,
           prompt: "Say hello.",
-          generation: { maxTokens: 30, topP: 0.9, stop: ["request"] },
+          maxTokens: 30,
+          topP: 0.9,
+          stop: ["request"],
           providerOptions: { store: true },
         }),
       )
@@ -447,7 +449,7 @@ describe("request option precedence", () => {
       const model = route.model({ id: "claude-sonnet-4-5" })
       const withoutMaxTokens = yield* compileRequest(ai.request({ model, prompt: "Say hello.", cache: "none" }))
       const withMaxTokens = yield* compileRequest(
-        ai.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 8_000 } }),
+        ai.request({ model, prompt: "Say hello.", cache: "none", maxTokens: 8_000 }),
       )
 
       expect(withoutMaxTokens.body.max_tokens).toBe(32_000)

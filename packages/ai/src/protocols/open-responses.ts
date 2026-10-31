@@ -814,16 +814,15 @@ export const lowerConversation = Effect.fnUntraced(function* (request: LLMReques
 })
 
 export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
-  const generation = request.generation
   const cacheKey = ProviderShared.promptCacheKey(request)
   const parallelToolCalls = resolveParallelToolCalls(request, options)
   return {
     stream: true as const,
-    max_output_tokens: generation?.maxTokens,
-    temperature: generation?.temperature,
-    top_p: generation?.topP,
-    presence_penalty: generation?.presencePenalty,
-    frequency_penalty: generation?.frequencyPenalty,
+    max_output_tokens: request.maxTokens,
+    temperature: request.temperature,
+    top_p: request.topP,
+    presence_penalty: request.presencePenalty,
+    frequency_penalty: request.frequencyPenalty,
     ...(options.store !== undefined ? { store: options.store } : {}),
     ...(options.metadata ? { metadata: options.metadata } : {}),
     ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),

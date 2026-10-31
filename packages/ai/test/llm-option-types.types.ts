@@ -145,3 +145,9 @@ ai.request({ model, prompt: "Hello", http: { query: { trace: "1" }, body: { extr
 ai.request({ model, prompt: "Hello", http: { headers: { "x-trace": "1" } } })
 // @ts-expect-error Timeouts moved out of `http`.
 ai.request({ model, prompt: "Hello", http: { headerTimeout: 1_000 } })
+
+// Portable knobs sit at the top level; editing one is a flat spread.
+const knobs = ai.request({ model, prompt: "Hello", maxTokens: 256, temperature: 0, stop: ["END"] })
+ai.generate({ ...knobs, maxTokens: 512 })
+// @ts-expect-error The nested `generation` object was removed.
+ai.request({ model, prompt: "Hello", generation: { maxTokens: 256 } })

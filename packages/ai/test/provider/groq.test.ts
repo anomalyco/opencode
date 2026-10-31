@@ -12,9 +12,7 @@ it.effect("Groq reuses Chat streaming and defaults to parsed reasoning", () =>
     expect(Groq.protocol.stream).toBe(OpenAIChat.protocol.stream)
     const model = Groq.configure({ apiKey: "fixture" }).model("llama-3.3-70b-versatile")
     expect(model.route.endpoint.baseURL).toBe("https://api.groq.com/openai/v1")
-    const compiled = yield* compileRequest(
-      ai.request({ model, prompt: "Hello", tools: [weatherTool], generation: { maxTokens: 64 } }),
-    )
+    const compiled = yield* compileRequest(ai.request({ model, prompt: "Hello", tools: [weatherTool], maxTokens: 64 }))
     expect(compiled.body).toMatchObject({
       max_completion_tokens: 64,
       stream_options: { include_usage: true },

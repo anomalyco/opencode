@@ -338,11 +338,7 @@ const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (reque
   const flattened = ProviderShared.flattenToolRequest(request)
   if (flattened.tools.some((tool) => tool.native !== undefined))
     return yield* ProviderShared.invalidRequest("Google Interactions hosted tools are not supported")
-  if (
-    request.generation?.topK !== undefined ||
-    request.generation?.frequencyPenalty !== undefined ||
-    request.generation?.presencePenalty !== undefined
-  )
+  if (request.topK !== undefined || request.frequencyPenalty !== undefined || request.presencePenalty !== undefined)
     return yield* ProviderShared.invalidRequest(
       "Google Interactions does not support topK, frequencyPenalty, or presencePenalty",
     )
@@ -373,11 +369,11 @@ const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (reque
         }))
       : undefined,
     generation_config: {
-      max_output_tokens: request.generation?.maxTokens,
-      temperature: request.generation?.temperature,
-      top_p: request.generation?.topP,
-      seed: request.generation?.seed,
-      stop_sequences: request.generation?.stop,
+      max_output_tokens: request.maxTokens,
+      temperature: request.temperature,
+      top_p: request.topP,
+      seed: request.seed,
+      stop_sequences: request.stop,
       thinking_level: options.thinkingLevel,
       thinking_summaries: options.thinkingSummaries,
       tool_choice: choice,

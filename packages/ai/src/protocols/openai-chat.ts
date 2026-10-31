@@ -873,7 +873,6 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     return yield* ProviderShared.invalidRequest(
       `OpenAI Chat reasoning field conflicts with reserved field ${reasoningField}`,
     )
-  const generation = request.generation
   const flattened = ProviderShared.flattenToolRequest(request)
   const provider = request.model.provider
   const baseURL = request.model.route.endpoint.baseURL
@@ -902,14 +901,14 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     ...((request.model.compatibility?.streamUsage ?? true) ? { stream_options: { include_usage: true } } : {}),
     ...(zaiToolStream && hasActiveTools ? { tool_stream: true } : {}),
     ...(maxTokensField === "max_completion_tokens"
-      ? { max_completion_tokens: generation?.maxTokens }
-      : { max_tokens: generation?.maxTokens }),
-    temperature: generation?.temperature,
-    top_p: generation?.topP,
-    frequency_penalty: generation?.frequencyPenalty,
-    presence_penalty: generation?.presencePenalty,
-    seed: generation?.seed,
-    stop: generation?.stop,
+      ? { max_completion_tokens: request.maxTokens }
+      : { max_tokens: request.maxTokens }),
+    temperature: request.temperature,
+    top_p: request.topP,
+    frequency_penalty: request.frequencyPenalty,
+    presence_penalty: request.presencePenalty,
+    seed: request.seed,
+    stop: request.stop,
     ...lowerOptions(request, supportsStore, hasActiveTools),
   }
 })

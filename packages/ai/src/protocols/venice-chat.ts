@@ -188,7 +188,7 @@ const fromRequest = Effect.fn("VeniceChat.fromRequest")(function* (request: LLMR
   })
   return {
     ...body,
-    max_completion_tokens: options.maxCompletionTokens ?? options.maxTokens ?? request.generation?.maxTokens,
+    max_completion_tokens: options.maxCompletionTokens ?? options.maxTokens ?? request.maxTokens,
     reasoning_effort: undefined,
     reasoning:
       options.reasoningEffort === undefined
@@ -206,7 +206,7 @@ const fromRequest = Effect.fn("VeniceChat.fromRequest")(function* (request: LLMR
     prompt_cache_retention: options.promptCacheRetention ?? body.prompt_cache_retention,
     parallel_tool_calls: options.parallelToolCalls,
     min_p: options.minP,
-    top_k: request.generation?.topK,
+    top_k: request.topK,
     repetition_penalty: options.repetitionPenalty,
     stop_token_ids: options.stopTokenIds,
     logprobs: options.logprobs,

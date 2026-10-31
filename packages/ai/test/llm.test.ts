@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { ai, CacheHint, LLMEvent, LLMResponse, ToolEntry, ToolNamespace } from "../src/effect.js"
+import { ai, CacheHint, GENERATION_KEYS, LLMEvent, LLMResponse, ToolEntry, ToolNamespace } from "../src/effect.js"
 import { OpenAI } from "../src/providers.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAIResponses from "../src/protocols/openai-responses.js"
 import {
-  GenerationOptions,
   Message,
   LanguageModel,
   ToolCallPart,
@@ -80,7 +79,7 @@ describe("llm constructors", () => {
     expect(request.messages[0]).toBeInstanceOf(Message)
     expect(request.system).toEqual([{ type: "text", text: "You are concise." }])
     expect(request.messages[0]?.content).toEqual([{ type: "text", text: "Say hello." }])
-    expect(request.generation).toBeUndefined()
+    expect(request.maxTokens).toBeUndefined()
     expect(request.tools).toEqual([])
   })
 
@@ -92,13 +91,13 @@ describe("llm constructors", () => {
     })
     const updated = {
       ...base,
-      generation: GenerationOptions.make({ maxTokens: 20 }),
+      maxTokens: 20,
       messages: [...base.messages, Message.assistant("Hi.")],
     }
 
     expect(updated.id).toBe("req_1")
     expect(updated.model).toBe(base.model)
-    expect(updated.generation).toEqual({ maxTokens: 20 })
+    expect(updated.maxTokens).toBe(20)
     expect(updated.messages.map((message) => message.role)).toEqual(["user", "assistant"])
     expect(ai.request(updated)).toEqual(updated)
     expect(ai.request(updated).messages[1]).toBe(updated.messages[1])
@@ -110,6 +109,19 @@ describe("llm constructors", () => {
     })
     expect(prompted.system).toEqual([{ type: "text", text: "Be brief." }])
     expect(prompted.messages.map((message) => message.role)).toEqual(["user", "assistant", "user"])
+  })
+
+  test("lists the portable knobs", () => {
+    expect([...GENERATION_KEYS]).toEqual([
+      "maxTokens",
+      "temperature",
+      "topP",
+      "topK",
+      "frequencyPenalty",
+      "presencePenalty",
+      "seed",
+      "stop",
+    ])
   })
 
   test("keeps request options separate from route defaults", () => {
@@ -124,13 +136,14 @@ describe("llm constructors", () => {
         }),
       }),
       prompt: "Say hello.",
-      generation: { temperature: 0 },
+      temperature: 0,
       providerOptions: { store: true, metadata: { request: true } },
       headers: { "x-shared": "request" },
       http: { body: { metadata: { request: true } }, query: { request: "1" } },
     })
 
-    expect(request.generation).toEqual({ temperature: 0 })
+    expect(request.temperature).toBe(0)
+    expect(request.maxTokens).toBeUndefined()
     expect(request.providerOptions).toEqual({ store: true, metadata: { request: true } })
     expect(request.headers).toEqual({ "x-shared": "request" })
     expect(request.http).toEqual({ body: { metadata: { request: true } }, query: { request: "1" } })
@@ -176,7 +189,7 @@ describe("llm constructors", () => {
     expect(request.model.defaults?.providerOptions).toEqual({ parallelToolCalls: false })
     expect(request.model.defaults?.http).toEqual({ body: { extra_body: true } })
     expect(request.model.compatibility).toEqual({ sanitizer: "moonshot" })
-    expect(request.generation).toBeUndefined()
+    expect(request.maxTokens).toBeUndefined()
     expect(request.providerOptions).toBeUndefined()
     expect(request.http).toBeUndefined()
   })
