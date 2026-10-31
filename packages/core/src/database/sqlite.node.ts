@@ -25,10 +25,20 @@ interface Config extends Sqlite.ClientConfig {
 const make = (options: Config) =>
   Effect.gen(function* () {
     const native = (yield* Sqlite.Native) as DatabaseSync
+    // DatabaseSync.close() finalizes every statement it prepared. Arrays mode is
+    // sticky on a statement, so row and array results use separate statements.
+    const rowStatements = Sqlite.makeStatementCache(
+      (query) => native.prepare(query),
+      () => {},
+    )
+    const arrayStatements = Sqlite.makeStatementCache(
+      (query) => native.prepare(query),
+      () => {},
+    )
 
     const run = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
-        const statement = native.prepare(query)
+        const statement = rowStatements.get(query)
         statement.setReadBigInts(Context.get(fiber.context, SqlClient.SafeIntegers))
         try {
           return Effect.succeed(statement.all(...(params as SQLInputValue[])) as Array<Record<string, unknown>>)
@@ -43,7 +53,7 @@ const make = (options: Config) =>
 
     const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<ReadonlyArray<ReadonlyArray<unknown>>, SqlError>((fiber) => {
-        const statement = native.prepare(query)
+        const statement = arrayStatements.get(query)
         statement.setReadBigInts(Context.get(fiber.context, SqlClient.SafeIntegers))
         statement.setReturnArrays(true)
         try {
