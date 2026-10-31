@@ -104,7 +104,18 @@ const jsonSchema = (schema: JsonSchema.JsonSchema) => {
     (typeof schema.$schema === "string" && schema.$schema.includes("draft-07")) || "definitions" in schema
       ? JsonSchema.fromSchemaDraft07(schema)
       : JsonSchema.fromSchemaDraft2020_12(schema)
-  return Schema.make<Schema.Codec<unknown>>(SchemaRepresentation.fromJsonSchemaDocument(draft).ast)
+  // Tool schemas are untrusted, so skip regexes (ReDoS) but keep validating everything else. With regexes gone,
+  // `oneOf` branches that only differed by pattern would all match and reject valid input, so treat it as `anyOf`.
+  return Schema.make<Schema.Codec<unknown>>(
+    SchemaRepresentation.fromJsonSchemaDocument(draft, {
+      patterns: "ignore",
+      onEnter: (node) => {
+        if (!("oneOf" in node) || "anyOf" in node) return node
+        const { oneOf, ...rest } = node
+        return { ...rest, anyOf: oneOf }
+      },
+    }).ast,
+  )
 }
 
 const encodeOutput = (schema: Tool.ValueSchema<any>, value: unknown) => {
