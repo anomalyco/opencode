@@ -365,6 +365,8 @@ export interface ParserState {
   readonly reasoningEmitted: boolean
   readonly latestToolIndex?: number
   readonly nextToolIndex: number
+  /** Stream keys for provider indexes that a later tool call reused. */
+  readonly reusedToolIndexes: Partial<Record<number, number>>
   readonly requireFinishReason: boolean
 }
 
@@ -1143,6 +1145,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     let customCalls = state.customCalls
     let latestToolIndex = state.latestToolIndex
     let nextToolIndex = state.nextToolIndex
+    let reusedToolIndexes = state.reusedToolIndexes
 
     let lifecycle = state.lifecycle
 
@@ -1196,8 +1199,18 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       const matched = toolIndexByID(tools, pendingTools, tool.id || undefined)
       const fallback = toolDeltas.length > 1 ? position : (latestToolIndex ?? position)
       const fallbackTool = tools[fallback] ?? pendingTools[fallback]
-      const index =
-        tool.index ?? matched ?? (tool.id && fallbackTool?.id && fallbackTool.id !== tool.id ? nextToolIndex : fallback)
+      // Some gateways stream every parallel call under one index. A new id at an index that already holds
+      // another call starts a new call, and later deltas for that index continue the new one.
+      const wire = tool.index ?? undefined
+      const indexed = wire === undefined ? undefined : (reusedToolIndexes[wire] ?? wire)
+      const indexedID = indexed === undefined ? undefined : (tools[indexed] ?? pendingTools[indexed])?.id
+      const reused = Boolean(tool.id) && indexedID !== undefined && indexedID !== tool.id
+      const index = reused
+        ? (matched ?? nextToolIndex)
+        : (indexed ??
+          matched ??
+          (tool.id && fallbackTool?.id && fallbackTool.id !== tool.id ? nextToolIndex : fallback))
+      if (reused && wire !== undefined) reusedToolIndexes = { ...reusedToolIndexes, [wire]: index }
       const current = tools[index]
       const pending = pendingTools[index]
       const id = current?.id ?? pending?.id ?? (tool.id || undefined)
@@ -1292,6 +1305,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         reasoningEmitted,
         latestToolIndex,
         nextToolIndex,
+        reusedToolIndexes,
         requireFinishReason: state.requireFinishReason,
       },
       events,
@@ -1381,6 +1395,7 @@ export const protocol = Protocol.make({
       reasoningDetailsObserved: false,
       reasoningEmitted: false,
       nextToolIndex: 0,
+      reusedToolIndexes: {},
       requireFinishReason: request.model.compatibility?.requireFinishReason ?? true,
     }),
     step: (state: ParserState, event) => (event === DONE ? Effect.succeed([state, []] as const) : step(state, event)),
