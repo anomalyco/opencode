@@ -45,20 +45,37 @@ export function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
+/**
+ * A probe whose deadline passed by more than a second spanned a machine suspend or an event-loop
+ * stall. Its timeout is not evidence about the service: nothing was running to enforce it.
+ */
+export function stalled(elapsed: number, timeout: number) {
+  return elapsed - timeout > 1_000
+}
+
 /** Ask a registered owner for its health and classify the answer. */
 export async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
   const endpoint = {
     url: info.url,
     auth: info.password === undefined ? undefined : { type: "basic", username: "opencode", password: info.password },
   } satisfies Endpoint
+  const startedAt = Date.now()
   const signal = AbortSignal.timeout(timeout)
-  const result = await fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
+  // Never reuse a pooled socket: after a resume the client can still hold a connection the server has
+  // already dropped, and a request sent there times out without ever reaching the service.
+  const result = await fetch(new URL("/api/info", info.url), {
+    headers: { ...headers(endpoint), connection: "close" },
+    signal,
+  })
     .then(async (response) => ({
       response,
       body: response.status === 404 ? undefined : ((await response.json()) as unknown),
     }))
     .catch(() => undefined)
-  if (result === undefined) return { service: undefined, timedOut: signal.aborted }
+  if (result === undefined) {
+    const overslept = stalled(Date.now() - startedAt, timeout)
+    return { service: undefined, timedOut: signal.aborted && !overslept, stalled: overslept }
+  }
   const response = result.response
   // A missing health endpoint identifies protocol incompatibility, not an older
   // version. Only an unmet version requirement lets ensure replace this owner.
@@ -72,11 +89,13 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
         compatible: false,
       } satisfies LocalService,
       timedOut: false,
+      stalled: false,
     }
   const serverInfo = decodeInfo(result.body)
-  if (serverInfo === undefined) return { service: undefined, timedOut: false }
-  if (serverInfo.pid !== info.pid) return { service: undefined, timedOut: false }
-  if (info.version !== undefined && serverInfo.version !== info.version) return { service: undefined, timedOut: false }
+  if (serverInfo === undefined) return { service: undefined, timedOut: false, stalled: false }
+  if (serverInfo.pid !== info.pid) return { service: undefined, timedOut: false, stalled: false }
+  if (info.version !== undefined && serverInfo.version !== info.version)
+    return { service: undefined, timedOut: false, stalled: false }
   return {
     service: {
       info,
@@ -86,6 +105,7 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
       compatible: true,
     } satisfies LocalService,
     timedOut: false,
+    stalled: false,
   }
 }
 
