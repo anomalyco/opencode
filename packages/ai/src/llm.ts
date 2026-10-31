@@ -16,6 +16,7 @@ import {
   type Finish,
   ToolChoice,
   ToolEntry,
+  Usage,
   type ContentPart,
   type LanguageModelProviderOptions,
   type ToolEntryInput,
@@ -62,7 +63,7 @@ export type ObjectResponse<T> = LLMResponse & { readonly object: T }
 /** Stream events for a request with `schema`: the `finish` event carries the decoded `object`. */
 export type ObjectEvent<T> = Exclude<LLMEvent, Finish> | (Finish & { readonly object: T })
 
-/** Loop events for a request with `schema`: the final step's `finish` event carries the decoded `object`. */
+/** Loop events for a request with `schema`: the loop's `finish` event carries the decoded `object`. */
 export type LoopObjectEvent<T> = Exclude<LLMEvent, Finish> | (Finish & { readonly object?: T })
 
 /** Run one model call. With `schema`, the model must answer through a forced tool call decoded into `object`. */
@@ -128,9 +129,10 @@ export type LoopInput<SelectedLanguageModel extends LanguageModel = LanguageMode
   }
 
 /**
- * Stream model calls, running the model's tool calls between them, until a step has no client-executed tool calls,
- * reports a provider error, or `until` returns `true`. Each step's `step-start` and `step-finish` carry its step index.
- * With `schema`, the model ends by calling the hidden answer tool, decoded into `object` on that step's `finish`.
+ * Stream model calls, running the model's tool calls between them, until a step has no client-executed tool calls or
+ * `until` returns `true`. Each step's `step-start` and `step-finish` carry its step index and usage; one `finish` ends
+ * the loop with the final step's reason and the usage summed across steps. With `schema`, the model ends by calling
+ * the hidden answer tool, decoded into `object` on the `finish`.
  */
 export function loop<const Model extends LanguageModel, S extends OutputSchema>(
   input: LoopInput<Model> & { readonly schema: S },
@@ -150,6 +152,7 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
   const step = (
     request: LLMRequest,
     steps: ReadonlyArray<LLMResponse>,
+    usage: Usage | undefined,
     output: Tool | undefined,
   ): Stream.Stream<LLMEvent, AIError, Service> =>
     Stream.suspend(() => {
@@ -158,23 +161,25 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
         Stream.map((event) =>
           event.type === "step-start" || event.type === "step-finish" ? { ...event, index: steps.length } : event,
         ),
-        Stream.mapEffect((event) => {
-          state = LLMResponse.reduce(state, event)
-          if (output === undefined || event.type !== "finish") return Effect.succeed(event)
-          const response = LLMResponse.complete(state)
-          return response && clientCalls(response, output).length > 0
-            ? Effect.succeed(event)
-            : withObject(output, event, state)
-        }),
+        Stream.tap((event) => Effect.sync(() => (state = LLMResponse.reduce(state, event)))),
+        // Each call's `finish` ends only this step; the loop emits its own once it stops.
+        Stream.filter((event) => event.type !== "finish"),
         Stream.mapError((error) => withPartial(error, LLMResponse.partial(state))),
         Stream.concat(
           Stream.unwrap(
             Effect.gen(function* () {
               const response = LLMResponse.complete(state)
-              const calls = response ? clientCalls(response, output) : []
-              if (!response || calls.length === 0 || state.events.some(LLMEvent.is.providerError)) return Stream.empty
+              const finish = state.events.findLast(LLMEvent.is.finish)
+              if (!response || !finish) return Stream.empty
+              const total = addUsage(usage, response.usage)
+              const calls = clientCalls(response, output)
               const done = [...steps, response]
-              if (until?.({ steps: done })) return Stream.empty
+              if (calls.length === 0 || until?.({ steps: done })) {
+                const event = { ...finish, usage: total }
+                return Stream.fromEffect(
+                  output === undefined || calls.length > 0 ? Effect.succeed(event) : withObject(output, event, state),
+                )
+              }
               const results = yield* Effect.forEach(calls, (call) => ToolRuntime.dispatch(tools, call), {
                 concurrency: "unbounded",
               })
@@ -194,14 +199,43 @@ export function loop(input: LoopInput & { readonly schema?: OutputSchema }, opti
                 ],
               })
               return Stream.fromIterable(results.flatMap((result) => result.events)).pipe(
-                Stream.concat(step(next, done, output)),
+                Stream.concat(step(next, done, total, output)),
               )
             }),
           ),
         ),
       )
     })
-  return Stream.unwrap(prepare({ ...rest, tools }).pipe(Effect.map(({ request, output }) => step(request, [], output))))
+  return Stream.unwrap(
+    prepare({ ...rest, tools }).pipe(Effect.map(({ request, output }) => step(request, [], undefined, output))),
+  )
+}
+
+const addUsage = (total: Usage | undefined, step: Usage | undefined) => {
+  if (total === undefined || step === undefined) return total ?? step
+  const sum = (
+    key:
+      | "inputTokens"
+      | "outputTokens"
+      | "nonCachedInputTokens"
+      | "cacheReadInputTokens"
+      | "cacheWriteInputTokens"
+      | "reasoningTokens"
+      | "totalTokens"
+      | "cost",
+  ) => (total[key] === undefined && step[key] === undefined ? undefined : (total[key] ?? 0) + (step[key] ?? 0))
+  return new Usage({
+    // Context size describes the latest call, not a running total.
+    contextTokens: step.contextTokens ?? total.contextTokens,
+    inputTokens: sum("inputTokens"),
+    outputTokens: sum("outputTokens"),
+    nonCachedInputTokens: sum("nonCachedInputTokens"),
+    cacheReadInputTokens: sum("cacheReadInputTokens"),
+    cacheWriteInputTokens: sum("cacheWriteInputTokens"),
+    reasoningTokens: sum("reasoningTokens"),
+    totalTokens: sum("totalTokens"),
+    cost: sum("cost"),
+  })
 }
 
 const OBJECT_TOOL = "generate_object"

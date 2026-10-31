@@ -54,7 +54,9 @@ Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployme
 ### Tool loop
 
 `stream` runs one model call; `loop` runs the model's tool calls and calls the model again until it stops calling
-tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs. `until` is checked
+tools. Events from every step arrive on one stream, with a `tool-result` after each tool runs (an error result when
+it fails). Each step ends with its own `step-finish`; one `finish` ends the loop, carrying the final step's reason
+and the usage summed across steps. `until` is checked
 after each step that has tool calls, with every step's `LLMResponse`; returning `true` ends the loop without running
 them. Tools are an array, sent in the order given so the provider can reuse its cached prompt prefix. Each tool has a
 `name`, and two tools with the same name fail the request. `tool` takes a plain `async` execute; a throw or rejection
@@ -118,18 +120,19 @@ const res = await ai.generate({ model, prompt: "Pick a city.", schema: Schema.St
 res.object.city
 ```
 
-`stream` puts `object` on its `finish` event; `loop` runs tools first and puts it on the final step's `finish`. A
+`stream` puts `object` on its `finish` event; `loop` runs tools first and puts it on the loop's `finish`. A
 decode failure is an `AIError` whose `partial` holds the response.
 
 ### Raw provider events
 
 Set `includeRaw: true` on a request to also receive every provider frame as `{ type: "raw", data }`, in order and
 before the events parsed from that frame. `data` is the parsed JSON frame, so frames this package doesn't handle yet
-are visible too. Raw events are off by default, and `generate` ignores them. Translate a frame with a stream map:
+are visible too. Raw events are off by default, and `generate` ignores them. `RawEvent` is the event's type. Act on a
+frame with a stream map:
 
 ```ts
-import { Stream } from "effect"
-import { ai, LLMEvent } from "@opencode/ai/effect"
+import { Effect, Stream } from "effect"
+import { ai, AIError, ContentPolicyError } from "@opencode/ai/effect"
 
 const flagged = (data: unknown) =>
   typeof data === "object" && data !== null && "type" in data && data.type === "moderation.flagged"
@@ -137,10 +140,10 @@ const flagged = (data: unknown) =>
 const events = ai
   .stream({ model, prompt: "Say hello.", includeRaw: true })
   .pipe(
-    Stream.map((event) =>
+    Stream.mapEffect((event) =>
       event.type === "raw" && flagged(event.data)
-        ? LLMEvent.providerError({ message: "Flagged by moderation" })
-        : event,
+        ? Effect.fail(new AIError({ reason: new ContentPolicyError({ message: "Flagged by moderation" }) }))
+        : Effect.succeed(event),
     ),
   )
 ```

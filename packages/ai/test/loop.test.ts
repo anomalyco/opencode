@@ -1,6 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { ai, LanguageModel, type LLM, LLMEvent, tool, ToolFailure } from "../src/effect.js"
+import {
+  ai,
+  AIError,
+  LanguageModel,
+  type LLM,
+  LLMEvent,
+  ProviderInternalError,
+  tool,
+  ToolFailure,
+} from "../src/effect.js"
 import { AI } from "../src/index.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
 import { TestLLM } from "../src/testing.js"
@@ -54,8 +63,37 @@ describe("ai.loop", () => {
         expect.objectContaining({ id: "call-1", result: { type: "text", value: "hello" } }),
       ])
       expect(events.filter(LLMEvent.is.stepStart).map((event) => event.index)).toEqual([0, 1])
-      expect(events.filter(LLMEvent.is.finish)).toHaveLength(2)
+      expect(events.filter(LLMEvent.is.stepFinish).map((event) => event.index)).toEqual([0, 1])
+      expect(events.filter(LLMEvent.is.finish)).toHaveLength(1)
       expect(events.at(-1)?.type).toBe("finish")
+    }),
+  )
+
+  it.effect("ends with one finish carrying the final reason and usage summed across steps", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.complete(
+          {
+            reason: { normalized: "tool-calls" },
+            usage: { inputTokens: 10, outputTokens: 4, contextTokens: 10, cost: 0.5 },
+          },
+          LLMEvent.toolCall({ id: "call-1", name: "read_file", input: { path: "a.txt" } }),
+        ),
+        TestLLM.complete(
+          { reason: { normalized: "stop" }, usage: { inputTokens: 20, outputTokens: 6, contextTokens: 20 } },
+          LLMEvent.textDelta({ id: "text-1", text: "Done." }),
+        ),
+      )
+
+      const events = yield* collect()
+
+      expect(events.filter(LLMEvent.is.stepFinish).map((event) => event.usage?.inputTokens)).toEqual([10, 20])
+      const finishes = events.filter(LLMEvent.is.finish)
+      expect(finishes).toHaveLength(1)
+      expect(events.at(-1)).toBe(finishes[0])
+      expect(finishes[0].reason.normalized).toBe("stop")
+      expect(finishes[0].usage).toMatchObject({ inputTokens: 30, outputTokens: 10, contextTokens: 20, cost: 0.5 })
     }),
   )
 
@@ -73,6 +111,7 @@ describe("ai.loop", () => {
       expect(events.filter(LLMEvent.is.toolResult)).toEqual([
         expect.objectContaining({ id: "call-1", result: { type: "error", value: "No such file: missing.txt" } }),
       ])
+      expect(events.filter((event) => event.type.startsWith("tool-") && event.type !== "tool-call")).toHaveLength(1)
       expect(requests[1].messages[2].content).toEqual([
         expect.objectContaining({ result: { type: "error", value: "No such file: missing.txt" } }),
       ])
@@ -128,20 +167,22 @@ describe("ai.loop", () => {
       expect(events.at(-1)?.type).toBe("finish")
     }),
   )
-  it.effect("stops after a step that reports a provider error without running its tools", () =>
+  it.effect("fails without running tools when a step's stream fails", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
-      yield* client.push([
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.toolCall({ id: "call-1", name: "read_file", input: { path: "a.txt" } }),
-        LLMEvent.providerError({ message: "Overloaded" }),
-      ])
+      yield* client.push(
+        TestLLM.failAfter(
+          new AIError({ reason: new ProviderInternalError({ message: "Overloaded" }) }),
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-1", name: "read_file", input: { path: "a.txt" } }),
+        ),
+      )
 
-      const events = yield* collect()
+      const error = yield* collect().pipe(Effect.flip)
 
       expect(yield* client.requests()).toHaveLength(1)
-      expect(events.filter(LLMEvent.is.toolResult)).toHaveLength(0)
-      expect(events.at(-1)).toEqual(expect.objectContaining({ type: "provider-error", message: "Overloaded" }))
+      expect(error.reason.message).toBe("Overloaded")
+      expect(error.partial?.toolCalls.map((call) => call.id)).toEqual(["call-1"])
     }),
   )
 
