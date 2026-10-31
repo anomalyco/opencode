@@ -245,7 +245,7 @@ export function createPluginContext(input: {
       tabs: {
         enabled: host.sessionTabs.enabled,
         list: () =>
-          host.sessionTabs.tabs().map((tab) => {
+          host.sessionTabs.ordered().map((tab) => {
             const status = host.sessionTabs.status(tab.sessionID)
             return {
               ...tab,

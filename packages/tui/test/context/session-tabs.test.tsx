@@ -36,11 +36,13 @@ async function renderSessionTabs(
     sessionGate?: Promise<void>
     sessionDirectories?: Record<string, string>
     sessionParents?: Record<string, string>
-    sessionTimes?: Record<string, { idle?: number; viewed?: number }>
+    sessionTimes?: Record<string, { created?: number; updated?: number; idle?: number; viewed?: number }>
     sessionOutcomes?: Record<string, "succeeded" | "failed" | "interrupted">
     newLocation?: "launch" | "inherit"
     launchDirectory?: string
     tabsEnabled?: boolean
+    layout?: "horizontal" | "vertical"
+    order?: "recent" | "opened"
     viewFailures?: number
     experimental?: Record<string, boolean>
   },
@@ -135,7 +137,11 @@ async function renderSessionTabs(
   let storage!: ReturnType<typeof useStorage>
   let config!: ReturnType<typeof useConfig>
   let configuration = {
-    tabs: { mode: options?.tabsEnabled === false ? ("off" as const) : ("on" as const) },
+    tabs: {
+      mode: options?.tabsEnabled === false ? ("off" as const) : ("on" as const),
+      layout: options?.layout,
+      order: options?.order,
+    },
     experimental: options?.experimental,
     session: { new_location: options?.newLocation ?? "launch" },
   }
@@ -195,7 +201,7 @@ async function renderSessionTabs(
     locations,
     vcsLocations,
     state,
-    setSessionTime(sessionID: string, time: { idle?: number; viewed?: number }) {
+    setSessionTime(sessionID: string, time: { created?: number; updated?: number; idle?: number; viewed?: number }) {
       sessionTimes[sessionID] = time
     },
     emit: (event: OpenCodeEvent) => events.emit({ ...event, location: { directory } }),
@@ -412,6 +418,105 @@ test("keeps parent and subagent scroll anchors independent", async () => {
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "root"))
     expect(setup.tabs.scrollAnchor("root")).toBeUndefined()
     expect(setup.tabs.scrollAnchor("child")).toBeUndefined()
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("orders vertical tabs by last activity", async () => {
+  const setup = await renderSessionTabs("first", {
+    home: true,
+    persisted: ["first", "second", "third"],
+    layout: "vertical",
+    sessionTimes: { first: { updated: 10 }, second: { updated: 30 }, third: { updated: 20 } },
+  })
+  try {
+    await wait(
+      () =>
+        setup.tabs
+          .ordered()
+          .map((tab) => tab.sessionID)
+          .join() === "second,third,first",
+    )
+    // Activity only reorders the rail; the stored order stays untouched so switching layouts keeps it.
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "second", "third"])
+    setup.tabs.selectIndex(0)
+    expect(setup.route.data).toEqual({ type: "session", sessionID: "second" })
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("orders by the last finished run instead of the latest message", async () => {
+  const setup = await renderSessionTabs("first", {
+    home: true,
+    persisted: ["first", "second", "third"],
+    layout: "vertical",
+    // `second` is mid-run: its latest message is the newest, but its last finished run is the oldest.
+    sessionTimes: {
+      first: { updated: 20, idle: 20 },
+      second: { updated: 90, idle: 5 },
+      third: { updated: 30, idle: 30 },
+    },
+  })
+  try {
+    await wait(
+      () =>
+        setup.tabs
+          .ordered()
+          .map((tab) => tab.sessionID)
+          .join() === "third,first,second",
+    )
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("keeps the opened order for vertical tabs when order is opened", async () => {
+  const setup = await renderSessionTabs("first", {
+    home: true,
+    persisted: ["first", "second", "third"],
+    layout: "vertical",
+    order: "opened",
+    sessionTimes: { first: { updated: 10 }, second: { updated: 30 }, third: { updated: 20 } },
+  })
+  try {
+    await wait(() => setup.tabs.ordered().length === 3)
+    expect(setup.tabs.ordered().map((tab) => tab.sessionID)).toEqual(["first", "second", "third"])
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("orders horizontal tabs by activity when order is recent", async () => {
+  const setup = await renderSessionTabs("first", {
+    home: true,
+    persisted: ["first", "second", "third"],
+    order: "recent",
+    sessionTimes: { first: { updated: 10 }, second: { updated: 30 }, third: { updated: 20 } },
+  })
+  try {
+    await wait(
+      () =>
+        setup.tabs
+          .ordered()
+          .map((tab) => tab.sessionID)
+          .join() === "second,third,first",
+    )
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("keeps the stored tab order for a horizontal strip", async () => {
+  const setup = await renderSessionTabs("first", {
+    home: true,
+    persisted: ["first", "second", "third"],
+    sessionTimes: { first: { updated: 10 }, second: { updated: 30 }, third: { updated: 20 } },
+  })
+  try {
+    await wait(() => setup.tabs.ordered().length === 3)
+    expect(setup.tabs.ordered().map((tab) => tab.sessionID)).toEqual(["first", "second", "third"])
   } finally {
     await setup.destroy()
   }

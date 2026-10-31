@@ -196,6 +196,10 @@ export const Info = Schema.Struct({
       layout: Schema.optional(Schema.Literals(["horizontal", "vertical"])).annotate({
         description: "Show tabs in a horizontal strip or vertical sidebar",
       }),
+      order: Schema.optional(Schema.Literals(["recent", "opened"])).annotate({
+        description:
+          "Order tabs by last session activity or by the order they were opened. Defaults to recent for the vertical layout and opened for the horizontal strip",
+      }),
       indicators: Schema.optional(Schema.Literals(["status", "numbers"])).annotate({
         description: "Show status icons or always show tab numbers",
       }),
@@ -281,6 +285,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     enabled: boolean
     scope: "global" | "cwd"
     layout: "horizontal" | "vertical"
+    order: "recent" | "opened"
     indicators: "status" | "numbers"
   }
 }
@@ -331,6 +336,8 @@ export function resolve(
       enabled: tabsMode === "on" || (tabsMode === "auto" && (options.environment ?? process.env).HERDR_ENV !== "1"),
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
+      // A vertical rail reads as a list of conversations, so it follows activity unless told otherwise.
+      order: input.tabs?.order ?? ((input.tabs?.layout ?? "horizontal") === "vertical" ? "recent" : "opened"),
       indicators: input.tabs?.indicators ?? "status",
     },
   }

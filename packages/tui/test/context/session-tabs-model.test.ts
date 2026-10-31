@@ -6,6 +6,7 @@ import {
   moveSessionTab,
   moveSessionTabHistory,
   openSessionTab,
+  orderSessionTabsByRecency,
   recordClosedSessionTab,
   recordSessionTabHistory,
   reopenSessionTab,
@@ -89,6 +90,18 @@ describe("session tabs", () => {
   test("overflow markers reserve room for a gap beside their digits", () => {
     expect(sessionTabOverflowWidth(5)).toBe(3)
     expect(sessionTabOverflowWidth(12)).toBe(4)
+  })
+
+  test("orders tabs by last activity and keeps stored order for ties", () => {
+    const tabs = ["a", "b", "c", "d"].map((sessionID) => ({ sessionID }))
+    const times: Record<string, number> = { a: 10, b: 40, c: 40 }
+    expect(orderSessionTabsByRecency(tabs, (sessionID) => times[sessionID]).map((tab) => tab.sessionID)).toEqual([
+      "b",
+      "c",
+      "a",
+      "d",
+    ])
+    expect(orderSessionTabsByRecency(tabs, () => undefined).map((tab) => tab.sessionID)).toEqual(["a", "b", "c", "d"])
   })
 
   test("opens each session once and refreshes its title", () => {

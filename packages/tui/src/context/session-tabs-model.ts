@@ -36,6 +36,20 @@ export const SESSION_TAB_MIN_WIDTH = 8
 // Overflow markers reserve one gap cell beside the arrow and count, e.g. "‹12 " and " 12›".
 export const sessionTabOverflowWidth = (count: number) => String(count).length + 2
 
+/**
+ * Newest activity first. Tabs without a known time fall after the ones that have one, and ties
+ * keep their stored order so a list with no activity yet does not reshuffle.
+ */
+export function orderSessionTabsByRecency(
+  tabs: readonly SessionTab[],
+  time: (sessionID: string) => number | undefined,
+): SessionTab[] {
+  return tabs
+    .map((tab, index) => ({ tab, index, time: time(tab.sessionID) }))
+    .toSorted((a, b) => (b.time ?? -1) - (a.time ?? -1) || a.index - b.index)
+    .map((entry) => entry.tab)
+}
+
 export function openSessionTab(tabs: SessionTab[], tab: SessionTab): SessionTab[] {
   const index = tabs.findIndex((item) => item.sessionID === tab.sessionID)
   if (index === -1) return [...tabs, tab]
