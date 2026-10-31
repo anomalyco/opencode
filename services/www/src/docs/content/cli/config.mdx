@@ -125,6 +125,7 @@ Configure how full-screen TUI sessions are presented and where new sessions star
     "tps": true,
     "markdown": "rendered",
     "new_location": "launch",
+    "new_model": "last_used",
     "permissions": "prompt"
   }
 }
@@ -142,6 +143,7 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 | `session.tps`           | boolean                     | Shows output tokens per second in assistant footers.                         |
 | `session.markdown`      | `source` or `rendered`      | Shows Markdown syntax markers or conceals them in rendered content.          |
 | `session.new_location`  | `launch` or `inherit`       | Starts in the TUI launch directory or inherits the active session location.  |
+| `session.new_model`     | `last_used` or `default`    | Starts new sessions with the last used model or the configured default model. |
 | `session.permissions`   | `prompt` or `autoaccept`    | Prompts for permission requests or accepts every request automatically.      |
 
 </div>

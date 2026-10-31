@@ -462,6 +462,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
           })
         },
+        clearNewSessionSelection() {
+          const current = agent.current()
+          if (!current) return
+          setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), undefined)
+        },
         toggleFavorite(model: { providerID: string; modelID: string }) {
           batch(() => {
             if (!isModelValid(model)) return
