@@ -280,7 +280,7 @@ export const url = (
 export const ref = (provider: string | ProviderID, id: string, mediaType?: string, options?: AssetOptions) =>
   from({ type: "ref", provider: ProviderID.make(provider), id, mediaType }, options)
 
-const DATA_URL = /^data:([^;,]+)(?:;[^,]*)*;base64,(.*)$/s
+const DATA_URL = /^data:([^;,]+)(?:;[^,]*)*;base64,(.*)$/is
 
 /** Parse a `data:<mime>;base64,<data>` URL, or `undefined` when the value is not a base64 data URL. */
 export const parseDataUrl = (value: string, options?: AssetOptions) => {
@@ -316,8 +316,12 @@ export const make = (input: Input, mediaType?: string): Asset => {
     return base64(match[2], mediaType ?? match[1])
   }
   if (input instanceof URL || /^https?:\/\//i.test(value)) return url(value, { mediaType })
+  if (!BASE64.test(value))
+    throw invalid("Media strings must be base64, a data URL or an http(s) URL; read files with Media.file")
   return base64(value, mediaType ?? requireMediaType(sniffBase64(value)))
 }
+
+const BASE64 = /^[A-Za-z0-9+/\-_\s]*={0,2}\s*$/
 
 // 64 characters decode to 48 bytes, enough for every signature `detectMediaType` reads.
 const sniffBase64 = (value: string) => {

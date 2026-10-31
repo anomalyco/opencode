@@ -47,6 +47,14 @@ describe("Media.make", () => {
     expect(() => Media.make("AQID")).toThrow(AIError)
     expect(() => Media.make("data:text/plain,hello")).toThrow(AIError)
   })
+
+  test("rejects strings that are not base64", () => {
+    expect(() => Media.make("./photo.png", "image/png")).toThrow("Media.file")
+  })
+
+  test("matches the data URL scheme in any case", () => {
+    expect(Media.make(`DATA:image/png;base64,${PNG_BASE64}`).mediaType).toBe("image/png")
+  })
 })
 
 describe("plain file input", () => {
