@@ -1,15 +1,18 @@
-import type { RouteDefaultsInput } from "../route/client.js"
+import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
 import { Auth } from "../route/auth.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import { Gemini } from "../protocols/gemini.js"
+import { OpenAIChat } from "../protocols/openai-chat.js"
 import { GoogleInteractions } from "../protocols/google-interactions.js"
 import { GoogleImages } from "../protocols/google-images.js"
 import { GoogleSpeech } from "../protocols/google-speech.js"
 import { GoogleTranscription } from "../protocols/google-transcription.js"
 import { GoogleVideo } from "../protocols/google-video.js"
+import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export type { GoogleImageOptions } from "../protocols/google-images.js"
 export type { GoogleSpeechOptions } from "../protocols/google-speech.js"
@@ -21,7 +24,19 @@ export type GoogleInteractionsOptionsInput = GoogleInteractions.OptionsInput
 
 export const id = ProviderID.make("google")
 
-export const routes = [Gemini.route, GoogleInteractions.route]
+const CHAT_BASE_URL = `${Gemini.DEFAULT_BASE_URL}/openai`
+
+// Gemini's OpenAI-compatible endpoint: https://ai.google.dev/gemini-api/docs/openai
+const chatRoute = Route.make({
+  id: "google-chat",
+  provider: id,
+  providerMetadataKey: "google",
+  protocol: OpenAIChat.protocol,
+  endpoint: Endpoint.path("/chat/completions", { baseURL: CHAT_BASE_URL }),
+  framing: OpenAIChat.framing,
+})
+
+export const routes = [Gemini.route, GoogleInteractions.route, chatRoute]
 
 export type Config = RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
@@ -31,6 +46,12 @@ export type Config = RouteDefaultsInput &
 
 export type Settings = ProviderPackage.Settings &
   Gemini.ProviderOptionsInput & {
+    readonly apiKey?: string | false
+    readonly baseURL?: string
+  }
+
+export type ChatSettings = ProviderPackage.Settings &
+  OpenAIProviderOptionsInput & {
     readonly apiKey?: string | false
     readonly baseURL?: string
   }
@@ -48,8 +69,28 @@ const interactionsRoute = (input: Config) => {
   return GoogleInteractions.route.with({ ...rest, endpoint: { baseURL }, auth: auth(input) })
 }
 
+const chatAuth = (options: ProviderAuthOption<"optional">) =>
+  AuthOptions.bearer(options, "GOOGLE_GENERATIVE_AI_API_KEY")
+
+const configuredChatRoute = ({
+  baseURL,
+  ...rest
+}: Omit<RouteDefaultsInput, "providerOptions"> & {
+  readonly baseURL?: string
+  readonly auth: Auth.Definition
+  readonly providerOptions?: OpenAIProviderOptionsInput
+}) => chatRoute.with({ ...rest, endpoint: { baseURL: baseURL ?? CHAT_BASE_URL } })
+
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
+  const { apiKey: _, auth: _auth, baseURL, providerOptions: _options, ...defaults } = input
+  // `baseURL` is the Gemini API root, which serves Chat under `/openai`. Gemini provider options don't apply to Chat;
+  // pass Chat options through `chatModel` instead.
+  const chat = configuredChatRoute({
+    ...defaults,
+    baseURL: baseURL === undefined ? undefined : `${baseURL}/openai`,
+    auth: chatAuth(input),
+  })
   const media = MediaRoute.deployment(input, auth(input))
   const gemini = (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID })
   return {
@@ -58,6 +99,7 @@ export const configure = (input: Config = {}) => {
     gemini,
     interactions: (modelID: string | ModelID) =>
       interactionsRoute(input).model<GoogleInteractions.ProviderOptionsInput>({ id: modelID }),
+    chat: (modelID: string | ModelID) => chat.model<OpenAIProviderOptionsInput>({ id: modelID }),
     image: (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
       GoogleImages.model({ ...media, id: modelID, providerOptions }),
     video: (modelID: string | ModelID) => GoogleVideo.model({ ...media, id: modelID }),
@@ -70,6 +112,17 @@ export const configure = (input: Config = {}) => {
 export const provider = configure()
 export const model: ProviderPackage.Model<Settings, Gemini.ProviderOptionsInput> = (modelID, settings) =>
   configure(config(settings)).model(modelID)
+export const chatModel: ProviderPackage.Model<ChatSettings, OpenAIProviderOptionsInput> = (
+  modelID,
+  { apiKey, baseURL, body, headers, ...providerOptions }: ChatSettings = {},
+) =>
+  configuredChatRoute({
+    auth: chatAuth({ apiKey }),
+    baseURL,
+    headers,
+    http: body === undefined ? undefined : { body },
+    providerOptions,
+  }).model<OpenAIProviderOptionsInput>({ id: modelID })
 export const imageModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)
@@ -87,6 +140,7 @@ function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings
 
 export const image = provider.image
 export const gemini = provider.gemini
+export const chat = provider.chat
 export const interactions = provider.interactions
 export const video = provider.video
 export const speech = provider.speech

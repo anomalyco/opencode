@@ -71,6 +71,8 @@ describe("native OpenAI-compatible providers", () => {
       [CloudflareWorkersAI.configure({ accountId: "account" }).model("model"), "cloudflare-workers-ai"],
       [OpenRouter.configure({ apiKey: "test" }).model("model"), "openrouter"],
       [XAI.configure({ apiKey: "test" }).chat("model"), "xai"],
+      [Anthropic.configure({ apiKey: "test" }).chat("model"), "anthropic"],
+      [Google.configure({ apiKey: "test" }).chat("model"), "google"],
       [XAI.configure({ apiKey: "test" }).responses("model"), "xai"],
     ] as const
 
@@ -268,6 +270,24 @@ describe("native OpenAI-compatible providers", () => {
           env: { GROQ_API_KEY: "groq-secret" },
           token: "groq-secret",
           url: "https://api.groq.com/openai/v1/chat/completions",
+        },
+        {
+          model: Anthropic.configure().chat("claude-haiku-4-5"),
+          env: { ANTHROPIC_API_KEY: "anthropic-secret" },
+          token: "anthropic-secret",
+          url: "https://api.anthropic.com/v1/chat/completions",
+        },
+        {
+          model: Google.configure().chat("gemini-3.5-flash"),
+          env: { GOOGLE_GENERATIVE_AI_API_KEY: "google-secret" },
+          token: "google-secret",
+          url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        },
+        {
+          model: Google.configure({ baseURL: "https://proxy.test/v1beta" }).chat("gemini-3.5-flash"),
+          env: { GOOGLE_GENERATIVE_AI_API_KEY: "google-secret" },
+          token: "google-secret",
+          url: "https://proxy.test/v1beta/openai/chat/completions",
         },
       ]
 

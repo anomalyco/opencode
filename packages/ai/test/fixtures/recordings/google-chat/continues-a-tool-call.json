@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "gemini-3.5-flash-lite",
+    "tags": [
+      "prefix:google-chat",
+      "provider:google",
+      "protocol:openai-chat",
+      "tool",
+      "tool-loop"
+    ],
+    "name": "google-chat/continues-a-tool-call",
+    "recordedAt": "2026-10-31T17:08:35.923Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gemini-3.5-flash-lite\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_completion_tokens\":1024}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"tool_calls\":[{\"extra_content\":{\"google\":{\"thought_signature\":\"EmAKXgFpFH0T593JIvdTiFGZ623F1xhKKp/+yoTwRiS0OIsNOR48wTGLw6+gdjIPxBAWODNJldznsdGY2rs5jsJBgrw/sQwMnlrSMMU66sLYImfvOVCfwj9/acKmHsRdZGY=\"}},\"function\":{\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\",\"name\":\"get_weather\"},\"id\":\"call_621013\",\"type\":\"function\"}]},\"index\":0}],\"created\":1793466515,\"id\":\"kyDmaub9CufVz7IP4OaE8Qg\",\"model\":\"gemini-3.5-flash-lite\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":16,\"prompt_tokens\":74,\"total_tokens\":90}}\n\ndata: {\"choices\":[{\"delta\":{\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1793466515,\"id\":\"kyDmaub9CufVz7IP4OaE8Qg\",\"model\":\"gemini-3.5-flash-lite\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":16,\"prompt_tokens\":74,\"total_tokens\":90}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gemini-3.5-flash-lite\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_621013\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"},\"extra_content\":{\"google\":{\"thought_signature\":\"EmAKXgFpFH0T593JIvdTiFGZ623F1xhKKp/+yoTwRiS0OIsNOR48wTGLw6+gdjIPxBAWODNJldznsdGY2rs5jsJBgrw/sQwMnlrSMMU66sLYImfvOVCfwj9/acKmHsRdZGY=\"}}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_621013\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_completion_tokens\":1024}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"choices\":[{\"delta\":{\"content\":\"Paris is\",\"role\":\"assistant\"},\"index\":0}],\"created\":1793466515,\"id\":\"kyDmavytI7yez7IP4anQiA0\",\"model\":\"gemini-3.5-flash-lite\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":2,\"prompt_tokens\":113,\"total_tokens\":115}}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" sunny.\",\"role\":\"assistant\"},\"index\":0}],\"created\":1793466515,\"id\":\"kyDmavytI7yez7IP4anQiA0\",\"model\":\"gemini-3.5-flash-lite\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":4,\"prompt_tokens\":113,\"total_tokens\":117}}\n\ndata: {\"choices\":[{\"delta\":{\"extra_content\":{\"google\":{\"thought_signature\":\"EmAKXgFpFH0TLwqo+Wlrf8GoZFHNU+lYObcJ1Dsd/iT1H0zejL+Z4R6FtQUewnCTeOm7yFlG2LU/xp7/+aNmMsS7z7dJt/U8/ZN1JsrdIFUwSWp2JDNZLUX6lCZWHEez/kU=\"}},\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1793466515,\"id\":\"kyDmavytI7yez7IP4anQiA0\",\"model\":\"gemini-3.5-flash-lite\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":4,\"prompt_tokens\":113,\"total_tokens\":117}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

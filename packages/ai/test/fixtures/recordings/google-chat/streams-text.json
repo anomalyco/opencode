@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "gemini-3.5-flash-lite",
+    "tags": [
+      "prefix:google-chat",
+      "provider:google",
+      "protocol:openai-chat",
+      "text",
+      "usage"
+    ],
+    "name": "google-chat/streams-text",
+    "recordedAt": "2026-10-31T17:08:35.032Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gemini-3.5-flash-lite\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly one word: hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_completion_tokens\":1024}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"choices\":[{\"delta\":{\"content\":\"Hello\",\"role\":\"assistant\"},\"index\":0}],\"created\":1793466515,\"id\":\"kiDmapqHHsPXz7IP9ZD0mQ0\",\"model\":\"gemini-3.5-flash-lite\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":1,\"prompt_tokens\":8,\"total_tokens\":9}}\n\ndata: {\"choices\":[{\"delta\":{\"extra_content\":{\"google\":{\"thought_signature\":\"EmAKXgFpFH0T4TX8eJQ87yo8sqhTvDTWFsYyVZubRZJbAJ4b/fqWjp9Rjj9LJ3MRjlQvkkVvLe+BKpULTfKMD9aP1hHnGye0at4tt7LxxbQLSbooS1l/clXfASb4hkm/41c=\"}},\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1793466515,\"id\":\"kiDmapqHHsPXz7IP9ZD0mQ0\",\"model\":\"gemini-3.5-flash-lite\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":1,\"prompt_tokens\":8,\"total_tokens\":9}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

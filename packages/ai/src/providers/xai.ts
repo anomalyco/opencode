@@ -109,6 +109,8 @@ export const model: ProviderPackage.Model<Settings, XAIProviderOptionsInput, typ
   modelID,
   settings,
 ) => configure(config(settings)).model(modelID)
+export const chatModel: ProviderPackage.Model<Settings, XAIProviderOptionsInput> = (modelID, settings) =>
+  configure(config(settings)).chat(modelID)
 export const imageModel = (modelID: string, settings?: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)
