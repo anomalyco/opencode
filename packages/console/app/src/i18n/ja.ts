@@ -114,8 +114,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "さらに、",
   "home.faq.a3.p4.localLink": "ローカルモデル",
   "home.faq.q4": "既存のAIサブスクリプションをOpenCodeで使えますか？",
-  "home.faq.a4.p1":
-    "はい、ChatGPT Plus/ProまたはGitHub Copilotのサブスクリプション、またはClaude Code経由でClaudeのサブスクリプションを利用できます。",
+  "home.faq.a4.p1": "はい、ChatGPT Plus/ProまたはGitHub Copilotのサブスクリプションを利用できます。",
   "home.faq.q5": "ターミナルだけで使えますか？",
   "home.faq.a5.beforeDesktop": "もう違います！OpenCodeは今は",
   "home.faq.a5.desktop": "デスクトップ",

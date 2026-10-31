@@ -580,10 +580,17 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       onSelect: () => controller.attach(),
     },
     {
+      id: "prompt.mode.toggle",
+      title: language.t("command.prompt.mode.toggle"),
+      category: language.t("command.category.session"),
+      keybind: "mod+shift+x",
+      onSelect: () =>
+        void controller.dispatch({ type: controller.state.mode === "normal" ? "mode.shell" : "mode.normal" }),
+    },
+    {
       id: "prompt.mode.shell",
       title: language.t("command.prompt.mode.shell"),
       category: language.t("command.category.session"),
-      keybind: "mod+shift+x",
       disabled: controller.state.mode === "shell",
       onSelect: () => void controller.dispatch({ type: "mode.shell" }),
     },
@@ -591,7 +598,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       id: "prompt.mode.normal",
       title: language.t("command.prompt.mode.normal"),
       category: language.t("command.category.session"),
-      keybind: "mod+shift+e",
       disabled: controller.state.mode === "normal",
       onSelect: () => void controller.dispatch({ type: "mode.normal" }),
     },

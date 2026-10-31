@@ -5952,6 +5952,26 @@ describe("SessionRunnerLLM", () => {
     })
   }
 
+  scenario("compacts when the provider cuts an oversized prompt to its window and replies with nothing", function* (s) {
+    // Xiaomi MiMo answers an oversized prompt with HTTP 200, finish "length", no output, and a prompt count that fills
+    // the window instead of rejecting it.
+    s.currentModel = recoveryModel
+    yield* s.llm.push(
+      TestLLM.complete({ reason: { normalized: "length" }, usage: { inputTokens: 199_994, nonCachedInputTokens: 199_994, outputTokens: 0 } }),
+      TestLLM.text("## Objective\n- summary", "summary"),
+      TestLLM.text("Done", "done"),
+    )
+
+    yield* s.runPrompt("Large prompt")
+
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[1]).at(-1)).toContain("Summarize only what the user and the assistant said and did")
+    expect((yield* s.messages).filter((message) => message.type === "compaction")).toMatchObject([
+      { status: "completed" },
+    ])
+    expect((yield* s.context).at(-1)).toMatchObject(Expected.assistant({ finish: "stop" }, [Expected.text("Done")]))
+  })
+
   for (const tools of ["hosted", "unfinished"] as const) {
     scenario(`caps output token limit continuations and resets for new input (${tools})`, function* (s) {
       const toolEvents =

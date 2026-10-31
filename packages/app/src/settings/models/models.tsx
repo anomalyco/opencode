@@ -14,6 +14,7 @@ import { SettingsRow } from "@/settings/row"
 import { CONSOLE_GROUP_KEY, consoleModelGroup, ProviderModelSections } from "@/providers/models/provider-group"
 import { SettingsSearchEmpty } from "@/settings/search-empty"
 import { SettingsSearchField } from "@/settings/search-field"
+import { settingsScroller } from "@/settings/scroller"
 
 import "@/settings/settings.css"
 
@@ -125,8 +126,8 @@ export const SettingsModels: Component<{
       const header = panel?.querySelector<HTMLElement>(".settings-tab-header")
 
       if (panel && header) {
-        panel.scrollTo({
-          top: panel.scrollTop + section.getBoundingClientRect().top - header.getBoundingClientRect().bottom - 24,
+        settingsScroller(panel).scrollBy({
+          top: section.getBoundingClientRect().top - header.getBoundingClientRect().bottom - 24,
         })
       } else {
         section.scrollIntoView({ block: "start" })
