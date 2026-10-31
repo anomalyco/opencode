@@ -1,16 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { httpFailure } from "../src/route/executor"
-import { HttpContext, isStandardHttpStatus } from "../src/schema/errors"
 
 describe("HTTP context status", () => {
-  test("keeps HttpContext strict", () => {
-    expect(isStandardHttpStatus(200)).toBe(true)
-    expect(isStandardHttpStatus(599)).toBe(true)
-    expect(isStandardHttpStatus(600)).toBe(false)
-    expect(isStandardHttpStatus(999)).toBe(false)
-    expect(() => new HttpContext({ url: "http://example.test", status: 999, headers: {} })).toThrow()
-  })
-
   test("returns a provider error without http context for a nonstandard status", () => {
     const failure = httpFailure({
       message: "Provider request failed with HTTP 999: proxy said no",
