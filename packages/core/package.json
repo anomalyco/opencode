@@ -75,6 +75,7 @@
     }
   },
   "devDependencies": {
+    "@types/semver": "catalog:",
     "@ai-sdk/openai-compatible": "2.0.41",
     "@anthropic-ai/claude-agent-sdk": "0.3.301",
     "@effect/platform-node": "catalog:",
@@ -96,6 +97,7 @@
     "fast-check": "catalog:"
   },
   "dependencies": {
+    "semver": "catalog:",
     "@ai-sdk/provider": "3.0.19",
     "@ai-sdk/provider-utils": "4.0.62",
     "@ff-labs/fff-bun": "0.10.5",

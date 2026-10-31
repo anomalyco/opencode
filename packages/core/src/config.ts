@@ -24,6 +24,8 @@ import { Connection } from "@opencode/schema/connection"
 import { WellKnown } from "./wellknown.js"
 import { AppProcess } from "@opencode/util/process"
 import { ChildProcess } from "effect/process"
+import { MarketplaceRegistry } from "./marketplace/registry.js"
+import { MarketplaceProjection } from "./marketplace/projection.js"
 
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
   return entries.findLast((entry): entry is Document => entry.type === "document" && entry.info[key] !== undefined)
@@ -126,6 +128,7 @@ export const layer = (options?: Options) =>
       const globalService = yield* Global.Service
       const wellknown = yield* WellKnown.Service
       const processes = yield* AppProcess.Service
+      const marketplace = yield* MarketplaceRegistry.Service
       const integrations = new Map<string, ConfigIntegration.Document>()
       // Integrations set their documents from outside this layer, so their reloads run with its services.
       const context = yield* Effect.context<FSUtil.Service | Global.Service | Location.Service>()
@@ -365,6 +368,7 @@ export const layer = (options?: Options) =>
           ...integrated,
           ...wellknownDocuments.flat(),
           ...globalSupplementary,
+          ...(options?.global === false ? [] : MarketplaceProjection.documents(yield* marketplace.read())),
           ...explicit,
           ...direct,
           ...projectSupplementary,
@@ -409,7 +413,11 @@ export const layer = (options?: Options) =>
           if (isDeepStrictEqual(configs, next) && !compatibilityChanged) return
           sources = discovered
           configs = next
-          yield* bus.publish(Event.Updated, {})
+          yield* bus.publish(
+            Event.Updated,
+            {},
+            { location: { directory: location.directory, workspaceID: location.workspaceID } },
+          )
         },
         (effect) => reloadLock.withPermit(effect),
       )
@@ -438,6 +446,14 @@ export const layer = (options?: Options) =>
       yield* bus.subscribe(WellKnown.Event.Updated).pipe(
         Stream.runForEach(() =>
           reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload wellknown sources", { cause }))),
+        ),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* marketplace.changes().pipe(
+        Stream.runForEach(() =>
+          reload().pipe(
+            Effect.catchCause((cause) => Effect.logError("failed to reload marketplace config", { cause })),
+          ),
         ),
         Effect.forkScoped({ startImmediately: true }),
       )
@@ -522,6 +538,7 @@ export function configured(options?: Options) {
       Credential.node,
       WellKnown.node,
       AppProcess.node,
+      MarketplaceRegistry.node,
     ],
   })
 }

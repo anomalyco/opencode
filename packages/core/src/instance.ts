@@ -24,6 +24,7 @@ import { Location } from "./location.js"
 import { LocationLifecycle } from "./location-lifecycle.js"
 import { FileAccess } from "./file-access.js"
 import { ModelResolver } from "./model-resolver.js"
+import { MarketplaceService } from "./marketplace/service.js"
 import { Mcp } from "./mcp/index.js"
 import { Permission } from "./permission.js"
 import { Plugin } from "./plugin.js"
@@ -63,6 +64,7 @@ const nodes = [
   LocationLifecycle.node,
   Environment.node,
   Config.node,
+  MarketplaceService.node,
   Agent.node,
   Artifact.node,
   Command.node,
