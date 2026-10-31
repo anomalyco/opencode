@@ -123,6 +123,8 @@
     "./providers/zai-coding-plan/responses": "./src/providers/zai-coding-plan/responses.ts",
     "./providers/zai/chat": "./src/providers/zai/chat.ts",
     "./providers/zai/images": "./src/providers/zai/images.ts",
+    "./providers/zai/messages": "./src/providers/zai/messages.ts",
+    "./providers/zai/responses": "./src/providers/zai/responses.ts",
     "./protocols": "./src/protocols.ts",
     "./protocols/alibaba-images": "./src/protocols/alibaba-images.ts",
     "./protocols/cloudflare-run-decisions": "./src/protocols/cloudflare-run-decisions.ts",
