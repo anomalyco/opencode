@@ -211,3 +211,261 @@ test("local config commands do not start or require a server", async () => {
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+test("connects to an already-running service on the configured port without spawning a contender and warns on version mismatch", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-configured-port-discovery-"))
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      if (request.headers.get("authorization") !== `Basic ${btoa("opencode:configured-secret")}`) {
+        return Response.json({ _tag: "UnauthorizedError", message: "Unauthorized" }, { status: 401 })
+      }
+      return Response.json({
+        version: "0.0.0-older-server",
+        pid: process.pid,
+        urls: [],
+      })
+    },
+  })
+  const configDir = path.join(root, "config")
+  const stateDir = path.join(root, "state")
+  const layer = Global.layerWith({ home: root, config: configDir, state: stateDir })
+  const runPromise = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem | Scope.Scope>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer), Effect.scoped))
+  const warnings: string[] = []
+  const originalWrite = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    warnings.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"))
+    return true
+  }) as typeof process.stderr.write
+
+  try {
+    await fs.mkdir(configDir, { recursive: true })
+    await fs.writeFile(
+      path.join(configDir, ServiceConfig.filename()),
+      JSON.stringify({
+        hostname: "127.0.0.1",
+        port: server.port,
+        password: "configured-secret",
+      }),
+    )
+
+    const resolved = await runPromise(ServerConnection.resolve())
+    expect(resolved.endpoint).toEqual({
+      url: `http://127.0.0.1:${server.port}`,
+      auth: { type: "basic", username: "opencode", password: "configured-secret" },
+    })
+    expect(warnings.join("")).toContain(
+      `Warning: Server at http://127.0.0.1:${server.port} has version 0.0.0-older-server; this client is ${OPENCODE_VERSION}. Continuing anyway.`,
+    )
+    expect(await Bun.file(path.join(stateDir, ServiceConfig.filename())).exists()).toBe(false)
+
+    // Also discovers a registration written to ~/.local/state/opencode when config.env.XDG_STATE_HOME differs.
+    const homeRegistration = path.join(root, ".local", "state", "opencode", ServiceConfig.filename())
+    await fs.mkdir(path.dirname(homeRegistration), { recursive: true })
+    await fs.writeFile(
+      homeRegistration,
+      JSON.stringify({
+        id: "desktop-owner",
+        version: "0.0.0-older-server",
+        url: `http://127.0.0.1:${server.port}`,
+        pid: process.pid,
+        password: "configured-secret",
+      }),
+    )
+    await fs.writeFile(
+      path.join(configDir, ServiceConfig.filename()),
+      JSON.stringify({
+        hostname: "127.0.0.1",
+        port: server.port,
+        password: "configured-secret",
+        env: { XDG_STATE_HOME: stateDir },
+      }),
+    )
+    const options = await runPromise(ServiceConfig.options())
+    expect(options.file).toBe(homeRegistration)
+
+    // Fails clearly without spawning when the configured server rejects the password.
+    await fs.rm(homeRegistration, { force: true })
+    await fs.writeFile(
+      path.join(configDir, ServiceConfig.filename()),
+      JSON.stringify({
+        hostname: "127.0.0.1",
+        port: server.port,
+        password: "wrong-password",
+      }),
+    )
+    await expect(runPromise(ServerConnection.resolve())).rejects.toThrow(
+      `Server at http://127.0.0.1:${server.port} rejected the password`,
+    )
+  } finally {
+    process.stderr.write = originalWrite
+    await server.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+async function withConfiguredServer(
+  run: (input: {
+    readonly endpoint: { url: string; auth: { type: "basic"; username: string; password: string } }
+    readonly stateDir: string
+    readonly requests: () => number
+    readonly runPromise: <A, E>(
+      effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem | Scope.Scope>,
+    ) => Promise<A>
+  }) => Promise<void>,
+) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-configured-server-"))
+  let requests = 0
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      if (request.headers.get("authorization") !== `Basic ${btoa("opencode:configured-secret")}`)
+        return Response.json({ _tag: "UnauthorizedError", message: "Unauthorized" }, { status: 401 })
+      requests++
+      return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
+    },
+  })
+  const configDir = path.join(root, "config")
+  const stateDir = path.join(root, "state")
+  const layer = Global.layerWith({ home: root, config: configDir, state: stateDir })
+  try {
+    await fs.mkdir(configDir, { recursive: true })
+    await fs.writeFile(
+      path.join(configDir, ServiceConfig.filename()),
+      JSON.stringify({
+        hostname: "127.0.0.1",
+        port: server.port,
+        password: "configured-secret",
+        // A contender spawned by a regression stays inside this test's directory.
+        env: { HOME: root, OPENCODE_DB: path.join(root, "opencode.db"), XDG_DATA_HOME: path.join(root, "data") },
+      }),
+    )
+    await run({
+      endpoint: {
+        url: `http://127.0.0.1:${server.port}`,
+        auth: { type: "basic", username: "opencode", password: "configured-secret" },
+      },
+      stateDir,
+      requests: () => requests,
+      runPromise: (effect) =>
+        Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer), Effect.scoped)),
+    })
+  } finally {
+    await server.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}
+
+test("reconnecting reuses the configured server instead of spawning a contender", () =>
+  withConfiguredServer(async ({ endpoint, stateDir, runPromise }) => {
+    const resolved = await runPromise(ServerConnection.resolve())
+    expect(resolved.endpoint).toEqual(endpoint)
+    if (!resolved.service) throw new Error("Expected managed service capabilities")
+
+    expect(await runPromise(resolved.service.reconnect().pipe(Effect.timeout("5 seconds")))).toEqual(endpoint)
+    expect(await Bun.file(path.join(stateDir, ServiceConfig.filename())).exists()).toBe(false)
+  }), 30_000)
+
+test("restart refuses a configured server OpenCode didn't start and leaves it running", () =>
+  withConfiguredServer(async ({ endpoint, stateDir, requests, runPromise }) => {
+    const resolved = await runPromise(ServerConnection.resolve())
+    if (!resolved.service) throw new Error("Expected managed service capabilities")
+
+    const error = await runPromise(resolved.service.restart().pipe(Effect.timeout("5 seconds"), Effect.flip))
+    expect(String(error)).toContain(`The server at ${endpoint.url} wasn't started by OpenCode`)
+    const before = requests()
+    expect(await runPromise(resolved.service.reconnect())).toEqual(endpoint)
+    expect(requests()).toBeGreaterThan(before)
+    expect(await Bun.file(path.join(stateDir, ServiceConfig.filename())).exists()).toBe(false)
+  }), 30_000)
+
+test("a build ignores another channel's service config and never sends it that password", async () => {
+  expect(ServiceConfig.filename()).not.toBe("service.json")
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-channel-isolation-"))
+  const seen: Array<string | null> = []
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      seen.push(request.headers.get("authorization"))
+      return Response.json({ version: "0.0.0-production", pid: process.pid, urls: [] })
+    },
+  })
+  const configDir = path.join(root, "config")
+  const stateDir = path.join(root, "state")
+  const layer = Global.layerWith({ home: root, config: configDir, state: stateDir })
+  const runPromise = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem | Scope.Scope>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer), Effect.scoped))
+  try {
+    await fs.mkdir(configDir, { recursive: true })
+    await fs.writeFile(
+      path.join(configDir, "service.json"),
+      JSON.stringify({ hostname: "127.0.0.1", port: server.port, password: "prod-secret" }),
+    )
+    const options = await runPromise(ServiceConfig.options())
+    expect(options.file).toBe(path.join(stateDir, ServiceConfig.filename()))
+    expect(options.env).toBeUndefined()
+    expect(await runPromise(ServiceConfig.probeConfigured({ file: options.file }))).toBeUndefined()
+    expect(seen).toEqual([])
+  } finally {
+    await server.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("probing sends each password only to its own URL and never sends OPENCODE_PASSWORD", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-probe-pairing-"))
+  const stub = () => {
+    const seen: Array<string | null> = []
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        seen.push(request.headers.get("authorization"))
+        return Response.json({ _tag: "UnauthorizedError", message: "Unauthorized" }, { status: 401 })
+      },
+    })
+    return { seen, server }
+  }
+  const configured = stub()
+  const registered = stub()
+  const configDir = path.join(root, "config")
+  const stateDir = path.join(root, "state")
+  const layer = Global.layerWith({ home: root, config: configDir, state: stateDir })
+  const runPromise = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem | Scope.Scope>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer), Effect.scoped))
+  const originalPassword = process.env.OPENCODE_PASSWORD
+  process.env.OPENCODE_PASSWORD = "env-secret"
+  try {
+    await fs.mkdir(configDir, { recursive: true })
+    await fs.mkdir(stateDir, { recursive: true })
+    await fs.writeFile(
+      path.join(configDir, ServiceConfig.filename()),
+      JSON.stringify({ hostname: "127.0.0.1", port: configured.server.port, password: "config-secret" }),
+    )
+    const file = path.join(stateDir, ServiceConfig.filename())
+    await fs.writeFile(
+      file,
+      JSON.stringify({
+        id: "owner",
+        version: "0.0.0-other",
+        url: `http://127.0.0.1:${registered.server.port}`,
+        pid: process.pid,
+        password: "registration-secret",
+      }),
+    )
+    const result = await runPromise(ServiceConfig.probeConfigured({ file }))
+    expect(result?.state).toBe("unauthorized")
+    expect(configured.seen).toEqual([`Basic ${btoa("opencode:config-secret")}`])
+    expect(registered.seen).toEqual([`Basic ${btoa("opencode:registration-secret")}`])
+  } finally {
+    if (originalPassword === undefined) delete process.env.OPENCODE_PASSWORD
+    else process.env.OPENCODE_PASSWORD = originalPassword
+    await configured.server.stop(true)
+    await registered.server.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})

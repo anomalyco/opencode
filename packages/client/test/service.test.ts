@@ -384,6 +384,26 @@ test("retains a contender failure until the deadline while its survivor stalls",
   expect(() => process.kill(second, 0)).not.toThrow()
 })
 
+test("reuse returns a ready service and clears a stale persistent-terminal handoff", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  fixture.spawn("graceful")
+  await fixture.waitForFile()
+  const info = await Bun.file(registration).json()
+  await writeFile(
+    registration + ".pty-handoff",
+    JSON.stringify({
+      source: { id: "old", pid: 1, url: "http://127.0.0.1:1" },
+      handoff: null,
+      expiresAt: Date.now() + 30_000,
+    }),
+  )
+
+  expect((await run(Service.reuse({ file: registration, version: "test" })))?.url).toBe(info.url)
+  expect(await Bun.file(registration + ".pty-handoff").exists()).toBe(false)
+  expect(await run(Service.reuse({ file: registration, version: "other" }))).toBeUndefined()
+})
+
 test("accepts a surviving contender after a failure without recruiting replacements", async () => {
   await using fixture = await serviceFixture()
   const pending = run(ensure({ file: fixture.registration, version: "test", command: fixture.command("controlled") }))
