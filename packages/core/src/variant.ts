@@ -117,6 +117,12 @@ const openResponses: Protocol = (_, support) => {
   return efforts(support.values ?? EFFORTS, responsesEffort)
 }
 
+// Groq's Responses API rejects both `include` and `reasoning.summary`.
+const groqResponses: Protocol = (_, support) => {
+  if (support.type !== "effort") return []
+  return efforts(support.values ?? EFFORTS, (effort) => ({ settings: { reasoningEffort: effort } }))
+}
+
 const googleInteractions: Protocol = (_, support) => {
   if (support.type !== "effort") return []
   return efforts(support.values ?? EFFORTS, (effort) => ({
@@ -626,7 +632,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/venice/responses": openResponses,
   "@opencode/ai/providers/cloudflare-workers-ai/responses": openResponses,
   "@opencode/ai/providers/fireworks/responses": openResponses,
-  "@opencode/ai/providers/groq/responses": openResponses,
+  "@opencode/ai/providers/groq/responses": groqResponses,
 
   "@opencode/ai/providers/openai-compatible": openaiCompatible,
   "@opencode/ai/providers/openai/chat": openaiChat,
