@@ -750,6 +750,7 @@ export function make(options: ClientOptions) {
               files: input["files"],
               agents: input["agents"],
               skills: input["skills"],
+              agent: input["agent"],
               metadata: input["metadata"],
               delivery: input["delivery"],
               resume: input["resume"],

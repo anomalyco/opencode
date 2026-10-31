@@ -64,6 +64,9 @@ export const AgentSelected = Event.durable({
     ...Base,
     agent: Agent.ID,
     previous: Agent.ID.pipe(optional),
+    // Switches applied as part of an inbox delivery land at a turn boundary where
+    // the context hook owns mode reminders; reminder consumers skip these.
+    source: Schema.Literals(["delivery"]).pipe(optional),
   },
 })
 export type AgentSelected = typeof AgentSelected.Type

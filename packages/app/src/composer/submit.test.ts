@@ -310,10 +310,11 @@ describe("Composer submission", () => {
   })
 
   test.each([
-    // The prompt admits before the selection commits, so a steer shows as pending while it does.
+    // The agent selection rides the admission: the server defers a change to the
+    // delivery boundary. The model still switches now, as any steered model change does.
     {
       current: { agent: "plan", model: { id: "old", providerID: "old" } },
-      calls: ["admit", "switch-agent", "switch-model", "send"],
+      calls: ["admit", "switch-model", "send"],
     },
     // An unchanged selection sends without a model request to wait on.
     {
@@ -324,9 +325,9 @@ describe("Composer submission", () => {
     // settles before admission, whose row it would also delete.
     {
       current: { agent: "plan", model: { id: "old", providerID: "old" }, revert: { messageID: "msg_reverted" } },
-      calls: ["switch-agent", "revert-commit", "switch-model", "admit", "send"],
+      calls: ["revert-commit", "switch-model", "admit", "send"],
     },
-  ])("applies the selection before sending one captured value: $calls", async (row) => {
+  ])("admits the prompt with its selection before sending one captured value: $calls", async (row) => {
     const state = createMemoryComposerState({ prompt: "ship it" }).capture()
     state.context.add({ type: "file", path: "notes.md", description: "the failing version" })
     const calls: string[] = []
@@ -338,6 +339,7 @@ describe("Composer submission", () => {
 
     expect(calls).toEqual([...row.calls])
     expect(request.delivery).toBe("steer")
+    expect(request.agent).toBe("build")
     expect(request.text).toBe("ship it")
     expect(request.id).toMatch(/^msg_/)
     expect(request.metadata).toMatchObject({
@@ -609,9 +611,12 @@ describe("Composer submission", () => {
 
     expect(attempts).toHaveLength(4)
     expect(new Set(attempts).size).toBe(1)
-    // A retried admission reuses its submission's selection commit.
-    const submitted = ["admit", "switch-agent", "switch-model", "send", "admit", "send"]
-    expect(calls).toEqual([...submitted, ...submitted])
+    // The selection rides the admission, so a retry re-admits the same payload:
+    // two submissions, each admitted twice (the auto-retry after the failure). The
+    // retried admission reuses the first commit, so it switches the model only once.
+    const submitted = ["admit", "switch-model", "send"]
+    const retried = ["admit", "send"]
+    expect(calls).toEqual([...submitted, ...retried, ...submitted, ...retried])
     expect(statuses).toEqual(["running", "idle", "running", "idle"])
     expect(state.current()).toEqual(prompt)
     expect(state.context.items()).toMatchObject([
@@ -751,7 +756,7 @@ describe("Composer submission", () => {
       const run = running()
 
       await run.submit()
-      expect(run.calls).toEqual(["admit", "switch-agent", "switch-model", "send", "background"])
+      expect(run.calls).toEqual(["admit", "switch-model", "send", "background"])
 
       await run.submit()
       expect(run.calls.filter((call) => call === "background")).toHaveLength(1)
