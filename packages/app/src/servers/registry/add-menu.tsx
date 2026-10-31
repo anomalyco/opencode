@@ -3,10 +3,10 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { For, Show } from "solid-js"
-import { useServerAddItems } from "@/runtime/extension/servers"
+import { useServerAddItems } from "@/runtime/plugin/servers"
 import { useLanguage } from "@/runtime/i18n/language"
 
-/** The add-server button; extensions that add their own kinds of server turn it into a menu. */
+/** The add-server button; plugins that add their own kinds of server turn it into a menu. */
 export function AddServerMenu(props: { onAddServer: () => void; compact?: boolean }) {
   const language = useLanguage()
   const items = useServerAddItems()

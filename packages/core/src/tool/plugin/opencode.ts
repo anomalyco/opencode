@@ -1,6 +1,6 @@
 export * as OpenCodeTools from "./opencode.js"
 
-import { SystemPart, ToolFailure } from "@opencode/ai"
+import { SystemPart, ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
@@ -49,6 +49,13 @@ export const ModelsInput = Schema.Struct({
   }),
   provider: Schema.optionalKey(Schema.String).annotate({
     description: "Provider ID or name to filter by. Try your own provider first.",
+  }),
+  type: Schema.optionalKey(Schema.Literals(["chat", "image"])).annotate({
+    description: [
+      'Which kind of model to list. Defaults to "chat".',
+      '"chat": a language model (LLM). Powers sessions, agents and subagents, and can call tools.',
+      '"image": generates or edits images from a prompt. It can\'t chat or call tools.',
+    ].join("\n"),
   }),
   all: Schema.optionalKey(Schema.Boolean).annotate({
     description: "Include older versions of each model family. By default only the newest version is listed.",
@@ -219,7 +226,7 @@ export const Plugin = {
         draft.add({
           name: "models",
           description:
-            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference before running a subagent on it. Check your own provider first.",
+            "Search the models available to use. Use this to turn a model name the user mentions into an exact reference for a tool that takes a model. Check your own provider first.",
           input: ModelsInput,
           output: ModelsOutput,
           options: { namespace: "opencode", codemode: true },
@@ -231,7 +238,7 @@ export const Plugin = {
               const terms = input.query?.toLowerCase().split(/\s+/).filter(Boolean) ?? []
               const names = new Map((yield* ctx.provider.list()).data.map((provider) => [provider.id, provider.name]))
               const provider = input.provider?.toLowerCase()
-              const matching = (yield* ctx.model.list()).data
+              const matching = (yield* ctx.model.list({ types: [input.type ?? "chat"] })).data
                 .filter(
                   (model) =>
                     provider === undefined ||

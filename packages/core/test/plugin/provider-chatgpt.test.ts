@@ -2,9 +2,9 @@ import { Money } from "@opencode/schema/money"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/core/session"
 import { OpenAIResponses } from "@opencode/ai/protocols/openai-responses"
-import { AIError, HttpContext, LLM, Message, RateLimitError } from "@opencode/ai"
-import { classifyProviderFailure } from "@opencode/ai/provider-error"
-import { compileRequest } from "@opencode/ai/route/client"
+import { ai, AIError, HttpContext, Message, RateLimitError } from "@opencode/ai/effect"
+import { classifyProviderFailure } from "@opencode/ai/route"
+import { compileRequest } from "@opencode/ai/testing"
 import { describe, expect } from "bun:test"
 // import { DateTime, Deferred, Effect, Schedule } from "effect"
 import { DateTime, Effect, Schedule } from "effect"
@@ -749,6 +749,8 @@ describe("ChatGPTPlugin", () => {
           "gpt-6-sol-fast",
           "gpt-6.1-sol",
           "gpt-6.1-sol-fast",
+          "gpt-6.1-terra",
+          "gpt-6.1-terra-fast",
         ])
           catalog.models.update(Provider.ID.openai, Model.ID.make(id), () => {})
       })
@@ -827,6 +829,8 @@ describe("ChatGPTPlugin", () => {
           "gpt-6-sol-fast",
           "gpt-6.1-sol",
           "gpt-6.1-sol-fast",
+          "gpt-6.1-terra",
+          "gpt-6.1-terra-fast",
         ].map((id) => Model.ID.make(id)),
       )
     }),
@@ -1093,7 +1097,7 @@ describe("ChatGPTPlugin", () => {
         const model = required(yield* models.get(Provider.ID.openai, modelID))
         const body = (variant: string, messages: ReadonlyArray<Message>) =>
           resolver.resolveModel(model, Model.VariantID.make(variant)).pipe(
-            Effect.flatMap((resolved) => compileRequest(LLM.request({ model: resolved.model, messages }))),
+            Effect.flatMap((resolved) => compileRequest(ai.request({ model: resolved.model, messages }))),
             Effect.map((compiled) => compiled.body),
           )
         const switched = [

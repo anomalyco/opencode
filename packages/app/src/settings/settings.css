@@ -22,10 +22,12 @@
   container: settings-screen / inline-size;
 }
 
+/* Spans the whole screen and centers its 1048px layout with padding, so the gutters belong to the page scroller. */
 .settings-screen > .settings {
   display: flex;
-  width: min(100%, 1048px);
+  width: 100%;
   min-width: 0;
+  padding-inline: max(0px, calc((100% - 1048px) / 2));
 }
 
 @media (max-width: 767px) {
@@ -86,6 +88,61 @@
   gap: 16px;
   overflow-y: auto;
   min-height: 0;
+}
+
+@property --settings-nav-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --settings-nav-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* Each edge fades in once content is hidden behind it. A list that does not overflow has no scroll timeline, so it keeps both lengths at 0.
+   The same timeline keeps the wheel inside an overflowing list at its edges. Chromium contains even a list that fits,
+   which would stop a wheel over the page list from scrolling the page. */
+@supports (animation-timeline: scroll()) {
+  .settings-nav-groups {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--settings-nav-fade-start),
+      #000 calc(100% - var(--settings-nav-fade-end)),
+      transparent
+    );
+    animation:
+      settings-nav-fade-start linear both,
+      settings-nav-fade-end linear both,
+      settings-nav-contain linear both;
+    animation-timeline: scroll(self), scroll(self), scroll(self);
+    animation-range:
+      0 24px,
+      calc(100% - 24px) 100%,
+      normal;
+  }
+}
+
+@keyframes settings-nav-contain {
+  from,
+  to {
+    overscroll-behavior: contain;
+  }
+}
+
+@keyframes settings-nav-fade-start {
+  to {
+    --settings-nav-fade-start: 24px;
+  }
+}
+
+@keyframes settings-nav-fade-end {
+  from {
+    --settings-nav-fade-end: 24px;
+  }
 }
 
 .settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"] {
@@ -232,6 +289,55 @@
   gap: 14px;
 }
 
+.settings-about-version-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-about-version {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  margin-block: -2px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.settings-about-version::before {
+  position: absolute;
+  z-index: -1;
+  inset-block: 0;
+  inset-inline: -6px;
+  border-radius: 4px;
+  background: transparent;
+  content: "";
+  transition: background-color 120ms ease;
+}
+
+.settings-about-version:hover,
+.settings-about-version:focus-visible {
+  color: var(--v2-text-text-base);
+  outline: none;
+}
+
+.settings-about-version:hover::before,
+.settings-about-version:focus-visible::before {
+  background: var(--v2-background-bg-layer-02);
+}
+
+.settings-about-version:disabled {
+  cursor: default;
+}
+
 .settings-about-credits,
 .settings-about-publication,
 .settings-about-details {
@@ -308,6 +414,7 @@
 .settings-notices-scroll {
   min-height: 0;
   flex: 1;
+  overflow-y: auto;
 }
 
 .settings-notices {
@@ -532,6 +639,113 @@
   color: var(--v2-text-text-base);
 }
 
+/* As tall as the title's line box, so header actions center on the title rather than on the title and description. */
+.settings-tab-header-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-self: flex-start;
+  align-items: center;
+  gap: 8px;
+  height: var(--line-height-base);
+}
+
+.settings-tab-header-actions:not(:has(*)) {
+  display: none;
+}
+
+.settings-server-switcher[data-component="button-v2"] {
+  max-width: 240px;
+  gap: 6px;
+  padding-inline: 6px;
+}
+
+.settings-server-switcher-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--v2-icon-icon-muted);
+}
+
+.settings-server-switcher-label {
+  flex-shrink: 0;
+  color: var(--v2-text-text-muted);
+  font-weight: 440;
+}
+
+.settings-server-switcher-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-server-switcher-chevron {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
+}
+
+.settings-server-switcher-menu[data-component="menu-v2-content"] {
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 32px));
+}
+
+/* One grid for every row: a 16px status or icon column, the name, then the selection check. */
+.settings-server-switcher-menu [data-component="menu-v2-item"] {
+  padding-inline-start: 8px;
+}
+
+.settings-server-switcher-option {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-server-switcher-status {
+  flex-shrink: 0;
+  color: var(--v2-text-text-faint);
+}
+
+.settings-server-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 16px;
+  text-align: center;
+}
+
+.settings-server-unavailable-icon {
+  margin-bottom: 4px;
+  color: var(--v2-icon-icon-muted);
+}
+
+.settings-server-unavailable-title {
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 530;
+  line-height: var(--line-height-compact);
+}
+
+.settings-server-unavailable-description {
+  max-width: 360px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.settings-server-unavailable-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .settings-tab-body {
   display: flex;
   flex-direction: column;
@@ -644,7 +858,10 @@
   justify-content: flex-end;
 }
 
-[data-slot="settings-row-control"] > div:has([data-component="switch"]),
+/* The :has() belongs on the control, not on its div. Chromium checks a div:has() subject against every div in the
+   document and flags each one, then restyles a flagged div whenever an element is inserted anywhere beneath it, which
+   is every ancestor of a streaming answer. */
+[data-slot="settings-row-control"]:has(> div [data-component="switch"]) > div,
 [data-slot="settings-row-control"] > [data-component="switch"] {
   display: inline-flex;
   align-items: center;
@@ -652,8 +869,11 @@
 }
 
 [data-component="settings-list"][data-variant="catalog"]
+  [data-slot="settings-row-control"]:has(> div [data-component="switch"])
+  > div,
+[data-component="settings-list"][data-variant="catalog"]
   [data-slot="settings-row-control"]
-  > :is(div:has([data-component="switch"]), [data-component="switch"]) {
+  > [data-component="switch"] {
   padding: 0;
 }
 
@@ -684,6 +904,31 @@
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] > [data-slot="tabs-v2-list"] {
   background-color: var(--v2-background-bg-layer-01);
+}
+
+/* The whole view scrolls and the sidebar sticks, so a wheel over the gutters or the page list scrolls the page natively. */
+@container settings-screen (min-width: 800px) {
+  .settings-screen > .settings {
+    align-items: flex-start;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .settings-screen > .settings > .settings-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100%;
+  }
+
+  .settings-screen > .settings > .settings-content {
+    min-height: 100%;
+  }
+
+  .settings-screen > .settings > .settings-content > .settings-panel {
+    flex: 1 0 auto;
+    height: auto;
+    overflow: visible;
+  }
 }
 
 @container settings-screen (min-width: 800px) and (max-width: 1047px) {
@@ -766,22 +1011,6 @@
     display: none;
   }
 
-  .settings-search[data-expanded="false"] .settings-search-matches {
-    display: none;
-  }
-
-  .settings-search-matches {
-    position: absolute;
-    inset-block-start: calc(100% + 8px);
-    inset-inline: 0;
-    z-index: 12;
-    max-height: 45vh;
-    padding-block: 8px;
-    border-radius: 8px;
-    background: var(--v2-background-bg-base);
-    box-shadow: var(--v2-elevation-raised);
-  }
-
   .settings-screen > .settings > .settings-sidebar[data-searchable="false"] {
     display: none;
   }
@@ -794,6 +1023,11 @@
 @container settings-panel (max-width: 520px) {
   .settings-tab-header-row {
     flex-wrap: wrap;
+  }
+
+  /* Wrapped below the description, the actions no longer share the title's line. */
+  .settings-tab-header-actions {
+    height: auto;
   }
 
   .settings-tab-header-row [data-component="select-v2-root"] {
@@ -943,7 +1177,7 @@
   opacity: 1;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   .settings-provider-console-chevron {
     transition: none;
   }
@@ -1173,11 +1407,7 @@
 .settings-project-empty-card {
   width: 100%;
   border-radius: 8px;
-  background: color-mix(
-    in oklab,
-    var(--v2-background-bg-base) 50%,
-    var(--v2-background-bg-layer-01)
-  );
+  background: color-mix(in oklab, var(--v2-background-bg-base) 50%, var(--v2-background-bg-layer-01));
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
 }
 
@@ -1459,7 +1689,7 @@
   padding-block: 2px;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   .settings-models-group-chevron svg,
   .provider-model-group-chevron {
     transition: none;
@@ -1709,7 +1939,7 @@
   overflow: hidden;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-motion="reduce"] {
   .settings-workspaces-row-motion {
     transition: none;
   }
@@ -2014,6 +2244,7 @@
 
 .settings-extension-row {
   display: flex;
+  min-height: 56px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -2023,6 +2254,51 @@
 
 .settings-extension-row:last-child {
   border-bottom: 0;
+}
+
+.settings-extension-trailing {
+  display: flex;
+  min-width: 60px;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+}
+
+.settings-mcp-row .settings-extension-trailing {
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.settings-mcp-row {
+  gap: 16px;
+}
+
+/* The MCP status dot takes the icon's 16px slot, so names line up with the plugin and skill rows. */
+.settings-mcp-status {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  place-items: center;
+}
+
+.settings-mcp-row[data-status="disabled"] .settings-extension-name {
+  color: var(--v2-text-text-muted);
+}
+
+/* A quiet toggle under a plugin's error, its label lined up with the error text above it. */
+.settings-plugin-error-toggle[data-component="button-v2"][data-size="small"] {
+  height: 20px;
+  margin-inline-start: -5px;
+  padding-inline: 5px;
+  font-size: 11px;
+  font-weight: 440;
+  line-height: 16px;
+  letter-spacing: 0.05px;
 }
 
 .settings-extension-lead {

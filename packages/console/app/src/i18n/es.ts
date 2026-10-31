@@ -30,6 +30,10 @@ export const dict = {
   "legal.brand": "Marca",
   "legal.privacy": "Privacidad",
   "legal.terms": "Términos",
+  "legal.status.operational": "Todos los sistemas están operativos",
+  "legal.status.degraded": "Rendimiento degradado",
+  "legal.status.outage": "Interrupción del servicio",
+  "legal.status.unknown": "Estado del sistema",
 
   "email.title": "Sé el primero en enterarte cuando lancemos nuevos productos",
   "email.subtitle": "Únete a la lista de espera para acceso anticipado.",
@@ -201,6 +205,7 @@ export const dict = {
     "Todos los modelos Zen están alojados en EE. UU. y la UE Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
   "zen.privacy.exceptionsLink": "siguientes excepciones",
 
+  "go.promo.kimiK31Pro": "Kimi K3.1 Pro ya está disponible en Go.",
   "go.title": "OpenCode Go | Modelos de programación de bajo coste para todos",
   "go.meta.description":
     "Go cuesta 10 $/mes, con límites de uso generosos y acceso fiable a modelos de programación líderes.",
@@ -210,15 +215,26 @@ export const dict = {
     "Go lleva la programación agéntica a programadores de todo el mundo. Ofrece límites generosos y acceso fiable a los modelos de código abierto más capaces, para que puedas crear con agentes potentes sin preocuparte por el coste o la disponibilidad.",
 
   "go.cta.text": "Suscribirse a Go",
+  "go.plans.audience": "Planes de Go para",
+  "go.plans.individuals": "Individual",
+  "go.plans.teams": "Equipos",
   "go.plans.month": "al mes",
+  "go.plans.memberMonth": "por miembro\nal mes",
   "go.plans.plus.cta": "Suscribirse a Go Plus",
   "go.plans.plus.description": "Go Plus cuesta 40 $/mes y ofrece límites más altos.",
+  "go.plans.teams.cta": "Suscribirse a Go Teams",
+  "go.plans.teams.description": "Go Teams cuesta 20 $/miembro/mes con límites para cada miembro.",
   "go.plans.go.feature1": "Modelos seleccionados y asequibles",
   "go.plans.go.feature2": "Probados para programación con agentes",
   "go.plans.go.feature3": "Límites generosos y acceso fiable",
   "go.plans.plus.feature1": "Todo lo incluido en Go",
   "go.plans.plus.feature2": "Límites más altos para programar durante más tiempo con concentración",
   "go.plans.plus.feature3": "Para proyectos más grandes y exigentes",
+  "go.plans.teams.feature1": "Cada miembro tiene sus propios límites de Go",
+  "go.plans.teams.feature2": "Límites mensuales generosos para cada modelo",
+  "go.plans.teams.feature3": "Una sola factura para todo el espacio de trabajo",
+  "go.plans.teams.feature4": "Uso adicional con presupuestos por miembro",
+  "go.plans.teams.feature5": "Controles de privacidad y región de modelos",
   "go.plans.limits": "Límites",
   "go.plans.description": "Solicitudes estimadas cada 5 horas y límites mensuales por modelo",
   "go.plans.legend": "Planes",
@@ -282,11 +298,9 @@ export const dict = {
     "Se generan registros de supervisión de abusos para todo el uso de funciones de la API y se conservan durante un máximo de 30 días.",
   "go.faq.a5.museRetention":
     "Precios de tokens muy reducidos a cambio de permitir que tus prompts y las respuestas generadas se utilicen para entrenar futuros modelos de Meta.",
-  "go.faq.a5.geminiRetention":
-    "Tus prompts y las respuestas generadas pueden utilizarse para entrenar futuros modelos de Google.",
   "go.faq.a5.learnMore": "Más información",
   "go.faq.a5.deepseekRetention":
-    "El acuerdo de ZDR se renueva mensualmente. El acuerdo actual es válido hasta el 31 de octubre de 2026.",
+    "El acuerdo de ZDR se renueva mensualmente. El acuerdo actual es válido hasta el 30 de noviembre de 2026.",
   "go.faq.q6": "¿Puedo recargar crédito?",
   "go.faq.a6": "Si necesitas más uso, puedes recargar crédito en tu cuenta.",
   "go.faq.q7": "¿Puedo cancelar?",

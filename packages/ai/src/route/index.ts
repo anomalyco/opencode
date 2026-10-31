@@ -1,12 +1,10 @@
 export { Route, LLMClient } from "./client.js"
 export type {
-  Route as RouteShape,
   RouteLanguageModelInput,
   RouteRoutedLanguageModelInput,
   RouteDefaults,
   RouteDefaultsInput,
   AnyRoute,
-  Interface as LLMClientShape,
   LLMClientService,
   StreamOptions,
   CompactMethod,
@@ -26,18 +24,18 @@ export { Framing } from "./framing.js"
 export { Protocol } from "./protocol.js"
 export { HttpTransport, WebSocketTransport } from "./transport/index.js"
 export * as Transport from "./transport/index.js"
-export type { Definition as AuthShape, AuthInput, Credential, CredentialError } from "./auth.js"
+export { ProviderShared } from "../protocols/shared.js"
+export { classifyProviderFailure } from "../provider-error.js"
+export { mergeHttpOptions } from "../schema/index.js"
+export type { AuthInput, Credential, CredentialError } from "./auth.js"
 export type { ApiKeyMode, AuthOverride, ProviderAuthOption } from "./auth-options.js"
-export type { Definition as EndpointFn, EndpointInput } from "./endpoint.js"
-export type { Definition as FramingDef } from "./framing.js"
-export type { Protocol as ProtocolDef } from "./protocol.js"
+export type { EndpointInput } from "./endpoint.js"
 export type {
   ChannelCheckpoint,
   ChannelCreate,
   ChannelObservation,
   HttpHandler,
   HttpMiddleware,
-  Transport as TransportDef,
   TransportExecuteOptions,
   TransportExecution,
   TransportRuntime,

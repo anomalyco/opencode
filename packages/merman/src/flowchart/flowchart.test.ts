@@ -1596,6 +1596,113 @@ flowchart TD
     expect(output).toContain("After — merged this week")
   })
 
+  test("routes visible subgraph-to-subgraph chains without creating phantom nodes", () => {
+    const content = `flowchart TD
+  subgraph S1["1. provider.transform (seed)"]
+    A1["Catalog model → copy catalog variants"]
+    A2["Custom model → apply package/modelID/limit + seed default variants"]
+  end
+  subgraph S2["2. plugin model.transform"]
+    B["Plugin can replace variants, clear to [], or ignore"]
+  end
+  subgraph S3["3. config model.transform (post)"]
+    C1{"Config sets reasoning or variants?"}
+    C1 -- yes --> C2["Apply explicit config"]
+    C1 -- no --> C3{"Config changed package (or recreated removed model)?"}
+    C3 -- yes --> C4["Respell / reseed variants"]
+    C3 -- no --> C5["Keep current variants"]
+  end
+  S1 --> S2 --> S3`
+    const diagram = parseMermaidFlowchartDiagram(content)
+    expect(diagram.nodes.some((node) => node.id === "S1" || node.id === "S2" || node.id === "S3")).toBe(false)
+
+    for (const layoutMaxWidth of [60, 80, 120]) {
+      const layout = layoutParsedFlowchartDiagram(diagram, { compact: true, layoutMaxWidth })
+      const grid = drawParsedFlowchartDiagramGrid(diagram, { compact: true, layoutMaxWidth })
+      const s1 = layout.subgraphBounds.get("S1")!
+      const s2 = layout.subgraphBounds.get("S2")!
+      const s3 = layout.subgraphBounds.get("S3")!
+
+      expect(s1.top + s1.height).toBeLessThan(s2.top)
+      expect(s2.top + s2.height).toBeLessThan(s3.top)
+
+      for (const [fromId, toId, fromFrame, toFrame] of [
+        ["S1", "S2", s1, s2],
+        ["S2", "S3", s2, s3],
+      ] as const) {
+        const route = layout.routes.find((candidate) => candidate.edge.from === fromId && candidate.edge.to === toId)!
+        const start = route.points[0]!
+        const end = route.points.at(-1)!
+        expect(start.y).toBe(fromFrame.top + fromFrame.height)
+        expect(end.y).toBe(toFrame.top - 1)
+        expect(grid.getCell(start.x, fromFrame.top + fromFrame.height - 1)?.char).toBe("┬")
+        expect(grid.getCell(end.x, end.y)?.char).toBe("▼")
+      }
+    }
+  })
+
+  test("resolves forward, nested, labeled, and upward subgraph endpoints while keeping explicit same-id nodes", () => {
+    const forward = parseMermaidFlowchartDiagram(`flowchart TD
+  Start[Start] --> S1
+  S1 -->|done| Done[Done]
+  subgraph S1["Stage"]
+    W1[Step 1] --> W2[Step 2]
+  end`)
+    expect(forward.nodes.map((node) => node.id)).toEqual(["Start", "Done", "W1", "W2"])
+    const forwardOutput = renderFlowchartDiagram(`flowchart TD
+  Start[Start] --> S1
+  S1 -->|done| Done[Done]
+  subgraph S1["Stage"]
+    W1[Step 1] --> W2[Step 2]
+  end`)
+    expect(forwardOutput).toContain("done")
+
+    const btGrid = drawParsedFlowchartDiagramGrid(
+      parseMermaidFlowchartDiagram(`flowchart BT
+  subgraph S1["First group title"]
+    A1[Alpha]
+  end
+  subgraph S2["Second group title"]
+    B1[Beta]
+  end
+  S1 --> S2`),
+      { compact: true },
+    )
+    const btText = btGrid.toString({ trimTop: true, trimBottom: true })
+    expect(btText).toContain("First group title")
+    expect(btText).toContain("┴")
+    expect(btText).toContain("▲")
+
+    const nestedLayout = layoutFlowchartDiagram(`flowchart TD
+  subgraph Outer["Outer"]
+    Entry[Entry] --> Inner
+    subgraph Inner["Inner"]
+      A[One] --> B[Two]
+    end
+  end`)
+    const outer = nestedLayout.subgraphBounds.get("Outer")!
+    const entryRoute = nestedLayout.routes.find((route) => route.edge.from === "Entry" && route.edge.to === "Inner")!
+    expect(
+      entryRoute.points.every(
+        (point) =>
+          point.x > outer.left &&
+          point.x < outer.left + outer.width - 1 &&
+          point.y > outer.top &&
+          point.y < outer.top + outer.height - 1,
+      ),
+    ).toBe(true)
+
+    const sameId = parseMermaidFlowchartDiagram(`flowchart LR
+  subgraph API
+    API[API Gateway] --> DB[(Postgres)]
+  end`)
+    expect(sameId.nodes.map((node) => node.id)).toEqual(["API", "DB"])
+    const sameIdLayout = layoutParsedFlowchartDiagram(sameId, { compact: true })
+    const apiNode = sameIdLayout.bounds.get("API")!
+    const apiRoute = sameIdLayout.routes[0]!
+    expect(apiRoute.points[0]!.x).toBe(apiNode.left + apiNode.width)
+  })
+
   test("keeps every node and edge in a long chain distinct and in its subgraph", () => {
     const diagram = parseMermaidFlowchartDiagram(`flowchart LR
   subgraph Pipeline

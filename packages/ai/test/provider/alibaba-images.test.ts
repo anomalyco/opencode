@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
-import { Image, ImageClient, Media } from "../../src/index.js"
+import { ai, ImageClient, Media } from "../../src/effect.js"
 import { Alibaba } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -14,7 +14,7 @@ const result = JSON.stringify({
 describe("Alibaba Images", () => {
   it.effect("generates through the Model Studio multimodal generation API", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model: Alibaba.configure({
           region: "cn-beijing",
           workspaceID: "llm-fixture",
@@ -24,9 +24,9 @@ describe("Alibaba Images", () => {
         prompt: "Put the clock from image 1 into image 2",
         images: [Media.url("https://example.test/clock.png"), Media.bytes(new Uint8Array([1, 2, 3]), "image/png")],
         n: 2,
-        size: "1024x768",
-        seed: 7,
         providerOptions: {
+          size: "1024*768",
+          seed: 7,
           negativePrompt: "blurry",
           watermark: false,
           thinkingMode: true,
@@ -118,7 +118,7 @@ describe("Alibaba Images", () => {
         { region: "us-east-1" },
         { baseURL: "https://token-plan.example/api/v1" },
       ])
-        yield* Image.generate({
+        yield* ai.image.generate({
           model: Alibaba.configure({ ...config, apiKey: "test" }).image("qwen-image-2.0"),
           prompt: "test",
         }).pipe(Effect.provide(layer))
@@ -135,19 +135,22 @@ describe("Alibaba Images", () => {
     Effect.gen(function* () {
       const model = Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0")
       const layer = ImageClient.layer.pipe(Layer.provide(fixedResponse(result, json)))
-      const ref = yield* Image.generate({ model, prompt: "test", images: [Media.ref("alibaba", "file-1")] }).pipe(
+      const ref = yield* ai.image.generate({ model, prompt: "test", images: [Media.ref("alibaba", "file-1")] }).pipe(
         Effect.provide(layer),
         Effect.flip,
       )
-      const mask = yield* Image.generate({
-        model,
-        prompt: "test",
-        images: [Media.url("https://example.test/a.png")],
-        mask: Media.url("https://example.test/mask.png"),
-      }).pipe(Effect.provide(layer), Effect.flip)
+      const tooLarge = yield* ai.image.generate({ model, prompt: "test", aspect: "1:1", resolution: "4K" }).pipe(
+        Effect.provide(layer),
+        Effect.flip,
+      )
 
       expect(ref.reason._tag).toBe("InvalidRequest")
-      expect(mask.reason._tag).toBe("UnsupportedOperation")
+      expect(tooLarge.reason).toMatchObject({
+        _tag: "UnsupportedOperation",
+        operation: "media.resolution",
+        message:
+          "Alibaba Images can't render 1:1 at 4K; the closest size it takes is 2048x2048 (1:1). Change aspect or resolution, or set the size in providerOptions",
+      })
     }),
   )
 
@@ -162,7 +165,7 @@ describe("Alibaba Images", () => {
       ]
 
       yield* Effect.forEach(payloads, (payload) =>
-        Image.generate({ model, prompt: "test" }).pipe(
+        ai.image.generate({ model, prompt: "test" }).pipe(
           Effect.provide(ImageClient.layer.pipe(Layer.provide(fixedResponse(JSON.stringify(payload), json)))),
           Effect.flip,
           Effect.tap((error) => Effect.sync(() => expect(error.reason._tag).toBe("InvalidProviderOutput"))),
@@ -173,7 +176,7 @@ describe("Alibaba Images", () => {
 
   it.effect("surfaces Model Studio error messages", () =>
     Effect.gen(function* () {
-      const error = yield* Image.generate({
+      const error = yield* ai.image.generate({
         model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0"),
         prompt: "test",
       }).pipe(

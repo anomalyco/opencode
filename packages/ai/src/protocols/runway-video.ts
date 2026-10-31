@@ -24,7 +24,7 @@ const OUTPUT_RETENTION = Duration.hours(24)
 // ---------------------------------------------------------------------------
 
 /**
- * Provider-native options. Common fields lower to Runway's names: `aspectRatio` → `ratio` (Runway expects pixel
+ * Provider-native options. Common fields lower to Runway's names: `aspect` → `ratio` (Runway expects pixel
  * ratios such as `1280:720` for most models), `durationSeconds` → `duration`, `audio`, `negativePrompt`,
  * `resolution`, `references`, and `frames` → `promptImage`.
  */
@@ -92,7 +92,7 @@ const fromRequest = Effect.fn("RunwayVideo.fromRequest")(function* (request: Req
         promptImage: promptImage.length === 0 ? undefined : promptImage,
         videoUri,
         references: references.length === 0 ? undefined : references,
-        ratio: request.aspectRatio,
+        ratio: request.aspect,
         duration: request.durationSeconds,
         resolution: request.resolution,
         audio: request.audio,
@@ -121,7 +121,7 @@ const decodeStatus = Effect.fn("RunwayVideo.decodeStatus")(function* (
   context: MediaProtocol.PollContext<Token>,
 ) {
   const output = yield* decodeTask(response)
-  const status = yield* MediaProtocol.status(STATUS, output.value.status, output)
+  const status = MediaProtocol.status(STATUS, output.value.status)
   return { id: context.token.taskID, status, progress: output.value.progress ?? undefined }
 })
 
@@ -131,7 +131,7 @@ const decodeResult = Effect.fn("RunwayVideo.decodeResult")(function* (
 ) {
   const output = yield* decodeTask(response)
   const task = output.value
-  const status = yield* MediaProtocol.status(STATUS, task.status, output)
+  const status = MediaProtocol.status(STATUS, task.status)
   if (status === "failed") {
     const code = task.failureCode ?? undefined
     const message = `${route.name} task failed${code === undefined ? "" : ` (${code})`}${task.failure ? `: ${task.failure}` : ""}`

@@ -5,6 +5,7 @@ import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords } from "../schema/index.js"
 import { JsonObject, ProviderShared, lenient } from "./shared.js"
+import { ImageSizing } from "./utils/image-sizing.js"
 
 const route = MediaProtocol.identity({ id: "alibaba-images", name: "Alibaba Images", provider: "alibaba" })
 export const PATH = "/services/aigc/multimodal-generation/generation"
@@ -14,8 +15,11 @@ const OUTPUT_RETENTION = Duration.hours(24)
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-/** Provider-native `parameters`. Common fields (`n`, `size`, `seed`, `images`) live on the request. */
+/** Provider-native `parameters`. Common fields (`n`, `aspect`, `resolution`, `images`) live on the request. */
 export type AlibabaImageOptions = {
+  /** Exact `WIDTH*HEIGHT`; it wins over `aspect` and `resolution`. */
+  readonly size?: string
+  readonly seed?: number
   readonly negativePrompt?: string
   readonly promptExtend?: boolean
   readonly watermark?: boolean
@@ -65,13 +69,14 @@ const fromRequest = Effect.fn("AlibabaImages.fromRequest")(function* (request: R
       Effect.map((item) => ({ image: item.value })),
     ),
   )
+  const size = yield* ImageSizing.exact(route, request, { multiple: 16, minPixels: 512 * 512, maxPixels: 2048 * 2048 })
   return MediaProtocol.json(
     mergeJsonRecords(
       {
         model: request.model.id,
         input: { messages: [{ role: "user", content: [...images, { text: request.prompt }] }] },
         parameters: mergeJsonRecords(
-          { size: request.size?.replace("x", "*"), n: request.n, seed: request.seed },
+          { size: size === undefined ? undefined : `${size.width}*${size.height}`, n: request.n },
           nativeOptions(request.providerOptions),
         ),
       },
@@ -108,7 +113,6 @@ const decodeResponse = Effect.fn("AlibabaImages.decodeResponse")(function* (
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
-  unsupported: ["mask", "aspectRatio", "format"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })

@@ -1,12 +1,8 @@
-import { protocol } from "electron"
-import type { BrowserWindow } from "electron"
+import electron, { type BrowserWindow } from "electron"
 
 export const rendererProtocol = "oc"
 
 export const rendererHost = "renderer"
-
-/** Files of installed GUI extensions: `oc://extensions/<id>/<path>`. */
-export const extensionHost = "extensions"
 
 export function loadWindow(win: BrowserWindow, html: string) {
   const devUrl = process.env.ELECTRON_RENDERER_URL
@@ -37,14 +33,14 @@ export function isRendererUrl(value?: string, html = false) {
 // Scheme privileges can only be granted before the app is ready, so the entry module calls this
 // before it loads anything else.
 export function registerRendererScheme() {
-  protocol.registerSchemesAsPrivileged([
+  electron.protocol.registerSchemesAsPrivileged([
     {
       scheme: rendererProtocol,
       privileges: {
         secure: true,
         standard: true,
         supportFetchAPI: true,
-        // Extension fonts and fetched assets are cross-origin to the renderer.
+        // Plugin fonts and fetched assets are cross-origin to the renderer.
         corsEnabled: true,
         stream: true,
         // Let Chromium keep V8 bytecode for the renderer bundle between launches.

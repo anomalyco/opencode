@@ -3,23 +3,3 @@
   flex-shrink: 0;
   color: var(--v2-icon-icon-muted, #808080);
 }
-
-[data-component="session-progress-indicator-v2"] [data-frame-content] {
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-}
-
-[data-component="session-progress-indicator-v2"] [data-reduced-motion] {
-  display: none;
-  fill: currentColor;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-component="session-progress-indicator-v2"] [data-frame-content] {
-    display: none;
-  }
-
-  [data-component="session-progress-indicator-v2"] [data-reduced-motion] {
-    display: block;
-  }
-}

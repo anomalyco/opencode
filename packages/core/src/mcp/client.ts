@@ -4,12 +4,14 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import {
   Client,
+  ProtocolError,
   SdkError,
   SdkErrorCode,
   SdkHttpError,
   StreamableHTTPClientTransport,
   UnauthorizedError,
   UnsupportedProtocolVersionError,
+  type CallToolRequestOptions,
   type CallToolResult as SdkCallToolResult,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
@@ -22,13 +24,13 @@ import {
   type ReadResourceResult,
   type Resource,
   type ResourceTemplateType,
-  type Tool,
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
 import { Cause, Clock, Duration, Effect, Exit, Schedule, Schema } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
+import { isRecord } from "@opencode/util/record"
 import { McpStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
@@ -36,6 +38,8 @@ const DEFAULT_CATALOG_TIMEOUT = 30_000
 const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
 const ATTACHED_EXECUTION_TIMEOUT = 10 * 60 * 1_000 // 10 minutes
 const TERMINATE_TIMEOUT = 1_000
+// SEP-2243 HeaderMismatch; the SDK does not export the constant.
+const HEADER_MISMATCH = -32020
 const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
 
 // HTTP statuses and network error codes live on error properties and are lost once flattened to a message.
@@ -58,8 +62,25 @@ const isTransient = (error: unknown) =>
     ? error.status === 408 || error.status === 429 || (error.status >= 500 && error.status !== 501)
     : error instanceof TypeError && "code" in error
 
-export type { GetPromptResult, Prompt, ReadResourceResult, Resource, Tool }
+export type { GetPromptResult, Prompt, ReadResourceResult, Resource }
 export type ResourceTemplate = ResourceTemplateType
+
+/** A listed tool, keeping the server's fields except `icons`, each only when it has the right type. */
+export interface Tool {
+  readonly name: string
+  readonly title?: string
+  readonly description?: string
+  readonly inputSchema: {
+    readonly type: "object"
+    readonly properties?: Record<string, unknown>
+    readonly required?: string[]
+    readonly [key: string]: unknown
+  }
+  readonly outputSchema?: Record<string, unknown>
+  readonly annotations?: Record<string, unknown>
+  readonly execution?: Record<string, unknown>
+  readonly _meta?: Record<string, unknown>
+}
 
 export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.NeedsAuthError", {
   server: Schema.String,
@@ -115,6 +136,8 @@ export interface ElicitationHandler {
 export interface Connection {
   /** True when the connection negotiated revision 2026-07-28 or later; false is the initialize handshake. */
   readonly modern: boolean
+  /** Display title from `serverInfo.title`, when the server provides one. */
+  readonly title: string | undefined
   readonly instructions: string | undefined
   readonly tools: () => Effect.Effect<Tool[], Error>
   readonly prompts: () => Effect.Effect<Prompt[], Error>
@@ -243,6 +266,8 @@ export const connect = Effect.fnUntraced(function* (
     reported: false,
   }
   const failure = (error: unknown) => {
+    // A tool call that relists first can fail with the list's already mapped expiry.
+    if (error instanceof SessionExpiredError) return error
     if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
     const expired =
       error.status === 404 ||
@@ -330,6 +355,7 @@ export const connect = Effect.fnUntraced(function* (
       }),
     )
     const catalog = { timeout: timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT }
+    const listed = new Map<string, Tool>()
     const execution = timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
     const request = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>
       Effect.tryPromise({ try: run, catch: failure }).pipe(
@@ -350,11 +376,63 @@ export const connect = Effect.fnUntraced(function* (
     // Annotated rather than `satisfies`: the inferred SDK types are cyclic, so declaration emit needs the named type.
     const connection: Connection = {
       modern: client.getProtocolEra() === "modern",
+      title: client.getServerVersion()?.title?.trim() || undefined,
       instructions: client.getInstructions()?.trim() || undefined,
+      // Tool lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
+      // re-parses it and compiles an output validator for every listed tool. Each call passes its own
+      // checked definition instead, so only that tool's outputSchema is compiled and modern Mcp-Param-*
+      // header mirroring still sees the schema. Tools are relisted on connect, list_changed and a stale
+      // header declaration; the SDK cache never relisted an expired list before a call either.
       tools: () =>
         advertised("tools")
-          ? list("list MCP tools", (signal) => client.listTools(undefined, { ...catalog, signal })).pipe(
-              Effect.map((r) => r.tools),
+          ? list("list MCP tools", (signal) =>
+              client.listTools(undefined, { ...catalog, cacheMode: "bypass", signal }),
+            ).pipe(
+              // Our SDK patch leaves the listed tools unchecked, so one malformed tool doesn't fail the
+              // whole list; each is checked here and copied, dropping fields of the wrong type.
+              Effect.flatMap((result) => {
+                const skipped: Array<{ tool: unknown; reason: string }> = []
+                const tools = result.tools.flatMap((tool: unknown): Tool[] => {
+                  const skip = (reason: string) => {
+                    skipped.push({ tool: isRecord(tool) ? tool.name : undefined, reason })
+                    return []
+                  }
+                  if (!isRecord(tool)) return skip("not an object")
+                  if (typeof tool.name !== "string" || tool.name === "") return skip("name is not a non-empty string")
+                  if (!isRecord(tool.inputSchema)) return skip("inputSchema is not an object")
+                  if (tool.inputSchema.type !== undefined && tool.inputSchema.type !== "object")
+                    return skip('inputSchema type is not "object"')
+                  const { properties, required, ...inputSchema } = tool.inputSchema
+                  return [
+                    {
+                      name: tool.name,
+                      title: typeof tool.title === "string" ? tool.title : undefined,
+                      description: typeof tool.description === "string" ? tool.description : undefined,
+                      // Providers that check tool parameters against the JSON Schema metaschema reject the
+                      // whole request over a malformed top level. Nested property schemas are left as sent.
+                      inputSchema: {
+                        ...inputSchema,
+                        type: "object",
+                        ...(isRecord(properties) ? { properties } : {}),
+                        ...(Array.isArray(required) && required.every((key): key is string => typeof key === "string")
+                          ? { required }
+                          : {}),
+                      },
+                      outputSchema: isRecord(tool.outputSchema) ? tool.outputSchema : undefined,
+                      annotations: isRecord(tool.annotations) ? tool.annotations : undefined,
+                      execution: isRecord(tool.execution) ? tool.execution : undefined,
+                      _meta: isRecord(tool._meta) ? tool._meta : undefined,
+                    },
+                  ]
+                })
+                listed.clear()
+                for (const tool of tools) listed.set(tool.name, tool)
+                return Effect.forEach(
+                  skipped,
+                  (entry) => Effect.logWarning("skipping invalid MCP tool", { server, ...entry }),
+                  { discard: true },
+                ).pipe(Effect.as(tools))
+              }),
             )
           : Effect.succeed([]),
       prompts: () =>
@@ -385,18 +463,44 @@ export const connect = Effect.fnUntraced(function* (
         request("get MCP prompt", (signal) =>
           client.getPrompt({ name: input.name, arguments: input.args ?? {} }, { signal, timeout: execution }),
         ),
-      callTool: (input) =>
-        request("call MCP tool", (signal) =>
-          client.callTool(
-            {
-              name: input.name,
-              arguments: input.args ?? {},
-              ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
-            },
-            // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
-            { signal, timeout: execution, onprogress: () => {} },
+      callTool: (input) => {
+        const call = Effect.tryPromise({
+          try: (signal) =>
+            client.callTool(
+              {
+                name: input.name,
+                arguments: input.args ?? {},
+                ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
+              },
+              {
+                signal,
+                timeout: execution,
+                // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
+                onprogress: () => {},
+                // Always passed, even for a tool we haven't listed, so the SDK never falls back to listing
+                // and caching the raw tools itself. Its types are narrower than what it reads (JSON values,
+                // a string `$schema`); ours keep the server's values.
+                toolDefinition: (listed.get(input.name) ?? {
+                  name: input.name,
+                  inputSchema: { type: "object" },
+                }) as CallToolRequestOptions["toolDefinition"],
+              },
+            ),
+          catch: (error) => error,
+        })
+        // A modern server rejects headers mirrored from a stale definition before running the tool,
+        // so relist and retry once with the fresh definition.
+        return call.pipe(
+          Effect.catchIf(
+            (error) =>
+              client.getProtocolEra() === "modern" && error instanceof ProtocolError && error.code === HEADER_MISMATCH,
+            () => connection.tools().pipe(Effect.andThen(call)),
           ),
-        ).pipe(Effect.map(toCallToolResult)),
+          Effect.mapError(failure),
+          Effect.tapError((error) => Effect.logWarning("failed to call MCP tool", { server, error: error.message })),
+          Effect.map(toCallToolResult),
+        )
+      },
       onClose: (callback) => {
         client.onclose = () => callback(lastError ? `Connection closed: ${lastError}` : "Connection closed")
       },

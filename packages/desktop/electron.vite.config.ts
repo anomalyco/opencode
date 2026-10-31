@@ -1,7 +1,8 @@
 import { defineConfig } from "electron-vite"
 import type { Plugin } from "vite"
-import { pickerPlugin } from "./scripts/picker"
-import { nodePtyPackage } from "./scripts/utils"
+import { BetaNotes } from "./script/beta-notes"
+import { pickerPlugin } from "./script/picker"
+import { nodePtyPackage } from "./script/utils"
 
 function resolveChannel() {
   const raw = process.env.OPENCODE_CHANNEL
@@ -14,23 +15,6 @@ function resolveChannel() {
 }
 
 const appPlugin = (await import("@opencode/app/vite")).default
-
-const sentry =
-  process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
-    ? (await import("@sentry/vite-plugin")).sentryVitePlugin({
-        authToken: process.env.SENTRY_AUTH_TOKEN,
-        org: process.env.SENTRY_ORG,
-        project: process.env.SENTRY_PROJECT,
-        telemetry: false,
-        release: {
-          name: process.env.SENTRY_RELEASE ?? process.env.VITE_SENTRY_RELEASE,
-        },
-        sourcemaps: {
-          assets: "./out/renderer/**",
-          filesToDeleteAfterUpload: "./out/renderer/**/*.map",
-        },
-      })
-    : false
 
 // Every module the entry reaches through static imports lands in one chunk. Automatic splitting
 // otherwise fragments the initial graph into ~50 files shared with lazy routes, and each file costs
@@ -50,9 +34,18 @@ const initialChunk: Plugin = {
   },
 }
 
-export default defineConfig(({ command }) => {
+export default defineConfig(async ({ command }) => {
   const channel = resolveChannel()
   const nodePtyPkg = nodePtyPackage()
+
+  // Beta builds carry their commit and recent history for the updater's "What's new in beta"; the dev server carries
+  // them without asking GitHub, so the page can be tried; other channels none.
+  const betaNotes =
+    channel === "beta"
+      ? await BetaNotes.enrich(BetaNotes.embed(), { token: process.env.GITHUB_TOKEN })
+      : command === "serve"
+        ? BetaNotes.embed()
+        : undefined
 
   return {
     main: {
@@ -67,20 +60,11 @@ export default defineConfig(({ command }) => {
         minify: command === "build",
         rolldownOptions: {
           input: { index: "src/main/index.ts" },
-          // Keep this identical to electron-vite's Node 20.11+ shim. Its regex insertion can
-          // corrupt bundled TypeScript, while an output banner places the shim safely.
           output: {
             format: "es",
             // DesktopPaths resolves resources from the main output directory,
             // including when the lazy desktop entry shares it with other chunks.
             chunkFileNames: "[name]-[hash].js",
-            banner: `
-// -- CommonJS Shims --
-import __cjs_mod__ from 'node:module';
-const __filename = import.meta.filename;
-const __dirname = import.meta.dirname;
-const require = __cjs_mod__.createRequire(import.meta.url);
-`,
           },
         },
         externalizeDeps: {
@@ -97,6 +81,17 @@ const require = __cjs_mod__.createRequire(import.meta.url);
             if (s === "@lydell/node-pty") return nodePtyPkg
 
             return undefined
+          },
+        },
+        {
+          // Rolldown emits its own scoped createRequire runtime for CommonJS dependencies.
+          // electron-vite's post-bundle regex shim injects a top-level `const require` that collides
+          // with bundled ESM modules declaring their own `require` (such as @effect/platform-node).
+          name: "opencode:disable-esm-shim",
+          configResolved(config) {
+            const shim = config.plugins.find((plugin) => plugin.name === "vite:esm-shim")
+
+            if (shim) delete shim.renderChunk
           },
         },
       ],
@@ -123,11 +118,13 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       define: {
         "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
         "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+        "import.meta.env.OPENCODE_COMMIT": betaNotes ? JSON.stringify(betaNotes.sha) : "undefined",
+        "import.meta.env.OPENCODE_BETA_NOTES": betaNotes ? JSON.stringify(JSON.stringify(betaNotes)) : "undefined",
         "import.meta.env.OPENCODE_TEST_ONBOARDING": JSON.stringify(
           command === "serve" && process.env.OPENCODE_TEST_ONBOARDING === "1",
         ),
       },
-      plugins: [pickerPlugin(), appPlugin, initialChunk, sentry],
+      plugins: [pickerPlugin(), appPlugin, initialChunk],
       publicDir: "../../../app/public",
       root: "src/renderer",
       build: {

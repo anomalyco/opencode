@@ -1,6 +1,6 @@
 import type { RouteDefaultsInput } from "../route/client.js"
 import { Auth } from "../route/auth.js"
-import type { ProviderAuthOption } from "../route/auth-options.js"
+import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
@@ -23,18 +23,14 @@ export type Config = RouteDefaultsInput &
 export type Settings = ProviderPackage.Settings &
   AnthropicMessages.ProviderOptionsInput &
   (
-    | { readonly apiKey?: string; readonly authToken?: never }
+    | { readonly apiKey?: string | false; readonly authToken?: never }
     | { readonly apiKey?: never; readonly authToken?: string }
   ) & {
     readonly baseURL?: string
   }
 
-const auth = (options: ProviderAuthOption<"optional">) => {
-  if ("auth" in options && options.auth) return options.auth
-  return Auth.optional("apiKey" in options ? options.apiKey : undefined, "apiKey")
-    .orElse(Auth.config("ANTHROPIC_API_KEY"))
-    .pipe(Auth.header("x-api-key"))
-}
+const auth = (options: ProviderAuthOption<"optional">) =>
+  AuthOptions.apiKey(options, "ANTHROPIC_API_KEY", Auth.header("x-api-key"))
 
 export const configure = (input: Config = {}) => {
   const { apiKey: _, auth: _auth, baseURL, ...rest } = input
@@ -52,9 +48,9 @@ export const configure = (input: Config = {}) => {
 }
 
 export const provider = configure()
-export const model: ProviderPackage.Definition<Settings, AnthropicMessages.ProviderOptionsInput>["model"] = (
+export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput> = (
   modelID,
-  { apiKey, authToken, baseURL, body, headers, ...providerOptions },
+  { apiKey, authToken, baseURL, body, headers, ...providerOptions }: Settings = {},
 ) => {
   if (apiKey !== undefined && authToken !== undefined)
     throw new ProviderConfigurationError({

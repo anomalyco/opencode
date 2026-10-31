@@ -1,4 +1,6 @@
 import { encodeFilePath, getFilename } from "@opencode/util/path"
+import { parseSessionMention } from "@opencode/util/session-mention"
+import { serializePrompt } from "./prompt-parts"
 import type { FileSelection } from "@/workspaces/files/model"
 import type {
   AgentPart,
@@ -9,12 +11,15 @@ import type {
   NoteContextItem,
   PathAttachmentPart,
   Prompt,
+  QuoteComment,
+  QuoteContextItem,
   SkillPart,
 } from "@/composer/state"
 import {
   formatAttachmentReference,
   formatCommentNote,
   formatNoteComment,
+  formatQuoteComment,
   type PromptAttachmentReference,
   type PromptComment,
 } from "@/composer/comment-note"
@@ -63,7 +68,7 @@ const parseCommentMentions = (comment: string) => {
   return Array.from(comment.matchAll(mention)).flatMap((match) => {
     const path = (match[2] ?? "").replace(/[.,!?;:)}\]"']+$/, "")
 
-    if (!path) return []
+    if (!path || parseSessionMention(`@${path}`)) return []
 
     return [path]
   })
@@ -77,7 +82,7 @@ const isSkillAttachment = (part: Prompt[number]): part is SkillPart => part.type
 
 const isPathAttachment = (part: Prompt[number]): part is PathAttachmentPart => part.type === "path"
 
-/** The sent form of a note: its optional link and live subject travel only when present. */
+/** The sent form of a note: optional display fields, link and live subject travel only when present. */
 export function noteComment(item: NoteContextItem, comment: string) {
   const note: NoteComment = {
     type: "note",
@@ -88,6 +93,10 @@ export function noteComment(item: NoteContextItem, comment: string) {
     comment,
   }
 
+  if (item.title !== undefined) note.title = item.title
+
+  if (item.subtitle !== undefined) note.subtitle = item.subtitle
+
   if (item.href) note.href = item.href
 
   if (item.live) note.live = { ...item.live }
@@ -95,14 +104,32 @@ export function noteComment(item: NoteContextItem, comment: string) {
   return note
 }
 
+/** The sent form of a quote: its comment travels only when the user wrote one. */
+export function quoteComment(item: QuoteContextItem) {
+  const quote: QuoteComment = { type: "quote", text: item.text }
+  const comment = item.comment?.trim()
+
+  if (comment) quote.comment = comment
+
+  if (item.source) quote.source = { ...item.source }
+
+  return quote
+}
+
 export function buildPromptRequest(input: BuildPromptRequestInput): PromptRequest {
-  const skills = input.prompt.filter(isSkillAttachment).map((attachment) => ({
+  const prompt = serializePrompt(input.prompt)
+
+  const text = input.prompt.some((part) => part.type === "session")
+    ? prompt.map((part) => ("content" in part ? part.content : "")).join("")
+    : input.text
+
+  const skills = prompt.filter(isSkillAttachment).map((attachment) => ({
     id: attachment.id,
     name: attachment.name,
     mention: { start: attachment.start, end: attachment.end, text: attachment.content },
   }))
 
-  const files = input.prompt.filter(isFileAttachment).map((attachment) => {
+  const files = prompt.filter(isFileAttachment).map((attachment) => {
     const path = absolute(input.sessionDirectory, attachment.path)
 
     return {
@@ -114,7 +141,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     }
   })
 
-  const agents = input.prompt.filter(isAgentAttachment).map((attachment) => ({
+  const agents = prompt.filter(isAgentAttachment).map((attachment) => ({
     name: attachment.name,
     mention: { start: attachment.start, end: attachment.end, text: attachment.content },
   }))
@@ -136,10 +163,16 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     if (item.type === "note") {
       const comment = item.comment.trim()
 
-      if (!comment) return []
       comments.push(noteComment(item, comment))
 
       return mentioned(comment)
+    }
+
+    if (item.type === "quote") {
+      const quote = quoteComment(item)
+      comments.push(quote)
+
+      return quote.comment ? mentioned(quote.comment) : []
     }
 
     const path = absolute(input.sessionDirectory, item.path)
@@ -177,11 +210,17 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
 
   return {
     text: [
-      ...(input.text.trim() ? [input.text] : []),
+      ...(text.trim() ? [text] : []),
       ...attachments.map(formatAttachmentReference),
-      ...comments.map((comment) => (comment.type === "note" ? formatNoteComment(comment) : formatCommentNote(comment))),
+      ...comments.map((comment) => {
+        if (comment.type === "note") return formatNoteComment(comment)
+
+        if (comment.type === "quote") return formatQuoteComment(comment)
+
+        return formatCommentNote(comment)
+      }),
     ].join("\n"),
-    displayText: input.text,
+    displayText: text,
     files: [...files, ...context, ...inline],
     agents,
     skills,

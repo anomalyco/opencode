@@ -19,6 +19,7 @@ export const WireTerminal = Schema.Struct({
   id: Schema.Number,
   pid: Schema.NullOr(Schema.Number),
   title: Schema.String,
+  user_title: Schema.optional(Schema.NullOr(Schema.String)),
   foreground_process: Schema.NullOr(Schema.String),
   group_id: Session.ID,
   command: Schema.Array(Schema.String),
@@ -37,6 +38,7 @@ const Registration = Schema.Struct({
   protocol: Schema.Number,
   socket: Schema.String,
   token: Schema.String,
+  features: Schema.optional(Schema.Array(Schema.String)),
 })
 type Registration = typeof Registration.Type
 
@@ -46,6 +48,7 @@ export const WireResponse = Schema.Union([
     instance_id: Schema.String,
     pid: Schema.Number,
     protocol: Schema.Number,
+    features: Schema.optional(Schema.Array(Schema.String)),
   }),
   Schema.Struct({ type: Schema.Literal("created"), terminal: WireTerminal }),
   Schema.Struct({ type: Schema.Literal("terminals"), terminals: Schema.Array(WireTerminal) }),
@@ -141,6 +144,7 @@ export class DaemonError extends Data.TaggedError("PersistentPty.DaemonError")<{
 export interface DaemonTransport {
   readonly request: (value: object, start?: boolean) => Effect.Effect<WireResponse, DaemonError>
   readonly requestIfRunning: (value: object) => Effect.Effect<WireResponse | undefined, DaemonError>
+  readonly supports: (feature: string) => Effect.Effect<boolean, DaemonError>
   readonly shutdown: Effect.Effect<WireResponse | undefined, DaemonError>
   readonly handoff: Effect.Effect<Handoff | null, DaemonError>
   readonly subscribe: (
@@ -223,7 +227,8 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       response.protocol !== ProtocolVersion
     )
       return yield* Effect.fail(new DaemonError({ kind: "protocol", message: "opencode-pty registration mismatch" }))
-    return decoded
+    // Daemons older than the features list omit it; trust the live daemon's answer over the file.
+    return { ...decoded, features: response.features ?? [] }
   })
 
   const spawnDaemon = Effect.fn("PersistentPty.daemon.spawn")(function* () {
@@ -338,6 +343,11 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       Effect.catch((error) => (error.kind === "connect" ? Effect.succeed(undefined) : Effect.fail(error))),
     )
 
+  const supports = Effect.fn("PersistentPty.daemon.supports")(function* (feature: string) {
+    const current = yield* connect(false)
+    return current.features?.includes(feature) ?? false
+  })
+
   const shutdown = Effect.gen(function* () {
     const response = yield* requestIfRunning({ op: "shutdown" })
     registration = undefined
@@ -428,7 +438,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     )
   }
 
-  return { request, requestIfRunning, shutdown, handoff, subscribe } satisfies DaemonTransport
+  return { request, requestIfRunning, supports, shutdown, handoff, subscribe } satisfies DaemonTransport
 })
 
 // Older releases kept registrations in purgeable temp directories. Renaming keeps the lock file's

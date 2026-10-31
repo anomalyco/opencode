@@ -222,28 +222,32 @@ describe("GoogleVertexPlugin", () => {
     ),
   )
 
-  it.effect("keeps OpenAI-compatible Vertex endpoint templates regional for eu", () =>
-    Effect.gen(function* () {
-      const catalog = yield* Provider.Service
-      yield* catalog.transform((catalog) =>
-        catalog.update(Provider.ID.make("google-vertex"), (provider) => {
-          provider.package = "@opencode/ai/providers/google-vertex/chat"
-          provider.settings = {
-            ...provider.settings,
-            baseURL:
-              "https://${GOOGLE_VERTEX_ENDPOINT}/v1/projects/${GOOGLE_VERTEX_PROJECT}/locations/${GOOGLE_VERTEX_LOCATION}",
-          }
-          provider.settings = { ...provider.settings, project: "config-project", location: "eu" }
-        }),
-      )
-      yield* addPlugin()
-      const provider = required(yield* catalog.get(Provider.ID.make("google-vertex")))
-      expect(provider).toMatchObject({
-        package: "@opencode/ai/providers/google-vertex/chat",
-        settings: { baseURL: "https://eu-aiplatform.googleapis.com/v1/projects/config-project/locations/eu" },
-      })
-    }),
-  )
+  for (const location of ["eu", "us"]) {
+    it.effect(`expands Vertex endpoint templates to the multi-region host for ${location}`, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Provider.Service
+        yield* catalog.transform((catalog) =>
+          catalog.update(Provider.ID.make("google-vertex"), (provider) => {
+            provider.package = "@opencode/ai/providers/google-vertex/chat"
+            provider.settings = {
+              baseURL:
+                "https://${GOOGLE_VERTEX_ENDPOINT}/v1/projects/${GOOGLE_VERTEX_PROJECT}/locations/${GOOGLE_VERTEX_LOCATION}",
+              project: "config-project",
+              location,
+            }
+          }),
+        )
+        yield* addPlugin()
+        const provider = required(yield* catalog.get(Provider.ID.make("google-vertex")))
+        expect(provider).toMatchObject({
+          package: "@opencode/ai/providers/google-vertex/chat",
+          settings: {
+            baseURL: `https://aiplatform.${location}.rep.googleapis.com/v1/projects/config-project/locations/${location}`,
+          },
+        })
+      }),
+    )
+  }
 
   it.effect("expands endpoint templates on Vertex chat models", () =>
     Effect.gen(function* () {
@@ -269,7 +273,7 @@ describe("GoogleVertexPlugin", () => {
         settings: {
           project: "config-project",
           location: "eu",
-          baseURL: "https://eu-aiplatform.googleapis.com/v1/projects/config-project/locations/eu/endpoints/openapi",
+          baseURL: "https://aiplatform.eu.rep.googleapis.com/v1/projects/config-project/locations/eu/endpoints/openapi",
         },
       })
     }),

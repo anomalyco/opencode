@@ -40,7 +40,7 @@ Use `system` to follow your terminal's appearance, or lock the theme to light or
 
 This maps to the `mode` field inside `theme` in your CLI config. If a custom theme provides only one mode, OpenCode uses that mode when the other is requested.
 
-## Adding a Theme
+## Adding a theme
 
 To add a theme you downloaded or received from someone else, copy its JSON file into the global themes directory:
 
@@ -54,11 +54,11 @@ The filename becomes the theme name. For example, `my-theme.json` appears as `my
 
 OpenCode reads `.json` files only. A theme closer to the current directory replaces a global or parent theme with the same name.
 
-## Using Themes in Plugins
+## Using themes in plugins
 
-[CLI plugins](/build/plugins/cli) read resolved colors through `context.theme` and the active mode through `context.themeMode`. Use semantic tokens so your plugin follows the selected theme:
+[TUI plugins](/build/plugins/cli) read resolved colors through `context.theme` and the active mode through `context.themeMode`. Use semantic tokens so your plugin follows the selected theme:
 
-```tsx title="Inside a CLI plugin component"
+```tsx title="Inside a TUI plugin component"
 import { usePlugin } from "@opencode/plugin/tui"
 
 function Status() {
@@ -67,11 +67,11 @@ function Status() {
 }
 ```
 
-The public CLI plugin API does not register themes. Add custom theme definitions with JSON files in the directories above.
+The public TUI plugin API does not register themes. Add custom theme definitions with JSON files in the directories above.
 
-## Creating a Theme
+## Creating a theme
 
-Use our [Theme Tool](https://opencode.ai/theme/) to create or edit themes. This tool makes it easy to understand the structure, change it, and define custom colors. The explanation below is for reference.
+Use our [theme tool](https://opencode.ai/theme/) to create or edit themes. This tool makes it easy to understand the structure, change it, and define custom colors. The explanation below is for reference.
 
 A theme separates shared semantic tokens from mode-specific palettes:
 
