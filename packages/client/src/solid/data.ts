@@ -748,7 +748,12 @@ export function createData(config: CreateDataInput) {
         clearDeleted(event.data.sessionID)
         sessionOutbox.delete(event.data.sessionID)
         result.session.invalidate(event.data.sessionID)
-        refresh(() => result.session.sync(event.data.sessionID))
+        refresh(() =>
+          result.session.sync(event.data.sessionID).catch((error: unknown) => {
+            if (isSessionNotFoundError(error) && error.sessionID === event.data.sessionID) return
+            throw error
+          }),
+        )
         // Band-aid: a newly created session starts empty, so live events can be its source of truth.
         // Fetching pending inputs and projected messages separately lets promotion move an input between snapshots,
         // causing both requests to miss it and overwrite event-built state. Skip those racy initial reads until

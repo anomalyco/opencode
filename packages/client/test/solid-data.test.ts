@@ -14,6 +14,70 @@ const session = (viewed: number): SessionInfo => ({
   location: { directory: "/project" },
 })
 
+test.each([
+  {
+    status: 404,
+    body: { _tag: "SessionNotFoundError", sessionID: "ses_refresh", message: "Session not found" },
+    errors: 0,
+  },
+  {
+    status: 404,
+    body: { _tag: "SessionNotFoundError", sessionID: "ses_other", message: "Session not found" },
+    errors: 1,
+  },
+  { status: 500, body: { message: "Read failed" }, errors: 1 },
+])(
+  "handles a $status response to a session.created refresh ($body.sessionID)",
+  async ({ status, body, errors: count }) => {
+    const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+    const errors: unknown[] = []
+    const response = Promise.withResolvers<Response>()
+    const api = OpenCode.make({ baseUrl: "http://opencode.local", fetch: () => response.promise })
+    const setup = createRoot((dispose) => ({
+      data: createData({
+        api: () => api,
+        directory: "/project",
+        onError: (error) => errors.push(error),
+        event: {
+          on: () => () => {},
+          listen(handler) {
+            listeners.add(handler)
+            return () => listeners.delete(handler)
+          },
+        },
+      }),
+      dispose,
+    }))
+
+    try {
+      const event: OpenCodeEvent = {
+        id: "evt_created",
+        created: 1,
+        type: "session.created",
+        durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+        data: {
+          sessionID: "ses_refresh",
+          projectID: "project",
+          location: { directory: "/project" },
+          slug: "temporary",
+          version: "2.0.32",
+        },
+      }
+      listeners.forEach((listener) => listener({ name: event.type, details: event }))
+      const reading = setup.data.session.sync("ses_refresh")
+      response.resolve(Response.json(body, { status }))
+      // Joining the event's in-flight read still rejects to an explicit caller.
+      await expect(reading).rejects.toThrow()
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      expect(errors).toHaveLength(count)
+      expect(setup.data.session.get("ses_refresh")).toBeUndefined()
+    } finally {
+      response.resolve(Response.json(body, { status }))
+      setup.dispose()
+    }
+  },
+)
+
 test("uses the configured initial window and retains normal cursor page sizes", async () => {
   const requests: { limit: string | null; cursor: string | null }[] = []
   const api = OpenCode.make({
