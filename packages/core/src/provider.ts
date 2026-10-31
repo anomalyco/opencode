@@ -4,7 +4,7 @@ import { Context, Effect, Layer, Option, Schema, Stream, Struct } from "effect"
 import { Provider } from "@opencode/schema/provider"
 import { Model } from "@opencode/schema/model"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { HttpTimeout, type ProviderPackageDefinition } from "@opencode/ai/effect"
+import { HttpTimeout, type ProviderPackage } from "@opencode/ai/effect"
 import { isRecord } from "@opencode/util/record"
 import { Npm } from "@opencode/util/npm"
 import type { DeepMutable } from "./schema.js"
@@ -42,7 +42,6 @@ export class LoadError extends Schema.TaggedError<LoadError>()("Provider.LoadErr
   package: Schema.String,
   cause: Schema.Defect(),
 }) {}
-export type ProviderPackage = ProviderPackageDefinition
 
 const packages = new Map<string, Promise<unknown>>()
 const builtins = new Map<string, () => Promise<unknown>>([
@@ -566,5 +565,5 @@ const importPackage = Effect.fn("Provider.importPackage")(function* (
       cause: new Error(`Provider package ${specifier} does not export model(modelID, settings)`),
     })
   }
-  return module as ProviderPackageDefinition
+  return module as ProviderPackage.Definition
 })
