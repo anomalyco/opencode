@@ -56,7 +56,12 @@ let reply:
       _request: LLMRequest,
       attempt: number,
     ) =>
-      | { text?: string; finish?: "stop" | "length"; usage?: { inputTokens?: number; outputTokens?: number } }
+      | {
+          text?: string
+          finish?: "stop" | "length"
+          usage?: { inputTokens?: number; outputTokens?: number }
+          noUsage?: boolean
+        }
       | undefined)
   | undefined
 const model = LanguageModel.make({
@@ -87,19 +92,23 @@ const client = Layer.mock(LLMClient.Service)({
       Stream.concat(
         Stream.make(
           ...(text ? [LLMEvent.textDelta({ id: "summary", text })] : []),
-          LLMEvent.stepFinish({
-            index: 0,
-            reason: { normalized: "stop" },
-            usage: {
-              inputTokens: 15,
-              outputTokens: 6,
-              nonCachedInputTokens: 10,
-              cacheReadInputTokens: 3,
-              cacheWriteInputTokens: 2,
-              reasoningTokens: 2,
-              ...override?.usage,
-            },
-          }),
+          ...(override?.noUsage
+            ? []
+            : [
+                LLMEvent.stepFinish({
+                  index: 0,
+                  reason: { normalized: "stop" },
+                  usage: {
+                    inputTokens: 15,
+                    outputTokens: 6,
+                    nonCachedInputTokens: 10,
+                    cacheReadInputTokens: 3,
+                    cacheWriteInputTokens: 2,
+                    reasoningTokens: 2,
+                    ...override?.usage,
+                  },
+                }),
+              ]),
           LLMEvent.finish({
             reason: { normalized: override?.finish ?? "stop" },
           }),
@@ -1155,6 +1164,26 @@ it.effect("a summary reply the window cut short is retried with a smaller input"
     expect(requests[0].tools).toEqual(fixture.context.tools.definitions)
     expect(requests[1].tools).toEqual([])
     expect(JSON.stringify(requests[1].messages)).toContain("Earlier question")
+  }),
+)
+
+it.effect("a summary capped for the window is retried when the provider reports no usage", () =>
+  Effect.gen(function* () {
+    const fixture = yield* summaryFixture([
+      textUser("Earlier question"),
+      measured("Earlier answer", 16_000),
+      textUser("Latest question"),
+    ])
+    const narrow = { ...resolved, limit: { context: 20_000, output: 16_000 } }
+    reply = (_request, attempt) => (attempt === 1 ? { finish: "length", noUsage: true } : undefined)
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        reply = undefined
+      }),
+    )
+    expect(yield* fixture.run({ ...fixture.context, model: narrow })).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(2)
+    expect(requests[0].generation?.maxTokens).toBe(3_000)
   }),
 )
 

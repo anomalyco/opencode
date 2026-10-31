@@ -130,6 +130,8 @@ type Precomputed = {
 const NOTHING_TO_COMPACT = fail({ type: "compaction.unavailable", message: "Nothing to compact yet" })
 /** After each "too long" rejection, the next attempt aims at this share of the first rejected request's size. */
 const SHRINK_STEPS = [0.85, 0.7, 0.5, 0.35]
+/** A truncating provider can report a token or two short of the full window, so usage counts as filled within this share. */
+const WINDOW_REACH_SHARE = 0.995
 const isShrinkableFailure = (failure: Failure) => failure.kind === "window-limited"
 // The least of the window kept free for the last reply before compaction and for the summary itself.
 const RESERVE_MIN = 16_000
@@ -482,10 +484,9 @@ export const layer = Layer.effect(
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
-      const capped = (before: LLMRequest, after: LLMRequest) =>
-        before.generation?.maxTokens !== undefined &&
-        after.generation?.maxTokens !== undefined &&
-        after.generation.maxTokens < before.generation.maxTokens
+      const windowSized = (request: LLMRequest) =>
+        request.generation?.maxTokens !== undefined &&
+        request.generation.maxTokens < SessionModelRequest.outputLimit(context.model.limit)
       const send = (request: LLMRequest, size?: Estimate) =>
         Effect.gen(function* () {
           const prompted = fitOutput(
@@ -493,8 +494,7 @@ export const layer = Layer.effect(
             context.model.limit,
             size && { ...size, estimated: size.estimated + Token.estimate(prompt) },
           )
-          const clamped = capped(request, prompted)
-          const reply = yield* stream(context, prompted, prepared.options, background, clamped)
+          const reply = yield* stream(context, prompted, prepared.options, background, windowSized(prompted))
           if (filled(reply.text)) return reply
 
           const nudged = fitOutput(
@@ -502,19 +502,14 @@ export const layer = Layer.effect(
             context.model.limit,
             size && { ...size, estimated: size.estimated + Token.estimate(prompt) + Token.estimate(NUDGE) },
           )
-          const retry = yield* stream(context, nudged, prepared.options, background, clamped || capped(prompted, nudged))
+          const retry = yield* stream(context, nudged, prepared.options, background, windowSized(nudged))
           if (filled(retry.text)) return retry
           const blank = retry.text.trim() === ""
           return yield* Effect.fail(
             blank
               ? fail(
                   { type: "compaction.failed", message: "Compaction produced no summary" },
-                  limitKind(
-                    retry.usage,
-                    context.model.limit,
-                    nudged.generation?.maxTokens,
-                    clamped || capped(prompted, nudged),
-                  ),
+                  limitKind(retry.usage, context.model.limit, nudged.generation?.maxTokens, windowSized(nudged)),
                 )
               : fail({ type: "compaction.failed", message: "Compaction summary did not match the required template" }),
           )
@@ -786,7 +781,7 @@ export const layer = Layer.effect(
       request: LLMRequest,
       options: StreamOptions,
       background?: Background,
-      clamped = false,
+      windowSized = false,
     ) => {
       const sessionID = context.session.id
       const unusable = (error: SessionError.Error) => Effect.fail(fail(error))
@@ -836,7 +831,7 @@ export const layer = Layer.effect(
                 return Effect.fail(
                   fail(
                     { type: "compaction.failed", message: "Compaction summary reached the output token limit" },
-                    limitKind(streamed.usage, context.model.limit, request.generation?.maxTokens, clamped),
+                    limitKind(streamed.usage, context.model.limit, request.generation?.maxTokens, windowSized),
                   ),
                 )
               case "content-filter":
@@ -1210,17 +1205,18 @@ const limitKind = (
   usage: Usage | undefined,
   limit: SessionContext.Loaded["model"]["limit"],
   requested: number | undefined,
-  clamped: boolean,
+  windowSized: boolean,
 ): Failure["kind"] => {
-  if (clamped) return "window-limited"
-  if (!usage) return "unknown"
+  if (!usage) return windowSized ? "window-limited" : "unknown"
   const window = inputWindow(limit)
-  if (!Number.isFinite(window) || window <= 0) return "unknown"
-  const input = usage.inputTokens ?? 0
-  const output = usage.outputTokens ?? 0
-  if (input + output >= window && (requested === undefined || output < requested)) return "window-limited"
-  if (requested !== undefined && output >= requested) return "output-limited"
-  return "unknown"
+  if (Number.isFinite(window) && window > 0) {
+    const input = usage.inputTokens ?? 0
+    const output = usage.outputTokens ?? 0
+    if (input + output >= Math.floor(window * WINDOW_REACH_SHARE) && (requested === undefined || output < requested))
+      return "window-limited"
+    if (requested !== undefined && output >= requested) return "output-limited"
+  }
+  return windowSized ? "window-limited" : "unknown"
 }
 
 /**
