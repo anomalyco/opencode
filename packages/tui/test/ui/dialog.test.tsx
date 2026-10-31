@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import type { InputRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
-import { expect, test } from "bun:test"
+import { expect, jest, test } from "bun:test"
 import { ConfigProvider } from "../../src/config"
 import { Keymap } from "../../src/context/keymap"
 import { ThemeProvider } from "../../src/context/theme"
@@ -13,9 +13,13 @@ import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 test("clearing with no dialog open does not restore focus saved by an earlier dialog", async () => {
   await using temporary = await tmpdir()
-  let dialog: DialogContext | undefined
-  let first: InputRenderable | undefined
-  let second: InputRenderable | undefined
+  let dialog!: DialogContext
+  let first!: InputRenderable
+  let second!: InputRenderable
+  function Capture() {
+    dialog = useDialog()
+    return null
+  }
   const app = await testRender(
     () => (
       <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }}>
@@ -24,10 +28,7 @@ test("clearing with no dialog open does not restore focus saved by an earlier di
             <Keymap.Provider>
               <ToastProvider>
                 <DialogProvider>
-                  {(() => {
-                    dialog = useDialog()
-                    return null
-                  })()}
+                  <Capture />
                   <input ref={(value) => (first = value)} />
                   <input ref={(value) => (second = value)} />
                 </DialogProvider>
@@ -39,23 +40,24 @@ test("clearing with no dialog open does not restore focus saved by an earlier di
     ),
     { width: 80, height: 24 },
   )
+  await app.renderOnce()
 
+  // DialogProvider restores focus on a production setTimeout that cannot be injected.
+  jest.useFakeTimers()
   try {
-    app.renderer.start()
-    await app.waitForFrame(() => first !== undefined && second !== undefined)
-    first!.focus()
-    dialog!.replace(() => <text>Dialog</text>)
-    expect(first!.focused).toBe(false)
-    dialog!.clear()
-    await Bun.sleep(20)
-    expect(first!.focused).toBe(true)
+    first.focus()
+    dialog.replace(() => <text>Dialog</text>)
+    dialog.clear()
+    jest.runOnlyPendingTimers()
+    expect(first.focused).toBe(true)
 
     // Commands such as terminal.select clear dialogs and then move focus themselves.
-    dialog!.clear()
-    second!.focus()
-    await Bun.sleep(20)
-    expect(second!.focused).toBe(true)
+    dialog.clear()
+    second.focus()
+    jest.runOnlyPendingTimers()
+    expect(second.focused).toBe(true)
   } finally {
+    jest.useRealTimers()
     app.renderer.destroy()
   }
 })
