@@ -127,12 +127,15 @@ export function parse(patchText: string): Result.Result<ReadonlyArray<Hunk>, Par
 
 export function derive(path: string, chunks: ReadonlyArray<UpdateFileChunk>, original: string): FileUpdate {
   const source = Bom.split(original)
-  const lines = source.text.split("\n")
+  // Preserve uniformly CRLF files without normalizing mixed line endings.
+  const newline = source.text.includes("\r\n") && !/(?<!\r)\n/.test(source.text) ? "\r\n" : "\n"
+  const lines = source.text.split(newline)
   if (lines.at(-1) === "") lines.pop()
   const replacements = computeReplacements(lines, path, chunks)
   for (const [start, remove, insert] of replacements.reverse()) lines.splice(start, remove, ...insert)
-  if (lines.at(-1) !== "") lines.push("")
-  const next = Bom.split(lines.join("\n"))
+  // Terminate every line, including a trailing blank one.
+  lines.push("")
+  const next = Bom.split(lines.join(newline))
   return { content: next.text, bom: source.bom || next.bom }
 }
 
