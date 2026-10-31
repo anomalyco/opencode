@@ -9,6 +9,7 @@ import SidebarTodo from "../feature-plugins/sidebar/todo"
 import DiffViewer from "../feature-plugins/system/diff-viewer"
 import Notifications from "../feature-plugins/system/notifications"
 import Plugins from "../feature-plugins/system/plugins"
+import Marketplace from "../feature-plugins/system/marketplace"
 import Storybook from "../feature-plugins/system/storybook"
 import Stats from "../feature-plugins/system/stats"
 import Latex from "@opencode/latex/plugin"
@@ -25,6 +26,7 @@ export const builtins = [
   SidebarFooter,
   Notifications,
   Plugins,
+  Marketplace,
   Stats,
   Merman,
   Latex,

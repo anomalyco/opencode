@@ -122,6 +122,11 @@ export interface MockServerConfig {
   onIntegrationOAuthStatus?: (attemptID: string) => "pending" | "complete"
   plugins?: Resolvable<unknown[]>
   skills?: Resolvable<unknown[]>
+  marketplace?: {
+    view: unknown
+    plan: unknown
+    onInstall: (body: unknown) => unknown
+  }
   // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
   worktrees?: Resolvable<unknown[]>
   // Without them, creating or removing a worktree answers 501 MockUnsupported. `onWorktreeCreate` may hold the request
@@ -840,6 +845,30 @@ function mockHandlers(
           })),
         skill: () => Effect.sync(() => ({ location: location(config), data: resolve(config.skills ?? []) })),
         plugin: () => Effect.sync(() => ({ location: location(config), data: resolve(config.plugins ?? []) })),
+        marketplaceGet: () =>
+          Effect.sync(() => ({
+            location: location(config),
+            data: config.marketplace?.view ?? {
+              state: { revision: 0 },
+              listings: [],
+              errors: [],
+              cache: { root: "", objects: 0, total_bytes: 0, fetch_entries: 0, materializations: 0 },
+            },
+          })),
+        marketplacePlan: () =>
+          Effect.sync(() => ({
+            location: location(config),
+            data: config.marketplace?.plan ?? { ok: false, reason: "not_found", message: "not found" },
+          })),
+        marketplaceInstall: (ctx) =>
+          Effect.sync(() => ({
+            location: location(config),
+            data: config.marketplace?.onInstall(ctx.payload) ?? {
+              ok: false,
+              reason: "not_found",
+              message: "not found",
+            },
+          })),
         mcp: (ctx) =>
           Effect.sync(() => {
             const directory = requestDirectory(config, ctx.request)

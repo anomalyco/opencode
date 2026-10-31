@@ -13,6 +13,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { useMcpToggle } from "@/providers/connect/mcp"
 import { DialogMcp } from "@/providers/connect/mcp-dialog"
 import { ExtensionPlugins } from "@/runtime/plugin/extension-plugins"
+import { DialogMarketplace } from "@/settings/providers/marketplace"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsList } from "@/settings/list"
@@ -91,7 +92,16 @@ export const SettingsExtensions: Component<{
             <h2 class="settings-tab-title">{language.t("settings.tab.extensions")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.extensions.description")}</span>
           </div>
-          <div class="settings-tab-header-actions">{props.headerAction}</div>
+          <div class="settings-tab-header-actions">
+            {props.headerAction}
+            <Button
+              size="small"
+              variant="ghost"
+              onClick={() => dialog.show(() => <DialogMarketplace directory={location().directory} />)}
+            >
+              {language.t("marketplace.open")}
+            </Button>
+          </div>
         </div>
       </div>
 

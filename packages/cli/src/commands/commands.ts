@@ -324,6 +324,44 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             package: Argument.String("package").pipe(Argument.withDescription("configured package specifier")),
           },
         }),
+        Spec.make("marketplace", {
+          description: "Manage Marketplace catalogs and installations",
+          globalFlags: ServerFlags,
+          params: {
+            action: Argument.Literals("action", [
+              "list",
+              "add",
+              "remove-source",
+              "install",
+              "uninstall",
+              "update",
+              "export",
+              "import",
+              "lock",
+              "verify",
+              "audit",
+              "prune",
+            ]).pipe(Argument.withDescription("Marketplace action")),
+            target: Argument.String("target").pipe(
+              Argument.withDescription("Catalog, package key, source ID, or file"),
+              Argument.optional,
+            ),
+            headerEnv: Flag.String("header-env").pipe(
+              Flag.withDescription("Catalog credential binding NAME=ENV (repeatable)"),
+              Flag.atMost(100),
+            ),
+            trust: Flag.Literals("trust", ["community", "private"]).pipe(Flag.withDefault("community")),
+            force: Flag.Boolean("force").pipe(
+              Flag.withDescription("Allow configuration conflicts"),
+              Flag.withDefault(false),
+            ),
+            acceptUntrusted: Flag.Boolean("accept-untrusted").pipe(
+              Flag.withDescription("Accept untrusted catalogs"),
+              Flag.withDefault(false),
+            ),
+            mode: Flag.Literals("mode", ["merge", "replace"]).pipe(Flag.withDefault("merge")),
+          },
+        }),
       ],
     }),
     Spec.make("models", {

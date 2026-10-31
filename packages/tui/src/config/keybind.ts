@@ -288,6 +288,7 @@ export const Definitions = {
   "terminal.suspend": keybind("ctrl+z", "Suspend terminal"),
   "terminal.title.toggle": keybind("none", "Toggle terminal title"),
   "plugins.list": keybind("none", "Open plugin manager dialog"),
+  "marketplace.list": keybind("none", "Open Marketplace dialog"),
 
   "which-key.toggle": keybind("ctrl+alt+k", "Toggle which-key panel"),
   "which-key.layout.toggle": keybind("ctrl+alt+shift+k", "Switch which-key layout"),

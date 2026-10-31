@@ -829,6 +829,97 @@ test("single extension rows stay aligned when switching tabs", async ({ page }) 
   }
 })
 
+test("Marketplace requires approval for the reviewed plan", async ({ page }, testInfo) => {
+  const source = { id: "community", name: "Community", url: "https://example.test/catalog.json", trust: "community" }
+  const item = {
+    id: "review",
+    name: "Review kit",
+    description: "Review changes",
+    kind: "agent",
+    version: "1.0.0",
+    install: { agents: { review: { prompt: "review" } } },
+  }
+  const listing = {
+    key: "community:catalog:review",
+    source,
+    item,
+    catalog: { schema: "opencode.marketplace/v1", id: "catalog", name: "Catalog", items: [item] },
+  }
+  const cache = { root: "/cache", objects: 0, total_bytes: 0, fetch_entries: 0, materializations: 0 }
+  const view = { state: { revision: 1, sources: [source] }, listings: [listing], errors: [], cache }
+  const requests: unknown[] = []
+  const { settings } = await open(page, {
+    marketplace: {
+      view,
+      plan: {
+        ok: true,
+        plan_id: "plan-reviewed",
+        revision: 1,
+        expires_at: "2099-01-01",
+        key: listing.key,
+        action: "install",
+        listing_digest: "listing",
+        plan_digest: "plan",
+        compatibility: { compatible: true, reasons: [] },
+        trust_warning: true,
+        conflicts: [],
+        permissions: ["Adds an agent"],
+        summary: "1 agent",
+      },
+      onInstall(body) {
+        requests.push(body)
+        return {
+          ok: true,
+          changed: true,
+          connect_mcp: [],
+          preserved: [],
+          view: {
+            ...view,
+            state: {
+              ...view.state,
+              revision: 2,
+              installed: {
+                [listing.key]: {
+                  source: source.id,
+                  catalog: "catalog",
+                  item: item.id,
+                  name: item.name,
+                  kind: item.kind,
+                  version: item.version,
+                  fingerprint: "fingerprint",
+                  installed_at: "now",
+                  updated_at: "now",
+                  plan: item.install,
+                  receipt: {},
+                },
+              },
+            },
+          },
+        }
+      },
+    },
+  })
+  await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+  await settings.getByRole("tab", { name: "Plugins", exact: true }).click()
+  await settings.getByRole("button", { name: "Open Marketplace" }).click()
+  const dialog = page.getByRole("dialog", { name: "Marketplace" })
+  await expect(dialog.getByText("Review kit")).toBeVisible()
+  await dialog.getByRole("button", { name: "Review install" }).click()
+  await expect(dialog.getByText("Adds an agent")).toBeVisible()
+  const apply = dialog.getByRole("button", { name: "Install", exact: true })
+  await expect(apply).toBeDisabled()
+  await dialog.getByText("I trust this catalog and its packages", { exact: true }).click()
+  await expect(apply).toBeEnabled()
+  await dialog.screenshot({ path: testInfo.outputPath("marketplace-review.png") })
+  await testInfo.attach("Marketplace installation review", {
+    path: testInfo.outputPath("marketplace-review.png"),
+    contentType: "image/png",
+  })
+  await apply.click()
+  await expect(dialog.getByRole("button", { name: "Uninstall" })).toBeVisible()
+  expect(requests).toEqual([{ plan_id: "plan-reviewed", expected_revision: 1, force: false, accept_untrusted: true }])
+})
+
 test.describe("pages open before slow data", () => {
   test("worktrees", async ({ page }) => {
     const { settings } = await open(page)

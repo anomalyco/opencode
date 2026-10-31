@@ -169,6 +169,19 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("command", "/api/command", { success: Json }))
   .add(HttpApiEndpoint.get("skill", "/api/skill", { success: Json }))
   .add(HttpApiEndpoint.get("plugin", "/api/plugin", { success: Json }))
+  .add(HttpApiEndpoint.get("marketplaceGet", "/api/experimental/marketplace", { success: Json }))
+  .add(
+    HttpApiEndpoint.post("marketplacePlan", "/api/experimental/marketplace/plan", {
+      payload: JsonPayload,
+      success: Json,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("marketplaceInstall", "/api/experimental/marketplace/install", {
+      payload: JsonPayload,
+      success: Json,
+    }),
+  )
   .add(HttpApiEndpoint.get("mcp", "/api/mcp", { success: Json }))
   .add(
     HttpApiEndpoint.post("mcpConnect", "/api/experimental/mcp/:server/connect", {
