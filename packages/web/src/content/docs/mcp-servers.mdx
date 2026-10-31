@@ -510,3 +510,34 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### codetopo
+
+Add the [codetopo](https://github.com/nrupala/codetopo) MCP server to query a code graph of your repository: symbols, calls, and blast radius, with proof-checked snapshots. codetopo is read-only and never executes the code it indexes. It is open source under AGPL-3.0.
+
+Install it with Cargo:
+
+```bash
+cargo install codetopo-mcp
+```
+
+```json title="opencode.json" {4-8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "codetopo": {
+      "type": "local",
+      "command": ["codetopo-mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+Add `use codetopo` to your prompts to use the codetopo MCP server.
+
+```txt "use codetopo"
+What breaks if I change the parse_config function? use codetopo
+```
