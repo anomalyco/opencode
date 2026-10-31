@@ -192,7 +192,9 @@ describe("Session.move", () => {
           Global.node.replace(tempGlobalLayer),
           Project.node.replace(globalProjectNode),
           SessionExecution.node.replace(SessionExecution.noopLayer),
-          SessionMove.node.replace(Layer.succeed(SessionMove.Service, { move: () => Effect.fail(rejection) })),
+          SessionMove.node.replace(
+            Layer.succeed(SessionMove.Service, { move: () => Effect.fail(rejection), revive: () => Effect.void }),
+          ),
           offlineModels,
         ]),
       )
