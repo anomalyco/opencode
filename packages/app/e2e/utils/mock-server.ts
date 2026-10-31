@@ -3,6 +3,7 @@ import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise
 import { Permission } from "@opencode/schema/permission"
 import { Model } from "@opencode/schema/model"
 import { Worktree } from "@opencode/schema/worktree"
+import { PullRequest } from "@opencode/schema/pull-request"
 import { Duration, Effect, Layer, Option, Predicate, Schema } from "effect"
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
@@ -121,6 +122,7 @@ export interface MockServerConfig {
   // Answers status polls for an OAuth attempt; without it every attempt stays pending.
   onIntegrationOAuthStatus?: (attemptID: string) => "pending" | "complete"
   plugins?: Resolvable<unknown[]>
+  pullRequest?: (directory: string) => PullRequest.Result | Promise<PullRequest.Result>
   skills?: Resolvable<unknown[]>
   // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
   worktrees?: Resolvable<unknown[]>
@@ -1132,14 +1134,23 @@ function mockHandlers(
           })
         },
         // The goal plugin's pill reads each routed session's goal; no scenario sets one.
-        rpcCall: (ctx) =>
-          ctx.params.rpcID === "opencode.goal" && ctx.params.method === "get"
-            ? Effect.succeed({ output: null })
-            : Effect.fail(
-                new MockUnsupported({
-                  message: `The mock server has no ${ctx.params.rpcID}.${ctx.params.method} RPC`,
-                }),
-              ),
+        rpcCall: (ctx) => {
+          if (ctx.params.rpcID === "opencode.goal" && ctx.params.method === "get")
+            return Effect.succeed({ output: null })
+          const read = config.pullRequest
+
+          if (ctx.params.rpcID !== PullRequest.Definition.id || ctx.params.method !== "get" || !read)
+            return Effect.fail(
+              new MockUnsupported({ message: `The mock server has no ${ctx.params.rpcID}.${ctx.params.method} RPC` }),
+            )
+
+          return Effect.tryPromise({
+            try: async () => ({
+              output: await read(requestDirectory(config, ctx.request)),
+            }),
+            catch: () => new MockUnsupported({ message: "The configured RPC failed" }),
+          })
+        },
         sessionActive: () => {
           const status = resolve(config.sessionStatus ?? {})
 

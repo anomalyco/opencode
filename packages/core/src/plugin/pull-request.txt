@@ -1,0 +1,52 @@
+query PullRequestSnapshot($id: ID!) {
+  node(id: $id) {
+    ... on PullRequest {
+      number
+      title
+      url
+      state
+      isDraft
+      headRefName
+      headRefOid
+      baseRefName
+      commits(last: 1) {
+        nodes {
+          commit {
+            oid
+            statusCheckRollup {
+              contexts(first: 100) {
+                pageInfo { hasNextPage }
+                nodes {
+                  __typename
+                  ... on CheckRun { name status conclusion detailsUrl }
+                  ... on StatusContext { context state targetUrl }
+                }
+              }
+            }
+          }
+        }
+      }
+      latestReviews(first: 100) {
+        pageInfo { hasNextPage }
+        nodes {
+          author { login }
+          state
+          commit { oid }
+          url
+        }
+      }
+      reviewThreads(first: 100) {
+        pageInfo { hasNextPage }
+        nodes {
+          isResolved
+          isOutdated
+          path
+          line
+          comments(first: 1) {
+            nodes { author { login } body url }
+          }
+        }
+      }
+    }
+  }
+}
