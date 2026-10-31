@@ -103,7 +103,7 @@ describe("acp turn events over the wire", () => {
         succeeded("ses_background"),
         permissionAsked("ses_background", "perm_after_end", { action: "read" }),
       )
-      await acp.until(() => acp.server.replies.length === 2, "child permission replies")
+      await acp.until(() => acp.server.replies.length === 3, "child permission replies")
       expect(turnUpdates(acp.updates).slice(responded)).toEqual([])
       expect((await acp.prompt(acp.sessionId, "again")).stopReason).toBe("end_turn")
 
@@ -128,10 +128,21 @@ describe("acp turn events over the wire", () => {
             },
           },
         },
+        {
+          sessionId: acp.sessionId,
+          toolCall: {
+            toolCallId: "ses_background:perm_after_end",
+            title: "Research",
+            _meta: {
+              "opencode/child-session": { id: "ses_background", parentID: acp.sessionId, depth: 1, title: "Research" },
+            },
+          },
+        },
       ])
       expect(acp.server.replies).toEqual([
         { sessionID: "ses_grandchild", requestID: "perm_child", decision: "once" },
         { sessionID: "ses_background", requestID: "perm_background", decision: "once" },
+        { sessionID: "ses_background", requestID: "perm_after_end", decision: "once" },
       ])
     },
   )
