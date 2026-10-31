@@ -126,6 +126,12 @@ Limit the list and print JSON.
 $ opencode session list --max-count 20 --format json
 ```
 
+Filter top-level sessions in the current project by title, newest first. Combine `--search` with `--max-count` to limit matching results.
+
+```bash
+$ opencode session list --search "deployment" --max-count 20 --format json
+```
+
 Delete a session and its child sessions.
 
 ```bash
