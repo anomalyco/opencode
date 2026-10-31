@@ -28,7 +28,7 @@ import {
   type SessionPanelMenuItem,
 } from "@opencode/plugin/gui"
 import { useCommand } from "@/shell/commands/command"
-import { guardClosingFocus } from "@/shell/panel-motion"
+import { guardClosingFocus, setPanelResizing } from "@/shell/panel-motion"
 import { useLanguage } from "@/runtime/i18n/language"
 import { same } from "@/runtime/persistence/equality"
 import { useLayout } from "@/shell/state/layout"
@@ -153,6 +153,7 @@ export function SideRegion(props: {
 
                             if (column.height > 0) view().split.resize(1 - height / column.height)
                           }}
+                          onDraggingChange={setPanelResizing}
                         />
                       </div>
                     </Show>
