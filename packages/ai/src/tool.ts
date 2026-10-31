@@ -279,15 +279,18 @@ const standardJsonSchema = (schema: StandardSchemaV1): JsonSchema.JsonSchema => 
   return body
 }
 
+// A throwing or rejecting `validate` is an input error the model can see, not a defect.
 const validateStandard = (schema: StandardSchemaV1, value: unknown) =>
-  Effect.suspend(() => {
-    const result = schema["~standard"].validate(value)
-    return result instanceof Promise ? Effect.promise(() => result) : Effect.succeed(result)
-  }).pipe(
+  Effect.try({ try: () => schema["~standard"].validate(value), catch: toError }).pipe(
+    Effect.flatMap((result) =>
+      result instanceof Promise ? Effect.tryPromise({ try: () => result, catch: toError }) : Effect.succeed(result),
+    ),
     Effect.flatMap((result) =>
       result.issues === undefined ? Effect.succeed(result.value) : Effect.fail(new Error(formatIssues(result.issues))),
     ),
   )
+
+const toError = (cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause)))
 
 const formatIssues = (issues: ReadonlyArray<StandardSchemaV1.Issue>) =>
   issues

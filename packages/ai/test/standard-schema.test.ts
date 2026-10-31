@@ -67,6 +67,36 @@ describe("Standard Schema tool input", () => {
     })
   })
 
+  test("returns a throwing or rejecting validate as a tool error", async () => {
+    const schema = (validate: () => never) => ({
+      "~standard": {
+        version: 1 as const,
+        vendor: "test",
+        validate,
+        jsonSchema: { input: () => ({ type: "object" }), output: () => ({ type: "object" }) },
+      },
+    })
+    const results = await Promise.all(
+      [
+        schema(() => {
+          throw new Error("sync boom")
+        }),
+        schema(() => Promise.reject(new Error("async boom")) as never),
+      ].map((input) =>
+        Effect.runPromise(
+          ToolRuntime.dispatch(
+            [tool({ name: "boom", description: "Boom.", input, execute: () => Effect.succeed("ok") })],
+            call("boom", {}),
+          ),
+        ),
+      ),
+    )
+    expect(results.map((result) => result.result)).toEqual([
+      { type: "error", value: "Invalid tool input: sync boom" },
+      { type: "error", value: "Invalid tool input: async boom" },
+    ])
+  })
+
   test("fails clearly when the schema has no JSON Schema export", () => {
     expect(() =>
       tool({ name: "weather", description: "Get the weather.", input: v.object({ city: v.string() }) }),
