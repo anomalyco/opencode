@@ -104,6 +104,7 @@ import { McpCodeModeDefaultsPlugin } from "./mcp-codemode-defaults.js"
 import { ProviderPlugins } from "./provider.js"
 import { DynamicProviderPlugin } from "./provider/dynamic.js"
 import { OpencodePlugin } from "./provider/opencode.js"
+import { OpenAICompatiblePlugin } from "./provider/openai-compatible.js"
 import { WebSearchPlugins } from "./websearch/index.js"
 import { SkillPlugin } from "./skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
@@ -287,6 +288,8 @@ const post = [
   ConfigProviderPlugin.Plugin,
   // Run the dynamic npm SDK loader after SDK, instance, and external plugins register their `sdk` hooks.
   DynamicProviderPlugin,
+  // Fills configured providers with discovered models, so it must see their config applied first.
+  OpenAICompatiblePlugin,
   ConfigWebSearchPlugin.Plugin,
   ConfigPolicyPlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
