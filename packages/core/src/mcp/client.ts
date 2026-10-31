@@ -11,7 +11,7 @@ import {
   StreamableHTTPClientTransport,
   UnauthorizedError,
   UnsupportedProtocolVersionError,
-  isJSONRPCResultResponse,
+  type CallToolRequestOptions,
   type CallToolResult as SdkCallToolResult,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
@@ -24,7 +24,6 @@ import {
   type ReadResourceResult,
   type Resource,
   type ResourceTemplateType,
-  type Tool,
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
@@ -62,8 +61,21 @@ const isTransient = (error: unknown) =>
     ? error.status === 408 || error.status === 429 || (error.status >= 500 && error.status !== 501)
     : error instanceof TypeError && "code" in error
 
-export type { GetPromptResult, Prompt, ReadResourceResult, Resource, Tool }
+export type { GetPromptResult, Prompt, ReadResourceResult, Resource }
 export type ResourceTemplate = ResourceTemplateType
+
+/** A listed tool, keeping only the fields opencode and the SDK's `callTool` read. */
+export interface Tool {
+  readonly name: string
+  readonly description?: string
+  readonly inputSchema: {
+    readonly type: "object"
+    readonly properties?: Record<string, unknown>
+    readonly required?: string[]
+    readonly [key: string]: unknown
+  }
+  readonly outputSchema?: Record<string, unknown>
+}
 
 export class NeedsAuthError extends Schema.TaggedError<NeedsAuthError>()("MCP.NeedsAuthError", {
   server: Schema.String,
@@ -234,27 +246,6 @@ export const connect = Effect.fnUntraced(function* (
       )
     }
 
-    // Our SDK patch leaves tools/list items unchecked, so one malformed tool no longer fails every tool
-    // on the server; they are checked here instead. The SDK runs a handler set on the transport before
-    // connect ahead of its own, on the same message, so it returns only the tools kept here.
-    const onmessage = transport.onmessage
-    transport.onmessage = (message, extra) => {
-      if (isJSONRPCResultResponse(message) && Array.isArray(message.result.tools))
-        message.result.tools = message.result.tools.filter((tool: unknown) => {
-          const reason = checkTool(tool)
-          if (reason === undefined) return true
-          runFork(
-            Effect.logWarning("skipping invalid MCP tool", {
-              server,
-              tool: isRecord(tool) && typeof tool.name === "string" ? tool.name : undefined,
-              reason,
-            }),
-          )
-          return false
-        })
-      onmessage?.(message, extra)
-    }
-
     yield* Effect.tryPromise({
       try: (signal) => client.connect(transport, { timeout: timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT, signal }),
       catch: (error) => error,
@@ -358,9 +349,9 @@ export const connect = Effect.fnUntraced(function* (
     )
     // Lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
     // re-parses it and compiles an output validator for every listed tool. Each call passes its own
-    // listed definition instead, so only that tool's outputSchema is compiled and modern
-    // Mcp-Param-* header mirroring still sees the schema. Lists are refetched only on list_changed or
-    // reconnect, so modern list TTLs are not honored.
+    // checked definition instead, so only that tool's outputSchema is compiled and modern
+    // Mcp-Param-* header mirroring still sees the schema. Lists are refetched only on list_changed,
+    // reconnect, or a stale header declaration, so modern list TTLs are not honored.
     const catalog = { timeout: timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT, cacheMode: "bypass" as const }
     const listed = new Map<string, Tool>()
     const execution = timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
@@ -388,10 +379,46 @@ export const connect = Effect.fnUntraced(function* (
       tools: () =>
         advertised("tools")
           ? list("list MCP tools", (signal) => client.listTools(undefined, { ...catalog, signal })).pipe(
-              Effect.map((r) => {
+              // Our SDK patch leaves the listed tools unchecked, so one malformed tool doesn't fail the
+              // whole list; each is checked here and copied with only the fields we read.
+              Effect.flatMap((result) => {
+                const skipped: Array<{ tool: unknown; reason: string }> = []
+                const tools = result.tools.flatMap((tool: unknown): Tool[] => {
+                  const skip = (reason: string) => {
+                    skipped.push({ tool: isRecord(tool) ? tool.name : undefined, reason })
+                    return []
+                  }
+                  if (!isRecord(tool)) return skip("not an object")
+                  if (typeof tool.name !== "string" || tool.name === "") return skip("name is not a non-empty string")
+                  if (!isRecord(tool.inputSchema)) return skip("inputSchema is not an object")
+                  const { properties, required, ...inputSchema } = tool.inputSchema
+                  if (inputSchema.type !== undefined && inputSchema.type !== "object")
+                    return skip('inputSchema type is not "object"')
+                  return [
+                    {
+                      name: tool.name,
+                      description: typeof tool.description === "string" ? tool.description : undefined,
+                      // Providers that check tool parameters against the JSON Schema metaschema reject the
+                      // whole request over a malformed top level. Nested property schemas are left as sent.
+                      inputSchema: {
+                        ...inputSchema,
+                        type: "object",
+                        ...(isRecord(properties) ? { properties } : {}),
+                        ...(Array.isArray(required) && required.every((key): key is string => typeof key === "string")
+                          ? { required }
+                          : {}),
+                      },
+                      outputSchema: isRecord(tool.outputSchema) ? tool.outputSchema : undefined,
+                    },
+                  ]
+                })
                 listed.clear()
-                for (const tool of r.tools) listed.set(tool.name, tool)
-                return r.tools
+                for (const tool of tools) listed.set(tool.name, tool)
+                return Effect.forEach(
+                  skipped,
+                  (entry) => Effect.logWarning("skipping invalid MCP tool", { server, ...entry }),
+                  { discard: true },
+                ).pipe(Effect.as(tools))
               }),
             )
           : Effect.succeed([]),
@@ -423,27 +450,36 @@ export const connect = Effect.fnUntraced(function* (
         request("get MCP prompt", (signal) =>
           client.getPrompt({ name: input.name, arguments: input.args ?? {} }, { signal, timeout: execution }),
         ),
-      callTool: (input) =>
-        request("call MCP tool", (signal) => {
-          const params = {
-            name: input.name,
-            arguments: input.args ?? {},
-            ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
-          }
-          // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
-          const options = { signal, timeout: execution, onprogress: () => {} }
-          const toolDefinition = listed.get(input.name)
-          if (toolDefinition === undefined) return client.callTool(params, options)
-          // A modern server rejects headers mirrored from a stale definition before running the tool.
-          // Without a definition the SDK refetches the list itself and retries.
-          return client
-            .callTool(params, { ...options, toolDefinition })
-            .catch((error) =>
-              error instanceof ProtocolError && error.code === HEADER_MISMATCH
-                ? client.callTool(params, options)
-                : Promise.reject(error),
-            )
-        }).pipe(Effect.map(toCallToolResult)),
+      callTool: (input) => {
+        const params = {
+          name: input.name,
+          arguments: input.args ?? {},
+          ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
+        }
+        const call = Effect.tryPromise({
+          try: (signal) =>
+            client.callTool(params, {
+              signal,
+              timeout: execution,
+              // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
+              onprogress: () => {},
+              // The SDK's types say schema values are JSON; ours are unknown values parsed from JSON.
+              toolDefinition: listed.get(input.name) as CallToolRequestOptions["toolDefinition"],
+            }),
+          catch: (error) => error,
+        })
+        // A modern server rejects headers mirrored from a stale definition before running the tool,
+        // so relist and retry once with the fresh definition.
+        return call.pipe(
+          Effect.catchIf(
+            (error) => error instanceof ProtocolError && error.code === HEADER_MISMATCH,
+            () => connection.tools().pipe(Effect.andThen(call)),
+          ),
+          Effect.mapError(failure),
+          Effect.tapError((error) => Effect.logWarning("failed to call MCP tool", { server, error: error.message })),
+          Effect.map(toCallToolResult),
+        )
+      },
       onClose: (callback) => {
         client.onclose = () => callback(lastError ? `Connection closed: ${lastError}` : "Connection closed")
       },
@@ -482,43 +518,6 @@ function rejectsUnknownQuery(url: URL) {
   if (/(^|\.)zohomcp\.[a-z.]+$/.test(url.hostname)) return true
   // Loopback servers run on this machine (Figma Desktop's Dev Mode MCP returns 404), so they are not hosted Code Mode servers.
   return url.hostname === "localhost" || url.hostname === "[::1]" || /^127(\.\d+){3}$/.test(url.hostname)
-}
-
-const OPTIONAL_TOOL_FIELDS = {
-  description: "string",
-  title: "string",
-  outputSchema: "object",
-  annotations: "object",
-  execution: "object",
-  icons: "array",
-  _meta: "object",
-} as const
-
-/**
- * Returns why a listed tool cannot be used, or undefined when it can. A malformed optional field is
- * deleted instead, keeping the tool. Property schemas are not walked: the legacy SDK schema did, which
- * cost most of the time on large catalogs.
- */
-function checkTool(tool: unknown) {
-  if (!isRecord(tool)) return "not an object"
-  if (typeof tool.name !== "string" || tool.name === "") return "name is not a non-empty string"
-  if (!isRecord(tool.inputSchema)) return "inputSchema is not an object"
-  if (tool.inputSchema.type !== undefined && tool.inputSchema.type !== "object")
-    return 'inputSchema type is not "object"'
-  // Providers that check tool parameters against the JSON Schema metaschema reject the whole request
-  // over a malformed top level, so drop it; nested property schemas are left as sent.
-  if (tool.inputSchema.properties !== undefined && !isRecord(tool.inputSchema.properties))
-    delete tool.inputSchema.properties
-  const required = tool.inputSchema.required
-  if (required !== undefined && !(Array.isArray(required) && required.every((key) => typeof key === "string")))
-    delete tool.inputSchema.required
-  for (const [key, kind] of Object.entries(OPTIONAL_TOOL_FIELDS)) {
-    const value = tool[key]
-    if (value === undefined) continue
-    if (kind === "string" ? typeof value !== "string" : kind === "array" ? !Array.isArray(value) : !isRecord(value))
-      delete tool[key]
-  }
-  return undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

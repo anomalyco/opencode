@@ -7,6 +7,7 @@ import {
   InMemoryTransport,
   StreamableHTTPClientTransport,
   isJSONRPCRequest,
+  type ListToolsResult,
 } from "@modelcontextprotocol/client"
 import {
   createMcpHandler,
@@ -103,13 +104,13 @@ function resourceServer(
     emptyElicitation?: boolean
     urlElicitation?: boolean
     /**
-     * Ahead of the valid tools, list entries that cannot be used (not an object, no name, an input
+     * Ahead of the valid tools, list entries that cannot be used (null, not an object, no name, an input
      * schema that is not an object), one whose input schema has a string `required`, and one with a
-     * malformed description.
+     * malformed description and output schema.
      */
     malformedTool?: boolean
     /** Listed after the default tools. A call's `structured` argument comes back as structured content. */
-    tools?: McpClient.Tool[]
+    tools?: ListToolsResult["tools"]
     /** Legacy servers give up on the URL elicitation after this many milliseconds. */
     elicitationTimeout?: number
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
@@ -163,13 +164,14 @@ function resourceServer(
               // Servers send raw JSON; the cast lets the fixture send a tool the schema rejects.
               ...(input.malformedTool
                 ? ([
+                    null,
                     "not-a-tool",
                     { inputSchema: { type: "object" } },
                     { name: "no-schema" },
                     { name: "malformed", inputSchema: { type: "string" } },
                     { name: "bad-required", inputSchema: { type: "object", required: "text" } },
-                    { name: "bad-description", description: 42, inputSchema: { type: "object" } },
-                  ] as unknown as McpClient.Tool[])
+                    { name: "bad-fields", description: 42, outputSchema: "none", inputSchema: { type: "object" } },
+                  ] as unknown as ListToolsResult["tools"])
                 : []),
               ...(input.emptyElicitation
                 ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
@@ -1224,13 +1226,13 @@ describe.each([
           )
 
           const tools = yield* connection.tools()
-          expect(tools.map((tool) => tool.name)).toEqual(["bad-required", "bad-description", "echo"])
+          expect(tools.map((tool) => tool.name)).toEqual(["bad-required", "bad-fields", "echo"])
           // A malformed optional field or top-level `required` is dropped, not the tool.
           expect(tools.slice(0, 2)).toEqual([
             { name: "bad-required", inputSchema: { type: "object" } },
-            { name: "bad-description", inputSchema: { type: "object" } },
+            { name: "bad-fields", inputSchema: { type: "object" } },
           ])
-          for (const name of ["bad-required", "bad-description", "echo"]) {
+          for (const name of ["bad-required", "bad-fields", "echo"]) {
             yield* connection.callTool({ name, args: { text: "hi" } })
             expect(server.state.toolCalls.at(-1)).toMatchObject({ name, arguments: { text: "hi" } })
           }
@@ -1312,8 +1314,8 @@ test("retries a modern MCP tool call whose listed header declaration went stale"
 
         expect((yield* connection.callTool({ name: "regional", args: { region: "eu" } })).isError).toBe(false)
         expect(server.state.toolCalls.map((call) => call.arguments)).toEqual([{ region: "eu" }])
-        // First the stale Region header, then no header; the SDK then relists and sends Zone.
-        expect(rejected).toEqual(["eu", null])
+        // The stale Region header is rejected once; the relisted definition then sends Zone.
+        expect(rejected).toEqual(["eu"])
         expect(server.state.toolLists).toBe(2)
       }),
     ),

@@ -1,5 +1,5 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 71cf63076b073284aa14f63cd41efa653e8def0f..4c33e3b873b94f0f9392b23bf13c85b2b4fe9286 100644
+index 71cf63076b073284aa14f63cd41efa653e8def0f..d4679fc706c76b87949fd674857cea54793e82ce 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
 @@ -1038,7 +1038,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
@@ -18,8 +18,17 @@ index 71cf63076b073284aa14f63cd41efa653e8def0f..4c33e3b873b94f0f9392b23bf13c85b2
  	if (resource) authorizationUrl.searchParams.set("resource", resourceIndicatorToString(resource));
  	return {
  		authorizationUrl,
+@@ -4350,7 +4348,7 @@ var Client = class extends require_src.Protocol {
+ 	_excludeInvalidXMcpHeaderTools(result) {
+ 		if (this.getProtocolEra() !== "modern" || !this.transport || detectProbeTransportKind(this.transport) === "stdio") return;
+ 		const filtered = result.tools.filter((tool) => {
+-			const scan = require_src.scanXMcpHeaderDeclarations(tool.inputSchema);
++			const scan = require_src.scanXMcpHeaderDeclarations(tool?.inputSchema);
+ 			if (!scan.valid) {
+ 				console.warn(`[mcp-sdk] excluding tool '${tool.name}' from tools/list: invalid x-mcp-header declaration — ${scan.reason}`);
+ 				return false;
 diff --git a/dist/index.mjs b/dist/index.mjs
-index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..f5b0e1d4d47965150a62f20f8c1282d1d4972b99 100644
+index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..bf457bdfdef05ad8d09f3fbb94c6ac1aecc59487 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -1035,7 +1035,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
@@ -38,6 +47,15 @@ index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..f5b0e1d4d47965150a62f20f8c1282d1
  	if (resource) authorizationUrl.searchParams.set("resource", resourceIndicatorToString(resource));
  	return {
  		authorizationUrl,
+@@ -4347,7 +4345,7 @@ var Client = class extends Protocol {
+ 	_excludeInvalidXMcpHeaderTools(result) {
+ 		if (this.getProtocolEra() !== "modern" || !this.transport || detectProbeTransportKind(this.transport) === "stdio") return;
+ 		const filtered = result.tools.filter((tool) => {
+-			const scan = scanXMcpHeaderDeclarations(tool.inputSchema);
++			const scan = scanXMcpHeaderDeclarations(tool?.inputSchema);
+ 			if (!scan.valid) {
+ 				console.warn(`[mcp-sdk] excluding tool '${tool.name}' from tools/list: invalid x-mcp-header declaration — ${scan.reason}`);
+ 				return false;
 diff --git a/dist/src-DpAS0jfg.cjs b/dist/src-DpAS0jfg.cjs
 index e2ffe6482e0d8eed88082215547ccde7b5ef2d37..1550d1d30cdbd79b35af59ef69a2e9e26d67290e 100644
 --- a/dist/src-DpAS0jfg.cjs
