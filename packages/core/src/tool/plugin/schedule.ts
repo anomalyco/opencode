@@ -2,7 +2,7 @@ export * as ScheduleTools from "./schedule.js"
 
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { optional } from "@opencode/schema/schema"
+import { PositiveInt, optional } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { DateTime, Effect, Option, Schema } from "effect"
 import { Config } from "../../config.js"
@@ -40,6 +40,48 @@ const ListOutput = Schema.Struct({
 
 export const IDInput = Schema.Struct({
   id: Schedule.ID.annotate({ description: "Schedule id from schedule_list." }),
+})
+
+export const RunView = Schema.Struct({
+  id: Schedule.RunID,
+  scheduleID: Schedule.ID,
+  scheduleName: Schema.String.pipe(optional),
+  sessionID: Session.ID.pipe(optional),
+  run: PositiveInt,
+  status: Schedule.RunStatus,
+  attention: Schedule.Attention,
+  summary: Schema.String.pipe(optional),
+  error: Schema.String.pipe(optional),
+  startedAt: Schema.String,
+  completedAt: Schema.String.pipe(optional),
+  readAt: Schema.String.pipe(optional),
+})
+export type RunView = typeof RunView.Type
+
+const InboxInput = Schema.Struct({
+  includeRead: Schema.Boolean.pipe(optional).annotate({
+    description: "Include items already marked read (default: false).",
+  }),
+  limit: PositiveInt.pipe(optional).annotate({
+    description: "Maximum items to return (default: 50).",
+  }),
+})
+
+const RunsInput = Schema.Struct({
+  id: Schedule.ID.pipe(optional).annotate({
+    description: "Schedule id to inspect, or omit for all schedules in this session.",
+  }),
+  limit: PositiveInt.pipe(optional).annotate({
+    description: "Maximum runs to return (default: 50).",
+  }),
+})
+
+const DismissInput = Schema.Struct({
+  runID: Schedule.RunID.annotate({ description: "Schedule run id from schedule_inbox or schedule_runs." }),
+})
+
+const RunsOutput = Schema.Struct({
+  runs: Schema.Array(RunView),
 })
 
 const RemoveOutput = Schema.Struct({ id: Schedule.ID, removed: Schema.Boolean })
@@ -149,6 +191,95 @@ export const Plugin = {
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(schedules.remove(input.id)),
               Effect.as({ output: { id: input.id, removed: true }, content: `Deleted schedule ${input.id}.` }),
+              Effect.mapError(failure),
+            ),
+        })
+        editor.add({
+          name: "schedule_result",
+          description:
+            "Report the outcome of the current scheduled background run (`attention`: `\"quiet\"`, `\"ready\"`, or `\"needs_you\"`), an optional short `summary`, and an optional `nextIn` duration to override the next firing cadence.",
+          input: Schedule.ResultInput,
+          output: RunView,
+          options: { namespace: "opencode", codemode: true },
+          execute: (input, context) =>
+            allowed(context.sessionID).pipe(
+              Effect.andThen(schedules.reportResult(context.sessionID, input)),
+              Effect.map((run) => {
+                const view = toRunView(run)
+                return { output: view, content: `Recorded ${view.attention}: ${runSummary(view)}` }
+              }),
+              Effect.mapError(failure),
+            ),
+        })
+        editor.add({
+          name: "schedule_inbox",
+          description:
+            "List scheduled run results that need attention (`needs_you` first, then `ready`) for this session.",
+          input: InboxInput,
+          output: RunsOutput,
+          options: { namespace: "opencode", codemode: true },
+          execute: (input, context) =>
+            allowed(context.sessionID).pipe(
+              Effect.andThen(
+                schedules.inbox({
+                  sessionID: context.sessionID,
+                  includeRead: input.includeRead,
+                  limit: input.limit,
+                }),
+              ),
+              Effect.map((items) => {
+                const runs = items.map(toRunView)
+                return {
+                  output: { runs },
+                  content: runs.length === 0 ? "Schedule inbox is empty." : runs.map(runSummary).join("\n"),
+                }
+              }),
+              Effect.mapError(failure),
+            ),
+        })
+        editor.add({
+          name: "schedule_runs",
+          description: "List recent run history for a schedule (or all schedules in this session), newest first.",
+          input: RunsInput,
+          output: RunsOutput,
+          options: { namespace: "opencode", codemode: true },
+          execute: (input, context) =>
+            (input.id === undefined ? allowed(context.sessionID) : owned(input.id, context.sessionID).pipe(Effect.asVoid)).pipe(
+              Effect.andThen(
+                schedules.runs({
+                  scheduleID: input.id,
+                  sessionID: context.sessionID,
+                  limit: input.limit,
+                }),
+              ),
+              Effect.map((items) => {
+                const runs = items.map(toRunView)
+                return {
+                  output: { runs },
+                  content: runs.length === 0 ? "No schedule runs." : runs.map(runSummary).join("\n"),
+                }
+              }),
+              Effect.mapError(failure),
+            ),
+        })
+        editor.add({
+          name: "schedule_dismiss",
+          description: "Mark a scheduled run item as read in this session's Inbox.",
+          input: DismissInput,
+          output: RunView,
+          options: { namespace: "opencode", codemode: true },
+          execute: (input, context) =>
+            allowed(context.sessionID).pipe(
+              Effect.andThen(schedules.getRun(input.runID)),
+              Effect.filterOrFail(
+                (run) => run.ownerSessionID === context.sessionID,
+                () => new Schedule.RunNotFoundError({ runID: input.runID }),
+              ),
+              Effect.andThen(schedules.markRead(input.runID)),
+              Effect.map((run) => {
+                const view = toRunView(run)
+                return { output: view, content: `Marked read: ${runSummary(view)}` }
+              }),
               Effect.mapError(failure),
             ),
         })
@@ -276,4 +407,35 @@ function toView(info: Schedule.Info): View {
     lastOutcome: info.lastOutcome,
     lastOutput: info.lastOutput,
   }
+}
+
+function toRunView(run: Schedule.Run): RunView {
+  return {
+    id: run.id,
+    scheduleID: run.scheduleID,
+    scheduleName: run.scheduleName,
+    sessionID: run.sessionID,
+    run: run.run,
+    status: run.status,
+    attention: run.attention,
+    summary: run.summary,
+    error: run.error,
+    startedAt: DateTime.formatIso(run.startedAt),
+    completedAt: run.completedAt === undefined ? undefined : DateTime.formatIso(run.completedAt),
+    readAt: run.readAt === undefined ? undefined : DateTime.formatIso(run.readAt),
+  }
+}
+
+function runSummary(run: RunView) {
+  const label = run.scheduleName ? `"${run.scheduleName}"` : run.scheduleID
+  const detail = run.summary ?? run.error
+  return [
+    `${run.id} (${label} #${run.run})`,
+    run.status,
+    run.attention,
+    run.startedAt,
+    detail && JSON.stringify(clip(detail, 120)),
+  ]
+    .filter(Boolean)
+    .join(", ")
 }

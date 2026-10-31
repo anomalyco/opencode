@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "05cdd510-d89c-4f5d-83a1-64b9c633f221",
-  "prevIds": ["4f6e16c6-f070-4545-b9d0-19fcb6e5210c"],
+  "id": "5a5abc73-28f0-4366-8eeb-4e74b004db6c",
+  "prevIds": ["05cdd510-d89c-4f5d-83a1-64b9c633f221"],
   "ddl": [
     {
       "name": "account_state",
@@ -46,6 +46,10 @@
     },
     {
       "name": "project",
+      "entityType": "tables"
+    },
+    {
+      "name": "schedule_run",
       "entityType": "tables"
     },
     {
@@ -875,6 +879,186 @@
       "name": "commands",
       "entityType": "columns",
       "table": "project"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "schedule_id",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "schedule_name",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "owner_session_id",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "session_id",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "run",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "status",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'quiet'",
+      "generated": null,
+      "name": "attention",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "summary",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "error",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "reported_attention",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "reported_summary",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "next_in_ms",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "completed_at",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "read_at",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_created",
+      "entityType": "columns",
+      "table": "schedule_run"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "time_updated",
+      "entityType": "columns",
+      "table": "schedule_run"
     },
     {
       "type": "text",
@@ -2071,6 +2255,28 @@
       "table": "project_directory"
     },
     {
+      "columns": ["schedule_id"],
+      "tableTo": "schedule",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_schedule_run_schedule_id_schedule_id_fk",
+      "entityType": "fks",
+      "table": "schedule_run"
+    },
+    {
+      "columns": ["owner_session_id"],
+      "tableTo": "session_v2",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "nameExplicit": false,
+      "name": "fk_schedule_run_owner_session_id_session_v2_id_fk",
+      "entityType": "fks",
+      "table": "schedule_run"
+    },
+    {
       "columns": ["session_id"],
       "tableTo": "session_v2",
       "columnsTo": ["id"],
@@ -2299,6 +2505,13 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
+      "name": "schedule_run_pk",
+      "table": "schedule_run",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
       "name": "schedule_pk",
       "table": "schedule",
       "entityType": "pks"
@@ -2455,6 +2668,56 @@
       "name": "permission_project_action_resource_idx",
       "entityType": "indexes",
       "table": "permission"
+    },
+    {
+      "columns": [
+        {
+          "value": "schedule_id",
+          "isExpression": false
+        },
+        {
+          "value": "started_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "schedule_run_schedule_idx",
+      "entityType": "indexes",
+      "table": "schedule_run"
+    },
+    {
+      "columns": [
+        {
+          "value": "session_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"schedule_run\".\"status\" = 'running' and \"schedule_run\".\"session_id\" is not null",
+      "origin": "manual",
+      "name": "schedule_run_session_running_idx",
+      "entityType": "indexes",
+      "table": "schedule_run"
+    },
+    {
+      "columns": [
+        {
+          "value": "owner_session_id",
+          "isExpression": false
+        },
+        {
+          "value": "started_at",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"schedule_run\".\"attention\" in ('ready', 'needs_you') and \"schedule_run\".\"read_at\" is null",
+      "origin": "manual",
+      "name": "schedule_run_inbox_idx",
+      "entityType": "indexes",
+      "table": "schedule_run"
     },
     {
       "columns": [

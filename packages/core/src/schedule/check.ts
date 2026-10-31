@@ -33,6 +33,8 @@ const FORBIDDEN_CODE_TOOLS = new Set([
   "opencode.schedule_pause",
   "opencode.schedule_resume",
   "opencode.schedule_delete",
+  "opencode.schedule_result",
+  "opencode.schedule_dismiss",
   "opencode.session_move",
   "opencode.session_rename",
   "opencode.worktree_create",

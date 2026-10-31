@@ -333,13 +333,19 @@ export type ScheduleConditionCode = { type: "code"; code: string }
 
 export type ScheduleThread = "same" | "dedicated"
 
-export type ScheduleDelivery = "session" | "silent"
+export type ScheduleDelivery = "inbox" | "session" | "silent"
 
 export type ScheduleTarget = "same" | "dedicated" | "subagent"
 
 export type ScheduleStatus = "active" | "paused" | "done"
 
 export type ScheduleOutcome = "fired" | "late" | "checked" | "expired" | "skipped" | "disabled" | "failed"
+
+export type ScheduleRunID = string
+
+export type ScheduleRunStatus = "running" | "completed" | "failed" | "cancelled"
+
+export type ScheduleAttention = "quiet" | "ready" | "needs_you"
 
 export type ArtifactCapability = "static" | "server-code" | "sqlite" | "durable-objects"
 
@@ -943,6 +949,22 @@ export type ScheduleActionCommand = {
   arguments?: string
   target?: ScheduleTarget
   deliver?: ScheduleDelivery
+}
+
+export type ScheduleRun = {
+  id: ScheduleRunID
+  scheduleID: ScheduleID
+  scheduleName?: string
+  ownerSessionID?: SessionID
+  sessionID?: SessionID
+  run: number
+  status: ScheduleRunStatus
+  attention: ScheduleAttention
+  summary?: string
+  error?: string
+  startedAt: number
+  completedAt?: number
+  readAt?: number
 }
 
 export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
@@ -3206,6 +3228,14 @@ export type PtyFeatureUnsupportedError = {
 export const isPtyFeatureUnsupportedError = (value: unknown): value is PtyFeatureUnsupportedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyFeatureUnsupportedError"
 
+export type ScheduleRunNotFoundError = {
+  readonly _tag: "ScheduleRunNotFoundError"
+  readonly runID: string
+  readonly message: string
+}
+export const isScheduleRunNotFoundError = (value: unknown): value is ScheduleRunNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ScheduleRunNotFoundError"
+
 export type ScheduleNotFoundError = {
   readonly _tag: "ScheduleNotFoundError"
   readonly scheduleID: string
@@ -4599,7 +4629,7 @@ export type ExperimentalScheduleCreateInput = {
   readonly code?: string | undefined
   readonly target?: ("same" | "dedicated" | "subagent") | undefined
   readonly agent?: string | undefined
-  readonly deliver?: ("session" | "silent") | undefined
+  readonly deliver?: ("inbox" | "session" | "silent") | undefined
 }
 
 export type ExperimentalScheduleCreateOutput = { data: ScheduleInfo }["data"]
@@ -4608,9 +4638,25 @@ export type ExperimentalScheduleListInput = { readonly sessionID: string }
 
 export type ExperimentalScheduleListOutput = { data: Array<ScheduleInfo> }["data"]
 
+export type ExperimentalScheduleInboxInput = {
+  readonly sessionID?: string | undefined
+  readonly includeRead?: boolean | undefined
+  readonly limit?: number | undefined
+}
+
+export type ExperimentalScheduleInboxOutput = { data: Array<ScheduleRun> }["data"]
+
+export type ExperimentalScheduleMarkReadInput = { readonly runID: string }
+
+export type ExperimentalScheduleMarkReadOutput = { data: ScheduleRun }["data"]
+
 export type ExperimentalScheduleGetInput = { readonly scheduleID: string }
 
 export type ExperimentalScheduleGetOutput = { data: ScheduleInfo }["data"]
+
+export type ExperimentalScheduleRunsInput = { readonly scheduleID: string; readonly limit?: number | undefined }
+
+export type ExperimentalScheduleRunsOutput = { data: Array<ScheduleRun> }["data"]
 
 export type ExperimentalSchedulePauseInput = { readonly scheduleID: string }
 

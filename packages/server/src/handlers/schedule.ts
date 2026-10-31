@@ -1,8 +1,13 @@
 import { Permission } from "@opencode/core/permission"
 import { Schedule } from "@opencode/core/schedule"
 import type { Session } from "@opencode/core/session"
-import { ForbiddenError, InvalidRequestError, ScheduleNotFoundError } from "@opencode/protocol/errors"
-import type { CreatePayload } from "@opencode/protocol/groups/schedule"
+import {
+  ForbiddenError,
+  InvalidRequestError,
+  ScheduleNotFoundError,
+  ScheduleRunNotFoundError,
+} from "@opencode/protocol/errors"
+import type { CreatePayload, InboxQuery, RunsQuery } from "@opencode/protocol/groups/schedule"
 import { Effect } from "effect"
 import { HttpApiSchema } from "effect/http-api"
 import { missingSession } from "./session-error"
@@ -49,6 +54,55 @@ export const makeSchedule = Effect.gen(function* () {
         Effect.andThen(schedules.list({ sessionID })),
         Effect.map((data) => ({ data })),
       ),
+    inbox: (query: InboxQuery) =>
+      Effect.gen(function* () {
+        if (query.sessionID !== undefined) {
+          yield* allowed(query.sessionID)
+          const data = yield* schedules.inbox({
+            sessionID: query.sessionID,
+            includeRead: query.includeRead,
+            limit: query.limit,
+          })
+          return { data }
+        }
+        const targetLimit = query.limit ?? 50
+        const items = yield* schedules.inbox({
+          includeRead: query.includeRead,
+          limit: Math.max(targetLimit * 4, 200),
+        })
+        const cache = new Map<Session.ID, boolean>()
+        const data: Schedule.Run[] = []
+        for (const item of items) {
+          if (item.ownerSessionID === undefined) continue
+          let on = cache.get(item.ownerSessionID)
+          if (on === undefined) {
+            on = yield* schedules.enabled(item.ownerSessionID).pipe(
+              Effect.catchTag("Session.NotFoundError", () => Effect.succeed(false)),
+            )
+            cache.set(item.ownerSessionID, on)
+          }
+          if (on) {
+            data.push(item)
+            if (data.length >= targetLimit) break
+          }
+        }
+        return { data }
+      }),
+    runs: (id: Schedule.ID, query: RunsQuery) =>
+      find(id).pipe(
+        Effect.andThen(schedules.runs({ scheduleID: id, limit: query.limit })),
+        Effect.map((data) => ({ data })),
+      ),
+    markRead: (runID: Schedule.RunID) =>
+      Effect.gen(function* () {
+        const existing = yield* schedules.getRun(runID).pipe(Effect.mapError(missingRun))
+        if (existing.ownerSessionID === undefined) return yield* missingRun({ runID })
+        yield* allowed(existing.ownerSessionID).pipe(
+          Effect.catchTag("SessionNotFoundError", () => Effect.fail(missingRun({ runID }))),
+        )
+        const data = yield* schedules.markRead(runID).pipe(Effect.mapError(missingRun))
+        return { data }
+      }),
     get: (id: Schedule.ID) => find(id).pipe(Effect.map((data) => ({ data }))),
     pause: (id: Schedule.ID) =>
       find(id).pipe(
@@ -70,6 +124,10 @@ export const makeSchedule = Effect.gen(function* () {
 
 function missingSchedule(error: { readonly scheduleID: Schedule.ID }) {
   return new ScheduleNotFoundError({ scheduleID: error.scheduleID, message: `Schedule not found: ${error.scheduleID}` })
+}
+
+function missingRun(error: { readonly runID: Schedule.RunID }) {
+  return new ScheduleRunNotFoundError({ runID: error.runID, message: `Schedule run not found: ${error.runID}` })
 }
 
 function disabled() {

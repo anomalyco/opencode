@@ -136,6 +136,47 @@ it.live("manages schedules through the experimental API when enabled and honors 
         lastOutput: expect.stringContaining("models="),
         until: { type: "code" },
       })
+
+      // Shell background action with deliver: "inbox" records run history + unread Inbox item, and markRead dismisses it.
+      const allowDir = path.join(dir, "allow-shell")
+      await fs.mkdir(allowDir, { recursive: true })
+      await fs.writeFile(
+        path.join(allowDir, "opencode.json"),
+        JSON.stringify({ experimental: { schedules: true }, permission: { shell: "allow" } }),
+      )
+      const allowSession = await api.session.create({ location: { directory: allowDir } })
+      const inboxSched = await api.experimental.schedule.create({
+        sessionID: allowSession.id,
+        name: "Release check",
+        until: { run: "printf v2.3.0" },
+        run: "printf 'Tag v2.3.0 is live'",
+        deliver: "inbox",
+      })
+      const deadline = Date.now() + 5_000
+      let inboxItems = await api.experimental.schedule.inbox({ sessionID: allowSession.id })
+      while (inboxItems.length === 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 25))
+        inboxItems = await api.experimental.schedule.inbox({ sessionID: allowSession.id })
+      }
+      expect(inboxItems).toMatchObject([
+        {
+          scheduleID: inboxSched.id,
+          scheduleName: "Release check",
+          status: "completed",
+          attention: "ready",
+          summary: "Tag v2.3.0 is live",
+        },
+      ])
+      expect(await api.experimental.schedule.runs({ scheduleID: inboxSched.id })).toMatchObject([
+        { id: inboxItems[0]!.id, run: 1, attention: "ready" },
+      ])
+      const readItem = await api.experimental.schedule.markRead({ runID: inboxItems[0]!.id })
+      expect(readItem.readAt).toBeDefined()
+      expect(await api.experimental.schedule.inbox({ sessionID: allowSession.id })).toEqual([])
+      expect(await api.experimental.schedule.inbox({ sessionID: allowSession.id, includeRead: true })).toMatchObject([
+        { id: inboxItems[0]!.id },
+      ])
+
       const mixed = await handlerRequest("/api/experimental/schedule", {
         sessionID: session.id,
         until: { run: "true", code: "return true" },

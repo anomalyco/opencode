@@ -12250,6 +12250,182 @@
         "summary": "List schedules"
       }
     },
+    "/api/experimental/schedule/inbox": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.inbox",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": false
+          },
+          {
+            "name": "includeRead",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Schedule.Run"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List scheduled run items needing attention (`needs_you` first, then `ready`). When `sessionID` is omitted, returns items across all Sessions with schedules enabled. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "List schedule inbox"
+      }
+    },
+    "/api/experimental/schedule/runs/{runID}/read": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.markRead",
+        "parameters": [
+          {
+            "name": "runID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Schedule.RunID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Schedule.Run"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ScheduleRunNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleRunNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Mark a scheduled run item as read in the Inbox. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "Mark schedule run read"
+      }
+    },
     "/api/experimental/schedule/{scheduleID}": {
       "get": {
         "tags": ["experimental"],
@@ -12388,6 +12564,95 @@
         },
         "description": "Delete a schedule. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
         "summary": "Delete schedule"
+      }
+    },
+    "/api/experimental/schedule/{scheduleID}/runs": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.schedule.runs",
+        "parameters": [
+          {
+            "name": "scheduleID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Schedule.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Schedule.Run"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ScheduleNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List recent run history for a schedule, newest first. Experimental: needs experimental.schedules in the Session's config and may change without notice.",
+        "summary": "List schedule runs"
       }
     },
     "/api/experimental/schedule/{scheduleID}/pause": {
@@ -22094,6 +22359,10 @@
         "required": ["type", "prompt"],
         "additionalProperties": false
       },
+      "Schedule.Attention": {
+        "type": "string",
+        "enum": ["quiet", "ready", "needs_you"]
+      },
       "Schedule.Condition": {
         "anyOf": [
           {
@@ -22249,7 +22518,7 @@
       },
       "Schedule.Delivery": {
         "type": "string",
-        "enum": ["session", "silent"]
+        "enum": ["inbox", "session", "silent"]
       },
       "Schedule.Duration": {
         "type": "string",
@@ -22357,6 +22626,62 @@
       "Schedule.Outcome": {
         "type": "string",
         "enum": ["fired", "late", "checked", "expired", "skipped", "disabled", "failed"]
+      },
+      "Schedule.Run": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Schedule.RunID"
+          },
+          "scheduleID": {
+            "$ref": "#/components/schemas/Schedule.ID"
+          },
+          "scheduleName": {
+            "type": "string"
+          },
+          "ownerSessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "run": {
+            "type": "integer",
+            "maximum": 9007199254740991,
+            "exclusiveMinimum": 0
+          },
+          "status": {
+            "$ref": "#/components/schemas/Schedule.RunStatus"
+          },
+          "attention": {
+            "$ref": "#/components/schemas/Schedule.Attention"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "completedAt": {
+            "type": "number"
+          },
+          "readAt": {
+            "type": "number"
+          }
+        },
+        "required": ["id", "scheduleID", "run", "status", "attention", "startedAt"],
+        "additionalProperties": false
+      },
+      "Schedule.RunID": {
+        "type": "string",
+        "pattern": "^srun_"
+      },
+      "Schedule.RunStatus": {
+        "type": "string",
+        "enum": ["running", "completed", "failed", "cancelled"]
       },
       "Schedule.Status": {
         "type": "string",
@@ -22561,6 +22886,23 @@
           }
         },
         "required": ["_tag", "scheduleID", "message"],
+        "additionalProperties": false
+      },
+      "ScheduleRunNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ScheduleRunNotFoundError"]
+          },
+          "runID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "runID", "message"],
         "additionalProperties": false
       },
       "ServerInfo": {

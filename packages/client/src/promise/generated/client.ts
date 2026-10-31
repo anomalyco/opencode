@@ -247,8 +247,14 @@ import type {
   ExperimentalScheduleCreateOutput,
   ExperimentalScheduleListInput,
   ExperimentalScheduleListOutput,
+  ExperimentalScheduleInboxInput,
+  ExperimentalScheduleInboxOutput,
+  ExperimentalScheduleMarkReadInput,
+  ExperimentalScheduleMarkReadOutput,
   ExperimentalScheduleGetInput,
   ExperimentalScheduleGetOutput,
+  ExperimentalScheduleRunsInput,
+  ExperimentalScheduleRunsOutput,
   ExperimentalSchedulePauseInput,
   ExperimentalSchedulePauseOutput,
   ExperimentalScheduleResumeInput,
@@ -1543,11 +1549,46 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+        inbox: (input?: ExperimentalScheduleInboxInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalScheduleInboxOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/schedule/inbox`,
+              query: { sessionID: input?.["sessionID"], includeRead: input?.["includeRead"], limit: input?.["limit"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        markRead: (input: ExperimentalScheduleMarkReadInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalScheduleMarkReadOutput }>(
+            {
+              method: "POST",
+              path: `/api/experimental/schedule/runs/${encodeURIComponent(input.runID)}/read`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
         get: (input: ExperimentalScheduleGetInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalScheduleGetOutput }>(
             {
               method: "GET",
               path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403, 404],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        runs: (input: ExperimentalScheduleRunsInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalScheduleRunsOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}/runs`,
+              query: { limit: input["limit"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],
               empty: false,

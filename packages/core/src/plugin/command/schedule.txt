@@ -12,7 +12,9 @@ Use the schedule tools in the `opencode` namespace. They only see this session's
     - `command` (and optional `arguments`): run a slash command such as `"morning-brief"`. Defaults to `target: "subagent"` so no kickoff prompt enters this chat.
     - `run`: execute a deterministic shell command in the session's directory with no model call.
     - `code`: execute a deterministic Code Mode JavaScript script with no model call.
-  - Add `deliver: "silent"` on background actions when runs should stay quiet instead of posting completion notices to this session, or `ends` (`{ after }`, `{ at }`, `{ times }`) to cap repeating runs.
+  - Add `deliver: "inbox"` on background actions to record findings in the Inbox without waking this session, `deliver: "silent"` to stay quiet unless auto-paused, or `ends` (`{ after }`, `{ at }`, `{ times }`) to cap repeating runs.
+- Inside a scheduled background run, call `schedule_result({ attention: "quiet" | "ready" | "needs_you", summary?, nextIn? })` to classify attention and optionally adjust the next firing cadence.
+- To inspect unread findings or past runs, call `schedule_inbox`, `schedule_runs`, or `schedule_dismiss`.
 - To pause, resume or delete one, find its id with `schedule_list`, then call `schedule_pause`, `schedule_resume` or `schedule_delete`.
 - If the request is empty, call `schedule_list` and show this session's schedules: name, action, when, status and next run.
 

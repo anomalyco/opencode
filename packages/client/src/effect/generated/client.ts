@@ -247,8 +247,14 @@ import type {
   ExperimentalScheduleCreateOutput,
   ExperimentalScheduleListInput,
   ExperimentalScheduleListOutput,
+  ExperimentalScheduleInboxInput,
+  ExperimentalScheduleInboxOutput,
+  ExperimentalScheduleMarkReadInput,
+  ExperimentalScheduleMarkReadOutput,
   ExperimentalScheduleGetInput,
   ExperimentalScheduleGetOutput,
+  ExperimentalScheduleRunsInput,
+  ExperimentalScheduleRunsOutput,
   ExperimentalSchedulePauseInput,
   ExperimentalSchedulePauseOutput,
   ExperimentalScheduleResumeInput,
@@ -1615,10 +1621,39 @@ const EndpointExperimentalScheduleList =
       ),
     )
 
+const EndpointExperimentalScheduleInbox =
+  (raw: RawClient["server.experimental"]) => (input?: ExperimentalScheduleInboxInput) =>
+    preserveEffect<ExperimentalScheduleInboxOutput>()(
+      raw["schedule.inbox"]({
+        query: { sessionID: input?.["sessionID"], includeRead: input?.["includeRead"], limit: input?.["limit"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalScheduleMarkRead =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleMarkReadInput) =>
+    preserveEffect<ExperimentalScheduleMarkReadOutput>()(
+      raw["schedule.markRead"]({ params: { runID: input["runID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const EndpointExperimentalScheduleGet =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleGetInput) =>
     preserveEffect<ExperimentalScheduleGetOutput>()(
       raw["schedule.get"]({ params: { scheduleID: input["scheduleID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalScheduleRuns =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleRunsInput) =>
+    preserveEffect<ExperimentalScheduleRunsOutput>()(
+      raw["schedule.runs"]({ params: { scheduleID: input["scheduleID"] }, query: { limit: input["limit"] } }).pipe(
         Effect.mapError(mapClientError),
         Effect.map((value) => value.data),
       ),
@@ -1721,7 +1756,10 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   schedule: {
     create: EndpointExperimentalScheduleCreate(raw),
     list: EndpointExperimentalScheduleList(raw),
+    inbox: EndpointExperimentalScheduleInbox(raw),
+    markRead: EndpointExperimentalScheduleMarkRead(raw),
     get: EndpointExperimentalScheduleGet(raw),
+    runs: EndpointExperimentalScheduleRuns(raw),
     pause: EndpointExperimentalSchedulePause(raw),
     resume: EndpointExperimentalScheduleResume(raw),
     delete: EndpointExperimentalScheduleDelete(raw),

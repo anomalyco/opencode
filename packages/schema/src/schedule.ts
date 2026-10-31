@@ -14,6 +14,15 @@ export const ID = Schema.String.check(Schema.isStartingWith("sch_")).pipe(
 )
 export type ID = typeof ID.Type
 
+export const RunID = Schema.String.check(Schema.isStartingWith("srun_")).pipe(
+  Schema.brand("Schedule.RunID"),
+  Schema.annotate({ identifier: "Schedule.RunID" }),
+  statics((schema) => ({
+    create: () => schema.make("srun_" + ascending()),
+  })),
+)
+export type RunID = typeof RunID.Type
+
 const decodeDuration = Schema.decodeUnknownOption(Schema.DurationFromString)
 
 /** Milliseconds in a duration string, or `None` when it is not one. */
@@ -69,10 +78,20 @@ export const Target = Schema.Literals(["same", "dedicated", "subagent"]).annotat
 })
 export type Target = typeof Target.Type
 
-export const Delivery = Schema.Literals(["session", "silent"]).annotate({
+export const Delivery = Schema.Literals(["inbox", "session", "silent"]).annotate({
   identifier: "Schedule.Delivery",
 })
 export type Delivery = typeof Delivery.Type
+
+export const Attention = Schema.Literals(["quiet", "ready", "needs_you"]).annotate({
+  identifier: "Schedule.Attention",
+})
+export type Attention = typeof Attention.Type
+
+export const RunStatus = Schema.Literals(["running", "completed", "failed", "cancelled"]).annotate({
+  identifier: "Schedule.RunStatus",
+})
+export type RunStatus = typeof RunStatus.Type
 
 export const PromptAction = Schema.Struct({
   type: Schema.tag("prompt"),
@@ -186,6 +205,38 @@ export const Outcome = Schema.Literals([
   identifier: "Schedule.Outcome",
 })
 export type Outcome = typeof Outcome.Type
+
+export const Run = Schema.Struct({
+  id: RunID,
+  scheduleID: ID,
+  scheduleName: Schema.String.pipe(optional),
+  ownerSessionID: SessionID.pipe(optional),
+  sessionID: SessionID.pipe(optional),
+  run: PositiveInt,
+  status: RunStatus,
+  attention: Attention,
+  summary: Schema.String.pipe(optional),
+  error: Schema.String.pipe(optional),
+  startedAt: DateTimeUtcFromMillis,
+  completedAt: DateTimeUtcFromMillis.pipe(optional),
+  readAt: DateTimeUtcFromMillis.pipe(optional),
+}).annotate({ identifier: "Schedule.Run" })
+export type Run = typeof Run.Type
+
+export const ResultInput = Schema.Struct({
+  attention: Attention.annotate({
+    description:
+      '"quiet" when nothing needs reporting, "ready" when you have a finished summary or artifact, or "needs_you" when blocked on a human decision or approval.',
+  }),
+  summary: Schema.String.pipe(optional).annotate({
+    description: "Short plain summary for the Inbox and completion notice (omit when quiet).",
+  }),
+  nextIn: DurationString.pipe(optional).annotate({
+    description:
+      'Optional adaptive cadence override: reschedule the next firing to run after this duration (e.g. "2 minutes" while active or "2 hours" when quiet).',
+  }),
+}).annotate({ identifier: "Schedule.ResultInput" })
+export type ResultInput = typeof ResultInput.Type
 
 export const Info = Schema.Struct({
   id: ID,
@@ -318,7 +369,7 @@ export const Request = Schema.Struct({
   }),
   deliver: Delivery.pipe(optional).annotate({
     description:
-      'Whether background runs post a completion notice to this session (`"session"`) or stay quiet unless inspected (`"silent"`).',
+      'Where background run findings go: `"session"` (posts a 1-line notice to this session and records in the Inbox), `"inbox"` (records in the Inbox without waking this session), or `"silent"` (records history quietly unless auto-paused).',
   }),
 }).annotate({ identifier: "Schedule.Request" })
 export type Request = typeof Request.Type
@@ -378,8 +429,10 @@ const resolveRequestAction = (request: Request): Result.Result<Action, string> =
       })
     }
     const thread = request.target === "dedicated" ? "dedicated" : undefined
-    if (thread === undefined && request.deliver === "silent")
-      return Result.fail('deliver: "silent" requires a background action (subagent, dedicated, command, run or code)')
+    if (thread === undefined && (request.deliver === "silent" || request.deliver === "inbox"))
+      return Result.fail(
+        `deliver: "${request.deliver}" requires a background action (subagent, dedicated, command, run or code)`,
+      )
     return Result.succeed({
       type: "prompt",
       prompt: request.prompt,
@@ -390,8 +443,8 @@ const resolveRequestAction = (request: Request): Result.Result<Action, string> =
   if (request.command !== undefined) {
     const command = request.command.replace(/^\//, "").trim()
     if (command === "") return Result.fail("A command action needs a command name")
-    if (request.target === "same" && request.deliver === "silent")
-      return Result.fail('deliver: "silent" cannot be combined with target: "same"')
+    if (request.target === "same" && (request.deliver === "silent" || request.deliver === "inbox"))
+      return Result.fail(`deliver: "${request.deliver}" cannot be combined with target: "same"`)
     return Result.succeed({
       type: "command",
       command,

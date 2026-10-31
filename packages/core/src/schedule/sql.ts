@@ -45,3 +45,40 @@ export const ScheduleTable = sqliteTable(
       .where(sql`${table.status} = 'active' and ${table.next_due_at} is not null`),
   ],
 )
+
+export const ScheduleRunTable = sqliteTable(
+  "schedule_run",
+  {
+    id: text().$type<Schedule.RunID>().primaryKey(),
+    schedule_id: text()
+      .$type<Schedule.ID>()
+      .notNull()
+      .references(() => ScheduleTable.id, { onDelete: "cascade" }),
+    schedule_name: text(),
+    owner_session_id: text()
+      .$type<SessionSchema.ID>()
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
+    session_id: text().$type<SessionSchema.ID>(),
+    run: integer().notNull(),
+    status: text().$type<Schedule.RunStatus>().notNull(),
+    attention: text().$type<Schedule.Attention>().notNull().default("quiet"),
+    summary: text(),
+    error: text(),
+    reported_attention: text().$type<Schedule.Attention>(),
+    reported_summary: text(),
+    next_in_ms: integer(),
+    started_at: integer().notNull(),
+    completed_at: integer(),
+    read_at: integer(),
+    ...Timestamps,
+  },
+  (table) => [
+    index("schedule_run_schedule_idx").on(table.schedule_id, table.started_at),
+    index("schedule_run_session_running_idx")
+      .on(table.session_id)
+      .where(sql`${table.status} = 'running' and ${table.session_id} is not null`),
+    index("schedule_run_inbox_idx")
+      .on(table.owner_session_id, table.started_at)
+      .where(sql`${table.attention} in ('ready', 'needs_you') and ${table.read_at} is null`),
+  ],
+)

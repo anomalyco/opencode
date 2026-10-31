@@ -16,8 +16,10 @@ export function validate(action: ScheduleSchema.Action): Result.Result<void, str
   switch (action.type) {
     case "prompt":
       if (action.prompt.trim() === "") return Result.fail("A prompt action needs a prompt")
-      if ((action.thread ?? "same") === "same" && action.deliver === "silent")
-        return Result.fail('deliver: "silent" requires a background action (subagent, dedicated, command, run or code)')
+      if ((action.thread ?? "same") === "same" && (action.deliver === "silent" || action.deliver === "inbox"))
+        return Result.fail(
+          `deliver: "${action.deliver}" requires a background action (subagent, dedicated, command, run or code)`,
+        )
       return Result.succeed(undefined)
     case "subagent":
       if (action.prompt.trim() === "") return Result.fail("A subagent action needs a prompt")
@@ -26,8 +28,8 @@ export function validate(action: ScheduleSchema.Action): Result.Result<void, str
     case "command":
       if (action.command.trim() === "") return Result.fail("A command action needs a command name")
       if (action.command === "schedule") return Result.fail("Command schedule cannot be scheduled")
-      if (action.target === "same" && action.deliver === "silent")
-        return Result.fail('deliver: "silent" cannot be combined with target: "same"')
+      if (action.target === "same" && (action.deliver === "silent" || action.deliver === "inbox"))
+        return Result.fail(`deliver: "${action.deliver}" cannot be combined with target: "same"`)
       return Result.succeed(undefined)
     case "shell":
       return action.run.trim() === "" ? Result.fail("A shell action needs a command") : Result.succeed(undefined)

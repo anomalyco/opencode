@@ -2407,11 +2407,33 @@ export type ExperimentalScheduleListOperation<E = never> = (
   input: ExperimentalScheduleListInput,
 ) => Effect.Effect<ExperimentalScheduleListOutput, E>
 
+export type ExperimentalScheduleInboxInput = {
+  readonly sessionID?: Session.ID | undefined
+  readonly includeRead?: boolean | undefined
+  readonly limit?: number | undefined
+}
+export type ExperimentalScheduleInboxOutput = ReadonlyArray<Schedule.Run>
+export type ExperimentalScheduleInboxOperation<E = never> = (
+  input?: ExperimentalScheduleInboxInput,
+) => Effect.Effect<ExperimentalScheduleInboxOutput, E>
+
+export type ExperimentalScheduleMarkReadInput = { readonly runID: Schedule.RunID }
+export type ExperimentalScheduleMarkReadOutput = Schedule.Run
+export type ExperimentalScheduleMarkReadOperation<E = never> = (
+  input: ExperimentalScheduleMarkReadInput,
+) => Effect.Effect<ExperimentalScheduleMarkReadOutput, E>
+
 export type ExperimentalScheduleGetInput = { readonly scheduleID: Schedule.ID }
 export type ExperimentalScheduleGetOutput = Schedule.Info
 export type ExperimentalScheduleGetOperation<E = never> = (
   input: ExperimentalScheduleGetInput,
 ) => Effect.Effect<ExperimentalScheduleGetOutput, E>
+
+export type ExperimentalScheduleRunsInput = { readonly scheduleID: Schedule.ID; readonly limit?: number | undefined }
+export type ExperimentalScheduleRunsOutput = ReadonlyArray<Schedule.Run>
+export type ExperimentalScheduleRunsOperation<E = never> = (
+  input: ExperimentalScheduleRunsInput,
+) => Effect.Effect<ExperimentalScheduleRunsOutput, E>
 
 export type ExperimentalSchedulePauseInput = { readonly scheduleID: Schedule.ID }
 export type ExperimentalSchedulePauseOutput = Schedule.Info
@@ -2515,7 +2537,10 @@ export interface ExperimentalApi<E = never> {
   readonly schedule: {
     readonly create: ExperimentalScheduleCreateOperation<E>
     readonly list: ExperimentalScheduleListOperation<E>
+    readonly inbox: ExperimentalScheduleInboxOperation<E>
+    readonly markRead: ExperimentalScheduleMarkReadOperation<E>
     readonly get: ExperimentalScheduleGetOperation<E>
+    readonly runs: ExperimentalScheduleRunsOperation<E>
     readonly pause: ExperimentalSchedulePauseOperation<E>
     readonly resume: ExperimentalScheduleResumeOperation<E>
     readonly delete: ExperimentalScheduleDeleteOperation<E>

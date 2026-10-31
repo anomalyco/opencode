@@ -19,9 +19,17 @@ import { codeModeListings, executeTool, registerToolPlugin, toolIdentity } from 
 const sessionID = Session.ID.make("ses_schedule_tool_test")
 const otherSessionID = Session.ID.make("ses_schedule_tool_other")
 const now = DateTime.makeUnsafe("2026-10-27T13:00:00Z")
-const names = ["schedule_create", "schedule_list", "schedule_pause", "schedule_resume", "schedule_delete"].map(
-  (name) => `opencode.${name}`,
-)
+const names = [
+  "schedule_create",
+  "schedule_list",
+  "schedule_pause",
+  "schedule_resume",
+  "schedule_delete",
+  "schedule_result",
+  "schedule_inbox",
+  "schedule_runs",
+  "schedule_dismiss",
+].map((name) => `opencode.${name}`)
 
 const it = testEffect(
   AppNodeBuilder.build(Tool.node, [Image.node.replace(imagePassthrough), Permission.node.replace(permissionLayer())]),
@@ -30,6 +38,7 @@ const it = testEffect(
 /** An in-memory Schedule service. The real one is covered in schedule.test.ts; this exercises the tool layer. */
 const memory = () => {
   const rows = new Map<Schedule.ID, Schedule.Info>()
+  const runRows = new Map<Schedule.RunID, Schedule.Run>()
   const flag = { enabled: true }
   const find = (id: Schedule.ID): Effect.Effect<Schedule.Info, Schedule.NotFoundError> => {
     const info = rows.get(id)
@@ -68,11 +77,59 @@ const memory = () => {
     pause: (id) => update(id, "paused"),
     resume: (id) => update(id, "active"),
     remove: (id) => find(id).pipe(Effect.map(() => void rows.delete(id))),
+    runs: (input) =>
+      Effect.sync(() =>
+        [...runRows.values()]
+          .filter(
+            (item) =>
+              (input?.scheduleID === undefined || item.scheduleID === input.scheduleID) &&
+              (input?.sessionID === undefined || item.ownerSessionID === input.sessionID),
+          )
+          .slice(0, input?.limit ?? 50),
+      ),
+    inbox: (input) =>
+      Effect.sync(() =>
+        [...runRows.values()]
+          .filter(
+            (item) =>
+              (item.attention === "ready" || item.attention === "needs_you") &&
+              (input?.includeRead === true || item.readAt === undefined) &&
+              (input?.sessionID === undefined || item.ownerSessionID === input.sessionID),
+          )
+          .slice(0, input?.limit ?? 50),
+      ),
+    getRun: (runID) => {
+      const found = runRows.get(runID)
+      return found ? Effect.succeed(found) : Effect.fail(new Schedule.RunNotFoundError({ runID }))
+    },
+    markRead: (runID) => {
+      const found = runRows.get(runID)
+      if (!found) return Effect.fail(new Schedule.RunNotFoundError({ runID }))
+      const next = { ...found, readAt: found.readAt ?? now }
+      runRows.set(runID, next)
+      return Effect.succeed(next)
+    },
+    reportResult: (callerSessionID, input) => {
+      const active = [...runRows.values()].find(
+        (item) => item.sessionID === callerSessionID && item.status === "running",
+      )
+      if (!active)
+        return Effect.fail(
+          new Schedule.InvalidError({ reason: "schedule_result can only be called during an active scheduled run" }),
+        )
+      const next: Schedule.Run = {
+        ...active,
+        attention: input.attention,
+        summary: input.summary,
+      }
+      runRows.set(active.id, next)
+      return Effect.succeed(next)
+    },
     enabled: () => Effect.sync(() => flag.enabled),
     tick: Effect.void,
     run: Effect.never,
   })
-  return { rows, flag, service }
+  return { rows, runRows, flag, service }
 }
 
 const setup = (experimental: ConfigExperimental.Info | undefined) =>
@@ -97,7 +154,14 @@ const setup = (experimental: ConfigExperimental.Info | undefined) =>
       Effect.provide(Layer.succeed(Schedule.Service, schedules.service)),
       Effect.provide(permissionLayer({ assert: () => Effect.void })),
     )
-    return { registry: yield* Tool.Service, rows: schedules.rows, flag: schedules.flag, commands, prompts }
+    return {
+      registry: yield* Tool.Service,
+      rows: schedules.rows,
+      runRows: schedules.runRows,
+      flag: schedules.flag,
+      commands,
+      prompts,
+    }
   })
 
 /** Runs one Code Mode call, the way the model reaches these tools. */
@@ -345,13 +409,98 @@ describe("ScheduleTools", () => {
         { when: { in: "5 minutes" } },
         { when: { in: "5 minutes" }, prompt: "a", run: "b" },
         { when: { in: "5 minutes" }, prompt: "a", deliver: "silent" },
+        { when: { in: "5 minutes" }, prompt: "a", deliver: "inbox" },
         { when: { in: "5 minutes" }, command: "brief", target: "same", deliver: "silent" },
+        { when: { in: "5 minutes" }, command: "brief", target: "same", deliver: "inbox" },
         { when: { in: "5 minutes" }, run: "ls", arguments: "extra" },
         { when: { in: "5 minutes" }, prompt: "a", agent: "explore" },
       ]) {
         expect(yield* call(registry, "schedule_create", bad)).toMatchObject({ metadata: { error: true } })
       }
       expect(rows.size).toBe(4)
+    }),
+  )
+
+  it.effect("manages inbox, run history, dismissal, and schedule_result scoped to this session", () =>
+    Effect.gen(function* () {
+      const { registry, runRows } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
+      yield* run(registry, "schedule_create", {
+        name: "monitor",
+        when: { every: "15 minutes" },
+        prompt: "check deploy",
+        target: "subagent",
+        deliver: "inbox",
+      })
+      const runID = Schedule.RunID.make("srun_1")
+      const otherRunID = Schedule.RunID.make("srun_2")
+      const subagentSessionID = Session.ID.make("ses_subagent_1")
+      runRows.set(runID, {
+        id: runID,
+        scheduleID: Schedule.ID.make("sch_1"),
+        scheduleName: "monitor",
+        ownerSessionID: sessionID,
+        sessionID: subagentSessionID,
+        run: 1,
+        status: "running",
+        attention: "quiet",
+        startedAt: now,
+      })
+      runRows.set(otherRunID, {
+        id: otherRunID,
+        scheduleID: Schedule.ID.make("sch_9"),
+        scheduleName: "other",
+        ownerSessionID: otherSessionID,
+        run: 1,
+        status: "completed",
+        attention: "needs_you",
+        summary: "other session item",
+        startedAt: now,
+        completedAt: now,
+      })
+
+      // Calling schedule_result outside an active run fails cleanly.
+      expect(yield* call(registry, "schedule_result", { attention: "quiet" })).toMatchObject({
+        metadata: { error: true },
+      })
+
+      // Calling schedule_result inside the scheduled subagent updates the run.
+      expect(
+        yield* run(
+          registry,
+          "schedule_result",
+          { attention: "needs_you", summary: "Approve rollout?" },
+          subagentSessionID,
+        ),
+      ).toMatchObject({
+        id: "srun_1",
+        attention: "needs_you",
+        summary: "Approve rollout?",
+      })
+      runRows.set(runID, {
+        ...runRows.get(runID)!,
+        status: "completed",
+        completedAt: now,
+      })
+
+      expect(yield* run(registry, "schedule_inbox", {})).toMatchObject({
+        runs: [{ id: "srun_1", attention: "needs_you", summary: "Approve rollout?" }],
+      })
+      expect(yield* run(registry, "schedule_runs", { id: "sch_1" })).toMatchObject({
+        runs: [{ id: "srun_1", status: "completed" }],
+      })
+
+      // Cannot dismiss another session's run.
+      expect(yield* call(registry, "schedule_dismiss", { runID: "srun_2" })).toMatchObject({
+        metadata: { error: true },
+      })
+      expect(yield* run(registry, "schedule_dismiss", { runID: "srun_1" })).toMatchObject({
+        id: "srun_1",
+        readAt: expect.any(String),
+      })
+      expect(yield* run(registry, "schedule_inbox", {})).toEqual({ runs: [] })
+      expect(yield* run(registry, "schedule_inbox", { includeRead: true })).toMatchObject({
+        runs: [{ id: "srun_1" }],
+      })
     }),
   )
 })
