@@ -287,7 +287,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
 
 export function resolve(
   input: Info,
-  options: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> },
+  options: { terminalSuspend: boolean; mouse?: boolean; environment?: Readonly<Record<string, string | undefined>> },
 ): Resolved {
   const tabsMode = input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
@@ -314,7 +314,7 @@ export function resolve(
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
     leader: { timeout: input.leader?.timeout ?? 2000 },
-    mouse: input.mouse ?? true,
+    mouse: options.mouse ?? input.mouse ?? true,
     cursor: {
       style: input.cursor?.style ?? "block",
       blinking: input.cursor?.blinking ?? true,
@@ -345,7 +345,7 @@ const ConfigContext = createContext<{
 export function ConfigProvider(props: {
   config: Resolved
   service?: Interface
-  options?: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> }
+  options?: { terminalSuspend: boolean; mouse?: boolean; environment?: Readonly<Record<string, string | undefined>> }
   children: JSX.Element
 }) {
   const [config, setConfig] = createStore(props.config)
