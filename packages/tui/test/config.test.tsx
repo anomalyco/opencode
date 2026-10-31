@@ -130,6 +130,8 @@ test("navigates session tabs with option arrows", () => {
 
   expect(config.keybinds.get("session.tab.next")).toMatchObject([{ key: "ctrl+tab,alt+down" }])
   expect(config.keybinds.get("session.tab.previous")).toMatchObject([{ key: "ctrl+shift+tab,alt+up" }])
+  expect(config.keybinds.get("session.tab.move_up")).toMatchObject([{ key: "ctrl+alt+up" }])
+  expect(config.keybinds.get("session.tab.move_down")).toMatchObject([{ key: "ctrl+alt+down" }])
   expect(config.keybinds.get("session.tab.next_unread")).toMatchObject([{ key: "alt+shift+down" }])
   expect(config.keybinds.get("session.tab.previous_unread")).toMatchObject([{ key: "alt+shift+up" }])
 })
