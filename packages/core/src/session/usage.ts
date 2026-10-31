@@ -8,7 +8,7 @@ import type { Model } from "@opencode/schema/model"
 const finite = (value: number) => (Number.isFinite(value) ? value : 0)
 const safe = (value: number | undefined) => Math.max(0, finite(value ?? 0))
 
-export const tokens = (usage: Usage | undefined): TokenUsage.Info => ({
+const billedTokens = (usage: Usage | undefined): TokenUsage.Info => ({
   input: safe(usage?.nonCachedInputTokens),
   output: safe(usage?.visibleOutputTokens),
   reasoning: safe(usage?.reasoningTokens),
@@ -17,6 +17,12 @@ export const tokens = (usage: Usage | undefined): TokenUsage.Info => ({
     write: safe(usage?.cacheWriteInputTokens),
   },
 })
+
+export const tokens = (usage: Usage | undefined): TokenUsage.Info => {
+  const billed = billedTokens(usage)
+  if (usage?.contextTokens === undefined) return billed
+  return { ...billed, input: safe(usage.contextTokens), cache: { read: 0, write: 0 } }
+}
 
 // Catalog pricing is the fallback for endpoints that don't report what they charged (`Usage.cost`).
 // TODO(#35765): Normalize Copilot's reported billed amount into `Usage.cost`.
@@ -47,7 +53,7 @@ export const record = (usage: Usage | undefined, costs: Model.Info["cost"]): Rec
     tokens: normalized,
     // What an endpoint says it charged beats the catalog, which can't see its peak pricing, subscriptions or routing.
     // A reported zero is authoritative.
-    cost: usage?.cost === undefined ? calculateCost(costs, normalized) : Money.USD.make(usage.cost),
+    cost: usage?.cost === undefined ? calculateCost(costs, billedTokens(usage)) : Money.USD.make(usage.cost),
   }
 }
 

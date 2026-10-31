@@ -28,3 +28,9 @@ test("keeps a reported zero cost, as for a request a subscription covered", () =
     cost: Money.USD.zero,
   })
 })
+
+test("stores the effective context size while pricing all billed input tokens", () => {
+  const recorded = SessionUsage.record(new Usage({ nonCachedInputTokens: 947, contextTokens: 412 }), costs)
+  expect(recorded.tokens.input + recorded.tokens.cache.read + recorded.tokens.cache.write).toBe(412)
+  expect(recorded.cost).toBe(Money.USD.make(0.000947))
+})

@@ -23,6 +23,34 @@ for (const fixture of [
     expected: { inputTokens: 10, outputTokens: 2, totalTokens: 12, contextTokens: undefined },
   },
   {
+    name: "fallback usage keeps billed totals and reports the answering attempt's context",
+    usage: {
+      input_tokens: 412,
+      output_tokens: 264,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+      iterations: [
+        {
+          type: "message",
+          model: "claude-fable-5",
+          input_tokens: 535,
+          output_tokens: 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+        },
+        {
+          type: "fallback_message",
+          model: "claude-opus-4-8",
+          input_tokens: 412,
+          output_tokens: 264,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+        },
+      ],
+    },
+    expected: { inputTokens: 947, outputTokens: 264, totalTokens: 1211, contextTokens: 412 },
+  },
+  {
     name: "partially reported iterations preserve known totals",
     usage: {
       iterations: [
