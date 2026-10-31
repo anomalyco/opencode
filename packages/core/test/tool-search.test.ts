@@ -180,7 +180,7 @@ describe("search tools", () => {
                 const file = yield* executeTool(registry, call("grep", { path: "target.txt", pattern: "needle" }))
                 expect(file).toMatchObject({
                   status: "completed",
-                  output: [{ entry: { path: "target.txt" }, line: 1, text: "needle\n" }],
+                  output: [{ entry: { path: "target.txt" }, line: 1, text: "needle" }],
                   metadata: { matches: 1, truncated: false },
                 })
 
@@ -203,6 +203,33 @@ describe("search tools", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+
+  for (const newline of ["\n", "\r\n"]) {
+    it.live(`renders consecutive grep matches without extra ${JSON.stringify(newline)} blank lines`, () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        yield* Effect.promise(() => Bun.write(path.join(tmp.path, "match.txt"), `line a${newline}line b${newline}`))
+        yield* withTools(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const result = yield* executeTool(registry, call("grep", { pattern: "line" }))
+            expect(result).toMatchObject({
+              status: "completed",
+              output: [
+                { line: 1, text: "line a" },
+                { line: 2, text: "line b" },
+              ],
+              content: [
+                {
+                  type: "text",
+                  text: `Found 2 matches\n${path.join(tmp.path, "match.txt")}:\n  Line 1: line a\n  Line 2: line b`,
+                },
+              ],
+            })
+          }),
+        )
+      }),
+    )
+  }
 
   it.live("reports no grep matches", () =>
     Effect.acquireUseRelease(
