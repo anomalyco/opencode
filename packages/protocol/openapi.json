@@ -24966,6 +24966,9 @@
           "go": {
             "$ref": "#/components/schemas/UsageLimits.Go"
           },
+          "meta": {
+            "$ref": "#/components/schemas/UsageLimits.Meta"
+          },
           "budgets": {
             "type": "array",
             "items": {
@@ -24974,6 +24977,16 @@
           }
         },
         "required": ["workspace", "budgets"],
+        "additionalProperties": false
+      },
+      "UsageLimits.Meta": {
+        "type": "object",
+        "properties": {
+          "monthly": {
+            "$ref": "#/components/schemas/UsageLimits.Meter"
+          }
+        },
+        "required": ["monthly"],
         "additionalProperties": false
       },
       "UsageLimits.Meter": {

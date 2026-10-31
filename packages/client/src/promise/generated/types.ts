@@ -940,6 +940,8 @@ export type WebSearchProvider = { id: WebSearchID; name: string }
 
 export type UsageLimitsGo = { rolling: UsageLimitsMeter; weekly: UsageLimitsMeter; monthly: UsageLimitsMeter }
 
+export type UsageLimitsMeta = { monthly: UsageLimitsMeter }
+
 export type ConfigModelCapabilities = {
   tools?: boolean
   input?: Array<string>
@@ -2527,6 +2529,7 @@ export type ConfigEntry =
 export type UsageLimitsInfo = {
   workspace: { id: string; name?: string; usageURL: string }
   go?: UsageLimitsGo
+  meta?: UsageLimitsMeta
   budgets: Array<UsageLimitsBudget>
 }
 

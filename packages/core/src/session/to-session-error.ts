@@ -29,19 +29,12 @@ const FREE_USAGE_LIMIT_MESSAGE =
   "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models."
 const BUDGET_LIMIT_MESSAGE = "Workspace usage limit reached. Model use is paused until the limit resets."
 const MODEL_BUDGET_LIMIT_MESSAGE = "You've reached the spend limit for this model. Switch models to keep going."
-const META_LIMIT_MESSAGE =
-  "Meta usage limit reached. Wait for the limit to reset, or switch models."
 
 export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof AIError) {
     // ChatGPT's usage limit arrives in HTTP and stream errors alike, whatever their reason, so its code decides the type.
     if (cause.reason.body?.includes("subscription_sharing_usage_limit_exceeded"))
       return providerError("provider.chatgpt-limit", cause.reason)
-    if (
-      cause.reason.body?.includes("MetaUsageLimitError") ||
-      cause.reason.body?.includes("meta_usage_limit_exceeded")
-    )
-      return { ...providerError("provider.meta-limit", cause.reason), message: META_LIMIT_MESSAGE }
     switch (cause.reason._tag) {
       case "RateLimit":
         return providerError("provider.rate-limit", cause.reason)
