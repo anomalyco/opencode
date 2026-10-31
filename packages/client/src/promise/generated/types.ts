@@ -296,7 +296,7 @@ export type CommandInfo = { name: string; description?: string }
 
 export type RpcOutput = { output?: any }
 
-export type PermissionReply = "once" | "always" | "reject"
+export type PermissionReply = "once" | "session" | "always" | "reject"
 
 export type PtyID = string
 
@@ -4212,7 +4212,7 @@ export type PermissionGetOutput = { data: PermissionRequest }["data"]
 export type PermissionReplyInput = {
   readonly sessionID: string
   readonly requestID: string
-  readonly decision: "once" | "always" | "reject"
+  readonly decision: "once" | "session" | "always" | "reject"
   readonly message?: string | undefined
 }
 

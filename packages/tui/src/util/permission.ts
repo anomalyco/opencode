@@ -151,6 +151,13 @@ function wildcardDirectory(value: string) {
   return prefix.replace(/[\\/]+$/, "")
 }
 
+export function permissionSessionLines(input: { resources: ReadonlyArray<string> }): string[] {
+  return [
+    "This will allow exactly the following for the rest of this session.",
+    ...input.resources.map((item) => `- ${item}`),
+  ]
+}
+
 export function permissionAlwaysLines(input: { action: string; save?: ReadonlyArray<string> }): string[] {
   const save = input.save ?? []
   if (save.length === 1 && save[0] === "*") {
@@ -159,8 +166,9 @@ export function permissionAlwaysLines(input: { action: string; save?: ReadonlyAr
   return ["This will always allow the following patterns for this project.", ...save.map((item) => `- ${item}`)]
 }
 
-export function permissionOptionLabel(option: "once" | "always" | "reject" | "confirm" | "cancel") {
+export function permissionOptionLabel(option: "once" | "session" | "always" | "reject" | "confirm" | "cancel") {
   if (option === "once") return "Allow once"
+  if (option === "session") return "Allow for session"
   if (option === "always") return "Always allow"
   if (option === "reject") return "Reject"
   if (option === "confirm") return "Confirm"

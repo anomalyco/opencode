@@ -131,6 +131,9 @@ const layer = Layer.effect(
     const saved = yield* PermissionSaved.Service
     const hooks = yield* PluginHooks.Service
     const pending = new Map<ID, Pending>()
+    // Exact resources allowed by "session" replies, by session and action. Kept in memory only, and matched
+    // literally so a command containing `*` or `?` is not widened into a wildcard.
+    const sessionGrants = new Map<SessionSchema.ID, Map<string, Set<string>>>()
     let closed = false
 
     const close = Effect.gen(function* () {
@@ -158,6 +161,11 @@ const layer = Layer.effect(
       )
     })
 
+    function granted(input: Pick<Request, "sessionID" | "action" | "resources">) {
+      const resources = sessionGrants.get(input.sessionID)?.get(input.action)
+      return resources !== undefined && input.resources.every((resource) => resources.has(resource))
+    }
+
     const configured = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, agentID?: Agent.ID) {
       const session = yield* sessions.get(sessionID)
       if (!session) return yield* new SessionErrors.NotFoundError({ sessionID })
@@ -178,7 +186,7 @@ const layer = Layer.effect(
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
-      const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
+      const effect: Permission.Effect = effects.includes("ask") && !granted(input) ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
         sessionID: input.sessionID,
         agent: input.agent,
@@ -336,9 +344,16 @@ const layer = Layer.effect(
               resources: existing.request.save,
             })
           }
+          if (input.reply === "session") {
+            const actions = sessionGrants.get(existing.request.sessionID) ?? new Map<string, Set<string>>()
+            const resources = actions.get(existing.request.action) ?? new Set<string>()
+            existing.request.resources.forEach((resource) => resources.add(resource))
+            sessionGrants.set(existing.request.sessionID, actions.set(existing.request.action, resources))
+          }
           yield* Deferred.succeed(existing.deferred, undefined)
           pending.delete(input.requestID)
-          if (input.reply !== "always" || !existing.request.save?.length) return
+          if (input.reply === "once") return
+          if (input.reply === "always" && !existing.request.save?.length) return
 
           for (const [id, item] of pending) {
             const result = yield* evaluateInput({ ...item.request, agent: item.agent }).pipe(
@@ -348,7 +363,7 @@ const layer = Layer.effect(
             yield* bus.publish(Permission.Event.Replied, {
               sessionID: item.request.sessionID,
               requestID: item.request.id,
-              reply: "always",
+              reply: input.reply,
             })
             yield* Deferred.succeed(item.deferred, undefined)
             pending.delete(id)
