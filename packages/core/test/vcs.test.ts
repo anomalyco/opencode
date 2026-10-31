@@ -96,6 +96,32 @@ const provider = (input: Partial<VcsDefinition> = {}) =>
   }) satisfies VcsDefinition
 
 describe("Vcs", () => {
+  it.live("keeps per-file fallback patches literal for bracketed filenames", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        const vcs = yield* Vcs.Service
+        yield* Effect.promise(async () => {
+          // Binary patches omit ---/+++ lines; " b/" in the path makes the batch header ambiguous.
+          const dir = path.join(directory, "d b")
+          await fs.mkdir(dir)
+          await fs.writeFile(path.join(dir, "f[1].bin"), Buffer.from([0, 1, 2]))
+          await fs.writeFile(path.join(dir, "f1.bin"), Buffer.from([0, 3, 4]))
+          await commitAll(directory, "binary fixtures")
+          await fs.writeFile(path.join(dir, "f[1].bin"), Buffer.from([0, 1, 5]))
+          await fs.writeFile(path.join(dir, "f1.bin"), Buffer.from([0, 3, 6]))
+        })
+        const diff = yield* vcs.diff("working")
+        expect(diff).toHaveLength(2)
+        const bracketed = diff.find((item) => item.file === "d b/f[1].bin")
+        expect(bracketed?.patch).toContain("f[1].bin")
+        expect(bracketed?.patch).not.toContain("f1.bin")
+        const ordinary = diff.find((item) => item.file === "d b/f1.bin")
+        expect(ordinary?.patch).toContain("f1.bin")
+        expect(ordinary?.patch).not.toContain("f[1].bin")
+      }),
+    ),
+  )
+
   it.live("routes initialization through the requested provider before a repository exists", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
