@@ -192,6 +192,12 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
     readonly item: Item & { readonly type: Type }
+    /**
+     * Records that this admission requested automatic execution, so restart recovery can resume the
+     * row when the process dies before the execution claim is written. Omitted records no intent:
+     * the row stays ineligible, like a legacy row. A retried ID keeps the intent it first recorded.
+     */
+    readonly resume?: boolean
   }) {
     const existing = yield* reconcile({ ...request, type: request.item.type, delivery: request.item.delivery })
     if (existing !== undefined) return existing
@@ -200,6 +206,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
         inboxID: request.id,
         sessionID: request.sessionID,
         item: request.item,
+        resume: request.resume,
       })
       .pipe(
         Effect.map((event) =>
@@ -304,6 +311,8 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
     readonly sessionID: SessionSchema.ID
     readonly item: Item
     readonly timeCreated: number
+    /** Absent means the admission recorded no automatic-execution intent, as legacy rows do. */
+    readonly resume?: boolean
   },
 ) {
   const message = yield* db
@@ -330,6 +339,7 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
       payload,
       delivery: request.item.delivery,
       enqueued_seq: request.enqueuedSeq,
+      resume: request.resume ?? false,
       time_created: request.timeCreated,
     })
     .onConflictDoNothing()

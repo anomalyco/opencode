@@ -223,6 +223,12 @@ export const InboxEnqueued = Event.durable({
   schema: {
     ...InboxRef,
     item: SessionInbox.Item,
+    /**
+     * Admission requested automatic execution, recorded before that wake is attempted so restart
+     * recovery can resume a row whose execution claim was never written. Absent (and therefore
+     * ineligible) for legacy events and for admit-only admissions.
+     */
+    resume: Schema.Boolean.pipe(optional),
   },
 })
 export type InboxEnqueued = typeof InboxEnqueued.Type
