@@ -306,14 +306,25 @@ function createServerController(
     untrack(() => projects.migrate(legacy.flatMap((directory) => forDirectory(directory)?.id ?? [])))
   })
 
-  // Resolving a directory registers its project on the server; the list then reloads to include it, and the
-  // project becomes this client's last used one.
+  function touch(directory: string) {
+    const project = forDirectory(directory)
+    if (!project) return
+    // A hidden path can have several historical IDs; reopening it restores all of them together.
+    projects.use(
+      list()
+        .filter((item) => pathKey(item.worktree) === pathKey(project.worktree))
+        .map((item) => item.id),
+    )
+    projects.touch(project.id)
+  }
+
+  // Resolving a directory registers its project on the server and makes it this client's last used one.
   function add(directory: string) {
     return sdk.api.location
       .get({ location: { directory } })
       .then(async (location) => {
         await sync.project.refresh()
-        projects.touch(location.project.id)
+        touch(directory)
 
         return list().find((project) => project.id === location.project.id)
       })
@@ -338,17 +349,20 @@ function createServerController(
     projects: {
       list,
       unique,
+      // Server history is shared across clients; only an explicit local hide excludes a project.
+      visible: createMemo(() => {
+        const hidden = new Set(projects.hidden())
+        const paths = new Set(list().flatMap((project) => (hidden.has(project.id) ? [pathKey(project.worktree)] : [])))
+        return unique().filter((project) => !paths.has(pathKey(project.worktree)))
+      }),
       used,
       add,
       forDirectory,
-      forSession: (session: SessionInfo): Project | undefined => projectForSession(session, list()),
+      forSession: (session: Pick<SessionInfo, "projectID" | "location">): Project | undefined =>
+        projectForSession(session, list()),
       last: () => list().find((project) => project.id === projects.last()),
       // Marks the project of a directory as used from this client, and as the last one.
-      touch(directory: string) {
-        const id = forDirectory(directory)?.id
-
-        if (id) projects.touch(id)
-      },
+      touch,
       // Removes a project from this client's used projects until it is used again; the server keeps it.
       hide(project: Pick<Project, "worktree">) {
         const key = pathKey(project.worktree)

@@ -15,12 +15,10 @@ import { sessionFormRequest, sessionPermissionRequest, sessionTreeIDs } from "@/
 import { notifySessionTabsRemoved } from "./session-events"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
+import { createSessionBranches } from "./session-branches"
 
 // Keep the immutable result opaque so Solid Query does not recursively unwrap every session.
 const selectSessions = (sessions: SessionInfo[]) => () => sessions
-
-// Branch lookups each run git on the server, so load them a few at a time.
-const BRANCH_BATCH = 4
 
 // Root sessions fetched per server.
 const INDEX_LIMIT = 200
@@ -205,48 +203,7 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     return route.sessionId === entry.session.id || entry.ctx.data.session.root(route.sessionId) === entry.session.id
   }
 
-  // Git info is not stored on the session, so load it for the rows a view shows and mark each location settled once
-  // its load ends.
-  const [vcs, setVcs] = createStore<{ settled: Record<string, true> }>({ settled: {} })
-  const queued = new Set<string>()
-  const queue: InboxEntry[] = []
-  const drain = { running: false }
-
-  const run = async () => {
-    if (drain.running) return
-    drain.running = true
-
-    while (queue.length) {
-      await Promise.all(
-        queue.splice(0, BRANCH_BATCH).map((entry) =>
-          entry.ctx.data.location.vcs
-            .sync(entry.session.location)
-            .catch(() => undefined)
-            .then(() => setVcs("settled", locationKey(entry), true)),
-        ),
-      )
-    }
-
-    drain.running = false
-  }
-
-  const loadBranches = (list: InboxEntry[]) => {
-    list.forEach((entry) => {
-      const key = locationKey(entry)
-
-      if (queued.has(key)) return
-
-      if (!entry.ctx.data.location.info(entry.session.location)) {
-        setVcs("settled", key, true)
-
-        return
-      }
-
-      queued.add(key)
-      queue.push(entry)
-    })
-    void run()
-  }
+  const branches = createSessionBranches()
 
   const open = (entry: InboxEntry) => {
     const directory = entry.ctx.projects.forSession(entry.session)?.worktree ?? entry.session.location.directory
@@ -293,11 +250,9 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
     byKey,
     selected,
     open,
-    loadBranches,
-    branchLoading: (entry: InboxEntry) =>
-      !vcs.settled[locationKey(entry)] && !entry.ctx.data.location.vcs.info(entry.session.location),
-    branch: (entry: InboxEntry) =>
-      entry.ctx.data.location.vcs.info(entry.session.location)?.branch.current ?? undefined,
+    loadBranches: branches.load,
+    branchLoading: branches.loading,
+    branch: branches.branch,
     inWorktree: inboxInWorktree,
     permission: (entry: InboxEntry) =>
       sessionPermissionRequest(family(entry), entry.ctx.data.session.permission.list, entry.session.id),
@@ -364,10 +319,6 @@ export function inboxArchived(entry: InboxEntry) {
 
 export function inboxBusy(status: InboxStatus) {
   return status === "working" || status === "approval" || status === "input"
-}
-
-function locationKey(entry: InboxEntry) {
-  return `${entry.server}\0${pathKey(entry.session.location.directory)}`
 }
 
 export function inboxInWorktree(entry: InboxEntry) {

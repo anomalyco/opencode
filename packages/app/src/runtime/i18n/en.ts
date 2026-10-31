@@ -1,6 +1,10 @@
 import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
 
 export const dict = {
+  "migration.v1.title": "One-way upgrade to OpenCode V2",
+  "migration.v1.description":
+    "Back up your OpenCode data and configuration, then stop all V1 processes. This upgrade applies to every project sharing this environment, not just the current project. Use V2 from now on: later V1 changes will not be imported, and V2 changes cannot be sent back to V1. Uninstalling or reinstalling V2 does not restore the V1 environment.",
+  "migration.v1.confirm": "Use V2 from now on",
   "experiment.voiceCalls": "Voice calls",
   "voice.call": "Call",
   "voice.mute": "Mute",
@@ -758,6 +762,29 @@ export const dict = {
 
   "sidebar.settings": "Settings",
   "sidebar.help": "Help",
+  "sidebar.grouping.label": "Group sessions",
+  "sidebar.grouping.none": "List",
+  "sidebar.grouping.project": "By project",
+  "sidebar.grouping.other": "Other sessions",
+  "sidebar.recent.title": "Recent sessions",
+  "sidebar.session.branch": "Branch: {{branch}}",
+  "sidebar.session.worktree": "Worktree: {{path}}",
+  "sidebar.project.newSession": "New session in {{project}}",
+  "sidebar.recent.hide": "Hide from recent sessions",
+  "sidebar.recent.more.one": "More ({{count}})",
+  "sidebar.recent.more.other": "More ({{count}})",
+  "sidebar.recent.expand.one": "Show {{count}} more session in {{project}}",
+  "sidebar.recent.expand.other": "Show {{count}} more sessions in {{project}}",
+  "sidebar.recent.less": "Show less",
+  "sidebar.recent.collapse": "Collapse sessions in {{project}}",
+  "sidebar.recent.count.one": "{{shown}} shown · {{recent}} recent · {{count}} session in project history",
+  "sidebar.recent.count.other": "{{shown}} shown · {{recent}} recent · {{count}} sessions in project history",
+  "sidebar.session.lastRun": "Last run ended: {{time}}",
+  "sidebar.running.title": "Running sessions",
+  "sidebar.running.empty": "No running sessions",
+  "sidebar.running.disconnected": "Some servers are disconnected",
+  "sidebar.running.count.one": "{{count}} running session",
+  "sidebar.running.count.other": "{{count}} running sessions",
   "sidebar.inbox.empty": "Sessions you work on will appear here",
   "sidebar.inbox.section.needsAttention": "Needs attention",
   "sidebar.inbox.section.working": "Working",
@@ -808,7 +835,8 @@ export const dict = {
   "settings.experimental.row.newIcons.title": "New icons",
   "settings.experimental.row.newIcons.description": "Preview the updated icon set",
   "settings.experimental.row.foldUserMessages.title": "Fold long messages",
-  "settings.experimental.row.foldUserMessages.description": "Fold your messages past 12 lines behind a Read more button",
+  "settings.experimental.row.foldUserMessages.description":
+    "Fold your messages past 12 lines behind a Read more button",
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.plugins.reload": "Reload",
@@ -870,6 +898,9 @@ export const dict = {
   "settings.general.row.interfaceMode.inbox": "Inbox",
   "settings.general.row.interfaceMode.inbox.description":
     "Every session across your servers, sorted by what needs you next.",
+  "settings.general.row.interfaceMode.sidebar": "Side bar",
+  "settings.general.row.interfaceMode.sidebar.description":
+    "Project-grouped session history with an always-visible running sessions list.",
   "settings.general.row.interfaceMode.experimental": "Experimental",
   "settings.appearance.row.zoom.title": "Zoom",
   "settings.appearance.row.zoom.description": "Make text and controls larger across the app",

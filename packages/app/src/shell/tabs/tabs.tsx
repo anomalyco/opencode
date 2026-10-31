@@ -83,6 +83,11 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const [info, setInfo, , infoReady] = persisted(Persist.window("tabs.info"), TabStorage.Infos, {})
     const [regions, setRegions, , regionsReady] = persisted(Persist.window("tabs.panes"), TabStorage.Regions, {})
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), TabStorage.Closed, [])
+    const [sidebarHidden, setSidebarHidden, , sidebarHiddenReady] = persisted(
+      Persist.window("sidebar.hidden"),
+      TabStorage.SidebarHidden,
+      [],
+    )
     const [pending, setPending] = createStore<Record<string, PendingSession | undefined>>({})
 
     const navigate = useNavigate()
@@ -121,6 +126,17 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       }
 
       void closedReady.promise?.then(apply)
+    }
+
+    // Queue visibility changes behind desktop storage hydration, preserving close/reopen order.
+    const hideInSidebar = (tab: SessionTab, hidden: boolean) => {
+      const key = tabKey(tab)
+      const apply = () =>
+        setSidebarHidden((current) =>
+          hidden ? (current.includes(key) ? current : [...current, key]) : current.filter((item) => item !== key),
+        )
+      if (sidebarHiddenReady()) return apply()
+      void sidebarHiddenReady.promise?.then(apply)
     }
 
     const removeDraftPersisted = (draftID: string) => {
@@ -195,6 +211,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     })
 
     const navigateTab = (tab: Tab) => {
+      if (tab.type === "session") hideInSidebar(tab, false)
       const href = tabHref(tab)
       setRecentKey(tabKey(tab))
       navigate(href)
@@ -232,6 +249,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const actions = {
       addSessionTab: (tab: Omit<SessionTab, "type">) => {
         const next = { type: "session" as const, ...tab }
+        hideInSidebar(next, false)
         const existing = store.find((item) => tabKey(item) === tabKey(next))
 
         if (existing) return existing
@@ -416,7 +434,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         if (!tab) return
 
-        if (tab.type === "session") updateClosed((stack) => pushClosedTab(stack, tab, index, info[tabKey(tab)]))
+        if (tab.type === "session") {
+          hideInSidebar(tab, true)
+          updateClosed((stack) => pushClosedTab(stack, tab, index, info[tabKey(tab)]))
+        }
         removeTab(index)
       },
       reopenClosedTab(target?: SessionTab, options?: { append?: boolean }) {
@@ -555,6 +576,11 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         setInfo(key, next)
       },
       select: navigateTab,
+      sidebar: {
+        ready: sidebarHiddenReady,
+        hidden: (tab: Tab) => tab.type === "session" && sidebarHidden.includes(tabKey(tab)),
+        hide: (tab: SessionTab) => hideInSidebar(tab, true),
+      },
       remember(tab: Tab) {
         const key = tabKey(tab)
 
