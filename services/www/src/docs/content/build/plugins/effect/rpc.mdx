@@ -45,14 +45,23 @@ JSON Schema and Standard Schema are also supported.
 
 ### Input and output
 
-Use `input` for the method argument and `output` for its return value. Leave
-either one out when there is no value.
+Use `input` for the method argument and `output` for its return value.
 
 ```ts
 search: {
   input: Schema.Struct({ query: Schema.String }),
   output: Schema.Struct({ text: Schema.String }),
 }
+```
+
+Leave either schema out when there is no value. Callers omit the argument when
+`input` is absent, and handlers return `Effect.void` when `output` is absent:
+
+```ts
+status: {
+  output: Schema.Struct({ ok: Schema.Boolean }),
+},
+reset: {},
 ```
 
 ### Errors
@@ -67,7 +76,8 @@ errors: {
 
 ### Events
 
-Add events to the top-level `events` map. Event data must be an object.
+Add events to the top-level `events` map, or omit `events` when the RPC only
+defines methods. Event data must be an object.
 
 ```ts
 events: {

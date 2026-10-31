@@ -17,15 +17,15 @@ export type RpcArguments<Input, Options> = unknown extends Input
 
 export type RpcClient<D extends Rpc.PortableDefinition, Options = RpcCallOptions> = {
   readonly [Name in keyof D["methods"]]: (
-    ...args: RpcArguments<Rpc.Input<D["methods"][Name]["input"]>, Options>
-  ) => Promise<Rpc.Output<D["methods"][Name]["output"]>>
+    ...args: RpcArguments<Rpc.MethodInput<D["methods"][Name]>, Options>
+  ) => Promise<Rpc.MethodOutput<D["methods"][Name]>>
 } & {
   readonly events: {
-    readonly subscribe: <Name extends keyof D["events"] & string>(
+    readonly subscribe: <Name extends Rpc.EventName<D>>(
       name: Name,
       options?: Pick<RequestOptions, "signal">,
     ) => AsyncIterable<RpcEventPayload<D, Name>>
-    readonly on: <Name extends keyof D["events"] & string>(
+    readonly on: <Name extends Rpc.EventName<D>>(
       name: Name,
       handler: (event: RpcEventPayload<D, Name>) => Promise<void> | void,
       options?: Pick<RequestOptions, "signal">,
@@ -35,15 +35,15 @@ export type RpcClient<D extends Rpc.PortableDefinition, Options = RpcCallOptions
 
 type RpcEventPayloadFor<
   D extends Rpc.PortableDefinition,
-  Name extends keyof D["events"] & string,
+  Name extends Rpc.EventName<D>,
 > = Omit<RpcEvent, "type" | "data"> & {
   type: `rpc.${D["id"]}.${Name}`
-  data: Rpc.EventData<D["events"][Name]["schema"]>
+  data: Rpc.EventData<Rpc.EventSchema<D, Name>>
 }
 
 export type RpcEventPayload<
   D extends Rpc.PortableDefinition,
-  Name extends keyof D["events"] & string = keyof D["events"] & string,
+  Name extends Rpc.EventName<D> = Rpc.EventName<D>,
 > = { [K in Name]: RpcEventPayloadFor<D, K> }[Name]
 
 export interface RpcApi<Options = RpcCallOptions> {
@@ -59,7 +59,8 @@ export function makeRpc(
       name: string,
       options?: Pick<RequestOptions, "signal">,
     ): AsyncIterable<RpcEventPayload<Rpc.PortableDefinition>> => {
-      if (!Object.hasOwn(definition.events, name)) throw new Error(`Unknown RPC event: ${definition.id}.${name}`)
+      if (!definition.events || !Object.hasOwn(definition.events, name))
+        throw new Error(`Unknown RPC event: ${definition.id}.${name}`)
       const type = eventType(definition, name)
       return {
         [Symbol.asyncIterator]() {

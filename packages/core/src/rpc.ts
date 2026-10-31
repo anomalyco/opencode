@@ -57,7 +57,7 @@ const layer = Layer.effect(
       const existing = definitions.get(definition)
       if (existing) return existing
       const events = new Map(
-        Object.entries(definition.events).map(([name, event]) => [
+        Object.entries(definition.events ?? {}).map(([name, event]) => [
           name,
           { event, definition: eventDefinition(eventType(definition, name)) },
         ]),
@@ -114,7 +114,8 @@ const layer = Layer.effect(
         return yield* Effect.fail(failure("rpc.method_not_found", `Unknown RPC method: ${rpcID}.${name}`))
       const method = entry.definition.methods[name]
       const handler = entry.handlers[name]
-      const parsed = yield* parse(method.input, input).pipe(
+      // Omitted input/output schemas mean the method accepts or returns no value.
+      const parsed = yield* parse(method.input === undefined ? Schema.Undefined : method.input, input).pipe(
         Effect.mapError((error) => failure("rpc.invalid_input", errorMessage(error, "Invalid RPC input"))),
       )
       const result = yield* Effect.suspend(() => {
@@ -136,7 +137,7 @@ const layer = Layer.effect(
           ),
         ),
       )
-      return yield* encode(method.output, result).pipe(
+      return yield* encode(method.output === undefined ? Schema.Void : method.output, result).pipe(
         Effect.mapError((error) => failure("rpc.invalid_output", errorMessage(error, "Invalid RPC output"))),
       )
     })
@@ -158,7 +159,7 @@ const layer = Layer.effect(
       return {
         ...methods,
         events: {
-          subscribe: <Name extends keyof D["events"] & string>(name: Name) => {
+          subscribe: <Name extends Rpc.EventName<D>>(name: Name) => {
             const registered = events.get(name)
             if (!registered) return Stream.fail(new Error(`Unknown RPC event: ${definition.id}.${name}`))
             return bus.subscribe(registered.definition).pipe(
@@ -185,7 +186,7 @@ const fields = {
 const EventData = Schema.Record(Schema.String, Schema.Unknown)
 const jsonSchemas = new WeakMap<JsonSchema.JsonSchema, Schema.Codec<unknown>>()
 
-function eventType<const D extends Rpc.Definition, const Name extends keyof D["events"] & string>(
+function eventType<const D extends Rpc.Definition, const Name extends Rpc.EventName<D>>(
   definition: D,
   name: Name,
 ): `rpc.${D["id"]}.${Name}` {
@@ -261,21 +262,24 @@ function isStandardSchema(schema: Tool.ValueSchema): schema is Extract<Tool.Valu
   return "~standard" in schema
 }
 
-function read(schema: Tool.ValueSchema, value: unknown): Effect.Effect<unknown, unknown> {
+function read(schema: Tool.ValueSchema | undefined, value: unknown): Effect.Effect<unknown, unknown> {
   // Standard Schema results were already parsed by the publisher; don't apply transforms twice.
-  return Schema.isSchema(schema) ? Schema.decodeUnknownEffect(schema)(value) : Effect.succeed(value)
+  return schema !== undefined && Schema.isSchema(schema)
+    ? Schema.decodeUnknownEffect(schema)(value)
+    : Effect.succeed(value)
 }
 
 const logicalEvent = Effect.fn("Rpc.logicalEvent")(function* <
   D extends Rpc.Definition,
-  Name extends keyof D["events"] & string,
+  Name extends Rpc.EventName<D>,
 >(
   definition: D,
   name: Name,
   payload: Event.Payload,
   ref: Location.Ref,
 ): Effect.fn.Return<Rpc.EventPayload<D, Name>, unknown> {
-  const event = definition.events[name]
+  const event = definition.events?.[name]
+  if (!event) return yield* Effect.fail(new Error(`Unknown RPC event: ${definition.id}.${name}`))
   const data = yield* read(event.schema, payload.data)
   // SAFETY: The private Bus definition owns the envelope and location.
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion

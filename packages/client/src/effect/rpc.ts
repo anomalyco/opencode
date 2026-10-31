@@ -18,16 +18,16 @@ export type RpcClient<
   EventError = E,
 > = {
   readonly [Name in keyof D["methods"]]: (
-    ...args: RpcArguments<Rpc.Input<D["methods"][Name]["input"]>, Options>
+    ...args: RpcArguments<Rpc.MethodInput<D["methods"][Name]>, Options>
   ) => Effect.Effect<
-    Rpc.Output<D["methods"][Name]["output"]>,
-    Rpc.MethodError<D["methods"][Name]> | DecodeError<D["methods"][Name]["output"]> | E
+    Rpc.MethodOutput<D["methods"][Name]>,
+    Rpc.MethodError<D["methods"][Name]> | DecodeError<Rpc.OutputSchema<D["methods"][Name]>> | E
   >
 } & {
   readonly events: {
-    readonly subscribe: <Name extends keyof D["events"] & string>(
+    readonly subscribe: <Name extends Rpc.EventName<D>>(
       name: Name,
-    ) => Stream.Stream<Rpc.EventPayload<D, Name>, DecodeError<D["events"][Name]["schema"]> | EventError>
+    ) => Stream.Stream<Rpc.EventPayload<D, Name>, DecodeError<Rpc.EventSchema<D, Name>> | EventError>
   }
 }
 
@@ -70,9 +70,10 @@ export function make<CallError, EventError>(
     // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
     return Object.assign(methods, {
         events: {
-          subscribe: (name: keyof D["events"] & string) => {
+          subscribe: (name: Rpc.EventName<D>) => {
             const type = RpcRuntime.eventType(definition, name)
-            if (!Object.hasOwn(definition.events, name)) return Stream.fail(new Error(`Unknown RPC event: ${type}`))
+            if (!definition.events || !Object.hasOwn(definition.events, name))
+              return Stream.fail(new Error(`Unknown RPC event: ${type}`))
             const schema = definition.events[name]
             return subscribe().pipe(
               Stream.filter((event): event is RpcEvent => event.type === type),

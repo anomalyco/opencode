@@ -9,7 +9,9 @@ type RpcEvent = Extract<OpenCodeEvent, { type: `rpc.${string}` }>
 
 export function read(schema: Rpc.Method["output"], value: unknown) {
   // Standard Schema results have already been parsed by the server.
-  return Schema.isSchema(schema) ? Schema.decodeUnknownEffect(schema)(value) : Effect.succeed(value)
+  return schema !== undefined && Schema.isSchema(schema)
+    ? Schema.decodeUnknownEffect(schema)(value)
+    : Effect.succeed(value)
 }
 
 export function readError(method: Rpc.Method, error: unknown): Effect.Effect<never, unknown> {
@@ -35,7 +37,7 @@ export function readError(method: Rpc.Method, error: unknown): Effect.Effect<nev
 
 export const event = Effect.fn("Client.Rpc.event")(function* <
   D extends Rpc.Definition,
-  Name extends keyof D["events"] & string,
+  Name extends Rpc.EventName<D>,
 >(
   definition: D,
   name: Name,
@@ -52,7 +54,7 @@ export const event = Effect.fn("Client.Rpc.event")(function* <
   } as Rpc.EventPayload<D, Name>
 })
 
-export function eventType<const D extends Rpc.Definition, const Name extends keyof D["events"] & string>(
+export function eventType<const D extends Rpc.Definition, const Name extends Rpc.EventName<D>>(
   definition: D,
   name: Name,
 ): `rpc.${D["id"]}.${Name}` {

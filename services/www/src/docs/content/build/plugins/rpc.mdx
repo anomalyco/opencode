@@ -69,8 +69,7 @@ and errors. It supports two schema formats:
 ### Input and output
 
 Each method can define an `input` schema for its argument and an `output` schema
-for its return value. Leave either one out if the method does not accept or
-return a value.
+for its return value.
 
 ```ts
 search: {
@@ -89,6 +88,21 @@ search: {
 
 JSON Schema values are `unknown` in TypeScript, so narrow them before use.
 Standard Schema infers the input and output types.
+
+Leave either schema out when the method takes or returns no value. Callers omit
+the argument when `input` is absent, and handlers return nothing when `output`
+is absent:
+
+```ts
+status: {
+  output: {
+    type: "object",
+    properties: { ok: { type: "boolean" } },
+    required: ["ok"],
+  },
+},
+reset: {},
+```
 
 ### Errors
 
@@ -110,8 +124,8 @@ Error names beginning with `rpc.` are reserved by OpenCode.
 
 ### Events
 
-Add events to the top-level `events` map. Each event has a schema for the data
-sent to subscribers.
+Add events to the top-level `events` map, or omit `events` when the RPC only
+defines methods. Each event has a schema for the data sent to subscribers.
 
 Event data must be an object. Use an empty object schema when there is no data:
 
