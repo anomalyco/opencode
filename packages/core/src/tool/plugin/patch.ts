@@ -114,6 +114,17 @@ export const Plugin = {
               }
               const prepared: Prepared[] = []
               const updates = new Map<string, string | null>()
+              // Preflight reads each update/delete target at most once, so remembering the bytes it had lets
+              // the patch fail instead of silently discarding an editor save that landed while approval was
+              // pending. Comparing raw bytes means every rewrite is a conflict, including changes to
+              // invalid UTF-8 bytes, a BOM, or line endings. This detects changes observed in preflight;
+              // it is not atomicity: an external write between this check and the write below, or a
+              // formatter rewrite, can still interleave. `add` never reads its target, so it records no
+              // snapshot and keeps overwrite semantics, and an `add` followed by `delete`/`update` on the
+              // same path inherits the same. A `*** Move to:` destination is never read either, so an
+              // external edit to an existing destination is still overwritten: a known gap, left for a
+              // change that guards destinations, not an intended outcome.
+              const originals = new Map<string, { readonly resource: string; readonly bytes: Uint8Array }>()
               const resolveTarget = Effect.fnUntraced(function* (value: string) {
                 const target = yield* access.resolve({ path: value, kind: "file" })
                 if (!target.externalDirectory) return target
@@ -122,6 +133,13 @@ export const Plugin = {
                   parentDir: target.externalDirectory.directory,
                 })
                 return target
+              })
+              const readOriginal = Effect.fnUntraced(function* (target: FileAccess.Target) {
+                const bytes = (yield* environment.files.read(target.absolute)).bytes
+                const decoded = Bom.decodeBytes(bytes)
+                if (!originals.has(target.absolute))
+                  originals.set(target.absolute, { resource: target.resource, bytes })
+                return Bom.join(decoded.text, decoded.bom)
               })
               for (const hunk of hunks) {
                 yield* Effect.gen(function* () {
@@ -149,14 +167,16 @@ export const Plugin = {
                     const before =
                       previous !== undefined
                         ? Bom.split(previous).text
-                        : (yield* FileMutation.readText(environment.files, target.absolute).pipe(
-                            Effect.mapError(
-                              (error) =>
-                                new ToolFailure({
-                                  message: `patch verification failed: Failed to delete ${target.resource}: ${errorMessage(error)}`,
-                                }),
+                        : Bom.split(
+                            yield* readOriginal(target).pipe(
+                              Effect.mapError(
+                                (error) =>
+                                  new ToolFailure({
+                                    message: `patch verification failed: Failed to delete ${target.resource}: ${errorMessage(error)}`,
+                                  }),
+                              ),
                             ),
-                          )).text
+                          ).text
                     prepared.push({ ...hunk, target, before, after: "" })
                     updates.set(target.absolute, null)
                     return
@@ -169,17 +189,14 @@ export const Plugin = {
                   }
                   const original =
                     previous ??
-                    (yield* Effect.gen(function* () {
-                      const content = yield* FileMutation.readText(environment.files, target.absolute).pipe(
-                        Effect.mapError(
-                          (error) =>
-                            new ToolFailure({
-                              message: `patch verification failed: Failed to read file to update ${target.absolute}: ${errorMessage(error)}`,
-                            }),
-                        ),
-                      )
-                      return Bom.join(content.text, content.bom)
-                    }))
+                    (yield* readOriginal(target).pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new ToolFailure({
+                            message: `patch verification failed: Failed to read file to update ${target.absolute}: ${errorMessage(error)}`,
+                          }),
+                      ),
+                    ))
                   const before = Bom.split(original).text
                   const update = yield* Effect.try({
                     try: () => Patch.derive(hunk.path, hunk.chunks, original),
@@ -229,6 +246,34 @@ export const Plugin = {
                 agent: context.agent,
                 source,
               })
+
+              const conflicting = (yield* Effect.forEach([...originals.entries()], ([absolute, original]) =>
+                Effect.gen(function* () {
+                  // A re-read that no longer resolves is itself a change: the file moved, vanished, or
+                  // became a directory while approval was pending.
+                  const current = yield* environment.files.read(absolute).pipe(
+                    Effect.map((result) => result.bytes),
+                    Effect.catchTag("Environment.NotFound", () => Effect.succeed(undefined)),
+                    Effect.catchTag("Environment.WrongKind", () => Effect.succeed(undefined)),
+                    Effect.mapError(
+                      (error) =>
+                        new ToolFailure({
+                          message: `Failed to verify ${original.resource} before writing: ${errorMessage(error)}`,
+                        }),
+                    ),
+                  )
+                  if (current === undefined) return original.resource
+                  if (current.length !== original.bytes.length) return original.resource
+                  if (current.some((byte, index) => byte !== original.bytes[index])) return original.resource
+                  return undefined
+                }),
+              ))
+                .filter((resource): resource is string => resource !== undefined)
+                .sort()
+              if (conflicting.length > 0)
+                return yield* new ToolFailure({
+                  message: `patch rejected: ${conflicting.join(", ")} changed on disk while the patch was waiting for approval. Nothing was written. Read the file again and reapply the patch.`,
+                })
 
               yield* Effect.forEach(
                 prepared,

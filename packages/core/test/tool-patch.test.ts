@@ -166,6 +166,39 @@ const withTempTool = <A, E, R>(body: (directory: string, registry: Tool.Interfac
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   )
 
+const conflictMessage = (resources: string) =>
+  `patch rejected: ${resources} changed on disk while the patch was waiting for approval. Nothing was written. Read the file again and reapply the patch.`
+
+/** Runs a patch whose target is rewritten during approval and asserts it fails with the target's external bytes intact. */
+const rejectsApprovalChange = (input: {
+  readonly name: string
+  readonly initial: string | Uint8Array
+  readonly external: string | Uint8Array
+  readonly patchText: string
+}) =>
+  Effect.acquireUseRelease(
+    Effect.promise(() => tmpdir()),
+    (tmp) => {
+      reset()
+      const target = path.join(tmp.path, input.name)
+      afterEditApproval = () => Effect.promise(() => fs.writeFile(target, input.external)).pipe(Effect.orDie)
+      return Effect.promise(() => fs.writeFile(target, input.initial)).pipe(
+        Effect.andThen(
+          withTool(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              expect(yield* executeTool(registry, call(input.patchText))).toMatchObject({
+                status: "error",
+                error: { message: conflictMessage(input.name) },
+              })
+              expect(yield* Effect.promise(() => fs.readFile(target))).toEqual(Buffer.from(input.external))
+            }),
+          ),
+        ),
+      )
+    },
+    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+  )
+
 describe("PatchTool", () => {
   it.live("selects the same edit tools for compaction and generate requests as the agent loop", () =>
     withTempTool(() =>
@@ -1276,6 +1309,104 @@ describe("PatchTool", () => {
             ).toMatchObject({ status: "completed" })
             expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("replacement\n")
           }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("rejects an update changed during approval", () =>
+    rejectsApprovalChange({
+      name: "edited.txt",
+      initial: "first=old\nsecond=old\n",
+      external: "first=old\nsecond=external-change\n",
+      patchText: "*** Begin Patch\n*** Update File: edited.txt\n@@\n-first=old\n+first=new\n*** End Patch",
+    }),
+  )
+
+  it.live("rejects a delete changed during approval", () =>
+    rejectsApprovalChange({
+      name: "remove.txt",
+      initial: "remove\n",
+      external: "remove\nkeep-me\n",
+      patchText: "*** Begin Patch\n*** Delete File: remove.txt\n*** End Patch",
+    }),
+  )
+
+  // Both trailing bytes decode to U+FFFD, so only a byte comparison sees this change.
+  it.live("rejects a change to invalid UTF-8 bytes during approval", () =>
+    rejectsApprovalChange({
+      name: "invalid.txt",
+      initial: Buffer.concat([Buffer.from("first=old\nsecond=old\n"), Uint8Array.of(0xff)]),
+      external: Buffer.concat([Buffer.from("first=old\nsecond=old\n"), Uint8Array.of(0xfe)]),
+      patchText: "*** Begin Patch\n*** Update File: invalid.txt\n@@\n-first=old\n+first=new\n*** End Patch",
+    }),
+  )
+
+  it.live("rejects one of several files changed during approval", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const alpha = path.join(tmp.path, "alpha.txt")
+        const beta = path.join(tmp.path, "beta.txt")
+        afterEditApproval = () => Effect.promise(() => fs.writeFile(beta, "two\nsecond-change\n")).pipe(Effect.orDie)
+        return Effect.promise(() => Promise.all([fs.writeFile(alpha, "one\n"), fs.writeFile(beta, "two\n")])).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call(
+                      [
+                        "*** Begin Patch",
+                        "*** Update File: alpha.txt",
+                        "@@",
+                        "-one",
+                        "+ONE",
+                        "*** Update File: beta.txt",
+                        "@@",
+                        "-two",
+                        "+TWO",
+                        "*** End Patch",
+                      ].join("\n"),
+                    ),
+                  ),
+                ).toMatchObject({ status: "error", error: { message: conflictMessage("beta.txt") } })
+                expect(yield* Effect.promise(() => fs.readFile(alpha, "utf8"))).toBe("one\n")
+                expect(yield* Effect.promise(() => fs.readFile(beta, "utf8"))).toBe("two\nsecond-change\n")
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("applies when identical bytes are written during approval", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "steady.txt")
+        afterEditApproval = () =>
+          Effect.promise(() => fs.writeFile(target, "first=old\nsecond=old\n")).pipe(Effect.orDie)
+        return Effect.promise(() => fs.writeFile(target, "first=old\nsecond=old\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call("*** Begin Patch\n*** Update File: steady.txt\n@@\n-first=old\n+first=new\n*** End Patch"),
+                  ),
+                ).toMatchObject({ status: "completed" })
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("first=new\nsecond=old\n")
+              }),
+            ),
+          ),
         )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
