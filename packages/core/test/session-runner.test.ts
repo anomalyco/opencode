@@ -2319,7 +2319,7 @@ describe("SessionRunnerLLM", () => {
     })
     s.currentModel = LanguageModel.update(s.currentModel, { defaults: { providerOptions: { effort: "low" } } })
     yield* s.llm.push(TestLLM.text("Later answer", "text-effort-low"))
-    yield* s.runPrompt("Second")
+    const second = yield* s.runPrompt("Second")
 
     expect(messageRoles(s.requests[1])).toEqual(["user", "assistant", "user"])
     expect(s.requests[1]?.messages[1]?.effort).toBe("high")
@@ -2335,18 +2335,17 @@ describe("SessionRunnerLLM", () => {
       ],
     })
 
-    // Switch to `max`, run a third turn, then fork before that third turn:
-    // `forked` inherits `session.model` (`max`) while its copied history ends at `low`.
+    // Switch to `max`, run Turn 3, then fork and revert to `second`:
+    // both `low` and `max` switch rows are removed while `session.model` remains `max`.
     yield* s.bus.publish(SessionEvent.ModelSelected, {
       sessionID,
       model: { ...model, variant: Model.VariantID.make("max") },
     })
     s.currentModel = LanguageModel.update(s.currentModel, { defaults: { providerOptions: { effort: "max" } } })
-    const third = yield* s.session.prompt({ sessionID, text: "Third", resume: false })
     yield* s.llm.push(TestLLM.text("Third answer", "text-effort-max-1"))
-    yield* s.resume
+    yield* s.runPrompt("Third")
 
-    const forked = yield* s.session.fork({ sessionID, before: third.id })
+    const forked = yield* s.session.fork({ sessionID, before: second.id })
     yield* s.llm.push(TestLLM.text("Forked answer", "text-effort-max-2"))
     yield* s.session.prompt({ sessionID: forked.id, text: "Forked", resume: false })
     yield* s.session.resume(forked.id)
@@ -2357,16 +2356,13 @@ describe("SessionRunnerLLM", () => {
       messages: [
         { role: "user" },
         { role: "assistant" },
-        { role: "system", content: [], output_config: { effort: "low" } },
-        { role: "user" },
-        { role: "assistant" },
         { role: "system", content: [], output_config: { effort: "max" } },
         { role: "user" },
       ],
     })
 
-    // Committed revert on the original session keeps the same frozen baseline and earlier marker.
-    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: third.id })
+    // Committed revert to `second` keeps the frozen `high` baseline as well.
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
     yield* s.llm.push(TestLLM.text("Reverted answer", "text-effort-max-3"))
     yield* s.runPrompt("After revert")
 
@@ -2376,12 +2372,28 @@ describe("SessionRunnerLLM", () => {
       messages: [
         { role: "user" },
         { role: "assistant" },
-        { role: "system", content: [], output_config: { effort: "low" } },
-        { role: "user" },
-        { role: "assistant" },
         { role: "system", content: [], output_config: { effort: "max" } },
         { role: "user" },
       ],
+    })
+  })
+
+  scenario("keeps configured default effort stable when no variant is selected", function* (s) {
+    s.currentModel = LanguageModel.make({
+      id: "claude-opus-5-5",
+      provider: "anthropic",
+      route: AnthropicMessages.route,
+      defaults: { providerOptions: { effort: "high" } },
+    })
+    yield* s.llm.push(TestLLM.text("First answer", "text-default-effort-1"))
+    yield* s.runPrompt("First")
+    yield* s.llm.push(TestLLM.text("Second answer", "text-default-effort-2"))
+    yield* s.runPrompt("Second")
+
+    const compiled = yield* compileRequest(s.requests[1]!)
+    expect(compiled.body).toMatchObject({
+      output_config: { effort: "high" },
+      messages: [{ role: "user" }, { role: "assistant" }, { role: "user" }],
     })
   })
 

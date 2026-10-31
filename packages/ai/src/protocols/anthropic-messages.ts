@@ -39,6 +39,8 @@ export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
 export const DEFAULT_MAX_TOKENS = 32_000
 const MIN_THINKING_BUDGET = 1_024
+const ANTHROPIC_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"])
+const isAnthropicEffort = (effort: string) => ANTHROPIC_EFFORTS.has(effort)
 
 // Claude Opus 5.5 and Haiku 5.5 default to `medium`; other Claude models default to `high`.
 const defaultEffort = (id: string) => {
@@ -929,7 +931,7 @@ const lowerMessages = Effect.fnUntraced(function* (
     const effort = effortMarkers.get(index)
     if (effort === undefined) return
     const last = messages.at(-1)
-    if (last?.role === "system" && last.content.length === 0 && last.output_config !== undefined) messages.pop()
+    if (last?.role === "system" && last.output_config !== undefined) messages.pop()
     // Accepted at any position, so the text-update placement rules do not apply.
     messages.push({ role: "system", content: [], output_config: { effort } })
   }
@@ -1081,6 +1083,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     request,
     options.effort ?? outputConfig?.effort ?? undefined,
     defaultEffort(request.model.id),
+    isAnthropicEffort,
   )
   const generation = request.generation
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
@@ -1425,7 +1428,10 @@ const onContentBlockDelta = Effect.fnUntraced(function* (
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onContentBlockStop = Effect.fnUntraced(function* (state: ParserState, event: AnthropicEvent) {
+const onContentBlockStop = Effect.fnUntraced(function* (
+  state: ParserState,
+  event: AnthropicEvent,
+) {
   if (event.index === undefined) return [state, NO_EVENTS] satisfies StepResult
   if (event.index in state.compactions) {
     const { [event.index]: content, ...compactions } = state.compactions

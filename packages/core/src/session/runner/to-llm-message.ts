@@ -152,7 +152,12 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
-const assistant = (message: SessionMessage.Assistant, model: Model.Ref, providerMetadataKey: string) => {
+const assistant = (
+  message: SessionMessage.Assistant,
+  model: Model.Ref,
+  providerMetadataKey: string,
+  defaultEffort?: string,
+) => {
   const sameProvider = message.model.providerID === model.providerID
   const sameModel = sameProvider && message.model.id === model.id
   const reuseProviderMetadata = sameModel && message.error === undefined
@@ -216,7 +221,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
     .map(Message.tool)
   if (meaningful.length === 0) return results
   const effort =
-    sameModel && variantEffort(model.variant) !== undefined ? variantEffort(message.model.variant) : undefined
+    sameModel && variantEffort(model.variant, defaultEffort) !== undefined
+      ? variantEffort(message.model.variant, defaultEffort)
+      : undefined
   return [
     Message.make({ id: message.id, role: "assistant", content: meaningful, effort, metadata: message.metadata }),
     ...results,
@@ -225,12 +232,17 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
 
 const EFFORT_VARIANTS = new Set<string>(ReasoningEfforts)
 
-const variantEffort = (variant: Model.VariantID | undefined) => {
-  if (variant === undefined || variant === "default") return null
+const variantEffort = (variant: Model.VariantID | undefined, defaultEffort?: string) => {
+  if (variant === undefined || variant === "default") return defaultEffort ?? null
   return EFFORT_VARIANTS.has(variant) ? variant : undefined
 }
 
-function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMetadataKey: string): Message[] {
+function toLLMMessage(
+  message: SessionMessage.Info,
+  model: Model.Ref,
+  providerMetadataKey: string,
+  defaultEffort?: string,
+): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "idle":
@@ -281,7 +293,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
         }),
       ]
     case "assistant":
-      return assistant(message, model, providerMetadataKey)
+      return assistant(message, model, providerMetadataKey, defaultEffort)
     case "compaction": {
       if (message.status !== "completed") return []
       // History selection only keeps native windows the target model can replay.
@@ -311,4 +323,5 @@ export const toLLMMessages = (
   messages: readonly SessionMessage.Info[],
   model: Model.Ref,
   providerMetadataKey: string = model.providerID,
-) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey))
+  defaultEffort?: string,
+) => messages.flatMap((message) => toLLMMessage(message, model, providerMetadataKey, defaultEffort))

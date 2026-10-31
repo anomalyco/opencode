@@ -638,8 +638,6 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
   return yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request, adapter))
 })
 
-export const DEFAULT_EFFORT = "medium"
-
 const lowerMessages = Effect.fnUntraced(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
@@ -1208,7 +1206,10 @@ const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResul
   ]
 }
 
-const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (state: ParserState, event: Event) {
+const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (
+  state: ParserState,
+  event: Event,
+) {
   if (event.item_id === undefined) return [state, NO_EVENTS] satisfies StepResult
   const tool = state.tools[event.item_id]
   if (!tool) return [state, NO_EVENTS] satisfies StepResult
@@ -1236,7 +1237,10 @@ const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (state: ParserS
   return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
-const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: NormalizedEvent["item"]) {
+const onOutputItemDone = Effect.fnUntraced(function* (
+  state: ParserState,
+  item: NormalizedEvent["item"],
+) {
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
   if (item.type === "compaction") {

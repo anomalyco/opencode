@@ -1109,8 +1109,16 @@ describe("ChatGPTPlugin", () => {
             Effect.flatMap((resolved) => compileRequest(ai.request({ model: resolved.model, messages }))),
             Effect.map((compiled) => compiled.body),
           )
-        const switched = [Message.user("a"), Message.assistant("b", { effort: "high" }), Message.user("c")]
-        const switchedBack = [...switched, Message.assistant("d", { effort: "max" }), Message.user("e")]
+        const switched = [
+          Message.user("a"),
+          Message.make({ role: "assistant", content: "b", effort: "high" }),
+          Message.user("c"),
+        ]
+        const switchedBack = [
+          ...switched,
+          Message.make({ role: "assistant", content: "d", effort: "max" }),
+          Message.user("e"),
+        ]
         const user = (text: string) => ({ role: "user", content: [{ type: "input_text", text }] })
         const assistant = (text: string) => ({ role: "assistant", content: [{ type: "output_text", text }] })
         const update = (effort: string) => ({ type: "configuration_update", reasoning: { effort } })

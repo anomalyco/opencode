@@ -260,8 +260,7 @@ export namespace Message {
 
   export const user = (content: ContentInput) => make({ role: "user", content })
 
-  export const assistant = (content: ContentInput, options?: { readonly effort?: ReasoningEffort | null }) =>
-    make({ role: "assistant", content, ...options })
+  export const assistant = (content: ContentInput) => make({ role: "assistant", content })
 
   /**
    * Add an operator-authored instruction at this chronological point in the

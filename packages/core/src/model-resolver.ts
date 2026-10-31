@@ -13,7 +13,7 @@ import {
   type ProviderPackage,
 } from "@opencode/ai/effect"
 import { Auth, mergeHttpOptions } from "@opencode/ai/route"
-import { Context, Effect, Layer, Schema, Struct } from "effect"
+import { Context, Effect, Layer, Option, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
@@ -136,6 +136,23 @@ export interface Resolved {
   readonly transport?: Provider.Transport
   /** Milliseconds without streamed data before a WebSocket exchange fails; `false` disables the limit. */
   readonly chunkTimeout?: number | false
+  /** Effort configured on the provider or model before any variant overlay. */
+  readonly defaultEffort?: string
+}
+
+const ConfiguredEffort = Schema.Struct({
+  effort: Schema.optional(Schema.String),
+  reasoningEffort: Schema.optional(Schema.String),
+  output_config: Schema.optional(Schema.Struct({ effort: Schema.optional(Schema.String) })),
+  outputConfig: Schema.optional(Schema.Struct({ effort: Schema.optional(Schema.String) })),
+})
+
+const decodeConfiguredEffort = Schema.decodeUnknownOption(ConfiguredEffort)
+
+export const configuredEffort = (options: Readonly<Record<string, unknown>> | undefined) => {
+  if (!options) return undefined
+  const parsed = Option.getOrUndefined(decodeConfiguredEffort(options))
+  return parsed?.effort ?? parsed?.reasoningEffort ?? parsed?.output_config?.effort ?? parsed?.outputConfig?.effort
 }
 
 export type MediaError =
@@ -365,7 +382,8 @@ function prepareProviderURL(
   const prepared = baseURL.replace(
     /\$\{([^}]+)\}/g,
     (placeholder, name: string) =>
-      (name === "AWS_REGION" && typeof settings.region === "string" ? settings.region : process.env[name]) ?? placeholder,
+      (name === "AWS_REGION" && typeof settings.region === "string" ? settings.region : process.env[name]) ??
+      placeholder,
   )
   const failure = unresolvedProviderVariables(model, prepared)
   return failure ? Effect.fail(failure) : Effect.succeed(prepared)
@@ -458,14 +476,15 @@ export const layer = Layer.effect(
       )
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
       const selectedVariant = yield* withVariant(selected, variant)
+      const baseSettings = Provider.mergeOverlay(provider?.settings, Provider.modelSettings(selected.settings))
       const runtimeInfo: RuntimeInfo = {
         ...selectedVariant,
         settings: Provider.mergeOverlay(provider?.settings, Provider.modelSettings(selectedVariant.settings)),
       }
-      return { provider, credential, runtimeInfo }
+      return { provider, credential, runtimeInfo, defaultEffort: configuredEffort(baseSettings) }
     })
     const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
-      const { provider, credential, runtimeInfo } = yield* prepare(selected, variant)
+      const { provider, credential, runtimeInfo, defaultEffort } = yield* prepare(selected, variant)
       const model = yield* fromCatalogModel(runtimeInfo, credential, dependencies)
       const runtime =
         provider?.activation === "enabled" &&
@@ -488,6 +507,7 @@ export const layer = Layer.effect(
         cache: runtimeInfo.settings?.cache,
         transport: provider?.settings?.transport,
         chunkTimeout: Provider.timeout(provider?.settings?.chunkTimeout),
+        defaultEffort,
       }
     })
     const loadMedia = Effect.fnUntraced(function* <Runtime>(

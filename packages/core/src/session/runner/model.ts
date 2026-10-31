@@ -66,6 +66,10 @@ export const resolved = (
   limit: options.limit,
   compaction: options.compaction,
   transport: options.transport,
+  defaultEffort:
+    options.variant === undefined || options.variant === "default"
+      ? ModelResolver.configuredEffort(model.defaults?.providerOptions)
+      : undefined,
 })
 
 const layer = Layer.effect(

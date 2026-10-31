@@ -254,9 +254,11 @@ Earlier work
       ])
     })
 
-    test("maps the default variant and no variant to null", () => {
+    test("maps the default variant and no variant to the configured default effort or null", () => {
       expect(toLLMMessages([reply(ref())], ref("low"))[0]?.effort).toBeNull()
       expect(toLLMMessages([reply(ref("default"))], ref())[0]?.effort).toBeNull()
+      expect(toLLMMessages([reply(ref())], ref("low"), "provider", "high")[0]?.effort).toBe("high")
+      expect(toLLMMessages([reply(ref("default"))], ref(), "provider", "medium")[0]?.effort).toBe("medium")
     })
 
     test("leaves effort unset across model switches, non-effort variants, and model-switched markers", () => {

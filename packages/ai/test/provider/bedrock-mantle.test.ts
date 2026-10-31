@@ -418,7 +418,7 @@ describe("Amazon Bedrock Mantle Messages recorded", () => {
           model: mantleMessages("anthropic.claude-opus-5"),
           messages: [
             Message.user("What is 12 + 30?"),
-            Message.assistant("42", { effort: "high" }),
+            Message.make({ role: "assistant", content: "42", effort: "high" }),
             Message.user("Add 8 to that result. Reply with only the integer."),
           ],
           providerOptions: {

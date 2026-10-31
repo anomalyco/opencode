@@ -23,8 +23,10 @@ const openai = (id: string, compatibility?: { readonly supportsEffortUpdates?: b
 
 const opus5 = anthropic("claude-opus-5")
 const astra = openai("gpt-6-astra")
+const reply = (content: Message.ContentInput, effort?: string | null) =>
+  Message.make({ role: "assistant", content, effort })
 
-const conversation = [Message.user("Before."), Message.assistant("First.", { effort: "high" }), Message.user("After.")]
+const conversation = [Message.user("Before."), reply("First.", "high"), Message.user("After.")]
 
 const systemMessages = (body: AnthropicMessages.AnthropicMessagesBody) =>
   body.messages.filter((message) => message.role === "system")
@@ -59,7 +61,7 @@ describe("cache policy", () => {
           model: opus5,
           messages: [
             Message.user("first"),
-            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })], { effort: "high" }),
+            reply([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })], "high"),
             Message.tool({ id: "call_1", name: "lookup", result: "ok" }),
           ],
           providerOptions: { effort: "low" },
@@ -112,9 +114,9 @@ describe("Anthropic Messages effort updates", () => {
           model: opus5,
           messages: [
             Message.user("One."),
-            Message.assistant("First.", { effort: "high" }),
+            reply("First.", "high"),
             Message.user("Two."),
-            Message.assistant("Second.", { effort: "low" }),
+            reply("Second.", "low"),
             Message.user("Forked follow-up."),
           ],
           providerOptions: { effort: "max" },
@@ -149,9 +151,9 @@ describe("Anthropic Messages effort updates", () => {
             model: anthropic(id),
             messages: [
               Message.user("One."),
-              Message.assistant("First.", { effort: null }),
+              reply("First.", null),
               Message.user("Two."),
-              Message.assistant("Second.", { effort: "low" }),
+              reply("Second.", "low"),
               Message.user("Three."),
             ],
             providerOptions: { output_config: { format } },
@@ -175,7 +177,7 @@ describe("Anthropic Messages effort updates", () => {
           model: opus5,
           messages: [
             Message.user("Before."),
-            Message.assistant("First.", { effort: "high" }),
+            reply("First.", "high"),
             Message.user("After."),
             Message.assistant("Summary:"),
           ],
@@ -223,7 +225,7 @@ describe("Anthropic Messages effort updates", () => {
           model: opus5,
           messages: [
             Message.user("Weather?"),
-            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })], { effort: "high" }),
+            reply([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })], "high"),
             Message.tool({ id: "call_1", name: "lookup", result: { temp: 72 } }),
           ],
           providerOptions: { effort: "low" },
@@ -245,12 +247,7 @@ describe("Anthropic Messages effort updates", () => {
       const prepared = yield* compileRequest(
         ai.request({
           model: opus5,
-          messages: [
-            Message.user("Fix it."),
-            Message.assistant("Done.", { effort: "high" }),
-            Message.system("Update."),
-            Message.user("Next."),
-          ],
+          messages: [Message.user("Fix it."), reply("Done.", "high"), Message.system("Update."), Message.user("Next.")],
           providerOptions: { effort: "low" },
           cache: "none",
         }),
@@ -333,6 +330,28 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
+  it.effect("ignores non-Anthropic `none` effort from an earlier disabled-thinking turn", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: opus5,
+          messages: [
+            Message.user("One."),
+            reply("First.", "high"),
+            Message.user("Two."),
+            reply("No thinking.", "none"),
+            Message.user("Three."),
+          ],
+          providerOptions: { effort: "low" },
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.output_config).toEqual({ effort: "high" })
+      expect(systemMessages(prepared.body)).toEqual([{ role: "system", content: [], output_config: { effort: "low" } }])
+    }),
+  )
+
   it.effect("omits markers for Opus 5.0 on Bedrock Mantle Messages while lowering Opus 5.5", () =>
     Effect.gen(function* () {
       const mantle = AmazonBedrockMantle.configure({ apiKey: "test", region: "us-east-1" })
@@ -406,12 +425,7 @@ describe("OpenAI Responses effort updates", () => {
       const prepared = yield* compileRequest(
         ai.request({
           model: astra,
-          messages: [
-            Message.user("Before."),
-            Message.assistant("First.", { effort: "medium" }),
-            Message.assistant([], { effort: "low" }),
-            Message.user("After."),
-          ],
+          messages: [Message.user("Before."), reply("First.", "medium"), reply([], "low"), Message.user("After.")],
           providerOptions: { reasoningEffort: "xhigh" },
         }),
       )
@@ -433,9 +447,9 @@ describe("OpenAI Responses effort updates", () => {
           model: astra,
           messages: [
             Message.user("One."),
-            Message.assistant("First.", { effort: "high" }),
+            reply("First.", "high"),
             Message.user("Two."),
-            Message.assistant("Second.", { effort: "low" }),
+            reply("Second.", "low"),
             Message.user("Forked follow-up."),
           ],
           providerOptions: { reasoningEffort: "xhigh" },
@@ -457,9 +471,9 @@ describe("OpenAI Responses effort updates", () => {
           model: astra,
           messages: [
             Message.user("One."),
-            Message.assistant("First.", { effort: null }),
+            reply("First.", null),
             Message.user("Two."),
-            Message.assistant("Second.", { effort: "low" }),
+            reply("Second.", "low"),
             Message.user("Three."),
           ],
         }),
@@ -490,12 +504,31 @@ describe("OpenAI Responses effort updates", () => {
         }),
       )
 
+      const withBodyTruncation = yield* compileRequest(
+        ai.request({
+          model: astra,
+          messages: conversation,
+          providerOptions: { reasoningEffort: "low" },
+          http: { body: { truncation: "auto" } },
+        }),
+      )
+      const withBodyCompaction = yield* compileRequest(
+        ai.request({
+          model: astra,
+          messages: conversation,
+          providerOptions: { reasoningEffort: "low" },
+          http: { body: { context_management: [{ type: "compaction" }] } },
+        }),
+      )
+
       expect(updates(withCompaction.body)).toEqual([])
       expect(withCompaction.body.reasoning).toEqual({ effort: "low" })
       expect(withCompaction.body.context_management).toEqual([{ type: "compaction" }])
       expect(updates(withTruncation.body)).toEqual([])
       expect(withTruncation.body.reasoning).toEqual({ effort: "low" })
       expect(withTruncation.body.truncation).toBe("auto")
+      expect(updates(withBodyTruncation.body)).toEqual([])
+      expect(updates(withBodyCompaction.body)).toEqual([])
     }),
   )
 
