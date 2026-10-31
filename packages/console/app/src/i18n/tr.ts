@@ -113,8 +113,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Hatta",
   "home.faq.a3.p4.localLink": "yerel modellerinizi bağlayabilirsiniz",
   "home.faq.q4": "Mevcut AI aboneliklerimi OpenCode ile kullanabilir miyim?",
-  "home.faq.a4.p1":
-    "Evet, ChatGPT Plus/Pro veya GitHub Copilot aboneliklerinizi ya da Claude Code üzerinden Claude aboneliğinizi kullanabilirsiniz.",
+  "home.faq.a4.p1": "Evet, ChatGPT Plus/Pro veya GitHub Copilot aboneliklerinizi kullanabilirsiniz.",
   "home.faq.q5": "OpenCode'u sadece terminalde mi kullanabilirim?",
   "home.faq.a5.beforeDesktop": "Artık hayır! OpenCode artık sizin bu cihazlarınıza",
   "home.faq.a5.desktop": "masaüstü",

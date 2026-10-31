@@ -115,8 +115,7 @@ export const dict = {
   "home.faq.a3.p4.beforeLocal": "Du kan til og med koble til dine",
   "home.faq.a3.p4.localLink": "lokale modeller",
   "home.faq.q4": "Kan jeg bruke mine eksisterende AI-abonnementer med OpenCode?",
-  "home.faq.a4.p1":
-    "Ja, du kan bruke ChatGPT Plus/Pro- eller GitHub Copilot-abonnementene dine, eller Claude-abonnementet ditt via Claude Code.",
+  "home.faq.a4.p1": "Ja, du kan bruke ChatGPT Plus/Pro- eller GitHub Copilot-abonnementene dine.",
   "home.faq.q5": "Kan jeg bare bruke OpenCode i terminalen?",
   "home.faq.a5.beforeDesktop": "Ikke lenger! OpenCode er nå tilgjengelig som en app for",
   "home.faq.a5.desktop": "desktop",

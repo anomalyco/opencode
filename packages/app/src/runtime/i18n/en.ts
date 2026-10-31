@@ -103,6 +103,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Switch to the next model variant",
   "command.prompt.mode.shell": "Shell",
   "command.prompt.mode.normal": "Prompt",
+  "command.prompt.mode.toggle": "Toggle shell mode",
   "command.permissions.autoaccept.enable": "Auto-accept permissions",
   "command.permissions.autoaccept.disable": "Stop auto-accepting permissions",
   "command.permissions.autoaccept.project": "Auto-accept permissions for this project",
@@ -230,7 +231,6 @@ export const dict = {
   "provider.connect.title.anthropicProMax": "Login with Anthropic",
   "provider.connect.claudeAgent.description":
     "Use your Claude plan or another Claude Code login. Install Claude Code and sign in first.",
-  "provider.connect.claudeAgent.learnMore": "Learn more",
   "provider.connect.claudeAgent.install": "Install Claude Code",
   "provider.connect.claudeAgent.signIn.command": "Sign-in command",
   "provider.connect.claudeAgent.connect": "Connect",
