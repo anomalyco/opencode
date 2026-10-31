@@ -1,62 +1,12 @@
-import { batch, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
-import { createStore } from "solid-js/store"
-import { makeEventListener } from "@solid-primitives/event-listener"
+import { createMemo, createSignal, onCleanup, Show } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createKeyed, usePlugin } from "@opencode/plugin/gui"
+import { usePlugin } from "@opencode/plugin/gui"
 import { motionGlobals, motionTuning } from "@opencode/ui/motion-tuning"
 import { duration } from "@opencode/util/duration"
 import { SessionTurn } from "@opencode/util/session-turn"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
-
-type Mem = Performance & {
-  memory?: {
-    usedJSHeapSize: number
-    jsHeapSizeLimit: number
-  }
-}
-
-type Evt = PerformanceEntry & {
-  interactionId?: number
-  processingStart?: number
-}
-
-type Shift = PerformanceEntry & {
-  hadRecentInput: boolean
-  value: number
-}
-
-type Obs = PerformanceObserverInit & {
-  durationThreshold?: number
-}
-
-type Readings = {
-  cls: number | undefined
-  delay: number | undefined
-  fps: number | undefined
-  gap: number | undefined
-  focus: boolean
-  heap: { limit: number | undefined; used: number | undefined }
-  inp: number | undefined
-  jank: number | undefined
-  long: { block: number | undefined; count: number | undefined; max: number | undefined }
-  nav: { dur: number | undefined; pending: boolean }
-}
-
-const span = 5000
-
-const ms = (n?: number, d = 0) => {
-  if (n === undefined || Number.isNaN(n)) return
-
-  return `${n.toFixed(d)}ms`
-}
-
-const time = (n?: number) => {
-  if (n === undefined || Number.isNaN(n)) return
-
-  return `${Math.round(n)}`
-}
 
 const fixed = (n?: number, digits = 0) => {
   if (n === undefined || Number.isNaN(n)) return
@@ -64,30 +14,7 @@ const fixed = (n?: number, digits = 0) => {
   return n.toFixed(digits)
 }
 
-const mb = (n?: number) => {
-  if (n === undefined || Number.isNaN(n)) return
-  const v = n / 1024 / 1024
-
-  return `${v >= 1024 ? v.toFixed(0) : v.toFixed(1)}MB`
-}
-
-const bad = (n: number | undefined, limit: number, low = false) => {
-  if (n === undefined || Number.isNaN(n)) return false
-
-  return low ? n < limit : n > limit
-}
-
-const session = (path: string) => path.includes("/session")
-
-function Cell(props: {
-  bad?: boolean
-  dim?: boolean
-  inline?: boolean
-  label: string
-  tip: string
-  value: string
-  span?: 2 | 3
-}) {
+function Cell(props: { dim?: boolean; inline?: boolean; label: string; tip: string; value: string }) {
   const content = () => (
     <div
       classList={{
@@ -95,8 +22,6 @@ function Cell(props: {
         "min-h-[20px] w-fit justify-start px-1.5 py-0.5 text-left": !!props.inline,
         "justify-center text-center": !props.inline,
         "min-h-[42px] w-full flex-col rounded-[8px] px-0.5 py-1": !props.inline,
-        "col-span-2": props.span === 2 && !props.inline,
-        "col-span-3": props.span === 3 && !props.inline,
       }}
     >
       <div
@@ -120,7 +45,6 @@ function Cell(props: {
             "uppercase font-bold tabular-nums": true,
             "text-[11px] leading-text-tight": !!props.inline,
             "text-[13px] leading-text-compact sm:text-[14px]": !props.inline,
-            "text-text-on-critical-base": !!props.bad,
             "opacity-70": !!props.dim,
           }}
         >
@@ -183,7 +107,8 @@ function ToggleCell(props: {
 }
 
 export default function DebugBar(props: {
-  diagnostics?: boolean
+  /** The dev server's layout tools: the direction and focus toggles. */
+  devTools?: boolean
   inline?: boolean
   memory?: { on: boolean; env: boolean; toggle: () => void }
   motion?: { open: boolean; toggle: () => void }
@@ -194,29 +119,7 @@ export default function DebugBar(props: {
   const locale = ctx.locale
   const desktop = ctx.desktop
   const sessions = ctx.sessions
-
-  const [state, setState] = createStore<Readings>({
-    cls: undefined,
-    delay: undefined,
-    fps: undefined,
-    gap: undefined,
-    focus: false,
-    heap: {
-      limit: undefined,
-      used: undefined,
-    },
-    inp: undefined,
-    jank: undefined,
-    long: {
-      block: undefined,
-      count: undefined,
-      max: undefined,
-    },
-    nav: {
-      dur: undefined,
-      pending: false,
-    },
-  })
+  const [focus, setFocus] = createSignal(false)
 
   const target = createMemo(
     () => {
@@ -263,324 +166,21 @@ export default function DebugBar(props: {
   )
 
   const na = () => ctx.t("na").toUpperCase()
-  const heap = () => (state.heap.limit ? (state.heap.used ?? 0) / state.heap.limit : undefined)
-
-  const heapv = () => {
-    const value = heap()
-
-    if (value === undefined) return na()
-
-    return `${Math.round(value * 100)}%`
-  }
-
-  const longv = () => (state.long.count === undefined ? na() : `${time(state.long.block) ?? na()}/${state.long.count}`)
-  const navv = () => (state.nav.pending ? "…" : (time(state.nav.dur) ?? na()))
 
   const toggleFocus = async () => {
     if (!desktop) return
-    const enabled = !state.focus
+    const enabled = !focus()
     await desktop.forceFocus(enabled)
-    setState("focus", enabled)
+    setFocus(enabled)
   }
 
   onCleanup(() => {
-    if (state.focus) void desktop?.forceFocus(false).catch(() => undefined)
-  })
-
-  let prev = ""
-  let start = 0
-  let init = false
-  let one = 0
-  let two = 0
-
-  // Times navigations to and from a session: from the route starting to change until two frames after it settles.
-  createKeyed(
-    () => props.diagnostics && { busy: router.routing(), next: router.path() },
-    (route) => {
-      const next = route.next
-
-      if (!init) {
-        init = true
-        prev = next
-
-        return
-      }
-
-      if (route.busy) {
-        if (one !== 0) cancelAnimationFrame(one)
-
-        if (two !== 0) cancelAnimationFrame(two)
-        one = 0
-        two = 0
-
-        if (start !== 0) return
-        start = performance.now()
-
-        if (session(prev)) setState("nav", { dur: undefined, pending: true })
-
-        return
-      }
-
-      if (start === 0) {
-        prev = next
-
-        return
-      }
-
-      const at = start
-      const from = prev
-
-      start = 0
-      prev = next
-
-      if (!(session(from) || session(next))) return
-
-      if (one !== 0) cancelAnimationFrame(one)
-
-      if (two !== 0) cancelAnimationFrame(two)
-      one = requestAnimationFrame(() => {
-        one = 0
-        two = requestAnimationFrame(() => {
-          two = 0
-          setState("nav", { dur: performance.now() - at, pending: false })
-        })
-      })
-    },
-  )
-
-  onMount(() => {
-    if (!props.diagnostics) return
-    const obs: PerformanceObserver[] = []
-    const fps: Array<{ at: number; dur: number }> = []
-    const long: Array<{ at: number; dur: number }> = []
-    const seen = new Map<number | string, { at: number; delay: number; dur: number }>()
-    let hasLong = false
-    let poll: number | undefined
-    let raf = 0
-    let last = 0
-    let snap = 0
-
-    const trim = (list: Array<{ at: number; dur: number }>, span: number, at: number) => {
-      while (list[0] && at - list[0].at > span) list.shift()
-    }
-
-    const syncFrame = (at: number) => {
-      trim(fps, span, at)
-      const total = fps.reduce((sum, entry) => sum + entry.dur, 0)
-      const gap = fps.reduce((max, entry) => Math.max(max, entry.dur), 0)
-      const jank = fps.filter((entry) => entry.dur > 32).length
-      batch(() => {
-        setState("fps", total > 0 ? (fps.length * 1000) / total : undefined)
-        setState("gap", gap > 0 ? gap : undefined)
-        setState("jank", jank)
-      })
-    }
-
-    const syncLong = (at = performance.now()) => {
-      if (!hasLong) return
-      trim(long, span, at)
-      const block = long.reduce((sum, entry) => sum + Math.max(0, entry.dur - 50), 0)
-      const max = long.reduce((hi, entry) => Math.max(hi, entry.dur), 0)
-      setState("long", { block, count: long.length, max })
-    }
-
-    const syncInp = (at = performance.now()) => {
-      for (const [key, entry] of seen) {
-        if (at - entry.at > span) seen.delete(key)
-      }
-
-      let delay = 0
-      let inp = 0
-
-      for (const entry of seen.values()) {
-        delay = Math.max(delay, entry.delay)
-        inp = Math.max(inp, entry.dur)
-      }
-
-      batch(() => {
-        setState("delay", delay > 0 ? delay : undefined)
-        setState("inp", inp > 0 ? inp : undefined)
-      })
-    }
-
-    const syncHeap = () => {
-      const timing: Mem = performance
-      const mem = timing.memory
-
-      if (!mem) return
-      setState("heap", { limit: mem.jsHeapSizeLimit, used: mem.usedJSHeapSize })
-    }
-
-    const reset = () => {
-      fps.length = 0
-      long.length = 0
-      seen.clear()
-      last = 0
-      snap = 0
-      batch(() => {
-        setState("fps", undefined)
-        setState("gap", undefined)
-        setState("jank", undefined)
-        setState("delay", undefined)
-        setState("inp", undefined)
-
-        if (hasLong) setState("long", { block: 0, count: 0, max: 0 })
-      })
-    }
-
-    const watch = (type: string, init: Obs, fn: (entries: PerformanceEntry[]) => void) => {
-      if (typeof PerformanceObserver === "undefined") return false
-
-      if (!(PerformanceObserver.supportedEntryTypes ?? []).includes(type)) return false
-      const ob = new PerformanceObserver((list) => fn(list.getEntries()))
-
-      try {
-        ob.observe(init)
-        obs.push(ob)
-
-        return true
-      } catch {
-        ob.disconnect()
-
-        return false
-      }
-    }
-
-    if (
-      watch("layout-shift", { buffered: true, type: "layout-shift" }, (entries) => {
-        const add = entries.reduce((sum, entry) => {
-          // SAFETY: this observer subscribes to "layout-shift" entries alone, which carry these fields.
-          const item = entry as Shift
-
-          if (item.hadRecentInput) return sum
-
-          return sum + item.value
-        }, 0)
-
-        if (add === 0) return
-        setState("cls", (value) => (value ?? 0) + add)
-      })
-    ) {
-      setState("cls", 0)
-    }
-
-    if (
-      watch("longtask", { buffered: true, type: "longtask" }, (entries) => {
-        const at = performance.now()
-        long.push(...entries.map((entry) => ({ at: entry.startTime, dur: entry.duration })))
-        syncLong(at)
-      })
-    ) {
-      hasLong = true
-      setState("long", { block: 0, count: 0, max: 0 })
-    }
-
-    watch("event", { buffered: true, durationThreshold: 16, type: "event" }, (entries) => {
-      for (const raw of entries) {
-        // SAFETY: this observer subscribes to "event" entries alone, which carry these optional fields.
-        const entry = raw as Evt
-
-        if (entry.duration < 16) continue
-
-        const key =
-          entry.interactionId && entry.interactionId > 0
-            ? entry.interactionId
-            : `${entry.name}:${Math.round(entry.startTime)}`
-
-        const prev = seen.get(key)
-        const delay = Math.max(0, (entry.processingStart ?? entry.startTime) - entry.startTime)
-        seen.set(key, {
-          at: entry.startTime,
-          delay: Math.max(prev?.delay ?? 0, delay),
-          dur: Math.max(prev?.dur ?? 0, entry.duration),
-        })
-
-        if (seen.size <= 200) continue
-        const first = seen.keys().next().value
-
-        if (first !== undefined) seen.delete(first)
-      }
-
-      syncInp()
-    })
-
-    const loop = (at: number) => {
-      if (document.visibilityState !== "visible") {
-        raf = 0
-
-        return
-      }
-
-      if (last === 0) {
-        last = at
-        raf = requestAnimationFrame(loop)
-
-        return
-      }
-
-      fps.push({ at, dur: at - last })
-      last = at
-
-      if (at - snap >= 250) {
-        snap = at
-        syncFrame(at)
-      }
-
-      raf = requestAnimationFrame(loop)
-    }
-
-    const stop = () => {
-      if (raf !== 0) cancelAnimationFrame(raf)
-      raf = 0
-
-      if (poll === undefined) return
-      clearInterval(poll)
-      poll = undefined
-    }
-
-    const start = () => {
-      if (document.visibilityState !== "visible") return
-
-      if (poll === undefined) {
-        poll = window.setInterval(() => {
-          syncLong()
-          syncInp()
-          syncHeap()
-        }, 1000)
-      }
-
-      if (raf !== 0) return
-      raf = requestAnimationFrame(loop)
-    }
-
-    const vis = () => {
-      if (document.visibilityState !== "visible") {
-        stop()
-
-        return
-      }
-
-      reset()
-      start()
-    }
-
-    syncHeap()
-    start()
-    makeEventListener(document, "visibilitychange", vis)
-
-    onCleanup(() => {
-      if (one !== 0) cancelAnimationFrame(one)
-
-      if (two !== 0) cancelAnimationFrame(two)
-      stop()
-
-      for (const ob of obs) ob.disconnect()
-    })
+    if (focus()) void desktop?.forceFocus(false).catch(() => undefined)
   })
 
   return (
     <aside
-      aria-label={ctx.t(props.diagnostics ? "ariaLabel" : "providerAriaLabel")}
+      aria-label={ctx.t("providerAriaLabel")}
       classList={{
         "pointer-events-auto hidden overflow-hidden text-text-strong md:block": true,
         "mt-[-6px] w-full shrink-0 px-3 py-1": !!props.inline,
@@ -623,87 +223,7 @@ export default function DebugBar(props: {
           dim={turn()?.tps === undefined}
           inline={props.inline}
         />
-        <Show when={props.diagnostics}>
-          <Cell
-            label={ctx.t("nav.label")}
-            tip={ctx.t("nav.tip")}
-            value={navv()}
-            bad={bad(state.nav.dur, 400)}
-            dim={state.nav.dur === undefined && !state.nav.pending}
-            inline={props.inline}
-          />
-          <Cell
-            label={ctx.t("fps.label")}
-            tip={ctx.t("fps.tip")}
-            value={state.fps === undefined ? na() : `${Math.round(state.fps)}`}
-            bad={bad(state.fps, 50, true)}
-            dim={state.fps === undefined}
-            inline={props.inline}
-          />
-          <Cell
-            label={ctx.t("frame.label")}
-            tip={ctx.t("frame.tip")}
-            value={time(state.gap) ?? na()}
-            bad={bad(state.gap, 50)}
-            dim={state.gap === undefined}
-            inline={props.inline}
-          />
-          <Cell
-            label={ctx.t("jank.label")}
-            tip={ctx.t("jank.tip")}
-            value={state.jank === undefined ? na() : `${state.jank}`}
-            bad={bad(state.jank, 8)}
-            dim={state.jank === undefined}
-            inline={props.inline}
-          />
-          <Cell
-            label={ctx.t("long.label")}
-            tip={ctx.t("long.tip", { max: ms(state.long.max) ?? na() })}
-            value={longv()}
-            bad={bad(state.long.block, 200)}
-            dim={state.long.count === undefined}
-            inline={props.inline}
-          />
-          <Cell
-            label={ctx.t("delay.label")}
-            tip={ctx.t("delay.tip")}
-            value={time(state.delay) ?? na()}
-            bad={bad(state.delay, 100)}
-            dim={state.delay === undefined}
-            inline={props.inline}
-          />
-          <Cell
-            label={ctx.t("inp.label")}
-            tip={ctx.t("inp.tip")}
-            value={time(state.inp) ?? na()}
-            bad={bad(state.inp, 200)}
-            dim={state.inp === undefined}
-            inline={props.inline}
-          />
-          <Cell
-            label={ctx.t("cls.label")}
-            tip={ctx.t("cls.tip")}
-            value={state.cls === undefined ? na() : state.cls.toFixed(2)}
-            bad={bad(state.cls, 0.1)}
-            dim={state.cls === undefined}
-            inline={props.inline}
-          />
-          <Cell
-            label={ctx.t("mem.label")}
-            tip={
-              state.heap.used === undefined
-                ? ctx.t("mem.tipUnavailable")
-                : ctx.t("mem.tip", {
-                    used: mb(state.heap.used) ?? na(),
-                    limit: mb(state.heap.limit) ?? na(),
-                  })
-            }
-            value={heapv()}
-            bad={bad(heap(), 0.8)}
-            dim={state.heap.used === undefined}
-            inline={props.inline}
-            span={desktop ? 2 : 3}
-          />
+        <Show when={props.devTools}>
           <ToggleCell
             active={locale.direction() === "rtl"}
             inline={props.inline}
@@ -714,11 +234,11 @@ export default function DebugBar(props: {
           />
           <Show when={desktop}>
             <ToggleCell
-              active={state.focus}
+              active={focus()}
               inline={props.inline}
               label={ctx.t("focus.label")}
               tip={ctx.t("focus.tip")}
-              value={ctx.t(state.focus ? "focus.on" : "focus.off")}
+              value={ctx.t(focus() ? "focus.on" : "focus.off")}
               onClick={() => void toggleFocus()}
             />
           </Show>
