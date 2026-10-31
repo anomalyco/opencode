@@ -186,6 +186,31 @@ opencode mcp add
 
 此命令将引导您添加本地或远程 MCP 服务器。
 
+要跳过交互提示，请提供服务器名称，以及远程服务器的 `--url` 或 `--` 后的本地命令。在 OpenCode v1 中，非交互式添加会写入全局配置。
+
+为远程服务器设置身份验证请求头：
+
+```bash
+opencode mcp add github --url https://api.githubcopilot.com/mcp \
+  --header "Authorization=Bearer {env:GITHUB_TOKEN}"
+```
+
+请在运行 OpenCode 的环境中设置 `GITHUB_TOKEN`。引号内的 `{env:GITHUB_TOKEN}` 会作为[环境变量引用](/docs/zh-cn/config#环境变量)原样保存，并在加载配置时替换。
+
+添加本地服务器时，将命令及其参数放在 `--` 后面：
+
+```bash
+opencode mcp add everything --env LOG_LEVEL=debug -- npx -y @modelcontextprotocol/server-everything
+```
+
+##### 标志
+
+| 标志       | 描述                                                     |
+| ---------- | -------------------------------------------------------- |
+| `--url`    | 远程服务器 URL；不能与本地命令同时使用                   |
+| `--header` | 远程服务器的 HTTP 请求头，格式为 `KEY=VALUE`；可重复设置 |
+| `--env`    | 本地服务器的环境变量，格式为 `KEY=VALUE`；可重复设置     |
+
 ---
 
 #### list
