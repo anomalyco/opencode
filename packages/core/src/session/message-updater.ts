@@ -270,6 +270,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           draft.native = castDraft(event.data.native)
           draft.cost = event.data.cost
           draft.tokens = event.data.tokens
+          draft.contextTokens = event.data.contextTokens
           projectTerminalSnapshot(draft, event)
         })
       },
@@ -281,6 +282,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           draft.native = castDraft(event.data.native)
           draft.error = castDraft(event.data.error)
           draft.retry = undefined
+          draft.contextTokens = event.data.contextTokens
           if (event.data.cost !== undefined && event.data.tokens !== undefined) {
             draft.cost = event.data.cost
             draft.tokens = castDraft(event.data.tokens)
