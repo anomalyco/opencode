@@ -397,4 +397,75 @@ describe("search tools", () => {
         ),
     ),
   )
+
+  it.live("scopes glob search to directories named null and undefined", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.promise(() =>
+          Promise.all(
+            ["null", "undefined", "ordinary"].map((dir) =>
+              Bun.write(path.join(tmp.path, dir, "inside.txt"), "needle\n"),
+            ),
+          ).then(() => fs.writeFile(path.join(tmp.path, "outside.txt"), "needle\n")),
+        ).pipe(
+          Effect.andThen(
+            withTools(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                for (const dir of ["null", "undefined", "ordinary"]) {
+                  const result = yield* executeTool(registry, {
+                    sessionID,
+                    ...toolIdentity,
+                    call: {
+                      type: "tool-call" as const,
+                      id: `call-glob-${dir}`,
+                      name: "glob",
+                      input: { pattern: "*.txt", path: dir },
+                    },
+                  })
+                  expect(result).toMatchObject({
+                    status: "completed",
+                    output: [{ path: path.join(dir, "inside.txt"), type: "file" }],
+                    metadata: { count: 1, truncated: false },
+                  })
+                }
+              }),
+            ),
+          ),
+        ),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("reports a missing search path for literal null and undefined paths", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.promise(() => fs.writeFile(path.join(tmp.path, "outside.txt"), "needle\n")).pipe(
+          Effect.andThen(
+            withTools(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                for (const dir of ["null", "undefined"]) {
+                  const result = yield* executeTool(registry, {
+                    sessionID,
+                    ...toolIdentity,
+                    call: {
+                      type: "tool-call" as const,
+                      id: `call-glob-missing-${dir}`,
+                      name: "glob",
+                      input: { pattern: "*.txt", path: dir },
+                    },
+                  })
+                  expect(result).toEqual({
+                    status: "error",
+                    error: { type: "tool.execution", message: `Search path does not exist: ${dir}` },
+                  })
+                }
+              }),
+            ),
+          ),
+        ),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })
