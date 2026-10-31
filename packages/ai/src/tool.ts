@@ -67,6 +67,8 @@ export type FreeformOption<Parameters extends ToolSchema<any>> =
  * `ToolDefinition` so callers do not rebuild them per invocation.
  */
 export interface Tool<Parameters extends ToolSchema<any> = any, Success extends ToolSchema<any> = any> {
+  /** The tool name the model sees and calls. */
+  readonly name: string
   readonly description: string
   readonly parameters: Parameters
   readonly success: Success
@@ -105,6 +107,7 @@ export type ToolOptions<
   Success extends ToolSchema<any>,
   Execute = ToolExecute<Parameters, Success>,
 > = {
+  readonly name: string
   readonly description: string
   readonly freeform?: FreeformOption<Parameters>
   readonly execute?: Execute
@@ -120,6 +123,7 @@ export type ToolOptions<
  *
  * ```ts
  * tool({
+ *   name: "weather",
  *   description: "Get current weather",
  *   parameters: Schema.Struct({ city: Schema.String }),
  *   success: Schema.Struct({ temperature: Schema.Number }),
@@ -157,6 +161,7 @@ export function build(
   execute: ((params: any, context?: ToolExecuteContext) => any) | undefined,
 ): Tool {
   const shared = {
+    name: config.name,
     description: config.description,
     execute,
     toModelOutput: config.toModelOutput,
@@ -173,7 +178,7 @@ export function build(
       _encode: Effect.succeed,
       _legacyResult: config.toModelOutput === undefined && config.toStructuredOutput === undefined,
       _definition: definition({
-        name: "",
+        name: config.name,
         description: config.description,
         inputSchema: config.jsonSchema,
         outputSchema: config.outputSchema,
@@ -188,7 +193,7 @@ export function build(
     _encode: config.success ? Schema.encodeEffect(config.success) : (value) => Effect.succeed(value ?? null),
     _legacyResult: false,
     _definition: definition({
-      name: "",
+      name: config.name,
       description: config.description,
       inputSchema: emptyInputJsonSchema(config.parameters) ?? toJsonSchema(config.parameters),
       outputSchema: config.success && toJsonSchema(config.success),
@@ -197,30 +202,9 @@ export function build(
   }
 }
 
-/**
- * A record of named tools. The record key becomes the tool name on the wire.
- */
-export type Tools = Record<string, Tool>
-
-/**
- * Convert a tools record into the `ToolDefinition[]` shape that
- * `LLMRequest.tools` expects.
- *
- * Tool names come from the record keys, so the per-tool cached
- * `_definition` is rebuilt with the correct name here. The JSON Schema body
- * is reused.
- */
-export const toDefinitions = (tools: Tools): ReadonlyArray<ToolDefinitionClass> =>
-  Object.entries(tools).map(
-    ([name, item]) =>
-      new ToolDefinition({
-        name,
-        description: item._definition.description,
-        inputSchema: item._definition.inputSchema,
-        outputSchema: item._definition.outputSchema,
-        freeform: item._definition.freeform,
-      }),
-  )
+/** The `ToolDefinition[]` that `LLMRequest.tools` expects, in array order. */
+export const toDefinitions = (tools: ReadonlyArray<Tool>): ReadonlyArray<ToolDefinitionClass> =>
+  tools.map((item) => item._definition)
 
 /**
  * Describes a no-argument Effect tool input as an empty object, or returns

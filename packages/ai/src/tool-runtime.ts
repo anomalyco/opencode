@@ -8,7 +8,7 @@ import {
   type ToolOutput as ToolOutputType,
   type ToolResultValue as ToolResultValueType,
 } from "./schema/index.js"
-import { type Tool, type Tools } from "./tool.js"
+import { type Tool } from "./tool.js"
 
 export interface ToolSettlement {
   readonly result: ToolResultValueType
@@ -20,9 +20,9 @@ export interface DispatchResult extends ToolSettlement {
 }
 
 /** Execute one canonical tool call without owning provider IO or continuation. */
-export const dispatch = (tools: Tools, call: ToolCallPart): Effect.Effect<DispatchResult> => {
+export const dispatch = (tools: ReadonlyArray<Tool>, call: ToolCallPart): Effect.Effect<DispatchResult> => {
   const name = call.namespace === undefined ? call.name : `${call.namespace}.${call.name}`
-  const tool = tools[name]
+  const tool = tools.find((item) => item.name === name)
   if (!tool)
     return Effect.succeed(
       result(call, {

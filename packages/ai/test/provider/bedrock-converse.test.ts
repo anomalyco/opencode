@@ -1091,14 +1091,15 @@ describe("Bedrock Converse route", () => {
       if (!call) throw new Error("Expected a tool call")
       expect(call.name).toBe("browser.tabs.open")
       const dispatched = yield* ToolRuntime.dispatch(
-        {
-          browser_tabs_open: tool({
+        [
+          tool({
+            name: "browser_tabs_open",
             description: "Open a tab",
             parameters: Schema.Struct({}),
             success: Schema.String,
             execute: () => Effect.die("A normalized replay name must not select an executor"),
           }),
-        },
+        ],
         call,
       )
       expect(dispatched.result).toEqual({

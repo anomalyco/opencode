@@ -1,5 +1,5 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 71cf630..4c33e3b 100644
+index 71cf63076b073284aa14f63cd41efa653e8def0f..d4679fc706c76b87949fd674857cea54793e82ce 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
 @@ -1038,7 +1038,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
@@ -18,8 +18,17 @@ index 71cf630..4c33e3b 100644
  	if (resource) authorizationUrl.searchParams.set("resource", resourceIndicatorToString(resource));
  	return {
  		authorizationUrl,
+@@ -4350,7 +4348,7 @@ var Client = class extends require_src.Protocol {
+ 	_excludeInvalidXMcpHeaderTools(result) {
+ 		if (this.getProtocolEra() !== "modern" || !this.transport || detectProbeTransportKind(this.transport) === "stdio") return;
+ 		const filtered = result.tools.filter((tool) => {
+-			const scan = require_src.scanXMcpHeaderDeclarations(tool.inputSchema);
++			const scan = require_src.scanXMcpHeaderDeclarations(tool?.inputSchema);
+ 			if (!scan.valid) {
+ 				console.warn(`[mcp-sdk] excluding tool '${tool.name}' from tools/list: invalid x-mcp-header declaration — ${scan.reason}`);
+ 				return false;
 diff --git a/dist/index.mjs b/dist/index.mjs
-index c1a09a8..f5b0e1d 100644
+index c1a09a82b8121d6a1b038ccc6d02bae46d55dbcf..bf457bdfdef05ad8d09f3fbb94c6ac1aecc59487 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -1035,7 +1035,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
@@ -38,8 +47,17 @@ index c1a09a8..f5b0e1d 100644
  	if (resource) authorizationUrl.searchParams.set("resource", resourceIndicatorToString(resource));
  	return {
  		authorizationUrl,
+@@ -4347,7 +4345,7 @@ var Client = class extends Protocol {
+ 	_excludeInvalidXMcpHeaderTools(result) {
+ 		if (this.getProtocolEra() !== "modern" || !this.transport || detectProbeTransportKind(this.transport) === "stdio") return;
+ 		const filtered = result.tools.filter((tool) => {
+-			const scan = scanXMcpHeaderDeclarations(tool.inputSchema);
++			const scan = scanXMcpHeaderDeclarations(tool?.inputSchema);
+ 			if (!scan.valid) {
+ 				console.warn(`[mcp-sdk] excluding tool '${tool.name}' from tools/list: invalid x-mcp-header declaration — ${scan.reason}`);
+ 				return false;
 diff --git a/dist/src-DpAS0jfg.cjs b/dist/src-DpAS0jfg.cjs
-index e2ffe64..af1153c 100644
+index e2ffe6482e0d8eed88082215547ccde7b5ef2d37..1550d1d30cdbd79b35af59ef69a2e9e26d67290e 100644
 --- a/dist/src-DpAS0jfg.cjs
 +++ b/dist/src-DpAS0jfg.cjs
 @@ -1093,11 +1093,7 @@ function build$1() {
@@ -55,8 +73,35 @@ index e2ffe64..af1153c 100644
  		annotations: ToolAnnotationsSchema$1.optional(),
  		execution: ToolExecutionSchema$1.optional(),
  		_meta: zod_v4.record(zod_v4.string(), zod_v4.unknown()).optional()
+@@ -1109,7 +1105,7 @@ function build$1() {
+ 	/**
+ 	* The server's response to a {@linkcode ListToolsRequest | tools/list} request from the client.
+ 	*/
+-	const ListToolsResultSchema$1 = PaginatedResultSchema$1.extend({ tools: zod_v4.array(ToolSchema$1) });
++	const ListToolsResultSchema$1 = PaginatedResultSchema$1.extend({ tools: zod_v4.array(zod_v4.unknown()) });
+ 	/**
+ 	* The server's response to a tool call.
+ 	*/
+@@ -2859,7 +2855,7 @@ function build() {
+ 	const ListToolsResultSchema$1 = wireResult({
+ 		ttlMs: zod_v4.number().int().min(0),
+ 		cacheScope: zod_v4.enum(["public", "private"]),
+-		tools: zod_v4.array(ToolSchema$1),
++		tools: zod_v4.array(zod_v4.unknown()),
+ 		nextCursor: CursorSchema$1.optional()
+ 	});
+ 	const ListPromptsResultSchema$1 = wireResult({
+@@ -3120,7 +3116,7 @@ function build() {
+ 		"tools/list": liftedResult({
+ 			ttlMs: zod_v4.number().int().min(0),
+ 			cacheScope: zod_v4.enum(["public", "private"]),
+-			tools: zod_v4.array(ToolSchema$1),
++			tools: zod_v4.array(zod_v4.unknown()),
+ 			nextCursor: CursorSchema$1.optional()
+ 		}),
+ 		"prompts/get": liftedResult({
 diff --git a/dist/src-WCy6ifGf.mjs b/dist/src-WCy6ifGf.mjs
-index 7a40fb4..16d9ac0 100644
+index 7a40fb418c402ffc6cac3e71192313a79c63be27..e9c090ae5e18531bb2fc5e225f0f072fddc67ab5 100644
 --- a/dist/src-WCy6ifGf.mjs
 +++ b/dist/src-WCy6ifGf.mjs
 @@ -1092,11 +1092,7 @@ function build$1() {
@@ -72,3 +117,30 @@ index 7a40fb4..16d9ac0 100644
  		annotations: ToolAnnotationsSchema$1.optional(),
  		execution: ToolExecutionSchema$1.optional(),
  		_meta: z.record(z.string(), z.unknown()).optional()
+@@ -1108,7 +1104,7 @@ function build$1() {
+ 	/**
+ 	* The server's response to a {@linkcode ListToolsRequest | tools/list} request from the client.
+ 	*/
+-	const ListToolsResultSchema$1 = PaginatedResultSchema$1.extend({ tools: z.array(ToolSchema$1) });
++	const ListToolsResultSchema$1 = PaginatedResultSchema$1.extend({ tools: z.array(z.unknown()) });
+ 	/**
+ 	* The server's response to a tool call.
+ 	*/
+@@ -2858,7 +2854,7 @@ function build() {
+ 	const ListToolsResultSchema$1 = wireResult({
+ 		ttlMs: z.number().int().min(0),
+ 		cacheScope: z.enum(["public", "private"]),
+-		tools: z.array(ToolSchema$1),
++		tools: z.array(z.unknown()),
+ 		nextCursor: CursorSchema$1.optional()
+ 	});
+ 	const ListPromptsResultSchema$1 = wireResult({
+@@ -3119,7 +3115,7 @@ function build() {
+ 		"tools/list": liftedResult({
+ 			ttlMs: z.number().int().min(0),
+ 			cacheScope: z.enum(["public", "private"]),
+-			tools: z.array(ToolSchema$1),
++			tools: z.array(z.unknown()),
+ 			nextCursor: CursorSchema$1.optional()
+ 		}),
+ 		"prompts/get": liftedResult({

@@ -55,14 +55,15 @@ test("leaves the next flag and its value alone", async () => {
   expect(result.input).toEqual({ worktree: Option.some(true), message: ["hi"], model: Option.some("openai/gpt") })
 })
 
-// Matches every other single-value flag, where `--model a --model b` keeps `a`.
+// Matches every other single-value flag, where `--model a --model b` is rejected.
 test.each([
-  { args: ["-w", "--worktree=feature"], worktree: Option.some(true) },
-  { args: ["--worktree=feature", "-w"], worktree: Option.some("feature") },
-])("keeps the first of repeated flags: $args", async ({ args, worktree }) => {
+  { args: ["-w", "--worktree=feature"] },
+  { args: ["--worktree=feature", "-w"] },
+  { args: ["--model", "a", "--model", "b"] },
+])("rejects repeated flags: $args", async ({ args }) => {
   const result = await parse(args)
-  expect(Exit.isSuccess(result.exit)).toBe(true)
-  expect(result.input).toEqual({ worktree, message: [], model: Option.none() })
+  expect(Exit.isFailure(result.exit)).toBe(true)
+  expect(result.input).toBeUndefined()
 })
 
 test("renders the value as optional in help", async () => {

@@ -25,7 +25,9 @@ export const OpenAIContextCapsPlugin = define({
       const credential = connection
         ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
+      const previous = signedIn
       signedIn = credential?.type === "oauth" && methodIDs.has(credential.methodID)
+      return signedIn !== previous
     })
 
     yield* load()
@@ -41,7 +43,7 @@ export const OpenAIContextCapsPlugin = define({
     })
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === integrationID),
-      Stream.runForEach(() => load().pipe(Effect.andThen(ctx.provider.reload()))),
+      Stream.runForEach(() => load().pipe(Effect.flatMap((changed) => (changed ? ctx.provider.reload() : Effect.void)))),
       Effect.forkScoped({ startImmediately: true }),
     )
   }),

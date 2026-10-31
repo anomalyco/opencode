@@ -7,7 +7,21 @@ import type { Session } from "@opencode/schema/session"
 import type { Transport } from "@modelcontextprotocol/client"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
+import {
+  Cause,
+  Clock,
+  Context,
+  Effect,
+  Exit,
+  FiberSet,
+  Latch,
+  Layer,
+  Schema,
+  Scope,
+  Semaphore,
+  Stream,
+  Types,
+} from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -80,6 +94,8 @@ type ServerEntry = {
   readonly config: Mcp.ServerConfig
   status: Status
   readonly startup: Latch.Latch
+  // The connection attempt in flight: when it began and a latch that opens once it settles.
+  attempt?: { readonly started: number; readonly settled: Latch.Latch }
   scope?: Scope.Closeable
   client?: McpClient.Connection
   tools?: ReadonlyArray<Tool>
@@ -97,6 +113,9 @@ type AttachedEntry = {
   readonly client: McpClient.Connection
   tools: ReadonlyArray<Tool>
 }
+
+// How long a model call may wait for a server that is still connecting, counted from when it began.
+const STARTUP_GRACE_MS = 2_000
 
 // Bounds re-listing the tools of an attached connection that takes over the top of its stack.
 const FALLBACK_LIST_TIMEOUT = "5 seconds"
@@ -136,6 +155,11 @@ export interface Interface extends State.Transformable<Editor> {
    */
   readonly attach: (name: string, transport: Transport) => Effect.Effect<void, McpClient.ConnectError, Scope.Scope>
   readonly tools: () => Effect.Effect<Tool[]>
+  /**
+   * Waits for servers that are still connecting, each until it settles or until its startup grace
+   * window ends. Servers past their window never wait.
+   */
+  readonly awaitStartup: () => Effect.Effect<void>
   readonly callTool: (input: {
     readonly server: ServerName | string
     readonly name: string
@@ -455,6 +479,9 @@ export const layer = (options?: Options) =>
 
       const startServer = (name: ServerName, entry: ServerEntry) =>
         Effect.gen(function* () {
+          // A server still pending from creation keeps the window that started with its entry.
+          if (!entry.attempt || entry.status.status !== "pending")
+            entry.attempt = { started: yield* Clock.currentTimeMillis, settled: Latch.makeUnsafe() }
           // Announce the handshake so connect() and credential reconnects don't show a stale
           // disabled/failed status for the duration of the connection attempt.
           entry.status = { status: "pending" }
@@ -505,6 +532,14 @@ export const layer = (options?: Options) =>
           yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
           yield* bus.publish(McpEvent.StatusChanged, { server: name })
         }).pipe(
+          // Every caller holds the server lock, so the attempt read here is the one this call began.
+          Effect.ensuring(
+            Effect.suspend(() => {
+              const attempt = entry.attempt
+              entry.attempt = undefined
+              return attempt ? attempt.settled.open : Effect.void
+            }),
+          ),
           Effect.ensuring(entry.startup.open),
           Effect.annotateLogs({ server: name, directory: location.directory, connectionID: crypto.randomUUID() }),
         )
@@ -535,6 +570,7 @@ export const layer = (options?: Options) =>
           config: serverConfig,
           status: { status: "pending" },
           startup: Latch.makeUnsafe(),
+          attempt: { started: yield* Clock.currentTimeMillis, settled: Latch.makeUnsafe() },
         }
         entries.set(name, entry)
         yield* Effect.gen(function* () {
@@ -665,11 +701,13 @@ export const layer = (options?: Options) =>
       const reconcile = Effect.fnUntraced(function* () {
         const servers = state.get().servers
         if (!applied && entries.size === 0) {
+          const started = yield* Clock.currentTimeMillis
           for (const [name, server] of servers) {
             entries.set(name, {
               config: server,
               status: { status: "pending" },
               startup: Latch.makeUnsafe(),
+              attempt: { started, settled: Latch.makeUnsafe() },
             })
           }
           yield* Effect.forEach(entries, ([name, entry]) => register(name, entry), { discard: true })
@@ -815,6 +853,17 @@ export const layer = (options?: Options) =>
               .filter((tool) => !shadowed.has(`${tool.server}\0${tool.name}`)),
             ...clients,
           ].toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
+        }),
+        awaitStartup: Effect.fn("MCP.awaitStartup")(function* () {
+          const now = yield* Clock.currentTimeMillis
+          yield* Effect.all(
+            Array.from(entries.values()).flatMap((entry) => {
+              if (entry.status.status !== "pending" || !entry.attempt) return []
+              const remaining = entry.attempt.started + STARTUP_GRACE_MS - now
+              return remaining > 0 ? [entry.attempt.settled.await.pipe(Effect.raceFirst(Effect.sleep(remaining)))] : []
+            }),
+            { concurrency: "unbounded", discard: true },
+          )
         }),
         callTool: Effect.fn("MCP.callTool")(function* (input) {
           const server = ServerName.make(input.server)
