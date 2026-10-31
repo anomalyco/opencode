@@ -102,6 +102,9 @@ export default function Home() {
                   <Tabs.Trigger value="brew" data-slot="tab">
                     brew
                   </Tabs.Trigger>
+                  <Tabs.Trigger value="winget" data-slot="tab">
+                    winget
+                  </Tabs.Trigger>
                   <Tabs.Trigger value="paru" data-slot="tab">
                     paru
                   </Tabs.Trigger>
@@ -145,6 +148,16 @@ export default function Home() {
                       <span>
                         <span data-slot="protocol">brew install </span>
                         <span data-slot="highlight">anomalyco/tap/opencode-v2</span>
+                      </span>
+                      <CopyStatus />
+                    </button>
+                  </Tabs.Content>
+                  <Tabs.Content as="pre" data-slot="panel" value="winget">
+                    <button data-copy data-slot="command" onClick={handleCopyClick}>
+                      <span>
+                        <span data-slot="protocol">winget install --id </span>
+                        <span data-slot="highlight">Anomaly.OpenCode</span>
+                        <span> -e</span>
                       </span>
                       <CopyStatus />
                     </button>

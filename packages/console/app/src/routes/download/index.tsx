@@ -79,6 +79,12 @@ export default function Download() {
                 </code>
                 <CopyStatus />
               </button>
+              <button data-component="cli-row" onClick={handleCopyClick("winget install --id Anomaly.OpenCode -e")}>
+                <code>
+                  winget install --id <strong>Anomaly.OpenCode</strong> -e
+                </code>
+                <CopyStatus />
+              </button>
               <button data-component="cli-row" onClick={handleCopyClick("paru -S opencode-beta")}>
                 <code>
                   paru -S <strong>opencode-beta</strong>
@@ -102,6 +108,15 @@ export default function Download() {
               <button data-component="cli-row" onClick={handleCopyClick("brew install --cask opencode-desktop")}>
                 <code>
                   brew install --cask <strong>opencode-desktop</strong>
+                </code>
+                <CopyStatus />
+              </button>
+              <button
+                data-component="cli-row"
+                onClick={handleCopyClick("winget install --id Anomaly.OpenCode.Desktop -e")}
+              >
+                <code>
+                  winget install --id <strong>Anomaly.OpenCode.Desktop</strong> -e
                 </code>
                 <CopyStatus />
               </button>
