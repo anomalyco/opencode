@@ -26,6 +26,11 @@
             openssl
             git
           ];
+          shellHook = ''
+            # bun dlopens prebuilt native addons (e.g. @parcel/watcher) that link
+            # libstdc++ dynamically; expose the C++ runtime so those loads succeed.
+            export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+          '';
         };
       });
 
