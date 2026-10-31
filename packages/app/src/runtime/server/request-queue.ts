@@ -1,15 +1,19 @@
 type Entry = { method: string; url: string; at: number; slow: boolean; priority: number }
 
+type RequestTiming = { method: string; url: string; ms: number }
+
+export type RequestQueueLog = { limit: number; inflight: RequestTiming[]; queued: RequestTiming[] }
+
 // Chromium allows six connections per origin. The event stream holds one for the life of the
 // connection and health probes use their own fetch, so the app's API calls stay below that or
 // a burst stalls probes and user actions inside the browser where nothing can observe it.
 const requestQueueLimit = 4
 
-// Endpoints that shell out to git or walk the filesystem take seconds on a large repository. They
-// may hold at most this many slots, so a session mount's small reads never queue behind them.
+// Git/filesystem endpoints and MCP catalogs can take seconds, including MCP startup and discovery.
+// They may hold at most this many slots, so a session mount's small reads never queue behind them.
 const requestQueueSlowLimit = 2
 
-const slowRequestPaths = ["/api/vcs", "/api/worktree"]
+const slowRequestPaths = ["/api/vcs", "/api/worktree", "/api/command", "/api/mcp"]
 
 // A mount legitimately fires a dozen requests at once; only a request that has waited this long
 // for a slot indicates the server is not keeping up.
@@ -40,7 +44,7 @@ export function createRequestQueue(input: {
   stallMs?: number
   headersTimeoutMs?: number
   setupHeadersTimeoutMs?: number
-  log?: (message: string, data: Record<string, unknown>) => void
+  log?: (message: string, data: RequestQueueLog) => void
   now?: () => number
 }) {
   const limit = input.limit ?? requestQueueLimit
@@ -127,12 +131,14 @@ export function createRequestQueue(input: {
       if (pathname === "/api/event") return base(request)
       // Writes go first. Session lists and the first transcript page unblock navigation, so they
       // go ahead of location reads. Older pages and filtered indexes keep background priority.
+
       const initialMessages =
         /^\/api\/session\/[^/]+\/message$/.test(pathname) &&
         !url.searchParams.has("cursor") &&
         !url.searchParams.has("before") &&
         !url.searchParams.has("type") &&
         url.searchParams.get("order") !== "asc"
+
       const priority = request.method !== "GET" ? 2 : pathname === "/api/session" || initialMessages ? 1 : 0
       const entry = { method: request.method, url: request.url, at: now(), slow: isSlowRequest(pathname), priority }
       const queued = acquire(entry)
