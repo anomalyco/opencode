@@ -27,6 +27,7 @@ import palenight from "./assets/palenight.json" with { type: "json" }
 import rosepine from "./assets/rosepine.json" with { type: "json" }
 import solarized from "./assets/solarized.json" with { type: "json" }
 import synthwave84 from "./assets/synthwave84.json" with { type: "json" }
+import t3Chat from "./assets/t3-chat.json" with { type: "json" }
 import tokyonight from "./assets/tokyonight.json" with { type: "json" }
 import vercel from "./assets/vercel.json" with { type: "json" }
 import vesper from "./assets/vesper.json" with { type: "json" }
@@ -62,6 +63,7 @@ export const DEFAULT_THEMES: Record<string, ThemeV1Json> = {
   rosepine,
   solarized,
   synthwave84,
+  ["t3-chat"]: t3Chat,
   tokyonight,
   vesper,
   vercel,
