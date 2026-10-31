@@ -346,17 +346,7 @@ export function PaneTabs(props: {
                 >
                   <Show
                     when={modifier}
-                    fallback={
-                      <Tooltip value={language.t("session.tab.add")} placement="bottom" class="flex items-center">
-                        <IconButton
-                          icon={<Icon name="plus" />}
-                          variant="ghost-muted"
-                          size="large"
-                          onClick={add}
-                          aria-label={language.t("session.tab.add")}
-                        />
-                      </Tooltip>
-                    }
+                    fallback={<NewTabButtonWithMenu items={launchers()} onChoose={target} onNewTab={add} />}
                   >
                     {(key) => (
                       <NewTabButton
@@ -500,13 +490,6 @@ function AddButton(props: { item: SessionPanelMenuItem; onChoose: () => void }):
 
 function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () => void }): JSX.Element {
   const language = useLanguage()
-  const command = useCommand()
-  const keys = createMemo(() => props.items.map((entry) => entry.key), [], { equals: same })
-  const byKey = createMemo(() => new Map(props.items.map((entry) => [entry.key, entry.item])))
-  // A chosen item runs once the closing menu has returned focus to "+", and the tab strip has passed it on to the
-  // selected tab. Releasing that focus first lets the item move it where its tab needs it, e.g. into a new terminal,
-  // without the strip taking it back for the tab it remembers.
-  let chosen: SessionPanelMenuItem | undefined
 
   return (
     <Tooltip value={language.t("session.tab.add")} placement="bottom" class="flex items-center">
@@ -522,53 +505,116 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () 
           onPointerDown={(event: PointerEvent) => event.preventDefault()}
         />
         <Menu.Portal>
-          <Menu.Content
-            onCloseAutoFocus={() => {
-              const item = chosen
-
-              if (!item) return
-              chosen = undefined
-              setTimeout(() => {
-                if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
-                props.onChoose()
-                item.run()
-              })
-            }}
-          >
-            <For each={keys()}>
-              {(key) => (
-                <Show when={byKey().get(key)}>
-                  {(item) => {
-                    const keybind = createMemo(() => {
-                      const bind = item().keybind
-
-                      return bind ? command.keybindParts(bind) : []
-                    })
-
-                    return (
-                      <Menu.Item
-                        class="!gap-6"
-                        onSelect={() => (chosen = item())}
-                        shortcut={
-                          <Show when={keybind().length > 0}>
-                            <Keybind keys={keybind()} variant="neutral" />
-                          </Show>
-                        }
-                      >
-                        <div class="flex items-center gap-2">
-                          <Show when={item().icon}>{(icon) => <Icon name={icon()} size="small" />}</Show>
-                          <span>{item().title}</span>
-                        </div>
-                      </Menu.Item>
-                    )
-                  }}
-                </Show>
-              )}
-            </For>
-          </Menu.Content>
+          <AddMenuContent items={props.items} onChoose={props.onChoose} />
         </Menu.Portal>
       </Menu>
     </Tooltip>
+  )
+}
+
+/** "+" opens the new tab view; a right click lists the same launchers as a quick menu under it instead. */
+function NewTabButtonWithMenu(props: {
+  items: readonly SessionPanelMenuEntry[]
+  onChoose: () => void
+  onNewTab: () => void
+}): JSX.Element {
+  const language = useLanguage()
+  const [menu, setMenu] = createStore({ open: false, x: 0, y: 0 })
+
+  return (
+    <>
+      {/* The tooltip would sit on top of the menu's first item. */}
+      <Tooltip
+        value={language.t("session.tab.add")}
+        placement="bottom"
+        class="flex items-center"
+        forceOpen={menu.open ? false : undefined}
+      >
+        <IconButton
+          icon={<Icon name="plus" />}
+          variant="ghost-muted"
+          size="large"
+          onClick={props.onNewTab}
+          onContextMenu={(event: MouseEvent) => {
+            if (!(event.currentTarget instanceof HTMLElement)) return
+            event.preventDefault()
+            const rect = event.currentTarget.getBoundingClientRect()
+            setMenu({ open: true, x: rect.left, y: rect.bottom })
+          }}
+          aria-label={language.t("session.tab.add")}
+        />
+      </Tooltip>
+      <Menu
+        appearance="standard"
+        open={menu.open}
+        onOpenChange={(open) => setMenu("open", open)}
+        modal={false}
+        placement="bottom-start"
+        gutter={4}
+        getAnchorRect={() => ({ x: menu.x, y: menu.y, width: 0, height: 0 })}
+      >
+        <Menu.Portal>
+          <AddMenuContent items={props.items} onChoose={props.onChoose} />
+        </Menu.Portal>
+      </Menu>
+    </>
+  )
+}
+
+function AddMenuContent(props: { items: readonly SessionPanelMenuEntry[]; onChoose: () => void }): JSX.Element {
+  const command = useCommand()
+  const keys = createMemo(() => props.items.map((entry) => entry.key), [], { equals: same })
+  const byKey = createMemo(() => new Map(props.items.map((entry) => [entry.key, entry.item])))
+  // A chosen item runs once the closing menu has returned focus to "+", and the tab strip has passed it on to the
+  // selected tab. Releasing that focus first lets the item move it where its tab needs it, e.g. into a new terminal,
+  // without the strip taking it back for the tab it remembers.
+  let chosen: SessionPanelMenuItem | undefined
+
+  return (
+    <Menu.Content
+      onCloseAutoFocus={() => {
+        const item = chosen
+
+        if (!item) return
+        chosen = undefined
+        setTimeout(() => {
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+          props.onChoose()
+          item.run()
+        })
+      }}
+    >
+      <For each={keys()}>
+        {(key) => (
+          <Show when={byKey().get(key)}>
+            {(item) => {
+              const keybind = createMemo(() => {
+                const bind = item().keybind
+
+                return bind ? command.keybindParts(bind) : []
+              })
+
+              return (
+                <Menu.Item
+                  class="!gap-6"
+                  onSelect={() => (chosen = item())}
+                  shortcut={
+                    <Show when={keybind().length > 0}>
+                      <Keybind keys={keybind()} variant="neutral" />
+                    </Show>
+                  }
+                >
+                  <div class="flex items-center gap-2">
+                    <Show when={item().icon}>{(icon) => <Icon name={icon()} size="small" />}</Show>
+                    <span>{item().title}</span>
+                  </div>
+                </Menu.Item>
+              )
+            }}
+          </Show>
+        )}
+      </For>
+    </Menu.Content>
   )
 }
 
