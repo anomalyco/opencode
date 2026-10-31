@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
-import { Effect, Fiber, Stream } from "effect"
+import { Effect, Exit, Fiber, Stream, Tracer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Project } from "@opencode/core/project"
@@ -166,3 +166,36 @@ it.live("Composer backgrounds stay inert and malformed, oversized or escaping ma
     expect(yield* ProjectIcon.discover(filesystem, tmp.path)).toBeUndefined()
   }),
 )
+
+it.live("returns undefined without recording span failures when the directory is missing", () => {
+  const spans: Tracer.NativeSpan[] = []
+  const tracer = Tracer.make({
+    span(options) {
+      const span = new Tracer.NativeSpan(options)
+      spans.push(span)
+      return span
+    },
+  })
+  return Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const missing = path.join(tmp.path, "missing")
+    const filesystem = yield* FSUtil.Service
+    const db = (yield* Database.Service).db
+    const id = Project.ID.make("missing-icons")
+    yield* db
+      .insert(ProjectTable)
+      .values({ id, worktree: AbsolutePath.make(missing), sandboxes: [] })
+      .run()
+
+    expect(yield* ProjectIcon.refresh(filesystem, db, id)).toBeUndefined()
+
+    const iconSpans = spans.filter((span) => span.name.startsWith("ProjectIcon."))
+    expect(iconSpans.some((span) => span.name === "ProjectIcon.refresh")).toBe(true)
+    expect(iconSpans.some((span) => span.name === "ProjectIcon.discover")).toBe(true)
+    for (const span of iconSpans) {
+      if (span.status._tag === "Ended") {
+        expect(Exit.isFailure(span.status.exit)).toBe(false)
+      }
+    }
+  }).pipe(Effect.provideService(Tracer.Tracer, tracer))
+})
