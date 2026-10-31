@@ -52,7 +52,8 @@ function serveUI(
   const revalidate = html || name === "sw.js" || name === "registerSW.js"
   const headers = {
     "content-type": FSUtil.mimeType(name),
-    "cache-control": revalidate ? "no-cache" : "public, max-age=31536000, immutable",
+    // no-transform keeps intermediaries from rewriting the bytes the PWA precache integrity covers.
+    "cache-control": `${revalidate ? "no-cache" : "public, max-age=31536000, immutable"}, no-transform`,
     "content-security-policy": html
       ? cspForHtml(typeof file === "string" ? file : Buffer.from(file).toString())
       : csp(),
