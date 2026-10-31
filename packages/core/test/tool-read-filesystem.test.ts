@@ -24,6 +24,34 @@ const absolute = (value: string) => AbsolutePath.make(value)
 describe("ReadTool text serialization", () => {
   const cases = [
     {
+      name: "preserves a single blank page before continuation",
+      content: "\nomega\n",
+      page: { limit: 1 },
+      output: { type: "text-page", content: "", offset: 1, lines: 1, truncated: true, next: 2 },
+      model: "Read file lines.txt, lines 1-1\n1: \n[Output truncated. Continue reading with offset: 2]",
+    },
+    {
+      name: "preserves a single blank page at a noninitial offset",
+      content: "alpha\n\nomega\n",
+      page: { offset: 2, limit: 1 },
+      output: { type: "text-page", content: "", offset: 2, lines: 1, truncated: true, next: 3 },
+      model: "Read file lines.txt, lines 2-2\n2: \n[Output truncated. Continue reading with offset: 3]",
+    },
+    {
+      name: "preserves a single blank page at EOF",
+      content: "alpha\n\n",
+      page: { offset: 2, limit: 1 },
+      output: { type: "text-page", content: "", offset: 2, lines: 1, truncated: false },
+      model: "Read file lines.txt, lines 2-2\n2: ",
+    },
+    {
+      name: "preserves a file containing only one blank line",
+      content: "\n",
+      page: { limit: 1 },
+      output: { type: "text-page", content: "", offset: 1, lines: 1, truncated: false },
+      model: "Read file lines.txt, lines 1-1\n1: ",
+    },
+    {
       name: "preserves a selected trailing blank line before continuation",
       content: "alpha\n\nomega\n",
       page: { offset: 1, limit: 2 },
@@ -90,7 +118,7 @@ describe("ReadTool text serialization", () => {
       name: "preserves empty-file page output",
       content: "",
       page: { limit: 2 },
-      output: { type: "text-page", content: "", offset: 1, truncated: false },
+      output: { type: "text-page", content: "", offset: 1, lines: 0, truncated: false },
       model: "Read file lines.txt, 0 lines",
     },
   ]
@@ -226,6 +254,30 @@ describe("ReadToolFileSystem", () => {
       expect(error.message).toBe("Offset 2 is out of range for this file (1 line)")
     }),
   )
+
+  for (const content of ["", "\n", "one\n", "one\n" + "x".repeat(300_000) + "\n"]) {
+    it.live(`identifies the actual EOF bytes for a ${content.length}-byte invalid read`, () =>
+      Effect.gen(function* () {
+        const current = yield* fixture
+        const file = absolute(path.join(current.directory, "revision.txt"))
+        yield* current.files.writeFileString(file, content)
+        const ranges: number[] = []
+        const environment = {
+          ...current.environment,
+          read: (input: string, range?: { readonly offset: number; readonly length: number }) => {
+            ranges.push(range?.offset ?? 0)
+            return current.environment.read(input, range)
+          },
+        }
+        const error = yield* ReadToolFileSystem.read(environment, file, "revision.txt", { offset: 100 }).pipe(
+          Effect.flip,
+        )
+
+        expect(error).toMatchObject({ version: Bun.SHA256.hash(content, "hex") })
+        expect(ranges).toEqual(content.length > 256 * 1024 ? [0, 256 * 1024] : [0])
+      }),
+    )
+  }
 
   it.effect("pages text with one-based offsets", () =>
     Effect.gen(function* () {

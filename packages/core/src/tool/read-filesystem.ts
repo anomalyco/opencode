@@ -1,6 +1,7 @@
 export * as ReadToolFileSystem from "./read-filesystem.js"
 
 import path from "path"
+import { createHash } from "crypto"
 import { pathToFileURL } from "url"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
@@ -42,7 +43,7 @@ export class MediaIngestLimitError extends Schema.TaggedError<MediaIngestLimitEr
 
 export class OffsetOutOfRangeError extends Schema.TaggedError<OffsetOutOfRangeError>()(
   "ReadTool.OffsetOutOfRangeError",
-  { offset: Schema.Number, lines: Schema.Number },
+  { offset: Schema.Number, lines: Schema.Number, version: Schema.optionalKey(Schema.String) },
 ) {
   override get message() {
     return `Offset ${this.offset} is out of range for this file (${this.lines} ${this.lines === 1 ? "line" : "lines"})`
@@ -83,6 +84,7 @@ export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
   content: Schema.String,
   mime: Schema.String,
   offset: PositiveInt,
+  lines: NonNegativeInt.annotate({ description: "The number of selected lines, including blank lines." }),
   truncated: Schema.Boolean,
   next: Schema.optionalKey(PositiveInt),
 }) {}
@@ -170,6 +172,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
       result,
       first.bytes.subarray(0, result.consumed).includes(0),
       lineCount(textLeaf(first.bytes).summary.lines, first.bytes.at(-1)),
+      [first.bytes],
     )
   }
 
@@ -207,7 +210,14 @@ export const read = Effect.fn("ReadTool.read")(function* (
           checked += leaf.summary.bytes
           return length > 0 && leaf.bytes.subarray(0, length).includes(0)
         })
-        return yield* makeTextPage(input, resource, translated, binary, lineCount(lines, leaves.at(-1)?.bytes.at(-1)))
+        return yield* makeTextPage(
+          input,
+          resource,
+          translated,
+          binary,
+          lineCount(lines, leaves.at(-1)?.bytes.at(-1)),
+          leaves.map((leaf) => leaf.bytes),
+        )
       }
     }
 
@@ -241,15 +251,22 @@ const makeTextPage = Effect.fnUntraced(function* (
   result: NonNullable<ReturnType<typeof textPage>>,
   binary: boolean,
   lines: number,
+  chunks: ReadonlyArray<Uint8Array>,
 ) {
   if (binary) return yield* new BinaryFileError({ resource })
   if (result.entries.length === 0 && result.offset !== 1)
-    return yield* new OffsetOutOfRangeError({ offset: result.offset, lines })
+    return yield* new OffsetOutOfRangeError({
+      offset: result.offset,
+      lines,
+      // An invalid offset has already scanned to EOF. Fingerprint those bytes without rereading the file.
+      version: chunks.reduce((hash, bytes) => hash.update(bytes), createHash("sha256")).digest("hex"),
+    })
   return new TextPage({
     type: "text-page",
     content: result.entries.join("\n"),
     mime: mimeType(input),
     offset: result.offset,
+    lines: result.entries.length,
     truncated: result.next !== undefined,
     ...(result.next === undefined ? {} : { next: result.next }),
   })

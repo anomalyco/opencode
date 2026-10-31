@@ -109,6 +109,7 @@ currently use these actions and resources:
 | Action               | Resource                                                                    |
 | -------------------- | --------------------------------------------------------------------------- |
 | `read`               | Location-relative internal path or canonical absolute external path         |
+| `doom_loop`          | `read`, when repeated invalid text-file offsets reach the permission gate    |
 | `edit`               | Target path for `edit`, `write`, and `patch`                                |
 | `glob`               | Requested glob pattern                                                      |
 | `grep`               | Requested regular expression, not the search path                           |
@@ -136,7 +137,24 @@ For example, allow one skill and deny all other skills:
 }
 ```
 
-`doom_loop` and `lsp` are not current V2 Core permission actions.
+`doom_loop` asks by default on an invalid text-file offset after two completed
+invalid reads of the same unchanged file since the last delivered user message.
+Changing offsets and rereading valid lines do not reset the count; changed file
+contents or a new delivered user message does. An `allow` rule permits further
+attempts with the normal offset error, while `deny` or rejecting the prompt stops
+the execution. Already-running parallel reads can finish before a later read is gated.
+
+For example, stop repeated invalid reads without prompting:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "doom_loop", "resource": "read", "effect": "deny" },
+  ],
+}
+```
+
+`lsp` is not a current V2 Core permission action.
 
 ## Directories
 
@@ -216,6 +234,7 @@ Every agent, including custom agents, starts with this ordered base policy:
 ```jsonc
 [
   { "action": "*", "resource": "*", "effect": "allow" },
+  { "action": "doom_loop", "resource": "*", "effect": "ask" },
   { "action": "read", "resource": "*.env", "effect": "ask" },
   { "action": "read", "resource": "*.env.*", "effect": "ask" },
   { "action": "read", "resource": "*.env.example", "effect": "allow" },

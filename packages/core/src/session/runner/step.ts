@@ -18,6 +18,7 @@ import { Snapshot } from "../../snapshot.js"
 import { Tool } from "../../tool.js"
 import { ToolOutput } from "../../tool-output.js"
 import { QuestionTool } from "../../tool/plugin/question.js"
+import { ReadRange } from "../../tool/read-range.js"
 import { StepFailedError } from "../error.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
@@ -87,6 +88,8 @@ export const make = Effect.gen(function* () {
       readonly call: ToolCall
       readonly fiber: Fiber.Fiber<void, Permission.DeclinedError | QuestionTool.CancelledError>
     }> = []
+    let rangeFailure: SessionError.Error | undefined
+    const rangeGates = new Set<string>()
     const interruptTools = Effect.suspend(() => Fiber.interruptAll(toolRuns.map((run) => run.fiber)))
     const executeTool = (call: ToolCall) => {
       if (input.prepared.request.toolChoice?.type === "none")
@@ -96,7 +99,10 @@ export const make = Effect.gen(function* () {
         agent: input.agent,
         messageID: input.assistantMessageID,
         call,
-        progress: (update) => publisher.progress(call.id, update),
+        progress: (update) => {
+          if (ReadRange.isGate(update)) rangeGates.add(call.id)
+          return publisher.progress(call.id, update)
+        },
       })
     }
 
@@ -126,9 +132,11 @@ export const make = Effect.gen(function* () {
               restore(executeTool(event)).pipe(
                 Effect.flatMap(toolOutput.truncate),
                 Effect.flatMap((outcome) => publisher.toolExecution(event.id, event.name, outcome)),
-                Effect.catchTag("Tool.Error", (error) =>
-                  publisher.failTool(event.id, toSessionError(error), error.metadata).pipe(Effect.asVoid),
-                ),
+                Effect.catchTag("Tool.Error", (error) => {
+                  if (error instanceof ReadRange.BlockedError)
+                    rangeFailure = { type: "doom_loop", message: error.message }
+                  return publisher.failTool(event.id, toSessionError(error), error.metadata).pipe(Effect.asVoid)
+                }),
               ),
             ).pipe(Effect.forkScoped),
           })
@@ -156,9 +164,19 @@ export const make = Effect.gen(function* () {
         const joined = yield* restore(Fiber.awaitAll(toolRuns.map((run) => run.fiber))).pipe(Effect.exit)
         if (Exit.isFailure(joined)) yield* interruptTools
         const tools = classifyToolExits(joined, toolRuns)
+        if (
+          !input.isLocationClosed() &&
+          !streamInterrupted &&
+          !tools.interrupted &&
+          tools.declines.some(
+            (decline) => rangeGates.has(decline.call.id) && decline.reason instanceof Permission.DeclinedError,
+          )
+        )
+          rangeFailure = { type: "permission.rejected", message: "The user declined repeated out-of-range reads" }
 
         const overflow = overflowFailure ?? streamFailure
         if (
+          !rangeFailure &&
           !publisher.record().outputStarted &&
           isContextOverflowFailure(overflow) &&
           (yield* restore(input.recoverOverflow))
@@ -172,6 +190,8 @@ export const make = Effect.gen(function* () {
         }
 
         if (overflowFailure) yield* publisher.publish(overflowFailure)
+        // All tool fibers and the provider stream have settled; flushing a failure here cannot race active fragments.
+        if (rangeFailure) yield* publisher.failAssistant(rangeFailure)
         const recorded = publisher.record()
         const unknownFinish =
           Exit.isSuccess(stream) && recorded.finish?.finish === "unknown"
@@ -185,6 +205,7 @@ export const make = Effect.gen(function* () {
         const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
         const llmError = llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined
         if (
+          !rangeFailure &&
           input.recoverContinuation &&
           llmFailure?.reason._tag === "Transport" &&
           (llmFailure.reason.recovery === "retry-full" || llmFailure.reason.recovery === "rotate-and-retry-full") &&
@@ -192,7 +213,7 @@ export const make = Effect.gen(function* () {
         )
           return Outcome.RecoverFull()
         const retry =
-          llmFailure && llmError && !isContextOverflowFailure(llmFailure)
+          !rangeFailure && llmFailure && llmError && !isContextOverflowFailure(llmFailure)
             ? yield* restore(
                 input.retry(
                   llmFailure,
@@ -264,6 +285,7 @@ export const make = Effect.gen(function* () {
         }
 
         if (
+          !rangeFailure &&
           llmFailure &&
           llmError &&
           retry?.retry &&
@@ -273,6 +295,7 @@ export const make = Effect.gen(function* () {
         )
           return Outcome.Continue({ error: llmError, decision: retry })
 
+        if (rangeFailure) return yield* new StepFailedError({ error: rangeFailure })
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) {
           if (input.isLocationClosed()) return Outcome.Completed({ needsContinuation: true })

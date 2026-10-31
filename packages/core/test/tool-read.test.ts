@@ -18,6 +18,7 @@ import { Tool } from "@opencode/core/tool"
 import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { SessionStore } from "@opencode/core/session/store"
 import { SessionInstructions } from "@opencode/core/session/instructions"
 import { Environment } from "@opencode/core/environment/index"
 import { testEffect } from "./lib/effect"
@@ -34,6 +35,7 @@ const readToolNode = makeLocationNode({
     Image.node,
     Permission.node,
     SessionInstructions.node,
+    SessionStore.node,
     FSUtil.node,
     Location.node,
   ],
@@ -1024,6 +1026,7 @@ describe("ReadTool", () => {
         content: "hello",
         mime: "text/plain",
         offset: 2,
+        lines: 1,
         truncated: true,
         next: 3,
       })
@@ -1056,4 +1059,35 @@ describe("ReadTool", () => {
       ])
     }),
   )
+
+  for (const lines of [0, 1]) {
+    it.effect(`preserves ${lines === 0 ? "empty" : "blank"} pages through the tool output schema`, () =>
+      Effect.gen(function* () {
+        readResult = new ReadToolFileSystem.TextPage({
+          type: "text-page",
+          content: "",
+          mime: "text/plain",
+          offset: 1,
+          lines,
+          truncated: false,
+        })
+        const registry = yield* Tool.Service
+        const result = yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call-blank",
+            name: "read",
+            input: { path: "blank.txt", limit: 1 },
+          },
+        })
+
+        expect(result).toMatchObject({ status: "completed", output: { content: "", lines } })
+        expect(result.content).toEqual([
+          { type: "text", text: lines === 0 ? "Read file blank.txt, 0 lines" : "Read file blank.txt, lines 1-1\n1: " },
+        ])
+      }),
+    )
+  }
 })
