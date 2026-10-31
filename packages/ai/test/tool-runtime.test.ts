@@ -42,7 +42,7 @@ test("dispatches namespaced calls by qualified identity", async () => {
   const lookup = tool({
     name: "crm.lookup",
     description: "Look up a customer.",
-    parameters: Schema.Struct({}),
+    input: Schema.Struct({}),
     success: Schema.String,
     execute: (_, value) => {
       context = value
@@ -52,7 +52,7 @@ test("dispatches namespaced calls by qualified identity", async () => {
   const call = ToolCallPart.make({ id: "call_1", namespace: "crm", name: "lookup", input: {} })
   const result = await Effect.runPromise(
     ToolRuntime.dispatch(
-      [lookup, tool({ name: "lookup", description: "Unqualified lookup.", parameters: Schema.Struct({}) })],
+      [lookup, tool({ name: "lookup", description: "Unqualified lookup.", input: Schema.Struct({}) })],
       call,
     ),
   )
@@ -65,7 +65,7 @@ test("dispatches namespaced calls by qualified identity", async () => {
 const get_weather = tool({
   name: "get_weather",
   description: "Get current weather for a city.",
-  parameters: Schema.Struct({ city: Schema.String }),
+  input: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
   execute: ({ city }) =>
     Effect.gen(function* () {
@@ -78,7 +78,7 @@ const get_weather = tool({
 const schema_only_weather = tool({
   name: "get_weather",
   description: "Get current weather for a city.",
-  parameters: Schema.Struct({ city: Schema.String }),
+  input: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
 })
 
@@ -184,12 +184,12 @@ describe("LLMClient tools", () => {
       const projected = tool({
         name: "projected",
         description: "Project an encoded success.",
-        parameters: Schema.Struct({ prefix: Schema.String }),
+        input: Schema.Struct({ prefix: Schema.String }),
         success: Schema.Struct({ count: Schema.NumberFromString }),
         execute: () => Effect.succeed({ count: 2 }),
-        toModelOutput: (input) => {
-          calls.push(input)
-          return [{ type: "text", text: `${input.parameters.prefix}:${input.output.count}` }]
+        toModelOutput: (result) => {
+          calls.push(result)
+          return [{ type: "text", text: `${result.input.prefix}:${result.output.count}` }]
         },
       })
 
@@ -198,7 +198,7 @@ describe("LLMClient tools", () => {
         LLMEvent.toolCall({ id: "call_projected", name: "projected", input: { prefix: "count" } }),
       )
 
-      expect(calls).toEqual([{ id: "call_projected", parameters: { prefix: "count" }, output: { count: "2" } }])
+      expect(calls).toEqual([{ id: "call_projected", input: { prefix: "count" }, output: { count: "2" } }])
       expect(dispatched.result).toEqual({ type: "text", value: "count:2" })
       expect(dispatched.output).toEqual({ structured: { count: "2" }, content: [{ type: "text", text: "count:2" }] })
       expect(dispatched.events).toEqual([
@@ -217,7 +217,7 @@ describe("LLMClient tools", () => {
       const text = tool({
         name: "text",
         description: "Return text.",
-        parameters: Schema.Struct({}),
+        input: Schema.Struct({}),
         success: Schema.String,
         execute: () => Effect.succeed("hello"),
       })
@@ -266,14 +266,14 @@ describe("LLMClient tools", () => {
       const text = tool({
         name: "text",
         description: "Return text.",
-        parameters: Schema.Struct({}),
+        input: Schema.Struct({}),
         success: Schema.String,
         execute: () => Effect.succeed("hello"),
       })
       const json = tool({
         name: "json",
         description: "Return JSON.",
-        parameters: Schema.Struct({}),
+        input: Schema.Struct({}),
         success: Schema.Struct({ ok: Schema.Boolean }),
         execute: () => Effect.succeed({ ok: true }),
       })
@@ -292,7 +292,7 @@ describe("LLMClient tools", () => {
       const image = tool({
         name: "image",
         description: "Return an image.",
-        parameters: Schema.Struct({}),
+        input: Schema.Struct({}),
         success: Schema.Struct({ mime: Schema.String, data: Schema.String }),
         execute: () => Effect.succeed({ mime: "image/png", data: "AAECAw==" }),
         toStructuredOutput: (output) => ({ mime: output.mime }),
@@ -374,7 +374,7 @@ describe("LLMClient tools", () => {
       const remote = tool({
         name: "remote",
         description: "Return a remote file.",
-        parameters: Schema.Struct({}),
+        input: Schema.Struct({}),
         success: Schema.Struct({ ok: Schema.Boolean }),
         execute: () => Effect.succeed({ ok: true }),
         toModelOutput: () => [{ type: "file", uri: "https://example.test/image.png", mime: "image/png" }],
@@ -401,7 +401,7 @@ describe("LLMClient tools", () => {
     const [typed] = toDefinitions([get_weather])
     const schema = { type: "object", properties: { result: { type: "string" } } } as const
     const [dynamic] = toDefinitions([
-      tool({ name: "dynamic", description: "Dynamic tool.", jsonSchema: { type: "object" }, outputSchema: schema }),
+      tool({ name: "dynamic", description: "Dynamic tool.", input: { type: "object" }, outputSchema: schema }),
     ])
 
     expect(typed?.outputSchema).toMatchObject({
@@ -421,7 +421,7 @@ describe("LLMClient tools", () => {
       const screenshot = tool({
         name: "screenshot",
         description: "Capture a screenshot.",
-        jsonSchema: { type: "object", properties: {} },
+        input: { type: "object", properties: {} },
         execute: () =>
           Effect.succeed({
             type: "content" as const,
@@ -462,7 +462,7 @@ describe("LLMClient tools", () => {
       const eventful = tool({
         name: "eventful",
         description: "Return an events field.",
-        jsonSchema: { type: "object", properties: {} },
+        input: { type: "object", properties: {} },
         execute: () => Effect.succeed(callerOwned),
       })
 
@@ -489,7 +489,7 @@ describe("LLMClient tools", () => {
       const dynamic = tool({
         name: "dynamic",
         description: "Return caller-defined JSON.",
-        jsonSchema: { type: "object", properties: {} },
+        input: { type: "object", properties: {} },
         execute: () => Effect.succeed(malformed),
       })
 
@@ -536,7 +536,7 @@ describe("LLMClient tools", () => {
       const contextual = tool({
         name: "contextual",
         description: "Capture tool context.",
-        parameters: Schema.Struct({ value: Schema.String }),
+        input: Schema.Struct({ value: Schema.String }),
         success: Schema.Struct({ ok: Schema.Boolean }),
         execute: (_params, ctx) =>
           Effect.sync(() => {

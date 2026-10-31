@@ -37,7 +37,7 @@ describe("tool (dynamic JSON Schema)", () => {
     const lookup = tool({
       name: "lookup",
       description: "Look up something",
-      jsonSchema,
+      input: jsonSchema,
       execute: () => Effect.succeed({ ok: true }),
     })
     const [definition] = toDefinitions([lookup])
@@ -52,7 +52,7 @@ describe("tool (dynamic JSON Schema)", () => {
       const echo = tool({
         name: "echo",
         description: "echo",
-        jsonSchema: { type: "object" },
+        input: { type: "object" },
         execute: (params) =>
           Effect.sync(() => {
             seen.push(params)
@@ -203,7 +203,7 @@ describe("schema on ai.stream and ai.loop", () => {
   const echo = tool({
     name: "echo",
     description: "Echo a value.",
-    parameters: Schema.Struct({ value: Schema.String }),
+    input: Schema.Struct({ value: Schema.String }),
     execute: ({ value }) => Effect.succeed(value),
   })
 

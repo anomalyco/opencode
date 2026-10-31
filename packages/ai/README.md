@@ -58,7 +58,9 @@ after each step that has tool calls, with every step's `LLMResponse`; returning 
 them. Tools are an array, sent in the order given so the provider can reuse its cached prompt prefix. Each tool has a
 `name`, and two tools with the same name fail the request. `tool` takes a plain `async` execute; a throw or rejection
 goes back to the model as an error result, and `signal` aborts when the loop is interrupted.
-`tool` from `@opencode/ai/effect` takes the same options (including an optional `success` schema) with an Effect execute:
+`input` is an Effect Schema that decodes and types the arguments, or a raw JSON Schema object, such as an MCP tool's,
+whose arguments arrive as `unknown` (pair it with an optional JSON Schema `outputSchema`). `tool` from
+`@opencode/ai/effect` takes the same options (including an optional `success` schema) with an Effect execute:
 
 ```ts
 import { readFile } from "node:fs/promises"
@@ -68,7 +70,7 @@ import { ai, tool } from "@opencode/ai"
 const read_file = tool({
   name: "read_file",
   description: "Read a UTF-8 file.",
-  parameters: Schema.Struct({ path: Schema.String }),
+  input: Schema.Struct({ path: Schema.String }),
   execute: ({ path }, { signal }) => readFile(path, { encoding: "utf8", signal }),
 })
 
@@ -92,7 +94,7 @@ instead of JSON arguments: unconstrained `text`, or text matching a `regex` or `
 const run_code = tool({
   name: "run_code",
   description: "Run JavaScript",
-  parameters: Schema.Struct({ code: Schema.String }),
+  input: Schema.Struct({ code: Schema.String }),
   freeform: { type: "lark", grammar: JS_GRAMMAR },
   execute: ({ code }) => runCode(code),
 })
@@ -131,11 +133,15 @@ import { ai, LLMEvent } from "@opencode/ai/effect"
 const flagged = (data: unknown) =>
   typeof data === "object" && data !== null && "type" in data && data.type === "moderation.flagged"
 
-const events = ai.stream({ model, prompt: "Say hello.", includeRaw: true }).pipe(
-  Stream.map((event) =>
-    event.type === "raw" && flagged(event.data) ? LLMEvent.providerError({ message: "Flagged by moderation" }) : event,
-  ),
-)
+const events = ai
+  .stream({ model, prompt: "Say hello.", includeRaw: true })
+  .pipe(
+    Stream.map((event) =>
+      event.type === "raw" && flagged(event.data)
+        ? LLMEvent.providerError({ message: "Flagged by moderation" })
+        : event,
+    ),
+  )
 ```
 
 ### Google Interactions
@@ -150,11 +156,13 @@ live under `providerMetadata.vertex`. The default is still full-history replay w
 
 ```ts
 const model = Google.configure({ apiKey }).interactions("gemini-3.8-flash")
-const response = yield* ai.generate({
-  model,
-  prompt: "Say hello.",
-  providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto", store: true },
-})
+const response =
+  yield *
+  ai.generate({
+    model,
+    prompt: "Say hello.",
+    providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto", store: true },
+  })
 ```
 
 Interactions supports text output, streamed function calls, native tool results, thought signatures, and multimodal
@@ -669,18 +677,18 @@ Common fields are portable in shape, not in support. Some routes approximate `as
 size they offer; others fail with a typed `AIError` before any network call rather than dropping them, so check this
 table before swapping only the `model`:
 
-| Provider              | `n` | `aspect`             | `resolution`          | `images`                         | Moved to `providerOptions`                         |
-| --------------------- | --- | -------------------- | --------------------- | -------------------------------- | -------------------------------------------------- |
-| OpenAI                | ✓¹  | nearest size         | nearest size          | ✓                                | `size`, `outputFormat`, `mask`                     |
-| Google (Gemini)       | 1   | ✓                    | ✓ (`0.5K` as `512`)   | ✓ (no public URLs)               | `seed`                                             |
-| xAI                   | ✓   | ✓                    | `1k`/`2k`             | ✓                                | none                                               |
-| Meta                  | ✓   | ✓ (hint)             | ignored               | ✓                                | `size`, `outputFormat`                             |
-| Z.ai                  | ✗   | width × height       | width × height        | ✗                                | `size`                                             |
-| Alibaba               | ✓   | width × height       | width × height        | ✓                                | `size`, `seed`                                     |
-| MiniMax               | ✓   | preset or w × h⁴     | preset or w × h⁴      | 1 (portrait subject)             | `aspect_ratio`, `width`, `height`, `seed`          |
-| Vercel AI Gateway     | ✓   | as OpenAI³           | as OpenAI³            | per model                        | as OpenAI                                          |
-| OpenRouter            | ✓   | ✓ (`aspect_ratio`)   | tier⁵                 | per model⁵                       | `size`, `outputFormat` (no `mask`)                 |
-| Cloudflare Workers AI | 1   | width × height²      | width × height²       | ✗                                | `width`, `height`, `seed`                          |
+| Provider              | `n` | `aspect`           | `resolution`        | `images`             | Moved to `providerOptions`                |
+| --------------------- | --- | ------------------ | ------------------- | -------------------- | ----------------------------------------- |
+| OpenAI                | ✓¹  | nearest size       | nearest size        | ✓                    | `size`, `outputFormat`, `mask`            |
+| Google (Gemini)       | 1   | ✓                  | ✓ (`0.5K` as `512`) | ✓ (no public URLs)   | `seed`                                    |
+| xAI                   | ✓   | ✓                  | `1k`/`2k`           | ✓                    | none                                      |
+| Meta                  | ✓   | ✓ (hint)           | ignored             | ✓                    | `size`, `outputFormat`                    |
+| Z.ai                  | ✗   | width × height     | width × height      | ✗                    | `size`                                    |
+| Alibaba               | ✓   | width × height     | width × height      | ✓                    | `size`, `seed`                            |
+| MiniMax               | ✓   | preset or w × h⁴   | preset or w × h⁴    | 1 (portrait subject) | `aspect_ratio`, `width`, `height`, `seed` |
+| Vercel AI Gateway     | ✓   | as OpenAI³         | as OpenAI³          | per model            | as OpenAI                                 |
+| OpenRouter            | ✓   | ✓ (`aspect_ratio`) | tier⁵               | per model⁵           | `size`, `outputFormat` (no `mask`)        |
+| Cloudflare Workers AI | 1   | width × height²    | width × height²     | ✗                    | `width`, `height`, `seed`                 |
 
 ✓ lowers natively; ✗ fails whenever the field is set (including `n: 1`); `1` means `n > 1` fails. "width × height"
 computes a size the provider accepts and fails when the request falls outside its limits. ¹ `ai.image.stream` on OpenAI
@@ -851,11 +859,13 @@ and emits `image-partial` events before each final `image`; `ai.image.generate` 
 import { Stream } from "effect"
 import { ImageEvent } from "@opencode/ai/effect"
 
-const previews = ai.image.stream({
-  model: openai.image("gpt-image-2"),
-  prompt: "A lighthouse at dusk",
-  providerOptions: { partialImages: 2 },
-}).pipe(Stream.runForEach((event) => (ImageEvent.is.imagePartial(event) ? showPreview(event.image) : Effect.void)))
+const previews = ai.image
+  .stream({
+    model: openai.image("gpt-image-2"),
+    prompt: "A lighthouse at dusk",
+    providerOptions: { partialImages: 2 },
+  })
+  .pipe(Stream.runForEach((event) => (ImageEvent.is.imagePartial(event) ? showPreview(event.image) : Effect.void)))
 ```
 
 The provider may send fewer previews than requested when the final image is ready first.

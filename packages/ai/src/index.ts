@@ -41,7 +41,7 @@ import {
   type TranscriptionRequestInput,
 } from "./transcription.js"
 import { ToolFailure, build } from "./tool.js"
-import type { NoExecute, ToolExecuteContext, ToolOptions, ToolSchema } from "./tool.js"
+import type { NoExecute, ToolExecuteContext, ToolInput, ToolInputType, ToolOptions, ToolSchema } from "./tool.js"
 import { fileMediaType } from "./utils/media-type.js"
 import { Video, type VideoModel, type VideoRequest, type VideoRequestInput } from "./video.js"
 
@@ -306,23 +306,23 @@ const fileError = (message: string, cause: unknown) =>
 
 /** `tool` from `@opencode/ai/effect`, with an `execute` that returns a value or a Promise and throws to fail. */
 export const tool = <
-  Parameters extends ToolSchema<any> = typeof Schema.Unknown,
+  Input extends ToolInput = typeof Schema.Unknown,
   Success extends ToolSchema<any> = typeof Schema.Unknown,
   Result extends Schema.Schema.Type<Success> | PromiseLike<Schema.Schema.Type<Success>> | NoExecute = NoExecute,
 >(
   config: ToolOptions<
-    Parameters,
+    Input,
     Success,
-    (params: Schema.Schema.Type<Parameters>, context: Partial<ToolExecuteContext> & { signal: AbortSignal }) => Result
+    (input: ToolInputType<Input>, context: Partial<ToolExecuteContext> & { signal: AbortSignal }) => Result
   >,
 ) => {
   const execute = config.execute
   return build(
     config,
     execute &&
-      ((params, context) =>
+      ((input, context) =>
         Effect.tryPromise({
-          try: async (signal) => execute(params, { ...context, signal }),
+          try: async (signal) => execute(input, { ...context, signal }),
           catch: (error) => new ToolFailure({ message: error instanceof Error ? error.message : String(error), error }),
         })),
   )
@@ -491,6 +491,8 @@ export type {
   Tool,
   ToolExecute,
   ToolExecuteContext,
+  ToolInput,
+  ToolInputType,
   ToolModelOutputInput,
   ToolOptions,
   ToolSchema,

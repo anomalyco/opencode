@@ -207,11 +207,7 @@ const prepare = (input: Input) => {
   return tryRequest(() => {
     const description = "Return the structured result by calling this tool."
     const output: Tool | undefined =
-      schema === undefined
-        ? undefined
-        : Schema.isSchema(schema)
-          ? tool({ name: OBJECT_TOOL, description, parameters: schema })
-          : tool({ name: OBJECT_TOOL, description, jsonSchema: schema })
+      schema === undefined ? undefined : tool({ name: OBJECT_TOOL, description, input: schema })
     const tools = rest.tools ?? []
     const built = request(
       output === undefined
