@@ -173,7 +173,7 @@ fn socket_root() -> Result<PathBuf> {
 
 fn resolve_socket_root(directory: Option<PathBuf>, uid: u32) -> Result<PathBuf> {
     let base = match directory {
-        None => PathBuf::from("/tmp"),
+        None => default_socket_base(),
         Some(directory) if !directory.is_absolute() => {
             bail!("OPENCODE_PTY_SOCKET_DIR must be an absolute path")
         }
@@ -189,6 +189,19 @@ fn resolve_socket_root(directory: Option<PathBuf>, uid: u32) -> Result<PathBuf> 
     // Sockets live in a dedicated child so the 0700 permission change never
     // applies to a caller-chosen directory.
     Ok(base.join(format!("opencode-pty-{uid}")))
+}
+
+fn default_socket_base() -> PathBuf {
+    // Android runtimes do not provide a writable /tmp; TMPDIR points at the app's
+    // own temporary directory (Termux sets it to $PREFIX/tmp).
+    #[cfg(target_os = "android")]
+    {
+        std::env::temp_dir()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        PathBuf::from("/tmp")
+    }
 }
 
 fn socket_file(root: &Path, canonical_directory: &Path) -> PathBuf {
