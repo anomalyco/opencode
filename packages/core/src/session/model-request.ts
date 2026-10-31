@@ -43,8 +43,14 @@ import type { SessionMessage } from "./message.js"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
-const IMAGE_REMOVED =
-  "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
+// The lowest per-request image cap seen is 30 (some OpenCode Go routes); Console/Zen and Azure OpenAI allow 50.
+// A per-model limit would replace this constant.
+const IMAGE_COUNT_TRIGGER = 30
+const IMAGE_COUNT_TARGET = 20
+const imageRemoved = (name: string | undefined) =>
+  name
+    ? `[The image "${name}" was removed from this request and is no longer visible. Do not make claims about its contents from memory. If needed, read "${name}" again with an available tool or ask the user to attach it again.]`
+    : "[This image was removed from this request and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
 // Used when the catalog has no output limit for the model.
 const OUTPUT_TOKEN_FALLBACK = 32_000
@@ -202,22 +208,22 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
       )
     }),
   )
-  // Replay the images in order, dropping the oldest down to the target whenever the kept payload passes the trigger.
-  // A new image then moves the cut only every (trigger - target) bytes instead of on every request, so the replaced
-  // prefix, and with it the provider's prompt cache, stays the same between cuts.
+  // Replay the images in order, dropping the oldest down to the target whenever the kept payload or count passes its
+  // trigger. A new image then moves the cut only every (trigger - target) bytes or images instead of on every request,
+  // so the replaced prefix, and with it the provider's prompt cache, stays the same between cuts.
   let cut = 0
   let kept = 0
-  for (const size of sizes) {
+  sizes.forEach((size, index) => {
     kept += size
-    if (kept <= IMAGE_BYTES_TRIGGER) continue
-    while (kept > IMAGE_BYTES_TARGET) kept -= sizes[cut++]!
-  }
+    if (kept > IMAGE_BYTES_TRIGGER) while (kept > IMAGE_BYTES_TARGET) kept -= sizes[cut++]!
+    if (index + 1 - cut > IMAGE_COUNT_TRIGGER) while (index + 1 - cut > IMAGE_COUNT_TARGET) kept -= sizes[cut++]!
+  })
   if (cut === 0) return messages
 
   let index = 0
   return replaceMedia(messages, (media) => {
     if (!isImage(media.mime)) return
-    return index++ < cut ? IMAGE_REMOVED : undefined
+    return index++ < cut ? imageRemoved(media.name) : undefined
   })
 }
 
