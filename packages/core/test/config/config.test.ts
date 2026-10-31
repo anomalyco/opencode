@@ -350,6 +350,39 @@ describe("Config", () => {
     ),
   )
 
+  it.live("ignores network settings in project configuration", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const network = (host: string) => ({
+          network: { client_certificates: [{ hosts: [host], cert: "client.pem", key: "client.key" }] },
+        })
+        return Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.mkdir(path.join(project, ".opencode"), { recursive: true })
+          await fs.writeFile(path.join(global, "opencode.json"), JSON.stringify(network("user.test")))
+          await fs.writeFile(
+            path.join(project, "opencode.json"),
+            JSON.stringify({ shell: "project", ...network("direct.test") }),
+          )
+          await fs.writeFile(path.join(project, ".opencode", "opencode.json"), JSON.stringify(network("dot.test")))
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const entries = yield* config.entries()
+              expect(Config.latest(entries, "shell")).toBe("project")
+              expect(Config.latest(entries, "network")?.client_certificates?.map((entry) => entry.hosts)).toEqual([
+                ["user.test"],
+              ])
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+        )
+      }),
+    ),
+  )
+
   test("resolves the system configuration directory per platform", () => {
     expect(ConfigDiscovery.systemDirectory("darwin", {})).toBe(
       AbsolutePath.make("/Library/Application Support/opencode"),

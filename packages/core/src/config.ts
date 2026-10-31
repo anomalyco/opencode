@@ -366,8 +366,8 @@ export const layer = (options?: Options) =>
           ...wellknownDocuments.flat(),
           ...globalSupplementary,
           ...explicit,
-          ...direct,
-          ...projectSupplementary,
+          ...(yield* Effect.forEach(direct, withoutNetwork)),
+          ...(yield* Effect.forEach(projectSupplementary, withoutNetwork)),
           ...content,
           ...managedSettings,
         ]
@@ -508,6 +508,19 @@ export const layer = (options?: Options) =>
       })
     }),
   )
+
+// `network` carries the machine's client certificates, so a repository's config must not choose where they are
+// presented. Project documents drop it; every other source layers as usual.
+const withoutNetwork = Effect.fnUntraced(function* (entry: Entry) {
+  if (entry.type !== "document" || entry.info.network === undefined) return entry
+  yield* Effect.logWarning("configuration normalization diagnostic", {
+    source: entry.path,
+    path: "$.network",
+    kind: "ignored",
+    action: "ignored network settings in project configuration",
+  })
+  return new Document({ ...entry, info: new Info({ ...entry.info, network: undefined }) })
+})
 
 export function configured(options?: Options) {
   return makeLocationNode({

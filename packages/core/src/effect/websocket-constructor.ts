@@ -19,9 +19,11 @@ type Environment = Readonly<Record<string, string | undefined>>
 const environmentValue = (environment: Environment, name: string) =>
   environment[name] ?? environment[name.toLowerCase()]
 
+const secure = (url: URL) => url.protocol === "wss:" || url.protocol === "https:"
+
 const bypassesProxy = (url: URL, value: string | undefined) => {
   if (!value) return false
-  const port = url.port || (url.protocol === "wss:" ? "443" : "80")
+  const port = url.port || (secure(url) ? "443" : "80")
   const hostname = url.hostname.toLowerCase()
   return value.split(/[\s,]+/).some((entry) => {
     if (!entry) return false
@@ -33,15 +35,15 @@ const bypassesProxy = (url: URL, value: string | undefined) => {
   })
 }
 
+/** The proxy the environment selects for a WebSocket or HTTP URL, if any. */
 const proxy = (value: string, environment: Environment = process.env) => {
   const url = new URL(value)
   if (["127.0.0.1", "localhost", "::1"].includes(url.hostname)) return undefined
   if (bypassesProxy(url, environmentValue(environment, "NO_PROXY"))) return undefined
-  const protocolProxy = url.protocol === "wss:" ? "WSS_PROXY" : "WS_PROXY"
-  const standardProxy = url.protocol === "wss:" ? "HTTPS_PROXY" : "HTTP_PROXY"
+  const protocolProxy = url.protocol.startsWith("ws") ? (secure(url) ? "WSS_PROXY" : "WS_PROXY") : undefined
   return (
-    environmentValue(environment, protocolProxy) ??
-    environmentValue(environment, standardProxy) ??
+    (protocolProxy ? environmentValue(environment, protocolProxy) : undefined) ??
+    environmentValue(environment, secure(url) ? "HTTPS_PROXY" : "HTTP_PROXY") ??
     environmentValue(environment, "ALL_PROXY")
   )
 }

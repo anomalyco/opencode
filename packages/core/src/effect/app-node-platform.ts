@@ -4,6 +4,9 @@ import { FetchHttpClient, HttpClient } from "effect/http"
 import { Socket } from "effect/socket"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { ClientCertificate } from "../client-certificate.js"
 import { WebSocketConstructor } from "./websocket-constructor.js"
 
 // Bun's fetch ends a request after five quiet minutes, before provider routes' own header and chunk timeouts.
@@ -20,8 +23,8 @@ const withoutBunTimeout = Layer.effect(
 
 export const requestExecutor = makeGlobalNode({
   service: RequestExecutor.Service,
-  layer: RequestExecutor.layer.pipe(Layer.provide(withoutBunTimeout)),
-  deps: [httpClient],
+  layer: RequestExecutor.layer.pipe(Layer.provide(withoutBunTimeout), Layer.provide(ClientCertificate.httpClientLayer)),
+  deps: [httpClient, FSUtil.node, Global.node],
 })
 
 export const llmClient = makeGlobalNode({ service: LLMClient.Service, layer: LLMClient.layer, deps: [requestExecutor] })
