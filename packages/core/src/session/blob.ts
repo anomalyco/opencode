@@ -29,12 +29,17 @@ const toolItems = (part: Part): ReadonlyArray<Tool.Content> =>
     ? (part.state.content ?? [])
     : []
 
-function collect(data: MessageRow["data"] | InboxRow["payload"], hashes: Set<string>) {
+/** A stored row, one `session_part` row, or the `session_part` rows of one assistant message. */
+type Refs = MessageRow["data"] | InboxRow["payload"] | Part | { readonly content: ReadonlyArray<Part> }
+
+function collect(data: Refs, hashes: Set<string>) {
   if ("files" in data)
     for (const file of data.files ?? []) if (isFileRef(file)) hashes.add(SessionStored.refHash(file.uri))
   if ("content" in data)
     for (const part of data.content)
       for (const item of toolItems(part)) if (isToolFileRef(item)) hashes.add(SessionStored.refHash(item.uri))
+  if ("type" in data && data.type === "tool")
+    for (const item of toolItems(data)) if (isToolFileRef(item)) hashes.add(SessionStored.refHash(item.uri))
 }
 
 /** A ref whose blob is gone reads as this text, so clients and the model never see a bare ref. */
@@ -351,7 +356,17 @@ export const externalize = Effect.fnUntraced(function* (
   return { ...message, content }
 })
 
-const hashesOf = (data: MessageRow["data"] | InboxRow["payload"]) => {
+/** {@link externalize} for one assistant part. Returns the same part when nothing moved. */
+export const externalizePart = Effect.fnUntraced(function* (db: DatabaseService, part: AssistantPart) {
+  if (!(yield* enabled)) return part
+  const pending: Pending = new Map()
+  const stored = toolPartRefs(pending, part)
+  if (pending.size === 0) return part
+  yield* save(db, [...pending.values()])
+  return stored
+})
+
+const hashesOf = (data: Refs) => {
   const hashes = new Set<string>()
   collect(data, hashes)
   return hashes
@@ -368,17 +383,17 @@ function storedPartRefs(pending: Pending, part: Part): Part {
  * Moves a stored row's inline media into blobs whatever the flag says, for offline backfills. Returns the row to
  * store (the same object when nothing moved), the blobs to insert, and every hash the row then names.
  */
-export function split<T extends MessageRow["data"] | InboxRow["payload"]>(
-  data: T,
-): { data: T; moved: boolean; blobs: Array<typeof BlobTable.$inferInsert>; hashes: Set<string> }
-export function split(data: MessageRow["data"] | InboxRow["payload"]) {
+export function split<T extends MessageRow["data"] | InboxRow["payload"] | Part>(data: T) {
   const pending: Pending = new Map()
-  const stored =
+  const stored = (
     "files" in data && data.files?.some((file) => !isFileRef(file))
       ? { ...data, files: data.files.map((file) => fileRef(pending, file)) }
       : "content" in data
         ? { ...data, content: data.content.map((part) => storedPartRefs(pending, part)) }
-        : data
+        : "type" in data && data.type === "tool"
+          ? storedPartRefs(pending, data)
+          : data
+  ) as T
   const result = pending.size > 0 ? stored : data
   return { data: result, moved: pending.size > 0, blobs: [...pending.values()], hashes: hashesOf(result) }
 }
@@ -395,11 +410,7 @@ export const externalizeRow = Effect.fnUntraced(function* (db: DatabaseService, 
 })
 
 /** Records that `owner` references each blob its stored row names, so release keeps them until it lets go. */
-export const recordRefs = Effect.fnUntraced(function* (
-  db: DatabaseService,
-  owner: Owner,
-  data: MessageRow["data"] | InboxRow["payload"],
-) {
+export const recordRefs = Effect.fnUntraced(function* (db: DatabaseService, owner: Owner, data: Refs) {
   yield* recordHashes(db, owner, hashesOf(data))
 })
 
@@ -435,7 +446,7 @@ export const recordHashes = Effect.fnUntraced(function* (
 })
 
 /** Records the refs a rewritten message names and releases the ones it no longer does. */
-export const syncRefs = Effect.fnUntraced(function* (db: DatabaseService, owner: Owner, data: MessageRow["data"]) {
+export const syncRefs = Effect.fnUntraced(function* (db: DatabaseService, owner: Owner, data: Refs) {
   yield* recordRefs(db, owner, data)
   const present = [...hashesOf(data)]
   const own = [eq(BlobRefTable.session_id, owner.sessionID), eq(BlobRefTable.message_id, owner.messageID)] as const
