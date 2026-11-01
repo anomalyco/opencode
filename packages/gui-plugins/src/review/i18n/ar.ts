@@ -12,7 +12,7 @@ export default {
   "mobile.title.few": "تغييرات",
   "mobile.title.many": "تغييرًا",
   "mobile.title.other": "تغييرات",
-  "empty.git": "لا توجد تغييرات غير مُودَعة بعد",
+  "empty.working": "لا توجد تغييرات غير مُودَعة بعد",
   "empty.branch": "لا توجد تغييرات في الفرع بعد",
   "git.title": "إنشاء مستودع Git",
   "git.description": "تتبع ومراجعة والتراجع عن التغييرات في هذا المشروع",

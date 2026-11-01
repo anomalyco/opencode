@@ -4,7 +4,7 @@ export default {
   "tab.count.other": "{{count}} skrám breytt",
   "mobile.title.one": "Breyta",
   "mobile.title.other": "Breytingar",
-  "empty.git": "Engar óbundnar breytingar ennþá",
+  "empty.working": "Engar óbundnar breytingar ennþá",
   "empty.branch": "Engar greinarbreytingar ennþá",
   "git.title": "Búðu til Git geymslu",
   "git.description": "Fylgstu með, skoðaðu og afturkallaðu breytingar á þessu verkefni",

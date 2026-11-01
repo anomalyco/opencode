@@ -8,7 +8,7 @@ export default {
   "mobile.title.few": "Zmiany",
   "mobile.title.many": "Zmian",
   "mobile.title.other": "Zmiany",
-  "empty.git": "Brak jeszcze niezatwierdzonych zmian",
+  "empty.working": "Brak jeszcze niezatwierdzonych zmian",
   "empty.branch": "Brak jeszcze zmian w gałęzi",
   "git.title": "Utwórz repozytorium Git",
   "git.description": "Śledź, przeglądaj i cofaj zmiany w tym projekcie",

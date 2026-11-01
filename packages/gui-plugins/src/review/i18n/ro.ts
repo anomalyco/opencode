@@ -6,7 +6,7 @@ export default {
   "mobile.title.one": "Modificare",
   "mobile.title.few": "Modificări",
   "mobile.title.other": "Modificări",
-  "empty.git": "Nicio modificare necomisă încă",
+  "empty.working": "Nicio modificare necomisă încă",
   "empty.branch": "Nicio modificare pe ramură încă",
   "git.title": "Creează un depozit Git",
   "git.description": "Urmărește, revizuiește și anulează modificările din acest proiect",

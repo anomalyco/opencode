@@ -143,7 +143,7 @@ for (const position of ["top", "bottom"] as const) {
     await projectMenu.getByRole("menuitem", { name: "No changes", exact: true }).click()
     await expect(projectMenu).toBeHidden()
     await expect(picker).toHaveText("Changes")
-    await expect(page.getByText("No uncommitted changes yet", { exact: true })).toBeVisible()
+    await expect(page.getByText("No branch changes yet", { exact: true })).toBeVisible()
     await expect(page.locator('[data-slot="session-review-header"]')).toHaveCSS("height", "40px")
     await expect(page.locator('[data-slot="session-review-header"]')).toHaveCSS("padding-left", "8px")
     await expect(composer).toBeHidden()

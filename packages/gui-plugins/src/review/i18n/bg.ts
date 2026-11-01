@@ -4,7 +4,7 @@ export default {
   "tab.count.other": "{{count}} файла са променени",
   "mobile.title.one": "промяна",
   "mobile.title.other": "Промени",
-  "empty.git": "Все още няма незавършени промени",
+  "empty.working": "Все още няма незавършени промени",
   "empty.branch": "Все още няма промени в клона",
   "git.title": "Създайте Git хранилище",
   "git.description": "Проследявайте, преглеждайте и отменяйте промените в този проект",

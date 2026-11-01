@@ -10,8 +10,9 @@ const PanelState = Schema.Struct({ expandMode: Schema.Literals(["expand", "colla
 
 const MobileDiff = Schema.Struct({ wrap: Schema.Boolean })
 
+const SourceState = Schema.Struct({ mode: Schema.Literals(["branch", "committed", "working", "turn"]) })
+
 const SessionState = Schema.Struct({
-  mode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
   file: Schema.optional(Schema.String),
   open: Schema.Array(Schema.String),
 })
@@ -55,7 +56,9 @@ export default Plugin.define({
         },
       },
     ),
-    // The mode, selected file and open files of each session.
+    // The change source the review shows, one choice for the app as in the TUI.
+    source: BuiltinStore.global(SourceState, { mode: "branch" }),
+    // The selected file and open files of each session.
     session: BuiltinStore.session(
       SessionState,
       { open: [] },
@@ -63,9 +66,9 @@ export default Plugin.define({
         key: "layout",
         sessions: "sessionView",
         // An entry that holds only other fields, such as its scroll, holds no review state.
-        pick: (entry: { reviewMode?: unknown; reviewFile?: unknown; reviewOpen?: unknown } | undefined) =>
-          entry && [entry.reviewMode, entry.reviewFile, entry.reviewOpen].some((field) => field !== undefined)
-            ? { mode: entry.reviewMode, file: entry.reviewFile, open: entry.reviewOpen }
+        pick: (entry: { reviewFile?: unknown; reviewOpen?: unknown } | undefined) =>
+          entry && [entry.reviewFile, entry.reviewOpen].some((field) => field !== undefined)
+            ? { file: entry.reviewFile, open: entry.reviewOpen }
             : undefined,
       },
     ),

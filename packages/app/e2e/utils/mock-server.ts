@@ -85,11 +85,13 @@ export interface MockServerConfig {
     items: SessionMessageInfo[]
     cursor?: string
   }
-  vcs?: { current: string; default: string } | ((directory: string) => { current: string; default: string })
+  vcs?: { current: string; default?: string } | ((directory: string) => { current: string; default?: string })
   branches?: (input: { directory: string; search?: string; limit?: number }) => string[] | Promise<string[]>
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
-  vcsDiff?: unknown[] | ((input: { mode?: string }) => unknown[])
+  vcsDiff?: unknown[] | ((input: { mode?: string; base?: string }) => unknown[])
+  // The review base Branch and Committed compare against; null, the default, leaves the default branch.
+  vcsBase?: { name: string; ref: string; source: "reflog" | "default" } | null
   // Benchmark latency only. Tests hold message pages with `beforeMessagesResponse`.
   messageDelay?: number
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
@@ -961,11 +963,12 @@ function mockHandlers(
             })),
           )
         },
+        vcsBase: () => Effect.succeed({ location: location(config), data: config.vcsBase ?? null }),
         vcsDiff: (ctx) =>
           Effect.sync(() => ({
             location: location(config),
             data: Predicate.isFunction(config.vcsDiff)
-              ? config.vcsDiff({ mode: ctx.query.mode })
+              ? config.vcsDiff({ mode: ctx.query.mode, base: ctx.query.base })
               : (config.vcsDiff ?? []),
           })),
         fsList: (ctx) =>

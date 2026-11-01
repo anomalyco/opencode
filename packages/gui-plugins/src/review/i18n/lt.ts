@@ -8,7 +8,7 @@ export default {
   "mobile.title.few": "Pakeitimai",
   "mobile.title.many": "Pakeitimų",
   "mobile.title.other": "Pakeitimai",
-  "empty.git": "Dar nėra nepadarytų pakeitimų",
+  "empty.working": "Dar nėra nepadarytų pakeitimų",
   "empty.branch": "Šakoje pakeitimų dar nėra",
   "git.title": "Sukurkite Git saugyklą",
   "git.description": "Stebėkite, peržiūrėkite ir anuliuokite šio projekto pakeitimus",

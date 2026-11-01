@@ -6,7 +6,7 @@ export default {
   "mobile.title.one": "Alteração",
   "mobile.title.many": "Alterações",
   "mobile.title.other": "Alterações",
-  "empty.git": "Ainda não há alterações sem commit",
+  "empty.working": "Ainda não há alterações sem commit",
   "empty.branch": "Ainda não há alterações na branch",
   "git.title": "Criar um repositório Git",
   "git.description": "Rastreie, revise e desfaça alterações neste projeto",

@@ -4,7 +4,7 @@ export default {
   "tab.count.other": "{{count}} fail ditukar",
   "mobile.title.one": "Perubahan",
   "mobile.title.other": "Perubahan",
-  "empty.git": "Belum ada perubahan belum komited",
+  "empty.working": "Belum ada perubahan belum komited",
   "empty.branch": "Belum ada perubahan cawangan",
   "git.title": "Cipta repositori Git",
   "git.description": "Jejak, semak dan undur perubahan dalam projek ini",
