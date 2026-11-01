@@ -60,7 +60,6 @@ interface TextRequestFields<Model extends LanguageModel> {
   readonly cache?: CachePolicy
   /** Stable cache affinity for protocols that support provider-managed prompt caching. */
   readonly promptCacheKey?: string
-  readonly metadata?: Record<string, unknown>
   /** Emit a `raw` event with each provider frame before the events parsed from it. */
   readonly includeRaw?: boolean
 }
@@ -308,7 +307,6 @@ export const request = <const Model extends LanguageModel>(input: LLMRequestInpu
     http: HttpOptions.make(input.http),
     cache: input.cache,
     promptCacheKey: input.promptCacheKey,
-    metadata: input.metadata,
     includeRaw: input.includeRaw,
   }
 }
