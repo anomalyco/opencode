@@ -127,45 +127,6 @@ opencode auth logout
 
 ---
 
-### github
-
-リポジトリ自動化のための GitHub エージェントを管理します。
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-GitHub エージェントをリポジトリにインストールします。
-
-```bash
-opencode github install
-```
-
-これにより、必要な GitHub Actions ワークフローが設定され、構成プロセスがガイドされます。 [詳細はこちら](/docs/github)。
-
----
-
-#### run
-
-GitHub エージェントを実行します。これは通常、GitHub Actions で使用されます。
-
-```bash
-opencode github run
-```
-
-##### フラグ
-
-| フラグ                                | 説明                                                |
-| ------------------------------------- | --------------------------------------------------- |
-| <nobr><code>{"--event"}</code></nobr> | エージェントを実行するための GitHub モック イベント |
-| <nobr><code>{"--token"}</code></nobr> | GitHub 個人アクセストークン                         |
-
----
-
 ### mcp
 
 モデルコンテキストプロトコルサーバーを管理します。
@@ -418,27 +379,6 @@ opencode import <file>
 ```bash
 opencode import session.json
 ```
-
----
-
-### web
-
-Web インターフェイスを使用してヘッドレス OpenCode サーバーを起動します。
-
-```bash
-opencode web
-```
-
-これにより、HTTP サーバーが起動し、Web ブラウザが開き、Web インターフェイスを通じて OpenCode にアクセスします。 `OPENCODE_SERVER_PASSWORD` を設定して HTTP 基本認証を有効にします (ユーザー名のデフォルトは `opencode`)。
-
-#### フラグ
-
-| フラグ                                   | 説明                                    |
-| ---------------------------------------- | --------------------------------------- |
-| <nobr><code>{"--port"}</code></nobr>     | リッスンするポート                      |
-| <nobr><code>{"--hostname"}</code></nobr> | リッスンするホスト名                    |
-| <nobr><code>{"--mdns"}</code></nobr>     | mDNS 検出を有効にする                   |
-| <nobr><code>{"--cors"}</code></nobr>     | CORS を許可する追加のブラウザーオリジン |
 
 ---
 
