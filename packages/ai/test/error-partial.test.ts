@@ -85,7 +85,7 @@ describe("AIError.partial", () => {
       const echo = tool({
         name: "echo",
         description: "Echo a value.",
-        parameters: Schema.Struct({ value: Schema.String }),
+        input: Schema.Struct({ value: Schema.String }),
         success: Schema.String,
         execute: ({ value }) => Effect.succeed(value),
       })

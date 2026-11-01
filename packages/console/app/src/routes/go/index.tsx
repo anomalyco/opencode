@@ -122,7 +122,7 @@ export default function Home() {
       <SocialMeta title={i18n.t("go.title")} description={description()} path="/go" />
 
       <div data-component="container">
-        <Header go hideGetStarted />
+        <Header />
 
         <div data-component="content">
           <section data-component="hero">

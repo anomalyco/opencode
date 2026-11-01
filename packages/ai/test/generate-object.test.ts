@@ -37,7 +37,7 @@ describe("tool (dynamic JSON Schema)", () => {
     const lookup = tool({
       name: "lookup",
       description: "Look up something",
-      jsonSchema,
+      input: jsonSchema,
       execute: () => Effect.succeed({ ok: true }),
     })
     const [definition] = toDefinitions([lookup])
@@ -52,7 +52,7 @@ describe("tool (dynamic JSON Schema)", () => {
       const echo = tool({
         name: "echo",
         description: "echo",
-        jsonSchema: { type: "object" },
+        input: { type: "object" },
         execute: (params) =>
           Effect.sync(() => {
             seen.push(params)
@@ -203,9 +203,29 @@ describe("schema on ai.stream and ai.loop", () => {
   const echo = tool({
     name: "echo",
     description: "Echo a value.",
-    parameters: Schema.Struct({ value: Schema.String }),
+    input: Schema.Struct({ value: Schema.String }),
     execute: ({ value }) => Effect.succeed(value),
   })
+
+  scripted.effect("reports the token limit instead of a decode error when output is cut off", () =>
+    Effect.gen(function* () {
+      const client = yield* TestLLM.Test
+      yield* client.push(
+        TestLLM.complete(
+          { reason: { normalized: "length" } },
+          LLMEvent.toolCall({ id: "call-1", name: "generate_object", input: {} }),
+        ),
+      )
+
+      const error = yield* ai
+        .generate({ model, prompt: "Pick a city.", schema: City, generation: { maxTokens: 1 } })
+        .pipe(Effect.flip)
+
+      expect(error.message).toContain("output hit the token limit")
+      expect(error.message).not.toContain("schema decode failed")
+      expect(error.partial?.toolCalls[0]?.name).toBe("generate_object")
+    }),
+  )
 
   scripted.effect("stream puts the decoded object on finish", () =>
     Effect.gen(function* () {
@@ -221,7 +241,7 @@ describe("schema on ai.stream and ai.loop", () => {
     }),
   )
 
-  scripted.effect("loop runs tools, leaves the answer tool alone and decodes it on the final finish", () =>
+  scripted.effect("loop runs tools, leaves the answer tool alone and decodes it on the loop's one finish", () =>
     Effect.gen(function* () {
       const client = yield* TestLLM.Test
       yield* client.push(TestLLM.toolCall("call-1", "echo", { value: "Paris" }))
@@ -233,7 +253,6 @@ describe("schema on ai.stream and ai.loop", () => {
 
       expect(events.filter(LLMEvent.is.toolResult).map((event) => event.name)).toEqual(["echo"])
       expect(events.filter((event) => event.type === "finish").map((event) => event.object)).toEqual([
-        undefined,
         { city: "Paris" },
       ])
       expect((yield* client.requests())[0]?.toolChoice?.type).toBe("required")

@@ -57,7 +57,7 @@ export const dict = {
   "modal.success": "Du er tilmeldt.",
   "modal.error": "Tilmelding mislykkedes",
   "product.allUsers": "Alle brugere",
-  "product.zen": "Zen",
+  "product.zen": "Models",
   "product.go": "Go",
   "range.1D": "1 dag",
   "range.1W": "1 uge",

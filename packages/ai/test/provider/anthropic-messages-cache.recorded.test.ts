@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { ai, CacheHint, LLMRequest, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
+import { ai, CacheHint, Message, ToolCallPart, ToolDefinition } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import * as Anthropic from "../../src/providers/anthropic.js"
 import { LARGE_CACHEABLE_SYSTEM } from "../recorded-scenarios.js"
@@ -94,15 +94,14 @@ describe("Anthropic Messages cache recorded", () => {
       // write establishes that Anthropic recognized the cache boundary.
       expect(firstCached).toBeGreaterThan(0)
 
-      const second = yield* LLMClient.generate(
-        LLMRequest.update(longToolTurnRequest, {
-          messages: [
-            ...longToolTurn,
-            Message.assistant("The fixture lookups are complete."),
-            Message.user("Reply exactly: OK"),
-          ],
-        }),
-      )
+      const second = yield* LLMClient.generate({
+        ...longToolTurnRequest,
+        messages: [
+          ...longToolTurn,
+          Message.assistant("The fixture lookups are complete."),
+          Message.user("Reply exactly: OK"),
+        ],
+      })
       expect(second.usage?.cacheReadInputTokens ?? 0).toBeGreaterThanOrEqual(firstCached)
       expect(second.usage?.cacheWriteInputTokens ?? 0).toBeLessThan(firstCached)
     }),
