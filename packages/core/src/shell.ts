@@ -212,6 +212,7 @@ const layer = () =>
         if (cursor >= command.size) return { output: "", cursor: command.size, size: command.size, truncated: false }
         const start = Math.max(0, cursor)
         const length = Math.min(limit, command.size - start)
+        if (length <= 0) return { output: "", cursor: start, size: command.size, truncated: false }
         const buffer = Buffer.alloc(length)
         const bytesRead = yield* Effect.promise(
           () =>
