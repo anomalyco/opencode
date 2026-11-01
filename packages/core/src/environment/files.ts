@@ -46,6 +46,12 @@ export interface FilesImpl {
   readonly list: (path: string) => Effect.Effect<ReadonlyArray<DirEntry>, NotFound | WrongKind | Failed>
   readonly remove: (path: string) => Effect.Effect<void, Failed>
   readonly move: (from: string, to: string) => Effect.Effect<void, NotFound | Failed>
+  /**
+   * Copies `from`'s permission bits onto `to`. Follows `from`'s final symlink, because a
+   * link entry carries no mode worth copying and its target's bits are the ones a
+   * copy-then-delete move must preserve.
+   */
+  readonly copyMode: (from: string, to: string) => Effect.Effect<void, NotFound | Failed>
   readonly mkdir: (path: string) => Effect.Effect<void, Failed>
 }
 

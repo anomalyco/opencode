@@ -312,6 +312,7 @@ const layer = (options: Options) =>
             list: (path) => withFiles(path, (files) => files.list(path)),
             remove: (path) => withFiles(path, (files) => files.remove(path)),
             move: (from, to) => withFiles(from, (files) => files.move(from, to)),
+            copyMode: (from, to) => withFiles(from, (files) => files.copyMode(from, to)),
             mkdir: (path) => withFiles(path, (files) => files.mkdir(path)),
           }
           return { spawner, overrides }

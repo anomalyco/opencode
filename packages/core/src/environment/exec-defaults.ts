@@ -64,6 +64,16 @@ ${loadMetadata()}
 mv -- "$1" "$2"
 `
 
+const copyModeScript = `
+${loadMetadata("-L")}
+error=$(chmod --reference="$1" -- "$2" 2>&1) || {
+  case "$error" in
+    *'No such file or directory'*|*'Not a directory'*) exit ${NOT_FOUND} ;;
+    *) printf '%s' "$error" >&2; exit ${FAILED} ;;
+  esac
+}
+`
+
 interface Result {
   readonly exitCode: number
   readonly stdout: Uint8Array
@@ -143,6 +153,8 @@ export const execDefaults = (spawner: ChildProcessSpawner["Service"]): FilesImpl
     remove: (path) => run(path, `rm -rf -- "$1"`).pipe(Effect.flatMap((result) => complete(path, result))),
     move: (from, to) =>
       run(from, moveScript, [to]).pipe(Effect.flatMap((result) => classifyPlain(from, result, () => undefined))),
+    copyMode: (from, to) =>
+      run(from, copyModeScript, [to]).pipe(Effect.flatMap((result) => classifyPlain(from, result, () => undefined))),
     mkdir: (path) => run(path, `mkdir -p -- "$1"`).pipe(Effect.flatMap((result) => complete(path, result))),
   }
 }

@@ -6,6 +6,9 @@ export interface EnvironmentHarness {
   readonly files: Files
   readonly root: string
   readonly symlink?: (target: string, path: string) => Effect.Effect<void, Failed>
+  /** Host-filesystem only: permission-bit checks need real chmod semantics. */
+  readonly chmod?: (path: string, mode: number) => Effect.Effect<void, Failed>
+  readonly readMode?: (path: string) => Effect.Effect<number, Failed>
   readonly dispose?: Effect.Effect<void>
 }
 
@@ -175,6 +178,24 @@ export const environmentConformance = <E>(
         expect(directoryError).toBeInstanceOf(WrongKind)
         expect((directoryError as WrongKind).actual).toBe("directory")
         expect(yield* Effect.flip(harness.files.read(`${harness.root}/dangling-link`))).toBeInstanceOf(NotFound)
+      }),
+    )
+
+    check("copies permission bits onto an existing file", (harness) =>
+      Effect.gen(function* () {
+        if (!harness.chmod || !harness.readMode) return
+        const source = `${harness.root}/executable`
+        const destination = `${harness.root}/plain`
+        yield* harness.files.write(source, bytes("#!/bin/sh\n"))
+        yield* harness.files.write(destination, bytes("data"))
+        yield* harness.chmod(source, 0o755)
+        yield* harness.files.copyMode(source, destination)
+        expect((yield* harness.readMode(destination)) & 0o111).not.toBe(0)
+        expect(text((yield* harness.files.read(destination)).bytes)).toBe("data")
+        expect(yield* Effect.flip(harness.files.copyMode(`${harness.root}/missing`, destination))).toBeInstanceOf(
+          NotFound,
+        )
+        expect(yield* Effect.flip(harness.files.copyMode(source, `${harness.root}/missing`))).toBeInstanceOf(NotFound)
       }),
     )
 

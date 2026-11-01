@@ -5,7 +5,7 @@ import type { Driver } from "./driver.js"
 import { Failed, NotFound, WrongKind, type FileInfo, type FilesImpl, type FileType } from "./files.js"
 
 type Node =
-  | { readonly type: "file"; readonly bytes: Uint8Array; readonly mtimeMs: number }
+  | { readonly type: "file"; readonly bytes: Uint8Array; readonly mtimeMs: number; readonly mode: number }
   | { readonly type: "directory"; readonly mtimeMs: number }
   | { readonly type: "symlink"; readonly target: string; readonly mtimeMs: number }
 
@@ -87,7 +87,7 @@ export const makeMemoryDriver = (): MemoryDriver => {
           const target = existing?.type === "symlink" ? resolveKey(value, true) : resolveKey(value, false)
           if (!target) throw new Error(`Cannot resolve symlink: ${value}`)
           requireParent(target)
-          nodes.set(target, { type: "file", bytes: bytes.slice(), mtimeMs: Date.now() })
+          nodes.set(target, { type: "file", bytes: bytes.slice(), mtimeMs: Date.now(), mode: 0o644 })
         },
         catch: (cause) => failed(value, cause),
       }),
@@ -135,6 +135,19 @@ export const makeMemoryDriver = (): MemoryDriver => {
           },
           catch: (cause) => failed(from, cause),
         })
+      }),
+    copyMode: (from, to) =>
+      Effect.suspend((): Effect.Effect<void, NotFound | Failed> => {
+        const source = resolveKey(from, true)
+        const sourceNode = source === undefined ? undefined : nodes.get(source)
+        if (!sourceNode) return Effect.fail(new NotFound({ path: from }))
+        const target = resolveKey(to, false) ?? key(to)
+        const node = nodes.get(target)
+        if (!node) return Effect.fail(new NotFound({ path: to }))
+        if (sourceNode.type !== "file" || node.type !== "file")
+          return Effect.fail(failed(to, new Error(`Mode can only be copied between files: ${from} -> ${to}`)))
+        nodes.set(target, { ...node, mode: sourceNode.mode })
+        return Effect.void
       }),
     mkdir: (value) => Effect.try({ try: () => mkdirSync(value), catch: (cause) => failed(value, cause) }),
   }

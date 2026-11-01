@@ -56,6 +56,7 @@ let denyAction: string | undefined
 let failRemoveTarget: string | undefined
 let failRemoveErrorTarget: string | undefined
 let failWriteTarget: string | undefined
+let failCopyModeTarget: string | undefined
 let readsBeforeEditApproval = 0
 let editApproved = false
 let afterEditApproval = (): Effect.Effect<void> => Effect.void
@@ -92,6 +93,7 @@ const reset = () => {
   failRemoveTarget = undefined
   failRemoveErrorTarget = undefined
   failWriteTarget = undefined
+  failCopyModeTarget = undefined
   readsBeforeEditApproval = 0
   editApproved = false
   afterEditApproval = () => Effect.void
@@ -131,6 +133,11 @@ const withTool = <A, E, R>(
               if (failWriteTarget && path.basename(target) === failWriteTarget)
                 return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
               return files.write(target, content)
+            },
+            copyMode: (from, to) => {
+              if (failCopyModeTarget && path.basename(to) === failCopyModeTarget)
+                return Effect.fail(new Environment.Failed({ path: to, cause: new Error("forced copyMode failure") }))
+              return files.copyMode(from, to)
             },
           })),
         ),
@@ -496,6 +503,53 @@ describe("PatchTool", () => {
         expect(yield* exists(source)).toBe(false)
         expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("before\n")
         expect(yield* Effect.promise(() => fs.readFile(moved, "utf8"))).toBe("after\n")
+      }),
+    ),
+  )
+
+  it.live("preserves the executable bit when moving a file", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const source = path.join(directory, "script.sh")
+        const destination = path.join(directory, "nested", "renamed.sh")
+        yield* Effect.promise(async () => {
+          await fs.writeFile(source, "#!/bin/sh\necho before\n")
+          await fs.chmod(source, 0o755)
+        })
+        expect(
+          yield* executeTool(
+            registry,
+            call(
+              "*** Begin Patch\n*** Update File: script.sh\n*** Move to: nested/renamed.sh\n@@\n-echo before\n+echo after\n*** End Patch",
+            ),
+          ),
+        ).toMatchObject({ status: "completed" })
+        expect(yield* exists(source)).toBe(false)
+        expect(yield* Effect.promise(() => fs.readFile(destination, "utf8"))).toBe("#!/bin/sh\necho after\n")
+        const executable = yield* Effect.promise(async () => ((await fs.stat(destination)).mode & 0o111) !== 0)
+        expect(executable).toBe(true)
+      }),
+    ),
+  )
+
+  it.live("completes a move when copying the permission bits fails", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const source = path.join(directory, "script.sh")
+        const destination = path.join(directory, "renamed.sh")
+        yield* Effect.promise(() => fs.writeFile(source, "#!/bin/sh\necho before\n"))
+        failCopyModeTarget = "renamed.sh"
+        expect(
+          yield* executeTool(
+            registry,
+            call(
+              "*** Begin Patch\n*** Update File: script.sh\n*** Move to: renamed.sh\n@@\n-echo before\n+echo after\n*** End Patch",
+            ),
+          ),
+        ).toMatchObject({ status: "completed" })
+        expect(yield* exists(source)).toBe(false)
+        expect(yield* Effect.promise(() => fs.readFile(destination, "utf8"))).toBe("#!/bin/sh\necho after\n")
       }),
     ),
   )
