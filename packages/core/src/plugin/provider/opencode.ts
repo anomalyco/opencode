@@ -63,7 +63,7 @@ const SkillBundle = Schema.Struct({
   files: Schema.Array(Schema.Struct({ path: Schema.String, content: Schema.String })),
 })
 type LibrarySkill = { readonly skill: Skill.Info; readonly files: Record<string, string> }
-// Downloaded skills by workspace, then slug. Shared by every project in this process, so a skill downloads again
+// Downloaded skills by sign-in and workspace, then slug. Shared by every project in this process, so a skill downloads again
 // only when its version changes.
 const downloaded = new Map<
   string,
@@ -305,7 +305,8 @@ export const OpencodePlugin = define<
         const credential = yield* ctx.integration.connection.resolve(connection)
         if (!credential || credential.type === "external") return []
         const server = yield* normalizeServer(ConsoleAccess.server(credential))
-        const workspace = JSON.stringify([server, credential.metadata?.accountID, credential.metadata?.orgID])
+        // API keys carry no account or org, so the sign-in itself identifies the workspace.
+        const workspace = JSON.stringify([server, IntegrationConnection.key(connection), credential.metadata?.orgID])
         const cached = downloaded.get(workspace)
         const loaded = yield* Effect.forEach(
           listed,
