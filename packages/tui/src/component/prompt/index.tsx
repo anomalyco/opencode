@@ -1542,7 +1542,7 @@ export function Prompt(props: PromptProps) {
     agentLabel: string | undefined
     agentColor: RGBA | undefined
     modelLabel: string
-    providerLabel: string
+    providerLabel: string | undefined
     variant: string | undefined
   }>(
     (previous) => {

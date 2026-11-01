@@ -127,18 +127,19 @@ test("shows what the workspace's limits leave and why a refused turn stopped", a
     (frame) =>
       frame.includes("GPT 5.6 Sol usage limit reached") &&
       frame.includes("Switch model with") &&
-      /GPT 5\.6 Sol OpenCode +\$6 left/.test(frame) &&
+      /Build · GPT 5\.6 Sol +\$6 left/.test(frame) &&
       frame.includes("Running low on GPT 5.6 Sol"),
   )
 
   await setup.mockInput.typeText("/usage")
   setup.mockInput.pressEnter()
-  // Shared money would look counted twice on every row, so only the selected model shows its amount.
+  // Shared money would look counted twice on every row, so only the selected model shows its amount. The composer
+  // behind the dialog still says "Build · GPT 5.6 Sol  $6 left".
   await setup.waitForFrame(
     (frame) =>
       frame.includes("Workspace: Acme") &&
       /Claude Opus 5 +\$6 left/.test(frame) &&
-      !/GPT 5\.6 Sol +\$6 left/.test(frame),
+      !/(?<!· )GPT 5\.6 Sol +\$6 left/.test(frame),
   )
 
   setup.mockInput.pressEnter()

@@ -43,6 +43,32 @@ describe("run variant shared", () => {
     expect(formatModelLabel(model, "high", providers)).toBe("GPT-5 · OpenAI · high")
   })
 
+  test("formats model labels like the prompt", () => {
+    const sol = { providerID: "console-openai", modelID: "gpt-6.1-sol" }
+    const native: RunProvider = {
+      id: "opencode",
+      name: "Anomaly / OpenCode",
+      integrationID: "opencode",
+      models: { "gpt-6.1-sol": { name: "GPT-6.1 Sol (latest)" } },
+    }
+    const managed: RunProvider = {
+      id: "console-openai",
+      name: "Anomaly / OpenAI",
+      integrationID: "opencode",
+      canonical: "openai",
+      models: { "gpt-6.1-sol": { name: "GPT-6.1 Sol" } },
+    }
+
+    expect(formatModelLabel({ providerID: "opencode", modelID: "gpt-6.1-sol" }, "high", [native])).toBe(
+      "GPT-6.1 Sol · high",
+    )
+    expect(formatModelLabel(sol, undefined, [native, managed])).toBe("GPT-6.1 Sol · OpenAI")
+    expect(formatModelLabel(sol, undefined, [native, managed, ...providers])).toBe("GPT-6.1 Sol · OpenCode / OpenAI")
+    expect(formatModelLabel({ providerID: "openai", modelID: "missing" }, undefined, providers)).toBe(
+      "missing · OpenAI",
+    )
+  })
+
   test("picks the latest matching variant from session history", () => {
     const session: RunSession = {
       first: false,
