@@ -124,6 +124,68 @@ describe("command subagents", () => {
   )
 })
 
+describe("command reasoning variants", () => {
+  for (const fixture of [
+    { name: "same model", command: "test/parent", expected: "xhigh" },
+    { name: "another supported model", command: "test/supported", expected: "xhigh" },
+    { name: "unsupported destination", command: "test/unsupported", expected: "default" },
+    { name: "stale same-model variant", initial: "test/unsupported#xhigh", command: "test/unsupported", expected: "default" },
+    { name: "unknown destination", command: "test/unknown", expected: "default" },
+    { name: "explicit command variant", command: "test/parent#low", expected: "low" },
+    { name: "agent model", agent: "test/parent", expected: "xhigh" },
+    { name: "explicit agent variant", agent: "test/parent#low", expected: "low" },
+    { name: "command over agent variant", command: "test/parent#low", agent: "test/parent#xhigh", expected: "low" },
+    { name: "no model selection", expected: "xhigh" },
+  ]) {
+    it.live(`preserves command variant precedence for ${fixture.name}`, () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        yield* Effect.promise(() =>
+          Bun.write(
+            path.join(tmp.path, "opencode.json"),
+            JSON.stringify({
+              providers: {
+                test: {
+                  package: "@opencode/ai/providers/openai-compatible",
+                  settings: { baseURL: "http://127.0.0.1:1/v1" },
+                  models: {
+                    parent: { variants: [{ id: "xhigh" }, { id: "low" }] },
+                    supported: { variants: [{ id: "xhigh" }] },
+                    unsupported: { variants: [{ id: "low" }] },
+                  },
+                },
+              },
+              agents: fixture.agent ? { reviewer: { mode: "primary", model: fixture.agent } } : {},
+              commands: {
+                review: {
+                  template: "Review changes",
+                  ...(fixture.command ? { model: fixture.command } : {}),
+                  ...(fixture.agent ? { agent: "reviewer" } : {}),
+                },
+              },
+            }),
+          ),
+        )
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({
+          location: { directory: AbsolutePath.make(tmp.path) },
+          title: "Variant selection",
+          agent: Agent.ID.make("build"),
+          model: Model.Ref.parse(fixture.initial ?? "test/parent#xhigh"),
+        })
+        yield* sessions.command({ sessionID: session.id, command: "review", text: "" })
+        yield* sessions.wait(session.id)
+        const selected = (yield* sessions.get(session.id)).model
+        expect(selected?.id).toBe(Model.Ref.parse(fixture.command ?? fixture.agent ?? "test/parent").id)
+        expect(selected?.variant).toBe(Model.VariantID.make(fixture.expected))
+        expect((yield* sessions.context(session.id)).filter((message) => message.type === "user")).toMatchObject([
+          { text: "Review changes" },
+        ])
+      }),
+    )
+  }
+})
+
 function project(
   command: { agent?: string; model?: string; subagent?: boolean; subtask?: boolean },
   format: "json" | "markdown",
