@@ -279,6 +279,57 @@ test("keeps the side panel's tabs and selection when the session moves", async (
   await expect(panel.getByText(`contents:${destination}:NOTES.md`, { exact: true })).toBeVisible()
 })
 
+test("recovers an interrupted transcript read after reconnecting without losing the draft", async ({ page }) => {
+  const directory = "/projects/restarted-server"
+  const sessionID = "ses_transcript_reconnect"
+  const requested = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const transport = await installSseTransport(page, { server: fixture.serverKey })
+  await mockOpenCodeServer(page, {
+    directory: fixture.directory,
+    project: fixture.project,
+    provider: fixture.provider,
+    sessions: [
+      { id: "ses_baseline", projectID: fixture.project.id, directory, title: "Before restart" },
+      { id: sessionID, projectID: fixture.project.id, directory, title: "Interrupted session" },
+    ],
+    fileList: () => [],
+    pageMessages: () => ({
+      items: [{ id: "msg_saved", type: "user", text: "Saved conversation history", time: { created: 1 } }],
+    }),
+  })
+  await test.step("production session entry baseline", async () => {
+    await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/ses_baseline`)
+    await expect(page.getByText("Saved conversation history", { exact: true })).toBeVisible()
+    await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
+  })
+
+  let requests = 0
+  await page.route(`**/api/session/${sessionID}/message?**`, async (route) => {
+    requests++
+
+    if (requests > 1) return route.fallback()
+    requested.resolve()
+    await release.promise
+
+    return route.abort("failed")
+  })
+  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
+  await requested.promise
+  const prompt = page.getByRole("textbox", { name: "Prompt", exact: true })
+  await expect(prompt).toBeEditable()
+  await prompt.fill("Draft survives a server restart")
+  const connection = await transport.waitForConnection()
+  release.resolve()
+  await expect(page.getByRole("heading", { name: "Something went wrong", exact: true })).toHaveCount(0)
+  await transport.disconnect()
+  await transport.waitForConnection({ after: connection.id })
+  await expect(page.getByText("Saved conversation history", { exact: true })).toBeVisible()
+  await expect(prompt).toBeEditable()
+  await expect(prompt).toHaveText("Draft survives a server restart")
+  await expect(page).toHaveURL(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
+})
+
 test("refreshes a session moved during disconnection without losing the draft", async ({ page }) => {
   const recovery = recoveryRequests(page)
   const directory = "/projects/before-reconnect"
