@@ -310,12 +310,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           .filter((sessionID) => sessionID !== current())
         for (const sessionID of sessions) {
           if (stale) return
-          await Promise.allSettled([
-            data.session.message.sync(sessionID),
-            data.session.pending.sync(sessionID),
-            data.session.permission.sync(sessionID),
-            data.session.form.sync(sessionID),
-          ])
+          await Promise.allSettled([data.session.message.sync(sessionID), data.session.pending.sync(sessionID)])
         }
       }, TAB_PREFETCH_DELAY)
       onCleanup(() => {

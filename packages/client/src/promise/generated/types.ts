@@ -79,8 +79,6 @@ export type FileDiffInfo = {
 
 export type SessionsCursor = string
 
-export type SessionActive = { type: "running" }
-
 export type PromptBase64 = string
 
 export type PromptFileSource = { type: "inline" } | { type: "uri"; uri: string }
@@ -408,6 +406,8 @@ export type ConfigModelVariantSettings = { compaction?: ProviderCompaction; enco
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
 export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
+
+export type SessionActive = { type: "running"; rootID?: SessionID }
 
 export type SessionForkBoundary =
   | { type: "before"; messageID: SessionMessageID }
@@ -2287,6 +2287,26 @@ export type SessionInfo = {
   metadata?: SessionMetadata
   permissions?: PermissionRuleset
   revert?: SessionRevert
+  status?: "idle" | "running"
+  location: LocationPublicRef
+}
+
+export type SessionPersisted = {
+  id: SessionID
+  parentID?: SessionID
+  fork?: { sessionID: SessionID; boundary: SessionForkBoundary }
+  projectID: ProjectID
+  agent?: AgentID
+  model?: ModelRef
+  cost: MoneyUSD
+  tokens: TokenUsageInfo
+  outcome?: "succeeded" | "failed" | "interrupted"
+  time: { created: number; updated: number; busy?: number; idle?: number; viewed?: number; archived?: number }
+  title?: string
+  subpath?: RelativePath
+  metadata?: SessionMetadata
+  permissions?: PermissionRuleset
+  revert?: SessionRevert
   location: LocationPublicRef
 }
 
@@ -2704,6 +2724,13 @@ export type SessionMessageInfo =
   | SessionMessageCompaction
   | SessionMessageIdle
 
+export type SessionFamily = {
+  rootID: SessionID
+  sessions: Array<SessionInfo>
+  permissions: Array<PermissionRequest>
+  forms: Array<FormInfo>
+}
+
 export type IntegrationMethod =
   | IntegrationOAuthMethod
   | IntegrationCommandMethod
@@ -2730,7 +2757,7 @@ export type FormCreated = {
   data: { form: FormInfo1 }
 }
 
-export type SessionTransferData = { info: SessionInfo; messages: Array<SessionMessageInfo> }
+export type SessionTransferData = { info: SessionPersisted; messages: Array<SessionMessageInfo> }
 
 export type SessionMessagesResponse = {
   data: Array<SessionMessageInfo>
@@ -4489,6 +4516,10 @@ export type ExperimentalPersistentPtyConnectTokenOutput = { data: PtyTicketConne
 export type ExperimentalMediaGetInput = { readonly hash: string }
 
 export type ExperimentalMediaGetOutput = globalThis.Uint8Array
+
+export type ExperimentalSessionFamilyGetInput = { readonly sessionID: string }
+
+export type ExperimentalSessionFamilyGetOutput = { data: SessionFamily }["data"]
 
 export type ExperimentalScheduleCreateInput = {
   readonly sessionID: string

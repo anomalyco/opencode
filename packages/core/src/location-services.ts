@@ -74,6 +74,11 @@ export function buildLocationServiceMap(
         get: (ref: Location.Ref) => inner.get(LocationServiceMap.canonical(ref)),
         contextEffect: (ref: Location.Ref) => inner.contextEffect(LocationServiceMap.canonical(ref)),
         contextEffectOption: (ref: Location.Ref) => inner.contextEffectOption(LocationServiceMap.canonical(ref)),
+        ready: (ref: Location.Ref) =>
+          Effect.sync(
+            () =>
+              Option.getOrUndefined(MutableHashMap.get(builds, LocationServiceMap.canonical(ref)))?.close !== undefined,
+          ),
         invalidate: (ref: Location.Ref) =>
           Effect.suspend(() => {
             const key = LocationServiceMap.canonical(ref)

@@ -28,6 +28,7 @@ import { Event } from "@opencode/schema/event"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 import { organizationPolicy, registerIntegrationPolicy } from "./fixture/policy"
+import { readyWhenCached } from "./fixture/location"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 // The organization behind this location's Console connection denies the skill.
@@ -79,7 +80,7 @@ const locations = makeGlobalNode({
           Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
         ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
       { idleTimeToLive: Duration.infinity },
-    ),
+    ).pipe(readyWhenCached),
   ),
   deps: [],
 })

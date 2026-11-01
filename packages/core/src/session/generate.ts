@@ -24,7 +24,7 @@ export type Error =
 
 /** Generates text from current Session context without mutating the Session. */
 export const generate = Effect.fn("SessionGenerate.generate")(function* (input: {
-  session: SessionSchema.Info
+  session: SessionSchema.Persisted
   prompt: string
 }) {
   const instances = yield* Instance.Service

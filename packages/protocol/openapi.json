@@ -1321,7 +1321,7 @@
                 "type": "object",
                 "properties": {
                   "info": {
-                    "$ref": "#/components/schemas/Session.Info"
+                    "$ref": "#/components/schemas/Session.Persisted"
                   },
                   "messages": {
                     "type": "array"
@@ -1484,7 +1484,7 @@
             }
           }
         },
-        "description": "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.",
+        "description": "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive. Each entry's `rootID` is the root of the family that contains the Session: the Session itself when it is a root.",
         "summary": "List active sessions"
       }
     },
@@ -12092,6 +12092,74 @@
         "summary": "Read media blob"
       }
     },
+    "/api/experimental/session/{sessionID}/family": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "experimental.sessionFamily.get",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Session.Family"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve every session in the tree that contains the session, with the family's pending permission requests and forms. The result is complete, not paginated: the root comes first, then its descendants ordered by creation time. Pending requests come only from locations that are running; a location that is not running holds none. Experimental: may change without compatibility guarantees.",
+        "summary": "Get session family"
+      }
+    },
     "/api/experimental/schedule": {
       "post": {
         "tags": ["experimental"],
@@ -22697,6 +22765,34 @@
           }
         ]
       },
+      "Session.Family": {
+        "type": "object",
+        "properties": {
+          "rootID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session.Info"
+            }
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Permission.Request"
+            }
+          },
+          "forms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Form.Info"
+            }
+          }
+        },
+        "required": ["rootID", "sessions", "permissions", "forms"],
+        "additionalProperties": false
+      },
       "Session.ForkBoundary": {
         "anyOf": [
           {
@@ -23121,6 +23217,10 @@
           },
           "revert": {
             "$ref": "#/components/schemas/Session.Revert"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["idle", "running"]
           },
           "location": {
             "$ref": "#/components/schemas/Location.PublicRef"
@@ -24024,6 +24124,94 @@
       "Session.Metadata": {
         "type": "object"
       },
+      "Session.Persisted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "parentID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "fork": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "boundary": {
+                "$ref": "#/components/schemas/Session.ForkBoundary"
+              }
+            },
+            "required": ["sessionID", "boundary"],
+            "additionalProperties": false
+          },
+          "projectID": {
+            "$ref": "#/components/schemas/Project.ID"
+          },
+          "agent": {
+            "$ref": "#/components/schemas/Agent.ID"
+          },
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/Money.USD"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/TokenUsage.Info"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": ["succeeded", "failed", "interrupted"]
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "updated": {
+                "type": "number"
+              },
+              "busy": {
+                "type": "number"
+              },
+              "idle": {
+                "type": "number"
+              },
+              "viewed": {
+                "type": "number"
+              },
+              "archived": {
+                "type": "number"
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
+          },
+          "title": {
+            "type": "string"
+          },
+          "subpath": {
+            "$ref": "#/components/schemas/RelativePath"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/Session.Metadata"
+          },
+          "permissions": {
+            "$ref": "#/components/schemas/Permission.Ruleset"
+          },
+          "revert": {
+            "$ref": "#/components/schemas/Session.Revert"
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.PublicRef"
+          }
+        },
+        "required": ["id", "projectID", "cost", "tokens", "time", "location"],
+        "additionalProperties": false
+      },
       "Session.Revert": {
         "type": "object",
         "properties": {
@@ -24085,6 +24273,9 @@
           "type": {
             "type": "string",
             "enum": ["running"]
+          },
+          "rootID": {
+            "$ref": "#/components/schemas/Session.ID"
           }
         },
         "required": ["type"],
@@ -24552,7 +24743,7 @@
         "type": "object",
         "properties": {
           "info": {
-            "$ref": "#/components/schemas/Session.Info"
+            "$ref": "#/components/schemas/Session.Persisted"
           },
           "messages": {
             "type": "array",

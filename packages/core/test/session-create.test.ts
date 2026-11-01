@@ -1495,6 +1495,7 @@ describe("SessionTransfer", () => {
         idle: DateTime.makeUnsafe(200),
         viewed: DateTime.makeUnsafe(150),
       })
+      expect(exported.info).not.toHaveProperty("status")
       expect(exported.messages).toEqual(messages)
       const sanitized = yield* transfer.export({ sessionID, sanitize: true })
       expect(sanitized.info.time).toMatchObject({ idle: DateTime.makeUnsafe(200), viewed: DateTime.makeUnsafe(150) })

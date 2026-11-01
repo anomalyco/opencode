@@ -32,7 +32,7 @@ export type Input = {
 }
 
 export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
-  session: Session.Info
+  session: Session.Persisted
   messageID: SessionMessage.ID
   input: Input
 }) {

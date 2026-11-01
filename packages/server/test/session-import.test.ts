@@ -5,6 +5,7 @@ import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
 
 const SessionResponse = Schema.Struct({ data: Schema.toEncoded(Session.Info) })
+const TransferResponse = Schema.Struct({ data: Schema.Struct({ info: Schema.toEncoded(Session.Persisted) }) })
 const SessionsResponse = Schema.Struct({ data: Schema.Array(Schema.toEncoded(Session.Info)) })
 
 const setup = Effect.gen(function* () {
@@ -32,10 +33,18 @@ it.live("preserves imported parentID through HTTP import, read, and parent filte
   Effect.gen(function* () {
     const request = yield* setup
     const parent = Schema.decodeUnknownSync(SessionResponse)(yield* request("/api/session", { title: "Parent" }))
+    expect(yield* request(`/api/session/${parent.data.id}`)).toMatchObject({ data: { status: "idle" } })
+    const exported = yield* request(`/api/experimental/session/${parent.data.id}/export`)
+    expect(exported).not.toHaveProperty(["data", "info", "status"])
     const id = Session.ID.create()
     const imported = Schema.decodeUnknownSync(SessionResponse)(
       yield* request("/api/experimental/session/import", {
-        info: { ...parent.data, id, parentID: parent.data.id, title: "Imported child" },
+        info: {
+          ...Schema.decodeUnknownSync(TransferResponse)(exported).data.info,
+          id,
+          parentID: parent.data.id,
+          title: "Imported child",
+        },
         messages: [],
       }),
     )

@@ -135,6 +135,10 @@ export interface Interface {
     input: ForkInput,
   ) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError | ForkEmptyError>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  /** The whole family containing `sessionID`: the root first, then every descendant by creation time and ID. */
+  readonly family: (
+    sessionID: SessionSchema.ID,
+  ) => Effect.Effect<{ readonly rootID: SessionSchema.ID; readonly sessions: SessionSchema.Info[] }, NotFoundError>
   readonly environment: (input: {
     readonly sessionID: SessionSchema.ID
     readonly variables?: SessionEnvironment.Variables
@@ -237,7 +241,11 @@ export interface Interface {
     input: CompactInput,
   ) => Effect.Effect<SessionInbox.Compaction, NotFoundError | CompactionConflictError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
-  readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
+  /**
+   * Each Session with a running execution, mapped to the root of its family: itself when it is a root, or when its
+   * root cannot be resolved because its row is gone or it sits on a parent cycle.
+   */
+  readonly active: Effect.Effect<ReadonlyMap<SessionSchema.ID, SessionSchema.ID>>
   readonly background: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID, options?: { readonly resume?: boolean }) => Effect.Effect<boolean>
@@ -280,15 +288,24 @@ const layer = Layer.effect(
     const environments = yield* SessionEnvironment.Service
     const locations = yield* LocationServiceMap.Service
     const sessions = yield* Session.make()
-    const mediaBlob = (session: SessionSchema.Info) => SessionBlob.enabledFor(instances, session)
+    const mediaBlob = (session: SessionSchema.Persisted) => SessionBlob.enabledFor(instances, session)
+    // Snapshot `active` before reading rows so `idle` never pairs with a row from before the terminal commit.
+    const withStatus = (
+      active: ReadonlySet<SessionSchema.ID>,
+      session: SessionSchema.Persisted,
+    ): SessionSchema.Info => ({
+      ...session,
+      status: active.has(session.id) ? "running" : "idle",
+    })
     const isDurableSessionEvent = (item: Bus.LogItem): item is SessionEvent.DurableEvent =>
       Object.hasOwn(SessionEvent.Durable.cases, item.type)
 
     const result = Service.of({
       create: Effect.fn("Session.create")(function* (input) {
         const sessionID = input.id ?? SessionSchema.ID.create()
+        const active = yield* execution.active
         const recorded = yield* store.get(sessionID)
-        if (recorded) return recorded
+        if (recorded) return withStatus(active, recorded)
         const parent = input.parentID ? yield* store.get(input.parentID) : undefined
         if (input.parentID && parent === undefined) return yield* new NotFoundError({ sessionID: input.parentID })
         const location = parent?.location ?? (input.location && LocationServiceMap.canonical(input.location))
@@ -332,7 +349,7 @@ const layer = Layer.effect(
                 )
             }),
           )
-        if (projected.type === "existing") return projected.session
+        if (projected.type === "existing") return withStatus(active, projected.session)
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
@@ -381,7 +398,16 @@ const layer = Layer.effect(
           .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
-      get: (sessionID) => sessions.forSession(sessionID).get(),
+      get: Effect.fn("Session.get")(function* (sessionID) {
+        const active = yield* execution.active
+        return withStatus(active, yield* sessions.forSession(sessionID).get())
+      }),
+      family: Effect.fn("Session.family")(function* (sessionID) {
+        const active = yield* execution.active
+        const members = yield* store.family(sessionID)
+        if (members.length === 0) return yield* new NotFoundError({ sessionID })
+        return { rootID: members[0].id, sessions: members.map((session) => withStatus(active, session)) }
+      }),
       environment: Effect.fn("Session.environment")(function* (input) {
         yield* result.get(input.sessionID)
         if (input.variables !== undefined) yield* environments.set(input.sessionID, input.variables)
@@ -405,24 +431,32 @@ const layer = Layer.effect(
           input.cursor === undefined
             ? input
             : yield* ListCursor.parse(input.cursor).pipe(Effect.mapError(() => new InvalidListCursorError()))
-        const data = yield* store.list({ ...filter, limit: input.limit ?? DefaultListLimit })
+        const limit = input.limit ?? DefaultListLimit
+        const backward = "anchor" in filter && filter.anchor.direction === "previous"
+        const active = yield* execution.active
+        // One extra row reveals whether another page exists; a backward page arrives reversed, so it sits first.
+        const rows = yield* store.list({ ...filter, limit: limit + 1 })
+        const more = rows.length > limit
+        const data = more && backward ? rows.slice(1) : rows.slice(0, limit)
         const first = data[0]
         const last = data.at(-1)
         return {
-          data,
+          data: data.map((session) => withStatus(active, session)),
           cursor: {
-            previous: first
-              ? ListCursor.make({
-                  ...filter,
-                  anchor: { id: first.id, time: DateTime.toEpochMillis(first.time.updated), direction: "previous" },
-                })
-              : undefined,
-            next: last
-              ? ListCursor.make({
-                  ...filter,
-                  anchor: { id: last.id, time: DateTime.toEpochMillis(last.time.updated), direction: "next" },
-                })
-              : undefined,
+            previous:
+              first && (more || !backward)
+                ? ListCursor.make({
+                    ...filter,
+                    anchor: { id: first.id, time: DateTime.toEpochMillis(first.time.updated), direction: "previous" },
+                  })
+                : undefined,
+            next:
+              last && (more || backward)
+                ? ListCursor.make({
+                    ...filter,
+                    anchor: { id: last.id, time: DateTime.toEpochMillis(last.time.updated), direction: "next" },
+                  })
+                : undefined,
           },
         }
       }),
@@ -505,7 +539,11 @@ const layer = Layer.effect(
       move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),
-      active: execution.active,
+      active: Effect.gen(function* () {
+        const active = Array.from(yield* execution.active)
+        const roots = yield* store.roots(active)
+        return new Map(active.map((sessionID) => [sessionID, roots.get(sessionID) ?? sessionID]))
+      }).pipe(Effect.withSpan("Session.active")),
       background: Effect.fn("Session.background")(function* (sessionID) {
         yield* result.get(sessionID)
         const backgrounded = yield* jobs.backgroundAll({ sessionID })

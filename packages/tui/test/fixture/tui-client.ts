@@ -68,13 +68,54 @@ export type FetchHandler = (url: URL, request: Request) => Response | undefined 
 
 export function createFetch(override?: FetchHandler, events?: ReturnType<typeof createEventStream>) {
   const session = [] as URL[]
-  async function fetch(input: RequestInfo | URL, init?: RequestInit) {
+  async function fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const request = input instanceof Request ? input : new Request(input, init)
     const url = new URL(request.url)
     if (url.pathname === "/session") session.push(url)
     const overridden = await override?.(url, request)
     if (overridden) return overridden
     if (url.pathname === "/api/event" && events) return events.v2()
+    // Derive a family from the Session, children, and pending-request reads a test serves, so overrides need not know
+    // the endpoint. Like the server it walks up to the topmost served Session and returns the whole tree, root first,
+    // and a failed read, such as a missing Session, becomes the family response.
+    const family = /^\/api\/experimental\/session\/([^/]+)\/family$/.exec(url.pathname)
+    if (family) {
+      type Info = { id: string; parentID?: string }
+      const read = (path: string) =>
+        fetch(new URL(path, url)).then(async (response) => {
+          if (!response.ok) throw response
+          return (await response.json()).data
+        })
+      const up = async (info: Info): Promise<Info> => {
+        if (!info.parentID) return info
+        const parent: Info | undefined = await read(`/api/session/${info.parentID}`).catch(() => undefined)
+        return parent ? up(parent) : info
+      }
+      const down = async (info: Info): Promise<Info[]> => {
+        const children: Info[] = await read(`/api/session?parentID=${info.id}`)
+        const nested = await Promise.all(children.filter((child) => child.parentID === info.id).map(down))
+        return [info, ...nested.flat()]
+      }
+      const build = async () => {
+        const sessions = await down(await up(await read(`/api/session/${family[1]}`)))
+        const pending = (kind: string) =>
+          Promise.all(sessions.map((session) => read(`/api/session/${session.id}/${kind}`))).then((lists) =>
+            lists.flat(),
+          )
+        return json({
+          data: {
+            rootID: sessions[0].id,
+            sessions,
+            permissions: await pending("permission"),
+            forms: await pending("form"),
+          },
+        })
+      }
+      return build().catch((error: unknown) => {
+        if (error instanceof Response) return error
+        throw error
+      })
+    }
 
     if (
       [
@@ -137,7 +178,7 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
     if (url.pathname === "/api/config") return json([])
     if (url.pathname === "/api/session/active") return json({ data: {} })
-    if (request.method === "POST" && /^\/api\/session\/[^/]+\/model$/.test(url.pathname))
+    if (request.method === "POST" && /^\/api\/session\/[^/]+\/(model|view)$/.test(url.pathname))
       return new Response(null, { status: 204 })
     if (url.pathname === "/api/permission/request")
       return json({

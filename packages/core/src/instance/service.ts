@@ -10,10 +10,13 @@ import type { Services, Error } from "../instance.js"
 /** Selects Session capabilities; implementations own caching and lifetime. */
 export interface Interface {
   readonly provide: (
-    session: Session.Info,
+    session: Session.Persisted,
   ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E | Error, Exclude<R, Services>>
-  /** Whether `provide` would reuse built or booting capabilities. Selectors without it are assumed live. */
-  readonly live?: (session: Session.Info) => Effect.Effect<boolean>
+  /**
+   * Whether `provide` would reuse capabilities that finished starting. Never waits on a start in progress.
+   * Selectors without it are assumed live.
+   */
+  readonly live?: (session: Session.Persisted) => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Instance") {}
