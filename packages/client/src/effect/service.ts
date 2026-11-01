@@ -7,7 +7,7 @@ import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
-export { headers }
+export { headers, PtyHandoff }
 /** Contents of the local service registration file. */
 export type Info = typeof Info.Type
 

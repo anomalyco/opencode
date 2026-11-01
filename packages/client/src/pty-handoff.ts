@@ -66,16 +66,21 @@ async function publish(file: string, info: Info, handoff: PersistentPty.Handoff 
   await rename(temporary, file + ".pty-handoff").finally(() => rm(temporary, { force: true }))
 }
 
-export async function environment(file: string, env?: Readonly<Record<string, string>>) {
+/** Read the private restart ticket at the service, even when a supervisor started it. */
+export async function ticket(file: string) {
   const record = await read(file)
   const current: Info | undefined = await readFile(file, "utf8")
     .then((text) => JSON.parse(text))
     .catch(() => undefined)
-  const handoff =
-    record !== undefined && record.expiresAt > Date.now() && (current === undefined || same(record.source, current))
-      ? record.handoff
-      : undefined
-  return { ...env, OPENCODE_PTY_HANDOFF: handoff == null ? undefined : JSON.stringify(handoff) }
+  if (record === undefined || record.expiresAt <= Date.now()) return
+  if (current !== undefined && !same(record.source, current)) return
+  if (record.handoff === null || record.handoff.expiresAt <= Date.now()) return
+  return record.handoff
+}
+
+export async function environment(file: string, env?: Readonly<Record<string, string>>) {
+  const handoff = await ticket(file)
+  return { ...env, OPENCODE_PTY_HANDOFF: handoff === undefined ? undefined : JSON.stringify(handoff) }
 }
 
 export async function complete(file: string, info: Info) {
