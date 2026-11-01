@@ -119,6 +119,7 @@ Configure how full-screen TUI sessions are presented and where new sessions star
   "session": {
     "sidebar": "auto",
     "scrollbar": false,
+    "keep_scroll_on_submit": false,
     "thinking": "hide",
     "grouping": "auto",
     "image_preview": false,
@@ -136,6 +137,7 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 | ----------------------- | --------------------------- | ---------------------------------------------------------------------------- |
 | `session.sidebar`       | `auto` or `hide`            | Shows the sidebar when space permits or always hides it.                     |
 | `session.scrollbar`     | boolean                     | Shows the transcript scrollbar.                                              |
+| `session.keep_scroll_on_submit` | boolean             | Keeps a scrolled-up transcript where it is when you send a prompt, instead of jumping to the bottom. |
 | `session.thinking`      | `show` or `hide`            | Shows or hides model reasoning by default.                                   |
 | `session.grouping`      | `auto` or `none`            | Groups related transcript items or renders each item separately.             |
 | `session.image_preview` | boolean                     | Shows user attachment and tool-result images in the transcript.              |
