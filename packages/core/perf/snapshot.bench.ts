@@ -33,6 +33,8 @@ export default bench({
   },
   cases: {
     "capture, nothing changed": { ...timed, run: (ctx) => git(ctx, "capture") },
+    // Eight sessions in one project capturing at once share the project's store.
+    "8 captures at once, nothing changed": { ...timed, run: (ctx) => git(ctx, "captureMany", 8) },
     "capture after editing a file": {
       ...timed,
       run: (ctx) => git(ctx, "capture"),

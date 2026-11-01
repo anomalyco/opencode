@@ -103,6 +103,10 @@ export const capture = () =>
     ),
   )
 
+/** `count` captures at once on one store, as sessions in one project capture when their steps start together. */
+export const captureMany = (count: number) =>
+  counted(() => Promise.all(Array.from({ length: count }, () => snapshot((s) => s.capture()))))
+
 /** Edits `count` tracked files (spread across the tree). */
 export async function edit(count: number) {
   const tag = `edit-${state.edits++}`
