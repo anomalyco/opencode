@@ -15,7 +15,6 @@ const ISOLATION_ENV = {
   CLAUDE_CODE_ENABLE_AWAY_SUMMARY: "0",
   ENABLE_TOOL_SEARCH: "false",
   CLAUDE_CODE_DISABLE_ADVISOR_TOOL: "1",
-  // The non-streaming retry skips the stream events that end a tool step, so the session would hang
   CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK: "1",
   // Raised so opencode's own truncation applies instead
   MAX_MCP_OUTPUT_TOKENS: "200000",
