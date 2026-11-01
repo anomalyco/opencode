@@ -1,9 +1,10 @@
 import { createContext, type JSX, useContext } from "solid-js"
 
 export type ClipboardContent = Readonly<{ data: string; mime: string }>
+export type ClipboardWriteResult = "written" | "attempted"
 export type ClipboardService = Readonly<{
   read(): Promise<ClipboardContent | undefined>
-  write(text: string): Promise<void>
+  write(text: string): Promise<ClipboardWriteResult>
 }>
 
 const ClipboardContext = createContext<ClipboardService>()
