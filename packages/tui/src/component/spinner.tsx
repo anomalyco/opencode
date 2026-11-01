@@ -9,7 +9,7 @@ import { ShimmerText } from "./shimmer-text"
 
 export { SPINNER_FRAMES } from "./spinner-frames"
 
-export function Spinner(props: { children?: JSX.Element; color?: RGBA; shimmer?: RGBA }) {
+export function Spinner(props: { children?: JSX.Element; color?: RGBA; shimmer?: RGBA; truncate?: boolean }) {
   const theme = useTheme()
   const config = useConfig().data
   const color = () => props.color ?? theme.text.muted
@@ -24,17 +24,29 @@ export function Spinner(props: { children?: JSX.Element; color?: RGBA; shimmer?:
   return (
     <Show
       when={config.animations ?? true}
-      fallback={<text fg={color()}>{props.children ? <>⋯ {props.children}</> : "⋯"}</text>}
+      fallback={
+        <text fg={color()} wrapMode={props.truncate ? "none" : undefined} truncate={props.truncate}>
+          {props.children ? <>⋯ {props.children}</> : "⋯"}
+        </text>
+      }
     >
       <Show
         when={props.shimmer}
         fallback={
-          <box flexDirection="row" gap={1} flexShrink={props.children ? 1 : 0}>
+          <box flexDirection="row" gap={1} flexShrink={props.children ? 1 : 0} minWidth={props.truncate ? 0 : undefined}>
             <box flexShrink={0}>
               <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
             </box>
             <Show when={props.children}>
-              <text fg={color()}>{props.children}</text>
+              <text
+                fg={color()}
+                flexShrink={props.truncate ? 1 : undefined}
+                minWidth={props.truncate ? 0 : undefined}
+                wrapMode={props.truncate ? "none" : undefined}
+                truncate={props.truncate}
+              >
+                {props.children}
+              </text>
             </Show>
           </box>
         }

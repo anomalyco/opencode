@@ -212,6 +212,7 @@ export function InlineToolRow(props: {
   pending: string
   failure?: string
   spinner?: boolean
+  truncate?: boolean
   status?: JSX.Element
   children: JSX.Element
   onMouseOver?: () => void
@@ -222,7 +223,10 @@ export function InlineToolRow(props: {
     <box paddingLeft={3} onMouseOver={props.onMouseOver} onMouseOut={props.onMouseOut} onMouseUp={props.onMouseUp}>
       <Switch>
         <Match when={props.spinner}>
-          <Show when={props.status} fallback={<Spinner color={props.color} children={props.children} />}>
+          <Show
+            when={props.status}
+            fallback={<Spinner color={props.color} truncate={props.truncate} children={props.children} />}
+          >
             {(status) => (
               <box flexDirection="row" gap={1}>
                 <Spinner color={props.color} />
@@ -234,10 +238,14 @@ export function InlineToolRow(props: {
           </Show>
         </Match>
         <Match when={true}>
-          <Show fallback={<Spinner color={props.color}>{props.pending}</Spinner>} when={props.complete || props.failed}>
+          <Show
+            fallback={<Spinner color={props.color} truncate={props.truncate}>{props.pending}</Spinner>}
+            when={props.complete || props.failed}
+          >
             <box flexDirection="row">
               <text
                 width={INLINE_TOOL_ICON_WIDTH}
+                flexShrink={0}
                 fg={props.failed ? props.errorColor : (props.iconColor ?? props.color)}
                 attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
               >
@@ -248,6 +256,9 @@ export function InlineToolRow(props: {
                 fallback={
                   <text
                     flexGrow={1}
+                    minWidth={props.truncate ? 0 : undefined}
+                    wrapMode={props.truncate ? "none" : undefined}
+                    truncate={props.truncate}
                     fg={props.failed ? props.errorColor : props.color}
                     attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
                   >
