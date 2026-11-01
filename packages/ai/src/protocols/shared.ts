@@ -283,7 +283,25 @@ export const toolFileMedia = (item: Tool.FileContent): MediaPart => {
   return Message.media(asset, { filename: item.name })
 }
 
+// A tool result the provider can only read as text. `undefined` has no JSON encoding, and a throw here would be a
+// defect that escapes the typed channel — the session dies instead of one step failing — so fall back instead.
+const encodeJsonOption = Schema.encodeUnknownOption(Json)
+
+const jsonText = (value: unknown) =>
+  Option.getOrElse(encodeJsonOption(value), () => {
+    // The fallback stays diagnosable: `String(value)` would yield "undefined" / "[object Object]" for the two cases
+    // that actually reach it, which cannot be told apart from a literal tool result.
+    if (value === undefined) return "null"
+    return typeof value === "object" && value !== null ? "[unserializable tool result]" : String(value)
+  })
+
 export const toolResultText = (part: ToolResultPart) => {
+  // A plugin can store a bare string (or another primitive) as the whole result. Reading `part.result.type` on it
+  // yields `undefined`, so every envelope branch below misses and the payload silently degrades to the "null"
+  // placeholder — dropping exactly the text (often a handle ref) the model needed. Degrade on shape first.
+  const result: unknown = part.result
+  if (typeof result === "string") return result
+  if (result === null || typeof result !== "object") return String(result)
   if (part.result.type === "text") return String(part.result.value)
   if (part.result.type === "error") {
     const value = part.result.value
@@ -292,7 +310,7 @@ export const toolResultText = (part: ToolResultPart) => {
     const structured = Array.isArray(value) || prototype === Object.prototype || prototype === null
     return structured && isJson(value) ? encodeJson(value) : String(value)
   }
-  return encodeJson(part.result.value)
+  return jsonText(part.result.value)
 }
 
 export const errorText = (error: unknown) => {

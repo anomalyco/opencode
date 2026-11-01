@@ -578,7 +578,7 @@ const prepareRequest = (request: LLMRequest) => {
     : LLMRequest.update(resolved, { http: mergeHttpOptions(new HttpOptions({ headers }), resolved.http) })
 }
 
-const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
+const compileUnsafe = Effect.fnUntraced(function* (request: LLMRequest, options?: StreamOptions) {
   const references = request.messages.flatMap((message) =>
     message.content.flatMap((part) => {
       if (part.type === "media") {
@@ -596,7 +596,29 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
   const resolved = prepareRequest(request)
   const route = resolved.model.route
 
-  const body = yield* route.body.from(resolved)
+  // Lowering is allowed to fail, not to defect: a defect here escapes the typed error channel and kills the
+  // session drain fiber, so route failures become a route-scoped AIError without re-wrapping typed failures.
+  const body = yield* Effect.suspend(() => route.body.from(resolved)).pipe(
+    Effect.catchCause((cause) => {
+      if (Cause.hasInterrupts(cause)) return Effect.failCause(cause)
+      const failure = Cause.findErrorOption(cause)
+      if (Option.isSome(failure)) {
+        // The typed failure wins below, so a defect riding along in the same cause would vanish from both channels.
+        if (!Cause.hasDies(cause)) return Effect.fail(failure.value)
+        const squashed = ProviderShared.errorText(Cause.squash(cause))
+        return Effect.andThen(
+          Effect.logError(`Route ${route.id} lowering defect alongside a typed failure: ${squashed}`, { cause }),
+          Effect.fail(failure.value),
+        )
+      }
+      const defect = Cause.squash(cause)
+      const message = `Route ${route.id} failed to build the request body: ${ProviderShared.errorText(defect)}`
+      return Effect.andThen(
+        Effect.logError(message, { cause }),
+        Effect.fail(ProviderShared.invalidRequest(message, defect)),
+      )
+    }),
+  )
   const prepared = yield* route.prepareTransport(body, resolved, options)
 
   return {
@@ -605,6 +627,19 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
     body,
     prepared,
   }
+})
+
+const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options?: StreamOptions) {
+  return yield* compileUnsafe(request, options).pipe(
+    // Protocol lowering is synchronous and total-by-contract; a throw here is a bug, but it must fail this step
+    // instead of killing the session's drain fiber. Any cause carrying an interrupt keeps it, including the mixed
+    // "interrupt + defect" case that `hasInterruptsOnly` would reclassify as a plain error.
+    Effect.catchCause((cause) =>
+      Cause.hasInterrupts(cause)
+        ? Effect.failCause(cause)
+        : Effect.fail(streamError(request.model.route.id, "Failed to compile request", cause)),
+    ),
+  )
 })
 
 /** Test-only projection of the execution compiler; exported from `@opencode/ai/testing`. */

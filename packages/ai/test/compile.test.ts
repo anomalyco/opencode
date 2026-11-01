@@ -459,3 +459,32 @@ describe("request option precedence", () => {
     }),
   )
 })
+
+describe("tool result encoding", () => {
+  it.effect("compiles an unencodable json tool result without throwing", () =>
+    Effect.gen(function* () {
+      const cases = [
+        { result: undefined, output: "null" },
+        { result: { a: 1 }, output: '{"a":1}' },
+      ]
+
+      for (const item of cases) {
+        const prepared = yield* compileRequest(
+          ai.request({
+            model: OpenAIResponses.route.model({ id: "gpt-5.4" }),
+            messages: [
+              Message.assistant(ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })),
+              Message.tool({ id: "call_1", name: "lookup", result: item.result }),
+            ],
+          }),
+        )
+
+        expect(prepared.body.input).toContainEqual({
+          type: "function_call_output",
+          call_id: "call_1",
+          output: item.output,
+        })
+      }
+    }),
+  )
+})
