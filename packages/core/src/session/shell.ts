@@ -15,6 +15,7 @@ export const start = Effect.fn("SessionShell.start")(function* (input: { session
     cwd: input.session.location.directory,
     timeout: 0,
     metadata: { sessionID: input.session.id, background: true },
+    source: { type: "user", sessionID: input.session.id },
   })
   // Keep completion tied to the original shell even if the Session moves.
   return {
