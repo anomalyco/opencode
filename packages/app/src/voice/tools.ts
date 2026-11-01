@@ -7,7 +7,14 @@ import { messageExcerpts } from "./messages"
 import { formatHandoff, headerLapse } from "./handoff"
 import { folder, matchModels, SessionSearch } from "./search"
 
-type Request = { id: string; sessionID: string; transcript: string[] }
+type Request = { id: string; sessionID?: string; transcript: string[] }
+
+/** A tool that needs a session ran while the call was on a draft whose session couldn't be created. */
+class NoSession extends Error {
+  constructor() {
+    super("There's no session yet: the call's new session couldn't be created. Create one with create_session first.")
+  }
+}
 
 export class VoiceTools {
   readonly replies = new ReplyWatch()
@@ -23,6 +30,8 @@ export class VoiceTools {
       open: (session: SessionInfo, signal: AbortSignal) => Promise<void>
       /** Session IDs with an open tab. */
       tabs: () => string[]
+      /** While the call is on a new-session draft, the session the call creates for it. */
+      draft?: () => Promise<SessionInfo | undefined> | undefined
     },
   ) {}
 
@@ -33,8 +42,13 @@ export class VoiceTools {
 
     const result = this.execute(call, request, signal)
       .then(JSON.stringify)
-      .catch(() =>
-        JSON.stringify({ error: "Tool request failed. Do not claim it succeeded or resend an uncertain admission." }),
+      .catch((error) =>
+        JSON.stringify({
+          error:
+            error instanceof NoSession
+              ? error.message
+              : "Tool request failed. Do not claim it succeeded or resend an uncertain admission.",
+        }),
       )
 
     this.calls.set(call.call_id, result)
@@ -72,7 +86,18 @@ export class VoiceTools {
     signal.throwIfAborted()
     const args = decodeArguments(call.arguments)
     const api = this.ctx.sdk.api
-    const sessionID = args.session_id ?? request.sessionID
+
+    // The session a tool acts on: the one it names, else the one on screen, else, on a draft, the session the call
+    // is creating for it, which later tools in the request then default to.
+    const target = async () => {
+      const id = args.session_id ?? request.sessionID ?? (await this.screen.draft?.())?.id
+
+      if (!id) throw new NoSession()
+      request.sessionID ??= id
+
+      return id
+    }
+
     const options = { signal }
 
     const row = (session: SessionInfo) => ({
@@ -141,14 +166,14 @@ export class VoiceTools {
       if (!projects.some((project) => project.canonical === directory || project.sandboxes.includes(directory)))
         return { error: "Directory is not a known project or worktree on this server. No session was created." }
 
-      const source = await api.session.get({ sessionID: request.sessionID }, options)
+      const source = request.sessionID ? await api.session.get({ sessionID: request.sessionID }, options) : undefined
       signal.throwIfAborted()
 
       const created = this.ctx.data.session.create({
         location: { directory },
         title: args.title,
-        model: source.model,
-        agent: source.agent,
+        model: source?.model,
+        agent: source?.agent,
       })
 
       await created.request
@@ -179,6 +204,7 @@ export class VoiceTools {
     }
 
     if (call.name === "interrupt_session") {
+      const sessionID = await target()
       await api.session.interrupt({ sessionID }, options)
 
       return { interrupted: sessionID }
@@ -186,6 +212,7 @@ export class VoiceTools {
 
     if (call.name === "send_message") {
       if (!args.text?.trim()) throw new Error("text required")
+      const sessionID = await target()
       const session = await api.session.get({ sessionID }, options)
       signal.throwIfAborted()
       const id = SessionMessage.ID.create()
@@ -237,6 +264,7 @@ export class VoiceTools {
     }
 
     if (call.name === "list_models") {
+      const sessionID = await target()
       const session = await api.session.get({ sessionID }, options)
       const catalog = await api.model.list({ location: { directory: session.location.directory } }, options)
       const current = session.model
@@ -268,6 +296,7 @@ export class VoiceTools {
       const wanted = args.model?.trim()
 
       if (!wanted) throw new Error("model required")
+      const sessionID = await target()
       const session = await api.session.get({ sessionID }, options)
       const catalog = await api.model.list({ location: { directory: session.location.directory } }, options)
       const enabled = catalog.data.filter((item) => item.enabled)
@@ -300,6 +329,8 @@ export class VoiceTools {
     }
 
     if (call.name === "read_session" || call.name === "wait_for_session") {
+      const sessionID = await target()
+
       if (call.name === "wait_for_session") {
         await api.experimental.session.wait({ sessionID }, { signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]) })
       }

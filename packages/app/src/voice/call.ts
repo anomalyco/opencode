@@ -7,21 +7,39 @@ import { VoiceTools } from "./tools"
 import { VoiceFailure, VoiceTransport } from "./transport"
 import { delegatorInstructions } from "./spec"
 import type { ToolCall, VoiceEvent } from "./protocol"
+import { viewTitle, type VoiceView } from "./view"
 
 export type CallState = {
   status: "idle" | "connecting" | "connected" | "dropped"
   failure?: "unavailable" | "microphone" | "dropped" | "connection"
   muted: boolean
-  level: number
+  /** When the call last connected, for its duration. */
+  since?: number
   caption: string
   speaker: "user" | "assistant"
   utterance?: number
   title: string
 }
 
+function viewing(view: VoiceView) {
+  return view.type === "session" ? { session: view.session } : { directory: view.directory }
+}
+
+/** A call's own bookkeeping, outside the reactive state the screen reads. */
+type CallRuntime = {
+  transport?: VoiceTransport
+  viewing: VoiceView
+  muted: boolean
+  ended: boolean
+  watching: boolean
+  ready: boolean
+  joining: boolean
+}
+
 type Delegation = {
   id: string
-  sessionID: string
+  /** The session on screen when it was asked; none while the call is still on its draft. */
+  sessionID?: string
   transcript: string[]
   calls: ToolCall[]
   rounds: number
@@ -30,13 +48,15 @@ type Delegation = {
 
 export function createVoiceCall(input: {
   ctx: ServerCtx
-  session: SessionInfo
+  view: VoiceView
   platform: Platform
   /** Shows the session on screen; rejects unless the route really changed. */
   open: (session: SessionInfo, signal: AbortSignal) => Promise<void>
   /** Session IDs with an open tab. */
   tabs: () => string[]
   change: (state: Partial<CallState>) => void
+  /** Microphone and speaker levels several times a second; kept out of reactive state. */
+  levels: (mic: number, speaker: number) => void
 }) {
   const tail = new TranscriptTail()
   let gates = new VoiceGates()
@@ -46,21 +66,14 @@ export function createVoiceCall(input: {
       await input.open(session, signal)
       // A call that ended or dropped mid-open must not take over the view.
       signal.throwIfAborted()
-      view(session)
+      view({ type: "session", session })
     },
     tabs: input.tabs,
+    draft: () => (state.viewing.type === "draft" ? state.viewing.session() : undefined),
   })
 
-  const state: {
-    transport?: VoiceTransport
-    viewing: SessionInfo
-    muted: boolean
-    ended: boolean
-    watching: boolean
-    ready: boolean
-    joining: boolean
-  } = {
-    viewing: input.session,
+  const state: CallRuntime = {
+    viewing: input.view,
     muted: false,
     ended: false,
     watching: false,
@@ -79,16 +92,16 @@ export function createVoiceCall(input: {
 
   let updates = Promise.resolve()
 
-  function view(session: SessionInfo) {
-    state.viewing = session
-    input.change({ title: session.title ?? session.id })
+  function view(next: VoiceView) {
+    state.viewing = next
+    input.change({ title: viewTitle(next) })
     const transport = state.transport
 
     if (!state.ready || !transport) return
     updates = updates
       .then(async () => {
         if (transport !== state.transport || transport.abort.signal.aborted) return
-        await transport.instructions(delegatorInstructions(state.viewing, tail.lines))
+        await transport.instructions(delegatorInstructions(viewing(state.viewing), tail.lines))
       })
       .catch(() => {
         if (transport === state.transport && !transport.abort.signal.aborted) drop("connection")
@@ -100,7 +113,8 @@ export function createVoiceCall(input: {
     state.ready = false
     delegations.forEach((delegation) => tail.release(delegation.id))
     delegations.clear()
-    input.change({ status: "dropped", failure, level: 0 })
+    input.levels(0, 0)
+    input.change({ status: "dropped", failure })
     void state.transport?.close()
     void input.platform.setVoiceCallActive?.(false).catch(() => undefined)
   }
@@ -110,7 +124,7 @@ export function createVoiceCall(input: {
     state.joining = true
     input.change({ status: "connecting", failure: undefined })
     await connect()
-      .catch((error: unknown) => {
+      .catch((error) => {
         if (!state.ended) drop(error instanceof VoiceFailure ? error.reason : "connection")
       })
       .finally(() => {
@@ -133,7 +147,7 @@ export function createVoiceCall(input: {
       levels: (mic, speaker) => {
         gates.user(!state.muted && mic > 0.015)
         gates.assistant(speaker > 0.005)
-        input.change({ level: Math.min(1, (state.muted ? speaker : Math.max(mic, speaker)) * 5) })
+        input.levels(state.muted ? 0 : mic, speaker)
       },
       dropped: () => {
         if (state.transport === transport) drop()
@@ -147,14 +161,14 @@ export function createVoiceCall(input: {
     transport.abort.signal.throwIfAborted()
     await input.platform.setVoiceCallActive?.(true)
     transport.abort.signal.throwIfAborted()
-    await transport.join(state.viewing, tail.lines)
+    await transport.join(viewing(state.viewing), tail.lines)
     transport.abort.signal.throwIfAborted()
     state.ready = true
     transport.mute(state.muted)
     // Navigation while connecting must reach the newly ready backend too.
     view(state.viewing)
     tools.replies.sessions.forEach((id) => dirty.add(id))
-    input.change({ status: "connected", muted: state.muted })
+    input.change({ status: "connected", muted: state.muted, since: Date.now() })
   }
 
   function eventReceived(event: VoiceEvent, transport: VoiceTransport) {
@@ -174,7 +188,13 @@ export function createVoiceCall(input: {
       const id = event.delegation.id
 
       if (delegations.has(id)) return
-      delegations.set(id, { id, sessionID: state.viewing.id, transcript: tail.capture(id), calls: [], rounds: 0 })
+      delegations.set(id, {
+        id,
+        sessionID: state.viewing.type === "session" ? state.viewing.session.id : undefined,
+        transcript: tail.capture(id),
+        calls: [],
+        rounds: 0,
+      })
 
       return
     }

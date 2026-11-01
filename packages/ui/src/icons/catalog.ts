@@ -302,6 +302,29 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M14.5 8.01193V8" stroke-linecap="square" stroke="currentColor"/><path d="M1.5 8.00607V7.99414" stroke-linecap="square" stroke="currentColor"/><path d="M3.66699 10.5141V5.48438" stroke-linecap="square" stroke="currentColor"/><path d="M10.167 10.5141V5.48438" stroke-linecap="square" stroke="currentColor"/><path d="M8 11.6004V4.39844" stroke-linecap="square" stroke="currentColor"/><path d="M12.333 9.20144V6.80078" stroke-linecap="square" stroke="currentColor"/><path d="M5.83301 13.5323V2.4668" stroke-linecap="square" stroke="currentColor"/>`,
   },
+  // Voice, hang-up, microphone and transcript glyphs, on a 24-unit grid at 1.5 so they render at the catalog's 1px
+  // stroke; the hang-up, microphone and transcript ones follow Lucide's geometry (ISC). The hang-up handset is filled,
+  // as the call's End is on iOS: an outlined handset reads as a thin squiggle at 16px.
+  voice: {
+    viewBox: "0 0 24 24",
+    body: `<path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
+  "phone-hangup": {
+    viewBox: "0 0 24 24",
+    body: `<path transform="rotate(135 12 12)" d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384Z" fill="currentColor" stroke="currentColor" stroke-linejoin="round"/>`,
+  },
+  microphone: {
+    viewBox: "0 0 24 24",
+    body: `<rect x="9" y="2" width="6" height="13" rx="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
+  "microphone-off": {
+    viewBox: "0 0 24 24",
+    body: `<path d="M12 19v3M15 9.34V5a3 3 0 0 0-5.68-1.33M16.95 16.95A7 7 0 0 1 5 12v-2M18.89 13.23A7.12 7.12 0 0 0 19 12v-2M2 2l20 20M9 9v3a3 3 0 0 0 5.12 2.12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
+  transcript: {
+    viewBox: "0 0 24 24",
+    body: `<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 8h9M7.5 12h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
   comment: {
     viewBox: "0 0 16 16",
     body: `<path d="M13.5 2.5H2.5V13.5H4.5L5.5 11.5H13.5V2.5Z" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/>`,

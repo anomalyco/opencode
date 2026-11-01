@@ -98,6 +98,7 @@ describe("settings schema", () => {
         newIcons: false,
         foldUserMessages: false,
         newQuestionUI: false,
+        voice: false,
         mobileTitlebarPosition: "top",
         followUpBehavior: "steer",
       },

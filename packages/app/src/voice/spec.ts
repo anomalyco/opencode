@@ -31,9 +31,18 @@ Your final reply is spoken aloud: one to three short sentences, plain words, no 
 Say only what your tools did: started, sent, opened, switched, done, or failed, and where. Never guess what unclear words meant.
 The voice agent has already acknowledged the request out loud, so lead with the outcome: the concrete action and where ("Sent that to the DESKTOP session"). Don't restate what the user asked or repeat the message you sent to a session.`
 
-export function delegatorInstructions(viewing: { id: string; title?: string }, tail = "") {
-  return `${instructions}\nViewed session: ${JSON.stringify({ id: viewing.id, title: viewing.title })}\nRecent voice conversation:\n${tail}`
+export function delegatorInstructions(viewing: VoiceViewing, tail = "") {
+  const viewed = viewing.session
+    ? `Viewed session: ${JSON.stringify({ id: viewing.session.id, title: viewing.session.title })}`
+    : `Viewed: a new session the call started on, in ${JSON.stringify(viewing.directory)}. It is still being created; tools that take session_id default to it once it exists.`
+
+  return `${instructions}\n${viewed}\nRecent voice conversation:\n${tail}`
 }
+
+/** What the call is on: a session, or a new-session draft whose session the call creates as it starts. */
+export type VoiceViewing =
+  | { session: { id: string; title?: string }; directory?: undefined }
+  | { session?: undefined; directory: string }
 
 const session = { session_id: { type: "string", description: "Omit for the viewed session" } }
 
