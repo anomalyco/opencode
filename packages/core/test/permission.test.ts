@@ -397,6 +397,34 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("allows only the exact resources for the rest of the session", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* Permission.Service
+      const asked = yield* Deferred.make<Permission.Request>()
+      const bus = yield* Bus.Service
+      const unsubscribe = yield* bus.listen((event) =>
+        event.type === Permission.Event.Asked.type
+          ? Deferred.succeed(asked, event.data as Permission.Request).pipe(Effect.asVoid)
+          : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const fiber = yield* service.assert(assertion({ resources: ["cp a *"], save: ["cp *"] })).pipe(Effect.forkScoped)
+      const request = yield* Deferred.await(asked)
+      yield* service.reply({ requestID: request.id, reply: "session" })
+      yield* Fiber.join(fiber)
+
+      expect(yield* service.allows(assertion({ id: Permission.ID.create("per_same"), resources: ["cp a *"] }))).toBe(
+        true,
+      )
+      expect(yield* service.allows(assertion({ id: Permission.ID.create("per_other"), resources: ["cp a b"] }))).toBe(
+        false,
+      )
+      const saved = yield* PermissionSaved.Service
+      expect(yield* saved.list()).toEqual([])
+    }),
+  )
+
   it.effect("edits saved approvals and enforces the edited rule", () =>
     Effect.gen(function* () {
       yield* setup()
@@ -764,10 +792,7 @@ describe("shell scanner permission impact", () => {
       name: "assignment redirect prefix",
       shell: "bash",
       command: "FOO=bar > output; printf done",
-      grants: [
-        ["printf *"],
-        ["FOO=bar > *", "printf *"],
-      ],
+      grants: [["printf *"], ["FOO=bar > *", "printf *"]],
       repeat: [
         ["ask", "allow"],
         ["ask", "allow"],
@@ -779,10 +804,7 @@ describe("shell scanner permission impact", () => {
       name: "PowerShell method prefix",
       shell: "pwsh",
       command: '[IO.File]::Delete("C:\\first")',
-      grants: [
-        ["[IO.File]::Delete(*"],
-        ["[IO.File]::Delete(*"],
-      ],
+      grants: [["[IO.File]::Delete(*"], ["[IO.File]::Delete(*"]],
       repeat: [
         ["allow", "allow"],
         ["allow", "allow"],
