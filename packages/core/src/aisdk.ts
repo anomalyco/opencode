@@ -358,14 +358,19 @@ export const locationLayer = Layer.effect(
         return language
       }),
       model: Effect.fn("AISDK.model")(function* (model) {
-        return modelFromLanguage(model, yield* service.language(model))
+        const language = yield* service.language(model)
+        return modelFromLanguage(model, Effect.succeed(language), service.language)
       }),
     })
     return service
   }),
 )
 
-function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
+function modelFromLanguage(
+  info: RuntimeInfo,
+  language: Effect.Effect<LanguageModelV3, InitError>,
+  resolve: Interface["language"],
+) {
   const packageName = Provider.packageName(info.package!)
   const projected = mapBodyToProviderOptions(info, packageName)
   const providerID = info.canonical ?? info.providerID
@@ -378,7 +383,9 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     protocol: "ai-sdk",
     // AI SDK providers convert tool schemas themselves, so model-family sanitizers stay off here.
     sanitizer: "none",
-    endpoint: Endpoint.path("/", { baseURL: "https://ai-sdk.local" }),
+    endpoint: Endpoint.path("/", {
+      baseURL: typeof info.settings?.baseURL === "string" ? info.settings.baseURL : undefined,
+    }),
     auth: Auth.none,
     transport: {
       id: "ai-sdk",
@@ -405,12 +412,21 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
             cause instanceof AIError ? cause : ProviderShared.invalidRequest("Invalid AI SDK request", cause),
         }),
     },
-    with: () => route,
+    with: (patch: Parameters<AnyRoute["with"]>[0]) => {
+      if (patch.endpoint?.baseURL === undefined) return route
+      const next = { ...info, settings: { ...info.settings, baseURL: patch.endpoint.baseURL } }
+      return modelFromLanguage(next, resolve(next), resolve).route
+    },
     model: (input) =>
       LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
     streamPrepared: (prepared, _request, _runtime, options) =>
-      streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
+      Stream.unwrap(
+        language.pipe(
+          Effect.mapError((cause) => ProviderShared.invalidRequest("Failed to initialize AI SDK model", cause)),
+          Effect.map((resolved) => streamLanguage(resolved, prepared as LanguageModelV3CallOptions, options?.http)),
+        ),
+      ),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,
