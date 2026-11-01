@@ -3,7 +3,7 @@ export * as ConfigVariable from "./variable.js"
 import os from "os"
 import path from "path"
 import { Effect } from "effect"
-import { type ParseError, parse } from "jsonc-parser"
+import { createScanner, type ParseError, parse } from "jsonc-parser"
 import { FSUtil } from "@opencode/util/fs-util"
 
 type ParseSource =
@@ -24,11 +24,25 @@ type SubstituteInput = ParseSource & {
 
 /** Apply {env:VAR} and {file:path} substitutions to config text. */
 export const substitute = Effect.fn("ConfigVariable.substitute")(function* (input: SubstituteInput) {
-  const env = (escape: boolean) =>
-    input.text.replace(/\{env:([^}]+)\}/g, (_, name: string) => {
+  const env = (escape: boolean) => {
+    const scanner = escape ? createScanner(input.text) : undefined
+    return input.text.replace(/\{env:([^}]+)\}/g, (_, name: string, offset: number) => {
       const value = (input.env?.[name] ?? process.env[name]) || ""
-      return escape ? JSON.stringify(value).slice(1, -1) : value
+      if (!scanner) return value
+      while (scanner.getPosition() <= offset) {
+        scanner.scan()
+      }
+      const token = input.text[scanner.getTokenOffset()]
+      if (token === "/") {
+        return JSON.stringify(value).slice(1, -1)
+      }
+      if (token !== '"') return value
+      // Preserve raw JSON fragments and already escaped strings when another variable needs escaping.
+      const errors: ParseError[] = []
+      parse(`"${value}"`, errors, { disallowComments: true })
+      return errors.length ? JSON.stringify(value).slice(1, -1) : value
     })
+  }
   // Escape only when raw values break the JSON (e.g. Windows paths), so configs that parse today keep their meaning.
   const raw = yield* substituteFiles(input, env(false))
   const errors: ParseError[] = []
