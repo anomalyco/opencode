@@ -1,7 +1,8 @@
 // One long diff in the review pane: `src/routes.ts` as a full-context patch of 1,559 lines (60 KB), highlighted in a
 // worker, or 15,599 lines (603 KB), past the size above which the viewer renders plain text. At 1366×768.
-import { bench, web, type Case } from "@strobe/bench"
+import { bench, web, type Case } from "@hona/strobe-bench"
 import { reviewDiffs, routesDiff } from "./fixtures/diffs"
+import { cached } from "./fixtures/mock"
 import { openReview, review } from "./fixtures/review"
 import { mockTimelineSession, serveDiffs, timeline } from "./fixtures/timeline"
 
@@ -23,9 +24,10 @@ export default bench({
   targets: {
     web: web({
       viewport: { width: 1366, height: 768 },
-      async prepare({ case: name, playwright, url }) {
-        const session = await mockTimelineSession(playwright.page, { server: new URL(url).origin, historyTurns: 0 })
-        await serveDiffs(playwright.page, changes(name))
+      async prepare({ case: name, playwright, mock, url }) {
+        const page = cached(playwright.page, mock)
+        const session = await mockTimelineSession(page, { server: new URL(url).origin, historyTurns: 0 })
+        await serveDiffs(page, changes(name))
 
         return session
       },

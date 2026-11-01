@@ -1,7 +1,8 @@
 // A reply streaming into a long session: 160 markdown deltas (bold text, tables, code fences) at 40 a second, from a
 // server that never waits for the renderer. Per-delta cost that grows with the reply or the history shows up here.
-import { bench, web, type Case } from "@strobe/bench"
+import { bench, web, type Case } from "@hona/strobe-bench"
 import { reviewDiffs } from "./fixtures/diffs"
+import { cached } from "./fixtures/mock"
 import { openReview } from "./fixtures/review"
 import { mockTimelineSession, reply, streamedReply, timeline } from "./fixtures/timeline"
 
@@ -30,8 +31,8 @@ export default bench({
   targets: {
     web: web({
       viewport: { width: 1366, height: 768 },
-      prepare: ({ case: name, playwright, url }) =>
-        mockTimelineSession(playwright.page, {
+      prepare: ({ case: name, playwright, mock, url }) =>
+        mockTimelineSession(cached(playwright.page, mock), {
           server: new URL(url).origin,
           historyTurns: name === "stream into a tool-heavy history" ? 320 : 120,
           toolHeavy: name === "stream into a tool-heavy history",
@@ -49,6 +50,8 @@ export default bench({
     if (name === "stream with review open") await openReview(page)
     await page.idle()
   },
+
+  teardown: ({ prepared }) => prepared.source?.stop(),
 
   cases: {
     // 120 turns: 242 messages, 248 KB of history.

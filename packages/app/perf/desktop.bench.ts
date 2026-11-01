@@ -1,6 +1,6 @@
 // The packaged desktop app, launched by strobe in a private home from the `opencode` profiles in strobe.json.
 // Compare two installed channels: `strobe bench packages/app/perf/desktop.bench.ts --base app:opencode --head app:opencode-beta`.
-import { app, bench } from "@strobe/bench"
+import { app, bench } from "@hona/strobe-bench"
 
 export default bench({
   targets: {

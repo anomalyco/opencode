@@ -6,7 +6,8 @@ import type { Page } from "@playwright/test"
  * reach the renderer over the network as they do from a server, so delivering them costs the measured page nothing,
  * and `stream` keeps its own pace like a model's reply: it never waits for the renderer to keep up.
  *
- * Install it before `mockOpenCodeServer`, which then leaves the event stream alone.
+ * Install it before `mockOpenCodeServer`, which then leaves the event stream alone, and `stop` it in the bench file's
+ * `teardown`.
  */
 export async function eventSource(page: Page, server: string) {
   const encoder = new TextEncoder()
@@ -51,8 +52,6 @@ export async function eventSource(page: Page, server: string) {
     },
   })
 
-  page.on("close", () => void http.stop(true))
-
   await page.addInitScript(
     ({ source, server }) => {
       // Tells the mock server's init script, which runs after this one, to leave `/api/event` to this source.
@@ -92,6 +91,7 @@ export async function eventSource(page: Page, server: string) {
           resolve()
         }, every)
       }),
+    stop: () => http.stop(true),
   }
 }
 
