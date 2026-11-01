@@ -88,7 +88,9 @@
   text-shadow: none;
 }
 
-[data-slot="project-avatar-surface"][data-generated] {
+/* Images draw their own tile; a backing behind them shows through their antialiased edges as a light rim. */
+[data-slot="project-avatar-surface"][data-generated],
+[data-slot="project-avatar-surface"][data-has-image] {
   background: none;
   box-shadow: none;
 }
@@ -97,10 +99,6 @@
   display: block;
   width: 100%;
   height: 100%;
-}
-
-[data-slot="project-avatar-surface"][data-has-image] {
-  background: var(--project-avatar-bg);
 }
 
 [data-slot="project-avatar-surface"] [data-slot="project-avatar-image"] {
