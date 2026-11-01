@@ -171,6 +171,9 @@ export const Info = Schema.Struct({
       tps: Schema.optional(Schema.Boolean).annotate({
         description: "Show average tokens per second",
       }),
+      variant: Schema.optional(Schema.Boolean).annotate({
+        description: "Show the model variant a turn ran with, such as its reasoning effort, in assistant footers",
+      }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
       }),
