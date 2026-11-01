@@ -60,7 +60,7 @@ export type ServerPairOutput = { readonly code: string; readonly expires_in: num
 export type ServerPairOperation<E = never> = () => Effect.Effect<ServerPairOutput, E>
 
 export type ServerConnectInput = { readonly code: string }
-export type ServerConnectOutput = { readonly token: string }
+export type ServerConnectOutput = { readonly token: string; readonly device?: { readonly name: string } | undefined }
 export type ServerConnectOperation<E = never> = (input: ServerConnectInput) => Effect.Effect<ServerConnectOutput, E>
 
 export interface ServerApi<E = never> {
