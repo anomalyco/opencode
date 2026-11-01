@@ -80,9 +80,9 @@ export class ToolCallError extends Schema.TaggedError<ToolCallError>()("MCP.Tool
 const unavailable = (server: ServerName, status: Status) => {
   switch (status.status) {
     case "failed":
-      return `MCP server "${server}" is not connected: ${status.error}. Reconnect it from /mcps.`
+      return `MCP server "${server}" is not connected: ${status.error}. Reconnect it from /mcp in the desktop or web app, or /mcps in the TUI.`
     case "needs_auth":
-      return `MCP server "${server}" needs authentication: ${status.error}. Sign in from /mcps.`
+      return `MCP server "${server}" needs authentication: ${status.error}. Sign in from /mcp in the desktop or web app, or /mcps in the TUI.`
     case "disabled":
       return `MCP server "${server}" is disabled.`
     default:
