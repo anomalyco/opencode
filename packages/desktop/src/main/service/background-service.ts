@@ -1,4 +1,5 @@
 import { app } from "electron"
+import { roots } from "@opencode/util/global-roots"
 import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import { CHANNEL } from "../constants"
 import { BackgroundServiceState } from "./background-service-state"
@@ -7,6 +8,7 @@ import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { sidecarProbe } from "./sidecar-probe"
+import { serviceCommand } from "./service-command"
 
 export * as BackgroundService from "./background-service"
 
@@ -55,13 +57,19 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
         )
       : undefined
 
+  const command = isolated
+    ? undefined
+    : yield* serviceCommand(
+        path.join(process.env.OPENCODE_CONFIG_DIR ?? roots("opencode").config, path.basename(file ?? client.fallback())),
+      )
+
   const ensure = (required = version) =>
     client.Service.ensure({
       file,
       version: required,
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
       // services could boot against the same database.
-      command: [
+      command: command ?? [
         ...cli.command,
         "serve",
         "--service",

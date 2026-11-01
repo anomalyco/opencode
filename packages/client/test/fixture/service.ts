@@ -1,4 +1,5 @@
 import { appendFile, rename, rm, writeFile } from "node:fs/promises"
+import { PtyHandoff } from "../../src/pty-handoff"
 
 const [registration, mode, delay] = process.argv.slice(2)
 if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
@@ -14,6 +15,9 @@ if (mode === "record-start") {
 if (mode === "environment") {
   await writeFile(registration + ".environment", process.env.OPENCODE_SERVICE_ENV_TEST ?? "")
   await writeFile(registration + ".handoff", process.env.OPENCODE_PTY_HANDOFF ?? "null")
+}
+if (mode === "supervised") {
+  await writeFile(registration + ".handoff", JSON.stringify((await PtyHandoff.ticket(registration)) ?? null))
 }
 if (mode === "signal") process.kill(process.pid, process.platform === "win32" ? "SIGTERM" : "SIGKILL")
 

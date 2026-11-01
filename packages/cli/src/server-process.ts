@@ -1,7 +1,7 @@
 export * as ServerProcess from "./server-process"
 
 import { NodeServices } from "@effect/platform-node"
-import { Service } from "@opencode/client/effect/service"
+import { PtyHandoff, Service } from "@opencode/client/effect/service"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
@@ -46,10 +46,13 @@ export const run = Effect.fnUntraced(function* (options: Options) {
 })
 
 const processEffect = Effect.fnUntraced(function* (options: Options) {
+  const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
   const inherited = process.env.OPENCODE_PTY_HANDOFF
   delete process.env.OPENCODE_PTY_HANDOFF
   const handoff =
-    inherited === undefined
+    serviceOptions !== undefined
+      ? yield* Effect.promise(() => PtyHandoff.ticket(serviceOptions.file))
+      : inherited === undefined
       ? undefined
       : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(PersistentPty.Handoff))(inherited).pipe(
           Effect.catch(() =>
@@ -67,7 +70,6 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const foreground = options.mode === "default"
-      const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
       const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
