@@ -1,16 +1,18 @@
 import type { ProviderPackage } from "../../provider-package.js"
-import { Moonshot } from "../moonshot.js"
+import { moonshot, type ResponsesOptionsInput, type ResponsesSettings } from "../moonshot.js"
 
-export type Settings = Moonshot.Settings<Moonshot.ResponsesOptionsInput>
+export type { ResponsesSettings as Settings } from "../moonshot.js"
 
-export const model: ProviderPackage.Model<Settings, Moonshot.ResponsesOptionsInput> = (
+export const model: ProviderPackage.Model<ResponsesSettings, ResponsesOptionsInput> = (
   modelID,
-  { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
+  { apiKey, baseURL, body, headers, ...providerOptions }: ResponsesSettings = {},
 ) =>
-  Moonshot.configure({
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }).responses(modelID)
+  moonshot
+    .configure({
+      apiKey,
+      baseURL,
+      headers,
+      http: body === undefined ? undefined : { body },
+      providerOptions,
+    })
+    .responses(modelID)

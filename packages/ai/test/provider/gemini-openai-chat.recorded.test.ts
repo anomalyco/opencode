@@ -1,17 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, Message, ToolRuntime } from "../../src/effect.js"
-import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
+import { openaiCompatible } from "../../src/providers/openai-compatible.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 import { weatherRuntimeTool } from "../recorded-scenarios.js"
 
-const model = OpenAICompatible.configure({
+const model = openaiCompatible.configure({
   provider: "google",
   baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture",
-}).model("gemini-3.8-flash")
+})("gemini-3.8-flash")
 
 const recorded = recordedTests({
   prefix: "openai-compatible-chat",

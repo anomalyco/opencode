@@ -9,16 +9,16 @@ import {
   toDefinitions,
   ToolCallPart,
 } from "../../src/effect.js"
-import * as AmazonBedrockMantle from "../../src/providers/amazon-bedrock-mantle.js"
-import * as Anthropic from "../../src/providers/anthropic.js"
-import * as Azure from "../../src/providers/azure.js"
-import * as DigitalOcean from "../../src/providers/digitalocean.js"
-import * as OpenAI from "../../src/providers/openai.js"
-import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
-import * as OpenAICompatibleResponses from "../../src/providers/openai-compatible-responses.js"
-import * as OpenRouter from "../../src/providers/openrouter.js"
-import * as Venice from "../../src/providers/venice.js"
-import * as VercelAIGateway from "../../src/providers/vercel-ai-gateway.js"
+import { amazonBedrockMantle } from "../../src/providers/amazon-bedrock-mantle.js"
+import { anthropic } from "../../src/providers/anthropic.js"
+import { azure } from "../../src/providers/azure.js"
+import { digitalocean } from "../../src/providers/digitalocean.js"
+import { openai } from "../../src/providers/openai.js"
+import { openaiCompatible } from "../../src/providers/openai-compatible.js"
+import { openaiCompatibleResponses } from "../../src/providers/openai-compatible-responses.js"
+import { openrouter } from "../../src/providers/openrouter.js"
+import { venice } from "../../src/providers/venice.js"
+import { vercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { tool } from "../../src/tool.js"
@@ -48,8 +48,8 @@ const body = (model: LanguageModel, freeform = lark) =>
     Effect.map((prepared) => prepared.body),
   )
 
-const responses = OpenAI.model("gpt-5.4", { apiKey: "test" })
-const chat = OpenAI.chatModel("gpt-5.4", { apiKey: "test" })
+const responses = openai.configure({ apiKey: "test" })("gpt-5.4")
+const chat = openai.configure({ apiKey: "test" }).chat("gpt-5.4")
 
 const RESPONSES_LARK = {
   type: "custom",
@@ -111,20 +111,20 @@ describe("freeform tools", () => {
     Effect.gen(function* () {
       const settings = { apiKey: "test" }
       const responsesModels = [
-        Azure.responsesModel("gpt-5.4", { ...settings, resourceName: "fixture" }),
-        AmazonBedrockMantle.responsesModel("openai.gpt-5.4", { ...settings, region: "us-east-1" }),
-        VercelAIGateway.responsesModel("openai/gpt-5.4", settings),
-        OpenAICompatibleResponses.model("gpt-5.4", { ...settings, baseURL: "https://responses.test/v1" }),
-        OpenRouter.responsesModel("openai/gpt-5.4", settings),
-        DigitalOcean.responsesModel("openai-gpt-5.4", settings),
-        Venice.responsesModel("openai-gpt-54", settings),
+        azure.configure({ ...settings, resourceName: "fixture" }).responses("gpt-5.4"),
+        amazonBedrockMantle.configure({ ...settings, region: "us-east-1" }).responses("openai.gpt-5.4"),
+        vercelAIGateway.configure(settings).responses("openai/gpt-5.4"),
+        openaiCompatibleResponses.configure({ ...settings, baseURL: "https://responses.test/v1" })("gpt-5.4"),
+        openrouter.configure(settings).responses("openai/gpt-5.4"),
+        digitalocean.configure(settings).responses("openai-gpt-5.4"),
+        venice.configure(settings).responses("openai-gpt-54"),
       ]
       const chatModels = [
-        Azure.chatModel("gpt-5.4", { ...settings, resourceName: "fixture" }),
-        AmazonBedrockMantle.chatModel("openai.gpt-5.4", { ...settings, region: "us-east-1" }),
-        VercelAIGateway.chatModel("openai/gpt-5.4", settings),
-        OpenRouter.model("openai/gpt-5.4", settings),
-        OpenAICompatible.model("gpt-5.4", { ...settings, baseURL: "https://chat.test/v1" }),
+        azure.configure({ ...settings, resourceName: "fixture" }).chat("gpt-5.4"),
+        amazonBedrockMantle.configure({ ...settings, region: "us-east-1" }).chat("openai.gpt-5.4"),
+        vercelAIGateway.configure(settings).chat("openai/gpt-5.4"),
+        openrouter.configure(settings)("openai/gpt-5.4"),
+        openaiCompatible.configure({ ...settings, baseURL: "https://chat.test/v1" })("gpt-5.4"),
       ]
       for (const model of responsesModels) {
         const prepared = yield* body(model)
@@ -143,7 +143,7 @@ describe("freeform tools", () => {
       expect(prepared.tools).toMatchObject([{ type: "function", name: "run" }])
       expect(prepared.tool_choice).toEqual({ type: "function", name: "run" })
       expect((yield* body(chat, plain)).tools).toMatchObject([{ type: "function", function: { name: "run" } }])
-      expect((yield* body(Anthropic.model("claude-sonnet-4-5", { apiKey: "test" }))).tools).toMatchObject([
+      expect((yield* body(anthropic.configure({ apiKey: "test" })("claude-sonnet-4-5"))).tools).toMatchObject([
         { name: "run", input_schema: { properties: { code: { type: "string" } } } },
       ])
     }),
@@ -290,7 +290,7 @@ describe("freeform tools", () => {
         },
         { role: "tool", tool_call_id: "call_1", content: '"ok"' },
       ])
-      expect(yield* messages(Anthropic.model("claude-sonnet-4-5", { apiKey: "test" }))).toMatchObject([
+      expect(yield* messages(anthropic.configure({ apiKey: "test" })("claude-sonnet-4-5"))).toMatchObject([
         { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "run", input: { code: "ZZ123" } }] },
         { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1" }] },
       ])

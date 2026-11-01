@@ -1,13 +1,13 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, SystemPart } from "../../src/effect.js"
-import { Cohere } from "../../src/providers/cohere.js"
+import { cohere } from "../../src/providers/cohere.js"
 import { LLMClient } from "../../src/route.js"
 import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop } from "../recorded-scenarios.js"
 import { recordedTests } from "../recorded-test.js"
 
 const recorded = recordedTests({ prefix: "cohere", provider: "cohere", requires: ["COHERE_API_KEY"] })
-const cohere = Cohere.configure({ apiKey: process.env.COHERE_API_KEY ?? "fixture" })
+const cohereProvider = cohere.configure({ apiKey: process.env.COHERE_API_KEY ?? "fixture" })
 
 recorded.effect(
   "streams native text and usage",
@@ -15,7 +15,7 @@ recorded.effect(
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: cohere.model("command-a-03-2025"),
+          model: cohereProvider("command-a-03-2025"),
           prompt: "Reply exactly: OK",
           generation: { maxTokens: 64 },
         }),
@@ -35,7 +35,7 @@ recorded.effect(
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: cohere.model("command-a-reasoning-08-2025"),
+          model: cohereProvider("command-a-reasoning-08-2025"),
           prompt: "What is 17 times 23? Answer briefly.",
           providerOptions: { thinking: { type: "enabled", tokenBudget: 128 } },
           generation: { maxTokens: 2048 },
@@ -57,7 +57,7 @@ recorded.effect(
       const events = yield* runWeatherToolLoop({
         ...goldenWeatherToolLoopRequest({
           id: "cohere-tool-loop",
-          model: cohere.model("command-a-plus-05-2026"),
+          model: cohereProvider("command-a-plus-05-2026"),
           maxTokens: 2048,
           temperature: false,
         }),
@@ -78,7 +78,7 @@ recorded.effect(
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: cohere.chat("command-a-reasoning-08-2025"),
+          model: cohereProvider.chat("command-a-reasoning-08-2025"),
           prompt: "What is 17 times 23? Answer briefly.",
           providerOptions: { reasoningEffort: "high" },
           generation: { maxTokens: 2048 },

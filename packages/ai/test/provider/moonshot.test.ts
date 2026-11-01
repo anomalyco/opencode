@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
 import { ai, Auth, LLMClient, Message, ReasoningPart, ToolDefinition } from "../../src/effect.js"
-import { Moonshot } from "../../src/providers.js"
+import { moonshot } from "../../src/providers.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -13,14 +13,14 @@ import { sseEvents } from "../lib/sse.js"
 
 it.effect("Moonshot composes shared protocols with explicit endpoints and bearer authentication", () =>
   Effect.gen(function* () {
-    const moonshot = Moonshot.configure()
-    expect(moonshot.model).toBe(moonshot.chat)
-    expect(moonshot.messages("kimi-k3").route.body).toBe(AnthropicMessages.protocol.body)
-    expect(moonshot.responses("kimi-k3").route.body).toBe(OpenResponses.protocol.body)
+    const moonshotProvider = moonshot.configure()
+    expect(moonshotProvider("fixture").route.id).toBe(moonshotProvider.chat("fixture").route.id)
+    expect(moonshotProvider.messages("kimi-k3").route.body).toBe(AnthropicMessages.protocol.body)
+    expect(moonshotProvider.responses("kimi-k3").route.body).toBe(OpenResponses.protocol.body)
     for (const item of [
-      { model: moonshot.chat("kimi-k3"), path: "/v1/chat/completions" },
-      { model: moonshot.messages("kimi-k3"), path: "/anthropic/v1/messages" },
-      { model: moonshot.responses("kimi-k3"), path: "/v1/responses" },
+      { model: moonshotProvider.chat("kimi-k3"), path: "/v1/chat/completions" },
+      { model: moonshotProvider.messages("kimi-k3"), path: "/anthropic/v1/messages" },
+      { model: moonshotProvider.responses("kimi-k3"), path: "/v1/responses" },
     ]) {
       const request = ai.request({ model: item.model, prompt: "Hello" })
       const compiled = yield* compileRequest(request)
@@ -48,12 +48,12 @@ it.effect("Moonshot composes shared protocols with explicit endpoints and bearer
 
 it.effect("Moonshot preserves default reasoning across model IDs on custom endpoints", () =>
   Effect.gen(function* () {
-    const moonshot = Moonshot.configure({
+    const moonshotProvider = moonshot.configure({
       baseURL: "https://gateway.example/v1",
       auth: Auth.header("x-api-key", "fixture"),
     })
     for (const id of ["kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k3", "future-model"]) {
-      const model = moonshot.chat(id)
+      const model = moonshotProvider.chat(id)
       const request = ai.request({ model, prompt: "Hello", generation: { maxTokens: 100 } })
       const compiled = yield* compileRequest(request)
       expect(compiled.body).toMatchObject({ model: id, max_tokens: 100, stream: true })
@@ -78,7 +78,7 @@ it.effect("Moonshot preserves default reasoning across model IDs on custom endpo
 it.effect("Moonshot honors fallback credentials and final HTTP body overlays", () =>
   LLMClient.generate(
     ai.request({
-      model: Moonshot.configure({ providerOptions: { reasoningEffort: "high" } }).responses("kimi-k3"),
+      model: moonshot.configure({ providerOptions: { reasoningEffort: "high" } }).responses("kimi-k3"),
       prompt: "Hello",
       providerOptions: { reasoningEffort: "low" },
       http: { body: { reasoning: { effort: "max" }, future_option: true } },
@@ -101,24 +101,24 @@ it.effect("Moonshot honors fallback credentials and final HTTP body overlays", (
 
 it.effect("Moonshot lowers API-specific reasoning options without adding unrelated controls", () =>
   Effect.gen(function* () {
-    const moonshot = Moonshot.configure({ apiKey: "fixture" })
+    const moonshotProvider = moonshot.configure({ apiKey: "fixture" })
     for (const thinking of [{ type: "disabled" }, { type: "enabled", keep: "all" }, { type: "enabled", keep: null }]) {
       const result = yield* compileRequest(
-        ai.request({ model: moonshot.chat("kimi-k2.6"), prompt: "Hello", providerOptions: { thinking } }),
+        ai.request({ model: moonshotProvider.chat("kimi-k2.6"), prompt: "Hello", providerOptions: { thinking } }),
       )
       expect(result.body.thinking).toEqual(thinking)
       expect(result.body.reasoning_effort).toBeUndefined()
     }
     for (const effort of ["low", "high", "max", "future-effort"]) {
       const chat = yield* compileRequest(
-        ai.request({ model: moonshot.chat("kimi-k3"), prompt: "Hello", providerOptions: { reasoningEffort: effort } }),
+        ai.request({ model: moonshotProvider.chat("kimi-k3"), prompt: "Hello", providerOptions: { reasoningEffort: effort } }),
       )
       const messages = yield* compileRequest(
-        ai.request({ model: moonshot.messages("kimi-k3"), prompt: "Hello", providerOptions: { effort } }),
+        ai.request({ model: moonshotProvider.messages("kimi-k3"), prompt: "Hello", providerOptions: { effort } }),
       )
       const responses = yield* compileRequest(
         ai.request({
-          model: moonshot.responses("kimi-k3"),
+          model: moonshotProvider.responses("kimi-k3"),
           prompt: "Hello",
           providerOptions: { reasoningEffort: effort },
         }),
@@ -135,7 +135,8 @@ it.effect("Moonshot lowers API-specific reasoning options without adding unrelat
 
 it.effect("Moonshot validates native Chat thinking options", () =>
   Effect.gen(function* () {
-    const invalid = Moonshot.configure({ apiKey: "fixture" })
+    const invalid = moonshot
+      .configure({ apiKey: "fixture" })
       .chat("kimi-k2.6")
       .route.with({ providerOptions: { thinking: { type: "enabled", keep: 42 } } })
       .model({ id: "kimi-k2.6" })
@@ -149,7 +150,7 @@ it.effect("Moonshot retains unsigned and signed Messages reasoning and projects 
   Effect.gen(function* () {
     const compiled = yield* compileRequest(
       ai.request({
-        model: Moonshot.configure({ apiKey: "fixture" }).messages("kimi-k3"),
+        model: moonshot.configure({ apiKey: "fixture" }).messages("kimi-k3"),
         messages: [
           Message.user("Hello"),
           Message.assistant([
@@ -199,7 +200,7 @@ it.effect("Moonshot retains unsigned and signed Messages reasoning and projects 
 
 it.effect("Moonshot Responses uses HTTP even with a WebSocket executor", () =>
   LLMClient.generate(
-    ai.request({ model: Moonshot.configure({ apiKey: "fixture" }).responses("kimi-k3"), prompt: "Hello" }),
+    ai.request({ model: moonshot.configure({ apiKey: "fixture" }).responses("kimi-k3"), prompt: "Hello" }),
     {
       webSocket: { execute: () => Effect.die("Unexpected WebSocket request") },
     },

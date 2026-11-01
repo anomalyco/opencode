@@ -2,14 +2,15 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, GenerationOptions, LanguageModel } from "../../src/effect.js"
 import { compileRequest } from "../../src/route/client.js"
-import { AmazonBedrock } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
+
+const amazonBedrockPackage = await import("../../src/providers/amazon-bedrock.js")
 
 const binding = { prefix_mismatch_behavior: "drop_block" }
 const beta = ["thinking-binding-controls-2026-08-01"]
 
-const bedrock = (id: string, settings: Parameters<typeof AmazonBedrock.model>[1] = {}) =>
-  AmazonBedrock.model(id, { baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer", ...settings })
+const bedrock = (id: string, settings: Parameters<typeof amazonBedrockPackage.model>[1] = {}) =>
+  amazonBedrockPackage.model(id, { baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer", ...settings })
 
 const fields = (model: LanguageModel, generation?: GenerationOptions) =>
   compileRequest(

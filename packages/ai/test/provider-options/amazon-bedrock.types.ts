@@ -1,7 +1,9 @@
 import { ai } from "../../src/effect.js"
-import { AmazonBedrock } from "../../src/providers.js"
+import { amazonBedrock } from "../../src/providers.js"
 
-const model = AmazonBedrock.provider.model("us.anthropic.claude-sonnet-4-6")
+const amazonBedrockPackage = await import("../../src/providers/amazon-bedrock.js")
+
+const model = amazonBedrock("us.anthropic.claude-sonnet-4-6")
 
 ai.request({
   model,
@@ -16,7 +18,7 @@ ai.request({
   },
 })
 
-AmazonBedrock.model("us.amazon.nova-2-lite-v1:0", { effort: "low", serviceTier: "flex" })
+amazonBedrockPackage.model("us.amazon.nova-2-lite-v1:0", { effort: "low", serviceTier: "flex" })
 
 ai.request({
   model,

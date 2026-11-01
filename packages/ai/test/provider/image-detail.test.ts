@@ -1,14 +1,14 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { ai, Media, Message } from "../../src/effect.js"
-import { OpenAI, Azure, XAI } from "../../src/providers.js"
+import { openai, azure, xai } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 
 for (const model of [
-  OpenAI.configure({ apiKey: "test" }).responses("fixture"),
-  Azure.configure({ apiKey: "test", resourceName: "test" }).responses("fixture"),
-  XAI.configure({ apiKey: "test" }).responses("fixture"),
+  openai.configure({ apiKey: "test" }).responses("fixture"),
+  azure.configure({ apiKey: "test", resourceName: "test" }).responses("fixture"),
+  xai.configure({ apiKey: "test" }).responses("fixture"),
 ]) {
   it.effect(`${model.provider} preserves image detail through message serialization and lowering`, () =>
     Effect.gen(function* () {
@@ -43,7 +43,7 @@ it.effect("rejects malformed image detail instead of silently discarding it", ()
   Effect.gen(function* () {
     const error = yield* compileRequest(
       ai.request({
-        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        model: openai.configure({ apiKey: "test" }).responses("fixture"),
         messages: [
           Message.user({
             type: "media",

@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, Media, Message, ToolDefinition } from "../../src/effect.js"
-import { ZAI } from "../../src/providers.js"
+import { zai } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"
 
@@ -15,7 +15,7 @@ recorded.effect.with(
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(
         ai.request({
-          model: ZAI.configure({ apiKey, providerOptions: { thinking: { type: "disabled" } } }).chat("glm-5.3"),
+          model: zai.configure({ apiKey, providerOptions: { thinking: { type: "disabled" } } }).chat("glm-5.3"),
           prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
           generation: { maxTokens: 4096 },
         }),
@@ -36,9 +36,9 @@ for (const modelID of ["glm-4.7", "glm-5.2"]) {
         Effect.gen(function* () {
           const response = yield* LLMClient.generate(
             ai.request({
-              model: ZAI.configure({ apiKey, providerOptions: { thinking: { type, clear_thinking: true } } }).chat(
-                modelID,
-              ),
+              model: zai
+                .configure({ apiKey, providerOptions: { thinking: { type, clear_thinking: true } } })
+                .chat(modelID),
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
               generation: { maxTokens: 4096 },
             }),
@@ -62,7 +62,7 @@ for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max"
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
           ai.request({
-            model: ZAI.configure({ apiKey, providerOptions: { reasoningEffort: effort } }).chat("glm-5.2"),
+            model: zai.configure({ apiKey, providerOptions: { reasoningEffort: effort } }).chat("glm-5.2"),
             prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
             generation: { maxTokens: 4096 },
           }),
@@ -88,7 +88,7 @@ recorded.effect.with(
       )
       const response = yield* LLMClient.generate(
         ai.request({
-          model: ZAI.configure({ apiKey, providerOptions: { reasoningEffort: "low" } }).chat("glm-5.3-flash"),
+          model: zai.configure({ apiKey, providerOptions: { reasoningEffort: "low" } }).chat("glm-5.3-flash"),
           messages: [
             Message.user([
               { type: "text", text: "Read the three words in this image. Reply with only the words in order." },
@@ -112,10 +112,12 @@ recorded.effect.with(
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: ZAI.configure({
-            apiKey,
-            providerOptions: { reasoningEffort: "low", responseFormat: { type: "json_object" } },
-          }).chat("glm-5.3"),
+          model: zai
+            .configure({
+              apiKey,
+              providerOptions: { reasoningEffort: "low", responseFormat: { type: "json_object" } },
+            })
+            .chat("glm-5.3"),
           prompt: 'Return a JSON object with one key "city" set to the capital city of France.',
           generation: { maxTokens: 4096 },
         }),
@@ -133,7 +135,7 @@ recorded.effect.with(
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: ZAI.configure({ apiKey }).chat("glm-4.5"),
+          model: zai.configure({ apiKey }).chat("glm-4.5"),
           prompt: "Use get_weather to look up the current weather in Paris.",
           tools: [
             ToolDefinition.make({

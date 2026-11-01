@@ -1,8 +1,8 @@
 import { ai } from "../../src/effect.js"
-import { Venice } from "../../src/providers.js"
+import { venice } from "../../src/providers.js"
 
 ai.request({
-  model: Venice.chat("qwen3-6-27b"),
+  model: venice.chat("qwen3-6-27b"),
   prompt: "Hello",
   providerOptions: {
     reasoningEffort: "high",
@@ -11,7 +11,7 @@ ai.request({
   },
 })
 ai.request({
-  model: Venice.configure({ providerOptions: { reasoningEffort: "future-effort" } }).model("future-model"),
+  model: venice.configure({ providerOptions: { reasoningEffort: "future-effort" } })("future-model"),
   prompt: "Hello",
   providerOptions: {
     reasoning: { enabled: false },
@@ -20,19 +20,19 @@ ai.request({
   },
 })
 ai.request({
-  model: Venice.chat("qwen3-6-27b"),
+  model: venice.chat("qwen3-6-27b"),
   prompt: "Hello",
   // @ts-expect-error Thinking toggles are boolean.
   providerOptions: { reasoning: { enabled: "false" } },
 })
 ai.request({
-  model: Venice.chat("qwen3-6-27b"),
+  model: venice.chat("qwen3-6-27b"),
   prompt: "Hello",
   // @ts-expect-error Venice uses nested reasoning, not Anthropic thinking controls.
   providerOptions: { thinking: { type: "disabled" } },
 })
 ai.request({
-  model: Venice.chat("qwen3-6-27b"),
+  model: venice.chat("qwen3-6-27b"),
   prompt: "Hello",
   // @ts-expect-error Venice's system-prompt toggle is boolean.
   providerOptions: { veniceParameters: { includeVeniceSystemPrompt: "false" } },

@@ -6,7 +6,7 @@ import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
-export const id = ProviderID.make("deepinfra")
+const id = ProviderID.make("deepinfra")
 const baseURL = "https://api.deepinfra.com/v1/openai"
 
 export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
@@ -32,7 +32,7 @@ export const route = Route.make({
 
 export const routes = [route]
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const root = endpoint?.replace(/\/+$/, "")
   const configured = route.with({
@@ -42,9 +42,8 @@ export const configure = (input: Config = {}) => {
     },
     auth: AuthOptions.bearer(input, "DEEPINFRA_API_KEY"),
   })
-  return {
-    id,
-    model: (modelID: string | ModelID) =>
+  return Object.assign(
+    (modelID: string | ModelID) =>
       configured.model<OpenAIProviderOptionsInput>({
         id: modelID,
         compatibility: {
@@ -53,11 +52,11 @@ export const configure = (input: Config = {}) => {
           supportsPromptCacheKey: true,
         },
       }),
-    configure,
-  }
+    { id, configure },
+  )
 }
 
-export const provider = configure()
+export const deepinfra = configure()
 
 export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (
   modelID,
@@ -69,4 +68,4 @@ export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> 
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
+  })(modelID)

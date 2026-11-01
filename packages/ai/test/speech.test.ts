@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
 import { Base64 } from "effect/encoding"
 import { Speech, SpeechClient, SpeechEvent } from "../src/experimental.js"
-import { Cartesia, Deepgram, ElevenLabs, Google, OpenAI } from "../src/providers.js"
+import { cartesia, deepgram, elevenlabs, google, openai } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
@@ -21,21 +21,23 @@ const collect = <E, R>(stream: Stream.Stream<SpeechEvent, E, R>) =>
     Effect.map((events) => Array.from(events)),
   )
 
-const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).speech("gpt-4o-mini-tts")
-const elevenlabs = ElevenLabs.configure({ apiKey: "test", baseURL: "https://elevenlabs.test" }).speech(
-  "eleven_flash_v2_5",
-)
-const cartesia = Cartesia.configure({ apiKey: "test", baseURL: "https://cartesia.test" }).speech("sonic-3")
-const google = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).speech(
-  "gemini-2.5-flash-preview-tts",
-)
-const google38 = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).speech(
-  "gemini-3.8-flash-tts",
-)
-const google38Lite = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).speech(
-  "gemini-3.8-flash-lite-tts",
-)
-const deepgram = Deepgram.configure({ apiKey: "test", baseURL: "https://deepgram.test" }).speech("aura-2-thalia-en")
+const openaiModel = openai.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).speech("gpt-4o-mini-tts")
+const elevenlabsModel = elevenlabs
+  .configure({ apiKey: "test", baseURL: "https://elevenlabs.test" })
+  .speech("eleven_flash_v2_5")
+const cartesiaModel = cartesia.configure({ apiKey: "test", baseURL: "https://cartesia.test" }).speech("sonic-3")
+const googleModel = google
+  .configure({ apiKey: "test", baseURL: "https://google.test/v1beta" })
+  .speech("gemini-2.5-flash-preview-tts")
+const google38 = google
+  .configure({ apiKey: "test", baseURL: "https://google.test/v1beta" })
+  .speech("gemini-3.8-flash-tts")
+const google38Lite = google
+  .configure({ apiKey: "test", baseURL: "https://google.test/v1beta" })
+  .speech("gemini-3.8-flash-lite-tts")
+const deepgramModel = deepgram
+  .configure({ apiKey: "test", baseURL: "https://deepgram.test" })
+  .speech("aura-2-thalia-en")
 const voice = "JBFqnCBsd6RMkjVDRZzb"
 
 describe("Speech", () => {
@@ -67,8 +69,8 @@ describe("Speech", () => {
   it.effect("describes OpenAI audio in the format the request body actually asked for", () =>
     Effect.gen(function* () {
       const [pcm, wav] = yield* Effect.all([
-        Speech.generate({ model: openai, text: "Hi", format: "mp3", providerOptions: { response_format: "pcm" } }),
-        Speech.generate({ model: openai, text: "Hi", http: { body: { response_format: "wav" } } }),
+        Speech.generate({ model: openaiModel, text: "Hi", format: "mp3", providerOptions: { response_format: "pcm" } }),
+        Speech.generate({ model: openaiModel, text: "Hi", http: { body: { response_format: "wav" } } }),
       ]).pipe(Effect.provide(respond("\u0001\u0002", "application/octet-stream")))
       expect(pcm.audio.mediaType).toBe("audio/pcm")
       expect(pcm.audio.info).toEqual({ format: "pcm", encoding: "pcm_s16le", sampleRate: 24000, channels: 1 })
@@ -79,7 +81,11 @@ describe("Speech", () => {
 
   it.effect("describes Deepgram raw encodings in their default WAV container", () =>
     Effect.gen(function* () {
-      const response = yield* Speech.generate({ model: deepgram, text: "Hi", providerOptions: { encoding: "mulaw" } })
+      const response = yield* Speech.generate({
+        model: deepgramModel,
+        text: "Hi",
+        providerOptions: { encoding: "mulaw" },
+      })
       expect(response.audio.mediaType).toBe("audio/wav")
       expect(response.audio.info?.format).toBe("wav")
     }).pipe(Effect.provide(respond("RIFF....WAVEfmt ", "audio/wav"))),
@@ -89,11 +95,11 @@ describe("Speech", () => {
     Effect.gen(function* () {
       const [requested, defaulted] = yield* Effect.all([
         Speech.generate({
-          model: deepgram,
+          model: deepgramModel,
           text: "Hi",
           providerOptions: { encoding: "mulaw", container: "none", sampleRate: 16000 },
         }),
-        Speech.generate({ model: deepgram, text: "Hi", providerOptions: { encoding: "alaw", container: "none" } }),
+        Speech.generate({ model: deepgramModel, text: "Hi", providerOptions: { encoding: "alaw", container: "none" } }),
       ]).pipe(Effect.provide(respond("\u0001\u0002", "audio/basic")))
       expect(requested.audio.info).toEqual({ format: "pcm", encoding: "pcm_mulaw", sampleRate: 16000, channels: 1 })
       expect(defaulted.audio.info).toEqual({ format: "pcm", encoding: "pcm_alaw", sampleRate: 8000, channels: 1 })
@@ -115,13 +121,13 @@ describe("Speech", () => {
     Effect.gen(function* () {
       const errors = yield* Effect.all(
         [
-          Speech.generate({ model: openai, text: "Hi", timestamps: true }),
-          Speech.generate({ model: openai, text: "Hi", format: "ogg" }),
-          Speech.generate({ model: google, text: "Hi", format: "mp3" }),
-          Speech.generate({ model: google, text: "Hi", instructions: "Warm." }),
-          collect(Speech.stream({ model: elevenlabs, text: "Hi", voice, format: "wav" })),
-          collect(Speech.stream({ model: cartesia, text: "Hi", voice, format: "mp3" })),
-          Speech.generate({ model: deepgram, text: "Hi", voice: "thalia" }),
+          Speech.generate({ model: openaiModel, text: "Hi", timestamps: true }),
+          Speech.generate({ model: openaiModel, text: "Hi", format: "ogg" }),
+          Speech.generate({ model: googleModel, text: "Hi", format: "mp3" }),
+          Speech.generate({ model: googleModel, text: "Hi", instructions: "Warm." }),
+          collect(Speech.stream({ model: elevenlabsModel, text: "Hi", voice, format: "wav" })),
+          collect(Speech.stream({ model: cartesiaModel, text: "Hi", voice, format: "mp3" })),
+          Speech.generate({ model: deepgramModel, text: "Hi", voice: "thalia" }),
         ].map((effect) => Effect.flip(effect)),
       )
       expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
@@ -152,20 +158,20 @@ describe("Speech", () => {
         ],
       })
       const responses = yield* Effect.all([
-        Speech.generate({ model: openai, text: "Hi", timestamps: false }).pipe(
+        Speech.generate({ model: openaiModel, text: "Hi", timestamps: false }).pipe(
           Effect.provide(respond(new Blob([bytes]).stream(), "audio/mpeg")),
         ),
-        Speech.generate({ model: google, text: "Hi", timestamps: false }).pipe(
+        Speech.generate({ model: googleModel, text: "Hi", timestamps: false }).pipe(
           Effect.provide(respond(gemini, "application/json")),
         ),
-        Speech.generate({ model: deepgram, text: "Hi", timestamps: false }).pipe(
+        Speech.generate({ model: deepgramModel, text: "Hi", timestamps: false }).pipe(
           Effect.provide(respond(new Blob([bytes]).stream(), "audio/mpeg")),
         ),
       ])
       for (const response of responses) expect(yield* response.audio.bytes()).toEqual(bytes)
 
       const errors = yield* Effect.all(
-        [openai, google, deepgram].map((model) =>
+        [openaiModel, googleModel, deepgramModel].map((model) =>
           Speech.generate({ model, text: "Hi", timestamps: true }).pipe(Effect.flip),
         ),
       ).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network"))))
@@ -186,16 +192,18 @@ describe("Speech", () => {
       const blocked = JSON.stringify({ promptFeedback: { blockReason: "PROHIBITED_CONTENT" } })
       const [truncated, invalid, provider, policy] = yield* Effect.all(
         [
-          collect(Speech.stream({ model: openai, text: "Hi" })).pipe(
+          collect(Speech.stream({ model: openaiModel, text: "Hi" })).pipe(
             Effect.provide(respond(sseEvents({ type: "speech.audio.delta", audio: "AQI=" }), "text/event-stream")),
           ),
-          collect(Speech.stream({ model: openai, text: "Hi" })).pipe(
+          collect(Speech.stream({ model: openaiModel, text: "Hi" })).pipe(
             Effect.provide(respond(sseEvents(badFrame), "text/event-stream")),
           ),
-          collect(Speech.stream({ model: cartesia, text: "Hi", voice })).pipe(
+          collect(Speech.stream({ model: cartesiaModel, text: "Hi", voice })).pipe(
             Effect.provide(respond(sseEvents(cartesiaError), "text/event-stream")),
           ),
-          Speech.generate({ model: google, text: "Hi" }).pipe(Effect.provide(respond(blocked, "application/json"))),
+          Speech.generate({ model: googleModel, text: "Hi" }).pipe(
+            Effect.provide(respond(blocked, "application/json")),
+          ),
         ].map((effect) => Effect.flip(effect)),
       )
 
@@ -211,7 +219,7 @@ describe("Speech", () => {
 
   it.effect("ignores unknown OpenAI speech stream events", () =>
     Effect.gen(function* () {
-      const events = yield* collect(Speech.stream({ model: openai, text: "Hi" })).pipe(
+      const events = yield* collect(Speech.stream({ model: openaiModel, text: "Hi" })).pipe(
         Effect.provide(
           respond(
             sseEvents(
@@ -240,7 +248,7 @@ describe("Speech", () => {
         })
       const withheld = JSON.stringify({ candidates: [{ finishReason: "SAFETY" }] })
       const generate = (body: string) =>
-        Speech.generate({ model: google, text: "Hi" }).pipe(Effect.provide(respond(body, "application/json")))
+        Speech.generate({ model: googleModel, text: "Hi" }).pipe(Effect.provide(respond(body, "application/json")))
 
       const truncated = yield* generate(document()).pipe(Effect.flip)
       const partial = yield* generate(document("MAX_TOKENS"))
@@ -275,9 +283,9 @@ describe("Speech", () => {
         },
       })
 
-      const events = yield* collect(Speech.stream({ model: elevenlabs, text: "Hi", voice, timestamps: true })).pipe(
-        Effect.provide(respond(body, "application/json")),
-      )
+      const events = yield* collect(
+        Speech.stream({ model: elevenlabsModel, text: "Hi", voice, timestamps: true }),
+      ).pipe(Effect.provide(respond(body, "application/json")))
 
       expect(events.map((event) => event.type)).toEqual([
         "audio-delta",

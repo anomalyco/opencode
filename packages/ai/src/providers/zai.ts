@@ -7,8 +7,9 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { config } from "./zai-settings.js"
 
-export const id = ProviderID.make("zai")
+const id = ProviderID.make("zai")
 
 export type ChatOptionsInput = ZAIChat.OptionsInput
 
@@ -39,7 +40,7 @@ const chatRoute = Route.make({
 
 export const routes = [chatRoute]
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL, ...rest } = input
   const chat = (modelID: string | ModelID) =>
     chatRoute
@@ -53,34 +54,10 @@ export const configure = (input: Config = {}) => {
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     ZAIImages.model({ ...media, id: modelID, providerOptions })
 
-  return {
-    id,
-    model: chat,
-    chat,
-    image,
-    configure,
-  }
+  return Object.assign(chat, { id, chat, image, configure })
 }
 
-export const provider = configure()
-export const image = provider.image
-export const chat = provider.chat
+export const zai = configure()
 
 export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
-export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
-  return configure(input).image(modelID, input.providerOptions)
-}
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
-}
-
-export * as ZAI from "./zai.js"
+  configure(config(settings))(modelID)

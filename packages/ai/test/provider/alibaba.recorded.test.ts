@@ -1,12 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, type LLMResponse, Message, ToolDefinition } from "../../src/effect.js"
-import { Alibaba } from "../../src/providers.js"
+import { alibaba } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
-const alibaba = Alibaba.configure({ region: "ap-southeast-1", apiKey: process.env.ALIBABA_API_KEY ?? "fixture" })
+const alibabaProvider = alibaba.configure({
+  region: "ap-southeast-1",
+  apiKey: process.env.ALIBABA_API_KEY ?? "fixture",
+})
 const weather = ToolDefinition.make({
   name: "get_weather",
   description: "Get the current weather in a city",
@@ -36,7 +39,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
         () =>
           Effect.gen(function* () {
             const request = ai.request({
-              model: alibaba[api]("qwen3.8-max"),
+              model: alibabaProvider[api]("qwen3.8-max"),
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
               providerOptions: api === "messages" ? { effort } : { reasoningEffort: effort },
               generation: { maxTokens: 4096 },
@@ -67,7 +70,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
       () =>
         Effect.gen(function* () {
           const request = ai.request({
-            model: alibaba[api]("qwen3.8-max"),
+            model: alibabaProvider[api]("qwen3.8-max"),
             providerOptions:
               api === "messages"
                 ? { effort: "medium" }

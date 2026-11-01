@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
-import { Mistral } from "../../src/providers.js"
+import { mistral } from "../../src/providers.js"
 
-const selected = Mistral.provider.model("mistral-small-latest")
+const selected = mistral("mistral-small-latest")
 
 ai.request({ model: selected, prompt: "Hello", providerOptions: { reasoningEffort: "high" } })
 ai.request({ model: selected, prompt: "Hello", providerOptions: { reasoningEffort: "future-effort" } })

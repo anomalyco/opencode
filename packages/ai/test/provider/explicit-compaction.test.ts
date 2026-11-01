@@ -5,7 +5,7 @@ import { LLMClient, Route } from "../../src/route/client.js"
 import { Auth } from "../../src/route/auth.js"
 import { Endpoint } from "../../src/route/endpoint.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
-import { OpenAI, Azure, XAI, Anthropic, OpenAICompatibleResponses } from "../../src/providers/index.js"
+import { openai, azure, xai, anthropic, openaiCompatibleResponses } from "../../src/providers/index.js"
 import { testEffect } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
@@ -97,9 +97,9 @@ testEffect(
 )
 
 for (const model of [
-  OpenAI.configure({ apiKey: "test" }).responses("fixture"),
-  Azure.configure({ apiKey: "test", resourceName: "test" }).responses("fixture"),
-  XAI.configure({ apiKey: "test" }).responses("fixture"),
+  openai.configure({ apiKey: "test" }).responses("fixture"),
+  azure.configure({ apiKey: "test", resourceName: "test" }).responses("fixture"),
+  xai.configure({ apiKey: "test" }).responses("fixture"),
 ]) {
   const item = {
     type: model.provider === "xai" ? "x_search_call" : "computer_call",
@@ -206,7 +206,7 @@ const retainedItems = [
 ]
 
 for (const model of [
-  OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
+  openai.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
   ...[undefined, "custom"].map((providerMetadataKey) =>
     Route.make({
       id: providerMetadataKey ?? "default-metadata",
@@ -283,7 +283,7 @@ for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: 
   ).effect(`compact preserves supported request controls${overlay ? " with HTTP overrides" : ""}`, () =>
     ai.compact(
       ai.request({
-        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        model: openai.configure({ apiKey: "test" }).responses("fixture"),
         prompt: "hello",
         promptCacheKey: "affinity",
         providerOptions: {
@@ -348,7 +348,7 @@ for (const item of [
       Effect.gen(function* () {
         const error = yield* ai
           .compact(
-            ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+            ai.request({ model: openai.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
           )
           .pipe(Effect.flip)
         expect(error.reason._tag).toBe("InvalidProviderOutput")
@@ -359,9 +359,9 @@ for (const item of [
 }
 
 for (const model of [
-  OpenAI.configure({ apiKey: "test" }).responses("fixture"),
-  Azure.configure({ apiKey: "test", resourceName: "test" }).responses("fixture"),
-  XAI.configure({ apiKey: "test" }).responses("fixture"),
+  openai.configure({ apiKey: "test" }).responses("fixture"),
+  azure.configure({ apiKey: "test", resourceName: "test" }).responses("fixture"),
+  xai.configure({ apiKey: "test" }).responses("fixture"),
 ]) {
   const images = [undefined, "low", "high", "auto"].map((detail) => ({
     type: "input_image",
@@ -396,7 +396,7 @@ for (const model of [
 testEffect(fixedResponse("must not execute")).effect("xAI rejects automatic compaction options", () =>
   Effect.gen(function* () {
     const request = {
-      ...ai.request({ model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"), prompt: "hello" }),
+      ...ai.request({ model: xai.configure({ apiKey: "test" }).responses("grok-4.6"), prompt: "hello" }),
       providerOptions: { contextManagement: [{ type: "compaction" }] },
     }
     const error = yield* LLMClient.generate(request).pipe(Effect.flip)
@@ -407,9 +407,9 @@ testEffect(fixedResponse("must not execute")).effect("xAI rejects automatic comp
 )
 
 for (const model of [
-  OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
-  Azure.configure({ apiKey: "test", resourceName: "test" }).responses("deployment"),
-  XAI.configure({ apiKey: "test" }).responses("grok-4.6"),
+  openai.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
+  azure.configure({ apiKey: "test", resourceName: "test" }).responses("deployment"),
+  xai.configure({ apiKey: "test" }).responses("grok-4.6"),
 ]) {
   testEffect(
     dynamicResponse(({ request, text, respond }) =>
@@ -464,8 +464,8 @@ for (const model of [
 }
 
 for (const model of [
-  Anthropic.configure({ apiKey: "test" }).model("claude-opus-4-6"),
-  OpenAICompatibleResponses.configure({ apiKey: "test", baseURL: "https://compatible.example/v1" }).model("model"),
+  anthropic.configure({ apiKey: "test" })("claude-opus-4-6"),
+  openaiCompatibleResponses.configure({ apiKey: "test", baseURL: "https://compatible.example/v1" })("model"),
 ]) {
   testEffect(fixedResponse("must not execute")).effect(
     `${model.route.id} does not inherit an unsupported compact endpoint`,
@@ -485,7 +485,7 @@ testEffect(
 ).effect("invalid explicit compaction preserves the original response and HTTP context", () =>
   Effect.gen(function* () {
     const error = yield* ai
-      .compact(ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }))
+      .compact(ai.request({ model: openai.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }))
       .pipe(Effect.flip)
     expect(error.reason._tag).toBe("InvalidProviderOutput")
     expect(error.reason.body).toContain("original payload")

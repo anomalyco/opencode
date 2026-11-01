@@ -4,7 +4,7 @@ import * as TestClock from "effect/testing/TestClock"
 import { HttpClientRequest } from "effect/http"
 import { Media } from "../src/effect.js"
 import { Transcription, TranscriptionClient, type TranscriptionEvent } from "../src/experimental.js"
-import { AssemblyAI, Deepgram, ElevenLabs, Google, OpenAI } from "../src/providers.js"
+import { assemblyai, deepgram, elevenlabs, google, openai } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, type Call } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
@@ -13,11 +13,11 @@ const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   TranscriptionClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
 
 const audio = Media.bytes(Uint8Array.from([0x49, 0x44, 0x33, 1, 2, 3]), "audio/mpeg")
-const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
-const deepgram = Deepgram.configure({ apiKey: "test", baseURL: "https://deepgram.test" }).transcription("nova-3")
-const google = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).transcription(
-  "gemini-3.5-transcribe",
-)
+const openaiProvider = openai.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
+const deepgramModel = deepgram.configure({ apiKey: "test", baseURL: "https://deepgram.test" }).transcription("nova-3")
+const googleModel = google
+  .configure({ apiKey: "test", baseURL: "https://google.test/v1beta" })
+  .transcription("gemini-3.5-transcribe")
 /**
  * Multipart fields of a recorded request, with repeated names collected in order. The boundary comes from the body:
  * each conversion of a FormData request to a web request picks a fresh one, so the recorded headers may not match.
@@ -33,39 +33,51 @@ const formFields = (call: Call) =>
     ),
   )
 
-const assemblyai = AssemblyAI.configure({ apiKey: "aai-key", baseURL: "https://assemblyai.test" }).transcription(
-  "universal-3-5-pro",
-)
-const elevenlabs = ElevenLabs.configure({ apiKey: "test", baseURL: "https://elevenlabs.test" }).transcription(
-  "scribe_v2",
-)
+const assemblyaiModel = assemblyai
+  .configure({ apiKey: "aai-key", baseURL: "https://assemblyai.test" })
+  .transcription("universal-3-5-pro")
+const elevenlabsModel = elevenlabs
+  .configure({ apiKey: "test", baseURL: "https://elevenlabs.test" })
+  .transcription("scribe_v2")
 
 describe("Transcription", () => {
   it.effect("rejects what a route cannot honor before sending anything", () =>
     Effect.gen(function* () {
       const errors = yield* Effect.all(
         [
-          Transcription.generate({ model: openai.transcription("gpt-4o-mini-transcribe"), audio, diarize: true }),
-          Transcription.generate({ model: openai.transcription("gpt-4o-mini-transcribe"), audio, timestamps: "word" }),
-          Transcription.generate({ model: openai.transcription("gpt-4o-transcribe-diarize"), audio, prompt: "Names" }),
-          Transcription.generate({ model: deepgram, audio, prompt: "OpenCode" }),
-          Transcription.generate({ model: google, audio, speakers: 2 }),
-          Transcription.start({ model: deepgram, audio }),
-          Transcription.generate({ model: deepgram, audio, http: { body: { callback: "https://hook.test" } } }),
           Transcription.generate({
-            model: openai.transcription("gpt-transcribe"),
+            model: openaiProvider.transcription("gpt-4o-mini-transcribe"),
+            audio,
+            diarize: true,
+          }),
+          Transcription.generate({
+            model: openaiProvider.transcription("gpt-4o-mini-transcribe"),
+            audio,
+            timestamps: "word",
+          }),
+          Transcription.generate({
+            model: openaiProvider.transcription("gpt-4o-transcribe-diarize"),
+            audio,
+            prompt: "Names",
+          }),
+          Transcription.generate({ model: deepgramModel, audio, prompt: "OpenCode" }),
+          Transcription.generate({ model: googleModel, audio, speakers: 2 }),
+          Transcription.start({ model: deepgramModel, audio }),
+          Transcription.generate({ model: deepgramModel, audio, http: { body: { callback: "https://hook.test" } } }),
+          Transcription.generate({
+            model: openaiProvider.transcription("gpt-transcribe"),
             audio: Media.url("https://a.test/x.mp3"),
           }),
           Transcription.start({
-            model: assemblyai,
+            model: assemblyaiModel,
             audio: Media.ref("file_1", { provider: "openai", mediaType: "audio/mpeg" }),
           }),
           Transcription.generate({
-            model: openai.transcription("gpt-transcribe"),
+            model: openaiProvider.transcription("gpt-transcribe"),
             audio: Media.bytes(Uint8Array.from([1, 2, 3]), "audio/x-unknown"),
           }),
           Transcription.generate({
-            model: Google.configure({ apiKey: "test" }).transcription("gemini-3.6-flash"),
+            model: google.configure({ apiKey: "test" }).transcription("gemini-3.6-flash"),
             audio,
           }),
         ].map((effect) => Effect.flip(effect)),
@@ -101,7 +113,7 @@ describe("Transcription", () => {
         ),
         sse(`{"type":"transcript.text.delta","delta":"Hi"}`, failure),
       ]
-      const model = openai.transcription("gpt-4o-mini-transcribe")
+      const model = openaiProvider.transcription("gpt-4o-mini-transcribe")
       const program = Effect.gen(function* () {
         const events = Array.from(yield* Stream.runCollect(Transcription.stream({ model, audio })))
         const error = yield* Stream.runCollect(Transcription.stream({ model, audio })).pipe(Effect.flip)
@@ -127,7 +139,9 @@ describe("Transcription", () => {
     Effect.gen(function* () {
       const bodies: Array<string> = []
       const events = Array.from(
-        yield* Stream.runCollect(Transcription.stream({ model: openai.transcription("whisper-1"), audio })).pipe(
+        yield* Stream.runCollect(
+          Transcription.stream({ model: openaiProvider.transcription("whisper-1"), audio }),
+        ).pipe(
           Effect.provide(
             layer((input) =>
               Effect.sync(() => {
@@ -159,7 +173,11 @@ describe("Transcription", () => {
       )
       const events = Array.from(
         yield* Stream.runCollect(
-          Transcription.stream({ model: openai.transcription("gpt-4o-transcribe-diarize"), audio, diarize: true }),
+          Transcription.stream({
+            model: openaiProvider.transcription("gpt-4o-transcribe-diarize"),
+            audio,
+            diarize: true,
+          }),
         ).pipe(
           Effect.provide(
             layer((input) =>
@@ -199,7 +217,7 @@ describe("Transcription", () => {
     Effect.gen(function* () {
       const calls: Array<Call> = []
       const response = yield* Transcription.generate({
-        model: openai.transcription("whisper-1"),
+        model: openaiProvider.transcription("whisper-1"),
         audio,
         timestamps: "segment",
       }).pipe(
@@ -246,7 +264,10 @@ describe("Transcription", () => {
   it.effect("fails an OpenAI stream that ends without transcript.text.done as incomplete", () =>
     Effect.gen(function* () {
       const events: Array<TranscriptionEvent> = []
-      const error = yield* Transcription.stream({ model: openai.transcription("gpt-4o-mini-transcribe"), audio }).pipe(
+      const error = yield* Transcription.stream({
+        model: openaiProvider.transcription("gpt-4o-mini-transcribe"),
+        audio,
+      }).pipe(
         Stream.runForEach((event) => Effect.sync(() => events.push(event))),
         Effect.flip,
         Effect.provide(
@@ -270,7 +291,7 @@ describe("Transcription", () => {
     Effect.gen(function* () {
       const calls: Array<Call> = []
       const response = yield* Transcription.generate({
-        model: deepgram,
+        model: deepgramModel,
         audio: Media.url("https://a.test/call.mp3", { mediaType: "audio/mpeg" }),
         language: "en",
         providerOptions: { keyterm: ["OpenCode", "Effect"] },
@@ -313,7 +334,7 @@ describe("Transcription", () => {
     Effect.gen(function* () {
       const calls: Array<Call> = []
       const response = yield* Transcription.generate({
-        model: assemblyai,
+        model: assemblyaiModel,
         audio: Media.url("https://a.test/call.mp3", { mediaType: "audio/mpeg" }),
       }).pipe(
         Effect.provide(
@@ -358,11 +379,11 @@ describe("Transcription", () => {
         const polls = () => calls.filter((call) => call.url.endsWith("/tr_1")).length
         const failed = JSON.stringify({ id: "tr_2", status: "error", error: "Audio file could not be decoded" })
         const program = Effect.gen(function* () {
-          const started = yield* Transcription.start({ model: assemblyai, audio, diarize: true, speakers: 2 })
+          const started = yield* Transcription.start({ model: assemblyaiModel, audio, diarize: true, speakers: 2 })
           expect(started.status).toBe("queued")
-          const resumed = yield* Transcription.resume(assemblyai, JSON.parse(JSON.stringify(started.token)))
+          const resumed = yield* Transcription.resume(assemblyaiModel, JSON.parse(JSON.stringify(started.token)))
           const response = yield* resumed.await({ poll: { interval: "1 second" } })
-          const failure = yield* Transcription.resume(assemblyai, { transcriptID: "tr_2" }).pipe(
+          const failure = yield* Transcription.resume(assemblyaiModel, { transcriptID: "tr_2" }).pipe(
             Effect.flatMap((generation) => generation.await()),
             Effect.flip,
           )
@@ -446,7 +467,11 @@ describe("Transcription", () => {
   it.effect("enables AssemblyAI speaker labels when only an expected speaker count is given", () =>
     Effect.gen(function* () {
       const calls: Array<Call> = []
-      yield* Transcription.start({ model: assemblyai, audio: Media.url("https://a.test/call.mp3"), speakers: 2 }).pipe(
+      yield* Transcription.start({
+        model: assemblyaiModel,
+        audio: Media.url("https://a.test/call.mp3"),
+        speakers: 2,
+      }).pipe(
         Effect.provide(
           layer((input) => observe(calls, input).pipe(Effect.as(json(input, { id: "tr_1", status: "queued" })))),
         ),
@@ -467,17 +492,17 @@ describe("Transcription", () => {
     Effect.gen(function* () {
       const errors = yield* Effect.all(
         [
-          Transcription.generate({ model: elevenlabs, audio, prompt: "OpenCode" }),
-          Transcription.generate({ model: elevenlabs, audio, providerOptions: { webhook: true } }),
-          Transcription.generate({ model: elevenlabs, audio, http: { body: { use_multi_channel: true } } }),
+          Transcription.generate({ model: elevenlabsModel, audio, prompt: "OpenCode" }),
+          Transcription.generate({ model: elevenlabsModel, audio, providerOptions: { webhook: true } }),
+          Transcription.generate({ model: elevenlabsModel, audio, http: { body: { use_multi_channel: true } } }),
           Transcription.generate({
-            model: elevenlabs,
+            model: elevenlabsModel,
             audio,
             diarize: true,
             providerOptions: { timestamps_granularity: "none" },
           }),
           Transcription.generate({
-            model: elevenlabs,
+            model: elevenlabsModel,
             audio: Media.ref("file_1", { provider: "elevenlabs", mediaType: "audio/mpeg" }),
           }),
         ].map((effect) => Effect.flip(effect)),
@@ -506,7 +531,7 @@ describe("Transcription", () => {
         logprob: 0,
       })
       const response = yield* Transcription.generate({
-        model: elevenlabs,
+        model: elevenlabsModel,
         audio: Media.url("https://a.test/call.mp3"),
         language: "en",
         speakers: 2,
@@ -574,7 +599,7 @@ describe("Transcription", () => {
 
   it.effect("rejects reading an AssemblyAI result before the transcript finishes", () =>
     Effect.gen(function* () {
-      const generation = yield* Transcription.resume(assemblyai, { transcriptID: "tr_1" })
+      const generation = yield* Transcription.resume(assemblyaiModel, { transcriptID: "tr_1" })
       const error = yield* generation.result().pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
       expect(error.message).toBe("AssemblyAI generation tr_1 has not finished; await it before reading the result")
@@ -601,7 +626,7 @@ describe("Transcription", () => {
         })
       const withheld = JSON.stringify({ candidates: [{ finishReason: "SAFETY" }] })
       const generate = (body: string) =>
-        Transcription.generate({ model: google, audio }).pipe(
+        Transcription.generate({ model: googleModel, audio }).pipe(
           Effect.provide(
             layer((input) => Effect.succeed(input.respond(body, { headers: { "content-type": "application/json" } }))),
           ),

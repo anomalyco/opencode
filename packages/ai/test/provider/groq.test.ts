@@ -2,15 +2,17 @@ import { expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LanguageModel, Message } from "../../src/effect.js"
 import { OpenAIChat } from "../../src/protocols/openai-chat.js"
-import { Groq } from "../../src/providers/groq.js"
+import { groq } from "../../src/providers/groq.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
 import { weatherTool } from "../recorded-scenarios.js"
 
+const groqPackage = await import("../../src/providers/groq.js")
+
 it.effect("Groq reuses Chat streaming and defaults to parsed reasoning", () =>
   Effect.gen(function* () {
-    expect(Groq.protocol.stream).toBe(OpenAIChat.protocol.stream)
-    const model = Groq.configure({ apiKey: "fixture" }).model("llama-3.3-70b-versatile")
+    expect(groqPackage.protocol.stream).toBe(OpenAIChat.protocol.stream)
+    const model = groq.configure({ apiKey: "fixture" })("llama-3.3-70b-versatile")
     expect(model.route.endpoint.baseURL).toBe("https://api.groq.com/openai/v1")
     const compiled = yield* compileRequest(
       ai.request({ model, prompt: "Hello", tools: [weatherTool], generation: { maxTokens: 64 } }),
@@ -29,7 +31,7 @@ it.effect("Groq reuses Chat streaming and defaults to parsed reasoning", () =>
 it.effect("Groq lowers its own options for custom catalog identities and endpoints", () =>
   Effect.gen(function* () {
     const model = LanguageModel.update(
-      Groq.model("qwen/qwen3.6-27b", {
+      groqPackage.model("qwen/qwen3.6-27b", {
         apiKey: "fixture",
         baseURL: "https://gateway.example/v1",
         headers: { "x-client": "test" },
@@ -67,7 +69,7 @@ it.effect("Groq lowers its own options for custom catalog identities and endpoin
 
 it.effect("Groq honors disableParallelToolUse and sends parallel_tool_calls only with tools", () =>
   Effect.gen(function* () {
-    const model = Groq.configure({ apiKey: "fixture" }).model("openai/gpt-oss-20b")
+    const model = groq.configure({ apiKey: "fixture" })("openai/gpt-oss-20b")
     const withTools = yield* compileRequest(
       ai.request({
         model,
@@ -88,7 +90,7 @@ it.effect("Groq replays reasoning only when present and preserves explicit reaso
   Effect.gen(function* () {
     const compiled = yield* compileRequest(
       ai.request({
-        model: Groq.configure({ apiKey: "fixture" }).model("openai/gpt-oss-20b"),
+        model: groq.configure({ apiKey: "fixture" })("openai/gpt-oss-20b"),
         messages: [
           Message.user("Think"),
           Message.assistant([
@@ -114,7 +116,7 @@ it.effect("Groq omits reasoning_format for the GPT-OSS family by default", () =>
   Effect.gen(function* () {
     for (const id of ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "openai/gpt-oss-safeguard-20b"]) {
       const compiled = yield* compileRequest(
-        ai.request({ model: Groq.configure({ apiKey: "fixture" }).model(id), prompt: "Hello" }),
+        ai.request({ model: groq.configure({ apiKey: "fixture" })(id), prompt: "Hello" }),
       )
       expect(compiled.body.reasoning_format).toBeUndefined()
       expect(compiled.body.include_reasoning).toBeUndefined()
@@ -126,7 +128,7 @@ it.effect("Groq validates option types", () =>
   Effect.gen(function* () {
     const error = yield* compileRequest(
       ai.request({
-        model: Groq.configure({ apiKey: "fixture" }).model("qwen"),
+        model: groq.configure({ apiKey: "fixture" })("qwen"),
         prompt: "Hello",
         providerOptions: { includeReasoning: "false" },
       }),

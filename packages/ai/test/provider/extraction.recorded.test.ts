@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Extraction } from "../../src/experimental.js"
-import { CloudflareWorkersAI } from "../../src/providers.js"
+import { cloudflareWorkersAI } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
-const cloudflareWorkersAI = recordedTests({
+const cloudflareWorkersAIModel = recordedTests({
   prefix: "cloudflare-workers-ai-extraction",
   provider: "cloudflare-workers-ai",
   protocol: "cloudflare-run-extraction",
@@ -16,13 +16,15 @@ const cloudflareWorkersAI = recordedTests({
 })
 
 describe("Extraction recorded", () => {
-  cloudflareWorkersAI.effect("extracts invoice fields", () =>
+  cloudflareWorkersAIModel.effect("extracts invoice fields", () =>
     Effect.gen(function* () {
       const response = yield* Extraction.generate({
-        model: CloudflareWorkersAI.configure({
-          accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
-          apiKey: process.env.CLOUDFLARE_API_KEY ?? "fixture",
-        }).experimental.extraction("@cf/cloudflare/clairic"),
+        model: cloudflareWorkersAI
+          .configure({
+            accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "fixture-account",
+            apiKey: process.env.CLOUDFLARE_API_KEY ?? "fixture",
+          })
+          .experimental.extraction("@cf/cloudflare/clairic"),
         input:
           "Invoice INV-2291 from Northwind Supply, issued 2026-09-02, net 30. 4 pallets at $250.00 each, shipping $80.00. Contact: Dana Ruiz, Priya Shah.",
         fields: {

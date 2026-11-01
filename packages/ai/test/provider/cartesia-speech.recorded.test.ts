@@ -1,13 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Speech, SpeechEvent } from "../../src/experimental.js"
-import { Cartesia } from "../../src/providers.js"
+import { cartesia } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TEXT, collectSpeech } from "./speech-recording.js"
 
-const model = Cartesia.configure({
-  apiKey: process.env.CARTESIA_API_KEY ?? "fixture",
-}).speech("sonic-3")
+const model = cartesia
+  .configure({
+    apiKey: process.env.CARTESIA_API_KEY ?? "fixture",
+  })
+  .speech("sonic-3")
 
 // "Katie", the voice from Cartesia's quickstart.
 const voice = "f786b574-daa5-4673-aa0c-cbe3e8534c02"

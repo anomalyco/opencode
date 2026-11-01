@@ -11,12 +11,12 @@ import {
   type WebSocketChannelExecutor,
   type WebSocketConnection,
 } from "../../src/route.js"
-import { configure } from "../../src/providers/openai.js"
+import { openai } from "../../src/providers/openai.js"
 import { decodeJson } from "../../src/protocols/shared.js"
 import { weatherRuntimeTool, weatherTool } from "../recorded-scenarios.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).responses("gpt-5.5")
+const model = openai.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" }).responses("gpt-5.5")
 const recorded = recordedTests({
   prefix: "openai-responses-websocket",
   provider: "openai",

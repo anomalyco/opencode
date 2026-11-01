@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
 import { ai, Auth, LLMClient } from "../../src/effect.js"
-import { Meta } from "../../src/providers/index.js"
+import { meta } from "../../src/providers/index.js"
 import { OpenAIChat } from "../../src/protocols/openai-chat.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { MetaResponses } from "../../src/protocols/meta-responses.js"
@@ -13,13 +13,13 @@ import { sseEvents } from "../lib/sse.js"
 
 it.effect("Meta composes baseline protocols with provider-owned endpoints and defaults", () =>
   Effect.gen(function* () {
-    const meta = Meta.configure({ apiKey: "fixture" })
-    const responses = meta.model("muse-spark-1.3")
-    const chat = meta.chat("muse-spark-1.3")
+    const metaProvider = meta.configure({ apiKey: "fixture" })
+    const responses = metaProvider("muse-spark-1.3")
+    const chat = metaProvider.chat("muse-spark-1.3")
     expect(responses.route.body).toBe(MetaResponses.protocol.body)
     expect(MetaResponses.protocol.stream.event).toBe(OpenResponses.protocol.stream.event)
     expect(chat.route.body).toBe(OpenAIChat.protocol.body)
-    expect(meta.model).toBe(meta.responses)
+    expect(metaProvider("fixture").route.id).toBe(metaProvider.responses("fixture").route.id)
     for (const model of [responses, chat]) {
       expect(model.provider).toBe("meta")
       expect(model.route.providerMetadataKey).toBe("meta")
@@ -39,7 +39,7 @@ it.effect("Meta Responses stays on HTTP when a WebSocket executor is supplied", 
     for (const baseURL of ["https://api.meta.ai/v1", "https://gateway.example/v1"]) {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: Meta.configure({ apiKey: "fixture", baseURL }).responses("muse-spark-1.3"),
+          model: meta.configure({ apiKey: "fixture", baseURL }).responses("muse-spark-1.3"),
           prompt: "Hello",
         }),
         { webSocket: { execute: () => Effect.die("Meta must not execute WebSocket requests") } },
@@ -81,7 +81,9 @@ it.effect("Meta Responses stays on HTTP when a WebSocket executor is supplied", 
 
 it.effect("Meta package selectors preserve overrides and Chat token policy on custom endpoints", () =>
   Effect.gen(function* () {
-    for (const select of [Meta.model, Meta.chatModel]) {
+    const responses = yield* Effect.promise(() => import("../../src/providers/meta/responses.js"))
+    const chat = yield* Effect.promise(() => import("../../src/providers/meta/chat.js"))
+    for (const select of [responses.model, chat.model]) {
       const model = select("future-model", {
         apiKey: "fixture",
         baseURL: "https://gateway.example/v1",
@@ -100,7 +102,7 @@ it.effect("Meta package selectors preserve overrides and Chat token policy on cu
           providerOptions: { store: true, include: [] },
         }),
       )
-      if (select === Meta.model) {
+      if (select === responses.model) {
         expect(compiled.body).toMatchObject({
           store: true,
           max_output_tokens: 64,
@@ -108,7 +110,7 @@ it.effect("Meta package selectors preserve overrides and Chat token policy on cu
         })
         expect(compiled.body.include).toBeUndefined()
       }
-      if (select === Meta.chatModel) {
+      if (select === chat.model) {
         expect(compiled.body).toMatchObject({ max_completion_tokens: 64, reasoning_effort: "future-effort" })
         expect(compiled.body.max_tokens).toBeUndefined()
         expect(compiled.body.store).toBeUndefined()
@@ -121,9 +123,9 @@ it.effect("Meta resolves environment credentials and accepts explicit auth overr
   Effect.gen(function* () {
     for (const api of ["responses", "chat"] as const) {
       for (const scenario of [
-        { provider: Meta.configure(), authorization: "Bearer environment-key" },
-        { provider: Meta.configure({ apiKey: "explicit-key" }), authorization: "Bearer explicit-key" },
-        { provider: Meta.configure({ auth: Auth.none }), authorization: undefined },
+        { provider: meta.configure(), authorization: "Bearer environment-key" },
+        { provider: meta.configure({ apiKey: "explicit-key" }), authorization: "Bearer explicit-key" },
+        { provider: meta.configure({ auth: Auth.none }), authorization: undefined },
       ]) {
         const model = scenario.provider[api]("muse-spark-1.3")
         const headers = yield* model.route.auth.apply({

@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { Transcription } from "../../src/experimental.js"
-import { ElevenLabs } from "../../src/providers.js"
+import { elevenlabs } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TRANSCRIPT, audio, audioRecording, dialog } from "./transcription-recording.js"
 
-const model = ElevenLabs.configure({ apiKey: process.env.ELEVENLABS_API_KEY ?? "fixture" }).transcription("scribe_v2")
+const model = elevenlabs.configure({ apiKey: process.env.ELEVENLABS_API_KEY ?? "fixture" }).transcription("scribe_v2")
 
 const recorded = recordedTests({
   prefix: "elevenlabs-transcription",

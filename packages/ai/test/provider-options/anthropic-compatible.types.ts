@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
-import { AnthropicCompatible } from "../../src/providers.js"
+import { anthropicCompatible } from "../../src/providers.js"
 
-const model = AnthropicCompatible.configure({ baseURL: "https://example.com" }).model("claude")
+const model = anthropicCompatible.configure({ baseURL: "https://example.com" })("claude")
 
 ai.request({ model, prompt: "Hello", providerOptions: { effort: "high" } })
 

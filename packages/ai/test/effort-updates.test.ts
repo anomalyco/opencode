@@ -6,7 +6,7 @@ import { compileRequest } from "../src/route/client.js"
 import { AnthropicMessages } from "../src/protocols/anthropic-messages.js"
 import { OpenAIResponses } from "../src/protocols/openai-responses.js"
 import { Gemini } from "../src/protocols/gemini.js"
-import { AmazonBedrockMantle, GoogleVertexMessages, OpenAI } from "../src/providers.js"
+import { amazonBedrockMantle, googleVertexMessages, openai } from "../src/providers.js"
 import { applyEffortUpdates } from "../src/effort-updates.js"
 import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
@@ -17,13 +17,13 @@ const anthropic = (id: string, compatibility?: { readonly supportsEffortUpdates?
     .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
     .model({ id, compatibility })
 
-const openai = (id: string, compatibility?: { readonly supportsEffortUpdates?: boolean }) =>
+const openaiModel = (id: string, compatibility?: { readonly supportsEffortUpdates?: boolean }) =>
   OpenAIResponses.route
     .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
     .model({ id, compatibility })
 
 const opus5 = anthropic("claude-opus-5")
-const astra = openai("gpt-6-astra")
+const astra = openaiModel("gpt-6-astra")
 
 const lowFromHigh = Message.effort({ effort: "low", previous: "high" })
 const conversation = [Message.user("Before."), lowFromHigh, Message.user("After.")]
@@ -286,7 +286,7 @@ describe("Anthropic Messages effort updates", () => {
 
   it.effect("strips markers for Opus 5.0 on Bedrock Mantle Messages while lowering Opus 5.5", () =>
     Effect.gen(function* () {
-      const mantle = AmazonBedrockMantle.configure({ apiKey: "test", region: "us-east-1" })
+      const mantle = amazonBedrockMantle.configure({ apiKey: "test", region: "us-east-1" })
       const opus50 = yield* compileRequest(
         ai.request({
           model: mantle.messages("anthropic.claude-opus-5"),
@@ -311,17 +311,17 @@ describe("Anthropic Messages effort updates", () => {
 
   it.effect("lowers markers on the Vertex Anthropic route for models that support them", () =>
     Effect.gen(function* () {
-      const vertex = GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" })
+      const vertex = googleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" })
       const opus5 = yield* compileRequest(
         ai.request({
-          model: vertex.model("claude-opus-5"),
+          model: vertex("claude-opus-5"),
           messages: conversation,
           providerOptions: { effort: "low" },
         }),
       )
       const opus48 = yield* compileRequest(
         ai.request({
-          model: vertex.model("claude-opus-4-8"),
+          model: vertex("claude-opus-4-8"),
           messages: conversation,
           providerOptions: { effort: "low" },
         }),
@@ -436,9 +436,9 @@ describe("OpenAI Responses effort updates", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAI.configure({ apiKey: "fixture", http: { body: { reasoning: { mode: "pro" } } } }).responses(
-            "gpt-6-sol",
-          ),
+          model: openai
+            .configure({ apiKey: "fixture", http: { body: { reasoning: { mode: "pro" } } } })
+            .responses("gpt-6-sol"),
           messages: conversation,
           providerOptions: { reasoningEffort: "low" },
         }),
@@ -453,7 +453,7 @@ describe("OpenAI Responses effort updates", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-6-sol"),
+          model: openai.configure({ apiKey: "fixture" }).responses("gpt-6-sol"),
           messages: conversation,
           providerOptions: { reasoningEffort: "low", reasoningMode: "pro" },
         }),
@@ -493,7 +493,7 @@ describe("OpenAI Responses effort updates", () => {
     it.effect(`${supported ? "lowers" : "strips"} markers for ${id}`, () =>
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
-          ai.request({ model: openai(id), messages: conversation, providerOptions: { reasoningEffort: "low" } }),
+          ai.request({ model: openaiModel(id), messages: conversation, providerOptions: { reasoningEffort: "low" } }),
         )
 
         expect(updates(prepared.body)).toHaveLength(supported ? 1 : 0)
@@ -506,14 +506,14 @@ describe("OpenAI Responses effort updates", () => {
     Effect.gen(function* () {
       const enabled = yield* compileRequest(
         ai.request({
-          model: openai("gpt-5.5", { supportsEffortUpdates: true }),
+          model: openaiModel("gpt-5.5", { supportsEffortUpdates: true }),
           messages: conversation,
           providerOptions: { reasoningEffort: "low" },
         }),
       )
       const disabled = yield* compileRequest(
         ai.request({
-          model: openai("gpt-6-astra", { supportsEffortUpdates: false }),
+          model: openaiModel("gpt-6-astra", { supportsEffortUpdates: false }),
           messages: conversation,
           providerOptions: { reasoningEffort: "low" },
         }),
@@ -526,7 +526,7 @@ describe("OpenAI Responses effort updates", () => {
 
   const checkpoint = { type: "compaction", id: "cmp_1", encrypted_content: "opaque" }
   const compactRequest = ai.request({
-    model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-6-astra"),
+    model: openai.configure({ apiKey: "fixture" }).responses("gpt-6-astra"),
     messages: conversation,
     providerOptions: { reasoningEffort: "low" },
   })

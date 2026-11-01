@@ -4,13 +4,13 @@ import { Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, type RequestEncoding } from "../src/effect.js"
 import { LLMClient } from "../src/route.js"
-import { configure } from "../src/providers/openai.js"
+import { openai } from "../src/providers/openai.js"
 import { dynamicResponse } from "./lib/http.js"
 import { deltaChunk, finishChunk } from "./lib/openai-chunks.js"
 import { sseEvents } from "./lib/sse.js"
 import { it } from "./lib/effect.js"
 
-const model = configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4.1-mini")
+const model = openai.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4.1-mini")
 
 const send = (prompt: string, encoding?: RequestEncoding) =>
   Effect.gen(function* () {

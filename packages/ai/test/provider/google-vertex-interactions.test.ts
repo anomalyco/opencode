@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Redacted } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, Message, ToolCallPart } from "../../src/effect.js"
-import { GoogleVertexInteractions } from "../../src/providers.js"
+import { googleVertexInteractions } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { Auth } from "../../src/route/auth.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -10,16 +10,18 @@ import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
+const googleVertexInteractionsPackage = await import("../../src/providers/google-vertex/interactions.js")
+
 describe("Google Vertex Interactions", () => {
   it.effect("streams through the global project endpoint with OAuth and Vertex service tiers", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: GoogleVertexInteractions.configure({
+          model: googleVertexInteractions.configure({
             accessToken: "vertex-token",
             location: "global",
             project: "vertex-project",
-          }).model("gemini-3.8-flash"),
+          })("gemini-3.8-flash"),
           system: "Be concise.",
           prompt: "Say hello.",
           providerOptions: { serviceTier: "flex", thinkingLevel: "low" },
@@ -81,7 +83,7 @@ describe("Google Vertex Interactions", () => {
     Effect.gen(function* () {
       yield* LLMClient.generate(
         ai.request({
-          model: GoogleVertexInteractions.configure({ apiKey: "vertex-key" }).model("gemini-3.8-flash"),
+          model: googleVertexInteractions.configure({ apiKey: "vertex-key" })("gemini-3.8-flash"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -108,10 +110,10 @@ describe("Google Vertex Interactions", () => {
   it.effect("resolves an auth override on every request and honors a custom base URL without a project", () =>
     Effect.gen(function* () {
       const tokens = ["first-token", "refreshed-token"]
-      const model = GoogleVertexInteractions.configure({
+      const model = googleVertexInteractions.configure({
         baseURL: "https://vertex.test/v1beta1/locations/global",
         auth: Auth.effect(Effect.sync(() => Redacted.make(tokens.shift() ?? "unexpected-token"))).bearer(),
-      }).model("gemini-3.8-flash")
+      })("gemini-3.8-flash")
       const headers: string[] = []
       yield* Effect.forEach(["First.", "Second."], (prompt) => LLMClient.generate(ai.request({ model, prompt }))).pipe(
         Effect.provide(
@@ -132,9 +134,7 @@ describe("Google Vertex Interactions", () => {
   )
 
   test("uses the jurisdictional host and lazily configures ADC", () => {
-    const model = GoogleVertexInteractions.configure({ project: "vertex-project", location: "eu" }).model(
-      "gemini-3.8-flash",
-    )
+    const model = googleVertexInteractions.configure({ project: "vertex-project", location: "eu" })("gemini-3.8-flash")
     expect(model.route.endpoint.baseURL).toBe(
       "https://aiplatform.eu.rep.googleapis.com/v1beta1/projects/vertex-project/locations/eu",
     )
@@ -145,27 +145,27 @@ describe("Google Vertex Interactions", () => {
   test("rejects conflicting credentials", () => {
     expect(() =>
       // @ts-expect-error Exercise invalid credentials from untyped callers.
-      GoogleVertexInteractions.configure({ apiKey: "key", accessToken: "token" }),
+      googleVertexInteractions.configure({ apiKey: "key", accessToken: "token" }),
     ).toThrow("Google Vertex apiKey cannot be combined with accessToken or auth")
     expect(() =>
       // @ts-expect-error Exercise invalid credentials from untyped callers.
-      GoogleVertexInteractions.configure({ apiKey: "key", auth: Auth.bearer("token") }),
+      googleVertexInteractions.configure({ apiKey: "key", auth: Auth.bearer("token") }),
     ).toThrow("Google Vertex apiKey cannot be combined with accessToken or auth")
     expect(() =>
       // @ts-expect-error Exercise invalid credentials from untyped callers.
-      GoogleVertexInteractions.model("gemini-3.8-flash", { apiKey: "key", accessToken: "token" }),
+      googleVertexInteractionsPackage.model("gemini-3.8-flash", { apiKey: "key", accessToken: "token" }),
     ).toThrow("Google Vertex apiKey cannot be combined with accessToken or auth")
   })
 
   test("requires a project unless a custom base URL or API key is provided", () => {
-    expect(() => GoogleVertexInteractions.configure({ project: "", accessToken: "token" })).toThrow(
+    expect(() => googleVertexInteractions.configure({ project: "", accessToken: "token" })).toThrow(
       "Google Vertex requires a project when baseURL is not configured",
     )
   })
 
   it.effect("ignores unknown stream events but rejects malformed known ones", () =>
     Effect.gen(function* () {
-      const model = GoogleVertexInteractions.configure({ apiKey: "vertex-key" }).model("gemini-3.8-flash")
+      const model = googleVertexInteractions.configure({ apiKey: "vertex-key" })("gemini-3.8-flash")
       const generate = (...events: ReadonlyArray<unknown>) =>
         LLMClient.generate(ai.request({ model, prompt: "Hi" })).pipe(
           Effect.provide(fixedResponse(sseEvents(...events))),
@@ -189,7 +189,7 @@ describe("Google Vertex Interactions", () => {
 
   it.effect("classifies failed interactions by their reported errors", () =>
     Effect.gen(function* () {
-      const model = GoogleVertexInteractions.configure({ apiKey: "vertex-key" }).model("gemini-3.8-flash")
+      const model = googleVertexInteractions.configure({ apiKey: "vertex-key" })("gemini-3.8-flash")
       const cases = [
         {
           errors: [{ code: "permission_denied", message: "Access denied" }],
@@ -220,10 +220,10 @@ describe("Google Vertex Interactions", () => {
 
   it.effect("round-trips tool signatures under Vertex metadata without enabling storage", () =>
     Effect.gen(function* () {
-      const model = GoogleVertexInteractions.configure({
+      const model = googleVertexInteractions.configure({
         accessToken: "vertex-token",
         project: "vertex-project",
-      }).model("gemini-3.8-flash")
+      })("gemini-3.8-flash")
       const response = yield* LLMClient.generate(ai.request({ model, prompt: "Check the weather." })).pipe(
         Effect.provide(
           fixedResponse(
@@ -264,9 +264,7 @@ describe("Google Vertex Interactions", () => {
         ai.request({
           model,
           messages: [
-            Message.assistant([
-              ToolCallPart.make({ id: "call_foreign", name: "lookup", input: { city: "Paris" } }),
-            ]),
+            Message.assistant([ToolCallPart.make({ id: "call_foreign", name: "lookup", input: { city: "Paris" } })]),
             Message.tool({ id: "call_foreign", name: "lookup", result: { weather: "sunny" } }),
             Message.assistant([
               ToolCallPart.make({

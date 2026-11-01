@@ -6,38 +6,38 @@ import {
   type TranscriptionEvent,
   type TranscriptionOptions,
 } from "../src/experimental.js"
-import { AssemblyAI, Deepgram, OpenAI } from "../src/providers.js"
+import { assemblyai, deepgram, openai } from "../src/providers.js"
 
 type StreamItem<T> = T extends Stream.Stream<infer A, infer _E, infer _R> ? A : never
 type Equal<A, B> = [A, B] extends [B, A] ? true : false
 type Assert<T extends true> = T
 
 const audio = Media.url("https://example.com/call.mp3")
-const deepgram = Deepgram.configure({ apiKey: "test" }).transcription("nova-3")
+const deepgramModel = deepgram.configure({ apiKey: "test" }).transcription("nova-3")
 const widenTranscription = <Options extends TranscriptionOptions>(
   model: TranscriptionModel<Options>,
 ): TranscriptionModel => model
 void widenTranscription
 
 Transcription.generate({
-  model: deepgram,
+  model: deepgramModel,
   audio,
   timestamps: "word",
   providerOptions: { keyterm: ["OpenCode"], diarize_model: "future-model", futureOption: true },
 })
-Transcription.start({ model: AssemblyAI.configure({ apiKey: "test" }).transcription("universal-3-5-pro"), audio })
+Transcription.start({ model: assemblyai.configure({ apiKey: "test" }).transcription("universal-3-5-pro"), audio })
 
 // @ts-expect-error Known provider options are inferred from the selected model.
-Transcription.generate({ model: deepgram, audio, providerOptions: { keyterm: "OpenCode" } })
+Transcription.generate({ model: deepgramModel, audio, providerOptions: { keyterm: "OpenCode" } })
 // @ts-expect-error Timestamp granularity is a closed set.
-Transcription.generate({ model: deepgram, audio, timestamps: "character" })
+Transcription.generate({ model: deepgramModel, audio, timestamps: "character" })
 // @ts-expect-error Audio is required.
-Transcription.request({ model: deepgram })
+Transcription.request({ model: deepgramModel })
 // @ts-expect-error Speech models cannot be used for transcription requests.
-Transcription.request({ model: OpenAI.configure({ apiKey: "test" }).speech("gpt-4o-mini-tts"), audio })
+Transcription.request({ model: openai.configure({ apiKey: "test" }).speech("gpt-4o-mini-tts"), audio })
 
 const streamed = Transcription.stream({
-  model: OpenAI.configure({ apiKey: "test" }).transcription("gpt-transcribe"),
+  model: openai.configure({ apiKey: "test" }).transcription("gpt-transcribe"),
   audio,
 })
 type StreamEvent = Assert<Equal<StreamItem<typeof streamed>, TranscriptionEvent>>

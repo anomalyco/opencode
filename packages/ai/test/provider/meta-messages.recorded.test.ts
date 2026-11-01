@@ -1,12 +1,12 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, Message, ToolChoice, ToolDefinition } from "../../src/effect.js"
-import { Meta } from "../../src/providers/meta.js"
+import { meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = Meta.configure({ apiKey: process.env.META_API_KEY ?? "fixture" }).messages("muse-spark-1.3")
+const model = meta.configure({ apiKey: process.env.META_API_KEY ?? "fixture" }).messages("muse-spark-1.3")
 const recorded = recordedTests({
   prefix: "meta-messages",
   provider: "meta",

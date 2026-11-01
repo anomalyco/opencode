@@ -6,7 +6,7 @@ import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { ProviderID, type ModelID, type OpenString } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 
-export const id = ProviderID.make("cohere")
+const id = ProviderID.make("cohere")
 const COMPATIBILITY_BASE_URL = "https://api.cohere.ai/compatibility/v1"
 export type ChatOptionsInput = { readonly reasoningEffort?: OpenString<"none" | "high"> }
 export type ProviderOptions = CohereChat.ProviderOptionsInput & ChatOptionsInput
@@ -17,6 +17,8 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   }
 export type Settings<Options = CohereChat.ProviderOptionsInput> = ProviderPackage.Settings &
   Options & { readonly apiKey?: string | false; readonly baseURL?: string }
+
+export type ChatSettings = Settings<ChatOptionsInput>
 
 export const route = CohereChat.route
 export const chatRoute = Route.make({
@@ -29,14 +31,13 @@ export const chatRoute = Route.make({
 })
 export const routes = [route, chatRoute]
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL, ...defaults } = input
   const auth = AuthOptions.bearer(input, "COHERE_API_KEY")
   const native = route.with({ ...defaults, auth, endpoint: { baseURL: baseURL ?? CohereChat.DEFAULT_BASE_URL } })
   const chat = chatRoute.with({ ...defaults, auth, endpoint: { baseURL: baseURL ?? COMPATIBILITY_BASE_URL } })
-  return {
+  return Object.assign((modelID: string | ModelID) => native.model<CohereChat.ProviderOptionsInput>({ id: modelID }), {
     id,
-    model: (modelID: string | ModelID) => native.model<CohereChat.ProviderOptionsInput>({ id: modelID }),
     chat: (modelID: string | ModelID) =>
       chat.model<ChatOptionsInput>({
         id: modelID,
@@ -47,10 +48,9 @@ export const configure = (input: Config = {}) => {
         },
       }),
     configure,
-  }
+  })
 }
-export const provider = configure()
-export const chat = provider.chat
+export const cohere = configure()
 export const model: ProviderPackage.Model<Settings, CohereChat.ProviderOptionsInput> = (
   modelID,
   { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},
@@ -61,5 +61,4 @@ export const model: ProviderPackage.Model<Settings, CohereChat.ProviderOptionsIn
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
-export * as Cohere from "./cohere.js"
+  })(modelID)

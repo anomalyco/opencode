@@ -1,37 +1,53 @@
 import {
-  Anthropic,
-  Google,
-  Groq,
-  OpenAI,
-  OpenAICompatible,
-  OpenCode,
-  OpenRouter,
-  VercelAIGateway,
-  XAI,
+  anthropic,
+  google,
+  groq,
+  openai,
+  openaiCompatible,
+  opencode,
+  openrouter,
+  vercelAIGateway,
+  xai,
 } from "../src/providers/index.js"
 
-OpenAI.model("gpt-5")
-OpenAI.chatModel("gpt-5")
-OpenAI.imageModel("gpt-image-1")
-Anthropic.model("claude-sonnet-4-6")
-Google.model("gemini-2.5-flash")
-Groq.model("llama-3.3-70b-versatile")
-OpenRouter.decisionModel("openai/gpt-5")
-XAI.model("grok-4")
-OpenCode.decisionModel("decision")
-
-OpenAI.model("gpt-5", { apiKey: "key" })
-Anthropic.model("claude-sonnet-4-6", { apiKey: "key" })
+openai("gpt-5")
+openai.chat("gpt-5")
+openai.image("gpt-image-1")
+anthropic("claude-sonnet-4-6")
+google("gemini-2.5-flash")
+groq("llama-3.3-70b-versatile")
+openrouter.decision("openai/gpt-5")
+xai("grok-4")
+opencode.decision("decision")
 
 // @ts-expect-error OpenAI-compatible models still require a base URL.
-OpenAICompatible.model("model")
+openaiCompatible("model")
+openaiCompatible("model", { baseURL: "https://example.com/v1" })
 
-const groqConfig: Groq.Config = { apiKey: "key" }
-const xaiConfig: XAI.Config = { apiKey: "key" }
-const gatewayConfig: VercelAIGateway.Config = { apiKey: "key" }
-const compatibleConfig: OpenAICompatible.Config = { baseURL: "https://example.com/v1" }
+const openaiPackage = await import("../src/providers/openai.js")
+const openaiChatPackage = await import("../src/providers/openai/chat.js")
+const openaiImagesPackage = await import("../src/providers/openai/images.js")
+const anthropicPackage = await import("../src/providers/anthropic.js")
+const openrouterDecisionsPackage = await import("../src/providers/openrouter/decisions.js")
+const opencodeDecisionsPackage = await import("../src/providers/opencode/decisions.js")
+const openaiCompatiblePackage = await import("../src/providers/openai-compatible.js")
 
-Groq.configure(groqConfig)
-XAI.configure(xaiConfig)
-VercelAIGateway.configure(gatewayConfig)
-OpenAICompatible.configure(compatibleConfig)
+openaiPackage.model("gpt-5")
+openaiPackage.model("gpt-5", { apiKey: "key" })
+openaiChatPackage.model("gpt-5")
+openaiImagesPackage.model("gpt-image-1")
+anthropicPackage.model("claude-sonnet-4-6", { apiKey: "key" })
+openrouterDecisionsPackage.model("openai/gpt-5")
+opencodeDecisionsPackage.model("decision")
+// @ts-expect-error OpenAI-compatible package models still require a base URL.
+openaiCompatiblePackage.model("model")
+
+const groqConfig: Parameters<typeof groq.configure>[0] = { apiKey: "key" }
+const xaiConfig: Parameters<typeof xai.configure>[0] = { apiKey: "key" }
+const gatewayConfig: Parameters<typeof vercelAIGateway.configure>[0] = { apiKey: "key" }
+const compatibleConfig: Parameters<typeof openaiCompatible.configure>[0] = { baseURL: "https://example.com/v1" }
+
+groq.configure(groqConfig)
+xai.configure(xaiConfig)
+vercelAIGateway.configure(gatewayConfig)
+openaiCompatible.configure(compatibleConfig)

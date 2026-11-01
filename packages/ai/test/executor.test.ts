@@ -11,7 +11,7 @@ import {
   type WebSocketChannelExecutor,
 } from "../src/route.js"
 import { route } from "../src/protocols/openai-chat.js"
-import { configure } from "../src/providers/openai.js"
+import { openai } from "../src/providers/openai.js"
 import { dynamicResponse, fixedResponse, handlerLayer, systemError, truncatedStream } from "./lib/http.js"
 import { deltaChunk } from "./lib/openai-chunks.js"
 import { sseEvents, sseRaw } from "./lib/sse.js"
@@ -727,7 +727,7 @@ describe("RequestExecutor", () => {
 })
 
 describe("WebSocket channel execution", () => {
-  const model = configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini")
+  const model = openai.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses("gpt-4.1-mini")
   const request = ai.request({ model, prompt: "Say hello." })
   const frames = [
     JSON.stringify({ type: "response.output_item.added", item: { type: "message", id: "msg_1" } }),

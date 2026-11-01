@@ -2,8 +2,9 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
-import { AmazonBedrock } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
+
+const amazonBedrockPackage = await import("../../src/providers/amazon-bedrock.js")
 
 const RECORDING_REGION = process.env.BEDROCK_RECORDING_REGION ?? "us-east-1"
 
@@ -13,7 +14,7 @@ const modelID = process.env.BEDROCK_BINDING_MODEL_ID ?? "global.anthropic.claude
 
 // Mirrors the "high" variant, so the recording covers the real overlay and default merge.
 const model = (blockBinding?: { readonly prefix_mismatch_behavior: string }) =>
-  AmazonBedrock.model(modelID, {
+  amazonBedrockPackage.model(modelID, {
     apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
     region: RECORDING_REGION,
     body: {
@@ -48,7 +49,7 @@ describe("Bedrock Converse thinking binding recorded", () => {
       const response = yield* LLMClient.generate(
         ai.request({
           id: "recorded_bedrock_thinking_binding_default",
-          model: AmazonBedrock.model(modelID, {
+          model: amazonBedrockPackage.model(modelID, {
             apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
             region: RECORDING_REGION,
           }),

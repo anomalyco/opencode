@@ -1,4 +1,4 @@
-import { configure } from "@opencode/ai/providers/mistral"
+import { mistral } from "@opencode/ai/providers/mistral"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, Message, SystemPart, ToolChoice, ToolDefinition } from "../../src/effect.js"
@@ -39,7 +39,7 @@ describe("Mistral recorded", () => {
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
           ai.request({
-            model: configure({ apiKey, providerOptions: { reasoningEffort: "none" } }).model("mistral-small-latest"),
+            model: mistral.configure({ apiKey, providerOptions: { reasoningEffort: "none" } })("mistral-small-latest"),
             prompt: "Reply with exactly one word: hello",
             generation: { maxTokens: 40, temperature: 0 },
           }),
@@ -58,7 +58,9 @@ describe("Mistral recorded", () => {
     { tags: ["reasoning", "replay", "usage"], metadata: { model: "mistral-small-latest" } },
     () =>
       Effect.gen(function* () {
-        const model = configure({ apiKey, providerOptions: { reasoningEffort: "high" } }).model("mistral-small-latest")
+        const model = mistral.configure({ apiKey, providerOptions: { reasoningEffort: "high" } })(
+          "mistral-small-latest",
+        )
         const firstRequest = ai.request({
           model,
           prompt: "Calculate 17 multiplied by 23. Think briefly, then reply with only the integer.",
@@ -95,7 +97,9 @@ describe("Mistral recorded", () => {
     { tags: ["tool", "tool-loop", "usage"], metadata: { model: "mistral-small-latest" } },
     () =>
       Effect.gen(function* () {
-        const model = configure({ apiKey, providerOptions: { reasoningEffort: "none" } }).model("mistral-small-latest")
+        const model = mistral.configure({ apiKey, providerOptions: { reasoningEffort: "none" } })(
+          "mistral-small-latest",
+        )
         const firstRequest = ai.request({
           model,
           system: [
@@ -143,7 +147,7 @@ describe("Mistral hosted GLM recorded", () => {
       Effect.gen(function* () {
         const response = yield* LLMClient.generate(
           ai.request({
-            model: configure({ apiKey }).model("zai-glm-5-2"),
+            model: mistral.configure({ apiKey })("zai-glm-5-2"),
             system: "Call lookup_weather exactly once with Paris.",
             prompt: "What is the weather?",
             tools: [weather],

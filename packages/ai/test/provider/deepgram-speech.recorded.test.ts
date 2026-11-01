@@ -1,13 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Speech } from "../../src/experimental.js"
-import { Deepgram } from "../../src/providers.js"
+import { deepgram } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TEXT, collectSpeech } from "./speech-recording.js"
 
-const model = Deepgram.configure({
-  apiKey: process.env.DEEPGRAM_API_KEY ?? "fixture",
-}).speech("aura-2-thalia-en")
+const model = deepgram
+  .configure({
+    apiKey: process.env.DEEPGRAM_API_KEY ?? "fixture",
+  })
+  .speech("aura-2-thalia-en")
 
 const recorded = recordedTests({
   prefix: "deepgram-speech",

@@ -9,7 +9,7 @@ export type AnthropicOptionsInput = AnthropicMessages.OptionsInput
 export type AnthropicProviderOptionsInput = AnthropicMessages.ProviderOptionsInput
 export type AnthropicThinkingInput = AnthropicMessages.ThinkingInput
 
-export const id = ProviderID.make("anthropic-compatible")
+const id = ProviderID.make("anthropic-compatible")
 
 export type Config = RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
@@ -33,7 +33,7 @@ export const routes = [compatibleRoute]
 
 const auth = (input: ProviderAuthOption<"optional">) => AuthOptions.apiKey(input, [], Auth.header("x-api-key"))
 
-export const configure = (input: Config) => {
+const configure = (input: Config) => {
   const provider = input.provider ?? "anthropic-compatible"
   if (!input.baseURL)
     throw new ProviderConfigurationError({
@@ -47,17 +47,19 @@ export const configure = (input: Config) => {
     endpoint: { baseURL },
     auth: auth(input),
   })
-  return {
-    id: ProviderID.make(provider),
-    model: (modelID: string | ModelID) => route.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
-    configure,
-  }
+  return Object.assign(
+    (modelID: string | ModelID) => route.model<AnthropicMessages.ProviderOptionsInput>({ id: modelID }),
+    { id: ProviderID.make(provider), configure },
+  )
 }
 
-export const provider = {
-  id,
-  configure,
-}
+export const anthropicCompatible = Object.assign(
+  (modelID: string | ModelID, input: Config) => configure(input)(modelID),
+  {
+    id,
+    configure,
+  },
+)
 
 export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOptionsInput> = (
   modelID,
@@ -75,7 +77,5 @@ export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOp
     http: body === undefined ? undefined : { body },
     provider,
     providerOptions,
-  }).model(modelID)
+  })(modelID)
 }
-
-export * as AnthropicCompatible from "./anthropic-compatible.js"

@@ -4,7 +4,7 @@ import { Effect, Ref, Schema } from "effect"
 import { FileSystem } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, AIError, Media, Message, ToolCallPart } from "../src/effect.js"
-import { OpenAI } from "../src/providers.js"
+import { openai } from "../src/providers.js"
 import { compileRequest } from "../src/route/client.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, scriptedResponses } from "./lib/http.js"
@@ -42,7 +42,7 @@ describe("Media", () => {
 
   it.effect("rejects local file references as request errors without breaking construction or decoding", () =>
     Effect.gen(function* () {
-      const model = OpenAI.configure({ apiKey: "test" }).responses("video-model")
+      const model = openai.configure({ apiKey: "test" }).responses("video-model")
       const restored = yield* Schema.decodeUnknownEffect(Media.AssetSchema)({
         source: { type: "url", url: " FILE:/C:/clips/video.mp4", mediaType: "video/mp4" },
       })

@@ -1,13 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { ai, ImageEvent, Media } from "../../src/effect.js"
-import { OpenAI } from "../../src/providers.js"
+import { openai } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = OpenAI.configure({
-  apiKey: process.env.OPENAI_API_KEY ?? "fixture",
-}).image("gpt-image-1-mini")
+const model = openai
+  .configure({
+    apiKey: process.env.OPENAI_API_KEY ?? "fixture",
+  })
+  .image("gpt-image-1-mini")
 
 const recorded = recordedTests({
   prefix: "openai-images",

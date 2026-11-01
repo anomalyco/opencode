@@ -2,12 +2,12 @@ import { describe, expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, LLMEvent, Message } from "../../src/effect.js"
-import { Google } from "../../src/providers.js"
+import { google } from "../../src/providers.js"
 import { LLMClient, RequestExecutor } from "../../src/route.js"
 import { recordedTests } from "../recorded-test.js"
 import { weatherTool } from "../recorded-scenarios.js"
 
-const model = Google.configure({ apiKey: process.env.GEMINI_API_KEY ?? "fixture" }).interactions("gemini-3.8-flash")
+const model = google.configure({ apiKey: process.env.GEMINI_API_KEY ?? "fixture" }).interactions("gemini-3.8-flash")
 const recorded = recordedTests({
   prefix: "google-interactions",
   provider: "google",

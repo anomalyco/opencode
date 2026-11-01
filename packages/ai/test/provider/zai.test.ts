@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
 import { ai, Auth, LLMClient, Message, ReasoningPart, ToolDefinition } from "../../src/effect.js"
-import { ZAI, ZAICodingPlan } from "../../src/providers.js"
+import { zai, zaiCodingPlan } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { Endpoint } from "../../src/route/endpoint.js"
 import { it } from "../lib/effect.js"
@@ -17,13 +17,13 @@ const tool = ToolDefinition.make({
 
 it.effect("ZAI owns standard and Coding Plan endpoints and bearer credentials", () =>
   Effect.gen(function* () {
-    expect(ZAI.provider.model).toBe(ZAI.provider.chat)
-    expect(ZAICodingPlan.provider.model).toBe(ZAICodingPlan.provider.chat)
+    expect(zai("fixture").route.id).toBe(zai.chat("fixture").route.id)
+    expect(zaiCodingPlan("fixture").route.id).toBe(zaiCodingPlan.chat("fixture").route.id)
     for (const item of [
-      { model: ZAI.chat("glm-5.3"), path: "/paas/v4/chat/completions", provider: "zai" },
-      { model: ZAICodingPlan.chat("glm-5.3"), path: "/coding/paas/v4/chat/completions", provider: "zai-coding-plan" },
-      { model: ZAICodingPlan.messages("glm-5.3"), path: "/anthropic/v1/messages", provider: "zai-coding-plan" },
-      { model: ZAICodingPlan.responses("glm-5.3"), path: "/v1/responses", provider: "zai-coding-plan" },
+      { model: zai.chat("glm-5.3"), path: "/paas/v4/chat/completions", provider: "zai" },
+      { model: zaiCodingPlan.chat("glm-5.3"), path: "/coding/paas/v4/chat/completions", provider: "zai-coding-plan" },
+      { model: zaiCodingPlan.messages("glm-5.3"), path: "/anthropic/v1/messages", provider: "zai-coding-plan" },
+      { model: zaiCodingPlan.responses("glm-5.3"), path: "/v1/responses", provider: "zai-coding-plan" },
     ]) {
       const request = ai.request({ model: item.model, prompt: "Hello" })
       const compiled = yield* compileRequest(request)
@@ -49,7 +49,7 @@ it.effect("ZAI owns standard and Coding Plan endpoints and bearer credentials", 
 
 it.effect("ZAI Chat retains native thinking fields and scopes tool streaming to supported models", () =>
   Effect.gen(function* () {
-    for (const configure of [ZAI.configure, ZAICodingPlan.configure]) {
+    for (const configure of [zai.configure, zaiCodingPlan.configure]) {
       const provider = configure({
         baseURL: "https://gateway.example/custom",
         auth: Auth.header("x-test-key", "fixture"),
@@ -133,7 +133,7 @@ it.effect("ZAI Chat retains native thinking fields and scopes tool streaming to 
 
 it.effect("ZAI tool streaming defaults require tools and preserve explicit overrides", () =>
   Effect.gen(function* () {
-    for (const configure of [ZAI.configure, ZAICodingPlan.configure]) {
+    for (const configure of [zai.configure, zaiCodingPlan.configure]) {
       const provider = configure({ apiKey: "fixture" })
       for (const item of [
         { id: "glm-6.1", tools: [], toolStream: undefined, expected: undefined },
@@ -160,12 +160,12 @@ it.effect("ZAI lowers effort using the selected native API without inventing thi
     for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh", "max", "future-effort"]) {
       const standard = yield* compileRequest(
         ai.request({
-          model: ZAI.configure({ apiKey: "fixture" }).chat("glm-5.3"),
+          model: zai.configure({ apiKey: "fixture" }).chat("glm-5.3"),
           prompt: "Hello",
           providerOptions: { reasoningEffort: effort },
         }),
       )
-      const coding = ZAICodingPlan.configure({ apiKey: "fixture" })
+      const coding = zaiCodingPlan.configure({ apiKey: "fixture" })
       const chat = yield* compileRequest(
         ai.request({ model: coding.chat("glm-5.3"), prompt: "Hello", providerOptions: { reasoningEffort: effort } }),
       )
@@ -188,7 +188,7 @@ it.effect("ZAI lowers effort using the selected native API without inventing thi
     for (const type of ["enabled", "adaptive", "disabled"]) {
       const result = yield* compileRequest(
         ai.request({
-          model: ZAICodingPlan.configure({ apiKey: "fixture", providerOptions: { thinking: { type } } }).messages(
+          model: zaiCodingPlan.configure({ apiKey: "fixture", providerOptions: { thinking: { type } } }).messages(
             "glm-5.3",
           ),
           prompt: "Hello",
@@ -203,7 +203,7 @@ it.effect("ZAI Coding Chat sends PDFs from tool results as file parts", () =>
   Effect.gen(function* () {
     const prepared = yield* compileRequest(
       ai.request({
-        model: ZAICodingPlan.configure({ apiKey: "fixture" }).chat("glm-5.3-flash"),
+        model: zaiCodingPlan.configure({ apiKey: "fixture" }).chat("glm-5.3-flash"),
         messages: [
           Message.user("Read the report."),
           Message.assistant({ type: "tool-call", id: "call_pdf", name: "read", input: {} }),
@@ -233,7 +233,8 @@ it.effect("ZAI Coding Chat sends PDFs from tool results as file parts", () =>
 
 it.effect("ZAI rejects invalid typed thinking options before execution", () =>
   Effect.gen(function* () {
-    const model = ZAI.configure({ apiKey: "fixture" })
+    const model = zai
+      .configure({ apiKey: "fixture" })
       .chat("glm-5.3")
       .route.with({ providerOptions: { thinking: { clear_thinking: "false" } } })
       .model({ id: "glm-5.3" })
@@ -247,7 +248,7 @@ it.effect("ZAI preserves unsigned and signed Messages reasoning", () =>
   Effect.gen(function* () {
     const result = yield* compileRequest(
       ai.request({
-        model: ZAICodingPlan.configure({ apiKey: "fixture" }).messages("glm-5.3"),
+        model: zaiCodingPlan.configure({ apiKey: "fixture" }).messages("glm-5.3"),
         messages: [
           Message.user("Hello"),
           Message.assistant([
@@ -278,11 +279,13 @@ it.effect("ZAI preserves unsigned and signed Messages reasoning", () =>
 it.effect("ZAI applies configured options, request options, and final body overlays in order", () =>
   LLMClient.generate(
     ai.request({
-      model: ZAI.configure({
-        apiKey: "fixture",
-        baseURL: "https://gateway.example/custom",
-        providerOptions: { thinking: { type: "enabled", clear_thinking: true }, reasoningEffort: "high" },
-      }).chat("glm-5.3"),
+      model: zai
+        .configure({
+          apiKey: "fixture",
+          baseURL: "https://gateway.example/custom",
+          providerOptions: { thinking: { type: "enabled", clear_thinking: true }, reasoningEffort: "high" },
+        })
+        .chat("glm-5.3"),
       prompt: "Hello",
       providerOptions: { thinking: { clear_thinking: false }, reasoningEffort: "low" },
       http: { body: { reasoning_effort: "max", extension: true } },
@@ -310,7 +313,7 @@ it.effect("ZAI applies configured options, request options, and final body overl
 
 it.effect("ZAI Coding Responses uses HTTP with a supplied WebSocket executor", () =>
   LLMClient.generate(
-    ai.request({ model: ZAICodingPlan.configure({ apiKey: "fixture" }).responses("glm-5.3"), prompt: "Hello" }),
+    ai.request({ model: zaiCodingPlan.configure({ apiKey: "fixture" }).responses("glm-5.3"), prompt: "Hello" }),
     {
       webSocket: { execute: () => Effect.die("Unexpected WebSocket") },
     },
@@ -331,11 +334,13 @@ it.effect("ZAI Coding Responses uses HTTP with a supplied WebSocket executor", (
 it.effect("ZAI Coding Messages serializes enabled thinking without a token budget", () =>
   LLMClient.generate(
     ai.request({
-      model: ZAICodingPlan.configure({
-        apiKey: "fixture",
-        baseURL: "https://gateway.example/messages/v1",
-        providerOptions: { thinking: { type: "enabled" }, effort: "max" },
-      }).messages("glm-5.3"),
+      model: zaiCodingPlan
+        .configure({
+          apiKey: "fixture",
+          baseURL: "https://gateway.example/messages/v1",
+          providerOptions: { thinking: { type: "enabled" }, effort: "max" },
+        })
+        .messages("glm-5.3"),
       prompt: "Hello",
       providerOptions: { effort: "high" },
     }),

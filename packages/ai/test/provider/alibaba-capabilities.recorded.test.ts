@@ -1,12 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, Media, Message, ToolDefinition } from "../../src/effect.js"
-import { Alibaba } from "../../src/providers.js"
+import { alibaba } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
 
-const alibaba = Alibaba.configure({ region: "ap-southeast-1", apiKey: process.env.ALIBABA_API_KEY ?? "fixture" })
+const alibabaProvider = alibaba.configure({
+  region: "ap-southeast-1",
+  apiKey: process.env.ALIBABA_API_KEY ?? "fixture",
+})
 const record = (api: "chat" | "messages" | "responses") =>
   recordedTests({
     prefix: `alibaba-${api}`,
@@ -26,7 +29,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
         () =>
           Effect.gen(function* () {
             const request = ai.request({
-              model: alibaba[api]("qwen3.7-plus"),
+              model: alibabaProvider[api]("qwen3.7-plus"),
               providerOptions:
                 api === "messages"
                   ? { thinking: { type: enabled ? "enabled" : "disabled", ...(enabled ? { budgetTokens: 1024 } : {}) } }
@@ -60,7 +63,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
           )
           const response = yield* LLMClient.generate(
             ai.request({
-              model: alibaba[api]("qwen3.8-flash"),
+              model: alibabaProvider[api]("qwen3.8-flash"),
               providerOptions: api === "messages" ? { thinking: { type: "disabled" } } : { enableThinking: false },
               messages: [
                 Message.user([
@@ -83,7 +86,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
         Effect.gen(function* () {
           const response = yield* LLMClient.generate(
             ai.request({
-              model: alibaba[api]("qwen3.8-max"),
+              model: alibabaProvider[api]("qwen3.8-max"),
               prompt: "Find the current weather in Paris.",
               providerOptions: api === "messages" ? { thinking: { type: "disabled" } } : { reasoningEffort: "none" },
               tools: [
@@ -117,7 +120,7 @@ record("chat").effect.with(
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: alibaba.chat("qwen3.8-max"),
+          model: alibabaProvider.chat("qwen3.8-max"),
           prompt: 'Return a JSON object with one key "city" set to the capital city of France.',
           providerOptions: { reasoningEffort: "none", responseFormat: { type: "json_object" } },
           generation: { maxTokens: 1024 },
@@ -136,7 +139,7 @@ record("messages").effect.with(
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: alibaba.messages("qwen3.8-max"),
+          model: alibabaProvider.messages("qwen3.8-max"),
           prompt: 'Return a JSON object with one key "city" set to the capital city of France.',
           providerOptions: {
             thinking: { type: "disabled" },
@@ -169,7 +172,7 @@ responses.effect.with(
     Effect.gen(function* () {
       const first = yield* LLMClient.generate(
         ai.request({
-          model: alibaba.responses("qwen3.8-max"),
+          model: alibabaProvider.responses("qwen3.8-max"),
           prompt: "Remember the password word apricot. Reply OK.",
           providerOptions: { store: true, reasoningEffort: "none" },
           generation: { maxTokens: 1024 },
@@ -180,7 +183,7 @@ responses.effect.with(
       if (typeof id !== "string") throw new Error("Missing Alibaba response ID")
       const second = yield* LLMClient.generate(
         ai.request({
-          model: alibaba.responses("qwen3.8-max"),
+          model: alibabaProvider.responses("qwen3.8-max"),
           prompt: "What word did I ask you to remember? Reply with only the word.",
           providerOptions: { previousResponseId: id, store: true, reasoningEffort: "none" },
           generation: { maxTokens: 1024 },
@@ -198,10 +201,10 @@ responses.effect.with(
   () =>
     Effect.gen(function* () {
       const request = ai.request({
-        model: alibaba.responses("qwen3.8-max"),
+        model: alibabaProvider.responses("qwen3.8-max"),
         prompt:
           "Use web search to find Alibaba Cloud Model Studio's official documentation, then use web_extractor to read the page. Give a brief summary with the source URL.",
-        tools: [Alibaba.webSearch(), Alibaba.webExtractor()],
+        tools: [alibaba.webSearch(), alibaba.webExtractor()],
         providerOptions: { reasoningEffort: "low", store: false },
         generation: { maxTokens: 4096 },
       })
@@ -235,10 +238,10 @@ responses.effect.with(
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: alibaba.responses("qwen3.8-max"),
+          model: alibabaProvider.responses("qwen3.8-max"),
           prompt:
             "Use the code interpreter to compute the SHA-256 hash of the UTF-8 string hello (no newline). Reply with only the hash.",
-          tools: [Alibaba.codeInterpreter()],
+          tools: [alibaba.codeInterpreter()],
           providerOptions: { reasoningEffort: "low" },
           generation: { maxTokens: 4096 },
         }),

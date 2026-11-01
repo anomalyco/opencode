@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, LLMEvent, Message } from "../../src/effect.js"
-import { OpenAI } from "../../src/providers.js"
+import { openai } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 
-const openai = OpenAI.configure({
+const openaiModel = openai.configure({
   apiKey: process.env.OPENAI_API_KEY ?? "fixture",
 })
 
@@ -20,7 +20,7 @@ describe("OpenAI Responses image generation recorded", () => {
     Effect.gen(function* () {
       const initial = Message.user("Generate a simple flat black triangle centered on a plain white background.")
       const tools = [
-        OpenAI.imageGeneration({
+        openai.imageGeneration({
           action: "auto",
           quality: "low",
           size: "1024x1024",
@@ -31,7 +31,7 @@ describe("OpenAI Responses image generation recorded", () => {
       ]
       const response = yield* ai.generate(
         ai.request({
-          model: openai.responses("gpt-5-mini"),
+          model: openaiModel.responses("gpt-5-mini"),
           messages: [initial],
           tools,
           toolChoice: "image_generation",
@@ -51,7 +51,7 @@ describe("OpenAI Responses image generation recorded", () => {
 
       const edited = yield* ai.generate(
         ai.request({
-          model: openai.responses("gpt-5-mini"),
+          model: openaiModel.responses("gpt-5-mini"),
           messages: [initial, response.message, Message.user("Now make the triangle blue.")],
           tools,
           toolChoice: "image_generation",

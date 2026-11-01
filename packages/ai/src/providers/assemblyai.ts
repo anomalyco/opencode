@@ -6,7 +6,7 @@ import { AssemblyAITranscription } from "../protocols/assemblyai-transcription.j
 
 export type { AssemblyAITranscriptionOptions } from "../protocols/assemblyai-transcription.js"
 
-export const id = ProviderID.make("assemblyai")
+const id = ProviderID.make("assemblyai")
 
 export type Config = ProviderAuthOption<"optional"> & {
   /** `https://api.eu.assemblyai.com` for the EU region. */
@@ -19,7 +19,7 @@ export type Config = ProviderAuthOption<"optional"> & {
 const auth = (options: ProviderAuthOption<"optional">) =>
   AuthOptions.apiKey(options, "ASSEMBLYAI_API_KEY", Auth.header("authorization"))
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const media = MediaRoute.deployment(input, auth(input))
   const transcription = (modelID: string | ModelID) => AssemblyAITranscription.model({ ...media, id: modelID })
   return {
@@ -29,5 +29,4 @@ export const configure = (input: Config = {}) => {
   }
 }
 
-export const provider = configure()
-export const transcription = provider.transcription
+export const assemblyai = configure()

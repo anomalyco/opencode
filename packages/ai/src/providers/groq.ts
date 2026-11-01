@@ -9,7 +9,7 @@ import { Protocol } from "../route/protocol.js"
 import { ProviderID, type ModelID, type LLMRequest } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
-export const id = ProviderID.make("groq")
+const id = ProviderID.make("groq")
 const baseURL = "https://api.groq.com/openai/v1"
 
 export type ProviderOptions = Pick<OpenAIProviderOptionsInput, "reasoningEffort"> & {
@@ -71,16 +71,15 @@ export const route = Route.make({
   framing: OpenAIChat.framing,
 })
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const configured = route.with({
     ...defaults,
     endpoint: { baseURL: endpoint ?? baseURL },
     auth: AuthOptions.bearer(input, "GROQ_API_KEY"),
   })
-  return {
-    id,
-    model: (modelID: string | ModelID) =>
+  return Object.assign(
+    (modelID: string | ModelID) =>
       configured.model<ProviderOptions>({
         id: modelID,
         compatibility: {
@@ -90,11 +89,11 @@ export const configure = (input: Config = {}) => {
           supportsStrictMode: false,
         },
       }),
-    configure,
-  }
+    { id, configure },
+  )
 }
 
-export const provider = configure()
+export const groq = configure()
 
 export const model: ProviderPackage.Model<Settings, ProviderOptions> = (
   modelID,
@@ -106,6 +105,4 @@ export const model: ProviderPackage.Model<Settings, ProviderOptions> = (
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-  }).model(modelID)
-
-export * as Groq from "./groq.js"
+  })(modelID)

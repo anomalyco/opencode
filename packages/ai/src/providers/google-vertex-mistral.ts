@@ -9,7 +9,7 @@ import { HttpTransport } from "../route/transport/index.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
-export const id = ProviderID.make("google-vertex")
+const id = ProviderID.make("google-vertex")
 
 export type Config = RouteDefaultsInput &
   GoogleVertexShared.OAuthOptions & {
@@ -76,19 +76,18 @@ const configuredRoute = (input: Config) => {
   })
 }
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
-  return {
+  return Object.assign((modelID: string | ModelID) => route.model<MistralChat.ProviderOptionsInput>({ id: modelID }), {
     id,
-    model: (modelID: string | ModelID) => route.model<MistralChat.ProviderOptionsInput>({ id: modelID }),
     configure,
-  }
+  })
 }
 
-export const provider = {
-  id,
-  configure,
-}
+export const googleVertexMistral = Object.assign(
+  (modelID: string | ModelID, input: Config = {}) => configure(input)(modelID),
+  { id, configure },
+)
 
 export const model: ProviderPackage.Model<Settings, MistralChat.ProviderOptionsInput> = (
   modelID,
@@ -104,5 +103,5 @@ export const model: ProviderPackage.Model<Settings, MistralChat.ProviderOptionsI
     location,
     project,
     providerOptions,
-  }).model(modelID)
+  })(modelID)
 }

@@ -7,7 +7,7 @@ import {
   type ChannelObservation,
   type WebSocketChannelExchange,
 } from "@opencode/ai/route"
-import { configure } from "@opencode/ai/providers/openai"
+import { openai } from "@opencode/ai/providers/openai"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { WebSocketConstructor } from "@opencode/core/effect/websocket-constructor"
 import { Session } from "@opencode/schema/session"
@@ -108,7 +108,7 @@ describe("SessionModelTransport local WebSocket server", () => {
         Effect.gen(function* () {
           const transport = yield* SessionModelTransport.Service
           const executor = transport.bind(sessionID)
-          const model = configure({
+          const model = openai.configure({
             baseURL: server.url.replace(/^ws/, "http").replace(/responses$/, ""),
             apiKey: "local",
           }).responses("gpt-5.2")
@@ -188,7 +188,7 @@ describe("SessionModelTransport local WebSocket server", () => {
         Effect.gen(function* () {
           const transport = yield* SessionModelTransport.Service
           const executor = transport.bind(sessionID)
-          const model = configure({
+          const model = openai.configure({
             baseURL: server.url.replace(/^ws/, "http").replace(/responses$/, ""),
             apiKey: "local",
           }).responses("gpt-5.2")

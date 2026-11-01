@@ -7,8 +7,9 @@ import { AwsV4Signer } from "aws4fetch"
 import { Config, ConfigProvider, Effect, FileSystem, PlatformError, Redacted } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http"
 import * as ProviderShared from "../src/protocols/shared"
-import { CloudflareAIGateway } from "../src/providers/cloudflare-ai-gateway.js"
-import { CloudflareWorkersAI } from "../src/providers/cloudflare-workers-ai.js"
+
+const cloudflareAIGatewayModule = await import("../src/providers/cloudflare-ai-gateway.js")
+const cloudflareWorkersAIModule = await import("../src/providers/cloudflare-workers-ai.js")
 
 type Provider = {
   readonly id: string
@@ -179,11 +180,11 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     ],
     validate: (env) =>
       validateChat({
-        url: `${CloudflareAIGateway.baseURL({
+        url: `${cloudflareAIGatewayModule.baseURL({
           accountId: env.CLOUDFLARE_ACCOUNT_ID,
           gatewayId: env.CLOUDFLARE_GATEWAY_ID || undefined,
         })}/chat/completions`,
-        token: Redacted.make(envValue(env, CloudflareAIGateway.authEnvVars)),
+        token: Redacted.make(envValue(env, cloudflareAIGatewayModule.authEnvVars)),
         tokenHeader: "cf-aig-authorization",
         model: "workers-ai/@cf/meta/llama-3.1-8b-instruct",
       }),
@@ -199,8 +200,8 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     ],
     validate: (env) =>
       validateChat({
-        url: `${CloudflareWorkersAI.baseURL({ accountId: env.CLOUDFLARE_ACCOUNT_ID })}/chat/completions`,
-        token: Redacted.make(envValue(env, CloudflareWorkersAI.authEnvVars)),
+        url: `${cloudflareWorkersAIModule.baseURL({ accountId: env.CLOUDFLARE_ACCOUNT_ID })}/chat/completions`,
+        token: Redacted.make(envValue(env, cloudflareWorkersAIModule.authEnvVars)),
         model: "@cf/meta/llama-3.1-8b-instruct",
       }),
   },

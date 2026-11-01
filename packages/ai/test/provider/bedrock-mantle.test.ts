@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, LLMEvent, Message, ToolDefinition } from "../../src/effect.js"
-import { AmazonBedrockMantle } from "../../src/providers.js"
+import { amazonBedrockMantle } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { compileRequest, LLMClient } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -20,15 +20,13 @@ const credentials = {
 describe("Amazon Bedrock Mantle provider", () => {
   it.effect("uses Responses by default and exposes Chat and Messages explicitly", () =>
     Effect.gen(function* () {
-      const provider = AmazonBedrockMantle.configure({ credentials })
-      expect(provider.model("openai.gpt-oss-120b").route.transport).toBe(OpenResponses.httpTransport)
+      const provider = amazonBedrockMantle.configure({ credentials })
+      expect(provider("openai.gpt-oss-120b").route.transport).toBe(OpenResponses.httpTransport)
       const chat = yield* compileRequest(ai.request({ model: provider.chat("openai.gpt-oss-120b"), prompt: "Hi" }))
       const messages = yield* compileRequest(
         ai.request({ model: provider.messages("anthropic.claude-opus-4-8"), prompt: "Hi", cache: "none" }),
       )
-      const responses = yield* compileRequest(
-        ai.request({ model: provider.model("openai.gpt-oss-120b"), prompt: "Hi" }),
-      )
+      const responses = yield* compileRequest(ai.request({ model: provider("openai.gpt-oss-120b"), prompt: "Hi" }))
 
       expect(chat).toMatchObject({
         route: "bedrock-mantle-chat",
@@ -45,7 +43,7 @@ describe("Amazon Bedrock Mantle provider", () => {
         protocol: "open-responses",
         body: { model: "openai.gpt-oss-120b", store: false },
       })
-      expect(provider.model("openai.gpt-oss-120b").route.providerMetadataKey).toBe("mantle")
+      expect(provider("openai.gpt-oss-120b").route.providerMetadataKey).toBe("mantle")
       expect(provider.chat("openai.gpt-oss-120b").route.providerMetadataKey).toBe("mantle")
       expect(provider.messages("anthropic.claude-opus-4-8").route.providerMetadataKey).toBe("mantle")
     }),
@@ -54,20 +52,27 @@ describe("Amazon Bedrock Mantle provider", () => {
   it.effect("preserves configured top-p generation defaults for Chat, Messages, and Responses", () =>
     Effect.gen(function* () {
       const settings = { apiKey: "test-key", topP: 0.8 }
+      const [chatEntry, messagesEntry, responsesEntry] = yield* Effect.promise(() =>
+        Promise.all([
+          import("../../src/providers/amazon-bedrock/mantle/chat.js"),
+          import("../../src/providers/amazon-bedrock/mantle/messages.js"),
+          import("../../src/providers/amazon-bedrock/mantle/responses.js"),
+        ]),
+      )
       const chat = yield* compileRequest(
         ai.request({
-          model: AmazonBedrockMantle.chatModel("openai.gpt-oss-safeguard-20b", settings),
+          model: chatEntry.model("openai.gpt-oss-safeguard-20b", settings),
           prompt: "Hi",
         }),
       )
       const messages = yield* compileRequest(
         ai.request({
-          model: AmazonBedrockMantle.messagesModel("anthropic.claude-opus-4-8", settings),
+          model: messagesEntry.model("anthropic.claude-opus-4-8", settings),
           prompt: "Hi",
         }),
       )
       const responses = yield* compileRequest(
-        ai.request({ model: AmazonBedrockMantle.responsesModel("openai.gpt-oss-120b", settings), prompt: "Hi" }),
+        ai.request({ model: responsesEntry.model("openai.gpt-oss-120b", settings), prompt: "Hi" }),
       )
 
       expect(chat.body.top_p).toBe(0.8)
@@ -79,7 +84,7 @@ describe("Amazon Bedrock Mantle provider", () => {
   it.effect("uses the Mantle endpoint and signing service across Responses and Messages", () =>
     Effect.gen(function* () {
       const seen: Array<{ readonly url: string; readonly authorization: string | undefined }> = []
-      const configured = AmazonBedrockMantle.configure({ credentials, region: "us-west-1" })
+      const configured = amazonBedrockMantle.configure({ credentials, region: "us-west-1" })
       for (const selected of [
         configured.responses("openai.gpt-oss-120b"),
         configured.messages("anthropic.claude-opus-4-8"),
@@ -108,7 +113,7 @@ describe("Amazon Bedrock Mantle provider", () => {
 
   it.effect("applies inline cache breakpoints on Mantle Messages", () =>
     Effect.gen(function* () {
-      const model = AmazonBedrockMantle.configure({ apiKey: "test-key" }).messages("anthropic.claude-opus-4-8")
+      const model = amazonBedrockMantle.configure({ apiKey: "test-key" }).messages("anthropic.claude-opus-4-8")
       const prepared = yield* compileRequest(
         ai.request({
           model,
@@ -130,7 +135,7 @@ describe("Amazon Bedrock Mantle provider", () => {
   it.effect("signs with the Mantle service using default-chain credentials", () =>
     Effect.gen(function* () {
       const seen: Array<string | undefined> = []
-      const model = AmazonBedrockMantle.configure({ region: "us-west-1" }).responses("openai.gpt-oss-120b")
+      const model = amazonBedrockMantle.configure({ region: "us-west-1" }).responses("openai.gpt-oss-120b")
       yield* LLMClient.generate(ai.request({ model, prompt: "Hi" })).pipe(
         Effect.provide(
           dynamicResponse((input) =>
@@ -160,10 +165,12 @@ describe("Amazon Bedrock Mantle provider", () => {
   it.effect("supports bearer authentication and custom base URLs", () =>
     Effect.gen(function* () {
       const seen: Array<{ readonly url: string; readonly authorization: string | undefined }> = []
-      const model = AmazonBedrockMantle.configure({
-        apiKey: "test-key",
-        baseURL: "https://mantle.test/v1",
-      }).chat("openai.gpt-oss-safeguard-20b")
+      const model = amazonBedrockMantle
+        .configure({
+          apiKey: "test-key",
+          baseURL: "https://mantle.test/v1",
+        })
+        .chat("openai.gpt-oss-safeguard-20b")
       yield* LLMClient.generate(ai.request({ model, prompt: "Hi" })).pipe(
         Effect.provide(
           dynamicResponse((input) =>
@@ -184,7 +191,7 @@ describe("Amazon Bedrock Mantle provider", () => {
 
   it.effect("replays reasoning with Mantle's message-prefixed item ids", () =>
     Effect.gen(function* () {
-      const model = AmazonBedrockMantle.configure({ apiKey: "test-key" }).responses("openai.gpt-oss-120b")
+      const model = amazonBedrockMantle.configure({ apiKey: "test-key" }).responses("openai.gpt-oss-120b")
       const item = { type: "reasoning", id: "msg_95d4d0af4350432a", encrypted_content: "mantle-state" }
       const response = yield* LLMClient.generate(ai.request({ model, prompt: "Think." })).pipe(
         Effect.provide(
@@ -232,10 +239,12 @@ describe("Amazon Bedrock Mantle recorded", () => {
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: AmazonBedrockMantle.configure({
-            apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
-            region: "us-east-1",
-          }).responses("openai.gpt-oss-120b"),
+          model: amazonBedrockMantle
+            .configure({
+              apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
+              region: "us-east-1",
+            })
+            .responses("openai.gpt-oss-120b"),
           prompt: "Reply with exactly: hello",
           generation: { maxTokens: 256, temperature: 0 },
         }),
@@ -255,10 +264,12 @@ const recordedMessages = recordedTests({
 })
 
 const mantleMessages = (modelID: string) =>
-  AmazonBedrockMantle.configure({
-    apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
-    region: "us-east-1",
-  }).messages(modelID)
+  amazonBedrockMantle
+    .configure({
+      apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
+      region: "us-east-1",
+    })
+    .messages(modelID)
 
 const weatherTool = ToolDefinition.make({
   name: "get_weather",

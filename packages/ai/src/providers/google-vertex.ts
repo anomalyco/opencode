@@ -15,6 +15,7 @@ import {
   type ProviderOptions,
 } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
+import { config } from "./google-vertex-settings.js"
 
 export interface GeminiOptionsInput extends Gemini.OptionsInput {
   readonly labels?: Readonly<Record<string, string>>
@@ -22,7 +23,7 @@ export interface GeminiOptionsInput extends Gemini.OptionsInput {
 
 export type GeminiProviderOptionsInput = GeminiOptionsInput
 
-export const id = ProviderID.make("google-vertex")
+const id = ProviderID.make("google-vertex")
 
 export type Config = RouteDefaultsInput &
   GoogleVertexShared.ApiKeyOptions & {
@@ -115,47 +116,24 @@ const connection = (input: Config, modelID: string | ModelID) => {
   }
 }
 
-export const configure = (input: Config = {}) => {
-  return {
-    id,
-    model: (modelID: string | ModelID) =>
-      configuredRoute(input, modelID).model<GeminiProviderOptionsInput>({ id: modelID }),
-    image: (modelID: string | ModelID, providerOptions?: ProviderOptions) => {
-      const target = connection(input, modelID)
-      return GoogleImages.model({
-        ...MediaRoute.deployment({ ...input, baseURL: target.endpoint.baseURL }, target.auth),
-        id: modelID,
-        providerOptions,
-      })
+const configure = (input: Config = {}) => {
+  return Object.assign(
+    (modelID: string | ModelID) => configuredRoute(input, modelID).model<GeminiProviderOptionsInput>({ id: modelID }),
+    {
+      id,
+      image: (modelID: string | ModelID, providerOptions?: ProviderOptions) => {
+        const target = connection(input, modelID)
+        return GoogleImages.model({
+          ...MediaRoute.deployment({ ...input, baseURL: target.endpoint.baseURL }, target.auth),
+          id: modelID,
+          providerOptions,
+        })
+      },
+      configure,
     },
-    configure,
-  }
+  )
 }
 
-export const provider = {
-  id,
-  configure,
-}
+export const googleVertex = configure()
 export const model: ProviderPackage.Model<Settings, GeminiProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
-export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
-  return configure(input).image(modelID, input.providerOptions)
-}
-
-function config({ accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions }: Settings = {}) {
-  if (apiKey !== undefined && accessToken !== undefined)
-    throw new ProviderConfigurationError({
-      provider: id,
-      message: "Google Vertex apiKey cannot be combined with accessToken or auth",
-    })
-  return {
-    ...(apiKey === undefined ? { accessToken: accessToken } : { apiKey: apiKey }),
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    location,
-    project,
-    providerOptions,
-  }
-}
+  configure(config(settings))(modelID)

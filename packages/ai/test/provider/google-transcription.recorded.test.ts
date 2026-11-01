@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { Transcription, TranscriptionEvent } from "../../src/experimental.js"
-import { Google } from "../../src/providers.js"
+import { google } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TRANSCRIPT, audio, audioRecording, dialog } from "./transcription-recording.js"
 
-const model = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" }).transcription(
-  "gemini-3.5-transcribe",
-)
+const model = google
+  .configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture" })
+  .transcription("gemini-3.5-transcribe")
 
 const recorded = recordedTests({
   prefix: "google-transcription",

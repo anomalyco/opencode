@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { Transcription, TranscriptionEvent } from "../../src/experimental.js"
-import { OpenAI } from "../../src/providers.js"
+import { openai } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TRANSCRIPT, audio, audioRecording } from "./transcription-recording.js"
 
-const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
+const openaiProvider = openai.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
 
 const recorded = recordedTests({
   prefix: "openai-transcription",
@@ -19,7 +19,7 @@ describe("OpenAI Transcription recorded", () => {
   recorded.effect("transcribes with a language hint", () =>
     Effect.gen(function* () {
       const response = yield* Transcription.generate({
-        model: openai.transcription("gpt-transcribe"),
+        model: openaiProvider.transcription("gpt-transcribe"),
         audio: yield* audio,
         language: "en",
       })
@@ -34,7 +34,7 @@ describe("OpenAI Transcription recorded", () => {
     Effect.gen(function* () {
       const events = Array.from(
         yield* Stream.runCollect(
-          Transcription.stream({ model: openai.transcription("gpt-4o-mini-transcribe"), audio: yield* audio }),
+          Transcription.stream({ model: openaiProvider.transcription("gpt-4o-mini-transcribe"), audio: yield* audio }),
         ),
       )
       const finish = events.at(-1)
@@ -56,7 +56,7 @@ describe("OpenAI Transcription recorded", () => {
   recorded.effect("diarizes speakers into segments", () =>
     Effect.gen(function* () {
       const response = yield* Transcription.generate({
-        model: openai.transcription("gpt-4o-transcribe-diarize"),
+        model: openaiProvider.transcription("gpt-4o-transcribe-diarize"),
         audio: yield* audio,
         diarize: true,
       })
@@ -77,7 +77,7 @@ describe("OpenAI Transcription recorded", () => {
   recorded.effect("returns whisper word timestamps", () =>
     Effect.gen(function* () {
       const response = yield* Transcription.generate({
-        model: openai.transcription("whisper-1"),
+        model: openaiProvider.transcription("whisper-1"),
         audio: yield* audio,
         timestamps: "word",
       })

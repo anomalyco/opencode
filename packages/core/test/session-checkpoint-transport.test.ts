@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { ai, Message } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
-import { configure } from "@opencode/ai/providers/openai"
+import { openai } from "@opencode/ai/providers/openai"
 import { SessionModelTransport } from "../src/session/model-transport"
 import { WebSocketConstructor } from "../src/effect/websocket-constructor"
 import { Session } from "@opencode/schema/session"
@@ -79,7 +79,7 @@ const fixture = (mode: "success" | "invalid" | "fallback") =>
       opens: () => server.state.opens,
       disconnect: () => disconnect?.(),
       request: ai.request({
-        model: configure({
+        model: openai.configure({
           apiKey: "fixture",
           baseURL: server.url.replace(/^ws/, "http").replace(/responses$/, ""),
           headers: { "chatgpt-account-id": "account", "x-codex-beta-features": "remote_compaction_v2" },

@@ -7,8 +7,9 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { config } from "./venice-settings.js"
 
-export const id = ProviderID.make("venice")
+const id = ProviderID.make("venice")
 export type ChatOptionsInput = VeniceChat.OptionsInput
 export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
@@ -22,6 +23,8 @@ export type Settings<Options = ChatOptionsInput> = ProviderPackage.Settings &
     readonly baseURL?: string
     readonly queryParams?: Readonly<Record<string, string>>
   }
+
+export type ResponsesSettings = Settings<OpenResponsesProviderOptionsInput>
 
 const baseURL = "https://api.venice.ai/api/v1"
 
@@ -44,7 +47,7 @@ const responsesRoute = Route.make({
 })
 export const routes = [route, responsesRoute]
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, queryParams, ...rest } = input
   const options = {
     ...rest,
@@ -55,35 +58,9 @@ export const configure = (input: Config = {}) => {
     route.with(options).model<ChatOptionsInput>({ id: modelID, compatibility: VeniceChat.compatibility })
   const responses = (modelID: string | ModelID) =>
     responsesRoute.with(options).model<OpenResponsesProviderOptionsInput>({ id: modelID })
-  return { id, model: chat, chat, responses, configure }
+  return Object.assign(chat, { id, chat, responses, configure })
 }
 
-export const provider = configure()
-export const chat = provider.chat
-export const responses = provider.responses
+export const venice = configure()
 export const model: ProviderPackage.Model<Settings, ChatOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
-export const responsesModel: ProviderPackage.Model<
-  Settings<OpenResponsesProviderOptionsInput>,
-  OpenResponsesProviderOptionsInput
-> = (modelID, settings) => configure(config(settings)).responses(modelID)
-
-function config({
-  apiKey,
-  baseURL,
-  queryParams,
-  body,
-  headers,
-  ...providerOptions
-}: Settings<Config["providerOptions"]> = {}) {
-  return {
-    apiKey,
-    baseURL,
-    queryParams,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
-}
-
-export * as Venice from "./venice.js"
+  configure(config(settings))(modelID)

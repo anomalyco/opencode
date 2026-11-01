@@ -1,13 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Speech, SpeechEvent } from "../../src/experimental.js"
-import { ElevenLabs } from "../../src/providers.js"
+import { elevenlabs } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { TEXT, collectSpeech } from "./speech-recording.js"
 
-const model = ElevenLabs.configure({
-  apiKey: process.env.ELEVENLABS_API_KEY ?? "fixture",
-}).speech("eleven_flash_v2_5")
+const model = elevenlabs
+  .configure({
+    apiKey: process.env.ELEVENLABS_API_KEY ?? "fixture",
+  })
+  .speech("eleven_flash_v2_5")
 
 // "George", an ElevenLabs premade voice.
 const voice = "JBFqnCBsd6RMkjVDRZzb"

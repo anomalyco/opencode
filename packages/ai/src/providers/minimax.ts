@@ -12,8 +12,9 @@ import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
 import { Protocol } from "../route/protocol.js"
 import { ProviderID, type LLMRequest, type ModelID, type ProviderOptions } from "../schema/index.js"
+import { config } from "./minimax-settings.js"
 
-export const id = ProviderID.make("minimax")
+const id = ProviderID.make("minimax")
 
 export type MessagesOptionsInput = {
   /** M3 defaults to disabled; M2.x always thinks. */
@@ -47,6 +48,11 @@ export type Settings<Options = MessagesOptionsInput> = ProviderPackage.Settings 
     readonly apiKey?: string | false
     readonly baseURL?: string
   }
+
+export type ChatSettings = Settings<ChatOptionsInput>
+export type ResponsesSettings = Settings<ResponsesOptionsInput>
+
+export type ImageSettings = Settings<MiniMaxImageOptions>
 
 export type { MiniMaxImageOptions }
 
@@ -108,7 +114,7 @@ const responsesRoute = Route.make({
 
 export const routes = [messagesRoute, chatRoute, responsesRoute]
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL, ...rest } = input
   const auth = AuthOptions.bearer(input, "MINIMAX_API_KEY")
   const defaults = {
@@ -131,31 +137,10 @@ export const configure = (input: Config = {}) => {
   const media = MediaRoute.deployment(input, auth)
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     MiniMaxImages.model({ ...media, id: modelID, providerOptions })
-  return { id, model: messages, messages, chat, responses, image, configure }
+  return Object.assign(messages, { id, messages, chat, responses, image, configure })
 }
 
-export const provider = configure()
+export const minimax = configure()
 
 export const model: ProviderPackage.Model<Settings<MessagesOptionsInput>, MessagesOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
-export const imageModel = (modelID: string, settings?: Settings<MiniMaxImageOptions>) => {
-  const input = config(settings)
-  return configure(input).image(modelID, input.providerOptions)
-}
-
-export const messages = provider.messages
-export const chat = provider.chat
-export const responses = provider.responses
-export const image = provider.image
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings<{}> = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: body === undefined ? undefined : { body },
-    providerOptions,
-  }
-}
-
-export * as MiniMax from "./minimax.js"
+  configure(config(settings))(modelID)

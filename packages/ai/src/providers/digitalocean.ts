@@ -12,8 +12,9 @@ import { Protocol } from "../route/protocol.js"
 import { ProviderID, type ModelID, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
+import { config } from "./digitalocean-settings.js"
 
-export const id = ProviderID.make("digitalocean")
+const id = ProviderID.make("digitalocean")
 const baseURL = "https://inference.do-ai.run/v1"
 
 export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
@@ -24,6 +25,8 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
 
 export type Settings<Options = OpenAIProviderOptionsInput> = ProviderPackage.Settings &
   Options & { readonly apiKey?: string | false }
+
+export type ResponsesSettings = Settings<OpenResponsesProviderOptionsInput>
 
 export const protocol = Protocol.make({
   id: "digitalocean-chat",
@@ -55,7 +58,7 @@ const responsesRoute = Route.make({
 
 export const routes = [route, responsesRoute]
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const auth = AuthOptions.bearer(input, ["DIGITALOCEAN_ACCESS_TOKEN", "DIGITALOCEAN_API_KEY", "DO_INFERENCE_API_KEY"])
   const options = { ...defaults, endpoint: { baseURL: endpoint ?? baseURL }, auth }
@@ -82,47 +85,18 @@ export const configure = (input: Config = {}) => {
         supportsPromptCacheKey: true,
       },
     })
-  return {
+  return Object.assign(chat, {
     id,
-    model: chat,
     chat,
     responses: (modelID: string | ModelID) =>
       configuredResponses.model<OpenResponsesProviderOptionsInput>({ id: modelID }),
     image,
     decision,
     configure,
-  }
+  })
 }
 
-export const provider = configure()
-export const decision = provider.decision
-export const image = provider.image
-export const chat = provider.chat
-export const responses = provider.responses
+export const digitalocean = configure()
 
 export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (modelID, settings) =>
-  configure(config(settings)).model(modelID)
-export const responsesModel: ProviderPackage.Model<
-  Settings<OpenResponsesProviderOptionsInput>,
-  OpenResponsesProviderOptionsInput
-> = (modelID, settings) => configure(config(settings)).responses(modelID)
-export const imageModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
-  return configure(input).image(modelID, input.providerOptions)
-}
-export const decisionModel = (modelID: string, settings?: Settings) => {
-  const input = config(settings)
-  return configure(input).decision(modelID, input.providerOptions)
-}
-
-function config({ apiKey, baseURL, body, headers, ...providerOptions }: Settings<Config["providerOptions"]> = {}) {
-  return {
-    apiKey,
-    baseURL,
-    headers,
-    http: { body },
-    providerOptions,
-  }
-}
-
-export * as DigitalOcean from "./digitalocean.js"
+  configure(config(settings))(modelID)

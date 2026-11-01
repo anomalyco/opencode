@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { ai, type LanguageModel, LLMResponse, Media, Message, ToolDefinition } from "../../src/effect.js"
-import { AmazonBedrock, Anthropic, Google, OpenAI, XAI } from "../../src/providers.js"
+import { amazonBedrock, anthropic, google, openai, xai } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { tool } from "../../src/tool.js"
 import { runTools } from "../lib/tool-runtime.js"
@@ -11,11 +11,11 @@ const CODE = "ORCHID-7391"
 const PDF =
   "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAgUiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA3NSA+PgpzdHJlYW0KQlQKL0YxIDE4IFRmCjcyIDcyMCBUZAooUERGIGNhc3NldHRlIHZlcmlmaWNhdGlvbiBjb2RlOiBPUkNISUQtNzM5MSkgVGoKRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzNjUgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0MzUKJSVFT0YK"
 
-const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
-const anthropic = Anthropic.configure({ apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture" })
-const google = Google.configure({ apiKey: process.env.GOOGLE_API_KEY ?? "fixture" })
-const xai = XAI.configure({ apiKey: process.env.XAI_API_KEY ?? "fixture" })
-const bedrock = AmazonBedrock.configure({
+const openaiProvider = openai.configure({ apiKey: process.env.OPENAI_API_KEY ?? "fixture" })
+const anthropicProvider = anthropic.configure({ apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture" })
+const googleProvider = google.configure({ apiKey: process.env.GOOGLE_API_KEY ?? "fixture" })
+const xaiProvider = xai.configure({ apiKey: process.env.XAI_API_KEY ?? "fixture" })
+const bedrock = amazonBedrock.configure({
   apiKey: process.env.AWS_BEDROCK_API_KEY ?? "fixture",
   region: process.env.AWS_REGION ?? "us-east-1",
 })
@@ -38,7 +38,7 @@ const targets: ReadonlyArray<{
     requires: "OPENAI_API_KEY",
     filename: "verification.pdf",
     maxTokens: 40,
-    model: openai.responses("gpt-4o-mini"),
+    model: openaiProvider.responses("gpt-4o-mini"),
   },
   {
     id: "anthropic",
@@ -48,7 +48,7 @@ const targets: ReadonlyArray<{
     requires: "ANTHROPIC_API_KEY",
     filename: "verification.pdf",
     maxTokens: 40,
-    model: anthropic.model("claude-haiku-4-5-20251001"),
+    model: anthropicProvider("claude-haiku-4-5-20251001"),
   },
   {
     id: "gemini",
@@ -58,7 +58,7 @@ const targets: ReadonlyArray<{
     requires: "GOOGLE_API_KEY",
     filename: "verification.pdf",
     maxTokens: 256,
-    model: google.model("gemini-3.5-flash"),
+    model: googleProvider("gemini-3.5-flash"),
   },
   {
     id: "xai",
@@ -68,7 +68,7 @@ const targets: ReadonlyArray<{
     requires: "XAI_API_KEY",
     filename: "verification.pdf",
     maxTokens: 40,
-    model: xai.responses("grok-4.5"),
+    model: xaiProvider.responses("grok-4.5"),
   },
   {
     id: "bedrock",
@@ -78,7 +78,7 @@ const targets: ReadonlyArray<{
     requires: "AWS_BEDROCK_API_KEY",
     filename: "verification",
     maxTokens: 40,
-    model: bedrock.model("us.anthropic.claude-haiku-4-5-20251001-v1:0"),
+    model: bedrock("us.anthropic.claude-haiku-4-5-20251001-v1:0"),
   },
 ]
 

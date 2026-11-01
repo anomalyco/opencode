@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { ai, LLMEvent, toDefinitions } from "../../src/effect.js"
-import { DigitalOcean, OpenRouter, Venice } from "../../src/providers.js"
+import { digitalocean, openrouter, venice } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { tool } from "../../src/tool.js"
 import { expectWeatherToolLoop, runWeatherToolLoop, weatherToolLoopRequest } from "../recorded-scenarios.js"
@@ -21,21 +21,21 @@ for (const item of [
   {
     provider: "openrouter",
     env: "OPENROUTER_API_KEY",
-    model: OpenRouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" }).responses(
-      "openai/gpt-5.4-mini",
-    ),
+    model: openrouter
+      .configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" })
+      .responses("openai/gpt-5.4-mini"),
   },
   {
     provider: "digitalocean",
     env: "DIGITAL_OCEAN_OFFICIAL_API_KEY",
-    model: DigitalOcean.configure({ apiKey: process.env.DIGITAL_OCEAN_OFFICIAL_API_KEY ?? "fixture" }).responses(
-      "openai-gpt-5.4-mini",
-    ),
+    model: digitalocean
+      .configure({ apiKey: process.env.DIGITAL_OCEAN_OFFICIAL_API_KEY ?? "fixture" })
+      .responses("openai-gpt-5.4-mini"),
   },
   {
     provider: "venice",
     env: "VENICE_API_KEY",
-    model: Venice.configure({ apiKey: process.env.VENICE_API_KEY ?? "fixture" }).responses("openai-gpt-54-mini"),
+    model: venice.configure({ apiKey: process.env.VENICE_API_KEY ?? "fixture" }).responses("openai-gpt-54-mini"),
   },
 ]) {
   const recorded = recordedTests({

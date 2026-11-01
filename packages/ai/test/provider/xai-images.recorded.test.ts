@@ -1,13 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, Media } from "../../src/effect.js"
-import { XAI } from "../../src/providers.js"
+import { xai } from "../../src/providers.js"
 import { dimensions } from "../lib/image.js"
 import { recordedTests } from "../recorded-test.js"
 
-const model = XAI.configure({
-  apiKey: process.env.XAI_API_KEY ?? "fixture",
-}).image("grok-imagine-image")
+const model = xai
+  .configure({
+    apiKey: process.env.XAI_API_KEY ?? "fixture",
+  })
+  .image("grok-imagine-image")
 
 const recorded = recordedTests({
   prefix: "xai-images",

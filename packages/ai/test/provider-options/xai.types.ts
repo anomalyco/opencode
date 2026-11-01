@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
-import { XAI } from "../../src/providers.js"
+import { xai } from "../../src/providers.js"
 
-const model = XAI.provider.model("grok-4")
+const model = xai("grok-4")
 
 ai.request({ model, prompt: "Hello", providerOptions: { reasoningEffort: "high" } })
 ai.request({ model, prompt: "Hello", providerOptions: { reasoningEffort: "experimental" } })

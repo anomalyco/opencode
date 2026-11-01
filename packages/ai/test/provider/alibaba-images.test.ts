@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/http"
 import { ai, ImageClient, Media } from "../../src/effect.js"
-import { Alibaba } from "../../src/providers.js"
+import { alibaba } from "../../src/providers.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 
@@ -15,12 +15,14 @@ describe("Alibaba Images", () => {
   it.effect("generates through the Model Studio multimodal generation API", () =>
     Effect.gen(function* () {
       const response = yield* ai.image.generate({
-        model: Alibaba.configure({
-          region: "cn-beijing",
-          workspaceID: "llm-fixture",
-          apiKey: "test",
-          headers: { "x-default": "yes" },
-        }).image("wan2.7-image-pro"),
+        model: alibaba
+          .configure({
+            region: "cn-beijing",
+            workspaceID: "llm-fixture",
+            apiKey: "test",
+            headers: { "x-default": "yes" },
+          })
+          .image("wan2.7-image-pro"),
         prompt: "Put the clock from image 1 into image 2",
         images: [Media.url("https://example.test/clock.png"), Media.bytes(new Uint8Array([1, 2, 3]), "image/png")],
         n: 2,
@@ -118,10 +120,12 @@ describe("Alibaba Images", () => {
         { region: "us-east-1" },
         { baseURL: "https://token-plan.example/api/v1" },
       ])
-        yield* ai.image.generate({
-          model: Alibaba.configure({ ...config, apiKey: "test" }).image("qwen-image-2.0"),
-          prompt: "test",
-        }).pipe(Effect.provide(layer))
+        yield* ai.image
+          .generate({
+            model: alibaba.configure({ ...config, apiKey: "test" }).image("qwen-image-2.0"),
+            prompt: "test",
+          })
+          .pipe(Effect.provide(layer))
 
       expect(urls).toEqual([
         "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
@@ -133,16 +137,14 @@ describe("Alibaba Images", () => {
 
   it.effect("rejects provider refs and unsupported common fields before sending", () =>
     Effect.gen(function* () {
-      const model = Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0")
+      const model = alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0")
       const layer = ImageClient.layer.pipe(Layer.provide(fixedResponse(result, json)))
-      const ref = yield* ai.image.generate({ model, prompt: "test", images: [Media.ref("alibaba", "file-1")] }).pipe(
-        Effect.provide(layer),
-        Effect.flip,
-      )
-      const tooLarge = yield* ai.image.generate({ model, prompt: "test", aspect: "1:1", resolution: "4K" }).pipe(
-        Effect.provide(layer),
-        Effect.flip,
-      )
+      const ref = yield* ai.image
+        .generate({ model, prompt: "test", images: [Media.ref("alibaba", "file-1")] })
+        .pipe(Effect.provide(layer), Effect.flip)
+      const tooLarge = yield* ai.image
+        .generate({ model, prompt: "test", aspect: "1:1", resolution: "4K" })
+        .pipe(Effect.provide(layer), Effect.flip)
 
       expect(ref.reason._tag).toBe("InvalidRequest")
       expect(tooLarge.reason).toMatchObject({
@@ -156,7 +158,7 @@ describe("Alibaba Images", () => {
 
   it.effect("rejects invalid response structures", () =>
     Effect.gen(function* () {
-      const model = Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0")
+      const model = alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0")
       const payloads = [
         {},
         { output: { choices: [] } },
@@ -176,22 +178,27 @@ describe("Alibaba Images", () => {
 
   it.effect("surfaces Model Studio error messages", () =>
     Effect.gen(function* () {
-      const error = yield* ai.image.generate({
-        model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0"),
-        prompt: "test",
-      }).pipe(
-        Effect.provide(
-          ImageClient.layer.pipe(
-            Layer.provide(
-              fixedResponse(JSON.stringify({ code: "InvalidParameter", message: "Model not exist.", request_id: "r" }), {
-                status: 400,
-                ...json,
-              }),
+      const error = yield* ai.image
+        .generate({
+          model: alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).image("qwen-image-2.0"),
+          prompt: "test",
+        })
+        .pipe(
+          Effect.provide(
+            ImageClient.layer.pipe(
+              Layer.provide(
+                fixedResponse(
+                  JSON.stringify({ code: "InvalidParameter", message: "Model not exist.", request_id: "r" }),
+                  {
+                    status: 400,
+                    ...json,
+                  },
+                ),
+              ),
             ),
           ),
-        ),
-        Effect.flip,
-      )
+          Effect.flip,
+        )
 
       expect([error.reason._tag, error.reason.message]).toEqual(["InvalidRequest", "Model not exist."])
     }),

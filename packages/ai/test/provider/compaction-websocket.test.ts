@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { ai, Message } from "../../src/effect.js"
 import { LLMClient, WebSocketTransport } from "../../src/route.js"
-import { OpenAI } from "../../src/providers.js"
+import { openai } from "../../src/providers.js"
 import { testEffect } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 
@@ -34,7 +34,7 @@ testEffect(fixedResponse("unexpected HTTP fallback")).effect(
           }),
       })
       const request = ai.request({
-        model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
+        model: openai.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
         prompt: "hello",
         providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },
       })

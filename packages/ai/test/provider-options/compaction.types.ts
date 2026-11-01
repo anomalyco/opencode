@@ -9,35 +9,41 @@ import {
   Message,
   ProviderID,
 } from "../../src/effect.js"
-import { OpenAI, Azure, XAI, Anthropic, OpenAICompatibleResponses } from "../../src/providers.js"
+import { openai, azure, xai, anthropic, openaiCompatibleResponses } from "../../src/providers.js"
 
-const openai = OpenAI.configure({
-  apiKey: "test",
-  providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },
-}).responses("gpt-5.3-codex")
-ai.compact(ai.request({ model: openai, prompt: "hello" }))
+const openaiPackage = await import("../../src/providers/openai.js")
+const azureResponsesPackage = await import("../../src/providers/azure/responses.js")
+const xaiPackage = await import("../../src/providers/xai.js")
+
+const openaiModel = openai
+  .configure({
+    apiKey: "test",
+    providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 100000 }] },
+  })
+  .responses("gpt-5.3-codex")
+ai.compact(ai.request({ model: openaiModel, prompt: "hello" }))
 
 for (const model of [
-  OpenAI.configure().responses("fixture"),
-  Azure.configure({ resourceName: "test" }).responses("fixture"),
-  XAI.configure().responses("fixture"),
-  OpenAI.model("fixture", {}),
-  Azure.responsesModel("fixture", { resourceName: "test" }),
-  XAI.model("fixture", {}),
-  openai.route.with({ headers: { "x-test": "test" } }).model({ id: "fixture" }),
-  LanguageModel.update(openai, { defaults: { generation: { maxTokens: 100 } } }),
-  LanguageModel.make(LanguageModel.input(openai)),
+  openai.configure().responses("fixture"),
+  azure.configure({ resourceName: "test" }).responses("fixture"),
+  xai.configure().responses("fixture"),
+  openaiPackage.model("fixture", {}),
+  azureResponsesPackage.model("fixture", { resourceName: "test" }),
+  xaiPackage.model("fixture", {}),
+  openaiModel.route.with({ headers: { "x-test": "test" } }).model({ id: "fixture" }),
+  LanguageModel.update(openaiModel, { defaults: { generation: { maxTokens: 100 } } }),
+  LanguageModel.make(LanguageModel.input(openaiModel)),
 ]) {
   ai.compact(ai.request({ model, prompt: "hello" }))
 }
 
 const unsupported = {
-  anthropic: ai.request({ model: Anthropic.configure().model("fixture"), prompt: "Hello" }),
-  openaiChat: ai.request({ model: OpenAI.configure().chat("fixture"), prompt: "Hello" }),
-  azureChat: ai.request({ model: Azure.configure({ resourceName: "test" }).chat("fixture"), prompt: "Hello" }),
-  xaiChat: ai.request({ model: XAI.configure().chat("fixture"), prompt: "Hello" }),
+  anthropic: ai.request({ model: anthropic.configure()("fixture"), prompt: "Hello" }),
+  openaiChat: ai.request({ model: openai.configure().chat("fixture"), prompt: "Hello" }),
+  azureChat: ai.request({ model: azure.configure({ resourceName: "test" }).chat("fixture"), prompt: "Hello" }),
+  xaiChat: ai.request({ model: xai.configure().chat("fixture"), prompt: "Hello" }),
   compatible: ai.request({
-    model: OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("fixture"),
+    model: openaiCompatibleResponses.configure({ baseURL: "https://example.com" })("fixture"),
     prompt: "Hello",
   }),
 }
@@ -56,17 +62,17 @@ LLMClient.Service.use((client) => {
   return client.compact(unsupported.anthropic)
 })
 
-const request = ai.request({ model: openai, prompt: "hello" })
+const request = ai.request({ model: openaiModel, prompt: "hello" })
 ai.compact({ ...request, messages: [Message.user("continue")] })
 ai.compact({ ...request })
-const switched = { ...request, model: Anthropic.configure().model("fixture") }
+const switched = { ...request, model: anthropic.configure()("fixture") }
 // @ts-expect-error Switching models replaces, rather than inherits, the capability.
 ai.compact(switched)
-ai.compact({ ...switched, model: openai })
+ai.compact({ ...switched, model: openaiModel })
 ai.compact(
   // @ts-expect-error Replacing the route also replaces compaction capability.
   ai.request({
-    model: LanguageModel.update(openai, { route: Anthropic.configure().model("fixture").route }),
+    model: LanguageModel.update(openaiModel, { route: anthropic.configure()("fixture").route }),
     prompt: "Hello",
   }),
 )
@@ -103,7 +109,7 @@ if (checkpoint.text !== undefined) {
 checkpoint.encrypted
 // @ts-expect-error Compaction parts do not contain a generic provider payload.
 checkpoint.value
-ai.compact(ai.request({ model: openai, prompt: "hello" })).pipe(
+ai.compact(ai.request({ model: openaiModel, prompt: "hello" })).pipe(
   Effect.map((result) => {
     result.replacement satisfies ReadonlyArray<Message>
     // @ts-expect-error The replacement window is named explicitly; the old field is not an alias.
@@ -113,16 +119,16 @@ ai.compact(ai.request({ model: openai, prompt: "hello" })).pipe(
   }),
 )
 ai.request({
-  model: openai,
+  model: openaiModel,
   prompt: "Hello",
   providerOptions: {
     // @ts-expect-error A token threshold is numeric.
     contextManagement: [{ type: "compaction", compactThreshold: "100000" }],
   },
 })
-const anthropic = Anthropic.configure().model("claude-opus-4-6")
+const anthropicModel = anthropic.configure()("claude-opus-4-6")
 ai.request({
-  model: anthropic,
+  model: anthropicModel,
   prompt: "Hello",
   providerOptions: {
     contextManagement: {
@@ -131,7 +137,7 @@ ai.request({
   },
 })
 ai.request({
-  model: anthropic,
+  model: anthropicModel,
   prompt: "Hello",
   providerOptions: {
     // @ts-expect-error A pause setting is boolean.
@@ -140,7 +146,7 @@ ai.request({
 })
 
 // Plain inputs compact without `ai.request(...)`, and a model alone can be narrowed.
-ai.compact({ model: OpenAI.configure().responses("fixture"), messages: [Message.user("continue")] })
+ai.compact({ model: openai.configure().responses("fixture"), messages: [Message.user("continue")] })
 if (ai.canCompact(dynamicModel)) ai.compact({ model: dynamicModel, prompt: "continue" })
 // @ts-expect-error A dynamically selected model must be narrowed first.
 ai.compact({ model: dynamicModel, prompt: "continue" })

@@ -3,13 +3,13 @@ import { Deferred, Effect, Fiber } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { ai, HttpOptions } from "../src/effect.js"
 import { LLMClient, mergeHttpOptions } from "../src/route.js"
-import { configure } from "../src/providers/openai.js"
+import { openai } from "../src/providers/openai.js"
 import { dynamicResponse } from "./lib/http.js"
 import { deltaChunk, finishChunk } from "./lib/openai-chunks.js"
 import { sseEvents, sseRaw } from "./lib/sse.js"
 import { it } from "./lib/effect.js"
 
-const model = configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4.1-mini")
+const model = openai.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4.1-mini")
 const SSE = { headers: { "content-type": "text/event-stream" } }
 
 const silentServer = dynamicResponse(() => Effect.never)

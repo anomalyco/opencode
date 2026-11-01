@@ -4,16 +4,16 @@ import { ai, CacheHint, CompactionPart, Message, ProviderID, ToolCallPart } from
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import {
-  Alibaba,
-  AmazonBedrock,
-  AnthropicCompatible,
-  CloudflareAIGateway,
-  DigitalOcean,
-  GoogleVertexMessages,
-  Meta,
-  MiniMax,
-  Moonshot,
-  ZAICodingPlan,
+  alibaba,
+  amazonBedrock,
+  anthropicCompatible,
+  cloudflareAIGateway,
+  digitalocean,
+  googleVertexMessages,
+  meta,
+  minimax,
+  moonshot,
+  zaiCodingPlan,
 } from "../src/providers.js"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
 import * as Gemini from "../src/protocols/gemini.js"
@@ -25,9 +25,9 @@ const anthropicModel = AnthropicMessages.route
   .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
   .model({ id: "claude-sonnet-4-5" })
 
-const bedrockModel = AmazonBedrock.configure({
+const bedrockModel = amazonBedrock.configure({
   credentials: { region: "us-east-1", accessKeyId: "fixture", secretAccessKey: "fixture" },
-}).model("anthropic.claude-3-5-sonnet-20241022-v2:0")
+})("anthropic.claude-3-5-sonnet-20241022-v2:0")
 
 const openaiModel = OpenAIChat.route
   .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
@@ -101,7 +101,7 @@ describe("applyCachePolicy", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" }).model(
+          model: googleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" })(
             "claude-opus-4-8",
           ),
           system: "You are concise.",
@@ -122,7 +122,7 @@ describe("applyCachePolicy", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: DigitalOcean.configure({ apiKey: "test" }).model("anthropic-claude-fable-5.1"),
+          model: digitalocean.configure({ apiKey: "test" })("anthropic-claude-fable-5.1"),
           system: "You are concise.",
           tools: [{ name: "lookup", description: "Look up a value", inputSchema: { type: "object", properties: {} } }],
           prompt: "hi",
@@ -149,7 +149,7 @@ describe("applyCachePolicy", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).chat("qwen3.8-max"),
+          model: alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).chat("qwen3.8-max"),
           system: "You are concise.",
           tools: [{ name: "lookup", description: "Look up a value", inputSchema: { type: "object", properties: {} } }],
           prompt: "hi",
@@ -174,7 +174,7 @@ describe("applyCachePolicy", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).chat("qwen3.8-max"),
+          model: alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).chat("qwen3.8-max"),
           system: "You are concise.",
           prompt: "hi",
           cache: "none",
@@ -187,10 +187,10 @@ describe("applyCachePolicy", () => {
 
   it.effect("Alibaba chat does not assume non-Qwen models support cache markers", () =>
     Effect.gen(function* () {
-      const alibaba = Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" })
+      const alibabaProvider = alibaba.configure({ region: "ap-southeast-1", apiKey: "test" })
       for (const modelID of ["kimi-k3", "glm-5.2", "deepseek-v4-flash-0731", "MiniMax-M2.5"]) {
         const prepared = yield* compileRequest(
-          ai.request({ model: alibaba.chat(modelID), system: "You are concise.", prompt: "hi" }),
+          ai.request({ model: alibabaProvider.chat(modelID), system: "You are concise.", prompt: "hi" }),
         )
 
         expect(JSON.stringify(prepared.body)).not.toContain("cache_control")
@@ -202,7 +202,7 @@ describe("applyCachePolicy", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
-          model: AnthropicCompatible.configure({ apiKey: "test", baseURL: "https://messages.example.test/v1" }).model(
+          model: anthropicCompatible.configure({ apiKey: "test", baseURL: "https://messages.example.test/v1" })(
             "compatible",
           ),
           system: "You are concise.",
@@ -219,17 +219,17 @@ describe("applyCachePolicy", () => {
   )
 
   const messagesModels = [
-    ["alibaba-messages", Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).messages("qwen3.8-max")],
+    ["alibaba-messages", alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).messages("qwen3.8-max")],
     [
       "cloudflare-ai-gateway-messages",
-      CloudflareAIGateway.configure({ accountId: "test", gatewayId: "test", apiKey: "test" }).model(
+      cloudflareAIGateway.configure({ accountId: "test", gatewayId: "test", apiKey: "test" })(
         "anthropic/claude-sonnet-4-6",
       ),
     ],
-    ["meta-messages", Meta.configure({ apiKey: "test" }).messages("muse-spark-1.3")],
-    ["minimax-messages", MiniMax.configure({ apiKey: "test" }).model("MiniMax-M3")],
-    ["moonshot-messages", Moonshot.configure({ apiKey: "test" }).messages("kimi-k3")],
-    ["zai-coding-messages", ZAICodingPlan.configure({ apiKey: "test" }).messages("glm-5.3")],
+    ["meta-messages", meta.configure({ apiKey: "test" }).messages("muse-spark-1.3")],
+    ["minimax-messages", minimax.configure({ apiKey: "test" })("MiniMax-M3")],
+    ["moonshot-messages", moonshot.configure({ apiKey: "test" }).messages("kimi-k3")],
+    ["zai-coding-messages", zaiCodingPlan.configure({ apiKey: "test" }).messages("glm-5.3")],
   ] as const
 
   messagesModels.forEach(([route, model]) =>

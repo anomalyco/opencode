@@ -8,12 +8,12 @@ import { AIError, LLMEvent, Media } from "../src/effect.js"
 import { SpeechEvent, TranscriptionEvent } from "../src/experimental.js"
 import { RequestExecutor, type StreamOptions } from "../src/route.js"
 import { AI } from "../src/index.js"
-import { AssemblyAI, OpenAI, Runway } from "../src/providers.js"
+import { assemblyai, openai, runway } from "../src/providers.js"
 import { handlerLayer, json } from "./lib/http.js"
 import { finishChunk, toolCallChunk } from "./lib/openai-chunks.js"
 import { sseEvents } from "./lib/sse.js"
 
-const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
+const openaiProvider = openai.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
 
 const chatBody = sseEvents(
   { choices: [{ delta: { content: "Hello" } }] },
@@ -124,17 +124,19 @@ describe("AI promise client", () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor(seen) })
 
-    const request = ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })
+    const request = ai.request({ model: openaiProvider.chat("gpt-4o-mini"), prompt: "Say hello." })
     const text = await ai.generate(request)
     expect(text.text).toBe("Hello world")
-    expect((await ai.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe("Hello world")
+    expect((await ai.generate({ model: openaiProvider.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe(
+      "Hello world",
+    )
 
-    const image = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
+    const image = await ai.image.generate({ model: openaiProvider.image("gpt-image-2"), prompt: "A lighthouse" })
     expect(image.image).toBeInstanceOf(Media.Asset)
     expect(image.image.mediaType).toBe("image/png")
     expect(await ai.run(image.image.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
     const requested = await ai.image.generate(
-      ai.image.request({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" }),
+      ai.image.request({ model: openaiProvider.image("gpt-image-2"), prompt: "A lighthouse" }),
     )
     expect(requested.image.mediaType).toBe("image/png")
 
@@ -144,13 +146,13 @@ describe("AI promise client", () => {
     }
     expect(deltas).toEqual(["Hello", " world"])
     const directDeltas: Array<string> = []
-    for await (const event of ai.stream({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })) {
+    for await (const event of ai.stream({ model: openaiProvider.chat("gpt-4o-mini"), prompt: "Say hello." })) {
       if (LLMEvent.is.textDelta(event)) directDeltas.push(event.text)
     }
     expect(directDeltas).toEqual(deltas)
 
     const imageEvents: Array<string> = []
-    for await (const event of ai.image.stream({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })) {
+    for await (const event of ai.image.stream({ model: openaiProvider.image("gpt-image-2"), prompt: "A lighthouse" })) {
       imageEvents.push(event.type)
     }
     expect(imageEvents).toEqual(["image-partial", "image", "finish"])
@@ -171,7 +173,7 @@ describe("AI promise client", () => {
   test("starts, awaits, and resumes video generations over the same runtime", async () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor(seen) })
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+    const model = runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
 
     const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
     expect(generation.id).toBe("task_1")
@@ -211,14 +213,14 @@ describe("AI promise client", () => {
         return handler(request)
       },
     }
-    const request = { model: openai.chat("gpt-4o-mini"), prompt: "Say hello." }
+    const request = { model: openaiProvider.chat("gpt-4o-mini"), prompt: "Say hello." }
 
     expect((await ai.generate(request, options)).text).toBe("Hello world")
     await Array.fromAsync(ai.stream(request, options))
     await Array.fromAsync(ai.loop({ ...request, tools: [] }, options))
     expect(seen).toEqual(Array(3).fill("https://openai.test/v1/chat/completions"))
 
-    const responses = ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
+    const responses = ai.request({ model: openaiProvider.responses("gpt-5"), prompt: "Hello" })
     expect(ai.canCompact(responses)).toBe(true)
     expect(ai.canCompact(responses, { mechanism: "trigger" })).toBe(true)
     expect(ai.canCompact(ai.request(request))).toBe(false)
@@ -227,7 +229,7 @@ describe("AI promise client", () => {
 
   test("exposes a generation's snapshot and terminal state", async () => {
     const ai = AI.make({ layer: executor([]) })
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+    const model = runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
     const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
     expect(generation.snapshot).toEqual({ id: "task_1", status: "queued", progress: undefined, position: undefined })
     expect(generation.terminal).toBe(false)
@@ -239,7 +241,7 @@ describe("AI promise client", () => {
 
   test("observes a started generation's events and fetches its result", async () => {
     const ai = AI.make({ layer: executor([]) })
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+    const model = runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
     const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
 
     const events: Array<string> = []
@@ -275,7 +277,7 @@ describe("AI promise client", () => {
     expect(
       (
         await ai.experimental.transcription.generate({
-          model: openai.transcription("gpt-4o-mini-transcribe"),
+          model: openaiProvider.transcription("gpt-4o-mini-transcribe"),
           audio: bytes,
         })
       ).text,
@@ -283,15 +285,15 @@ describe("AI promise client", () => {
 
     const deltas: Array<string> = []
     for await (const event of ai.experimental.transcription.stream({
-      model: openai.transcription("gpt-4o-mini-transcribe"),
+      model: openaiProvider.transcription("gpt-4o-mini-transcribe"),
       audio: bytes,
     }))
       if (TranscriptionEvent.is.textDelta(event)) deltas.push(event.delta)
     expect(deltas).toEqual(["Hello", " there."])
 
-    const model = AssemblyAI.configure({ apiKey: "test", baseURL: "https://assemblyai.test" }).transcription(
-      "universal-2",
-    )
+    const model = assemblyai
+      .configure({ apiKey: "test", baseURL: "https://assemblyai.test" })
+      .transcription("universal-2")
     const generation = await ai.experimental.transcription.start({ model, audio })
     expect(generation.token).toEqual({ transcriptID: "tr_1" })
     expect((await generation.await({ poll: { interval: 10 } })).text).toBe("Hello there.")
@@ -300,7 +302,7 @@ describe("AI promise client", () => {
 
   test("generates and streams speech over the same runtime", async () => {
     const ai = AI.make({ layer: executor([]) })
-    const model = openai.speech("gpt-4o-mini-tts")
+    const model = openaiProvider.speech("gpt-4o-mini-tts")
 
     const response = await ai.experimental.speech.generate({ model, text: "Hello", voice: "coral", format: "pcm" })
     expect(await ai.run(response.audio.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
@@ -318,7 +320,7 @@ describe("AI promise client", () => {
     const ai = AI.make({ layer: executor([]) })
 
     const failure = await ai
-      .generate(ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" }))
+      .generate(ai.request({ model: openaiProvider.responses("gpt-5"), prompt: "Hello" }))
       .then(() => undefined)
       .catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(AIError)
@@ -326,19 +328,21 @@ describe("AI promise client", () => {
 
     const invalidLLM = await ai
       // @ts-expect-error Invalid input must reject with AIError instead of throwing synchronously.
-      .generate({ model: openai.responses("gpt-5"), messages: [{ role: "bogus" }] })
+      .generate({ model: openaiProvider.responses("gpt-5"), messages: [{ role: "bogus" }] })
       .catch((error: unknown) => error)
     expect(invalidLLM instanceof AIError && invalidLLM.reason._tag).toBe("InvalidRequest")
 
     const invalid = await ai.image
-      .generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse", n: 1.5 })
+      .generate({ model: openaiProvider.image("gpt-image-2"), prompt: "A lighthouse", n: 1.5 })
       .catch((error: unknown) => error)
     expect(invalid instanceof AIError && invalid.reason._tag).toBe("InvalidRequest")
 
     const controller = new AbortController()
     controller.abort()
     const aborted = await ai
-      .generate(ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }), { signal: controller.signal })
+      .generate(ai.request({ model: openaiProvider.chat("gpt-4o-mini"), prompt: "Hello" }), {
+        signal: controller.signal,
+      })
       .then(() => "completed")
       .catch(() => "aborted")
     expect(aborted).toBe("aborted")
@@ -348,7 +352,7 @@ describe("AI promise client", () => {
 
   test("aborted calls reject and aborted streams throw with the signal's reason", async () => {
     const ai = AI.make({ layer: executor([]) })
-    const slow = OpenAI.configure({ apiKey: "test", baseURL: "https://slow.test/v1" }).chat("gpt-4o-mini")
+    const slow = openai.configure({ apiKey: "test", baseURL: "https://slow.test/v1" }).chat("gpt-4o-mini")
     const aborted = new AbortController()
     aborted.abort()
     const reason = new Error("mine")
@@ -365,7 +369,7 @@ describe("AI promise client", () => {
 
     const preAborted = await Array.fromAsync(
       ai.experimental.speech.stream(
-        { model: openai.speech("gpt-4o-mini-tts"), text: "Hello" },
+        { model: openaiProvider.speech("gpt-4o-mini-tts"), text: "Hello" },
         { signal: aborted.signal },
       ),
     ).catch((error: unknown) => error)
@@ -386,7 +390,7 @@ describe("AI promise client", () => {
     expect(midStreamFailure).toBe(midStream.signal.reason)
     expect(midStreamFailure).toMatchObject({ name: "AbortError" })
 
-    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+    const model = runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
     const generation = await ai.experimental.video.start({ model, prompt: "A kite" })
     const polling = new AbortController()
     const events: Array<string> = []
@@ -405,7 +409,7 @@ describe("AI promise client", () => {
 
   test("breaking out of an abortable stream cleans up without throwing", async () => {
     const ai = AI.make({ layer: executor([]) })
-    const slow = OpenAI.configure({ apiKey: "test", baseURL: "https://slow.test/v1" }).chat("gpt-4o-mini")
+    const slow = openai.configure({ apiKey: "test", baseURL: "https://slow.test/v1" }).chat("gpt-4o-mini")
     const controller = new AbortController()
     const deltas: Array<string> = []
     for await (const event of ai.stream({ model: slow, prompt: "Hello" }, { signal: controller.signal })) {
@@ -454,7 +458,7 @@ describe("AI promise client", () => {
     })
 
     const events = await Array.fromAsync(
-      ai.loop({ model: openai.chat("gpt-4o-mini"), prompt: "Read the files.", tools: [read_file] }),
+      ai.loop({ model: openaiProvider.chat("gpt-4o-mini"), prompt: "Read the files.", tools: [read_file] }),
     )
 
     expect(events.filter(LLMEvent.is.toolResult).map((event) => event.result)).toEqual([
@@ -497,7 +501,7 @@ describe("AI promise client", () => {
       input: Schema.Struct({ path: Schema.String }),
       execute: async () => "hello",
     })
-    const model = openai.chat("gpt-4o-mini")
+    const model = openaiProvider.chat("gpt-4o-mini")
 
     const looped = await ai.collect(ai.loop({ model, prompt: "Read the file.", tools: [read_file] }))
     expect(looped.text).toBe("Hello world")
@@ -532,7 +536,7 @@ describe("AI promise client", () => {
     })
 
     const response = await ai.generate({
-      model: openai.chat("gpt-4o-mini"),
+      model: openaiProvider.chat("gpt-4o-mini"),
       prompt: "Pick a city.",
       schema: Schema.Struct({ city: Schema.String }),
     })
@@ -567,7 +571,7 @@ describe("AI promise client", () => {
         ),
       ),
     })
-    const request = ai.request({ model: openai.responses("gpt-5"), prompt: "Hello" })
+    const request = ai.request({ model: openaiProvider.responses("gpt-5"), prompt: "Hello" })
 
     const compacted = await ai.compact(request)
     expect(compacted.replacement.flatMap((message) => message.content.map((part) => part.type))).toEqual(["compaction"])
@@ -580,7 +584,7 @@ describe("AI promise client", () => {
 
     const unsupported = await ai
       // @ts-expect-error Untyped callers on routes without a compact endpoint must reject with AIError.
-      .compact(ai.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }))
+      .compact(ai.request({ model: openaiProvider.chat("gpt-4o-mini"), prompt: "Hello" }))
       .catch((error: unknown) => error)
     expect(unsupported instanceof AIError && unsupported.reason._tag).toBe("UnsupportedOperation")
     expect(paths).toHaveLength(2)

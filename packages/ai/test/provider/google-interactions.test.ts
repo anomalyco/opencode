@@ -1,15 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { ai, isRetryable } from "../../src/effect.js"
-import { Google } from "../../src/providers.js"
+import { google } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
-const model = Google.configure({ apiKey: "test", baseURL: "https://generativelanguage.test/v1beta" }).interactions(
-  "gemini-3.8-flash",
-)
+const model = google
+  .configure({ apiKey: "test", baseURL: "https://generativelanguage.test/v1beta" })
+  .interactions("gemini-3.8-flash")
 
 const generate = (...events: ReadonlyArray<unknown>) =>
   LLMClient.generate(ai.request({ model, prompt: "Hi" })).pipe(Effect.provide(fixedResponse(sseEvents(...events))))
@@ -127,8 +127,7 @@ describe("Google Interactions", () => {
           message: `Stream rejected: ${code}`,
           body: JSON.stringify(streamEvent),
         })
-        if (fromError.reason._tag === "InvalidProviderOutput")
-          expect(fromError.reason.classification).toBeUndefined()
+        if (fromError.reason._tag === "InvalidProviderOutput") expect(fromError.reason.classification).toBeUndefined()
         expect(isRetryable(fromError)).toBe(false)
       }
     }),

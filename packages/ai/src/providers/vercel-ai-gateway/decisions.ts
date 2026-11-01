@@ -1,2 +1,9 @@
-export { decisionModel as model } from "../vercel-ai-gateway.js"
+import { vercelAIGateway, type Settings } from "../vercel-ai-gateway.js"
+import { config } from "../vercel-ai-gateway-settings.js"
+
 export type { Settings } from "../vercel-ai-gateway.js"
+
+export const model = (modelID: string, settings?: Settings) => {
+  const input = config(settings)
+  return vercelAIGateway.configure(input).decision(modelID, input.providerOptions)
+}

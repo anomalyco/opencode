@@ -2,9 +2,9 @@ import { expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { ai, LLMClient } from "../../src/effect.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
-import { Azure, Meta, OpenAI, XAI } from "../../src/providers/index.js"
+import { azure, meta, openai, xai } from "../../src/providers/index.js"
 import { WebSocketTransport } from "../../src/route.js"
-import { configure } from "../../src/providers/openai-compatible-responses.js"
+import { openaiCompatibleResponses } from "../../src/providers/openai-compatible-responses.js"
 import { it } from "../lib/effect.js"
 import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
@@ -89,9 +89,9 @@ it.effect("extracts error details from every shape and falls back to the raw fra
 )
 
 for (const model of [
-  OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.6-sol"),
-  XAI.configure({ apiKey: "fixture" }).responses("grok-4.6"),
-  Azure.configure({ apiKey: "fixture", resourceName: "fixture" }).responses("deployment"),
+  openai.configure({ apiKey: "fixture" }).responses("gpt-5.6-sol"),
+  xai.configure({ apiKey: "fixture" }).responses("grok-4.6"),
+  azure.configure({ apiKey: "fixture", resourceName: "fixture" }).responses("deployment"),
 ]) {
   it.effect(`preserves string error messages and raw bodies through ${model.provider} Responses`, () =>
     Effect.gen(function* () {
@@ -123,10 +123,12 @@ it.effect("retains classification and original error bodies through Meta and gen
   "diagnostic": "retain-original-frame"
 }`
     for (const model of [
-      Meta.configure({ apiKey: "fixture" }).responses("muse-spark-1.3"),
-      configure({ apiKey: "fixture", provider: "gateway", baseURL: "https://responses.example.test/v1" }).model(
-        "example-model",
-      ),
+      meta.configure({ apiKey: "fixture" }).responses("muse-spark-1.3"),
+      openaiCompatibleResponses.configure({
+        apiKey: "fixture",
+        provider: "gateway",
+        baseURL: "https://responses.example.test/v1",
+      })("example-model"),
     ]) {
       const error = yield* LLMClient.generate(ai.request({ model, prompt: "Hello" })).pipe(
         Effect.provide(fixedResponse(sseEvents(raw.replaceAll("\n", "\ndata: ")))),

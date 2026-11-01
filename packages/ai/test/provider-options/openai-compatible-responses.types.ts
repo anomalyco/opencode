@@ -1,7 +1,7 @@
 import { ai } from "../../src/effect.js"
-import { OpenAICompatibleResponses } from "../../src/providers.js"
+import { openaiCompatibleResponses } from "../../src/providers.js"
 
-const model = OpenAICompatibleResponses.configure({ baseURL: "https://example.com" }).model("model")
+const model = openaiCompatibleResponses.configure({ baseURL: "https://example.com" })("model")
 
 ai.request({ model, prompt: "Hello", providerOptions: { reasoningSummary: "detailed" } })
 ai.request({ model, prompt: "Hello", providerOptions: { reasoningEffort: "high" } })

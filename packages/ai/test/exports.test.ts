@@ -17,29 +17,29 @@ import { AI } from "@opencode/ai"
 import { Speech, SpeechClient, SpeechEvent, TranscriptionClient, Video, VideoClient } from "@opencode/ai/experimental"
 import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import {
-  Alibaba,
-  AssemblyAI,
-  Baseten,
-  Cartesia,
-  CloudflareAIGateway,
-  CloudflareWorkersAI,
-  Deepgram,
-  DeepSeek,
-  DigitalOcean,
-  ElevenLabs,
-  Fireworks,
-  Google,
-  Meta,
-  MiniMax,
-  OpenCode,
-  OpenAI,
-  OpenAICompatible,
-  OpenRouter,
-  Runway,
-  TypeSafeAI,
-  VercelAIGateway,
-  XAI,
-  ZAI,
+  alibaba,
+  assemblyai,
+  baseten,
+  cartesia,
+  cloudflareAIGateway,
+  cloudflareWorkersAI,
+  deepgram,
+  deepseek,
+  digitalocean,
+  elevenlabs,
+  fireworks,
+  google,
+  meta,
+  minimax,
+  opencode,
+  openai,
+  openaiCompatible,
+  openrouter,
+  runway,
+  typesafeAI,
+  vercelAIGateway,
+  xai,
+  zai,
 } from "@opencode/ai/providers"
 import {
   AnthropicMessages,
@@ -124,83 +124,71 @@ describe("public exports", () => {
     expect(WebSocketTransport.makeDirect).toBeFunction()
   })
 
-  test("provider barrels expose user-facing facades", async () => {
-    const { OpenAICompatibleResponses } = await import("@opencode/ai/providers")
+  test("provider barrels expose callable providers", async () => {
+    const providers = await import("@opencode/ai/providers")
 
-    expect(OpenAI.model).toBeFunction()
-    expect(OpenAI.provider.responses).toBe(OpenAI.responses)
-    expect(OpenAI.configure({ apiKey: "fixture" }).responses).toBeFunction()
-    for (const provider of [Baseten, DeepSeek, Fireworks]) {
+    expect(openai("gpt-5.4").route.id).toBe("openai-responses")
+    expect(openai.configure({ apiKey: "fixture" })("gpt-5.4").route.id).toBe("openai-responses")
+    expect(openai.configure({ apiKey: "fixture" }).chat("gpt-5.4").route.id).toBe("openai-chat")
+    for (const provider of [baseten, deepseek, fireworks]) {
       expect(provider.configure).toBeFunction()
-      expect(provider.model).toBeFunction()
+      expect(provider("fixture").route).toBeDefined()
+    }
+    for (const name of ["model", "provider", "configure", "chatModel", "responsesModel", "OpenAI", "Anthropic"]) {
+      expect(providers).not.toHaveProperty(name)
     }
     for (const name of ["baseten", "cerebras", "deepinfra", "deepseek", "fireworks", "groq", "togetherai"]) {
-      expect(OpenAICompatible).not.toHaveProperty(name)
+      expect(openaiCompatible).not.toHaveProperty(name)
     }
     expect(
-      OpenAICompatibleResponses.configure({ baseURL: "https://responses.test/v1" }).model("fixture").route.id,
+      providers.openaiCompatibleResponses.configure({ baseURL: "https://responses.test/v1" })("fixture").route.id,
     ).toBe("openai-compatible-responses")
-    expect(CloudflareAIGateway.configure).toBeFunction()
-    expect(CloudflareAIGateway.configure({ accountId: "fixture", gatewayApiKey: "fixture" }).model).toBeFunction()
-    expect(CloudflareWorkersAI.configure).toBeFunction()
-    expect(CloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" }).model).toBeFunction()
-    expect(OpenRouter.model).toBeFunction()
-    expect(OpenRouter.decision).toBeFunction()
-    expect(TypeSafeAI.decision).toBeFunction()
-    expect(OpenCode.decision).toBeFunction()
-    expect(VercelAIGateway.decision("typesafe-ai/jev").route.id).toBe("openai-decisions")
-    expect(Baseten.decision).toBeFunction()
-    expect(DigitalOcean.decision).toBeFunction()
-    expect(OpenAI.decision("gpt-6-luna").route.id).toBe("openai-decisions")
-    expect(XAI.model).toBeFunction()
-    expect(XAI.provider.responses).toBe(XAI.responses)
-    expect(XAI.provider.chat).toBe(XAI.chat)
-    expect(XAI.configure({ apiKey: "fixture" }).responses("grok-4.3").route.id).toBe("xai-responses")
-    expect(XAI.configure({ apiKey: "fixture" }).chat("grok-4.3").route.id).toBe("xai-chat")
-    expect(OpenAI.configure({ apiKey: "fixture" }).image("gpt-image-2").route.id).toBe("openai-images")
-    expect(OpenAI.provider.image).toBe(OpenAI.image)
-    expect(Google.configure({ apiKey: "fixture" }).image("imagen-4.0-generate-001").route.id).toBe("google-images")
-    expect(Google.provider.image).toBe(Google.image)
-    expect(XAI.configure({ apiKey: "fixture" }).image("grok-imagine-image").route.id).toBe("xai-images")
-    expect(XAI.provider.image).toBe(XAI.image)
-    expect(Meta.configure({ apiKey: "fixture" }).image("muse-image").route.id).toBe("meta-images")
-    expect(Meta.provider.image).toBe(Meta.image)
-    expect(ZAI.configure({ apiKey: "fixture" }).image("glm-image").route.id).toBe("zai-images")
-    expect(ZAI.provider.image).toBe(ZAI.image)
-    expect(MiniMax.configure({ apiKey: "fixture" }).image("image-01").route.id).toBe("minimax-images")
-    expect(MiniMax.provider.image).toBe(MiniMax.image)
-    expect(Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" }).image("qwen-image-2.0").route.id).toBe(
+    expect(cloudflareAIGateway.configure({ accountId: "fixture", gatewayApiKey: "fixture" })).toBeFunction()
+    expect(cloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" })).toBeFunction()
+    expect(openrouter("fixture").route.id).toBe("openrouter")
+    expect(openrouter.decision).toBeFunction()
+    expect(typesafeAI.decision).toBeFunction()
+    expect(opencode.decision).toBeFunction()
+    expect(vercelAIGateway.decision("typesafe-ai/jev").route.id).toBe("openai-decisions")
+    expect(baseten.decision).toBeFunction()
+    expect(digitalocean.decision).toBeFunction()
+    expect(openai.decision("gpt-6-luna").route.id).toBe("openai-decisions")
+    expect(xai("grok-4.3").route.id).toBe("xai-responses")
+    expect(xai.configure({ apiKey: "fixture" }).responses("grok-4.3").route.id).toBe("xai-responses")
+    expect(xai.configure({ apiKey: "fixture" }).chat("grok-4.3").route.id).toBe("xai-chat")
+    expect(openai.configure({ apiKey: "fixture" }).image("gpt-image-2").route.id).toBe("openai-images")
+    expect(google.configure({ apiKey: "fixture" }).image("imagen-4.0-generate-001").route.id).toBe("google-images")
+    expect(xai.configure({ apiKey: "fixture" }).image("grok-imagine-image").route.id).toBe("xai-images")
+    expect(meta.configure({ apiKey: "fixture" }).image("muse-image").route.id).toBe("meta-images")
+    expect(zai.configure({ apiKey: "fixture" }).image("glm-image").route.id).toBe("zai-images")
+    expect(minimax.configure({ apiKey: "fixture" }).image("image-01").route.id).toBe("minimax-images")
+    expect(alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" }).image("qwen-image-2.0").route.id).toBe(
       "alibaba-images",
     )
-    expect(VercelAIGateway.configure({ apiKey: "fixture" }).image("meta/muse-image-1.0").route.id).toBe("openai-images")
-    expect(VercelAIGateway.provider.image).toBe(VercelAIGateway.image)
+    expect(vercelAIGateway.configure({ apiKey: "fixture" }).image("meta/muse-image-1.0").route.id).toBe("openai-images")
     expect(
-      CloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" }).image(
-        "@cf/black-forest-labs/flux-1-schnell",
-      ).route.id,
+      cloudflareWorkersAI
+        .configure({ accountId: "fixture", apiKey: "fixture" })
+        .image("@cf/black-forest-labs/flux-1-schnell").route.id,
     ).toBe("cloudflare-workers-ai-images")
-    expect(XAI.configure({ apiKey: "fixture" }).video("grok-imagine-video-1.5").route.id).toBe("xai-video")
-    expect(XAI.provider.video).toBe(XAI.video)
-    expect(Google.configure({ apiKey: "fixture" }).video("veo-3.1-generate-preview").route.id).toBe("google-video")
-    expect(Google.provider.video).toBe(Google.video)
-    expect(Runway.configure({ apiKey: "fixture" }).video("gen4.5").route.id).toBe("runway-video")
-    expect(Runway.provider.video).toBe(Runway.video)
-    expect(OpenAI.configure({ apiKey: "fixture" }).speech("gpt-4o-mini-tts").route.id).toBe("openai-speech")
-    expect(Google.configure({ apiKey: "fixture" }).speech("gemini-2.5-flash-preview-tts").route.id).toBe(
+    expect(xai.configure({ apiKey: "fixture" }).video("grok-imagine-video-1.5").route.id).toBe("xai-video")
+    expect(google.configure({ apiKey: "fixture" }).video("veo-3.1-generate-preview").route.id).toBe("google-video")
+    expect(runway.configure({ apiKey: "fixture" }).video("gen4.5").route.id).toBe("runway-video")
+    expect(openai.configure({ apiKey: "fixture" }).speech("gpt-4o-mini-tts").route.id).toBe("openai-speech")
+    expect(google.configure({ apiKey: "fixture" }).speech("gemini-2.5-flash-preview-tts").route.id).toBe(
       "google-speech",
     )
-    expect(ElevenLabs.configure({ apiKey: "fixture" }).speech("eleven_flash_v2_5").route.id).toBe("elevenlabs-speech")
-    expect(Cartesia.configure({ apiKey: "fixture" }).speech("sonic-3").route.id).toBe("cartesia-speech")
-    expect(Deepgram.configure({ apiKey: "fixture" }).speech("aura-2-thalia-en").route.id).toBe("deepgram-speech")
-    expect(OpenAI.configure({ apiKey: "fixture" }).transcription("gpt-transcribe").route.kind).toBe("stream")
-    expect(Google.configure({ apiKey: "fixture" }).transcription("gemini-3.5-transcribe").route.kind).toBe("stream")
-    expect(Deepgram.configure({ apiKey: "fixture" }).transcription("nova-3").route.kind).toBe("inline")
-    expect(AssemblyAI.configure({ apiKey: "fixture" }).transcription("universal-3-5-pro").route.kind).toBe("queued")
-    expect(ElevenLabs.configure({ apiKey: "fixture" }).transcription("scribe_v2").route.id).toBe(
+    expect(elevenlabs.configure({ apiKey: "fixture" }).speech("eleven_flash_v2_5").route.id).toBe("elevenlabs-speech")
+    expect(cartesia.configure({ apiKey: "fixture" }).speech("sonic-3").route.id).toBe("cartesia-speech")
+    expect(deepgram.configure({ apiKey: "fixture" }).speech("aura-2-thalia-en").route.id).toBe("deepgram-speech")
+    expect(openai.configure({ apiKey: "fixture" }).transcription("gpt-transcribe").route.kind).toBe("stream")
+    expect(google.configure({ apiKey: "fixture" }).transcription("gemini-3.5-transcribe").route.kind).toBe("stream")
+    expect(deepgram.configure({ apiKey: "fixture" }).transcription("nova-3").route.kind).toBe("inline")
+    expect(assemblyai.configure({ apiKey: "fixture" }).transcription("universal-3-5-pro").route.kind).toBe("queued")
+    expect(elevenlabs.configure({ apiKey: "fixture" }).transcription("scribe_v2").route.id).toBe(
       "elevenlabs-transcription",
     )
-    expect(ElevenLabs.configure({ apiKey: "fixture" }).transcription("scribe_v2").route.kind).toBe("inline")
-    expect(ElevenLabs.provider.transcription).toBe(ElevenLabs.transcription)
+    expect(elevenlabs.configure({ apiKey: "fixture" }).transcription("scribe_v2").route.kind).toBe("inline")
   })
 
   test("protocol barrels expose supported low-level routes", () => {

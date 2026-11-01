@@ -6,7 +6,7 @@ import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 
-export const id = ProviderID.make("google-vertex")
+const id = ProviderID.make("google-vertex")
 
 export type Config = RouteDefaultsInput &
   GoogleVertexShared.OAuthOptions & {
@@ -60,19 +60,21 @@ const configuredRoute = (input: Config) => {
   })
 }
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
-  return {
+  return Object.assign((modelID: string | ModelID) => route.model<OpenAIProviderOptionsInput>({ id: modelID }), {
     id,
-    model: (modelID: string | ModelID) => route.model<OpenAIProviderOptionsInput>({ id: modelID }),
     configure,
-  }
+  })
 }
 
-export const provider = {
-  id,
-  configure,
-}
+export const googleVertexChat = Object.assign(
+  (modelID: string | ModelID, input: Config = {}) => configure(input)(modelID),
+  {
+    id,
+    configure,
+  },
+)
 
 export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> = (
   modelID,
@@ -88,5 +90,5 @@ export const model: ProviderPackage.Model<Settings, OpenAIProviderOptionsInput> 
     location,
     project,
     providerOptions,
-  }).model(modelID)
+  })(modelID)
 }

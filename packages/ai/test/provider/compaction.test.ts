@@ -2,7 +2,7 @@ import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { ai, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route/client.js"
-import { OpenAI, Azure, XAI } from "../../src/providers/index.js"
+import { openai, azure, xai } from "../../src/providers/index.js"
 import { testEffect } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
@@ -17,8 +17,8 @@ const response = sseEvents(
 )
 
 for (const model of [
-  OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
-  Azure.configure({ apiKey: "test", resourceName: "test" }).responses("deployment"),
+  openai.configure({ apiKey: "test" }).responses("gpt-5.3-codex"),
+  azure.configure({ apiKey: "test", resourceName: "test" }).responses("deployment"),
 ]) {
   testEffect(
     dynamicResponse(({ text, respond }) =>
@@ -46,7 +46,7 @@ for (const model of [
       yield* LLMClient.generate({ ...request, messages: [...request.messages, message, Message.user("continue")] })
       const rejected = yield* LLMClient.generate({
         ...request,
-        model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"),
+        model: xai.configure({ apiKey: "test" }).responses("grok-4.6"),
         providerOptions: {},
         messages: [message],
       }).pipe(Effect.flip)
@@ -60,7 +60,7 @@ testEffect(fixedResponse(sseEvents({ type: "response.completed", response: { out
   () =>
     Effect.gen(function* () {
       const result = yield* LLMClient.generate(
-        ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+        ai.request({ model: openai.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
       )
       expect(result.message.content).toHaveLength(1)
       expect(result.message.content[0]?.type).toBe("compaction")
@@ -72,7 +72,7 @@ testEffect(
 ).effect("rejects incomplete compaction payloads without publishing a checkpoint", () =>
   Effect.gen(function* () {
     const error = yield* LLMClient.generate(
-      ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
+      ai.request({ model: openai.configure({ apiKey: "test" }).responses("gpt-5.3-codex"), prompt: "hello" }),
     ).pipe(Effect.flip)
     expect(error.reason._tag).toBe("InvalidProviderOutput")
     expect(error.reason.body).toContain("cmp_bad")
@@ -101,7 +101,7 @@ for (const completed of [false, true]) {
   ).effect(completed ? "keeps streamed checkpoints before later text" : "rejects order-unsafe terminal recovery", () =>
     Effect.gen(function* () {
       const request = ai.request({
-        model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
+        model: openai.configure({ apiKey: "test" }).responses("fixture"),
         prompt: "hello",
       })
       if (completed) {
@@ -128,7 +128,7 @@ testEffect(
 ).effect("mints an id for terminal checkpoints that omit one", () =>
   Effect.gen(function* () {
     const response = yield* LLMClient.generate(
-      ai.request({ model: OpenAI.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" }),
+      ai.request({ model: openai.configure({ apiKey: "test" }).responses("fixture"), prompt: "hello" }),
     )
     const part = response.message.content[0]
     expect(part?.type).toBe("compaction")

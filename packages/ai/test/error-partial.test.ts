@@ -3,7 +3,7 @@ import { Effect, Layer, Schema, Stream } from "effect"
 import { ai, LanguageModel, LLMEvent, ProviderInternalError, tool } from "../src/effect.js"
 import { AI, AIError } from "../src/index.js"
 import { OpenAIChat } from "../src/protocols/openai-chat.js"
-import { OpenAI } from "../src/providers.js"
+import { openai } from "../src/providers.js"
 import { RequestExecutor } from "../src/route.js"
 import { TestLLM } from "../src/testing.js"
 import { testEffect } from "./lib/effect.js"
@@ -130,7 +130,7 @@ describe("AIError.partial from the promise client", () => {
     })
 
     const error = await client
-      .generate({ model: OpenAI.configure({ apiKey: "test" }).chat("gpt-4o-mini"), prompt: "Hello" })
+      .generate({ model: openai.configure({ apiKey: "test" }).chat("gpt-4o-mini"), prompt: "Hello" })
       .catch((error: unknown) => error)
 
     expect(error).toBeInstanceOf(AIError)

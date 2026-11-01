@@ -1,13 +1,15 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
 import { Video } from "../../src/experimental.js"
-import { XAI } from "../../src/providers.js"
+import { xai } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
 import { queuedPoll } from "./queued-recording.js"
 
-const model = XAI.configure({
-  apiKey: process.env.XAI_API_KEY ?? "fixture",
-}).video("grok-imagine-video-1.5")
+const model = xai
+  .configure({
+    apiKey: process.env.XAI_API_KEY ?? "fixture",
+  })
+  .video("grok-imagine-video-1.5")
 
 const recorded = recordedTests({
   prefix: "xai-video",

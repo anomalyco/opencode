@@ -8,7 +8,7 @@ import { DeepgramTranscription } from "../protocols/deepgram-transcription.js"
 export type { DeepgramEncoding, DeepgramSpeechOptions } from "../protocols/deepgram-speech.js"
 export type { DeepgramTranscriptionOptions } from "../protocols/deepgram-transcription.js"
 
-export const id = ProviderID.make("deepgram")
+const id = ProviderID.make("deepgram")
 
 export type Config = ProviderAuthOption<"optional"> & {
   readonly baseURL?: string
@@ -19,7 +19,7 @@ export type Config = ProviderAuthOption<"optional"> & {
 const auth = (options: ProviderAuthOption<"optional">) =>
   AuthOptions.apiKey(options, "DEEPGRAM_API_KEY", Auth.scheme("Token"))
 
-export const configure = (input: Config = {}) => {
+const configure = (input: Config = {}) => {
   const media = MediaRoute.deployment(input, auth(input))
   return {
     id,
@@ -29,6 +29,4 @@ export const configure = (input: Config = {}) => {
   }
 }
 
-export const provider = configure()
-export const speech = provider.speech
-export const transcription = provider.transcription
+export const deepgram = configure()
