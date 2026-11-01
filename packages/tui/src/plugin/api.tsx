@@ -9,6 +9,7 @@ import type {
   SlotMap,
   SlotPath,
   Toast,
+  ToastVariant,
 } from "@opencode/plugin/tui/context"
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
@@ -46,6 +47,8 @@ export type RegisteredSlot = {
 }
 
 const placements = ["prepend", "append", "before", "after", "replace"] as const satisfies readonly PlacementKind[]
+
+const toastVariants: readonly ToastVariant[] = ["info", "success", "warning", "error"]
 
 // The provider's registration store, narrowed to what a plugin context needs:
 // route/slot registration lands there, but ordering and lifecycle stay owned
@@ -107,10 +110,12 @@ export function createPluginContext(input: {
   const dialogApi = createDialogApi(host.dialog, provide)
   const toastApi: Toast = {
     show(options) {
+      const variant = options.variant
       const toast = {
         title: options.title,
         message: options.message,
-        variant: options.variant ?? "info",
+        // Plugins run as plain JS: an unknown variant must not reach the themed feedback lookup.
+        variant: variant && toastVariants.includes(variant) ? variant : "info",
         duration: options.duration,
       }
       const sessionID = options.sessionID
