@@ -802,7 +802,7 @@ await ctx.session.command({ sessionID, name: "review", text: "--staged" })
 const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
 ```
 
-Rename, interrupt, or wait for a session.
+Update, interrupt, or wait for a session.
 
 ```ts
 await ctx.session.update({ sessionID, title: "Review" })
@@ -831,11 +831,28 @@ const entries = await ctx.session.instructions.entry.list({ sessionID })
 await ctx.session.instructions.entry.remove({ sessionID, key: "deploy-target" })
 ```
 
+Answer `question` tool forms from an external system. A form appears when the agent asks a question; replying settles
+it and unblocks the turn. `list` returns every pending form kind, so filter `metadata.kind === "question"` when
+answering questions. Answers are keyed by the form's field keys (`q0`, `q1`, … for the built-in `question` tool);
+multiselect fields take an array of strings. Forms are scoped to the plugin's current location. Use `get` to inspect
+the current state, and `cancel` to dismiss a form; a cancel message is surfaced to the model as question feedback.
+
+```ts
+// `sessionID` is the session that owns the form.
+const pending = await ctx.session.form.list({ sessionID })
+const form = pending.find((item) => item.metadata?.kind === "question")
+if (!form) return
+const detail = await ctx.session.form.get({ sessionID, formID: form.id })
+if (detail.state.status !== "pending") return
+await ctx.session.form.reply({ sessionID, formID: form.id, answer: { q0: "yes" } })
+```
+
 #### Reference
 
 Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
 [`Session.Inbox.User`](/api#schema-Session.Inbox.User), [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic),
-[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info)
+[`InstructionEntry.Info`](/api#schema-InstructionEntry.Info), [`Form.Info`](/api#schema-Form.Info),
+[`Form.Detail`](/api#schema-Form.Detail)
 
 ```ts
 interface SessionContext {
@@ -852,6 +869,12 @@ interface SessionContext {
       put(input: ExperimentalSessionInstructionsEntryPutInput, requestOptions?: RequestOptions): Promise<void>
       remove(input: ExperimentalSessionInstructionsEntryRemoveInput, requestOptions?: RequestOptions): Promise<void>
     }
+  }
+  form: {
+    list(input: SessionFormListInput, requestOptions?: RequestOptions): Promise<readonly FormInfo[]>
+    get(input: SessionFormGetInput, requestOptions?: RequestOptions): Promise<FormDetail>
+    reply(input: SessionFormReplyInput, requestOptions?: RequestOptions): Promise<void>
+    cancel(input: SessionFormCancelInput, requestOptions?: RequestOptions): Promise<void>
   }
   switchAgent(input: SessionSwitchAgentInput, requestOptions?: RequestOptions): Promise<void>
   switchModel(input: SessionSwitchModelInput, requestOptions?: RequestOptions): Promise<void>
