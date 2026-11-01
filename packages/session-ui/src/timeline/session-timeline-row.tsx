@@ -101,6 +101,8 @@ export function createSessionTimelineRowRenderer(input: {
   anchor?: (messageID: string) => string | undefined
   /** Scrolls to and expands the tool call named by its ID or by the shell ID a backgrounded shell call reports. */
   revealPart?: (target: string) => boolean
+  /** Stops a timeline that follows its end from following, before a row scrolls the timeline itself. */
+  unpin?: () => void
 }) {
   const i18n = useI18n()
   const data = useData()
@@ -706,7 +708,13 @@ export function createSessionTimelineRowRenderer(input: {
           {(message) => (
             <div data-slot="session-turn-message-container" class={`w-full ${inset()}`}>
               <div data-slot="session-turn-compaction">
-                <SessionCompactionMessage message={message()} error={compactionError()} />
+                <SessionCompactionMessage
+                  message={message()}
+                  error={compactionError()}
+                  open={input.disclosure.value(message().id)}
+                  onOpenChange={(open) => input.disclosure.set(message().id, open)}
+                  onUnpin={input.unpin}
+                />
               </div>
             </div>
           )}

@@ -46,7 +46,7 @@ story("truncates long read rows and expands them in place", async ({ mount }) =>
   const files = row.locator('[data-slot="basic-tool-tool-subtitle"]')
   await expect(row).toHaveAttribute("role", "button")
   await expect(row).toHaveAttribute("aria-expanded", "false")
-  await expect(files).toHaveCSS("text-overflow", "ellipsis")
+  await expect.poll(() => files.evaluate((node) => getComputedStyle(node).maskImage)).toContain("linear-gradient")
   const collapsed = (await row.boundingBox())!.height
   await row.click()
   await expect(row).toHaveAttribute("aria-expanded", "true")
