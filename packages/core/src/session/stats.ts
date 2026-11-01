@@ -212,7 +212,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
                 AND message.time_created >= ${range.from}
                 AND message.time_created < ${range.to}
                 AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
-                AND NOT EXISTS (SELECT 1 FROM ${SessionPartTable} AS part WHERE part.message_id = message.id)
+                AND json_array_length(message.data, '$.content') > 0
                 AND json_extract(content.value, '$.type') = 'tool'
                 ${project}
             )
@@ -273,7 +273,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             AND message.time_created >= ${range.from}
             AND message.time_created < ${range.to}
             AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
-            AND NOT EXISTS (SELECT 1 FROM ${SessionPartTable} AS part WHERE part.message_id = message.id)
+            AND json_array_length(message.data, '$.content') > 0
             AND json_extract(content.value, '$.type') = 'tool'
             ${project}
         `,

@@ -1,12 +1,13 @@
 export * as SessionBlob from "./blob.js"
 
 import { createHash } from "node:crypto"
-import { and, eq, exists, gte, inArray, notExists, notInArray, type SQL, sql } from "drizzle-orm"
+import { and, eq, exists, gte, inArray, notExists, type SQL, sql } from "drizzle-orm"
 import { Cause, Context, Effect, Option, Schema } from "effect"
 import { map } from "effect/Array"
 import type { Attachment, FileAttachment } from "@opencode/schema/prompt"
 import type { Tool } from "@opencode/schema/tool"
 import { Config } from "../config.js"
+import { DatabaseBatch } from "../database/batch.js"
 import type { Database } from "../database/database.js"
 import type { Instance } from "../instance/service.js"
 import type { SessionMessage } from "./message.js"
@@ -102,13 +103,12 @@ function rewriteInbox(row: InboxRow, file: (file: SessionStored.File) => Session
 }
 
 const load = Effect.fnUntraced(function* (db: DatabaseService, hashes: ReadonlySet<string>) {
-  const all = [...hashes]
   const blobs = new Map<string, string>()
-  for (let offset = 0; offset < all.length; offset += 500) {
+  for (const batch of DatabaseBatch.batches([...hashes], 1)) {
     const found = yield* db
       .select({ hash: BlobTable.hash, data: BlobTable.data })
       .from(BlobTable)
-      .where(inArray(BlobTable.hash, all.slice(offset, offset + 500)))
+      .where(inArray(BlobTable.hash, batch))
       .all()
       .pipe(Effect.orDie)
     for (const blob of found) blobs.set(blob.hash, view(blob.data).toString("base64"))
@@ -171,14 +171,13 @@ export const keepInboxRefs = Effect.fnUntraced(function* (db: DatabaseService, r
 
 const loadMeta = Effect.fnUntraced(function* (db: DatabaseService, hashes: ReadonlySet<string>) {
   const meta = new Map<string, Meta>()
-  const all = [...hashes]
-  for (let offset = 0; offset < all.length; offset += 500) {
+  for (const batch of DatabaseBatch.batches([...hashes], 1)) {
     const found = yield* db
       .select({ hash: BlobTable.hash, bytes: BlobTable.bytes, width: BlobTable.width, height: BlobTable.height })
       .from(BlobTable)
       .where(
         and(
-          inArray(BlobTable.hash, all.slice(offset, offset + 500)),
+          inArray(BlobTable.hash, batch),
           exists(
             db
               .select({ one: sql`1` })
@@ -318,13 +317,8 @@ export const save = Effect.fnUntraced(function* (
   db: DatabaseService,
   blobs: ReadonlyArray<typeof BlobTable.$inferInsert>,
 ) {
-  if (blobs.length === 0) return
-  yield* db
-    .insert(BlobTable)
-    .values([...blobs])
-    .onConflictDoNothing()
-    .run()
-    .pipe(Effect.orDie)
+  for (const batch of DatabaseBatch.insertBatches(BlobTable, blobs))
+    yield* db.insert(BlobTable).values(batch).onConflictDoNothing().run().pipe(Effect.orDie)
 })
 
 /** {@link externalize} for a user message or pending inbox user payload. */
@@ -423,34 +417,50 @@ export const recordHashes = Effect.fnUntraced(function* (
   owner: Owner,
   hashes: ReadonlySet<string>,
 ) {
-  if (hashes.size === 0) return
   // A ref whose blob is already gone keeps nothing alive; reads render it as unavailable.
-  const found = yield* db
-    .select({ hash: BlobTable.hash })
-    .from(BlobTable)
-    .where(inArray(BlobTable.hash, [...hashes]))
-    .all()
-    .pipe(Effect.orDie)
-  if (found.length === 0) return
-  yield* db
-    .insert(BlobRefTable)
-    .values(
-      found.map(({ hash }) => ({ session_id: owner.sessionID, message_id: owner.messageID, hash, seq: owner.seq })),
+  const found: Array<{ hash: string }> = []
+  for (const batch of DatabaseBatch.batches([...hashes], 1))
+    found.push(
+      ...(yield* db
+        .select({ hash: BlobTable.hash })
+        .from(BlobTable)
+        .where(inArray(BlobTable.hash, batch))
+        .all()
+        .pipe(Effect.orDie)),
     )
-    .onConflictDoUpdate({
-      target: [BlobRefTable.session_id, BlobRefTable.message_id, BlobRefTable.hash],
-      set: { seq: owner.seq },
-    })
-    .run()
-    .pipe(Effect.orDie)
+  const refs = found.map(({ hash }) => ({
+    session_id: owner.sessionID,
+    message_id: owner.messageID,
+    hash,
+    seq: owner.seq,
+  }))
+  // The conflict update binds `seq` once more.
+  for (const batch of DatabaseBatch.insertBatches(BlobRefTable, refs, 1))
+    yield* db
+      .insert(BlobRefTable)
+      .values(batch)
+      .onConflictDoUpdate({
+        target: [BlobRefTable.session_id, BlobRefTable.message_id, BlobRefTable.hash],
+        set: { seq: owner.seq },
+      })
+      .run()
+      .pipe(Effect.orDie)
 })
 
 /** Records the refs a rewritten message names and releases the ones it no longer does. */
 export const syncRefs = Effect.fnUntraced(function* (db: DatabaseService, owner: Owner, data: Refs) {
   yield* recordRefs(db, owner, data)
-  const present = [...hashesOf(data)]
+  const present = hashesOf(data)
   const own = [eq(BlobRefTable.session_id, owner.sessionID), eq(BlobRefTable.message_id, owner.messageID)] as const
-  yield* present.length === 0 ? release(db, ...own) : release(db, ...own, notInArray(BlobRefTable.hash, present))
+  if (present.size === 0) return yield* release(db, ...own)
+  const stale = (yield* db
+    .select({ hash: BlobRefTable.hash })
+    .from(BlobRefTable)
+    .where(and(...own))
+    .all()
+    .pipe(Effect.orDie)).flatMap((ref) => (present.has(ref.hash) ? [] : [ref.hash]))
+  for (const batch of DatabaseBatch.batches(stale, 1, own.length))
+    yield* release(db, ...own, inArray(BlobRefTable.hash, batch))
 })
 
 /** Deletes the matching refs, then every blob among theirs that no ref names anymore. */
@@ -461,13 +471,12 @@ const release = Effect.fnUntraced(function* (db: DatabaseService, ...where: read
     .returning({ hash: BlobRefTable.hash })
     .all()
     .pipe(Effect.orDie)
-  const hashes = [...new Set(released.map((ref) => ref.hash))]
-  for (let offset = 0; offset < hashes.length; offset += 500)
+  for (const batch of DatabaseBatch.batches([...new Set(released.map((ref) => ref.hash))], 1))
     yield* db
       .delete(BlobTable)
       .where(
         and(
-          inArray(BlobTable.hash, hashes.slice(offset, offset + 500)),
+          inArray(BlobTable.hash, batch),
           notExists(
             db
               .select({ one: sql`1` })

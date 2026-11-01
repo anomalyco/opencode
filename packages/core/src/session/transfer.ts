@@ -11,6 +11,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
+import { DatabaseBatch } from "../database/batch.js"
 import { Instance } from "../instance/service.js"
 import { Location } from "../location.js"
 import { Project } from "../project.js"
@@ -152,14 +153,10 @@ const layer = Layer.effect(
                       ? messages.map((message, i) => ({ ...message, data: split[i]!.data }))
                       : messages
                     const storedParts = media ? parts.map((part, i) => ({ ...part, data: splitParts[i]!.data })) : parts
-                    yield* db.insert(SessionMessageTable).values(stored).run().pipe(Effect.orDie)
-                    for (let index = 0; index < storedParts.length; index += 500) {
-                      yield* db
-                        .insert(SessionPartTable)
-                        .values(storedParts.slice(index, index + 500))
-                        .run()
-                        .pipe(Effect.orDie)
-                    }
+                    for (const batch of DatabaseBatch.insertBatches(SessionMessageTable, stored))
+                      yield* db.insert(SessionMessageTable).values(batch).run().pipe(Effect.orDie)
+                    for (const batch of DatabaseBatch.insertBatches(SessionPartTable, storedParts))
+                      yield* db.insert(SessionPartTable).values(batch).run().pipe(Effect.orDie)
                     if (media) {
                       const moved = new Map<string, Set<string>>()
                       const add = (messageID: string, blobs: ReadonlyArray<{ hash: string }>) => {

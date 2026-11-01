@@ -1,8 +1,9 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Fiber, Option, Schema, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { and, asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
+import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import { Agent } from "@opencode/core/agent"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -40,12 +41,25 @@ import {
   SessionTable,
 } from "@opencode/core/session/sql"
 import { testEffect } from "./lib/effect"
+import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
 import { Snapshot } from "@opencode/core/snapshot"
 
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionInbox.node, SessionStore.node]),
     [Bus.node.replace(Bus.configured({ persist: true }))],
+  ),
+)
+// Durable Object SQLite, which rejects statements that bind more than 100 parameters.
+const durableIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionInbox.node, SessionStore.node]),
+    [
+      Bus.node.replace(Bus.configured({ persist: true })),
+      Database.node.replace(
+        Database.configuredClient(Layer.suspend(() => sqliteLayer({ storage: makeDurableObjectStorage() }))),
+      ),
+    ],
   ),
 )
 const sessionsLayer = AppNodeBuilder.build(Session.node, [SessionExecution.node.replace(SessionExecution.noopLayer)])
@@ -1093,7 +1107,12 @@ describe("SessionProjector", () => {
 
       expect(yield* settledRow()).toEqual(before)
       expect(
-        yield* db.select().from(SessionPartTable).where(eq(SessionPartTable.message_id, settledID)).all().pipe(Effect.orDie),
+        yield* db
+          .select()
+          .from(SessionPartTable)
+          .where(eq(SessionPartTable.message_id, settledID))
+          .all()
+          .pipe(Effect.orDie),
       ).toEqual([])
     }),
   )
@@ -2025,7 +2044,11 @@ describe("SessionProjector", () => {
       expect((yield* store.message(assistantMessageID))?.message).toMatchObject({
         content: [
           { type: "text", text: "before rollback" },
-          { type: "tool", id: "call_a", state: { status: "completed", content: [{ type: "text", text: "export {}" }] } },
+          {
+            type: "tool",
+            id: "call_a",
+            state: { status: "completed", content: [{ type: "text", text: "export {}" }] },
+          },
           { type: "text", text: "after rollback" },
           { type: "tool", id: "call_b", state: { status: "streaming" } },
         ],
@@ -2226,6 +2249,265 @@ describe("SessionProjector", () => {
       // The caller's own config doesn't decide: Session.fork sets ForkMedia from the parent's location.
     }).pipe(Effect.provide(mediaBlob)),
   )
+
+  it.effect("reads a split message an older build added inline content to as its parts then that content", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const messageID = SessionMessage.ID.make("msg_hybrid_read")
+      yield* db
+        .insert(SessionMessageTable)
+        .values(
+          hybridRow(messageID, [
+            { type: "text", text: "inline after" },
+            {
+              type: "tool",
+              id: "call_inline",
+              name: "read",
+              executed: true,
+              state: { status: "running", input: { path: "a.ts" }, metadata: {} },
+              time: { created: 1, ran: 1 },
+            },
+          ]),
+        )
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionPartTable)
+        .values(textPart(messageID, 0, "split first"))
+        .run()
+        .pipe(Effect.orDie)
+
+      const content = [
+        { type: "text", text: "split first" },
+        { type: "text", text: "inline after" },
+        { type: "tool", id: "call_inline", state: { status: "running" } },
+      ]
+      expect((yield* store.message(messageID))?.message).toMatchObject({ content })
+      // The runner settles stale tool calls from context, so an inline one on a split message must show up there.
+      expect(yield* store.context(sessionID)).toMatchObject([{ id: messageID, content }])
+
+      yield* bus.publish(SessionEvent.Tool.Failed, {
+        sessionID,
+        assistantMessageID: messageID,
+        id: "call_inline",
+        error: { type: "aborted", message: "Tool execution interrupted: read" },
+        executed: true,
+      })
+      expect((yield* store.message(messageID))?.message).toMatchObject({
+        content: [content[0], content[1], { type: "tool", id: "call_inline", state: { status: "error" } }],
+      })
+      expect((yield* messageRows(db, sessionID))[0]?.data).toMatchObject({ content: [] })
+    }),
+  )
+
+  it.effect("forks a split message an older build added inline media to", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const messageID = SessionMessage.ID.make("msg_hybrid_fork")
+      const childID = Session.ID.make("ses_hybrid_fork")
+      yield* db
+        .insert(SessionMessageTable)
+        .values(hybridRow(messageID, [inlineShot], { created, completed: created }))
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionPartTable)
+        .values(textPart(messageID, 0, "split first"))
+        .run()
+        .pipe(Effect.orDie)
+      const parent = yield* store.messages({ sessionID, order: "asc" })
+      expect(parent).toMatchObject([
+        {
+          content: [
+            { type: "text", text: "split first" },
+            { type: "tool", id: "call_inline_shot" },
+          ],
+        },
+      ])
+
+      yield* bus.publish(SessionEvent.Forked, {
+        sessionID: childID,
+        parentID: sessionID,
+        boundary: { type: "through", messageID },
+      })
+
+      const childRows = yield* messageRows(db, childID)
+      expect(JSON.stringify(yield* SessionHistory.withParts(db, childRows))).not.toContain(png.toString("base64"))
+      expect(
+        yield* db
+          .select({ session: BlobRefTable.session_id, message: BlobRefTable.message_id, hash: BlobRefTable.hash })
+          .from(BlobRefTable)
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([{ session: childID, message: childRows[0]!.id, hash: SessionBlob.hashBytes(png) }])
+      yield* bus.publish(SessionEvent.Deleted, { sessionID })
+      expect(withoutIDs(yield* store.messages({ sessionID: childID, order: "asc" }))).toEqual(withoutIDs(parent))
+    }).pipe(Effect.provideService(SessionBlob.ForkMedia, true)),
+  )
+
+  it.effect("deletes a reverted message's session_part rows and the blobs only they referenced", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const assistantMessageID = SessionMessage.ID.make("msg_media_tool_reverted")
+      yield* bus.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID, agent: build, model, started: 1 })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, { sessionID, assistantMessageID, id: "shot", name: "shot" })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        input: {},
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+        executed: true,
+      })
+      expect(yield* db.select().from(SessionPartTable).all().pipe(Effect.orDie)).toHaveLength(1)
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toHaveLength(1)
+
+      yield* bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: assistantMessageID })
+      expect(yield* db.select().from(SessionPartTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
+    }).pipe(Effect.provide(mediaBlob)),
+  )
+
+  it.effect("moves a legacy inline media message's rewritten content to session_part with its media as a blob", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const messageID = SessionMessage.ID.make("msg_legacy_media_rewritten")
+      const hash = SessionBlob.hashBytes(png)
+      yield* db
+        .insert(SessionMessageTable)
+        .values(hybridRow(messageID, [inlineShot], { created, completed: created }))
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* bus.publish(SessionEvent.MessageContentUpdated, {
+        sessionID,
+        messageID,
+        content: [{ type: "text", text: "rewritten" }, inlineShot],
+      })
+
+      expect((yield* messageRows(db, sessionID))[0]?.data).toMatchObject({ content: [] })
+      expect(
+        yield* db
+          .select({ data: SessionPartTable.data })
+          .from(SessionPartTable)
+          .orderBy(asc(SessionPartTable.ordinal))
+          .all()
+          .pipe(Effect.orDie),
+      ).toMatchObject([
+        { data: { type: "text", text: "rewritten" } },
+        { data: { type: "tool", state: { content: [{ type: "file", uri: SessionStored.ref(hash) }] } } },
+      ])
+      expect(yield* db.select({ hash: BlobTable.hash }).from(BlobTable).all().pipe(Effect.orDie)).toEqual([{ hash }])
+      expect(
+        yield* db
+          .select({ message: BlobRefTable.message_id, hash: BlobRefTable.hash })
+          .from(BlobRefTable)
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([{ message: messageID, hash }])
+      expect((yield* store.message(messageID))?.message).toMatchObject({
+        content: [
+          { type: "text", text: "rewritten" },
+          {
+            type: "tool",
+            id: "call_inline_shot",
+            state: { content: [{ type: "file", uri: inlineShot.state.content[0].uri }] },
+          },
+        ],
+      })
+    }).pipe(Effect.provide(mediaBlob)),
+  )
+
+  durableIt.effect("forks and reads a long session in statements under 100 bound parameters", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const childID = Session.ID.make("ses_long_fork")
+      const ids = Array.from({ length: 120 }, (_, seq) =>
+        SessionMessage.ID.make(`msg_long_${String(seq).padStart(3, "0")}`),
+      )
+      yield* Effect.forEach(
+        ids,
+        (id, seq) =>
+          db
+            .insert(SessionMessageTable)
+            .values(assistantRow(id, seq, { created, completed: created }))
+            .run()
+            .pipe(Effect.orDie),
+        { discard: true },
+      )
+      const texts = Array.from({ length: 30 }, (_, ordinal) => `part ${ordinal}`)
+      yield* Effect.forEach(
+        texts,
+        (text, ordinal) =>
+          db
+            .insert(SessionPartTable)
+            .values(textPart(ids[0]!, ordinal, text))
+            .run()
+            .pipe(Effect.orDie),
+        { discard: true },
+      )
+      const parent = yield* store.messages({ sessionID, order: "asc" })
+      expect(parent).toHaveLength(ids.length)
+      expect(parent[0]).toMatchObject({ content: texts.map((text) => ({ type: "text", text })) })
+
+      yield* bus.publish(SessionEvent.Forked, {
+        sessionID: childID,
+        parentID: sessionID,
+        boundary: { type: "through", messageID: ids.at(-1)! },
+      })
+      expect(withoutIDs(yield* store.messages({ sessionID: childID, order: "asc" }))).toEqual(withoutIDs(parent))
+    }).pipe(Effect.provideService(SessionBlob.ForkMedia, true)),
+  )
+})
+
+const inlineShot = {
+  type: "tool",
+  id: "call_inline_shot",
+  name: "screenshot",
+  executed: true,
+  state: {
+    status: "completed",
+    input: {},
+    content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+  },
+  time: { created: 2, ran: 2, completed: 2 },
+} as const
+
+/** An assistant row with inline content, the shape an older build writes even when session_part rows exist. */
+const hybridRow = (
+  messageID: SessionMessage.ID,
+  content: ReadonlyArray<typeof SessionMessage.AssistantContent.Encoded>,
+  time?: { created: DateTime.Utc; completed?: DateTime.Utc },
+) => {
+  const row = assistantRow(messageID, 0, time)
+  return { ...row, data: { ...row.data, content } }
+}
+
+const textPart = (messageID: SessionMessage.ID, ordinal: number, text: string) => ({
+  message_id: messageID,
+  session_id: sessionID,
+  ordinal,
+  type: "text" as const,
+  call_id: null,
+  time_created: 0,
+  time_updated: 0,
+  data: { type: "text" as const, text },
 })
 
 const messageRows = (db: Database.Interface["db"], session: Session.ID) =>

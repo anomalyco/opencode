@@ -5,6 +5,7 @@ import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "
 import { DateTime, Effect, Layer, Schema, Stream } from "effect"
 import path from "path"
 import { Database } from "../database/database.js"
+import { DatabaseBatch } from "../database/batch.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Model } from "@opencode/schema/model"
@@ -45,6 +46,13 @@ type Usage = {
 }
 
 const ForkBatchSize = 500
+
+const insertParts = (db: DatabaseService, rows: ReadonlyArray<typeof SessionPartTable.$inferInsert>) =>
+  Effect.forEach(
+    DatabaseBatch.insertBatches(SessionPartTable, rows),
+    (batch) => db.insert(SessionPartTable).values(batch).run().pipe(Effect.orDie),
+    { discard: true },
+  )
 
 const forkTitle = (value?: string) => {
   if (value === undefined) return
@@ -240,7 +248,11 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
         }
       }),
     )
-    yield* db.insert(SessionMessageTable).values(values).run().pipe(Effect.orDie)
+    yield* Effect.forEach(
+      DatabaseBatch.insertBatches(SessionMessageTable, values),
+      (batch) => db.insert(SessionMessageTable).values(batch).run().pipe(Effect.orDie),
+      { discard: true },
+    )
     yield* Effect.forEach(
       values,
       (value) =>
@@ -255,21 +267,15 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     const assistantRows = rows.filter((row) => row.type === "assistant")
     if (assistantRows.length > 0) {
       const idMap = new Map(assistantRows.map((row) => [row.id, forkedID(row.seq)]))
-      const storedParts = yield* db
-        .select()
-        .from(SessionPartTable)
-        .where(
-          and(
-            eq(SessionPartTable.session_id, event.data.parentID),
-            inArray(
-              SessionPartTable.message_id,
-              assistantRows.map((row) => row.id),
-            ),
-          ),
-        )
-        .orderBy(asc(SessionPartTable.message_id), asc(SessionPartTable.ordinal))
-        .all()
-        .pipe(Effect.orDie)
+      const storedParts = yield* Effect.forEach(DatabaseBatch.batches([...idMap.keys()], 1, 1), (ids) =>
+        db
+          .select()
+          .from(SessionPartTable)
+          .where(and(eq(SessionPartTable.session_id, event.data.parentID), inArray(SessionPartTable.message_id, ids)))
+          .orderBy(asc(SessionPartTable.message_id), asc(SessionPartTable.ordinal))
+          .all()
+          .pipe(Effect.orDie),
+      ).pipe(Effect.map((batches) => batches.flat()))
       const partValues: Array<typeof SessionPartTable.$inferInsert> = yield* Effect.forEach(storedParts, (part) =>
         Effect.gen(function* () {
           const data = media ? SessionBlob.split(part.data) : undefined
@@ -286,13 +292,7 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
           }
         }),
       )
-      for (let index = 0; index < partValues.length; index += ForkBatchSize) {
-        yield* db
-          .insert(SessionPartTable)
-          .values(partValues.slice(index, index + ForkBatchSize))
-          .run()
-          .pipe(Effect.orDie)
-      }
+      yield* insertParts(db, partValues)
       // Split parents' envelopes carry no content, so the parts' refs are recorded for each forked message here.
       const partsByMessage = Map.groupBy(partValues, (part) => part.message_id)
       yield* Effect.forEach(
@@ -369,13 +369,7 @@ function run(db: DatabaseService, event: MessageEvent) {
             time_updated: event.created,
             data: SessionHistory.encodePart(part),
           }))
-          for (let index = 0; index < partRows.length; index += ForkBatchSize) {
-            yield* db
-              .insert(SessionPartTable)
-              .values(partRows.slice(index, index + ForkBatchSize))
-              .run()
-              .pipe(Effect.orDie)
-          }
+          yield* insertParts(db, partRows)
         }
         const { id: _, type: __, ...data } = encodeMessage({ ...message, content: [] })
         yield* db
@@ -390,9 +384,11 @@ function run(db: DatabaseService, event: MessageEvent) {
     // Assistant content is written only by the part methods below, which also record its blob refs. Envelope updates
     // keep whatever content the row already holds: inline for a legacy row that was never split, [] once it was.
     const updateMessage = (message: SessionMessage.Info) => {
-      const { id: _, type: __, ...data } = encodeMessage(
-        message.type === "assistant" ? { ...message, content: [] } : message,
-      )
+      const {
+        id: _,
+        type: __,
+        ...data
+      } = encodeMessage(message.type === "assistant" ? { ...message, content: [] } : message)
       return db
         .update(SessionMessageTable)
         .set({
@@ -582,13 +578,7 @@ function run(db: DatabaseService, event: MessageEvent) {
             time_updated: event.created,
             data: SessionHistory.encodePart(part),
           }))
-          for (let index = 0; index < partRows.length; index += ForkBatchSize) {
-            yield* db
-              .insert(SessionPartTable)
-              .values(partRows.slice(index, index + ForkBatchSize))
-              .run()
-              .pipe(Effect.orDie)
-          }
+          yield* insertParts(db, partRows)
           // A content rewrite may drop media, so refs the new parts no longer name are released.
           yield* SessionBlob.syncRefs(db, owner, { content: partRows.map((part) => part.data) })
         })
@@ -679,13 +669,7 @@ const insertMessage = Effect.fnUntraced(function* (
     time_updated: event.created,
     data: SessionHistory.encodePart(part),
   }))
-  for (let index = 0; index < partRows.length; index += ForkBatchSize) {
-    yield* db
-      .insert(SessionPartTable)
-      .values(partRows.slice(index, index + ForkBatchSize))
-      .run()
-      .pipe(Effect.orDie)
-  }
+  yield* insertParts(db, partRows)
   yield* SessionBlob.recordRefs(
     db,
     { sessionID: event.data.sessionID, messageID: message.id, seq: event.durable.seq },

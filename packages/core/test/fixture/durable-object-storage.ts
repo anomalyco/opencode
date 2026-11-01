@@ -15,6 +15,8 @@ export const makeDurableObjectStorage = (): DurableObjectStorage => {
   return {
     sql: {
       exec(query: string, ...bindings: Array<unknown>) {
+        // Durable Object SQLite rejects a statement with more than 100 bound parameters.
+        if (bindings.length > 100) throw new Error(`too many SQL variables: ${bindings.length}`)
         const statement = native.query(query)
         const rows = (statement.values(...(bindings as never[])) ?? []).map((row) => row.map(toSqlStorageValue))
         const columnNames = statement.columnNames
