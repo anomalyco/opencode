@@ -555,6 +555,8 @@ describe("LocationServiceMap", () => {
           expect(blockedState.providers.some((provider) => provider.id === allowedID)).toBe(false)
           const blockedTools = blockedState.tools.map((tool) => tool.name)
           expect(blockedTools.filter((name) => name !== "execute").sort()).toEqual([
+            "answer",
+            "ask",
             "edit",
             "glob",
             "grep",
@@ -574,6 +576,8 @@ describe("LocationServiceMap", () => {
           const allowedTools = allowedState.tools.map((tool) => tool.name)
           expect(blockedTools.includes("execute")).toBe(allowedTools.includes("execute"))
           expect(allowedTools.filter((name) => name !== "execute").sort()).toEqual([
+            "answer",
+            "ask",
             "edit",
             "glob",
             "grep",
