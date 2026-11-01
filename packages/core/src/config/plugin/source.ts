@@ -119,7 +119,7 @@ function parse(input: ConfigPlugin.Plugin): Operation {
   return { type: "remove", target: input.slice(1) }
 }
 
-const scan = Effect.fn("ConfigPluginSource.scan")(function* (
+export const scan = Effect.fn("ConfigPluginSource.scan")(function* (
   fs: FSUtil.Interface,
   location: Location.Interface,
   entries: readonly Entry[],
@@ -155,6 +155,7 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
       return Option.some<Operation>(operation)
     }),
   ).pipe(Effect.map((operations) => operations.flatMap(Option.toArray)))
+  const configuredTargets = new Set(resolved.map((operation) => operation.target))
   // Explicit config is applied last so it can remove auto-discovered packages.
   return yield* Effect.forEach([...discovered, ...resolved], (operation) =>
     Effect.gen(function* () {
@@ -166,11 +167,26 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
         : { server: pathToFileURL(operation.target).href }
       // A directory without a server part still lists for its GUI part. A TUI-only directory stays the TUI's own.
       const entrypoint = entrypoints.server ?? entrypoints.gui
-      if (!entrypoint) return []
+      if (!entrypoint) {
+        // Auto-discovered directories also include helper folders; only an explicit plugin entry is misconfigured.
+        if (configuredTargets.has(operation.target) && !entrypoints.tui) {
+          yield* Effect.logWarning("plugin directory has no server, GUI, or TUI entrypoint", {
+            target: operation.target,
+          })
+        }
+        return []
+      }
       if (directory) {
         const root = yield* fs.resolve(operation.target)
         const resolved = yield* fs.resolve(fileURLToPath(entrypoint))
-        if (!FSUtil.contains(root, resolved)) return []
+        if (!FSUtil.contains(root, resolved)) {
+          yield* Effect.logWarning("plugin entrypoint resolves outside plugin directory", {
+            target: operation.target,
+            root,
+            entrypoint: resolved,
+          })
+          return []
+        }
       }
       const times = yield* Effect.forEach(
         [
