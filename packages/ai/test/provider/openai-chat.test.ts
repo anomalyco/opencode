@@ -2043,6 +2043,34 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("starts a new tool call when a later call reuses its index", () =>
+    Effect.gen(function* () {
+      // LiteLLM-proxied Gemini streams every parallel call under index 0, each with its own id.
+      const body = sseEvents(
+        deltaChunk({
+          role: "assistant",
+          tool_calls: [{ index: 0, id: "call_1", type: "function", function: { name: "lookup", arguments: "" } }],
+        }),
+        deltaChunk({ tool_calls: [{ index: 0, function: { arguments: '{"city":"Paris"}' } }] }),
+        deltaChunk({
+          tool_calls: [{ index: 0, id: "call_2", type: "function", function: { name: "lookup", arguments: "" } }],
+        }),
+        deltaChunk({ tool_calls: [{ index: 0, function: { arguments: '{"city":"Tokyo"}' } }] }),
+        deltaChunk({}, "tool_calls"),
+      )
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.toolCalls).toMatchObject([
+        { id: "call_1", name: "lookup", input: { city: "Paris" } },
+        { id: "call_2", name: "lookup", input: { city: "Tokyo" } },
+      ])
+    }),
+  )
+
   it.effect("keeps extra content that arrives before the tool identity", () =>
     Effect.gen(function* () {
       const body = sseEvents(
