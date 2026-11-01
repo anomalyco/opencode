@@ -9,7 +9,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
-import { ForbiddenError, PtyNotFoundError } from "@opencode/protocol/errors"
+import { ForbiddenError, InvalidRequestError, PtyNotFoundError } from "@opencode/protocol/errors"
 import {
   PTY_CONNECT_TICKET_QUERY,
   PTY_CONNECT_TOKEN_HEADER,
@@ -106,7 +106,9 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
           if (!isAllowedRequestOrigin(ctx.request.headers.origin, ctx.request.headers.host, cors))
             return HttpServerResponse.empty({ status: 403 })
 
-          const ref = LocationServiceMap.canonical(requestRef(ctx.request))
+          const location = requestRef(ctx.request)
+          if (location instanceof InvalidRequestError) return yield* location
+          const ref = LocationServiceMap.canonical(location)
           const url = new URL(ctx.request.url, "http://localhost")
           const ticket = url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
           if (

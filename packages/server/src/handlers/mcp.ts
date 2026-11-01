@@ -2,7 +2,7 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Mcp } from "@opencode/core/mcp/index"
 import { PtyTicket } from "@opencode/core/pty/ticket"
-import { ForbiddenError, McpServerNotFoundError } from "@opencode/protocol/errors"
+import { ForbiddenError, InvalidRequestError, McpServerNotFoundError } from "@opencode/protocol/errors"
 import { PTY_CONNECT_TOKEN_HEADER, PTY_CONNECT_TOKEN_HEADER_VALUE } from "@opencode/protocol/groups/pty"
 import { Effect, Queue } from "effect"
 import { HttpServerResponse } from "effect/http"
@@ -95,7 +95,9 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
             return HttpServerResponse.empty({ status: 403 })
 
           const name = ctx.query.name
-          const ref = LocationServiceMap.canonical(requestRef(ctx.request))
+          const location = requestRef(ctx.request)
+          if (location instanceof InvalidRequestError) return yield* location
+          const ref = LocationServiceMap.canonical(location)
           if (
             ctx.query.ticket &&
             !(yield* tickets.consume({
