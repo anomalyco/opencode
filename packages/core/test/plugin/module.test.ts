@@ -55,6 +55,22 @@ it.live("watches creation of an external helper with missing parent directories"
   }),
 )
 
+it.live("reports the file and position when a local plugin fails to build", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const entry = path.join(directory.path, "index.ts")
+    yield* Effect.promise(() => Bun.write(entry, 'export const broken = "unterminated\nexport default {}\n'))
+    const modules = yield* PluginModule.make()
+    const error = yield* modules
+      .load({ type: "add" as const, target: directory.path, options: {} })
+      .pipe(Effect.flip)
+    expect(error).toBeInstanceOf(PluginModule.LoadError)
+    if (!(error instanceof PluginModule.LoadError)) return
+    expect(error.message).toContain(`${entry}:1:`)
+    expect(error.message).toContain("Unterminated string literal")
+  }),
+)
+
 it.live("interrupts pending watcher setup when the loader scope closes during module evaluation", () =>
   Effect.gen(function* () {
     const directory = yield* tmpdirScoped()
