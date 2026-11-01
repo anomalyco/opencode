@@ -132,6 +132,15 @@ export const settings: Setting[] = [
     keywords: ["tokens per second", "throughput"],
   },
   {
+    title: "Model label",
+    category: "Session",
+    path: ["session", "model_label"],
+    default: "name",
+    values: ["name", "id"],
+    labels: ["display name", "provider/model ID"],
+    keywords: ["model id", "provider", "footer"],
+  },
+  {
     title: "New session location",
     category: "Session",
     path: ["session", "new_location"],
