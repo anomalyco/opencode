@@ -1,4 +1,5 @@
 import type { CommandApi } from "@opencode/client/promise/api"
+import type { Command } from "@opencode/schema/command"
 import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { Session } from "@opencode/schema/session"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
@@ -13,6 +14,7 @@ export interface CommandInvocation {
 export interface CommandDefinition {
   readonly name: string
   readonly description?: string
+  readonly source?: Command.Info["source"]
   readonly execute: (input: CommandInvocation) => Promise<void>
 }
 

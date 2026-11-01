@@ -274,7 +274,10 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       id: `custom.${item.name}`,
       trigger: item.name,
       title: item.name,
-      description: item.description,
+      description:
+        item.source === "builtin" && (item.name === "init" || item.name === "review")
+          ? language.t(`command.${item.name}`)
+          : item.description,
       type: "custom" as const,
     })),
     ...command.options

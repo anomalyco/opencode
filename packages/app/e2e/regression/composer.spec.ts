@@ -1175,6 +1175,41 @@ test("/reload reloads the server's configuration once and reports it", async ({ 
   expect(reloads).toBe(1)
 })
 
+for (const row of [
+  {
+    locale: "en",
+    source: "builtin",
+    init: "guided AGENTS.md setup",
+    review: "review changes [commit|branch|pr], defaults to uncommitted",
+  },
+  {
+    locale: "zh",
+    source: "builtin",
+    init: "guided AGENTS.md setup",
+    review: "review changes [commit|branch|pr], defaults to uncommitted",
+  },
+  { locale: "zh", source: undefined, init: "Custom init", review: "Custom review" },
+]) {
+  test(`shows slash descriptions from ${row.source ?? "custom"} commands in ${row.locale}`, async ({ page }) => {
+    const { editor } = await openSession(page, {
+      name: "ComposerSlashDescriptions",
+      provider: NO_PROVIDER,
+      seed: { locale: row.locale },
+      commands: [
+        { name: "init", description: "Custom init", source: row.source },
+        { name: "review", description: "Custom review", source: row.source },
+        { name: "other", description: "Other command", source: "builtin" },
+      ],
+    })
+
+    await editor.fill("/")
+    const suggestions = page.locator('[data-component="composer-suggestions"]')
+    await expect(suggestions.locator('[data-suggestion-id="custom.init"]')).toContainText(row.init)
+    await expect(suggestions.locator('[data-suggestion-id="custom.review"]')).toContainText(row.review)
+    await expect(suggestions.locator('[data-suggestion-id="custom.other"]')).toContainText("Other command")
+  })
+}
+
 const followUp = "Add follow-up, / for commands, @ for context…"
 
 test("the shell shortcut toggles modes and keeps explicit bindings", async ({ page }) => {

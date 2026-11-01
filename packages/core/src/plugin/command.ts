@@ -29,6 +29,7 @@ export const Plugin = define({
       editor.add({
         name: "init",
         description: "guided AGENTS.md setup",
+        source: "builtin",
         execute: (input) =>
           ctx.session
             .prompt({
@@ -42,6 +43,7 @@ export const Plugin = define({
       editor.add({
         name: "review",
         description: "review changes [commit|branch|pr], defaults to uncommitted",
+        source: "builtin",
         execute: (input) =>
           ctx.session
             .prompt({
