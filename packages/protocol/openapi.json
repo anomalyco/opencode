@@ -20276,6 +20276,9 @@
           "streamUsage": {
             "type": "boolean"
           },
+          "omitEmptyTools": {
+            "type": "boolean"
+          },
           "cacheFormat": {
             "$ref": "#/components/schemas/Model.CacheFormat"
           },
@@ -21593,6 +21596,9 @@
             "type": "boolean"
           },
           "streamUsage": {
+            "type": "boolean"
+          },
+          "omitEmptyTools": {
             "type": "boolean"
           },
           "cacheFormat": {
