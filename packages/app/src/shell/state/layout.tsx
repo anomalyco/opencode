@@ -88,7 +88,7 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
     }
   }
 
-  throw new Error("Unrecognised route!")
+  return { type: "home" }
 }
 
 export const useCurrentRoute = () => {
