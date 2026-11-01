@@ -276,6 +276,60 @@ describe("acp prompt turns over the wire", () => {
     })
   })
 
+  test.each(["file:", "file://", "FILE:", "file://localhost"])(
+    "attaches local resource links spelled with %s",
+    async (prefix) => {
+      await using dir = await tmpdir()
+      const file = pathToFileURL(path.join(dir.path, "notes #1%.md")).href
+      const missing = pathToFileURL(path.join(dir.path, "missing.md")).href
+      await Bun.write(path.join(dir.path, "notes #1%.md"), "# notes\n")
+      await using acp = await startSession()
+
+      const response = await acp.prompt(acp.sessionId, [
+        { type: "text", text: "compare" },
+        { type: "resource_link", uri: prefix + new URL(file).pathname, name: "notes #1%.md" },
+        { type: "resource_link", uri: prefix + new URL(missing).pathname, name: "missing.md" },
+      ])
+
+      expect(response.stopReason).toBe("end_turn")
+      expect(acp.server.submissions).toEqual([
+        expect.objectContaining({
+          kind: "prompt",
+          text: `compare\n[missing.md](${missing})`,
+          files: [{ uri: file, name: "notes #1%.md" }],
+        }),
+      ])
+    },
+  )
+
+  test("preserves Zed links and references non-file or malformed URIs", async () => {
+    await using dir = await tmpdir()
+    const file = path.join(dir.path, "notes #1%.md")
+    await Bun.write(file, "# notes\n")
+    await using acp = await startSession()
+    const references = [
+      "http://example.com/a%20b",
+      "https://example.com/a%20b",
+      "plain text",
+      "file://%",
+      "file://[bad]",
+    ]
+
+    const response = await acp.prompt(acp.sessionId, [
+      { type: "resource_link", uri: `zed://file?path=${encodeURIComponent(file)}`, name: "notes #1%.md" },
+      ...references.map((uri) => ({ type: "resource_link" as const, uri, name: "reference" })),
+    ])
+
+    expect(response.stopReason).toBe("end_turn")
+    expect(acp.server.submissions).toEqual([
+      expect.objectContaining({
+        kind: "prompt",
+        text: references.map((uri) => `[reference](${uri})`).join("\n"),
+        files: [{ uri: pathToFileURL(file).href, name: "notes #1%.md" }],
+      }),
+    ])
+  })
+
   test("attaches readable file links and references unreadable ones in place", async () => {
     await using dir = await tmpdir()
     const file = pathToFileURL(path.join(dir.path, "notes.md")).href
