@@ -52,7 +52,10 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
     auth: info.password === undefined ? undefined : { type: "basic", username: "opencode", password: info.password },
   } satisfies Endpoint
   const signal = AbortSignal.timeout(timeout)
-  const result = await fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
+  // A leading slash would replace any path prefix on the service URL, so join relative to it.
+  const baseUrl = new URL(info.url)
+  if (!baseUrl.pathname.endsWith("/")) baseUrl.pathname += "/"
+  const result = await fetch(new URL("api/info", baseUrl), { headers: headers(endpoint), signal })
     .then(async (response) => ({
       response,
       body: response.status === 404 ? undefined : ((await response.json()) as unknown),

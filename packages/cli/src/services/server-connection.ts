@@ -20,6 +20,14 @@ export type Resolved = {
   readonly service?: ReturnType<typeof managedService>
 }
 
+// A leading slash would replace any path prefix on the endpoint URL, so join relative to it.
+// The path may arrive with or without one, so strip it rather than assuming either shape.
+export function requestUrl(endpoint: Endpoint, path: string) {
+  const baseUrl = new URL(endpoint.url)
+  if (!baseUrl.pathname.endsWith("/")) baseUrl.pathname += "/"
+  return new URL(path.replace(/^\//, ""), baseUrl)
+}
+
 export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args = {}) {
   const serverFlag = yield* Effect.serviceOption(ServerFlag).pipe(Effect.map(Option.flatten))
   const standaloneFlag = yield* Effect.serviceOption(StandaloneFlag)

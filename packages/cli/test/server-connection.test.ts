@@ -60,6 +60,19 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
   }
 })
 
+test("request URLs keep a path prefix on the endpoint URL", () => {
+  for (const [url, expected] of [
+    ["http://127.0.0.1:4096", "http://127.0.0.1:4096/api/info"],
+    ["http://127.0.0.1:4096/", "http://127.0.0.1:4096/api/info"],
+    ["http://127.0.0.1:4096/proxy", "http://127.0.0.1:4096/proxy/api/info"],
+    ["http://127.0.0.1:4096/proxy/", "http://127.0.0.1:4096/proxy/api/info"],
+    ["http://127.0.0.1:4096/deep/proxy", "http://127.0.0.1:4096/deep/proxy/api/info"],
+  ]) {
+    expect(ServerConnection.requestUrl({ url }, "/api/info").href).toBe(expected)
+    expect(ServerConnection.requestUrl({ url }, "api/info").href).toBe(expected)
+  }
+})
+
 test("service options only require a matching version when requested", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-options-"))
   const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
