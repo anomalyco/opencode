@@ -33,6 +33,19 @@ other workflows that need model output directly in the terminal.
 opencode run "Explain this repository"
 ```
 
+## Mouse capture
+
+Use `--no-mouse` to let your terminal handle text selection and mouse paste. This is useful over SSH when clipboard
+integration is unavailable:
+
+```bash
+opencode --no-mouse
+```
+
+Use `opencode --mouse` to force application mouse capture on. Either flag overrides the `mouse` setting in
+[`cli.json`](/cli/config) for that invocation, including config reloads, without changing the file. Omit both flags to
+use the configured setting.
+
 ## Mini
 
 Use `opencode mini` to start OpenCode's minimal interactive interface instead of the full-screen TUI.

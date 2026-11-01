@@ -200,6 +200,8 @@ export type TuiInput = {
   updater?: UpdateSource
   packages: PackageSource
   environment?: Readonly<Record<string, string>>
+  /** Overrides mouse capture for this invocation, including config reloads. */
+  mouse?: boolean
   terminalHandoff?: () => Promise<
     | {
         readonly renderer: CliRenderer
@@ -216,6 +218,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const global = yield* Global.Service
   const config = Config.resolve(yield* Effect.tryPromise(() => input.config.get()), {
     terminalSuspend: process.platform !== "win32",
+    mouse: input.mouse,
   })
   const headers = Service.headers(input.server.endpoint)
   const options = {
@@ -389,7 +392,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                     <ConfigProvider
                                       config={config}
                                       service={input.config}
-                                      options={{ terminalSuspend: process.platform !== "win32" }}
+                                      options={{ terminalSuspend: process.platform !== "win32", mouse: input.mouse }}
                                     >
                                       <Keymap.Provider>
                                         <ToastProvider>

@@ -144,6 +144,7 @@ export default Runtime.handler(Commands, (input) =>
       },
       environment: requestedServer === undefined ? Env.session() : undefined,
       terminalHandoff: () => preflight.finish(),
+      mouse: Option.getOrUndefined(input.mouse),
       log: (level, message, tags) => {
         const effect =
           level === "debug"
