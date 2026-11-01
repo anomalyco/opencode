@@ -10,13 +10,14 @@ import {
   ToolDefinition,
   type LLMRequest,
 } from "@opencode/ai/effect"
-import { OpenAIChat } from "@opencode/ai/protocols"
+import { AnthropicMessages, BedrockConverse, Gemini, OpenAIChat } from "@opencode/ai/protocols"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { EventTable } from "@opencode/core/event/sql"
+import { Event } from "@opencode/schema/event"
 import { Instructions } from "@opencode/core/instructions/index"
 import { SessionCompaction } from "@opencode/core/session/compaction"
 import type { SessionContext } from "@opencode/core/session/context"
@@ -355,6 +356,121 @@ const textUser = (text: string) =>
     text,
     time: { created: DateTime.makeUnsafe(0) },
   })
+
+it.effect("overflow compaction preserves the pending user request verbatim after the summary", () =>
+  Effect.gen(function* () {
+    requests = []
+    const session = yield* insertSession(Session.ID.make("ses_pending_compaction"))
+    const pending = textUser("Please announce the change and write a setup script.\nKeep these exact requirements.")
+    // A checkpoint followed by one still-unanswered exchange has no older user boundary to keep.
+    const messages = [completedSummary("## Objective\n- Earlier work is complete"), pending]
+    yield* storeMessages(session.id, messages)
+    const compaction = yield* SessionCompaction.Service
+    expect(
+      yield* compaction.compact({
+        reason: "overflow",
+        context: loaded(session, messages),
+        estimate: { measured: 248_000, estimated: 0 },
+      }),
+    ).toEqual({
+      status: "completed",
+    })
+    const store = yield* SessionStore.Service
+    const context = toLLMMessages(yield* store.context(session.id), resolved.ref)
+    expect(context[0].content).toEqual([
+      expect.objectContaining({ type: "text", text: expect.stringContaining("## Objective\n- manual summary") }),
+    ])
+    expect(context.slice(1)).toContainEqual(
+      expect.objectContaining({
+        role: "user",
+        content: [{ type: "text", text: pending.text }],
+      }),
+    )
+    expect(JSON.stringify(requests[0].messages)).not.toContain(pending.text.split("\n")[0])
+  }),
+)
+
+it.effect("automatic compaction carries every pending request through tools, another compaction, and a fork", () =>
+  Effect.gen(function* () {
+    requests = []
+    const session = yield* insertSession(Session.ID.make("ses_pending_compaction_repeat"))
+    const pending = [
+      textUser(`First request: ${"exact wording ".repeat(5_000)}`),
+      {
+        ...textUser("Also use the attached example."),
+        files: [
+          {
+            mime: "text/plain",
+            data: Buffer.from("example = 42").toString("base64"),
+            name: "example.txt",
+            source: { type: "inline" as const },
+          },
+        ],
+      },
+    ]
+    const tool = SessionMessage.Assistant.make({
+      ...measured("", 248_000),
+      finish: "tool-calls",
+      content: [
+        {
+          type: "tool",
+          id: "call_read",
+          name: "read",
+          state: { status: "completed", input: {}, content: [{ type: "text", text: "Work in progress" }] },
+          time: { created: DateTime.makeUnsafe(0) },
+        },
+      ],
+    })
+    const messages = [
+      textUser("Old request"),
+      measured("Old answer", 100),
+      pending[0],
+      tool,
+      pending[1],
+      measured("", 248_000),
+    ]
+    yield* storeMessages(session.id, messages)
+    const compaction = yield* SessionCompaction.Service
+    const store = yield* SessionStore.Service
+    expect(yield* compaction.compact({ reason: "auto", context: loaded(session, messages) })).toEqual({
+      status: "completed",
+    })
+    const first = yield* store.context(session.id)
+    const expected = toLLMMessages(pending, resolved.ref)
+    expect(toLLMMessages(first, resolved.ref).slice(1)).toEqual(expected)
+    expect(JSON.stringify(requests[0].messages)).toContain("Old request")
+    expect(JSON.stringify(requests[0].messages)).not.toContain("First request:")
+    expect(JSON.stringify(requests[0].messages)).not.toContain("Also use the attached example.")
+    // Replayed input must not trigger another automatic compaction before any model step.
+    expect(
+      yield* compaction.compact({
+        reason: "auto",
+        context: loaded(session, first),
+        estimate: { measured: 248_000, estimated: 0 },
+      }),
+    ).toEqual({ status: "skipped" })
+    expect(
+      yield* compaction.compact({
+        reason: "overflow",
+        context: loaded(session, first),
+        estimate: { measured: 248_000, estimated: 0 },
+      }),
+    ).toEqual({ status: "completed" })
+    const second = yield* store.context(session.id)
+    expect(toLLMMessages(second, resolved.ref).slice(1)).toEqual(expected)
+    expect(JSON.stringify(requests[1].messages)).not.toContain("First request:")
+    const childID = Session.ID.make("ses_pending_compaction_fork")
+    const bus = yield* Bus.Service
+    yield* bus.publish(SessionEvent.Forked, {
+      sessionID: childID,
+      parentID: session.id,
+      boundary: { type: "through", messageID: second[0].id },
+    })
+    const child = toLLMMessages(yield* store.context(childID), resolved.ref)
+    expect(child.slice(1).map((message) => message.content)).toEqual(expected.map((message) => message.content))
+    expect(child[1].id).not.toBe(pending[0].id)
+  }),
+)
 
 test("compaction prompt requires the checkpoint headings in order", () => {
   const prompt = SessionCompaction.buildPrompt(false)
@@ -1008,6 +1124,7 @@ const measured = (text: string, input: number) =>
     agent: Agent.defaultID,
     model: { id: "summary-model", providerID: "test" },
     content: [{ type: "text", text }],
+    finish: "stop",
     tokens: { input, output: 100, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, completed: 1 },
   })
@@ -1028,6 +1145,202 @@ const enablePrecompute = Effect.gen(function* () {
   yield* compaction.transform((editor) => editor.configure({ precompute: true }))
   return compaction
 })
+
+for (const earlier of [false, true]) {
+  for (const reason of ["auto", "overflow"] as const) {
+    it.effect(`pending compaction preserves provider role boundaries (${reason}, earlier=${earlier})`, () =>
+      Effect.gen(function* () {
+        requests = []
+        const session = yield* insertSession(Session.ID.create())
+        const pending = textUser("Keep this exact request outside the summary")
+        const tool = SessionMessage.Assistant.make({
+          ...measured("", 180_000),
+          finish: "tool-calls",
+          content: [
+            {
+              type: "tool",
+              id: "call_read",
+              name: "read",
+              state: { status: "completed", input: {}, content: [{ type: "text", text: "Read result" }] },
+              time: { created: DateTime.makeUnsafe(0) },
+            },
+          ],
+        })
+        const messages = [...(earlier ? [textUser("Old question"), measured("Old answer", 100)] : []), pending, tool]
+        yield* storeMessages(session.id, messages)
+        const compaction = yield* SessionCompaction.Service
+        expect(yield* compaction.compact({ reason, context: loaded(session, messages) })).toEqual({
+          status: "completed",
+        })
+        const request = requests[0]
+        expect(JSON.stringify(request.messages)).not.toContain(pending.text)
+        const anthropic = yield* AnthropicMessages.protocol.body.from(request)
+        const bedrock = yield* BedrockConverse.protocol.body.from(request)
+        const gemini = yield* Gemini.protocol.body.from(request)
+        for (const roles of [
+          anthropic.messages.map((message) => message.role),
+          bedrock.messages.map((message) => message.role),
+          gemini.contents.map((message) => message.role),
+        ]) {
+          expect(roles[0]).toBe("user")
+          expect(roles.some((role, index) => role !== "user" && role === roles[index - 1])).toBe(false)
+        }
+      }),
+    )
+  }
+}
+
+it.effect("automatic compaction skips all-pending input and overflow sends no empty summary", () =>
+  Effect.gen(function* () {
+    requests = []
+    const session = yield* insertSession(Session.ID.create())
+    const compaction = yield* SessionCompaction.Service
+    const pending = textUser("Large first request ".repeat(80_000))
+    for (const native of [false, true]) {
+      const context = {
+        ...loaded(session, [pending]),
+        model: { ...resolved, compaction: native ? { type: "native" as const } : undefined },
+      }
+      expect(yield* compaction.compact({ reason: "auto", context })).toEqual({ status: "skipped" })
+      expect(yield* compaction.compact({ reason: "overflow", context })).toMatchObject({
+        status: "failed",
+        error: { type: "compaction.unavailable" },
+      })
+    }
+    const context = loaded(session, [
+      completedSummary("## Objective\n- Earlier work"),
+      pending,
+      textUser("One more request"),
+    ])
+    expect(yield* compaction.compact({ reason: "auto", context })).toEqual({ status: "skipped" })
+    expect(requests).toEqual([])
+  }),
+)
+
+it.effect("automatic compaction keeps the last completed exchange beside pending input", () =>
+  Effect.gen(function* () {
+    requests = []
+    const session = yield* insertSession(Session.ID.create())
+    const pending = textUser("Third question")
+    const messages = [
+      textUser("First question"),
+      measured("First answer", 100),
+      textUser("Second question"),
+      measured("Second answer", 180_000),
+      pending,
+    ]
+    yield* storeMessages(session.id, messages)
+    const compaction = yield* SessionCompaction.Service
+    expect(yield* compaction.compact({ reason: "auto", context: loaded(session, messages) })).toEqual({
+      status: "completed",
+    })
+    const store = yield* SessionStore.Service
+    const history = yield* store.context(session.id)
+    expect(history[0].metadata?.recent).toContain("[User]: Second question")
+    expect(history[0].metadata?.recent).toContain("[Assistant]: Second answer")
+    expect(history[0].metadata?.recent).not.toContain(pending.text)
+    expect(history[1]).toEqual(pending)
+  }),
+)
+
+for (const preserve of [false, true]) {
+  it.effect(
+    `compaction replay preserves explicit exclusions without reinterpreting old summaries (preserve=${preserve})`,
+    () =>
+      Effect.gen(function* () {
+        const session = yield* insertSession(Session.ID.create(), { model: resolved.ref })
+        const old = textUser("Input already covered by a native checkpoint")
+        const pending = textUser("Only this request is pending")
+        yield* storeMessages(session.id, [
+          old,
+          SessionMessage.CompactionCompleted.make({
+            ...completedSummary(""),
+            model: resolved.ref,
+            native: { messages: [Message.user("Native context")] },
+          }),
+          pending,
+        ])
+      const bus = yield* Bus.Service
+      const data = {
+        sessionID: session.id,
+        reason: "auto",
+        model: { id: "other-model", providerID: "other" },
+        text: "## Objective\n- Compacted history",
+      }
+      yield* bus.replay({
+          id: Event.ID.create(),
+          type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1),
+          aggregateID: session.id,
+          seq: 4,
+          created: 0,
+        data: preserve ? { ...data, pendingUserIDs: [pending.id] } : data,
+        })
+        const store = yield* SessionStore.Service
+        const history = yield* store.context(session.id)
+        expect(history[0].metadata?.pendingUserIDs).toEqual(preserve ? [pending.id] : undefined)
+        expect(history.slice(1)).toEqual(preserve ? [pending] : [])
+      }),
+  )
+}
+
+it.effect("background compaction does not repeat the same prefix after its pending tail outgrows the limit", () =>
+  Effect.gen(function* () {
+    requests = []
+    const session = yield* insertSession(Session.ID.create())
+    const compaction = yield* enablePrecompute
+    const pending = textUser("Pending work")
+    const start = [
+      textUser("Old question"),
+      measured("Old answer", 100),
+      pending,
+      SessionMessage.Assistant.make({ ...measured("Working", 156_000), finish: "tool-calls" }),
+    ]
+    const started = yield* Deferred.make<void>()
+    beforeResponse = Deferred.succeed(started, undefined).pipe(Effect.asVoid)
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        beforeResponse = Effect.void
+      }),
+    )
+    yield* compaction.precompute(Effect.succeed(loaded(session, start)))
+    yield* Deferred.await(started)
+    for (const text of ["Large result ".repeat(15_000), "Another step"]) {
+      start.push(SessionMessage.Assistant.make({ ...measured(text, 156_000), finish: "tool-calls" }))
+      yield* compaction.precompute(Effect.succeed(loaded(session, start)), { measured: 156_000, estimated: 0 })
+    }
+    expect(requests).toHaveLength(1)
+  }),
+)
+
+it.effect("background compaction leaves an in-flight request outside the summary", () =>
+  Effect.gen(function* () {
+    requests = []
+    const session = yield* insertSession(Session.ID.make("ses_pending_background"))
+    const pending = textUser("Publish the change and provide the setup script.")
+    const messages = [
+      textUser("Old request"),
+      measured("Old answer", 80_000),
+      pending,
+      SessionMessage.Assistant.make({ ...measured("Working on it", 156_000), finish: "tool-calls" }),
+    ]
+    yield* storeMessages(session.id, messages)
+    const compaction = yield* enablePrecompute
+    yield* compaction.precompute(Effect.succeed(loaded(session, messages)))
+    expect(
+      yield* compaction.compact({
+        reason: "auto",
+        context: loaded(session, messages),
+        estimate: { measured: 248_000, estimated: 0 },
+      }),
+    ).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(1)
+    expect(JSON.stringify(requests[0].messages)).toContain("Old request")
+    expect(JSON.stringify(requests[0].messages)).not.toContain(pending.text)
+    const store = yield* SessionStore.Service
+    const context = toLLMMessages(yield* store.context(session.id), resolved.ref)
+    expect(context.slice(1)).toEqual(toLLMMessages([pending], resolved.ref))
+  }),
+)
 
 const summaryWindow = resolved.limit.context
 const summaryBuffer = summaryWindow / 8

@@ -1553,6 +1553,7 @@ export type SessionCompactionEnded = {
     model?: ModelRef
     native?: SessionMessageNative1
     text: string
+    pendingUserIDs?: Array<SessionMessageID>
     cost?: MoneyUSD
     tokens?: TokenUsageInfo
   }

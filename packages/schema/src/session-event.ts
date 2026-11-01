@@ -614,6 +614,8 @@ export namespace Compaction {
       model: SessionMessage.CompactionCompleted.fields.model,
       native: SessionMessage.CompactionCompleted.fields.native,
       text: Schema.String,
+      // These requests were excluded from the replacement context and must replay verbatim after it.
+      pendingUserIDs: Schema.Array(SessionMessage.ID).pipe(optional),
       // Repeats the internal `session.usage.recorded` figures: that event never reaches clients, and it
       // stays the accounting source for session totals and stats.
       cost: SessionMessage.CompactionCompleted.fields.cost,

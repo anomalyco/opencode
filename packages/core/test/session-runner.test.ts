@@ -1619,7 +1619,10 @@ describe("SessionRunnerLLM", () => {
         }),
       )
       yield* s.admit("Echo before moving")
-      yield* s.llm.push(TestLLM.toolCall("call-move", "echo", { text: "moving" }), TestLLM.text("Done", "text-after-move"))
+      yield* s.llm.push(
+        TestLLM.toolCall("call-move", "echo", { text: "moving" }),
+        TestLLM.text("Done", "text-after-move"),
+      )
       const tools = yield* s.blockTools()
       const run = yield* s.resume.pipe(Effect.forkChild)
       yield* tools.started
@@ -2804,7 +2807,7 @@ describe("SessionRunnerLLM", () => {
           role: "user",
           content: [{ type: "text", text: SessionCompaction.buildPrompt(false) }],
         })
-        expect(userTexts(compact).includes("Retained recent request")).toBe(reason === "auto")
+        expect(userTexts(compact)).not.toContain("Retained recent request")
         for (const field of [
           "model",
           "system",
@@ -3239,11 +3242,12 @@ describe("SessionRunnerLLM", () => {
     )
     yield* s.runPrompt("Continue")
 
-    // The history fits the model's window by estimate, but the provider just rejected it, so older exchanges are cut.
+    // The latest completed exchange is retained outside the smaller summary request.
     expect(s.requests).toHaveLength(3)
-    expect(userTexts(s.requests[1])[0]).toContain("characters omitted")
-    expect(userTexts(s.requests[1])[0]).not.toContain(`Request 0: ${filler}`)
-    expect(userTexts(s.requests[1])[0]).toContain("Request 3:")
+    expect(userTexts(s.requests[1])[0]).toContain(`Request 0: ${filler}`)
+    expect(userTexts(s.requests[1])[0]).not.toContain("Request 3:")
+    expect(userTexts(s.requests[2])[0]).toContain(`Request 3: ${filler}`)
+    expect(userTexts(s.requests[2])[1]).toBe("Continue")
   })
 
   scenario("serializes history without tools or media after a summary input overflow", function* (s) {
@@ -3444,18 +3448,18 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Recent exact request ".repeat(180))
 
     expect(s.requests).toHaveLength(2)
-    expect(JSON.stringify(s.requests[0].messages)).toContain("Recent exact request ".repeat(180))
+    expect(JSON.stringify(s.requests[0].messages)).not.toContain("Recent exact request ".repeat(180))
     expect(userTexts(s.requests[0]).at(-1)).toContain("## Objective")
-    expect(userTexts(s.requests[1])).toHaveLength(1)
+    expect(userTexts(s.requests[1])).toHaveLength(2)
     expect(userTexts(s.requests[1])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
-    expect(userTexts(s.requests[1])[0]).toContain(`[User]: ${"Recent exact request ".repeat(180)}`)
+    expect(userTexts(s.requests[1])[1]).toBe("Recent exact request ".repeat(180))
 
     const context = yield* store.context(sessionID)
-    expect(context.map((message) => message.type)).toEqual(["compaction", "assistant"])
+    expect(context.map((message) => message.type)).toEqual(["compaction", "user", "assistant"])
     expect(context[0]).toMatchObject({
       type: "compaction",
       summary: "## Objective\n- Preserve the task",
-      metadata: { recent: `[User]: ${"Recent exact request ".repeat(180)}` },
+      metadata: { pendingUserIDs: [context[1].id] },
     })
     // Only a reference to the kept messages is stored; history rebuilds their text.
     const db = (yield* Database.Service).db
@@ -3472,7 +3476,7 @@ describe("SessionRunnerLLM", () => {
       .orderBy(desc(SessionMessageTable.seq))
       .get()
       .pipe(Effect.orDie)
-    expect(stored?.data).toMatchObject({ metadata: { keepID: kept?.id } })
+    expect(stored?.data).toMatchObject({ metadata: { pendingUserIDs: [kept?.id] } })
     expect(stored?.data).not.toHaveProperty("recent")
 
     s.requests.length = 0
@@ -3485,13 +3489,13 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(2)
     expect(userTexts(s.requests[0])[0]).toContain("<summary>\n## Objective\n- Preserve the task\n</summary>")
-    expect(userTexts(s.requests[0])[0]).toContain("Recent exact request")
+    expect(userTexts(s.requests[0])[1]).toContain("Recent exact request")
     expect(userTexts(s.requests[0]).at(-1)).toBe(SessionCompaction.buildPrompt(true))
     expect((yield* store.context(sessionID))[0]).toMatchObject({
       type: "compaction",
       summary: "## Objective\n- Preserve the updated task",
-      metadata: { recent: `[User]: ${"Newest exact request ".repeat(180)}` },
     })
+    expect(userTexts(s.requests[1])[1]).toBe("Newest exact request ".repeat(180))
   })
 
   scenario("automatically persists native windows, retains earlier users, and waits for fresh usage", function* (s) {
@@ -3572,6 +3576,7 @@ describe("SessionRunnerLLM", () => {
     expect(JSON.stringify(s.requests[2].messages)).not.toContain('"encrypted":"native-window"')
     expect(yield* s.context).toMatchObject([
       { type: "compaction", status: "completed", native: { messages: expect.any(Array) } },
+      { type: "user", text: "Overflow request" },
       { type: "assistant" },
     ])
   })
@@ -3632,10 +3637,15 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Recover overflow\n</summary>")
     expect(yield* s.context).toMatchObject([
       { type: "compaction", summary: "## Objective\n- Recover overflow" },
+      { type: "user", text: "Continue" },
       { type: "assistant", finish: "stop" },
     ])
     yield* replaySessionProjection(sessionID)
-    expect(yield* s.context).toMatchObject([{ type: "compaction" }, { type: "assistant", finish: "stop" }])
+    expect(yield* s.context).toMatchObject([
+      { type: "compaction" },
+      { type: "user", text: "Continue" },
+      { type: "assistant", finish: "stop" },
+    ])
   })
 
   scenario("refreshes preparation after overflow compaction without promoting new input", function* (s) {
@@ -3747,6 +3757,7 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(3)
     expect(yield* s.context).toMatchObject([
       { type: "compaction", summary: "## Objective\n- Recover unknown limit" },
+      { type: "user", text: "Continue" },
       { type: "assistant", finish: "stop" },
     ])
   })
@@ -3763,6 +3774,7 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(2)
     expect(yield* s.context).toMatchObject([
       { type: "compaction", summary: "## Objective\n- Recover undersized limit" },
+      { type: "user", text: "Continue" },
       { type: "assistant", finish: "stop" },
     ])
   })
@@ -3781,6 +3793,7 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(3)
     expect(yield* s.context).toMatchObject([
       { type: "compaction" },
+      { type: "user", text: "Continue" },
       { type: "assistant", finish: "error", error: { message: "prompt too long" } },
     ])
   })
@@ -3806,6 +3819,7 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(3)
     expect(yield* s.context).toMatchObject([
       { type: "compaction", summary: "## Objective\n- Recover raw overflow" },
+      { type: "user", text: "Continue" },
       { type: "assistant", finish: "stop" },
     ])
   })
@@ -5658,7 +5672,11 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(1)
     expect(yield* s.context).toMatchObject([
       Expected.user("Fail durably"),
-      { type: "assistant", finish: "error", error: { type: "provider.invalid-request", message: "Provider unavailable" } },
+      {
+        type: "assistant",
+        finish: "error",
+        error: { type: "provider.invalid-request", message: "Provider unavailable" },
+      },
     ])
   })
 
@@ -5670,7 +5688,11 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(1)
     expect(yield* s.context).toMatchObject([
       Expected.user("Fail before step"),
-      { type: "assistant", finish: "error", error: { type: "provider.invalid-request", message: "Provider unavailable" } },
+      {
+        type: "assistant",
+        finish: "error",
+        error: { type: "provider.invalid-request", message: "Provider unavailable" },
+      },
     ])
   })
 
@@ -5998,7 +6020,10 @@ describe("SessionRunnerLLM", () => {
     // the window instead of rejecting it.
     s.currentModel = recoveryModel
     yield* s.llm.push(
-      TestLLM.complete({ reason: { normalized: "length" }, usage: { inputTokens: 199_994, nonCachedInputTokens: 199_994, outputTokens: 0 } }),
+      TestLLM.complete({
+        reason: { normalized: "length" },
+        usage: { inputTokens: 199_994, nonCachedInputTokens: 199_994, outputTokens: 0 },
+      }),
       TestLLM.text("## Objective\n- summary", "summary"),
       TestLLM.text("Done", "done"),
     )
