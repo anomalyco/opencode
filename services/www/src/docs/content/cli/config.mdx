@@ -123,6 +123,8 @@ Configure how full-screen TUI sessions are presented and where new sessions star
     "grouping": "auto",
     "image_preview": false,
     "tps": true,
+    "shell_lines": 10,
+    "shell_command_lines": 2,
     "markdown": "rendered",
     "new_location": "launch",
     "permissions": "prompt"
@@ -140,6 +142,8 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 | `session.grouping`      | `auto` or `none`            | Groups related transcript items or renders each item separately.             |
 | `session.image_preview` | boolean                     | Shows user attachment and tool-result images in the transcript.              |
 | `session.tps`           | boolean                     | Shows output tokens per second in assistant footers.                         |
+| `session.shell_lines`   | positive integer            | Lines a collapsed shell call shows, command and output together. Defaults to `10`. |
+| `session.shell_command_lines` | positive integer      | Rows the command takes before it is cut with `…`; the output's tail gets the rest. Defaults to `2`. |
 | `session.markdown`      | `source` or `rendered`      | Shows Markdown syntax markers or conceals them in rendered content.          |
 | `session.new_location`  | `launch` or `inherit`       | Starts in the TUI launch directory or inherits the active session location.  |
 | `session.permissions`   | `prompt` or `autoaccept`    | Prompts for permission requests or accepts every request automatically.      |
