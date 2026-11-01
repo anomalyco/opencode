@@ -17,7 +17,7 @@ import {
   UnknownProviderError,
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
-import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
+import { AnthropicMessages, OpenAICompatibleChat, OpenAIResponses } from "@opencode/ai/protocols"
 import { TestLLM, compileRequest } from "@opencode/ai/testing"
 import { RequestExecutor } from "@opencode/ai/route"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
@@ -2738,7 +2738,12 @@ describe("SessionRunnerLLM", () => {
     })
   })
 
-  for (const route of [OpenAIChat.route, OpenAIResponses.route, AnthropicMessages.route]) {
+  for (const route of [
+    OpenAIChat.route,
+    OpenAICompatibleChat.route.with({ endpoint: { baseURL: "https://api.custom.test/v1" } }),
+    OpenAIResponses.route,
+    AnthropicMessages.route,
+  ]) {
     for (const reason of ["manual", "auto"] as const) {
       scenario(`preserves the session request prefix during ${reason} compaction (${route.id})`, function* (s) {
         const agents = yield* Agent.Service
@@ -5590,6 +5595,9 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("forces a text response on an agent's configured final step", function* (s) {
+    s.currentModel = OpenAICompatibleChat.route
+      .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+      .model({ id: "custom-model" })
     const agents = yield* Agent.Service
     yield* agents.transform((editor) =>
       editor.update(Agent.ID.make("build"), (agent) => {
@@ -5607,6 +5615,8 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(2)
     expect(s.requests[0]?.toolChoice).toBeUndefined()
+    expect((yield* compileRequest(s.requests[0])).body.tool_choice).toBe("auto")
+    expect((yield* compileRequest(s.requests[1])).body.tool_choice).toBe("none")
     expect(s.requests[1]?.toolChoice).toMatchObject({ type: "none" })
     // Protocols with native "none" keep these definitions for prompt caching.
     expect(s.requests[1]?.tools.map((tool) => tool.name)).toContain("echo")
