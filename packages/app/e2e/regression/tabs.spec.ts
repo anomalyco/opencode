@@ -949,9 +949,21 @@ test("server groups can be reordered by dragging their headers", async ({ page }
 
   const remoteHeader = page.locator(`[data-slot="tab-server-group"][data-server="${REMOTE_SERVER}"]`)
   await remoteHeader.hover()
-  await page
-    .locator(`[data-action="tab-server-group-drag"][data-server="${REMOTE_SERVER}"]`)
-    .dragTo(page.locator(`[data-slot="tab-server-group"][data-server="${SERVER}"]`))
+
+  const dragSource = page.locator(`[data-action="tab-server-group-drag"][data-server="${REMOTE_SERVER}"]`)
+  const sourceBox = await dragSource.boundingBox()
+  const sessionBox = await page.locator('[data-slot="session-timeline-scroll"]').boundingBox()
+
+  if (!sourceBox || !sessionBox) throw new Error("drag target has no bounding box")
+
+  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(sessionBox.x + sessionBox.width / 2, sessionBox.y + sessionBox.height / 2, { steps: 12 })
+  await expect(dragSource).toHaveAttribute("data-dragging", "true")
+  await expect(page.locator('[data-component="session-dropzone"]')).toBeHidden()
+  await page.mouse.up()
+
+  await dragSource.dragTo(page.locator(`[data-slot="tab-server-group"][data-server="${SERVER}"]`))
 
   await expect(headers).toHaveText(["127.0.0.1:4097", "This computer"])
   await expect

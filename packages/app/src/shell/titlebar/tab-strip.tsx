@@ -21,6 +21,7 @@ import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 import { orderTabsByServer, serverGroupHeaders } from "./tab-groups"
+import { TAB_GROUP_DRAG_TYPE } from "@/runtime/drag"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -661,11 +662,15 @@ export function TitlebarTabStrip(props: {
     setExpanded(server, false)
   }
 
-  function startGroupDrag(event: DragEvent, server: ServerConnection.Key) {
+  function startGroupDrag(event: DragEvent, server: ServerConnection.Key, element: HTMLElement) {
     event.stopPropagation()
     event.dataTransfer?.setData("text/plain", server)
+    event.dataTransfer?.setData(TAB_GROUP_DRAG_TYPE, server)
 
-    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move"
+      event.dataTransfer.setDragImage(element, 12, 12)
+    }
 
     setDrag({ server, over: undefined, after: false })
   }
@@ -871,23 +876,17 @@ export function TitlebarTabStrip(props: {
                           <div
                             data-slot="tab-server-group"
                             data-server={tab.server}
-                            class="group/server relative mt-2 flex h-6 w-full shrink-0 items-center gap-0.5 overflow-hidden ps-0.5 pe-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted"
+                            data-action="tab-server-group-drag"
+                            data-dragging={drag.server === tab.server ? "true" : undefined}
+                            data-drop={drag.over === tab.server && drag.server !== tab.server ? "true" : undefined}
+                            draggable={true}
+                            title={language.t("session.tab.serverGroup.drag", { server: title() })}
+                            class="relative mt-2 flex h-6 w-full shrink-0 cursor-grab items-center gap-0.5 overflow-hidden rounded-[6px] px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover data-[dragging=true]:bg-v2-background-bg-layer-03 data-[dragging=true]:text-v2-text-text-base data-[dragging=true]:ring-1 data-[dragging=true]:ring-v2-icon-icon-accent data-[drop=true]:bg-v2-overlay-simple-overlay-hover active:cursor-grabbing"
+                            onDragStart={(event) => startGroupDrag(event, tab.server, event.currentTarget)}
+                            onDragEnd={endGroupDrag}
                             onDragOver={(event) => dragOverGroup(event, tab.server, event.currentTarget)}
                             onDrop={(event) => dropGroup(event, tab.server)}
                           >
-                            <button
-                              type="button"
-                              draggable={true}
-                              data-action="tab-server-group-drag"
-                              data-server={tab.server}
-                              aria-label={language.t("session.tab.serverGroup.drag", { server: title() })}
-                              title={language.t("session.tab.serverGroup.drag", { server: title() })}
-                              class="flex size-4 shrink-0 cursor-grab items-center justify-center rounded-[4px] text-v2-text-text-faint opacity-0 transition-opacity group-hover/server:opacity-100 focus-visible:opacity-100 focus-visible:outline-none active:cursor-grabbing"
-                              onDragStart={(event) => startGroupDrag(event, tab.server)}
-                              onDragEnd={endGroupDrag}
-                            >
-                              <Icon name="outline-dots" size="small" class="rotate-90" />
-                            </button>
                             <bdi class="min-w-0 truncate">{title()}</bdi>
                             <div class="ms-auto flex shrink-0 items-center gap-0.5">
                               <button
@@ -896,7 +895,7 @@ export function TitlebarTabStrip(props: {
                                 data-server={tab.server}
                                 aria-label={language.t("session.tab.newOnServer", { server: title() })}
                                 title={language.t("session.tab.newOnServer", { server: title() })}
-                                class="flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
+                                class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
                                 onClick={() => newSessionInGroup(tab.server)}
                               >
                                 <Icon name="plus" size="small" />
@@ -908,7 +907,7 @@ export function TitlebarTabStrip(props: {
                                 aria-label={toggleLabel()}
                                 aria-expanded={!groupCollapsed()}
                                 title={toggleLabel()}
-                                class="flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
+                                class="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
                                 onClick={() => toggleGroup(tab.server)}
                               >
                                 <Icon
