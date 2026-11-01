@@ -35,6 +35,15 @@ export function PluginsDialog(props: { context: Plugin.Context; plugins: ReturnT
     () => props.context.location ?? props.context.data.location.default(),
     (location) => props.context.client.plugin.list({ location }).then((result) => result.data),
   )
+  // A transient transport failure (for example a proxy returning text/html) must degrade the dialog,
+  // not surface through the root ErrorBoundary when `server()` is read below.
+  createEffect(() => {
+    if (!server.error) return
+    props.context.ui.toast.show({
+      variant: "error",
+      message: `Failed to load plugins: ${errorMessage(server.error)}`,
+    })
+  })
   onMount(() => dialog.setSize("large"))
   onCleanup(props.context.data.on("plugin.updated", () => void refetch()))
   const updating = (entry: Entry) =>
@@ -66,7 +75,7 @@ export function PluginsDialog(props: { context: Plugin.Context; plugins: ReturnT
         error: plugin.status === "failed" ? plugin.error : undefined,
       }))
     // A package without a server part runs nothing there; its TUI part has its own row.
-    const serverEntries: Entry[] = (server() ?? [])
+    const serverEntries: Entry[] = (server.error ? [] : (server() ?? []))
       .filter((plugin) => plugin.features.server || plugin.state.status === "failed")
       .map((plugin) => ({
         key: `server:${plugin.id ?? source(plugin, props.context)}`,
