@@ -31,7 +31,7 @@ export const makeSchedule = Effect.gen(function* () {
   return {
     create: (payload: CreatePayload) =>
       // Stateless HTTP callers have no guaranteed UI listener to answer an interactive ask, so settle asks unattended.
-      schedules.create(Schedule.toCreateInput(payload.sessionID, payload)).pipe(
+      schedules.create(payload).pipe(
         Effect.provideService(Permission.Unattended, []),
         Effect.map((data) => ({ data })),
         Effect.catchTags({

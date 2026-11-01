@@ -1516,7 +1516,7 @@ export function make(options: ClientOptions) {
                 if: input["if"],
                 until: input["until"],
                 ends: input["ends"],
-                prompt: input["prompt"],
+                action: input["action"],
               },
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],

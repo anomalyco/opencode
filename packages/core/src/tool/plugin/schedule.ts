@@ -18,7 +18,8 @@ export const View = Schema.Struct({
   tz: Schema.String,
   if: Schedule.Condition.pipe(optional),
   until: Schedule.Condition.pipe(optional),
-  prompt: Schema.String,
+  action: Schedule.Action,
+  activeJobID: Schema.String.pipe(optional),
   status: Schedule.Status,
   nextDueAt: Schema.String.pipe(optional),
   endsAt: Schema.String.pipe(optional),
@@ -69,6 +70,10 @@ export const Plugin = {
         ),
       )
     const failure = (error: { readonly message: string }) => new ToolFailure({ message: error.message, error })
+    const viewResult = (info: Schedule.Info, prefix: string) => {
+      const view = toView(info)
+      return { output: view, content: `${prefix}: ${summary(view)}` }
+    }
 
     yield* ctx.tool
       .transform((editor) => {
@@ -76,20 +81,19 @@ export const Plugin = {
         editor.add({
           name: "schedule_create",
           description:
-            "Schedule a prompt that wakes this session later: once after a delay, at a time, every interval, on a cron, or gated by an `if` / `until` shell (`{ run }`) or Code Mode (`{ code }`) check. Returns the schedule with its next run (or `done` immediately if `until` already matches).",
+            'Schedule future or recurring work for this session: a `prompt` or slash `command` (in this session by default, or in an isolated child session via `target: { type: "subagent" }`), a deterministic `shell` command, or a Code Mode `code` script, optionally gated by an `if` / `until` check. Returns the schedule with its next run (or `done` immediately if `until` already matches).',
           input: Schedule.Request,
           output: View,
           options: { namespace: "opencode", codemode: true },
           execute: (input, context) =>
-            schedules.create(Schedule.toCreateInput(context.sessionID, input)).pipe(
-              Effect.map((info) => {
-                const view = toView(info)
-                const prefix =
-                  view.status === "done" && view.until !== undefined ? "Matched immediately" : "Scheduled"
-                return { output: view, content: `${prefix}: ${summary(view)}` }
-              }),
-              Effect.mapError(failure),
-            ),
+            schedules
+              .create({ sessionID: context.sessionID, ...input })
+              .pipe(
+                Effect.map((info) =>
+                  viewResult(info, info.status === "done" && info.until !== undefined ? "Matched immediately" : "Scheduled"),
+                ),
+                Effect.mapError(failure),
+              ),
         })
         editor.add({
           name: "schedule_list",
@@ -117,7 +121,7 @@ export const Plugin = {
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(schedules.pause(input.id)),
-              Effect.map((info) => ({ output: toView(info), content: `Paused: ${summary(toView(info))}` })),
+              Effect.map((info) => viewResult(info, "Paused")),
               Effect.mapError(failure),
             ),
         })
@@ -131,7 +135,7 @@ export const Plugin = {
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(schedules.resume(input.id)),
-              Effect.map((info) => ({ output: toView(info), content: `Resumed: ${summary(toView(info))}` })),
+              Effect.map((info) => viewResult(info, "Resumed")),
               Effect.mapError(failure),
             ),
         })
@@ -155,7 +159,7 @@ export const Plugin = {
       if (!enabled()) return
       editor.add({
         name: "schedule",
-        description: "schedule a prompt for later, or list, pause and delete this session's schedules",
+        description: "schedule work for later, or list, pause and delete this session's schedules",
         execute: (input) =>
           ctx.session
             .prompt({
@@ -170,6 +174,10 @@ export const Plugin = {
   }),
 }
 
+function clip(value: string, max = 80) {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value
+}
+
 function formatCondition(condition: Schedule.Condition): string {
   switch (condition.type) {
     case "shell":
@@ -180,6 +188,34 @@ function formatCondition(condition: Schedule.Condition): string {
         .map((line) => line.trim())
         .find((line) => line.length > 0)
       return `code ${JSON.stringify(first ? first.slice(0, 60) : "")}`
+    }
+  }
+}
+
+function formatTarget(target: Schedule.SessionTarget | undefined): string {
+  if (target?.type !== "subagent") return ""
+
+  return target.agent ? ` (subagent: ${target.agent})` : " (subagent)"
+}
+
+function formatAction(action: Schedule.Action): string {
+  switch (action.type) {
+    case "prompt":
+      return `prompt${formatTarget(action.target)}: ${JSON.stringify(clip(action.prompt))}`
+    case "command": {
+      const text = action.arguments?.trim() ? `/${action.name} ${action.arguments.trim()}` : `/${action.name}`
+
+      return `command${formatTarget(action.target)}: ${JSON.stringify(clip(text))}`
+    }
+    case "shell":
+      return `shell: ${JSON.stringify(clip(action.run))}`
+    case "code": {
+      const first = action.code
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+
+      return `code: ${JSON.stringify(clip(first ?? "", 60))}`
     }
   }
 }
@@ -201,13 +237,12 @@ function summary(view: View) {
       : view.if !== undefined
         ? `if ${formatCondition(view.if)}`
         : undefined
-  const prompt = view.prompt.length > 80 ? `${view.prompt.slice(0, 79)}…` : view.prompt
   return [
     `${view.id}${view.name ? ` "${view.name}"` : ""}: ${trigger} (${view.tz})`,
     gate,
     view.status,
     view.nextDueAt && `next ${view.nextDueAt}`,
-    `prompt: ${JSON.stringify(prompt)}`,
+    formatAction(view.action),
     view.lastOutput && `output: ${JSON.stringify(view.lastOutput)}`,
   ]
     .filter(Boolean)
@@ -217,11 +252,13 @@ function summary(view: View) {
 function toView(info: Schedule.Info): View {
   const local = (time: DateTime.Utc | undefined) => {
     if (time === undefined) return undefined
+
     return Option.match(DateTime.zoneMakeNamed(info.tz), {
       onNone: () => DateTime.formatIso(time),
       onSome: (zone) => DateTime.formatIsoOffset(DateTime.setZone(time, zone)),
     })
   }
+
   return {
     id: info.id,
     name: info.name,
@@ -229,7 +266,8 @@ function toView(info: Schedule.Info): View {
     tz: info.tz,
     if: info.if,
     until: info.until,
-    prompt: info.action.prompt,
+    action: info.action,
+    activeJobID: info.activeJobID,
     status: info.status,
     nextDueAt: local(info.nextDueAt),
     endsAt: local(info.endsAt),

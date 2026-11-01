@@ -31,7 +31,7 @@ export const ScheduleEndpoints = [
     annotations(
       "create",
       "Create schedule",
-      "Schedule a prompt that wakes the Session once after a delay, at a time, every interval, or on a cron.",
+      "Schedule a prompt, subagent, slash command, shell command, or Code Mode script to run once after a delay, at a time, every interval, or on a cron.",
     ),
   ),
   HttpApiEndpoint.get("schedule.list", "/api/experimental/schedule", {

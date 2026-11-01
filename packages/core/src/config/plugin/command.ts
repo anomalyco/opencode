@@ -69,34 +69,55 @@ export const Plugin = define({
       for (const document of loaded.documents) {
         for (const [name, command] of Object.entries(document.commands ?? {})) {
           const subagent = command.subagent ?? command.subtask
+          const configuredAgent = command.agent === undefined ? undefined : Agent.ID.make(command.agent)
           editor.add({
             name,
             description: command.description,
+            ...(configuredAgent === undefined ? {} : { agent: configuredAgent }),
+            ...(subagent === undefined ? {} : { subagent }),
+            template: command.template,
             execute: (input) =>
               Effect.gen(function* () {
-                const agent = command.agent === undefined ? undefined : Agent.ID.make(command.agent)
+                const agent = configuredAgent
                 const commandAgent = agent === undefined ? undefined : (yield* ctx.agent.get({ agentID: agent })).data
-                const model =
+                const explicitModel =
                   command.model === undefined
-                    ? commandAgent?.model
+                    ? undefined
                     : {
                         id: command.model.model,
                         providerID: command.model.providerID,
                         ...(command.model.variant === undefined ? {} : { variant: command.model.variant }),
                       }
+                const model = explicitModel ?? commandAgent?.model
                 const text = yield* evaluateTemplate(command.template, input.prompt.text, {
                   location,
                   processes,
                   shell,
+                  unattended: input.unattended,
+                  note: input.note,
                 })
-                if (subagent ?? commandAgent?.mode === "subagent") {
+                if ((subagent ?? commandAgent?.mode === "subagent") && !input.inline) {
                   const parent = yield* sessions.get(input.sessionID)
                   const selected = yield* agents.select(agent ?? parent.agent)
+                  const parentSchedule = parent.metadata?.schedule
+                  const scheduleMeta =
+                    typeof parentSchedule === "object" && parentSchedule !== null && !Array.isArray(parentSchedule)
+                      ? parentSchedule
+                      : {}
                   const child = yield* sessions.create({
                     parentID: parent.id,
                     title: command.description ?? name,
                     agent: selected.id,
                     model: model ?? selected.info?.model ?? parent.model,
+                    ...(input.unattended
+                      ? {
+                          permissions: parent.permissions,
+                          metadata: {
+                            ...parent.metadata,
+                            schedule: { ...scheduleMeta, ownerSessionID: parent.id, unattended: true },
+                          },
+                        }
+                      : {}),
                   })
                   yield* sessions.prompt({
                     ...input.prompt,
@@ -115,11 +136,24 @@ export const Plugin = define({
                   yield* subagents.background(recovery)
                   return
                 }
-                if (agent !== undefined) {
+                if (!input.inline && agent !== undefined) {
                   const session = yield* ctx.session.get({ sessionID: input.sessionID })
                   if (session.agent !== agent) yield* ctx.session.switchAgent({ sessionID: input.sessionID, agent })
                 }
-                if (model !== undefined) yield* ctx.session.switchModel({ sessionID: input.sessionID, model })
+                const sessionModel = input.inline ? explicitModel : model
+                if (sessionModel !== undefined)
+                  yield* ctx.session.switchModel({ sessionID: input.sessionID, model: sessionModel })
+                if (input.messageID !== undefined) {
+                  yield* sessions.prompt({
+                    ...input.prompt,
+                    id: input.messageID,
+                    sessionID: input.sessionID,
+                    text,
+                    delivery: input.delivery,
+                    ...(input.inline ? { resume: false } : {}),
+                  })
+                  return
+                }
                 yield* ctx.session.prompt({
                   ...input.prompt,
                   sessionID: input.sessionID,
@@ -180,6 +214,14 @@ function decode(directory: string, filepath: string, content: string) {
   }
 }
 
+export function unattendedShellSnippets(template: string, input: string, shell: string): string[] {
+  const matches = Array.from(template.matchAll(shellRegex))
+  if (matches.length === 0) return []
+  const args = parseArguments(input)
+  const last = maxPlaceholder(template)
+  return matches.map((match) => substituteShellArguments(match[1] ?? "", input, args, last, shell))
+}
+
 function evaluateTemplate(
   template: string,
   input: string,
@@ -187,51 +229,211 @@ function evaluateTemplate(
     readonly location: Location.Info
     readonly processes: AppProcess.Interface
     readonly shell: ShellSelect.Interface
+    readonly unattended?: boolean
+    readonly note?: string
   },
 ) {
   return Effect.gen(function* () {
+    if (!services.unattended) {
+      const text = renderInteractiveArguments(template, input)
+      const matches = Array.from(text.matchAll(shellRegex))
+      if (matches.length === 0) return appendNote(text, services.note)
+      const shell = yield* services.shell.resolve({ priority: "config" })
+      const outputs = yield* runShellSnippets(
+        matches.map((match) => match[1] ?? ""),
+        shell,
+        services,
+      )
+      const iterator = outputs[Symbol.iterator]()
+      return appendNote(
+        text.replace(shellRegex, () => iterator.next().value ?? ""),
+        services.note,
+      )
+    }
+
+    // Scheduled runs only execute `!`...`` blocks authored in `template`: `$1`/`$ARGUMENTS` inside those blocks are
+    // shell-quoted for their quote context, snippet stdout is spliced in without running argument replacement over it,
+    // and caller arguments / runtime check notes are never scanned for `!`...``.
     const args = parseArguments(input)
-    const placeholders = template.match(placeholderRegex) ?? []
-    const last = Math.max(0, ...placeholders.map((item) => Number(item.slice(1))))
-    const withArguments = template.replaceAll(argumentRegex, (match, index) => {
-      if (match === "$ARGUMENTS") return input
-      const position = Number(index)
-      const argIndex = position - 1
-      if (argIndex >= args.length) return ""
-      if (position === last) return args.slice(argIndex).join(" ")
-      return args[argIndex]
-    })
-    const text =
-      placeholders.length === 0 && !template.includes("$ARGUMENTS") && input.trim()
-        ? `${withArguments}\n\n${input}`.trim()
-        : withArguments.trim()
-    const matches = Array.from(text.matchAll(shellRegex))
-    if (matches.length === 0) return text
-    const shell = yield* services.shell.resolve({ priority: "config" })
-    const outputs = yield* Effect.forEach(
-      matches,
-      (match) => {
-        const source = match[1] ?? ""
-        return services.processes
-          .run(
-            ChildProcess.make(shell, ShellSelect.args(shell, source), {
-              cwd: services.location.directory,
-              stdin: "ignore",
-            }),
-            { combineOutput: true },
-          )
-          .pipe(
-            Effect.map((result) => (result.output ?? Buffer.concat([result.stdout, result.stderr])).toString("utf8")),
-            Effect.mapError(
-              (error) => new Error(`Shell interpolation failed for ${JSON.stringify(source)}: ${error.message}`),
-            ),
-          )
-      },
-      { concurrency: 2 },
-    )
-    const iterator = outputs[Symbol.iterator]()
-    return text.replace(shellRegex, () => iterator.next().value ?? "")
+    const last = maxPlaceholder(template)
+    const hasPlaceholder = last > 0 || template.includes("$ARGUMENTS")
+    const matches = Array.from(template.matchAll(shellRegex))
+    const outputs =
+      matches.length === 0
+        ? []
+        : yield* Effect.gen(function* () {
+            const shell = yield* services.shell.resolve({ priority: "compat" })
+            const snippets = matches.map((match) => substituteShellArguments(match[1] ?? "", input, args, last, shell))
+            return yield* runShellSnippets(snippets, shell, services)
+          })
+
+    let cursor = 0
+    let combined = ""
+    for (const [index, match] of matches.entries()) {
+      const start = match.index ?? cursor
+      combined += replaceArguments(template.slice(cursor, start), input, args, last)
+      combined += outputs[index] ?? ""
+      cursor = start + match[0].length
+    }
+    combined += replaceArguments(template.slice(cursor), input, args, last)
+    const trimmed = combined.trim()
+    const withInput = !hasPlaceholder && input.trim() ? `${trimmed}\n\n${input}`.trim() : trimmed
+    return appendNote(withInput, services.note)
   })
+}
+
+function runShellSnippets(
+  snippets: readonly string[],
+  shell: string,
+  services: {
+    readonly location: Location.Info
+    readonly processes: AppProcess.Interface
+  },
+) {
+  return Effect.forEach(
+    snippets,
+    (source) =>
+      services.processes
+        .run(
+          ChildProcess.make(shell, ShellSelect.args(shell, source), {
+            cwd: services.location.directory,
+            stdin: "ignore",
+          }),
+          { combineOutput: true },
+        )
+        .pipe(
+          Effect.map((result) => (result.output ?? Buffer.concat([result.stdout, result.stderr])).toString("utf8")),
+          Effect.mapError(
+            (error) => new Error(`Shell interpolation failed for ${JSON.stringify(source)}: ${error.message}`),
+          ),
+        ),
+    { concurrency: 2 },
+  )
+}
+
+function maxPlaceholder(template: string) {
+  const placeholders = template.match(placeholderRegex) ?? []
+  return Math.max(0, ...placeholders.map((item) => Number(item.slice(1))))
+}
+
+function resolveArgument(
+  match: string,
+  index: string | undefined,
+  input: string,
+  args: readonly string[],
+  last: number,
+): string | undefined {
+  if (match === "$ARGUMENTS") return input.length === 0 ? undefined : input
+  const position = Number(index)
+  const argIndex = position - 1
+  if (argIndex >= args.length) return undefined
+  if (position === last) return args.slice(argIndex).join(" ")
+  return args[argIndex]
+}
+
+function replaceArguments(text: string, input: string, args: readonly string[], last: number) {
+  return text.replaceAll(argumentRegex, (match, index) => resolveArgument(match, index, input, args, last) ?? "")
+}
+
+function renderInteractiveArguments(template: string, input: string) {
+  const args = parseArguments(input)
+  const last = maxPlaceholder(template)
+  const withArguments = replaceArguments(template, input, args, last)
+  return last === 0 && !template.includes("$ARGUMENTS") && input.trim()
+    ? `${withArguments}\n\n${input}`.trim()
+    : withArguments.trim()
+}
+
+function appendNote(text: string, note: string | undefined) {
+  const trimmedNote = note?.trim()
+  if (!trimmedNote) return text
+  if (!text.trim()) return trimmedNote
+  return `${text}\n\n${trimmedNote}`
+}
+
+type QuoteState = "none" | "single" | "double"
+
+function substituteShellArguments(
+  source: string,
+  input: string,
+  args: readonly string[],
+  last: number,
+  shell: string,
+): string {
+  const matches = Array.from(source.matchAll(argumentRegex))
+  if (matches.length === 0) return source
+
+  const kind: "cmd" | "ps" | "posix" =
+    ShellSelect.name(shell) === "cmd" ? "cmd" : ShellSelect.ps(shell) ? "ps" : "posix"
+  let quote: QuoteState = "none"
+  let cursor = 0
+  let result = ""
+
+  for (const match of matches) {
+    const start = match.index ?? cursor
+    let i = cursor
+    while (i < start) {
+      const ch = source[i]
+      if (kind === "cmd") {
+        if (ch === '"') quote = quote === "double" ? "none" : "double"
+      } else if (kind === "ps") {
+        if (quote === "none") {
+          if (ch === "`") i++
+          else if (ch === "'") quote = "single"
+          else if (ch === '"') quote = "double"
+        } else if (quote === "single") {
+          if (ch === "'" && source[i + 1] === "'") i++
+          else if (ch === "'") quote = "none"
+        } else {
+          if (ch === "`") i++
+          else if (ch === '"' && source[i + 1] === '"') i++
+          else if (ch === '"') quote = "none"
+        }
+      } else {
+        if (quote === "none") {
+          if (ch === "\\") i++
+          else if (ch === "'") quote = "single"
+          else if (ch === '"') quote = "double"
+        } else if (quote === "single") {
+          if (ch === "'") quote = "none"
+        } else {
+          if (ch === "\\") i++
+          else if (ch === '"') quote = "none"
+        }
+      }
+      i++
+    }
+
+    result += source.slice(cursor, start)
+    if (i > start) {
+      result += match[0]
+    } else {
+      const value = resolveArgument(match[0], match[1], input, args, last)
+      result += value === undefined ? "" : quoteShellValue(value, quote, kind)
+    }
+    cursor = start + match[0].length
+  }
+
+  result += source.slice(cursor)
+  return result
+}
+
+function quoteShellValue(value: string, quote: QuoteState, kind: "cmd" | "ps" | "posix"): string {
+  if (kind === "cmd") {
+    const escaped = value.replace(/[\r\n]+/g, " ").replaceAll("%", "%%").replaceAll('"', '""')
+    return quote === "double" ? escaped : `"${escaped}"`
+  }
+  if (kind === "ps") {
+    if (quote === "double") {
+      return value.replaceAll("`", "``").replaceAll('"', '`"').replaceAll("$", "`$")
+    }
+    const escaped = value.replaceAll("'", "''")
+    return quote === "single" ? escaped : `'${escaped}'`
+  }
+  const escaped = value.replaceAll("'", "'\\''")
+  if (quote === "single") return escaped
+  if (quote === "double") return value === "" ? "" : `"'${escaped}'"`
+  return `'${escaped}'`
 }
 
 function parseArguments(input: string) {

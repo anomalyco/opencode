@@ -33,6 +33,7 @@ const memory = () => {
   const flag = { enabled: true }
   const find = (id: Schedule.ID): Effect.Effect<Schedule.Info, Schedule.NotFoundError> => {
     const info = rows.get(id)
+
     return info ? Effect.succeed(info) : Effect.fail(new Schedule.NotFoundError({ scheduleID: id }))
   }
   const update = (id: Schedule.ID, status: Schedule.Info["status"]) =>
@@ -72,6 +73,7 @@ const memory = () => {
     tick: Effect.void,
     run: Effect.never,
   })
+
   return { rows, flag, service }
 }
 
@@ -160,14 +162,14 @@ describe("ScheduleTools", () => {
       expect(
         yield* run(registry, "schedule_create", {
           name: "build",
-          when: { in: "20 minutes" },
-          prompt: "check the build",
+          when: { type: "in", in: "20 minutes" },
+          action: { type: "prompt", prompt: "check the build" },
         }),
       ).toMatchObject({
         id: "sch_1",
         name: "build",
         when: { type: "in", in: "20 minutes" },
-        prompt: "check the build",
+        action: { type: "prompt", prompt: "check the build" },
         status: "active",
         nextDueAt: "2026-10-27T09:20:00.000-04:00",
       })
@@ -204,7 +206,10 @@ describe("ScheduleTools", () => {
   it.effect("rechecks the flag on each call, since a request keeps its tools after config reloads", () =>
     Effect.gen(function* () {
       const { registry, rows, flag } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
-      yield* run(registry, "schedule_create", { when: { every: "1 hour" }, prompt: "ping" })
+      yield* run(registry, "schedule_create", {
+        when: { type: "every", every: "1 hour" },
+        action: { type: "prompt", prompt: "ping" },
+      })
       flag.enabled = false
 
       for (const [name, input] of [
@@ -222,25 +227,35 @@ describe("ScheduleTools", () => {
     }),
   )
 
-  it.effect("rejects a when with more than one trigger instead of keeping the first", () =>
+  it.effect("rejects untagged or malformed unions cleanly", () =>
     Effect.gen(function* () {
       const { registry, rows } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
       expect(
-        yield* call(registry, "schedule_create", { when: { in: "5 minutes", every: "1 hour" }, prompt: "ping" }),
+        yield* call(registry, "schedule_create", {
+          when: { in: "5 minutes", every: "1 hour" },
+          action: { type: "prompt", prompt: "ping" },
+        }),
       ).toMatchObject({ metadata: { error: true } })
       expect(rows.size).toBe(0)
     }),
   )
 
-  it.effect("puts each schedule's id, trigger, status, next run and prompt in the text without Code Mode", () =>
+  it.effect("puts each schedule's id, trigger, status, next run and action in the text without Code Mode", () =>
     Effect.gen(function* () {
       const { registry } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
       expect(
-        yield* direct(registry, "schedule_create", { name: "ci", when: { every: "1 hour" }, prompt: "check CI" }),
+        yield* direct(registry, "schedule_create", {
+          name: "ci",
+          when: { type: "every", every: "1 hour" },
+          action: { type: "prompt", prompt: "check CI" },
+        }),
       ).toBe(
         'Scheduled: sch_1 "ci": every 1 hour (America/New_York), active, next 2026-10-27T09:20:00.000-04:00, prompt: "check CI"',
       )
-      yield* direct(registry, "schedule_create", { when: { cron: "0 9 * * 1-5" }, prompt: "x".repeat(100) })
+      yield* direct(registry, "schedule_create", {
+        when: { type: "cron", cron: "0 9 * * 1-5" },
+        action: { type: "prompt", prompt: "x".repeat(100) },
+      })
       yield* direct(registry, "schedule_pause", { id: "sch_2" })
       const list = yield* direct(registry, "schedule_list", {})
       expect(list?.split("\n").slice(1)).toEqual([
@@ -254,7 +269,12 @@ describe("ScheduleTools", () => {
   it.effect("treats another session's schedule as missing", () =>
     Effect.gen(function* () {
       const { registry, rows } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
-      yield* run(registry, "schedule_create", { when: { every: "1 hour" }, prompt: "ping" }, otherSessionID)
+      yield* run(
+        registry,
+        "schedule_create",
+        { when: { type: "every", every: "1 hour" }, action: { type: "prompt", prompt: "ping" } },
+        otherSessionID,
+      )
 
       expect(yield* run(registry, "schedule_list", {})).toMatchObject({ schedules: [] })
       for (const name of ["schedule_pause", "schedule_resume", "schedule_delete"]) {
@@ -271,8 +291,8 @@ describe("ScheduleTools", () => {
     Effect.gen(function* () {
       const { registry, rows } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
       const created = yield* run(registry, "schedule_create", {
-        until: { run: "gh pr checks 59962" },
-        prompt: "CI passed",
+        until: { type: "shell", run: "gh pr checks 59962" },
+        action: { type: "prompt", prompt: "CI passed" },
       })
       expect(created).toMatchObject({
         id: "sch_1",
@@ -285,23 +305,92 @@ describe("ScheduleTools", () => {
       })
       expect(
         yield* direct(registry, "schedule_create", {
-          when: { every: "2 minutes" },
-          if: { run: "git status -s", changes: true },
-          prompt: "working tree changed",
+          when: { type: "every", every: "2 minutes" },
+          if: { type: "shell", run: "git status -s", changes: true },
+          action: { type: "prompt", prompt: "working tree changed" },
         }),
       ).toContain('if "git status -s", active')
       expect(
         yield* direct(registry, "schedule_create", {
-          until: { code: "return (await tools.slack.read_thread({})).ok" },
-          prompt: "thread ok",
+          until: { type: "code", code: "return (await tools.slack.read_thread({})).ok" },
+          action: { type: "prompt", prompt: "thread ok" },
         }),
       ).toContain('until code "return (await tools.slack.read_thread({})).ok", active')
       expect(
         yield* call(registry, "schedule_create", {
           until: { run: "true", code: "return true" },
-          prompt: "both",
+          action: { type: "prompt", prompt: "both" },
         }),
       ).toMatchObject({ metadata: { error: true } })
+    }),
+  )
+
+  it.effect("supports prompt, command, shell and code tagged actions with shared target union", () =>
+    Effect.gen(function* () {
+      const { registry, rows } = yield* setup(new ConfigExperimental.Info({ schedules: true }))
+
+      const subagentPrompt = yield* run(registry, "schedule_create", {
+        name: "triage",
+        when: { type: "every", every: "1 hour" },
+        action: {
+          type: "prompt",
+          prompt: "triage issues",
+          target: { type: "subagent", agent: "explore", notify: false },
+        },
+      })
+      expect(subagentPrompt).toMatchObject({
+        action: {
+          type: "prompt",
+          prompt: "triage issues",
+          target: { type: "subagent", agent: "explore", notify: false },
+        },
+      })
+
+      const subagentCommand = yield* direct(registry, "schedule_create", {
+        when: { type: "cron", cron: "0 9 * * 1-5" },
+        action: {
+          type: "command",
+          name: "morning-brief",
+          arguments: "team",
+          target: { type: "subagent", notify: false },
+        },
+      })
+      expect(subagentCommand).toContain('command (subagent): "/morning-brief team"')
+
+      const sessionCommand = yield* direct(registry, "schedule_create", {
+        when: { type: "in", in: "5 minutes" },
+        action: {
+          type: "command",
+          name: "review",
+          arguments: "HEAD",
+        },
+      })
+      expect(sessionCommand).toContain('command: "/review HEAD"')
+
+      const shell = yield* direct(registry, "schedule_create", {
+        when: { type: "in", in: "10 minutes" },
+        action: { type: "shell", run: "git fetch origin" },
+      })
+      expect(shell).toContain('shell: "git fetch origin"')
+
+      const code = yield* direct(registry, "schedule_create", {
+        when: { type: "in", in: "15 minutes" },
+        action: { type: "code", code: "await tools.slack.read_thread({}); return 'ok'" },
+      })
+      expect(code).toContain("code: \"await tools.slack.read_thread({}); return 'ok'\"")
+      expect(rows.size).toBe(5)
+
+      for (const bad of [
+        { when: { type: "in", in: "5 minutes" } },
+        { when: { type: "in", in: "5 minutes" }, action: { type: "unknown" } },
+        {
+          when: { type: "in", in: "5 minutes" },
+          action: { type: "prompt", prompt: "a", target: { type: "invalid" } },
+        },
+      ]) {
+        expect(yield* call(registry, "schedule_create", bad)).toMatchObject({ metadata: { error: true } })
+      }
+      expect(rows.size).toBe(5)
     }),
   )
 })
