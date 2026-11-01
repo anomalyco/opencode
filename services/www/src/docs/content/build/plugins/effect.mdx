@@ -1,5 +1,6 @@
 ---
 title: "Effect"
+description: "Write server plugins with the Effect-native plugin API."
 ---
 
 `@opencode/plugin/effect` is the Effect-native version of the OpenCode plugin API. Its context operations return
@@ -122,11 +123,13 @@ interface Context {
   readonly event: EventDomain
   readonly experimental: {
     readonly terminal: Pick<ExperimentalApi<unknown>["persistentPty"], "read">
+    readonly generate: GenerateApi<unknown>
   }
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
   readonly model: ModelDomain
-  readonly generate: GenerateApi<unknown>
+  /** @deprecated Use `experimental.generate.text`. */
+  readonly generate: Pick<ExperimentalGenerateApi<unknown>, "text">
   readonly permission: PermissionDomain
   readonly plugin: Pick<PluginApi<unknown>, "list">
   readonly provider: ProviderDomain
@@ -1283,6 +1286,10 @@ effect: (ctx) =>
     )
   }),
 ```
+
+The `system` part that holds OpenCode's instructions also lists each source in `metadata.experimental.instructions` as
+`{ key, text }`, such as `core/date` or `core/environment`, so a hook can tell the sources apart. The list is a copy:
+editing the part's `text` does not update it. This is experimental and may change.
 
 Modify model request settings and optionally scope the hook to one provider. The event carries the same `kind` as
 the HTTP hooks below.

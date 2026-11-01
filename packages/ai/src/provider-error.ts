@@ -4,7 +4,6 @@ import {
   ContentPolicyError,
   InvalidRequestError,
   AIError,
-  ProviderErrorEvent,
   ProviderInternalError,
   QuotaExceededError,
   RateLimitError,
@@ -42,6 +41,8 @@ const patterns = [
   // Hugging Face Text Generation Inference, e.g. Together
   /`inputs` tokens \+ `max_new_tokens` must be <= \d+/i,
   /context window exceeds limit/i,
+  // LiteLLM's ContextWindowExceededError
+  /context window exceeded/i,
   /exceeded model token limit/i,
   /context[_ ]length[_ ]exceeded/i,
   /context length is only \d+ tokens/i,
@@ -73,12 +74,12 @@ export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&
   (patterns.some((pattern) => pattern.test(message)) || /^4(?:00|13)\s*(status code)?\s*\(no body\)/i.test(message))
 
-export const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
+const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
 
 export const isContextOverflowFailure = (failure: unknown) =>
-  failure instanceof AIError
-    ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
-    : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
+  failure instanceof AIError &&
+  failure.reason._tag === "InvalidRequest" &&
+  failure.reason.classification === "context-overflow"
 
 /**
  * Whether a failed call may succeed when sent again: rate limits, provider-side failures, transport failures that did
@@ -111,7 +112,6 @@ export const isRetryable = (error: AIError) => {
     case "ContentPolicy":
     case "InvalidRequest":
     case "UnsupportedOperation":
-    case "NoRoute":
     case "Timeout":
       return false
     default: {
@@ -176,8 +176,9 @@ const AUTH_TEXT = /incorrect api key provided/i
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
 // Only consulted on 429, where throttles and account caps share a status.
 // Z.ai reports balance, plan expiry, plan limits, and plan model access on 429.
+// Cerebras reports its per-minute token throttle as `token_quota_exceeded`; that is a rate limit.
 const QUOTA_TEXT =
-  /insufficient[-_\s]?(?:quota|balance)|quota[-_\s]?exceeded|budget exceeded|usage limit|limit exhausted|package has expired|plan does not yet include/i
+  /insufficient[-_\s]?(?:quota|balance)|(?<!token_)quota[-_\s]?exceeded|budget exceeded|usage limit|limit exhausted|package has expired|plan does not yet include/i
 // Policy rejections without a dedicated code, matched against the provider's own
 // explanation only. OpenAI reuses `invalid_prompt` for usage-policy rejections while
 // Bedrock Mantle reuses it for schema validation; Anthropic reports blocked output
@@ -262,7 +263,9 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     (codes.includes("context_length_exceeded") ||
       codes.includes("model_context_window_exceeded") ||
       codes.includes("request_too_large") ||
-      (!codes.includes("throttlingexception") && isContextOverflow(text)))
+      // 429 bodies are throttles even when their wording matches an overflow phrase, e.g. Cerebras's
+      // "too many tokens processed". Text matching stays on for 4xx and mid-stream errors without a status.
+      (input.status !== 429 && !codes.includes("throttlingexception") && isContextOverflow(text)))
   )
     return new InvalidRequestError({ ...details, classification: "context-overflow" })
   if (input.status === 413 || isPayloadTooLarge(text))
@@ -328,8 +331,6 @@ function providerCodes(value: unknown) {
     decoded.code,
     ...awsErrorType(decoded.__type),
     ...awsErrorType(decoded.code),
-    // Stability's `{ id, name, errors }` bodies carry the code in `name`.
-    Array.isArray(decoded.errors) ? decoded.name : undefined,
     decoded.error_type,
     error?.code,
     error?.type,

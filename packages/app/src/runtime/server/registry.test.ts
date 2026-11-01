@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test"
-import { canRemoveServer, createServerProjects, resolveServerList, ServerConnection, serverLabel } from "./registry"
+import {
+  canRemoveServer,
+  createServerProjects,
+  resolveServerList,
+  resolveVisibleServers,
+  ServerConnection,
+  serverLabel,
+} from "./registry"
 import { Schema } from "effect"
 import { ServerState } from "./persistence"
 import { createStore } from "solid-js/store"
@@ -52,24 +59,36 @@ test("startup auth_token credentials override a persisted same-url server; witho
   expect(kept[0]?.type === "http" ? kept[0].authToken : true).toBeUndefined()
 })
 
-test("treats WSL sidecars as remote server connections", () => {
+test("treats WSL and mismatched-port loopback servers as remote connections", () => {
+  const windowsSidecar = "http://127.0.0.1:28894"
+
   expect(
-    ServerConnection.local({
-      type: "extension",
-      key: "wsl:Debian",
-      extension: "wsl",
-      state: "ready",
-      connecting: false,
-      authenticationRequired: false,
-      managed: false,
-      http: { url: "http://127.0.0.1:4097" },
-    }),
+    ServerConnection.local(
+      {
+        type: "plugin",
+        key: "wsl:Debian",
+        plugin: "wsl",
+        state: "ready",
+        connecting: false,
+        authenticationRequired: false,
+        managed: false,
+        http: { url: "http://127.0.0.1:4097" },
+      },
+      windowsSidecar,
+    ),
   ).toBe(false)
-  expect(ServerConnection.local({ type: "sidecar", variant: "base", http: { url: "http://127.0.0.1:4096" } })).toBe(
-    true,
+  expect(
+    ServerConnection.local({ type: "sidecar", variant: "base", http: { url: windowsSidecar } }),
+  ).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:28894" } }, windowsSidecar)).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://[::1]:28894" } }, windowsSidecar)).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:4096" } }, windowsSidecar)).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://127.0.0.1:4096" } }, windowsSidecar)).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:49374" } }, windowsSidecar)).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:4096" } })).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "https://server.example.test" } }, windowsSidecar)).toBe(
+    false,
   )
-  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:4096" } })).toBe(true)
-  expect(ServerConnection.local({ type: "http", http: { url: "https://server.example.test" } })).toBe(false)
 })
 
 test("keeps exact persisted server identities and prevents removing provided servers", () => {
@@ -87,6 +106,24 @@ test("keeps exact persisted server identities and prevents removing provided ser
   expect(canRemoveServer({ key, stored, provided: [{ type: "http", http: { url: key } }] })).toBe(false)
 })
 
+test("hidden servers are left out, but never every server: the built-in one, otherwise the first, stays shown", () => {
+  const sidecar: ServerConnection.Sidecar = { type: "sidecar", variant: "base", http: { url: "http://127.0.0.1:4096" } }
+  const remote: ServerConnection.Http = { type: "http", http: { url: "https://apollo.example.test" } }
+  const other: ServerConnection.Http = { type: "http", http: { url: "https://zeus.example.test" } }
+
+  const hide = (...servers: ServerConnection.Any[]) =>
+    Object.fromEntries(servers.map((server) => [ServerConnection.key(server), true]))
+
+  expect(resolveVisibleServers({ servers: [sidecar, remote], hidden: {} })).toEqual([sidecar, remote])
+  expect(resolveVisibleServers({ servers: [sidecar, remote], hidden: hide(sidecar) })).toEqual([remote])
+  expect(resolveVisibleServers({ servers: [remote, sidecar], hidden: hide(remote, sidecar) })).toEqual([sidecar])
+  expect(resolveVisibleServers({ servers: [remote, other], hidden: hide(remote, other) })).toEqual([remote])
+  expect(resolveVisibleServers({ servers: [], hidden: hide(remote) })).toEqual([])
+})
+
+/** The server props a project store follows, which the test changes. */
+type ProjectScopeProps = { server: ServerConnection.Key; canonicalLocalServer?: ServerConnection.Key }
+
 test("used and last projects follow dynamic server scopes, and migration consumes only its scope", () => {
   const [store, setStore] = createStore(
     Schema.decodeUnknownSync(serverSchema())({
@@ -94,9 +131,7 @@ test("used and last projects follow dynamic server scopes, and migration consume
     }),
   )
 
-  const props: { server: ServerConnection.Key; canonicalLocalServer?: ServerConnection.Key } = {
-    server: ServerConnection.Key.make("https://remote.example"),
-  }
+  const props: ProjectScopeProps = { server: ServerConnection.Key.make("https://remote.example") }
 
   const projects = createServerProjects({
     store,

@@ -1,4 +1,5 @@
-import { createEffect, createMemo, createResource, For, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createResource, For, onCleanup, onMount, Show } from "solid-js"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
@@ -228,6 +229,7 @@ function SessionTabEntry(props: {
       pending() ||
       !ctx ||
       props.active ||
+      ctx.data.session.missing(id) ||
       (!session() && !persisted()?.title) ||
       ctx.sdk.connection.status() !== "connected"
     )
@@ -392,6 +394,22 @@ export function TitlebarTabStrip(props: {
   const command = useCommand()
   const vertical = () => props.orientation === "vertical"
   let listRef!: HTMLDivElement
+  let scrollRef!: HTMLDivElement
+  // Each vertical edge feathers by as much as there is left to scroll past it, so it appears and leaves without a jump.
+  const [fade, setFade] = createStore({ top: 0, bottom: 0 })
+
+  const measureFade = () =>
+    setFade({
+      top: Math.min(16, Math.round(scrollRef.scrollTop)),
+      bottom: Math.min(
+        16,
+        Math.max(0, Math.round(scrollRef.scrollHeight - scrollRef.clientHeight - scrollRef.scrollTop)),
+      ),
+    })
+
+  onMount(() => {
+    if (vertical()) createResizeObserver([scrollRef, listRef], measureFade)
+  })
   const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
   const [unread, setUnread] = createStore<Record<string, boolean>>({})
   const visibleTabs = createMemo(() => props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
@@ -449,6 +467,23 @@ export function TitlebarTabStrip(props: {
     },
   ])
 
+  // One registration numbers the visible tabs, so a reorder, a close or a tab coming into view never leaves two tabs
+  // holding the same number while their owners update.
+  const tabRefs = new Map<string, () => HTMLDivElement | undefined>()
+
+  command.register("titlebar-tab-numbers", () =>
+    visibleTabs()
+      .slice(0, 9)
+      .map((tab, index) => ({
+        id: `tab.${index + 1}`,
+        category: "tab",
+        title: "",
+        keybind: `mod+${index + 1}`,
+        hidden: true,
+        onSelect: () => props.onNavigate(tab, tabRefs.get(tabKey(tab))?.()),
+      })),
+  )
+
   function selectAdjacentTab(offset: -1 | 1, include?: (key: string) => boolean) {
     const current = props.currentTab
     const key = adjacentTabKey(visibleTabIds(), current ? tabKey(current) : undefined, offset, include)
@@ -465,11 +500,20 @@ export function TitlebarTabStrip(props: {
       classList={{ "min-h-0 overflow-hidden": vertical() }}
     >
       <div
+        ref={scrollRef}
         data-slot={vertical() ? "vertical-tabs-scroll" : "titlebar-tabs-scroll"}
         class="flex min-w-0 no-scrollbar [app-region:no-drag]"
         classList={{
           "flex-row items-center gap-1.5 overflow-x-auto": !vertical(),
           "max-h-full flex-col overflow-y-auto overflow-x-hidden": vertical(),
+        }}
+        style={
+          vertical()
+            ? { "--vertical-tabs-fade-top": `${fade.top}px`, "--vertical-tabs-fade-bottom": `${fade.bottom}px` }
+            : undefined
+        }
+        onScroll={() => {
+          if (vertical()) measureFade()
         }}
       >
         <DragDropProvider
@@ -481,7 +525,9 @@ export function TitlebarTabStrip(props: {
                   : [new PointerActivationConstraints.Distance({ value: 4 })],
               preventActivation: (event) =>
                 event.target instanceof Element &&
-                !!event.target.closest('[data-slot="tab-close"], [contenteditable="true"], [contenteditable="plaintext-only"]'),
+                !!event.target.closest(
+                  '[data-slot="tab-close"], [contenteditable="true"], [contenteditable="plaintext-only"]',
+                ),
             }),
           ]}
           modifiers={[
@@ -536,7 +582,11 @@ export function TitlebarTabStrip(props: {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
                 const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
-                useTabShortcut(visibleIndex, () => props.onNavigate(tab, ref))
+                const element = () => ref
+                tabRefs.set(id, element)
+                onCleanup(() => {
+                  if (tabRefs.get(id) === element) tabRefs.delete(id)
+                })
 
                 const serverCtx = useServerCtx(() => {
                   if (tab.type !== "session") return
@@ -599,25 +649,4 @@ export function TitlebarTabStrip(props: {
       </Show>
     </div>
   )
-}
-
-function useTabShortcut(index: () => number, onSelect: () => void) {
-  const command = useCommand()
-
-  command.register(() => {
-    const number = index() + 1
-
-    if (number < 1 || number > 9) return []
-
-    return [
-      {
-        id: `tab.${number}`,
-        category: "tab",
-        title: "",
-        keybind: `mod+${number}`,
-        hidden: true,
-        onSelect,
-      },
-    ]
-  })
 }

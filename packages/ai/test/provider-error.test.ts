@@ -21,6 +21,8 @@ describe("provider error classification", () => {
       "Prompt exceeds max length",
       "The input is too long for the selected model.",
       "This text request is too large for the model's configured input limit.",
+      // LiteLLM's own check, before it calls the model.
+      "litellm.ContextWindowExceededError: litellm.BadRequestError: litellm._pre_call_checks: Context Window exceeded for given call. No models have context window large enough for this call.",
     ]
 
     expect(messages.every(isContextOverflow)).toBe(true)
@@ -201,10 +203,6 @@ describe("provider error classification", () => {
         classifyProviderFailure({ message: messages.error.message, rawBody: JSON.stringify(messages) }),
       ].map((failure) => failure._tag),
     ).toEqual(["ContentPolicy", "ContentPolicy", "ContentPolicy"])
-    const stability = { id: "a1b2", name: "content_moderation", errors: ["Your request was flagged"] }
-    expect(
-      classifyProviderFailure({ message: "Forbidden", status: 403, rawBody: JSON.stringify(stability) })._tag,
-    ).toBe("ContentPolicy")
   })
 
   test("classifies Alibaba Model Studio data inspection failures", () => {
@@ -447,6 +445,21 @@ describe("provider error classification", () => {
     expect(isContextOverflow("Too many tokens per day, please wait before trying again.")).toBe(false)
     // Plain overflow phrasing without the throttle cue still compacts.
     expect(isContextOverflow("Too many tokens")).toBe(true)
+  })
+
+  test("classifies 429 token throttles as retryable rate limits, not context overflow", () => {
+    const bodies = [
+      // Cerebras, captured live
+      '{"message":"Tokens per minute limit exceeded - too many tokens processed.","type":"too_many_tokens_error","param":"quota","code":"token_quota_exceeded"}',
+      '{"message":"Token limit reached: too many tokens per minute for this model."}',
+    ]
+    for (const body of bodies) {
+      const error = new AIError({
+        reason: classifyProviderFailure({ message: providerErrorMessage(body), status: 429, rawBody: body }),
+      })
+      expect(error.reason._tag).toBe("RateLimit")
+      expect(isRetryable(error)).toBe(true)
+    }
   })
 
   test("does not infer context overflow from known throttling exceptions", () => {

@@ -1,12 +1,13 @@
 export * as SessionModelRequest from "./model-request.js"
 
 import {
+  ai,
   GenerationOptions,
   type GenerationOptionsFields,
   HttpOptions,
   LanguageModel,
-  LLM,
-  LLMRequest,
+  type LLM,
+  type LLMRequest,
   type Media,
   Message,
   SystemPart,
@@ -27,6 +28,7 @@ import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
+import { Instructions } from "../instructions/index.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
@@ -50,6 +52,10 @@ const OUTPUT_TOKEN_FALLBACK = 32_000
 const OUTPUT_TOKEN_MAX = 256_000
 // Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
 const ESTIMATE_ERROR = 0.15
+// Share of the window a turn leaves unused when its output limit is fitted to the room left. Providers count a few
+// tokens more than we do (chat template, tool schemas), and strict ones reject input plus output past the window.
+// Compaction sizes its summary against its own reserve instead.
+const WINDOW_HEADROOM = 0.01
 // Never ask for less; only reachable with automatic compaction off, since it keeps the window from filling this far.
 const OUTPUT_TOKEN_MIN = 1_024
 
@@ -74,7 +80,7 @@ export interface Input {
   readonly tools?: Tool.Snapshot
   readonly system: Array<SystemPart>
   readonly messages: Array<Message>
-  readonly toolChoice?: LLM.RequestInput["toolChoice"]
+  readonly toolChoice?: LLM.LLMRequestInput["toolChoice"]
   /** Only the durable runner may use a stateful WebSocket. */
   readonly webSocket?: "session"
   /** Prompt size, measured by the provider or estimated. The default output limit leaves room for it. */
@@ -82,10 +88,13 @@ export interface Input {
 }
 
 /** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
-export const outputLimit = (limit: Model.Info["limit"], inputTokens?: Input["inputTokens"]) => {
+export const outputLimit = (limit: Model.Info["limit"], inputTokens?: Input["inputTokens"], headroom = 0) => {
   const requested = Math.min(limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK, OUTPUT_TOKEN_MAX)
   if (inputTokens === undefined || limit.context <= 0) return requested
-  const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
+  const room =
+    Math.floor(limit.context * (1 - headroom)) -
+    inputTokens.measured -
+    Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
   return Math.min(requested, Math.max(OUTPUT_TOKEN_MIN, room))
 }
 
@@ -93,20 +102,23 @@ export const baseTranscript = (input: {
   readonly agent: Agent.Info
   readonly model: SessionRunnerModel.Resolved
   readonly tools: Tool.Snapshot
-  readonly initial: string
+  readonly initial: ReadonlyArray<Instructions.Rendered>
   readonly messages: ReadonlyArray<SessionMessage.Info>
 }) => {
   const providerMetadataKey = input.model.model.route.providerMetadataKey ?? input.model.model.provider
   return {
     providerMetadataKey,
     system: [
-      input.agent.system
-        ? input.agent.system
-        : SessionSystemPrompt.make(input.tools.definitions.map((tool) => tool.name)),
-      input.initial,
-    ]
-      .filter((part) => part.length > 0)
-      .map(SystemPart.make),
+      SystemPart.make(
+        input.agent.system
+          ? input.agent.system
+          : SessionSystemPrompt.make(input.tools.definitions.map((tool) => tool.name)),
+      ),
+      {
+        ...SystemPart.make(Instructions.join(input.initial)),
+        metadata: { experimental: { instructions: input.initial } },
+      },
+    ].filter((part) => part.text.length > 0),
     messages: toLLMMessages(input.messages, input.model.ref, providerMetadataKey),
   }
 }
@@ -255,9 +267,11 @@ export const layer = Layer.effect(
           system: input.system,
           messages: input.messages,
           options:
-            kind === "primary" || kind === "compaction"
-              ? { maxTokens: outputLimit(model.limit, input.inputTokens) }
-              : {},
+            kind === "primary"
+              ? { maxTokens: outputLimit(model.limit, input.inputTokens, WINDOW_HEADROOM) }
+              : kind === "compaction"
+                ? { maxTokens: outputLimit(model.limit, input.inputTokens) }
+                : {},
         },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),
       )
@@ -274,7 +288,7 @@ export const layer = Layer.effect(
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
       const affinity = SessionAffinity.get(session)
-      const base = LLM.request({
+      const base = ai.request({
         model: model.model,
         http: {
           headers: {
@@ -310,13 +324,14 @@ export const layer = Layer.effect(
         modelHook.baseURL !== undefined && modelHook.baseURL !== baseURL
           ? base.model.route.with({ endpoint: { baseURL: modelHook.baseURL } })
           : base.model.route
-      const request = LLMRequest.update(base, {
+      const request = {
+        ...base,
         model: route === base.model.route ? base.model : LanguageModel.update(base.model, { route }),
         http: new HttpOptions({
           ...base.http,
           headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
         }),
-      })
+      }
       const hasHttpHooks =
         (yield* hooks.has("session", "http.request", model.ref.providerID)) ||
         (yield* hooks.has("session", "http.response", model.ref.providerID))

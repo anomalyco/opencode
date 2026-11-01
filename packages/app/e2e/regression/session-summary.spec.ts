@@ -128,7 +128,6 @@ test("the project menu loads changes on demand and opens review", async ({ page 
     "main",
     /1 Changed file.*\+7.*-3/,
     "",
-    "This computer",
     "C:/OpenCode/ProjectChanges",
     "",
     "Edit project",
@@ -243,7 +242,7 @@ test("the details follow the routed session when it moves to another worktree", 
   await page.keyboard.press("Escape")
   await expect(summary).toBeHidden()
 
-  // The server moves the session; the screen stays mounted while its extensions read the new worktree.
+  // The server moves the session; the screen stays mounted while its plugins read the new worktree.
   const moved = sessions.find((item) => item.id === fixture.targetID)
 
   if (moved) moved.directory = `${root}/other`
@@ -557,6 +556,8 @@ test("MCP rows toggle once per action and keep sign-in, errors, and management a
       }
     })
     .toEqual({ width: 6, height: 6, alignment: 0, gap: 8 })
+  // Like every other control in the menu, a row that toggles its server keeps the default cursor.
+  await expect(row("figma")).not.toHaveCSS("cursor", "pointer")
   await page.screenshot({ path: test.info().outputPath("mcp-toggles.png"), animations: "disabled" })
 
   for (const [index, target] of ["label", "dot", "padding", "control", "keyboard"].entries()) {
@@ -567,7 +568,11 @@ test("MCP rows toggle once per action and keep sign-in, errors, and management a
         ? await holdRoute(page, /\/api\/experimental\/mcp\/figma\/disconnect(?:\?|$)/, { method: "POST" })
         : undefined
 
-    if (target === "label") await row("figma").locator('[data-slot="truncated-text-label"]').click()
+    if (target === "label") {
+      await row("figma").locator('[data-slot="truncated-text-label"]').click()
+      // A name that fits has nothing to reveal, so a click on it leaves no focus ring of its own.
+      await expect(row("figma").locator('[data-component="tooltip-v2-trigger"]')).not.toBeFocused()
+    }
 
     if (target === "dot") await row("figma").locator(".session-service-dot").click()
 
@@ -673,11 +678,15 @@ test("Extensions lists open on hover, hold course into the open list, and follow
 test("Extensions lists open config files and skills in a side tab and start setup sessions", async ({ page }) => {
   const global = "C:/Users/kit/.config/opencode/opencode.jsonc"
   const skill = `${fixture.directory}/.opencode/skills/release-notes/SKILL.md`
+  let builtinReads = 0
 
   await mockStressTimeline(page, {
     mcp: [{ name: "atlas-search", status: { status: "connected" } }],
     plugins: [],
-    skills: [{ id: "release-notes", name: "release-notes", path: skill, content: "Release notes" }],
+    skills: [
+      { id: "opencode", name: "OpenCode", path: "skill://opencode/SKILL.md", content: "# Built-in OpenCode guide" },
+      { id: "release-notes", name: "release-notes", path: skill, content: "Release notes" },
+    ],
     configEntries: [
       {
         type: "document",
@@ -688,6 +697,16 @@ test("Extensions lists open config files and skills in a side tab and start setu
       { type: "document", path: `${fixture.directory}/.opencode/opencode.jsonc`, info: { mcp: {} } },
     ],
     fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+  })
+
+  await page.route(/\/api\/fs\/read\/SKILL\.md(\?|$)/, (route) => {
+    builtinReads += 1
+
+    return route.fulfill({
+      status: 404,
+      json: { message: "Location not found: skill://opencode" },
+      headers: cors,
+    })
   })
   await page.goto(sessionHref(fixture.targetID))
   const trigger = page.getByRole("button", { name: "Session details", exact: true })
@@ -707,9 +726,19 @@ test("Extensions lists open config files and skills in a side tab and start setu
 
   await trigger.click()
   await row("Skills").hover()
-  await list("Skills").getByRole("button", { name: "release-notes", exact: true }).click()
+  await list("Skills").getByRole("button", { name: "OpenCode", exact: true }).click()
   await expect(summary).toBeHidden()
   await expect(page.getByRole("tab", { name: "SKILL.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByRole("heading", { name: "Built-in OpenCode guide", exact: true })).toBeVisible()
+  await expect(page.getByText("Failed to load file", { exact: true })).toHaveCount(0)
+  expect(builtinReads).toBe(0)
+
+  await trigger.click()
+  await row("Skills").hover()
+  await list("Skills").getByRole("button", { name: "release-notes", exact: true }).click()
+  await expect(summary).toBeHidden()
+  await expect(page.getByRole("tab", { name: "SKILL.md", selected: true, exact: true })).toBeVisible()
+  await expect(page.getByText("contents:.opencode/skills/release-notes/SKILL.md", { exact: true })).toBeVisible()
 
   // An empty list offers a draft session in the global configuration's directory, its prompt filled in.
   await trigger.click()
@@ -841,7 +870,14 @@ test("long MCP lists stay in the viewport in a real RTL locale", async ({ page }
   await summary.getByRole("button", { name: "MCP", exact: true }).click()
   const menu = page.getByRole("group", { name: "MCP", exact: true })
   await expect(menu.locator(".session-mcp-row")).toHaveCount(30)
-  await expect.poll(() => menu.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  const list = menu.locator("[data-scrollable]")
+  await expect.poll(() => list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  // Long names truncate; the list only scrolls vertically.
+  expect(await list.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0)
+  // The submenu shows and moves without motion unless its Knobs toggle is on.
+  expect(
+    await page.locator(".session-service-flyout").evaluate((element) => getComputedStyle(element).transitionDuration),
+  ).toBe("0s")
   await expect
     .poll(async () => {
       const bounds = (await menu.boundingBox())!

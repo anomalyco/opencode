@@ -39,7 +39,7 @@ export default function Home() {
       />
 
       <div data-component="container">
-        <Header zen hideGetStarted />
+        <Header />
 
         <div data-component="content">
           <section data-component="hero">

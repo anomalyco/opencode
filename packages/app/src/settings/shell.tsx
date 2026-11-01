@@ -1,22 +1,8 @@
 import { Tabs } from "@opencode/ui/tabs"
 import { useDialog } from "@opencode/ui/context/dialog"
-import {
-  createEffect,
-  createMemo,
-  For,
-  lazy,
-  on,
-  onCleanup,
-  onMount,
-  Show,
-  Suspense,
-  Switch,
-  Match,
-  type Accessor,
-} from "solid-js"
+import { createEffect, createMemo, For, on, onCleanup, onMount, Show, Switch, Match, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -47,14 +33,8 @@ import { useSettingsSurface } from "./surface"
 import { settingsViewRedirect } from "./route"
 import { pageIcons, pageLabels } from "./pages"
 import { revealSettingsSearch } from "./search-reveal"
-import { ExtensionSettingsPages } from "@/runtime/extension/settings-page-view"
+import { PluginSettingsPages } from "@/runtime/plugin/settings-page-view"
 import "@/settings/settings.css"
-
-const GuiExtensionsSettings = import.meta.env.DEV
-  ? lazy(() =>
-      import("@/runtime/extension/settings-page-dev").then((module) => ({ default: module.GuiExtensionsSettings })),
-    )
-  : undefined
 
 const rootClientTabs = [
   { value: "general", icon: pageIcons.general, label: "settings.tab.preferences" },
@@ -82,10 +62,6 @@ const serverPages = {
 
 const experimentalTab = [
   { value: "experimental", icon: pageIcons.experimental, label: "settings.tab.experimental" },
-] as const
-
-const guiExtensionsTab = [
-  { value: "gui-extensions", icon: pageIcons["gui-extensions"], label: "settings.guiExtensions.title" },
 ] as const
 
 const aboutTab = [{ value: "about", icon: pageIcons.about, label: "settings.tab.about" }] as const
@@ -199,22 +175,6 @@ export function SettingsScreen() {
 
         surface.back()
       }}
-      onWheel={(event) => {
-        if (!root || event.ctrlKey || !event.deltaY || !(event.target instanceof Element)) return
-
-        // The page scrolls inside its panel, so a wheel over the gutters or sidebar would otherwise do nothing.
-        if (event.target.closest(".settings-content") || scrollsNatively(event.target, root, event.deltaY)) return
-        const panel = root.querySelector<HTMLElement>(".settings-content > .settings-panel")
-
-        if (!panel) return
-        const unit =
-          event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-            ? panel.clientHeight
-            : event.deltaMode === WheelEvent.DOM_DELTA_LINE
-              ? 16
-              : 1
-        panel.scrollBy({ top: event.deltaY * unit })
-      }}
     >
       <Switch>
         <Match when={surface.view().type === "root"}>
@@ -232,23 +192,12 @@ export function SettingsScreen() {
   )
 }
 
-function scrollsNatively(target: Element, root: Element, deltaY: number) {
-  for (let node: Element | null = target; node && node !== root; node = node.parentElement) {
-    if (!/auto|scroll/.test(getComputedStyle(node).overflowY)) continue
-
-    if (deltaY < 0 ? node.scrollTop > 0 : node.scrollHeight - node.clientHeight - node.scrollTop > 1) return true
-  }
-
-  return false
-}
-
 function RootSettings() {
   const language = useLanguage()
   const dialog = useDialog()
   const surface = useSettingsSurface()
   const global = useGlobal()
   const inventory = useSettingsServers()
-  const platform = usePlatform()
 
   const [state, setState] = createStore<{ worktreeFilterReset: number; modelProvider: string | undefined }>({
     worktreeFilterReset: 0,
@@ -266,21 +215,23 @@ function RootSettings() {
 
   const prefetchWorkspaces = useWorkspacesPrefetch(reachable)
   const activeDirectory = useSettingsDirectory(reachable)
-  // Development builds list the built-in GUI extensions of this window.
-  const guiExtensions = !!GuiExtensionsSettings && platform.platform === "desktop"
   createEffect(() => {
     const view = surface.view()
 
     if (view.type !== "root") return
 
     if (view.tab === "experimental" && !experimentalSettingsAvailable) surface.open("general")
-
-    if (view.tab === "gui-extensions" && !guiExtensions) surface.open("general")
   })
 
   const selectServer = (server: ServerConnection.Any) => surface.selectServer(ServerConnection.key(server))
 
   const addServer = () => void dialog.push(() => <DialogServer mode="add" onSave={selectServer} />)
+
+  const pluginTabs = (group?: "about") =>
+    surface.plugins
+      .pages()
+      .filter((item) => item.value.group === group)
+      .map((item) => ({ value: item.value.id, icon: item.value.icon ?? pageIcons.extensions, label: item.value.title }))
 
   const groups = createMemo<SettingsNavGroup[]>(() => [
     {
@@ -291,14 +242,7 @@ function RootSettings() {
       })),
     },
     {
-      items: [
-        ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
-        ...surface.extensions.pages().map((item) => ({
-          value: item.value.id,
-          icon: item.value.icon ?? pageIcons.extensions,
-          label: item.value.title,
-        })),
-      ],
+      items: [...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })), ...pluginTabs()],
     },
     {
       items: [
@@ -312,8 +256,9 @@ function RootSettings() {
     ...(experimentalSettingsAvailable
       ? [{ items: experimentalTab.map((item) => ({ ...item, label: language.t(item.label) })) }]
       : []),
-    ...(guiExtensions ? [{ items: guiExtensionsTab.map((item) => ({ ...item, label: language.t(item.label) })) }] : []),
-    { items: aboutTab.map((item) => ({ ...item, label: language.t(item.label) })) },
+    {
+      items: [...aboutTab.map((item) => ({ ...item, label: language.t(item.label) })), ...pluginTabs("about")],
+    },
   ])
 
   const change = (value: string) => {
@@ -341,17 +286,10 @@ function RootSettings() {
       <Tabs.Content value="shortcuts" class="settings-panel">
         <SettingsKeybinds active={surface.view().tab === "shortcuts"} />
       </Tabs.Content>
-      <ExtensionSettingsPages />
+      <PluginSettingsPages />
       <Tabs.Content value="experimental" class="settings-panel">
         <SettingsExperimental />
       </Tabs.Content>
-      {GuiExtensionsSettings && guiExtensions && (
-        <Tabs.Content value="gui-extensions" class="settings-panel">
-          <Suspense>
-            <GuiExtensionsSettings />
-          </Suspense>
-        </Tabs.Content>
-      )}
       <Tabs.Content value="about" class="settings-panel settings-about">
         <SettingsAbout active={surface.view().tab === "about"} />
       </Tabs.Content>

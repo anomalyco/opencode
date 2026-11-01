@@ -228,6 +228,20 @@ describe("mini command", () => {
     }
   })
 
+  test("reports server connection errors as JSON", async () => {
+    const result = await cli(["run", "--format", "json", "--server", "http://127.0.0.1:1", "hi"])
+
+    expect(result.exitCode).toBe(1)
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      type: "error",
+      sessionID: "",
+      error: {
+        type: "unknown",
+        message: expect.stringMatching(/^Could not reach server at http:\/\/127\.0\.0\.1:1: \S/),
+      },
+    })
+  })
+
   test("uses the shared V2 server option instead of an attach command", async () => {
     const result = await cli(["mini", "--help"])
 

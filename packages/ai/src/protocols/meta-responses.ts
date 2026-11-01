@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import { Base64 } from "effect/encoding"
 import { Protocol } from "../route/protocol.js"
-import { LLMEvent, LLMRequest, Message, ToolResultPart } from "../schema/index.js"
+import { LLMEvent, type LLMRequest, Message, ToolResultPart } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
@@ -62,7 +62,8 @@ const adapter = {
 const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: LLMRequest) {
   const key = request.model.route.providerMetadataKey ?? String(request.model.provider)
   const body = yield* OpenResponses.fromRequestWithAdapter(
-    LLMRequest.update(request, {
+    {
+      ...request,
       messages: request.messages.map((message) =>
         Message.make({
           ...message,
@@ -86,7 +87,7 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
           }),
         }),
       ),
-    }),
+    },
     adapter,
   )
   // Meta cannot see video nested in tool results; attach it after the complete result batch.
@@ -120,8 +121,10 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
 type InputItem = OpenResponses.OpenResponsesBody["input"][number]
 
 // Hosted replay items have an open `type`, so a plain tag check does not narrow the union.
-const isFunctionCallOutput = (item: InputItem): item is Extract<InputItem, { type: "function_call_output" }> =>
-  item.type === "function_call_output"
+const isFunctionCallOutput = (
+  item: InputItem,
+): item is Extract<InputItem, { type: "function_call_output" | "custom_tool_call_output" }> =>
+  item.type === "function_call_output" || item.type === "custom_tool_call_output"
 
 const HOSTED_TOOLS = {
   web_search_call: { name: "web_search", input: (item) => item.action ?? {} },
@@ -169,10 +172,7 @@ const HOSTED_TOOLS = {
   },
 } satisfies ResponsesHostedTools.Definitions
 
-const onEvent = Effect.fnUntraced(function* (
-  state: OpenResponses.ParserState,
-  input: OpenResponses.Event,
-) {
+const onEvent = Effect.fnUntraced(function* (state: OpenResponses.ParserState, input: OpenResponses.Event) {
   const event = OpenResponses.normalize(state, input)
   if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
     return yield* ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)

@@ -5,7 +5,7 @@ import { Switch } from "@opencode/ui/switch"
 import { TimelineDetailControl } from "@/settings/timeline-detail"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
-import { ExtensionSettingsSections } from "@/runtime/extension/settings-page-view"
+import { PluginSettingsSections } from "@/runtime/plugin/settings-page-view"
 import {
   type BackgroundActivity,
   type FollowUpBehavior,
@@ -141,6 +141,7 @@ const FollowUpBehaviorSetting: Component = () => {
 const BackgroundActivitySetting = () => {
   const language = useLanguage()
   const settings = useSettings()
+
   const options = createMemo((): { value: BackgroundActivity; label: string }[] => [
     { value: "off", label: language.t("settings.timeline.row.backgroundActivity.off") },
     { value: "left", label: language.t("settings.timeline.row.backgroundActivity.left") },
@@ -171,6 +172,7 @@ const BackgroundActivitySetting = () => {
 const TimelineWidthSetting = () => {
   const language = useLanguage()
   const settings = useSettings()
+
   const options = createMemo((): { value: TimelineWidth; label: string }[] => [
     { value: "focused", label: language.t("settings.timeline.row.width.focused") },
     { value: "comfortable", label: language.t("settings.timeline.row.width.comfortable") },
@@ -247,6 +249,17 @@ export const SettingsGeneral: Component = () => {
     void update.catch(() => setPinchZoom(!checked))
   }
 
+  const [spellcheck, { mutate: setSpellcheck }] = createResource(
+    () => desktop() && "getSpellcheckEnabled" in platform,
+    () => platform.getSpellcheckEnabled?.().catch(() => true) ?? true,
+    { initialValue: true },
+  )
+
+  const onSpellcheckChange = (checked: boolean) => {
+    setSpellcheck(checked)
+    void platform.setSpellcheckEnabled?.(checked).catch(() => setSpellcheck(!checked))
+  }
+
   const GeneralSection = () => (
     <div class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
@@ -280,9 +293,17 @@ export const SettingsGeneral: Component = () => {
               <Switch checked={pinchZoom.latest} onChange={onPinchZoomChange} />
             </div>
           </SettingsRow>
+          <SettingsRow
+            title={language.t("settings.general.row.spellcheck.title")}
+            description={language.t("settings.general.row.spellcheck.description")}
+          >
+            <div data-action="settings-spellcheck">
+              <Switch checked={spellcheck.latest} onChange={onSpellcheckChange} />
+            </div>
+          </SettingsRow>
         </Show>
 
-        <ExtensionSettingsSections page="general" section="general" />
+        <PluginSettingsSections page="general" section="general" />
 
         <Show when={mobile()}>
           <SettingsRow
@@ -341,7 +362,7 @@ export const SettingsGeneral: Component = () => {
           </SettingsList>
         </section>
 
-        <ExtensionSettingsSections page="general" />
+        <PluginSettingsSections page="general" />
       </div>
     </>
   )

@@ -1,9 +1,12 @@
 import { expect, test } from "bun:test"
 import {
+  AIError,
   GenerationOptions,
+  InvalidRequestError,
   LLMClient,
   LLMEvent,
   LanguageModel,
+  Message,
   ToolDefinition,
   type LLMRequest,
 } from "@opencode/ai/effect"
@@ -14,6 +17,7 @@ import { llmClient } from "@opencode/core/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { EventTable } from "@opencode/core/event/sql"
+import { Instructions } from "@opencode/core/instructions/index"
 import { SessionCompaction } from "@opencode/core/session/compaction"
 import type { SessionContext } from "@opencode/core/session/context"
 import { MessageDecodeError } from "@opencode/core/session/error"
@@ -22,6 +26,7 @@ import { SessionHistory } from "@opencode/core/session/history"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { Token } from "@opencode/core/util/token"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
@@ -46,6 +51,7 @@ import { testEffect } from "./lib/effect"
 let requests: LLMRequest[] = []
 /** Runs before a request's response streams; tests hold it back to keep a background summary in flight. */
 let beforeResponse: Effect.Effect<void> = Effect.void
+let reject: ((request: LLMRequest) => boolean) | undefined
 const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
@@ -64,6 +70,13 @@ const cost = [
 const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
+    if (reject?.(request)) {
+      return Stream.fail(
+        new AIError({
+          reason: new InvalidRequestError({ message: "prompt too long", classification: "context-overflow" }),
+        }),
+      )
+    }
     return Stream.fromEffect(beforeResponse).pipe(
       Stream.drain,
       Stream.concat(
@@ -397,7 +410,7 @@ it.effect("auto compaction estimates current content against the buffered prompt
         id: Agent.defaultID,
         info: { ...Agent.Info.default(Agent.defaultID), system: "You are a helpful assistant." },
       },
-      initial: "Project instructions.",
+      initial: [{ key: Instructions.Key.make("test/project"), text: "Project instructions." }],
       tools: {
         definitions: [
           ToolDefinition.make({ name: "read", description: "Read files", inputSchema: { type: "object" } }),
@@ -423,6 +436,12 @@ it.effect("auto compaction estimates current content against the buffered prompt
     expect(yield* due(native(231_200))).toBe(true)
     expect(yield* due(native(1_000_000, { context: 0, input: undefined, output: 0 }))).toBe(false)
 
+    // An input limit above the context window, as some catalogs and config overrides report, cannot be used in full.
+    const overstated = { context: 128_000, input: 272_000, output: 128_000 }
+    expect(yield* due(input(108_799, overstated))).toBe(false)
+    expect(yield* due(input(108_800, overstated))).toBe(true)
+    expect(yield* due(input(200_000, { context: 0, input: 272_000, output: 0 }))).toBe(false)
+
     // The summary's 16k output limit is more than 15% of a 100k window, so it sets the ceiling.
     const contextLimited = { context: 100_000, output: 10_000 }
     expect(yield* due(input(83_999, contextLimited))).toBe(false)
@@ -439,6 +458,15 @@ it.effect("auto compaction estimates current content against the buffered prompt
         yield* compaction.transform((editor) => editor.configure({ buffer: 100_000 }))
         expect(yield* due(input(60_000, contextLimited))).toBe(false)
         expect(yield* due(input(84_000, contextLimited))).toBe(true)
+      }),
+    )
+
+    // A percentage buffer is a share of the model's window.
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* compaction.transform((editor) => editor.configure({ buffer: "25%" }))
+        expect(yield* due(input(74_999, contextLimited))).toBe(false)
+        expect(yield* due(input(75_000, contextLimited))).toBe(true)
       }),
     )
 
@@ -546,7 +574,7 @@ const loaded = (session: Session.Info, messages: readonly SessionMessage.Info[])
   messages,
   model: resolved,
   agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
-  initial: "Session instructions",
+  initial: [{ key: Instructions.Key.make("test/session"), text: "Session instructions" }],
   tools: { definitions: [], execute: () => Effect.die("Compaction must not execute tools") },
 })
 
@@ -1000,6 +1028,185 @@ const enablePrecompute = Effect.gen(function* () {
   yield* compaction.transform((editor) => editor.configure({ precompute: true }))
   return compaction
 })
+
+const summaryWindow = resolved.limit.context
+const summaryBuffer = summaryWindow / 8
+const summaryCeiling = summaryWindow - summaryBuffer
+const summaryInput = summaryCeiling * 0.9 // Past precompute's trigger, below the compaction ceiling.
+const tokenText = (tokens: number) => "text".repeat(Math.ceil(tokens / Token.estimate("text")))
+const oldReasoning = (input = summaryInput) => ({
+  ...measured("Earlier answer", input),
+  content: [{ type: "reasoning" as const, text: tokenText(summaryWindow * 3) }],
+})
+const summaryFixture = Effect.fnUntraced(function* (messages: readonly SessionMessage.Info[]) {
+  requests = []
+  const context = {
+    ...loaded(yield* insertSession(Session.ID.create()), messages),
+    tools: {
+      definitions: [ToolDefinition.make({ name: "read", description: "Read files", inputSchema: { type: "object" } })],
+      execute: () => Effect.die("Compaction must not execute tools"),
+    },
+  }
+  const compaction = yield* SessionCompaction.Service
+  yield* compaction.transform((editor) => editor.configure({ buffer: summaryBuffer, precompute: true }))
+  return {
+    context,
+    compaction,
+    run: (input = context) =>
+      compaction.compact({ reason: "manual", context: input, inputID: SessionMessage.ID.create() }),
+  }
+})
+
+for (const background of [false, true]) {
+  it.effect(`summary cache prefix uses measured input with old reasoning (background=${background})`, () =>
+    Effect.gen(function* () {
+      const messages = [
+        textUser("Earlier question"),
+        oldReasoning(),
+        textUser("Latest question"),
+        measured("Latest answer", summaryInput),
+      ]
+      const fixture = yield* summaryFixture(messages)
+      const builder = yield* SessionModelRequest.Service
+      const normal = yield* builder.primary({
+        ...fixture.context,
+        agent: fixture.context.agent.id,
+        ...SessionModelRequest.baseTranscript({
+          ...fixture.context,
+          agent: fixture.context.agent.info,
+          messages: background ? messages.slice(0, -1) : messages,
+        }),
+      })
+      if (background) yield* fixture.compaction.precompute(Effect.succeed(fixture.context))
+      expect(yield* fixture.run()).toEqual({ status: "completed" })
+      expect(requests).toHaveLength(1)
+      expect(requests[0]).toMatchObject({
+        system: normal.request.system,
+        tools: normal.request.tools,
+        messages: [...normal.request.messages, Message.user(SessionCompaction.buildPrompt(false))],
+        generation: { maxTokens: summaryBuffer },
+      })
+    }),
+  )
+}
+
+it.effect("summary cache prefix still flattens genuinely oversized measured input", () =>
+  Effect.gen(function* () {
+    const fixture = yield* summaryFixture([
+      textUser(tokenText(summaryCeiling)),
+      measured("Latest answer", summaryWindow + summaryBuffer),
+    ])
+    expect(yield* fixture.run()).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(1)
+    expect(requests[0].tools).toEqual([])
+    expect(requests[0].messages).toHaveLength(2)
+    expect(JSON.stringify(requests[0].messages[0])).toContain("characters omitted")
+  }),
+)
+
+it.effect("summary measured recovery shrinks from the rejected measured size", () =>
+  Effect.gen(function* () {
+    const text = tokenText(summaryCeiling / 2)
+    const fixture = yield* summaryFixture([
+      textUser(text),
+      oldReasoning(summaryCeiling / 2),
+      textUser(text),
+      measured("Latest answer", summaryCeiling),
+    ])
+    // Reject until the original exchange is actually shortened, without duplicating a token estimator in the mock.
+    reject = (request) =>
+      request.messages.some((message) =>
+        message.content.some((part) => part.type === "text" && part.text.includes(text)),
+      )
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        reject = undefined
+      }),
+    )
+    expect(yield* fixture.run()).toEqual({ status: "completed" })
+    // The retained exchange fits the 85% and 70% targets; 50% of the measured input forces truncation.
+    expect(requests).toHaveLength(4)
+    expect(JSON.stringify(requests.at(-1)?.messages)).toContain("characters omitted")
+  }),
+)
+
+it.effect("summary cache prefix survives hooks that shape every request alike", () =>
+  Effect.gen(function* () {
+    const fixture = yield* summaryFixture([
+      textUser("Earlier question"),
+      oldReasoning(),
+      textUser("Latest question"),
+      measured("Latest answer", summaryInput),
+    ])
+    // Built-in tool plugins register one hook for both normal and compaction requests.
+    const hooks = yield* PluginHooks.Service
+    const describe = (event: { tools: Record<string, { description: string }> }) =>
+      Effect.sync(() => {
+        if (event.tools.read) event.tools.read.description = "Read files from the project"
+      })
+    yield* hooks.register("session", "context", describe)
+    yield* hooks.register("session", "compaction", describe)
+    expect(yield* fixture.run()).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(1)
+    expect(requests[0].tools.map((tool) => tool.description)).toEqual(["Read files from the project"])
+  }),
+)
+
+it.effect("summary resends as text when a hook makes the request larger than the measured count", () =>
+  Effect.gen(function* () {
+    const fixture = yield* summaryFixture([
+      textUser("Earlier question"),
+      oldReasoning(),
+      textUser("Latest question"),
+      measured("Latest answer", summaryInput),
+    ])
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "compaction", (event) =>
+      Effect.sync(() => {
+        event.system.push({ type: "text", text: "Plugin guidance" })
+      }),
+    )
+    // The provider rejects the unchanged request, which the measured count said would fit.
+    reject = (request) => request.tools.length > 0
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        reject = undefined
+      }),
+    )
+    expect(yield* fixture.run()).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(2)
+    expect(requests[0].tools).toEqual(fixture.context.tools.definitions)
+    expect(requests[1].tools).toEqual([])
+  }),
+)
+
+it.effect("summary measured recovery reuses usage only for the matching agent", () =>
+  Effect.gen(function* () {
+    const fixture = yield* summaryFixture([textUser("Earlier question"), oldReasoning()])
+    const agent = Agent.ID.make("other")
+    const context = {
+      ...fixture.context,
+      agent: {
+        id: agent,
+        info: { ...Agent.Info.default(agent), system: tokenText(summaryWindow - summaryBuffer / 5) },
+      },
+    }
+    expect(yield* fixture.run(context)).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(1)
+    expect(requests[0].generation?.maxTokens).toBeLessThanOrEqual(summaryBuffer / 5)
+    // Switching back restores the measured prefix; discarding usage for every agent is not sufficient.
+    expect(yield* fixture.run()).toEqual({ status: "completed" })
+    expect(requests).toHaveLength(2)
+    expect(requests[1]).toMatchObject({
+      tools: fixture.context.tools.definitions,
+      messages: [
+        ...toLLMMessages(fixture.context.messages, resolved.ref),
+        Message.user(SessionCompaction.buildPrompt(false)),
+      ],
+      generation: { maxTokens: summaryBuffer },
+    })
+  }),
+)
 
 it.effect("background summaries stay off unless enabled", () =>
   Effect.gen(function* () {

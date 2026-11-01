@@ -46,7 +46,7 @@ export function createHomeProjectsController(home: HomeController) {
   }
 
   // An expired pairing session or a changed password signs the app out of an HTTP server; signing in again edits it,
-  // and the action that asked for sign-in continues once the dialog saves, as it does for extension servers. It continues
+  // and the action that asked for sign-in continues once the dialog saves, as it does for plugin servers. It continues
   // with the saved connection: the one it started with still carries the rejected credentials.
   function authenticate(conn: ServerConnection.Any, onConnected?: (conn: ServerConnection.Any) => void) {
     if (conn.type !== "http" || !home.server.health(conn)?.unauthorized)
@@ -123,7 +123,7 @@ export function createHomeProjectsController(home: HomeController) {
                 Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
               )(await file.text())
 
-              const api = home.server.context(conn).sdk.api.session
+              const api = home.server.context(conn).sdk.api.experimental.session
 
               // SAFETY: the import endpoint validates the transcript, including exports written by earlier releases.
               const imported = await api.import({

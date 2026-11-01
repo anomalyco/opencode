@@ -46,7 +46,9 @@ import {
 } from "../context/markdown"
 import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
+import { setupFragmentLinks } from "./markdown-fragment-links"
 import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
+import { markdownClipboardHtml } from "./markdown-clipboard"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -556,6 +558,22 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   }
 }
 
+// Selections that leave this message keep the browser's copy, since surrounding UI may hold hidden content.
+function copySelection(event: ClipboardEvent & { currentTarget: HTMLDivElement }) {
+  const selection = window.getSelection()
+
+  if (event.defaultPrevented || !event.clipboardData || !selection || selection.isCollapsed) return
+  const ranges = Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index))
+
+  if (!ranges.every((range) => event.currentTarget.contains(range.commonAncestorContainer))) return
+  event.preventDefault()
+  event.clipboardData.setData("text/plain", selection.toString())
+  event.clipboardData.setData(
+    "text/html",
+    `<meta charset="utf-8">${ranges.map((range) => markdownClipboardHtml(event.currentTarget, range)).join("")}`,
+  )
+}
+
 function initialResult(
   text: string,
   key: string | undefined,
@@ -624,6 +642,8 @@ export function Markdown(
   const completedCode = new Map<string, Extract<RenderedBlock, { mode: "code" }>>()
   const settledMarkdown = new Map<string, Exclude<RenderedBlock, { mode: "code" }>>()
   let renderedBlocks: RenderedBlock[] = []
+  let lastRender: { base: string | undefined; blocks: Block[]; rendered: RenderedBlock[] } | undefined
+  let appliedLabels: CopyLabels | undefined
   let streamed = false
 
   const [projection] = createResource(
@@ -700,68 +720,86 @@ export function Markdown(
 
       const base = src.key ?? (!streamed ? checksum(src.text) : undefined)
 
-      return Promise.all(
-        src.projection.blocks.map(async (block, index) => {
-          const key = base ? `${base}:${index}:${block.mode}` : undefined
-          const blockKey = markdownBlockKey(owner, src.key, index, block.mode)
+      const render = async (block: Block, index: number): Promise<RenderedBlock> => {
+        const key = base ? `${base}:${index}:${block.mode}` : undefined
+        const blockKey = markdownBlockKey(owner, src.key, index, block.mode)
 
-          if (block.mode === "code") {
-            const cached = completedCode.get(blockKey)
+        if (block.mode === "code") {
+          const cached = completedCode.get(blockKey)
 
-            if (block.complete && cached?.raw === block.raw) return cached
-            const result = await code(block.src, block.language, blockKey, block.complete)
+          if (block.complete && cached?.raw === block.raw) return cached
+          const result = await code(block.src, block.language, blockKey, block.complete)
 
-            const rendered = {
-              key: blockKey,
-              mode: block.mode,
-              raw: block.raw,
-              hash: String(block.raw.length),
-              complete: !!block.complete,
-              ...result,
-            }
-
-            if (block.complete) completedCode.set(blockKey, rendered)
-
-            return rendered
+          const rendered = {
+            key: blockKey,
+            mode: block.mode,
+            raw: block.raw,
+            hash: String(block.raw.length),
+            complete: !!block.complete,
+            ...result,
           }
 
-          if (block.mode === "full") {
-            const settled = settledMarkdown.get(blockKey)
+          if (block.complete) completedCode.set(blockKey, rendered)
 
-            if (settled && (settled.src ?? settled.raw) === block.src) {
-              if (key) {
-                const cached = getCachedMarkdown(key)
+          return rendered
+        }
 
-                if (cached) touchCachedMarkdown(key, cached)
-              }
+        if (block.mode === "full") {
+          const settled = settledMarkdown.get(blockKey)
 
-              return settled
+          if (settled && (settled.src ?? settled.raw) === block.src) {
+            if (key) {
+              const cached = getCachedMarkdown(key)
+
+              if (cached) touchCachedMarkdown(key, cached)
             }
-          }
-
-          const ready = block.mode === "full" ? getReadyMarkdown(block, key) : undefined
-          const entry = ready ?? (await renderCachedMarkdown(block, key, lifetime.signal))
-
-          if (block.mode === "full") {
-            const settled = {
-              key: blockKey,
-              mode: block.mode,
-              ...entry,
-            }
-
-            settledMarkdown.set(blockKey, settled)
 
             return settled
           }
+        }
 
-          return {
+        const ready = block.mode === "full" ? getReadyMarkdown(block, key) : undefined
+        const entry = ready ?? (await renderCachedMarkdown(block, key, lifetime.signal))
+
+        if (block.mode === "full") {
+          const settled = {
             key: blockKey,
             mode: block.mode,
             ...entry,
           }
-        }),
+
+          settledMarkdown.set(blockKey, settled)
+
+          return settled
+        }
+
+        return {
+          key: blockKey,
+          mode: block.mode,
+          ...entry,
+        }
+      }
+
+      // The worker keeps an unchanged block as the same object, so the block the last render made from it is reused.
+      // Rendering every block of the answer again on each delta cost a promise and two key strings per block.
+      const previous = lastRender?.base === base ? lastRender : undefined
+
+      const queued = src.projection.blocks.map((block, index) =>
+        previous?.blocks[index] === block ? previous.rendered[index]! : render(block, index),
       )
-        .then((blocks) => ({ text: src.text, blocks, ready: true }) satisfies RenderResult)
+
+      return Promise.all(
+        queued.flatMap((item, index) =>
+          item instanceof Promise ? [item.then((block) => [index, block] as const)] : [],
+        ),
+      )
+        .then((done) => {
+          const resolved = new Map(done)
+          const blocks = queued.map((item, index) => (item instanceof Promise ? resolved.get(index)! : item))
+          lastRender = { base, blocks: src.projection.blocks, rendered: blocks }
+
+          return { text: src.text, blocks, ready: true } satisfies RenderResult
+        })
         .catch(
           () =>
             (lifetime.signal.aborted
@@ -788,6 +826,7 @@ export function Markdown(
   let linkCleanup: (() => void) | undefined
   let faviconCleanup: (() => void) | undefined
   let sessionLinkCleanup: (() => void) | undefined
+  let fragmentLinkCleanup: (() => void) | undefined
   let readImage: ReadMarkdownImage | undefined
   let images: ReturnType<typeof createMarkdownImages> | undefined
 
@@ -864,9 +903,15 @@ export function Markdown(
     container.querySelectorAll<HTMLImageElement>("img[data-markdown-favicon]").forEach((image) => {
       if (image.complete && image.naturalWidth > 0) image.dataset.loaded = ""
     })
-    container
-      .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
-      .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
+
+    // A button gets the labels of the run that creates it, so the others only need new ones when the language changes.
+    // Relabelling every button on each streamed delta re-rendered each one's tooltip and icon button.
+    if (appliedLabels?.copy !== labels.copy || appliedLabels?.copied !== labels.copied)
+      container
+        .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
+        .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
+
+    appliedLabels = labels
 
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({
@@ -877,6 +922,8 @@ export function Markdown(
     if (!linkCleanup) linkCleanup = setupLocalLinks(container, () => markdown?.openLocalFile)
 
     if (!sessionLinkCleanup) sessionLinkCleanup = setupSessionLinks(container, () => markdown?.openSession)
+
+    if (!fragmentLinkCleanup) fragmentLinkCleanup = setupFragmentLinks(container)
 
     if (!faviconCleanup) faviconCleanup = setupExternalLinkFavicons(container)
     container.toggleAttribute("data-local-links", !!markdown?.openLocalFile)
@@ -907,6 +954,8 @@ export function Markdown(
 
     if (sessionLinkCleanup) sessionLinkCleanup()
 
+    if (fragmentLinkCleanup) fragmentLinkCleanup()
+
     if (faviconCleanup) faviconCleanup()
     const container = root()
 
@@ -929,6 +978,7 @@ export function Markdown(
         [local.class ?? ""]: !!local.class,
       }}
       ref={setRoot}
+      onCopy={copySelection}
       {...others}
     />
   )
@@ -1030,7 +1080,7 @@ function updateBlock(
   markExternalLinkFavicons(source)
 
   if (rendered) {
-    rendered.renderer.update(source.innerHTML, block.mode === "live", rendered.raw !== block.raw)
+    rendered.renderer.update(source, block.mode === "live", rendered.raw !== block.raw)
     rendered.raw = block.raw
 
     return pending
@@ -1039,7 +1089,7 @@ function updateBlock(
   if (block.mode === "live") {
     next.replaceChildren()
     renderedMarkdown.set(next, {
-      renderer: createMarkdownRenderer(next, source.innerHTML, true),
+      renderer: createMarkdownRenderer(next, source, true),
       raw: block.raw,
     })
   }

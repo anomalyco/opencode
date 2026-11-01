@@ -1,14 +1,14 @@
 export * as SessionCompaction from "./compaction.js"
 
 import {
+  ai,
   AIError,
   type ContentPart,
   InvalidProviderOutputError,
-  InvalidRequestError,
   isContextOverflowFailure,
   LLMClient,
   LLMEvent,
-  LLMRequest,
+  type LLMRequest,
   Message,
   type ToolEntry,
   UnknownProviderError,
@@ -23,6 +23,7 @@ import { Agent } from "../agent.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { llmClient } from "../effect/app-node-platform.js"
+import { Instructions } from "../instructions/index.js"
 import { Model } from "../model.js"
 import { State } from "../state.js"
 import { Token } from "../util/token.js"
@@ -40,8 +41,8 @@ import { SessionUsage } from "./usage.js"
 
 export type Settings = {
   auto: boolean
-  /** Tokens kept free below the model's limits before compacting. Unset keeps 15%, and at least 16k, free. */
-  buffer?: number
+  /** Room kept free below the model's limits before compacting: a share such as "20%", or tokens. Unset keeps 15%, and at least 16k, free. */
+  buffer?: number | string
   /** Tokens of recent conversation kept verbatim beside the summary. */
   keep: number
   /** Summarize in the background as the context nears the threshold, so automatic compaction can swap it in. */
@@ -269,7 +270,7 @@ export const layer = Layer.effect(
     /** The model that writes the summary, and the request size it aims for. */
     const selectModel = Effect.fnUntraced(function* (
       context: SessionContext.Loaded,
-      buffer: number | undefined,
+      buffer: Settings["buffer"],
       native: boolean,
     ) {
       const agent = native ? undefined : yield* agents.get(Agent.ID.make("compaction"))
@@ -379,7 +380,7 @@ export const layer = Layer.effect(
         firstID: context.messages[0]?.id,
         keepID: anchor.id,
         model: context.model.ref,
-        initial: context.initial,
+        initial: Instructions.join(context.initial),
         tailLimit: tailLimit(settings.keep, model.cap),
         failures,
         usage,
@@ -467,21 +468,28 @@ export const layer = Layer.effect(
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
       const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
       const prepared = yield* prepare(context, messages, budget)
+      // Size the unchanged request with the number that decided to compact: the last response's count plus an
+      // estimate of what came after it. Characters overstate a conversation whose old reasoning the provider drops.
+      // A hook can still make this request larger than that count; the provider then rejects it and it is resent as
+      // text. An overflow already proved the count low, so it keeps the character estimate.
+      const measured = trigger.reason === "overflow" ? undefined : measuredPrompt({ ...context, messages })
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
-      const send = (request: LLMRequest) =>
+      const send = (request: LLMRequest, size?: Estimate) =>
         Effect.gen(function* () {
           const prompted = fitOutput(
-            LLMRequest.update(request, { messages: [...request.messages, Message.user(prompt)] }),
+            { ...request, messages: [...request.messages, Message.user(prompt)] },
             context.model.limit,
+            size && { ...size, estimated: size.estimated + Token.estimate(prompt) },
           )
           const reply = yield* stream(context, prompted, prepared.options, background)
           if (filled(reply.text)) return reply
 
           const nudged = fitOutput(
-            LLMRequest.update(prompted, { messages: [...prompted.messages, Message.user(NUDGE)] }),
+            { ...prompted, messages: [...prompted.messages, Message.user(NUDGE)] },
             context.model.limit,
+            size && { ...size, estimated: size.estimated + Token.estimate(prompt) + Token.estimate(NUDGE) },
           )
           const retry = yield* stream(context, nudged, prepared.options, background)
           if (filled(retry.text)) return retry
@@ -501,13 +509,22 @@ export const layer = Layer.effect(
       // which still reuses the cache for that shorter prefix, and as text otherwise. Dropping exchanges to make room
       // for the tail would leave them in neither the summary nor the tail. Where 15% of the window is under
       // `RESERVE_MIN`, the ceiling equals `summaryRoom`, so automatic compaction always takes this fallback.
-      const fit = trigger.reason === "overflow" ? budget : Math.max(budget, summaryRoom(context.model.limit))
+      const fit =
+        trigger.reason === "overflow"
+          ? budget
+          : Math.max(budget, summaryRoom(context.model.limit, prepared.request.generation?.maxTokens))
       const result = yield* deliver(
         trigger,
         prepared,
         budget - overhead,
         send,
-        { fit: fit - overhead, history: withoutTail(prepared.request, keepID) },
+        {
+          fit: fit - overhead,
+          history: withoutTail(prepared.request, keepID),
+          measured,
+          // The provider just rejected this conversation, so sending it unchanged again would be rejected too.
+          text: trigger.reason === "overflow",
+        },
         background,
       )
       if (!keepID) return result
@@ -548,7 +565,7 @@ export const layer = Layer.effect(
         )
 
       const send = (request: LLMRequest) => {
-        if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
+        if (ai.canCompact(request, { mechanism: "trigger" })) {
           return Effect.gen(function* () {
             const history = yield* SessionHistory.load(db, context.session.id, "local").pipe(Effect.orDie)
             const retained = recentUserMessages(history, context.model, keep)
@@ -556,7 +573,7 @@ export const layer = Layer.effect(
             return yield* toResult([...retained, Message.assistant(response.checkpoint)], response.usage)
           })
         }
-        if (LLMClient.canCompact(request)) {
+        if (ai.canCompact(request)) {
           return llm
             .compact(request, { mechanism: "endpoint", http: prepared.options.http })
             .pipe(Effect.flatMap((response) => toResult(response.replacement, response.usage)))
@@ -569,7 +586,8 @@ export const layer = Layer.effect(
 
     /**
      * Sends the request as-is if it is estimated to fit `shrink.fit`, else `shrink.history` as-is if it fits `target`,
-     * and otherwise `shrink.history` as text aimed at `target` (see `flattenAndDropOldest`).
+     * and otherwise `shrink.history` as text aimed at `target` (see `flattenAndDropOldest`). `shrink.measured`, when
+     * given, sizes the unchanged request until the provider rejects it; after that it is only sent as text.
      * Limits and estimates can be wrong, so until the provider rejects something as too long, a request that cannot
      * be made to fit is sent whole: unchanged, or as text once its media has to go. A "too long" rejection means the
      * estimate ran low, so the next attempts aim at 85%, 70%, 50%, then 35% of the first rejected request's estimate,
@@ -583,8 +601,16 @@ export const layer = Layer.effect(
       trigger: Trigger,
       prepared: Prepared,
       target: number,
-      send: (request: LLMRequest) => Effect.Effect<Result, AIError | Failure>,
-      shrink: { readonly fit: number; readonly history: LLMRequest } = { fit: target, history: prepared.request },
+      send: (request: LLMRequest, size?: Estimate) => Effect.Effect<Result, AIError | Failure>,
+      shrink: {
+        readonly fit: number
+        readonly history: LLMRequest
+        readonly measured?: Estimate
+        readonly text?: boolean
+      } = {
+        fit: target,
+        history: prepared.request,
+      },
       background?: Background,
     ): Effect.fn.Return<Result, Failure> {
       const context = trigger.context
@@ -593,13 +619,14 @@ export const layer = Layer.effect(
       const policy = yield* SessionRunnerRetry.policy(context.session.id)
       let rejections = 0
       let rejected: number | undefined
-      let asText = false
+      let asText = shrink.text ?? false
       let fit = shrink.fit
 
       while (true) {
+        const measured = rejections === 0 ? shrink.measured : undefined
         const unchanged = asText
           ? undefined
-          : estimateRequest(prepared.request) <= fit
+          : (measured ? total(measured) : estimateRequest(prepared.request)) <= fit
             ? prepared.request
             : estimateRequest(shrink.history) <= target
               ? shrink.history
@@ -622,7 +649,8 @@ export const layer = Layer.effect(
           })
         }
 
-        const attempt = yield* Effect.result(send(request))
+        const size = request === prepared.request ? measured : undefined
+        const attempt = yield* Effect.result(send(request, size))
         if (Result.isSuccess(attempt)) return attempt.success
         const cause = attempt.failure
         if (!(cause instanceof AIError)) return yield* Effect.fail(cause)
@@ -637,7 +665,9 @@ export const layer = Layer.effect(
         if (tooLarge || isContextOverflowFailure(cause)) {
           const step = SHRINK_STEPS[rejections]
           if (step === undefined) return yield* Effect.fail<Failure>({ error })
-          rejected ??= estimateRequest(request)
+          rejected ??= size ? total(size) : estimateRequest(request)
+          // The characters can still say the rejected request fits, so it only goes out again as text.
+          if (size) asText = true
           target = Math.floor(rejected * step)
           fit = target
           rejections++
@@ -736,7 +766,7 @@ export const layer = Layer.effect(
         .map((renders, index) => renders[levels[index]])
         .filter(Boolean)
         .join("\n\n")
-      return LLMRequest.update(request, { tools: [], messages: [...lead, Message.user(note(omitted) + text)] })
+      return { ...request, tools: [], messages: [...lead, Message.user(note(omitted) + text)] }
     }
 
     const stream = (
@@ -752,16 +782,6 @@ export const layer = Layer.effect(
         Stream.runFoldEffect(
           (): Streamed => ({ text: "" }),
           (streamed, event): Effect.Effect<Streamed, AIError | Failure> => {
-            if (LLMEvent.is.providerError(event)) {
-              if (event.classification === undefined)
-                return unusable({ type: "provider.error", message: event.message })
-              return Effect.fail(
-                new AIError({
-                  reason: new InvalidRequestError({ message: event.message, classification: event.classification }),
-                }),
-              )
-            }
-
             if (LLMEvent.is.textDelta(event)) {
               const next = { ...streamed, text: streamed.text + event.text }
               if (background) return Effect.succeed(next)
@@ -931,7 +951,7 @@ export const node = makeLocationNode({
  * conversation: a compaction or revert since replaced its start, or the model or instructions changed.
  */
 const heldIndex = (held: Precomputed, context: SessionContext.Loaded) => {
-  if (held.firstID !== context.messages[0]?.id || held.initial !== context.initial) return -1
+  if (held.firstID !== context.messages[0]?.id || held.initial !== Instructions.join(context.initial)) return -1
   if (held.model.providerID !== context.model.ref.providerID || held.model.id !== context.model.ref.id) return -1
   if (held.model.variant !== context.model.ref.variant) return -1
   return context.messages.findIndex((message) => message.id === held.keepID)
@@ -980,7 +1000,7 @@ const splitConversation = (messages: ReadonlyArray<SessionMessage.Info>, keep: n
 const withoutTail = (request: LLMRequest, from: SessionMessage.ID | undefined) => {
   const index = from === undefined ? -1 : request.messages.findIndex((message) => message.id === from)
   if (index < 0) return request
-  return LLMRequest.update(request, { messages: request.messages.slice(0, index) })
+  return { ...request, messages: request.messages.slice(0, index) }
 }
 
 const recentStart = (
@@ -1112,19 +1132,30 @@ export const estimatePrompt = (context: SessionContext.Loaded): Estimate => {
  * `RESERVE_MIN` when that is more. A summary request that must be shrunk is aimed at the same size. A window too small
  * to give up `RESERVE_MIN` keeps `RESERVE_SHARE`.
  */
-const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer: number | undefined) => {
-  // Unknown limits are reported as 0. An unknown input limit falls back to the context window; with no window at
-  // all, only a provider rejection can limit the request.
-  const window = limit.input || limit.context
+const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer: Settings["buffer"]) => {
+  // With no window at all, only a provider rejection can limit the request.
+  const window = inputWindow(limit)
   if (window <= 0) return Number.POSITIVE_INFINITY
+  const tokens = typeof buffer === "string" ? Math.round((window * Number.parseFloat(buffer)) / 100) : buffer
   // A buffer that leaves no room, such as one set for a larger model, is ignored.
-  if (buffer !== undefined && buffer < window) return window - buffer
+  if (tokens !== undefined && tokens < window) return window - tokens
   return window - Math.max(Math.floor(window * RESERVE_SHARE), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
 }
 
-/** The largest summary request that leaves `RESERVE_MIN` of the window for the summary. Zero for an unknown window. */
-const summaryRoom = (limit: SessionContext.Loaded["model"]["limit"]) =>
-  Math.max(0, (limit.input || limit.context) - RESERVE_MIN)
+/**
+ * The largest summary request that leaves `RESERVE_MIN` of the window for the summary, or less when the request
+ * cannot generate that much. Zero for an unknown window.
+ */
+const summaryRoom = (limit: SessionContext.Loaded["model"]["limit"], output = RESERVE_MIN) =>
+  Math.max(0, inputWindow(limit) - Math.min(RESERVE_MIN, output))
+
+/**
+ * The largest prompt the model takes, or 0 when unknown. Unknown limits are reported as 0, and an unknown input limit
+ * falls back to the context window. The context window also holds the reply, so an input limit above it, as some
+ * catalogs and config overrides report, cannot be used in full.
+ */
+const inputWindow = (limit: SessionContext.Loaded["model"]["limit"]) =>
+  limit.input && limit.context ? Math.min(limit.input, limit.context) : limit.input || limit.context
 
 /**
  * Another provider's count may describe a native window this model cannot replay. History then holds the original
@@ -1137,6 +1168,19 @@ const hasMeasuredPrompt = (message: SessionMessage.Info, model: SessionContext.L
   message.tokens !== undefined &&
   message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0
 
+/** The prompt size, only while the model, variant and agent that were measured still match; they shape the request. */
+const measuredPrompt = (context: SessionContext.Loaded) => {
+  const anchor = context.messages.findLast((message) => hasMeasuredPrompt(message, context.model.ref))
+  if (
+    anchor?.type !== "assistant" ||
+    anchor.model.id !== context.model.ref.id ||
+    anchor.model.variant !== context.model.ref.variant ||
+    anchor.agent !== context.agent.id
+  )
+    return undefined
+  return estimatePrompt(context)
+}
+
 /**
  * `prepare` sizes the output limit for a request of `budget` tokens, but `deliver` can send a larger one when it
  * cannot shrink the conversation further. Lower the limit to the room the request being sent leaves in the window,
@@ -1146,19 +1190,19 @@ const hasMeasuredPrompt = (message: SessionMessage.Info, model: SessionContext.L
  * window, so that margin alone would cut a summary near its target to the minimum; there it still gets up to
  * `SUMMARY_OUTPUT_FLOOR` of the room left without the margin.
  */
-const fitOutput = (request: LLMRequest, limit: SessionContext.Loaded["model"]["limit"]) => {
+const fitOutput = (request: LLMRequest, limit: SessionContext.Loaded["model"]["limit"], size?: Estimate) => {
   const current = request.generation?.maxTokens
   if (current === undefined) return request
-  const estimated = estimateRequest(request)
+  const input = size ?? { measured: 0, estimated: estimateRequest(request) }
   const maxTokens = Math.min(
     current,
     Math.max(
-      SessionModelRequest.outputLimit(limit, { measured: 0, estimated }),
-      Math.min(SUMMARY_OUTPUT_FLOOR, SessionModelRequest.outputLimit(limit, { measured: estimated, estimated: 0 })),
+      SessionModelRequest.outputLimit(limit, input),
+      Math.min(SUMMARY_OUTPUT_FLOOR, SessionModelRequest.outputLimit(limit, { measured: total(input), estimated: 0 })),
     ),
   )
   if (maxTokens === current) return request
-  return LLMRequest.update(request, { generation: { ...request.generation, maxTokens } })
+  return { ...request, generation: { ...request.generation, maxTokens } }
 }
 
 const estimateRequest = (request: Pick<LLMRequest, "system" | "tools" | "messages">) =>

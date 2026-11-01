@@ -1,5 +1,5 @@
 import type { SessionInfo } from "@opencode/client/promise"
-import type { MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
+import type { MountedSession, SessionScreen } from "@opencode/plugin/gui"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -22,7 +22,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { ExtensionSlot } from "@/runtime/extension/render"
+import { PluginSlot } from "@/runtime/plugin/render"
 import { containsDirectory, getFilename } from "@opencode/util/path"
 import { useServer } from "@/runtime/server/current"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
@@ -67,7 +67,12 @@ export function SessionTitleHeader(props: ParentProps) {
 }
 
 export function SessionHeaderLayout(
-  props: ParentProps<{ title: string | undefined; location: JSX.Element; actions?: JSX.Element }>,
+  props: ParentProps<{
+    title: string | undefined
+    location: JSX.Element
+    /** Receives the fit: `compact` while the title needs the room the actions' details take. */
+    actions?: (fit: { readonly compact: boolean }) => JSX.Element
+  }>,
 ) {
   const fit = createSessionHeaderFit()
 
@@ -81,8 +86,7 @@ export function SessionHeaderLayout(
           </span>
           {props.children}
         </div>
-        {/* Each read of a JSX prop renders it again, so the actions render once, from the condition's value. */}
-        <Show when={props.actions}>{(actions) => <div class="session-header-actions">{actions()}</div>}</Show>
+        <Show when={props.actions}>{(actions) => <div class="session-header-actions">{actions()(fit)}</div>}</Show>
       </div>
     </SessionHeaderCollapse.Provider>
   )
@@ -147,18 +151,14 @@ export function SessionLocation(props: {
       void server.ctx.data.location.vcs.sync({ directory: props.project.worktree }).catch(() => undefined)
   }
 
-  const copyPath = async () => {
-    const directory = props.directory
-
-    if (!directory) return
-
+  const copyText = async (text: string) => {
     try {
-      await (platform.writeClipboardText?.(directory) ?? navigator.clipboard.writeText(directory))
+      await (platform.writeClipboardText?.(text) ?? navigator.clipboard.writeText(text))
       showToast({
         variant: "success",
         icon: "circle-check",
         title: language.t("common.copied"),
-        description: directory,
+        description: text,
       })
     } catch (cause) {
       showToast({
@@ -205,7 +205,8 @@ export function SessionLocation(props: {
 
   return (
     <>
-      <Menu placement="bottom-start" gutter={4} modal={false} onOpenChange={onOpenChange}>
+      {/* The shift lines the card's icons and labels up with the trigger's: 2px card + 8px row padding vs the trigger's 6px. */}
+      <Menu placement="bottom-start" gutter={4} shift={-4} modal={false} onOpenChange={onOpenChange}>
         <Tooltip
           placement="bottom"
           value={<bdi dir="auto">{label()}</bdi>}
@@ -231,7 +232,7 @@ export function SessionLocation(props: {
             <Show when={!props.compact && worktree()}>
               {(name) => (
                 <>
-                  <SessionHeaderSeparator glyph="slash" gap={0} before={0} after={0} />
+                  <SessionHeaderSeparator gap={0} before={0} after={0} />
                   <Icon
                     name="outline-worktree"
                     class="session-location-worktree-icon shrink-0 text-v2-icon-icon-muted"
@@ -266,7 +267,7 @@ export function SessionLocation(props: {
             <Show when={worktree() || git()}>
               <Show when={props.context} fallback={workspace()}>
                 {(context) => (
-                  <ExtensionSlot
+                  <PluginSlot
                     at="session.location.workspace"
                     fallback={workspace()}
                     input={{
@@ -291,10 +292,10 @@ export function SessionLocation(props: {
               </Show>
             </Show>
             <Show when={git()}>
-              <SessionLocationDetail icon="branch">
-                <Show
-                  when={branch()}
-                  fallback={
+              <Show
+                when={branch()}
+                fallback={
+                  <SessionLocationDetail icon="branch">
                     <span class="flex min-w-0 items-center gap-1.5">
                       <span class="shrink-0 whitespace-nowrap">{language.t("session.location.noBranch")}</span>
                       <Show when={baseBranch()}>
@@ -308,15 +309,50 @@ export function SessionLocation(props: {
                         )}
                       </Show>
                     </span>
-                  }
-                >
-                  {branch()}
-                </Show>
-              </SessionLocationDetail>
+                  </SessionLocationDetail>
+                }
+              >
+                {(name) => (
+                  <Menu.Sub gutter={4} overflowPadding={16} overlap>
+                    <Menu.SubTrigger class="[&_[data-slot=menu-v2-item-chevron]]:text-v2-icon-icon-muted">
+                      <Icon name="branch" class="shrink-0 text-v2-icon-icon-muted" />
+                      <bdi dir="auto" class="min-w-0 truncate">
+                        {name()}
+                      </bdi>
+                    </Menu.SubTrigger>
+                    <Menu.Portal>
+                      <Menu.SubContent class="w-max min-w-[172px] max-w-[calc(100vw-32px)]" aria-label={name()}>
+                        <Menu.Item onSelect={() => void copyText(name())}>
+                          <Icon name="outline-copy" class="text-v2-icon-icon-muted" />
+                          {language.t("session.location.copyBranch")}
+                        </Menu.Item>
+                        <Show when={props.context}>
+                          {(context) => (
+                            <PluginSlot
+                              at="session.location.branch.menu"
+                              input={{
+                                get session() {
+                                  return context().session
+                                },
+                                get screen() {
+                                  return context().screen
+                                },
+                                get shown() {
+                                  return store.open
+                                },
+                              }}
+                            />
+                          )}
+                        </Show>
+                      </Menu.SubContent>
+                    </Menu.Portal>
+                  </Menu.Sub>
+                )}
+              </Show>
             </Show>
             <Show when={props.context}>
               {(context) => (
-                <ExtensionSlot
+                <PluginSlot
                   at="session.location.menu"
                   input={{
                     get session() {
@@ -333,27 +369,31 @@ export function SessionLocation(props: {
               )}
             </Show>
             <Menu.Separator />
-            <SessionLocationDetail icon="server">
-              <ServerLabel server={server.conn} hint />
-            </SessionLocationDetail>
+            {/* The only server, on this computer, needs no name. */}
+            <Show when={servers.list.length > 1 || !servers.current(server.conn)}>
+              <SessionLocationDetail icon="server">
+                <ServerLabel server={server.conn} hint />
+              </SessionLocationDetail>
+            </Show>
             <Show when={props.directory}>
               {(directory) => (
                 <Menu.Sub gutter={4} overflowPadding={16} overlap>
                   <Menu.SubTrigger
                     data-slot="session-location-path"
                     class="[&_[data-slot=menu-v2-item-chevron]]:text-v2-icon-icon-muted"
-                    style={{ height: "auto", "padding-block": "6px" }}
+                    // The split spans are flex items, which the accessible name would join with a space.
+                    aria-label={directory()}
                   >
-                    <span class="flex min-w-0 items-start gap-2 text-[12px] leading-4 text-v2-text-text-muted">
-                      <Icon name="folder" class="shrink-0 text-v2-icon-icon-muted" />
-                      <bdi dir="ltr" class="min-w-0 select-text break-all">
-                        {directory()}
-                      </bdi>
-                    </span>
+                    <Icon name="folder" class="shrink-0 text-v2-icon-icon-muted" />
+                    {/* Truncates in the middle: the parent folders shrink, the last folder stays whole. */}
+                    <bdi dir="ltr" class="flex min-w-0 select-text whitespace-nowrap">
+                      <span class="min-w-0 truncate">{directory().slice(0, lastSeparator(directory()))}</span>
+                      <span class="max-w-full shrink-0 truncate">{directory().slice(lastSeparator(directory()))}</span>
+                    </bdi>
                   </Menu.SubTrigger>
                   <Menu.Portal>
                     <Menu.SubContent class="w-max max-w-[calc(100vw-32px)]" aria-label={directory()}>
-                      <Menu.Item onSelect={() => void copyPath()}>
+                      <Menu.Item onSelect={() => void copyText(directory())}>
                         <Icon name="outline-copy" class="text-v2-icon-icon-muted" />
                         {language.t("session.location.copyPath")}
                       </Menu.Item>
@@ -362,6 +402,24 @@ export function SessionLocation(props: {
                           <Icon name="outline-arrow-up-right" class="text-v2-icon-icon-muted" />
                           {language.t(fileManagerApp(platform.os ?? "unknown").actionLabel)}
                         </Menu.Item>
+                      </Show>
+                      <Show when={props.context}>
+                        {(context) => (
+                          <PluginSlot
+                            at="session.location.path.menu"
+                            input={{
+                              get session() {
+                                return context().session
+                              },
+                              get screen() {
+                                return context().screen
+                              },
+                              get shown() {
+                                return store.open
+                              },
+                            }}
+                          />
+                        )}
                       </Show>
                     </Menu.SubContent>
                   </Menu.Portal>
@@ -377,7 +435,7 @@ export function SessionLocation(props: {
         </Menu.Portal>
       </Menu>
       <Show when={props.trailing}>
-        <SessionHeaderSeparator glyph="slash" gap={8} before={6} after={4} />
+        <SessionHeaderSeparator gap={8} before={6} after={4} />
       </Show>
     </>
   )
@@ -385,11 +443,15 @@ export function SessionLocation(props: {
 
 function SessionLocationDetail(props: ParentProps<{ icon: ComponentProps<typeof Icon>["name"] }>) {
   return (
-    <div class="flex h-7 min-w-0 items-center gap-2 px-3 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px] text-v2-text-text-base">
+    <div class="flex h-7 min-w-0 items-center gap-2 px-2 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px] text-v2-text-text-base">
       <Icon name={props.icon} class="shrink-0 text-v2-icon-icon-muted" />
       <span class="flex min-w-0 truncate">{props.children}</span>
     </div>
   )
+}
+
+function lastSeparator(path: string) {
+  return Math.max(0, path.lastIndexOf("/"), path.lastIndexOf("\\"))
 }
 
 export function SessionAncestorTrail(props: {
@@ -444,14 +506,14 @@ export function SessionAncestorTrail(props: {
                 <bdi dir="auto">{ancestor.title}</bdi>
               </button>
               <Show when={index() < ancestors().length - 1}>
-                <SessionHeaderSeparator before={0} after={0} />
+                <SessionHeaderSeparator gap={8} before={0} after={0} />
               </Show>
             </>
           )}
         </For>
       </div>
       <Show when={props.trailing}>
-        <SessionHeaderSeparator before={0} />
+        <SessionHeaderSeparator gap={8} before={0} after={4} />
       </Show>
     </div>
   )

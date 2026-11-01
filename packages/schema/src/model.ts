@@ -3,7 +3,7 @@ export * as Model from "./model.js"
 import { Schema, Struct } from "effect"
 import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
-import { Compatibility, MaxTokensField, ReasoningField } from "./model-compatibility.js"
+import { Compatibility, MaxTokensField, MediaInput, ReasoningField } from "./model-compatibility.js"
 import { Money } from "./money.js"
 import { ephemeral, inventory } from "./event.js"
 
@@ -43,7 +43,7 @@ export const Ref = Schema.Struct({
   )
 export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 
-export { Compatibility, MaxTokensField, ReasoningField }
+export { Compatibility, MaxTokensField, MediaInput, ReasoningField }
 
 export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
@@ -61,6 +61,12 @@ export const Settings = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Any)],
 ).annotate({ identifier: "Model.Settings" })
 export type Settings = typeof Settings.Type
+
+// Variants switch request settings. The prompt cache belongs to the model, so a variant can't change it.
+const VariantSettings = Schema.StructWithRest(
+  Schema.Struct(Struct.omit(Settings.schema.fields, ["cache"])),
+  Settings.records,
+).annotate({ identifier: "Model.VariantSettings" })
 
 export const Overlays = {
   settings: Settings.pipe(optional),
@@ -101,6 +107,7 @@ export interface Variant extends Schema.Schema.Type<typeof Variant> {}
 export const Variant = Schema.Struct({
   id: VariantID,
   ...Overlays,
+  settings: VariantSettings.pipe(optional),
 }).annotate({ identifier: "Model.Variant" })
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}

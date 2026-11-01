@@ -10,8 +10,8 @@ import { ToastRegion } from "@/shell/notifications/toast"
 import { UploadToastHost } from "@/composer/attachments/uploads"
 import { useSettingsSurface } from "@/settings/surface"
 import { useSettings } from "@/settings/model"
-import { ExtensionServerCover } from "@/runtime/extension/server-shell"
-import { ExtensionSlot } from "@/runtime/extension/render"
+import { PluginServerCover } from "@/runtime/plugin/server-shell"
+import { PluginSlot } from "@/runtime/plugin/render"
 import { COMMAND_SEARCH_ID, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -23,7 +23,7 @@ import {
   measureSidebarToggles,
   paintCollapsedSlots,
 } from "@/shell/sidebar-toggle"
-import { createPanelMotion, guardClosingFocus, panelOpacity } from "@/shell/panel-motion"
+import { createPanelMotion, guardClosingFocus, panelOpacity, setPanelResizing } from "@/shell/panel-motion"
 import { createSidebarPeek } from "@/shell/sidebar-peek"
 import { windowDragEnabled } from "@/session/header/drag-area"
 
@@ -282,6 +282,7 @@ export default function Layout(props: ParentProps) {
                 min={136}
                 max={640}
                 onResize={(width) => setState("tabsWidth", width)}
+                onDraggingChange={setPanelResizing}
               />
             </Show>
           </aside>
@@ -300,13 +301,13 @@ export default function Layout(props: ParentProps) {
               : "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))",
           }}
         >
-          <ExtensionServerCover>
+          <PluginServerCover>
             <Suspense>{props.children}</Suspense>
-          </ExtensionServerCover>
+          </PluginServerCover>
         </main>
         <CollapsedSidebarToggle />
       </div>
-      <ExtensionSlot at="window.bottom" input={{}} />
+      <PluginSlot at="window.bottom" input={{}} />
       <ToastRegion />
       <UploadToastHost />
     </div>

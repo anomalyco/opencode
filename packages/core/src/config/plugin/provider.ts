@@ -103,7 +103,9 @@ export const Plugin = define({
         const providerID = definition.providerID
         for (const [id, config] of Object.entries(item.models ?? {})) {
           const source = definition.models.get(id)
-          const inherit = source?.inherit || !models.get(providerID, id)
+          const existing = models.get(providerID, id)
+          const hadVariants = (existing?.variants.length ?? 0) > 0
+          const inherit = source?.inherit || !existing
           overlay(
             models,
             models.provider.get(providerID)?.provider.package,
@@ -122,7 +124,8 @@ export const Plugin = define({
           if (
             config.variants === undefined &&
             config.capabilities?.reasoning === undefined &&
-            (!source?.base || repackaged)
+            // Custom models start without variants, so non-empty variants here came from an earlier transform.
+            ((!source?.base && !hadVariants) || repackaged)
           )
             models.update(providerID, id, (model) => {
               model.variants = [
@@ -217,6 +220,7 @@ function overlay(
       if (item.package !== undefined) model.package = undefined
       if (item.settings?.baseURL !== undefined && model.settings) delete model.settings.baseURL
     }
+    if (config.type !== undefined) model.type = config.type
     if (config.family !== undefined) model.family = config.family
     if (config.name) model.name = config.name
     if (config.modelID !== undefined) model.modelID = config.modelID

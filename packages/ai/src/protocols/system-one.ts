@@ -1,17 +1,18 @@
 import { Effect, Schema } from "effect"
 import {
   DecisionResponse,
+  DecisionUsage,
   type DecisionAnswer,
   type DecisionModelCompatibility,
   type DecisionPart,
   type DecisionQuestion,
-  type DecisionRequestFor,
+  type DecisionRequest,
 } from "../decision.js"
 import type { Media } from "../media.js"
 import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaProtocol } from "../route/media-protocol.js"
-import { AIError, UnsupportedOperationError, Usage, mergeJsonRecords } from "../schema/index.js"
+import { AIError, UnsupportedOperationError, mergeJsonRecords } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import { JsonObject, ProviderShared } from "./shared.js"
 
@@ -42,6 +43,7 @@ const NativeUsage = Schema.StructWithRest(
   Schema.Struct({
     input_tokens: Schema.optional(Schema.Number),
     output_tokens: Schema.optional(Schema.Number),
+    cost: Schema.optional(Schema.Number),
   }),
   [JsonObject],
 )
@@ -59,10 +61,7 @@ const ID = "system-one"
 const NAME = "System One"
 
 /** The System One body without `model`; media goes where the model's `mediaInput` says, else `fallback`. */
-export const encodeBody = Effect.fn("SystemOne.encodeBody")(function* (
-  request: DecisionRequestFor,
-  fallback: MediaInput,
-) {
+export const encodeBody = Effect.fn("SystemOne.encodeBody")(function* (request: DecisionRequest, fallback: MediaInput) {
   const questions = yield* encodeQuestions(request.questions)
   const placed = yield* placeMedia(request, request.model.compatibility?.mediaInput ?? fallback)
   return { ...mergeJsonRecords(request.providerOptions, request.http?.body), ...placed, questions }
@@ -103,7 +102,7 @@ const encodeQuestions = (questions: ReadonlyArray<DecisionQuestion>) =>
     ] as const)
   }).pipe(Effect.map(Object.fromEntries))
 
-const placeMedia = Effect.fnUntraced(function* (request: DecisionRequestFor, mediaInput: MediaInput) {
+const placeMedia = Effect.fnUntraced(function* (request: DecisionRequest, mediaInput: MediaInput) {
   const parts = request.input
   const unsupported = (asset: Media.Asset, accepted: string) =>
     new AIError({
@@ -198,7 +197,7 @@ const stateItem = (
 /** Map System One's answers, keyed by question name, back to the request's question order. */
 export const toResponse = (
   data: Response,
-  request: DecisionRequestFor,
+  request: DecisionRequest,
   providerMetadataKey: string,
   invalid: (message: string) => AIError,
 ) => {
@@ -211,15 +210,16 @@ export const toResponse = (
       usage:
         data.usage === undefined
           ? undefined
-          : new Usage({
+          : new DecisionUsage({
               inputTokens: data.usage.input_tokens,
               outputTokens: data.usage.output_tokens,
               totalTokens: ProviderShared.totalTokens(data.usage.input_tokens, data.usage.output_tokens, undefined),
-              providerMetadata: { [providerMetadataKey]: data.usage },
+              cost: data.usage.cost,
             }),
       providerMetadata: {
         [providerMetadataKey]: {
           model: data.model,
+          ...(data.usage === undefined ? {} : { usage: data.usage }),
           ...(data.id === undefined ? {} : { responseId: data.id }),
           ...(data.provider === undefined ? {} : { provider: data.provider }),
           ...data.provider_metadata?.[providerMetadataKey],

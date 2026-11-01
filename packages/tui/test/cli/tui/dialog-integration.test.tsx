@@ -247,6 +247,84 @@ test("uses the active location for integration data without scoping credential r
   }
 })
 
+test("leaves MCP integrations out of the connect menu", async () => {
+  await using fixture = await renderMenu()
+  await fixture.app.waitForFrame((frame) => frame.includes("OpenAI"))
+
+  const frame = fixture.app.captureCharFrame()
+  expect(frame).not.toContain("Linear")
+  expect(frame).not.toContain("MCP")
+})
+
+test("still offers an MCP integration when the MCP dialog asks for it", async () => {
+  await using fixture = await renderMenu("linear")
+  await fixture.app.waitForFrame((frame) => frame.includes("Linear"))
+
+  expect(fixture.app.captureCharFrame()).not.toContain("OpenAI")
+})
+
+async function renderMenu(integrationID?: string) {
+  const calls = createFetch(async (url, request) => {
+    if (url.pathname !== "/api/integration") return undefined
+    const directory = decodeURIComponent(request.headers.get("x-opencode-directory") ?? process.cwd())
+    return json({
+      location: { directory, project: { id: "proj_test", directory, canonical: directory } },
+      data: [
+        { id: "openai", name: "OpenAI", methods: [{ type: "key", label: "API key" }], connections: [] },
+        {
+          id: "linear",
+          name: "Linear",
+          methods: [{ type: "oauth", id: "mcp", label: "Sign in" }],
+          connections: [],
+          metadata: { source: "mcp" },
+        },
+      ],
+    })
+  })
+
+  function Probe() {
+    const data = useData()
+    const dialog = useDialog()
+    onMount(() => {
+      void data.location.integration
+        .sync()
+        .then(() => dialog.replace(() => <DialogIntegration integrationID={integrationID} />))
+    })
+    return null
+  }
+
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig()}>
+          <Keymap.Provider>
+            <ToastProvider>
+              <ClientProvider api={createApi(calls.fetch)}>
+                <DataProvider directory={process.cwd()}>
+                  <LocationProvider>
+                    <ThemeProvider mode="dark" source={emptyThemeSource}>
+                      <DialogProvider>
+                        <Probe />
+                      </DialogProvider>
+                    </ThemeProvider>
+                  </LocationProvider>
+                </DataProvider>
+              </ClientProvider>
+            </ToastProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 100, height: 30, kittyKeyboard: true },
+  )
+  app.renderer.start()
+
+  return {
+    app,
+    [Symbol.asyncDispose]: async () => app.renderer.destroy(),
+  }
+}
+
 async function renderIntegration(activeLocation?: LocationRef, form?: FormFields) {
   const events = createEventStream()
   const requests: Array<{ method: string; path: string; body?: unknown }> = []

@@ -11,9 +11,10 @@ import { Menu } from "@opencode/ui/menu"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { Keybind } from "@opencode/ui/keybind"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
-import { ExtensionSlot } from "@/runtime/extension/render"
+import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/plugin/gui"
+import { PluginSlot } from "@/runtime/plugin/render"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useSettings } from "@/settings/model"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline } from "@opencode/session-ui/timeline/projection"
@@ -21,12 +22,13 @@ import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
+import { createSelectedEffect } from "./selected-effect"
 import { containsDirectory } from "@opencode/util/path"
 import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { parseVoiceDelegation } from "./voice-delegation"
 import { useCommand } from "@/shell/commands/command"
-import { useExtensionScoped } from "@/runtime/extension/commands"
+import { usePluginScoped } from "@/runtime/plugin/commands"
 import {
   SessionAncestorTrail,
   SessionHeaderLayout,
@@ -89,19 +91,20 @@ type MessageTimelineProps = {
   pinned: boolean
   centered: boolean
   reserveReviewToggle: boolean
-  setContentRef: (el: HTMLDivElement) => void
+  onContentResize: () => void
   bottomInset?: number
   setVisibleRef?: (el: HTMLDivElement | undefined) => void
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setRevealPart?: (fn: (target: string) => boolean) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
+  setPage?: (fn: (direction: 1 | -1) => void) => void
   reveal?: { target: () => string | undefined; done: () => void }
   search?: JSX.Element
 }
 
 export function MessageTimeline(props: MessageTimelineProps) {
-  const controller = createTimelineController({ session: props.session })
+  const controller = createTimelineController({ session: props.session, active: () => props.active !== false })
   const tail = props.pinned ? controller.data.projection.rows().at(-1) : undefined
 
   if (tail?._tag === "AssistantPart" && tail.group.type === "part") {
@@ -133,7 +136,7 @@ function MessageTimelineView(
 ) {
   const language = useLanguage()
   const command = useCommand()
-  const extensionScoped = useExtensionScoped()
+  const pluginScoped = usePluginScoped()
   const server = useServer()
   const data = server.ctx.data
   const sdk = useWorkspaceLocation()
@@ -165,12 +168,16 @@ function MessageTimelineView(
     return server.ctx.projects.forSession(session)
   })
 
-  createEffect(() => {
-    const directory = project()?.worktree
+  createSelectedEffect(
+    project,
+    () => props.active !== false,
+    (project) => {
+      const directory = project?.worktree
 
-    if (!directory) return
-    void data.location.vcs.sync({ directory }).catch(() => undefined)
-  })
+      if (!directory) return
+      void data.location.vcs.sync({ directory }).catch(() => undefined)
+    },
+  )
   const turnPadding = () => "px-4 md:px-6"
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const pinned = createMemo(() => props.pinned)
@@ -186,7 +193,7 @@ function MessageTimelineView(
     scroll: () => props.scroll,
     onResumeScroll: props.onResumeScroll,
     setScrollRef: props.setScrollRef,
-    setContentRef: props.setContentRef,
+    onContentResize: props.onContentResize,
     bottomInset: () => props.bottomInset ?? 0,
     setVisibleRef: props.setVisibleRef,
     onScheduleScrollState: props.onScheduleScrollState,
@@ -246,6 +253,7 @@ function MessageTimelineView(
     setRevealMessage: props.setRevealMessage,
     setRevealPart: props.setRevealPart,
     setScrollToEnd: props.setScrollToEnd,
+    setPage: props.setPage,
     reveal: props.reveal,
   })
 
@@ -305,7 +313,7 @@ function MessageTimelineView(
             title: language.t("command.session.rename"),
             keybind: "ctrl+r",
             disabled: !sessionID() || !!parentID() || title.editing,
-            skip: (event) => extensionScoped(event.target),
+            skip: (event) => pluginScoped(event.target),
             onSelect: openTitleEditor,
           },
           {
@@ -327,7 +335,10 @@ function MessageTimelineView(
     setTitle({ draft: "", editing: false, menuOpen: false, pendingRename: false })
   })
 
+  const settings = useSettings()
+
   const rowRenderer = createSessionTimelineRowRenderer({
+    foldUserMessages: settings.general.foldUserMessages,
     sessionID: () => sessionID()!,
     status: sessionStatus,
     projection,
@@ -537,12 +548,12 @@ function MessageTimelineView(
                   </Show>
                 </>
               }
-              actions={
+              actions={(fit) => (
                 <Show when={sessionID()} keyed>
                   {(_id) => (
                     <>
                       {props.search}
-                      <ExtensionSlot
+                      <PluginSlot
                         at="session.header"
                         input={{
                           get session() {
@@ -554,13 +565,16 @@ function MessageTimelineView(
                           get active() {
                             return props.active !== false
                           },
+                          get compact() {
+                            return fit.compact
+                          },
                         }}
                       />
                       <SessionHeaderSpacer visible={props.reserveReviewToggle} />
                     </>
                   )}
                 </Show>
-              }
+              )}
             >
               <Show when={parentID() && childTitle()}>
                 {(value) => (
@@ -601,7 +615,6 @@ function MessageTimelineView(
                     class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content rounded-[6px] px-1 py-1.5"
                     classList={{ "max-w-[45%] shrink-0": !!parentID() }}
                     style={{
-                      "--inline-input-shadow": "none",
                       "text-align": "start",
                     }}
                     onInput={(event) => setTitle("draft", event.currentTarget.value)}

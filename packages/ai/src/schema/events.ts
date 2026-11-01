@@ -11,7 +11,6 @@ import {
   type ContentPart,
 } from "./messages.js"
 import { ProviderMetadata } from "./options.js"
-import { ProviderFailureClassification } from "./errors.js"
 import { Media } from "../media.js"
 
 export const FinishReason = LLM.FinishReason
@@ -117,6 +116,17 @@ export const MediaUsage = Schema.Union([
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "AI.MediaUsage" })
 export type MediaUsage = Schema.Schema.Type<typeof MediaUsage>
+
+/** Token usage from a provider's counts. A usage object without any count is no usage, so it returns undefined. */
+export const tokenUsage = (counts: {
+  readonly input?: number
+  readonly output?: number
+  readonly total?: number
+  readonly details?: Record<string, unknown>
+}): MediaUsage | undefined =>
+  counts.input === undefined && counts.output === undefined && counts.total === undefined
+    ? undefined
+    : { type: "tokens", ...counts }
 
 /** A replacement context window, not an assistant message to append to prior history. */
 export class CompactionResponse extends Schema.Class<CompactionResponse>("LLM.CompactionResponse")({
@@ -256,17 +266,6 @@ export const ToolResult = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.ToolResult" })
 export type ToolResult = Schema.Schema.Type<typeof ToolResult>
 
-export const ToolError = Schema.Struct({
-  type: Schema.tag("tool-error"),
-  id: ToolCallID,
-  name: Schema.String,
-  namespace: Schema.optional(Schema.String),
-  message: Schema.String,
-  error: Schema.optional(Schema.Defect()),
-  providerMetadata: Schema.optional(ProviderMetadata),
-}).annotate({ identifier: "LLM.Event.ToolError" })
-export type ToolError = Schema.Schema.Type<typeof ToolError>
-
 export const FinishReasonDetails = Schema.Struct({
   normalized: FinishReason,
   raw: Schema.optional(Schema.String),
@@ -290,6 +289,8 @@ export const Finish = Schema.Struct({
   type: Schema.tag("finish"),
   reason: FinishReasonDetails,
   usage: Schema.optional(Usage),
+  /** The final assistant message, set by `ai.stream` and `ai.loop`. */
+  message: Schema.optional(Message),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.Finish" })
 export type Finish = Schema.Schema.Type<typeof Finish>
@@ -302,13 +303,12 @@ export const MediaEvent = Schema.Struct({
 }).annotate({ identifier: "LLM.Event.Media" })
 export type MediaEvent = Schema.Schema.Type<typeof MediaEvent>
 
-export const ProviderErrorEvent = Schema.Struct({
-  type: Schema.tag("provider-error"),
-  message: Schema.String,
-  classification: Schema.optional(ProviderFailureClassification),
-  providerMetadata: Schema.optional(ProviderMetadata),
-}).annotate({ identifier: "LLM.Event.ProviderError" })
-export type ProviderErrorEvent = Schema.Schema.Type<typeof ProviderErrorEvent>
+/** One provider frame as received, emitted before the events parsed from it when the request sets `includeRaw`. */
+export const RawEvent = Schema.Struct({
+  type: Schema.tag("raw"),
+  data: Schema.Unknown,
+}).annotate({ identifier: "LLM.Event.Raw" })
+export type RawEvent = Schema.Schema.Type<typeof RawEvent>
 
 const llmEventTagged = Schema.Union([
   CompactionPart,
@@ -325,11 +325,10 @@ const llmEventTagged = Schema.Union([
   ToolInputError,
   ToolCall,
   ToolResult,
-  ToolError,
   MediaEvent,
   StepFinish,
   Finish,
-  ProviderErrorEvent,
+  RawEvent,
 ]).pipe(Schema.toTaggedUnion("type"))
 
 type WithID<Event extends { readonly id: unknown }, ID> = Omit<Event, "type" | "id"> & { readonly id: ID | string }
@@ -371,7 +370,6 @@ export const LLMEvent = Object.assign(llmEventTagged, {
       id: toolCallID(input.id),
       output: input.output === undefined ? undefined : ToolOutput.make(input.output.structured, input.output.content),
     }),
-  toolError: (input: WithID<ToolError, ToolCallID>) => ToolError.make({ ...input, id: toolCallID(input.id) }),
   media: MediaEvent.make,
   stepFinish: (input: WithUsage<StepFinish>) =>
     StepFinish.make({
@@ -383,7 +381,7 @@ export const LLMEvent = Object.assign(llmEventTagged, {
       ...input,
       usage: input.usage === undefined ? undefined : Usage.from(input.usage),
     }),
-  providerError: ProviderErrorEvent.make,
+  raw: RawEvent.make,
   is: {
     compaction: llmEventTagged.guards.compaction,
     stepStart: llmEventTagged.guards["step-start"],
@@ -399,11 +397,10 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     toolInputError: llmEventTagged.guards["tool-input-error"],
     toolCall: llmEventTagged.guards["tool-call"],
     toolResult: llmEventTagged.guards["tool-result"],
-    toolError: llmEventTagged.guards["tool-error"],
     media: llmEventTagged.guards.media,
     stepFinish: llmEventTagged.guards["step-finish"],
     finish: llmEventTagged.guards.finish,
-    providerError: llmEventTagged.guards["provider-error"],
+    raw: llmEventTagged.guards.raw,
   },
 })
 export type LLMEvent = Schema.Schema.Type<typeof llmEventTagged>
@@ -480,13 +477,6 @@ const appendEvent = (state: ResponseState, event: LLMEvent): ResponseState => {
       events,
       usage: event.usage ?? state.usage,
       finishReason: event.reason,
-    }
-  }
-  if (LLMEvent.is.providerError(event)) {
-    return {
-      ...state,
-      events,
-      finishReason: state.finishReason ?? { normalized: "error" },
     }
   }
   return {
@@ -646,6 +636,7 @@ const reduceToolCall = (state: ResponseState, event: ToolCall): ResponseState =>
 }
 
 const reduceResponseState = (state: ResponseState, event: LLMEvent): ResponseState => {
+  if (event.type === "raw") return state
   const next = appendEvent(state, event)
   switch (event.type) {
     case "compaction":
@@ -720,7 +711,7 @@ export namespace LLMResponse {
   /** Purely fold one provider-neutral event into the attempt assembly state. */
   export const reduce = reduceResponseState
 
-  /** Return a completed response only after a terminal finish or provider error. */
+  /** Return a completed response only after the terminal finish. */
   export const complete = (state: State): LLMResponse | undefined =>
     state.finishReason === undefined
       ? undefined
@@ -733,6 +724,12 @@ export namespace LLMResponse {
 
   /** Convenience reducer for callers that already have a collected event list. */
   export const fromEvents = (events: ReadonlyArray<LLMEvent>) => complete(events.reduce(reduce, empty()))
+
+  /** Output that arrived before a failure, or `undefined` if only `step-start` did; an unfinished response reports `error`. */
+  export const partial = (state: State) =>
+    state.events.every(LLMEvent.is.stepStart)
+      ? undefined
+      : complete({ ...state, finishReason: state.finishReason ?? { normalized: "error" } })
 
   /** Concatenate assistant text from a response or collected event list. */
   export const text = (response: Output) => responseText(response.events)

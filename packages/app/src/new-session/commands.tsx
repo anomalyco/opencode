@@ -40,19 +40,22 @@ export function useNewSessionCommands(input: {
       onSelect: input.restoreFocus,
     },
     {
-      ...projectSearchCommand,
-      title: language.t("session.new.project.search"),
-      category: language.t("command.category.project"),
-      disabled: input.project.empty(),
-      onSelect: input.project.open,
-    },
-    {
       id: "session.location.cycle",
       title: language.t("command.session.location.cycle"),
       category: language.t("command.category.workspace"),
       keybind: "mod+alt+l",
       disabled: !input.workspace.enabled(),
       onSelect: input.workspace.cycle,
+    },
+  ])
+  // Shadows the titlebar's command of the same key while the draft is mounted, so it searches projects in place.
+  command.register(projectSearchCommand.id, () => [
+    {
+      ...projectSearchCommand,
+      title: language.t("session.new.project.search"),
+      category: language.t("command.category.project"),
+      disabled: input.project.empty(),
+      onSelect: input.project.open,
     },
   ])
 }

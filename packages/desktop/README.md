@@ -11,34 +11,28 @@ bun dev
 
 ## Build
 
-Run the `build` script to build the app's JS assets, then `package` to
-bundle the assets as an application. The resulting app will be in `dist/`.
+`bun run build` prepares `resources/` (icons, metainfo and the bundled CLI) and builds the app into `out/`.
+`bun run pack` then packages it, unsigned, into `dist/desktop/` at the repository root: a `.app` tarball on macOS,
+the unpacked app on Windows, and AppImage/deb/rpm on Linux. The release workflow signs and notarizes afterwards.
 
 ```bash
-bun run build && bun run package
+bun run build && bun run pack
 ```
 
-Production builds require a prebuilt V2 CLI distribution. The release workflow supplies the artifact from the same run:
+Both read the same environment as every other release package:
 
-```bash
-OPENCODE_CHANNEL=prod OPENCODE_CLI_DIST=/absolute/path/to/packages/cli/dist bun run build
-OPENCODE_CHANNEL=prod bun run package
-```
+| Variable           | Meaning                                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `OPENCODE_CHANNEL` | `dev` (default), `beta`, or `latest`/`prod`. Picks the app identity, icons and bundled CLI.                     |
+| `OPENCODE_VERSION` | Version stamped into the app and its packages.                                                                  |
+| `OPENCODE_TARGET`  | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
 
-Set `OPENCODE_CLI_TARGET` when packaging for a different architecture. The CLI is placed outside `app.asar` in the
-application's resources directory, and packaging fails if it is missing.
-
-CLI preparation uses these channel rules:
-
-| Channel                                | Without `OPENCODE_CLI_DIST`    | With `OPENCODE_CLI_DIST`                      |
-| -------------------------------------- | ------------------------------ | --------------------------------------------- |
-| `dev`, `local`, unset, or unrecognized | Download the dev CLI           | Download the dev CLI; ignore the distribution |
-| `beta`                                 | Download the beta CLI          | Copy the supplied CLI; fail if it is missing  |
-| `prod`, `latest`                       | Fail before changing resources | Copy the supplied CLI; fail if it is missing  |
+The CLI is placed outside `app.asar` in the application's resources directory, and packaging fails if it is missing.
+`bun run build` uses `packages/cli/dist` when that holds the target's CLI. Otherwise `dev` (and `local`, unset or unrecognized)
+downloads the published dev CLI, `beta` downloads the beta CLI, and `prod`/`latest` fail.
 
 `bun dev` is separate from packaging: it uses local renderer/server mode, the dev app identity, and the CLI source by
-default. `bun dev --download-server <version>` instead downloads that CLI version for local development. Neither path
-requires `OPENCODE_CLI_DIST` or runs the production prebuild.
+default. `bun dev --download-server <version>` instead downloads that CLI version for local development.
 
 ## Beta channel
 
@@ -48,7 +42,7 @@ from `dev`. Install it from `https://opencode.ai/download/beta/<platform>`, for 
 `windows-x64-nsis`. Installed builds update in place on every platform.
 
 Each beta build compiles in its commit and the `feat`, `fix` and `perf` commits among its newest 200
-(`scripts/beta-notes.ts`, embedded by `electron.vite.config.ts`; run `bun scripts/beta-notes.ts` to preview them). After an
+(`script/beta-notes.ts`, embedded by `electron.vite.config.ts`; run `bun script/beta-notes.ts` to preview them). After an
 update, the beta app lists the ones after the commit of the build the user saw last in a "What's new in beta" dialog,
 unless release notes are turned off in Settings.
 
@@ -58,7 +52,7 @@ unless release notes are turned off in Settings.
 renderer going idle, so dev-server and bundling costs are not part of the numbers.
 
 ```bash
-OPENCODE_CHANNEL=dev bun run build && bunx electron-builder --win --dir --config electron-builder.config.ts
+OPENCODE_CHANNEL=dev bun run build && bun run pack
 bun run bench:startup -- --runs 5                                  # warm service (started once, reused by every launch)
 bun run bench:startup -- --runs 5 --compare dist/other/OpenCode\ Dev.exe   # A/B: alternate launches of two builds
 bun run bench:startup -- --service cold                            # each launch spawns the service

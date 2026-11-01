@@ -168,6 +168,8 @@ const NoteFields = {
   type: Schema.Literal("note"),
   origin: Schema.String,
   label: Schema.String,
+  title: Persistence.optional(Schema.String),
+  subtitle: Persistence.optional(Schema.String),
   icon: Schema.String,
   subject: Schema.String,
   href: Persistence.optional(Schema.String),
@@ -175,7 +177,7 @@ const NoteFields = {
   comment: Schema.String,
 }
 
-/** An extension's comment on something other than workspace lines, as sent in message metadata. */
+/** A plugin's comment on something other than workspace lines, as sent in message metadata. */
 export const NoteComment = Persistence.struct(NoteFields)
 
 export type NoteComment = typeof NoteComment.Type
@@ -184,7 +186,7 @@ export const NoteContextItem = Persistence.struct({ ...NoteFields, commentID: Sc
 
 export type NoteContextItem = typeof NoteContextItem.Type
 
-/** Where text quoted from outside the timeline came from, such as an extension's terminal. */
+/** Where text quoted from outside the timeline came from, such as a plugin's terminal. */
 export const QuoteSource = Persistence.struct({
   label: Schema.String,
   icon: Schema.String,
@@ -192,6 +194,21 @@ export const QuoteSource = Persistence.struct({
 })
 
 export type QuoteSource = typeof QuoteSource.Type
+
+/** Timeline coordinates kept only with the app's draft, never in quote metadata. */
+export const TimelineQuoteSource = Persistence.array(
+  Persistence.struct({
+    partID: Schema.String,
+    revealID: Schema.String,
+    body: Persistence.optional(Schema.String),
+    shadow: Persistence.optional(Persistence.struct({ host: Schema.Number, line: Schema.String })),
+    start: Schema.Number,
+    end: Schema.Number,
+    text: Schema.String,
+  }),
+)
+
+export type TimelineQuoteSource = typeof TimelineQuoteSource.Type
 
 const QuoteFields = {
   type: Schema.Literal("quote"),
@@ -219,8 +236,8 @@ export function durableNote<Note extends NoteComment>(note: Note) {
   return Struct.omit(note, ["live"])
 }
 
-// Legacy data: desktop builds before extension notes stored browser element comments as their own type, in drafts
-// and in message metadata. They read as the browser extension's note, without the element ref of their process.
+// Legacy data: desktop builds before plugin notes stored browser element comments as their own type, in drafts
+// and in message metadata. They read as the browser plugin's note, without the element ref of their process.
 const LegacyBrowserComment = Persistence.struct({
   type: Schema.Literal("browser"),
   tabID: Schema.String,
@@ -359,6 +376,7 @@ export const ComposerStore = Persistence.struct({
     }),
   ),
   context: Persistence.struct({ items: Persistence.array(ContextEntry) }),
+  quoteSources: Persistence.optional(Persistence.record(Schema.UndefinedOr(TimelineQuoteSource))),
 })
 
 export type ComposerStore = typeof ComposerStore.Type
@@ -374,7 +392,7 @@ export const LineComment = Persistence.struct({
 export type LineComment = typeof LineComment.Type
 
 export const CommentStore = Persistence.struct({
-  comments: Schema.Record(Schema.String, Schema.mutableKey(Persistence.array(LineComment))),
+  comments: Schema.Record(Schema.String, Persistence.entry(Persistence.array(LineComment))),
 })
 
 export type CommentStore = typeof CommentStore.Type

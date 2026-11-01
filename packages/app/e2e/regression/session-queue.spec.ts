@@ -231,6 +231,35 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await expect(view.input).toHaveText("")
 })
 
+test("a blank Enter leaves the running session alone while Stop still interrupts it, as in the TUI", async ({
+  page,
+}) => {
+  const mock = createQueueMock([])
+  const view = await openQueue(page, mock)
+  const interrupts: string[] = []
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`)) interrupts.push(request.url())
+  })
+  const stop = view.composer.getByRole("button", { name: "Stop", exact: true })
+
+  await expect(stop).toBeVisible()
+  await view.input.click()
+  await view.input.press("Enter")
+  await view.input.press("ControlOrMeta+Enter")
+  await view.input.pressSequentially("   ")
+  await view.input.press("Enter")
+
+  const interrupted = page.waitForRequest((request) =>
+    new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`),
+  )
+
+  await stop.click()
+  await interrupted
+
+  expect(interrupts).toHaveLength(1)
+  expect(mock.prompts).toEqual([])
+})
+
 test("a steer shows as pending in the timeline as the composer clears, before the server admits it", async ({
   page,
 }) => {
@@ -667,6 +696,14 @@ test("editing drops a file whose mention was deleted and keeps unmentioned conte
 test("editing a comment-only prompt keeps its notes once", async ({ page }) => {
   const note = "The user made the following comment regarding line 2 of /repo/app.ts: check the guard"
   const mock = createQueueMock([note])
+  mock.rows[0].payload.files = [
+    {
+      data: "aGk=",
+      mime: "text/plain",
+      source: { type: "uri", uri: "file:///repo/app.ts?start=2&end=2" },
+      name: "app.ts",
+    },
+  ]
   mock.rows[0].payload.metadata = {
     displayText: "",
     comments: [
@@ -679,8 +716,8 @@ test("editing a comment-only prompt keeps its notes once", async ({ page }) => {
     ],
   }
   const view = await openQueue(page, mock)
-  // With no display text, the editor shows the note itself, so the edit owns it as text.
-  await view.rows.getByText(note, { exact: true }).click()
+  // The queue counts the context file; the existing editor still loads its model-visible note as text.
+  await view.rows.getByRole("button", { name: "1 attachment", exact: true }).click()
   await expect(view.input).toHaveText(note)
   await view.input.press("End")
   await view.input.pressSequentially(", please")
@@ -1171,10 +1208,8 @@ for (const delivery of ["steer", "queue"] as const) {
       await expect(bubble).toHaveCSS("color", colors.pending.text)
       await expect(bubble).toHaveCSS("transition-duration", "0s")
       await expect(pending.locator('[data-slot="user-message-copy-wrapper"]')).toHaveCSS("opacity", "1")
-      // Pending stands in for the time of a steer that has not been sent.
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending\s*·\s*Queue Model$/, {
-        useInnerText: true,
-      })
+      // The steer keeps U1's agent and model, so Pending is all its meta line says.
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending$/, { useInnerText: true })
       await bubble.evaluate((element) => (element.dataset.deliveryMarker = "pending"))
     }
 
@@ -1256,7 +1291,7 @@ for (const delivery of ["steer", "queue"] as const) {
 
     if (colors) {
       await expect(bubble).toHaveAttribute("data-delivery-marker", "pending")
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Queue Model\s*·\s*Just now$/, {
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Queue Model$/, {
         useInnerText: true,
       })
       await expect(bubble).toHaveCSS("background-color", colors.delivered.background)

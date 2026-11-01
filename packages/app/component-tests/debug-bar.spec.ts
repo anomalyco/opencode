@@ -1,9 +1,9 @@
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const modules = {
-  fixture: sourceURL(new URL("./extension-host.fixture.tsx", import.meta.url)),
-  debug: sourceURL(new URL("../../gui-extensions/src/debug/index.ts", import.meta.url)),
-  renderer: sourceURL(new URL("../../gui-extensions/src/debug/renderer.tsx", import.meta.url)),
+  fixture: sourceURL(new URL("./plugin-host.fixture.tsx", import.meta.url)),
+  debug: sourceURL(new URL("../../gui-plugins/src/debug/index.ts", import.meta.url)),
+  renderer: sourceURL(new URL("../../gui-plugins/src/debug/renderer.tsx", import.meta.url)),
 }
 
 story.beforeEach(async ({ mount }) => {
@@ -13,17 +13,17 @@ story.beforeEach(async ({ mount }) => {
 // Reloads and updates are fresh mounts over the same storage, so a mount seeded with what the last one wrote is one.
 story("the debug bar stays open across a remount until its close button hides it", async ({ page }) => {
   const result = await page.evaluate(async (modules) => {
-    const { mountExtensions, until } = await import(modules.fixture)
+    const { mountPlugins, until } = await import(modules.fixture)
     const debug = await import(modules.debug)
-    const definition = { ...debug.default, renderer: () => import(modules.renderer) }
+    const definition = { ...debug.default, id: "debug", windowEntry: () => import(modules.renderer) }
     const bar = (host: { container: HTMLElement }) => host.container.querySelector("aside")
 
     const close = (host: { container: HTMLElement }) =>
       host.container.querySelector<HTMLButtonElement>('button[aria-label="Hide debug bar"]')
 
-    const first = mountExtensions({
+    const first = mountPlugins({
       definitions: [definition],
-      stored: { "extension.debug.bar": { visible: true, motion: false } },
+      stored: { "plugin.debug.bar": { visible: true, motion: false } },
     })
 
     first.release()
@@ -33,12 +33,12 @@ story("the debug bar stays open across a remount until its close button hides it
 
     close(first)?.click()
     await until(() => bar(first) === null)
-    await until(() => first.saved()["extension.debug.bar"]?.visible === false)
+    await until(() => first.saved()["plugin.debug.bar"]?.visible === false)
 
     const saved = first.saved()
     first.unmount()
 
-    const second = mountExtensions({ definitions: [definition], stored: saved })
+    const second = mountPlugins({ definitions: [definition], stored: saved })
     second.release()
     await until(() => second.ready())
 
@@ -46,7 +46,7 @@ story("the debug bar stays open across a remount until its close button hides it
     const reopened = bar(second) !== null
     second.unmount()
 
-    return { opened, saved: saved["extension.debug.bar"], reopened }
+    return { opened, saved: saved["plugin.debug.bar"], reopened }
   }, modules)
 
   expect(result).toEqual({ opened: true, saved: { visible: false, motion: false }, reopened: false })
@@ -63,13 +63,13 @@ story("a feature page's Enabled switch turns that feature on after another featu
 
       const first = experiment("switches.first", "First")
       const second = experiment("switches.second", "Second")
-      const { mountExtensions, until } = await import(modules.fixture)
+      const { mountPlugins, until } = await import(modules.fixture)
       const debug = await import(modules.debug)
-      const definition = { ...debug.default, renderer: () => import(modules.renderer) }
+      const definition = { ...debug.default, id: "debug", windowEntry: () => import(modules.renderer) }
 
-      const host = mountExtensions({
+      const host = mountPlugins({
         definitions: [definition],
-        stored: { "extension.debug.bar": { visible: true, motion: true } },
+        stored: { "plugin.debug.bar": { visible: true, motion: true } },
       })
 
       host.release()
@@ -131,13 +131,13 @@ story("a feature page's preset chips go through the feature model, modes include
       })
 
       const shipped = spring().duration
-      const { mountExtensions, until } = await import(modules.fixture)
+      const { mountPlugins, until } = await import(modules.fixture)
       const debug = await import(modules.debug)
-      const definition = { ...debug.default, renderer: () => import(modules.renderer) }
+      const definition = { ...debug.default, id: "debug", windowEntry: () => import(modules.renderer) }
 
-      const host = mountExtensions({
+      const host = mountPlugins({
         definitions: [definition],
-        stored: { "extension.debug.bar": { visible: true, motion: true } },
+        stored: { "plugin.debug.bar": { visible: true, motion: true } },
       })
 
       host.release()

@@ -1,7 +1,8 @@
 export * as CopilotModels from "./models.js"
 
 import { Money } from "@opencode/schema/money"
-import { Option, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
+import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
 
@@ -58,7 +59,6 @@ const RemoteModel = Schema.Struct({
 })
 
 const Response = Schema.Struct({ data: Schema.Array(Schema.Unknown) })
-const decodeResponse = Schema.decodeUnknownSync(Response)
 const decodeModel = Schema.decodeUnknownOption(RemoteModel)
 
 type RemoteModel = typeof RemoteModel.Type
@@ -72,26 +72,32 @@ type UsableModel = RemoteModel & {
   }
 }
 
-export async function get(baseURL: string, headers: RequestInit["headers"], existing: readonly Model.Info[]) {
-  return derive(baseURL, await load(baseURL, headers), existing)
+export function get(
+  http: HttpClient.HttpClient,
+  baseURL: string,
+  headers: Headers.Input,
+  existing: readonly Model.Info[],
+) {
+  return load(http, baseURL, headers).pipe(Effect.map((remote) => derive(baseURL, remote, existing)))
 }
 
 export type Snapshot = ReadonlyMap<string, UsableModel>
 
-export async function load(baseURL: string, headers: RequestInit["headers"]): Promise<Snapshot> {
-  const response = await fetch(`${baseURL}/models`, {
-    headers,
-    signal: AbortSignal.timeout(5_000),
-  })
-  if (!response.ok) throw new Error(`Failed to fetch Copilot models: ${response.status}`)
-
+export const load = Effect.fn("CopilotModels.load")(function* (
+  http: HttpClient.HttpClient,
+  baseURL: string,
+  headers: Headers.Input,
+) {
+  const response = yield* HttpClient.filterStatusOk(http)
+    .execute(HttpClientRequest.get(`${baseURL}/models`).pipe(HttpClientRequest.setHeaders(headers)))
+    .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(Response)), Effect.timeout("5 seconds"))
   return new Map(
-    decodeResponse(await response.json()).data.flatMap((raw) => {
+    response.data.flatMap((raw) => {
       const model = Option.getOrUndefined(decodeModel(raw))
       return model && usable(model) ? ([[model.id, model]] as const) : []
     }),
   )
-}
+})
 
 /** Combine remote facts with source templates, never a previously transformed model result. */
 export function derive(baseURL: string, remote: Snapshot, existing: readonly Model.Info[]) {

@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Headers, HttpClientRequest } from "effect/http"
-import { Image, ImageClient } from "../../src/effect.js"
+import { ai, ImageClient } from "../../src/effect.js"
 import { XAI } from "../../src/providers.js"
 import { Auth } from "../../src/route.js"
 import { it } from "../lib/effect.js"
@@ -10,7 +10,7 @@ import { dynamicResponse } from "../lib/http.js"
 describe("xAI Images", () => {
   it.effect("generates through the OpenAI-compatible Images API", () =>
     Effect.gen(function* () {
-      const response = yield* Image.generate({
+      const response = yield* ai.image.generate({
         model: XAI.configure({
           apiKey: "test",
           baseURL: "https://api.xai.test/v1",
@@ -39,7 +39,6 @@ describe("xAI Images", () => {
       expect(response.images[1].mediaType).toBe("application/octet-stream")
       expect(response.images[1].source).toEqual({ type: "url", url: "https://api.xai.test/image.jpg" })
       expect(response.usage).toBeUndefined()
-      expect(response.notices).toEqual([{ type: "other", message: "xAI Images doesn't offer 4K; used 2k" }])
       expect(response.providerMetadata).toEqual({ xai: { usage: { num_images: 2 } } })
     }).pipe(
       Effect.provide(
@@ -81,30 +80,32 @@ describe("xAI Images", () => {
   )
 
   it.effect("supports request-level custom auth", () =>
-    Image.generate({
-      model: XAI.configure({
-        baseURL: "https://api.xai.test/v1",
-        auth: Auth.custom((input) =>
-          Effect.succeed(Headers.set(input.headers, "x-custom-auth", new URL(input.url).hostname)),
-        ),
-      }).image("grok-imagine-image"),
-      prompt: "A robot tending a rooftop garden",
-    }).pipe(
-      Effect.provide(
-        ImageClient.layer.pipe(
-          Layer.provide(
-            dynamicResponse((input) =>
-              Effect.gen(function* () {
-                const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-                expect(request.headers.get("x-custom-auth")).toBe("api.xai.test")
-                return input.respond(JSON.stringify({ data: [{ b64_json: "AQID", mime_type: "image/png" }] }), {
-                  headers: { "content-type": "application/json" },
-                })
-              }),
+    ai.image
+      .generate({
+        model: XAI.configure({
+          baseURL: "https://api.xai.test/v1",
+          auth: Auth.custom((input) =>
+            Effect.succeed(Headers.set(input.headers, "x-custom-auth", new URL(input.url).hostname)),
+          ),
+        }).image("grok-imagine-image"),
+        prompt: "A robot tending a rooftop garden",
+      })
+      .pipe(
+        Effect.provide(
+          ImageClient.layer.pipe(
+            Layer.provide(
+              dynamicResponse((input) =>
+                Effect.gen(function* () {
+                  const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                  expect(request.headers.get("x-custom-auth")).toBe("api.xai.test")
+                  return input.respond(JSON.stringify({ data: [{ b64_json: "AQID", mime_type: "image/png" }] }), {
+                    headers: { "content-type": "application/json" },
+                  })
+                }),
+              ),
             ),
           ),
         ),
       ),
-    ),
   )
 })

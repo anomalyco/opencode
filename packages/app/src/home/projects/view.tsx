@@ -1,5 +1,6 @@
 import { createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Popover } from "@kobalte/core/popover"
 import {
   displayName,
@@ -29,10 +30,10 @@ const HOME_PROJECT_NAV_LABEL = "min-w-0 flex-1 overflow-hidden text-ellipsis whi
 
 const serverContextMenuID = (server: ServerConnection.Any) => `server:${ServerConnection.key(server)}`
 
-// Extension servers ask for sign-in themselves; an HTTP server that rejects its saved credentials needs a new
+// Plugin servers ask for sign-in themselves; an HTTP server that rejects its saved credentials needs a new
 // pairing link or password.
 const signInRequired = (server: ServerConnection.Any, health: ServerHealth | undefined) =>
-  (server.type === "extension" && server.authenticationRequired) || (server.type === "http" && !!health?.unauthorized)
+  (server.type === "plugin" && server.authenticationRequired) || (server.type === "http" && !!health?.unauthorized)
 
 const projectContextMenuID = (server: ServerConnection.Any, directory: string) =>
   `project:${ServerConnection.key(server)}:${directory}`
@@ -149,7 +150,17 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
 }
 
 function HomeProjectsPanel(props: HomeProjectsViewProps) {
+  let observer: MutationObserver | undefined
+  let frame = 0
   const [contextMenu, setContextMenu] = createStore<{ open: string | undefined }>({ open: undefined })
+  const updateFades = (element: HTMLDivElement) => {
+    element.toggleAttribute("data-fade-top", element.scrollTop > 0)
+    element.toggleAttribute("data-fade-bottom", element.scrollTop + element.clientHeight < element.scrollHeight - 1)
+  }
+  onCleanup(() => {
+    observer?.disconnect()
+    cancelAnimationFrame(frame)
+  })
 
   const contextMenuProps = {
     contextMenuOpen: (id: string) => contextMenu.open === id,
@@ -197,8 +208,19 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           </Show>
         </div>
       </Show>
-      <div data-slot="home-projects-scroll" class="relative flex min-h-0 min-w-0 shrink flex-col">
-        <div data-slot="home-projects-viewport" data-scrollable class="min-h-0 flex-1 overflow-y-auto">
+      <div data-slot="home-projects-scroll" class="flex min-h-0 min-w-0 shrink flex-col">
+        <div
+          data-slot="home-projects-viewport"
+          data-scrollable
+          class="min-h-0 flex-1 overflow-y-auto"
+          ref={(element) => {
+            createResizeObserver(element, () => updateFades(element))
+            observer = new MutationObserver(() => updateFades(element))
+            observer.observe(element, { childList: true, subtree: true })
+            frame = requestAnimationFrame(() => updateFades(element))
+          }}
+          onScroll={(event) => updateFades(event.currentTarget)}
+        >
           <Show when={props.dropdown && props.servers.length === 1}>
             <HomeProjectNavButton
               type="button"
@@ -216,7 +238,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
               props.servers.some(
                 (server) =>
                   signInRequired(server, props.serverHealth(server)) ||
-                  (server.type === "extension" && server.connecting),
+                  (server.type === "plugin" && server.connecting),
               )
             }
             fallback={
@@ -251,7 +273,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                   const hasProjects = () => projects().length > 0
                   const collapsed = () => props.collapsed(item)
                   const authentication = () => signInRequired(item, props.serverHealth(item))
-                  const connecting = () => item.type === "extension" && item.connecting
+                  const connecting = () => item.type === "plugin" && item.connecting
 
                   return (
                     <div class="flex min-w-0 flex-col gap-1">
@@ -366,7 +388,8 @@ function HomeServerRow(props: {
 
   return (
     <Tooltip
-      appearance="standard"
+      appearance="large"
+      contentClass="max-w-80 break-words"
       placement="top"
       class="flex h-7 w-full min-w-0"
       inactive={!incompatible() && !authentication()}
@@ -422,7 +445,7 @@ function HomeServerRow(props: {
           <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
             <ServerHealthIndicator
               health={props.health}
-              connecting={props.server.type === "extension" && props.server.connecting}
+              connecting={props.server.type === "plugin" && props.server.connecting}
               authenticationRequired={authentication()}
             />
           </div>

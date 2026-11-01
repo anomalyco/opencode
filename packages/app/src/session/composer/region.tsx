@@ -1,4 +1,5 @@
 import type { SessionUserActions } from "@opencode/session-ui/message"
+import type { ShellOutputInput } from "@opencode/client/promise"
 import { getFilename, sameDirectory } from "@opencode/util/path"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
@@ -19,8 +20,10 @@ import { showToast } from "@/shell/notifications/toast"
 import { errorMessage } from "@/shell/layout/helpers"
 import { useLocal } from "@/providers/models/selection"
 import { usePlatform } from "@/runtime/platform/platform"
-import { uuid } from "@/runtime/persistence/uuid"
+import { uuid } from "@opencode/util/uuid"
 import { contextItemKey } from "@/composer/schema"
+import type { QuoteSource } from "@/composer/quote-source"
+import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import { useComposerCommands } from "@/composer/commands"
@@ -34,18 +37,22 @@ import { useSessionFork } from "../fork"
 import { SessionComposerRegion } from "./session-composer-region"
 import { createSessionComposerController, type SessionComposerController } from "./controller"
 import { SessionQueuePanel } from "./queue-panel"
+import { SessionGoLimitTray } from "./go-limit-tray"
 import { SessionActivityChips, type SessionActivityItem } from "./activity-chips"
-import { SessionComposerLane } from "./composer-lane"
+import { SessionComposerLane, useComposerLaneAlignment } from "./composer-lane"
 import { SessionTodoPill } from "./todo-pill"
 import { sessionTodos, todoFinished } from "./todos"
 import { useOpenSessionRoute } from "../session-identity-header"
 import { resolveSessionComposerSelection } from "./selection"
-import { composerProviderName } from "@/composer/selection"
+import { composerModelLabelKey, composerModelLabels, composerProviderName } from "@/composer/model-label"
 import { useProviders } from "@/providers/catalog/providers"
 import { SubagentBar } from "./subagent-bar"
 import { createSessionRequestModel } from "../requests/model"
-import type { Region } from "@/runtime/extension/panels"
+import type { Region } from "@/runtime/plugin/panels"
 import { SessionLocationMissing } from "./location-missing"
+import { SessionPluginPills } from "./plugin-pills"
+import { createTimelineActions, type TimelineActionsView, type TimelinePendingActions } from "./timeline-actions"
+import type { MountedSession, SessionScreen } from "@opencode/plugin/gui"
 
 export function createActiveSessionRegion(input: {
   session: SessionModel
@@ -102,13 +109,27 @@ export function createActiveSessionRegion(input: {
   )
 
   const openAttachment: NonNullable<SessionUserActions["openAttachment"]> = (file) => {
-    const url = file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
+    const source = file.source
+    const fileData = "data" in file ? file.data : undefined
+    const fileUri = "uri" in file ? file.uri : undefined
+
+    const inlineUrl =
+      source?.type === "uri" ? source.uri : fileData !== undefined ? `data:${file.mime};base64,${fileData}` : undefined
 
     const download = () => {
-      const anchor = document.createElement("a")
-      anchor.href = url
-      anchor.download = getFilename(file.name) || "attachment"
-      anchor.click()
+      void (
+        inlineUrl
+          ? Promise.resolve(inlineUrl)
+          : fileUri
+            ? server.media.load(fileUri, file.mime)
+            : Promise.resolve(undefined)
+      ).then((url) => {
+        if (!url) return
+        const anchor = document.createElement("a")
+        anchor.href = url
+        anchor.download = getFilename(file.name) || "attachment"
+        anchor.click()
+      })
     }
 
     const path = file.name ?? ""
@@ -151,6 +172,24 @@ export function createActiveSessionRegion(input: {
     const path = event.composedPath()
     const target = path.find((item): item is HTMLElement => item instanceof HTMLElement)
     const active = activeElement()
+
+    // As in chat apps, page keys in the composer page the conversation, even when the draft itself overflows. An open
+    // suggestion popup has already claimed them, and modified page keys keep their native meaning.
+    if (
+      promptRef &&
+      active === promptRef &&
+      (event.key === "PageUp" || event.key === "PageDown") &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.isComposing
+    ) {
+      event.preventDefault()
+      input.timeline.actions.page(event.key === "PageUp" ? -1 : 1)
+
+      return
+    }
 
     if (
       path.some((item) => item instanceof HTMLElement && item.closest("[data-prevent-autofocus]") !== null) ||
@@ -210,13 +249,16 @@ export function createActiveSessionRegion(input: {
 
   const recalled = new Set<string>()
 
-  // The free allowance stops a prompt after it was sent. Hand its text back so switching models and resending is one
-  // step, unless the user has already started typing something else.
+  // The free allowance or a Go usage limit stops a prompt after it was sent. Hand its text back so switching models and
+  // resending is one step, unless the user has already started typing something else.
   onCleanup(
     location().event.on("session.step.failed", (event) => {
       const sessionID = input.session.identity.params.id
+      const type = event.data.error.type
 
-      if (!sessionID || event.data.sessionID !== sessionID || event.data.error.type !== "provider.free-limit") return
+      if (!sessionID || event.data.sessionID !== sessionID) return
+
+      if (type !== "provider.free-limit" && type !== "provider.go-limit") return
 
       if (recalled.has(event.data.assistantMessageID)) return
       recalled.add(event.data.assistantMessageID)
@@ -249,12 +291,8 @@ export function createActiveSessionRegion(input: {
     showToast({ title: language.t("common.requestFailed") })
   }
 
-  const pendingSteer: NonNullable<SessionUserActions["pending"]> = {
-    status: (messageID) => {
-      const sessionID = input.session.identity.params.id
-
-      return sessionID ? data.session.pending.status(sessionID, messageID) : undefined
-    },
+  const pendingSteer: TimelinePendingActions = {
+    status: (sessionID, messageID) => data.session.pending.status(sessionID, messageID),
     queue: ({ sessionID, messageID }) =>
       server.api.session.inbox
         .update({ sessionID, inboxID: messageID, delivery: "queue" })
@@ -296,6 +334,7 @@ export function createActiveSessionRegion(input: {
     centered: input.screen.centered,
     onResponseSubmit: input.timeline.actions.resume,
     openParent,
+    focusPrompt: () => focusPrompt(),
     setPromptRef: (element: HTMLDivElement) => {
       promptRef = element
     },
@@ -325,46 +364,41 @@ export function createActiveSessionRegion(input: {
 
   return {
     active,
+    focused: () => !!promptRef?.contains(document.activeElement),
     drop: {
       active: () => active()?.drop.active() ?? false,
       input: () => active()?.drop.input(),
     },
     quote: {
+      source: () => prompt.capture().quoteSource,
       // A child session has no composer to quote into, and a shell command takes no quotes.
       available: () => !input.session.data.isChild() && prompt.capture().mode.current() !== "shell",
-      add: (text: string, comment: boolean) => {
+      add: (text: string, source: QuoteSource, anchor?: ComposerQuoteAnchor) => {
         const item = { type: "quote" as const, text, commentID: uuid() }
         prompt.context.add(item)
 
-        if (comment) return prompt.capture().quoteComment.set(contextItemKey(item))
+        if (source.length) prompt.capture().quoteSource.add(contextItemKey(item), source)
+
+        if (anchor) {
+          prompt.capture().quoteSource.pend(contextItemKey(item))
+
+          return prompt.capture().quoteComment.set(contextItemKey(item), anchor)
+        }
+
         focusPrompt()
       },
       focus: focusPrompt,
     },
     actions: {
-      timeline: {
-        get revert() {
-          if (input.session.data.isChild()) return
-
-          return revertMessage
-        },
-        get fork() {
-          if (input.session.data.isChild()) return
-
-          return forkMessage
-        },
-        get pending() {
-          if (input.session.data.isChild()) return
-
-          return pendingSteer
-        },
-        get chooseModel() {
-          if (input.session.data.isChild()) return
-
-          return () => command.trigger("model.choose")
-        },
-        openAttachment,
-      } satisfies SessionUserActions,
+      // Each timeline passes its own session and child flag, which a kept timeline holds while another is routed.
+      timeline: (view: TimelineActionsView) =>
+        createTimelineActions(view, {
+          revert: revertMessage,
+          fork: forkMessage,
+          pending: pendingSteer,
+          chooseModel: () => command.trigger("model.choose"),
+          openAttachment,
+        }),
     },
     requests: state,
   }
@@ -374,6 +408,9 @@ export type ActiveSessionRegionModel = ReturnType<typeof createActiveSessionRegi
 
 export function ActiveSessionComposerRegion(props: {
   session: SessionModel
+  /** The routed session as plugins see it, for their composer pills. */
+  view: Accessor<MountedSession>
+  screen: SessionScreen
   model: SessionComposerController
   suggestionBoundary: () => HTMLElement | undefined
   onReveal: (target: string) => void
@@ -410,12 +447,15 @@ export function ActiveSessionComposerRegion(props: {
       .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
   )
 
+  const alignment = useComposerLaneAlignment()
   const todos = createMemo(() => sessionTodos(props.session.history.messages(), props.session.data.revertMessageID()))
   // Like the old dock: the plan shows while the turn runs and still has work left, so stale todos never linger.
+
   const todosVisible = () =>
     todoEnabled() && props.session.data.working() && todos().length > 0 && !todos().every(todoFinished)
   // Matches the server: the highest-priority document that sets `experimental` decides. Migrated V1 sessions keep their
   // old `todowrite` calls, so without this check their last plan would come back.
+
   const todoEnabled = () =>
     data.location.config
       .list({ directory: location().directory })
@@ -429,7 +469,7 @@ export function ActiveSessionComposerRegion(props: {
 
     if (item.sessionID) return openRoute(current, item.sessionID)
 
-    // Shells and starting subagent calls live in this timeline.
+    // A starting subagent call has no session yet, so it lives in this timeline.
     props.onReveal(item.target)
   }
 
@@ -438,18 +478,46 @@ export function ActiveSessionComposerRegion(props: {
       ? server.api.session.interrupt({ sessionID: item.sessionID })
       : server.api.shell.remove({
           id: item.target,
-          location: { directory: data.shell.get(item.target)?.location.directory },
+          location: { directory: data.shell.get(item.target)?.location.directory ?? location().directory },
         })
 
-    void request.catch((error) =>
-      showToast({
-        title: language.t("common.requestFailed"),
-        description: errorMessage(error, language.t("common.requestFailed")),
-      }),
+    return request.then(
+      () => true,
+      (error) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: errorMessage(error, language.t("common.requestFailed")),
+        })
+
+        return false
+      },
     )
   }
 
+  const shell = {
+    get directory() {
+      return location().directory
+    },
+    output: (input: ShellOutputInput) => server.api.shell.output(input),
+    ended: (id: string) =>
+      server.api.shell.get({ id, location: { directory: location().directory } }).then(
+        (response) => ({
+          status: response.data.status === "running" ? ("killed" as const) : response.data.status,
+          exit: response.data.exit,
+          completed: response.data.time.completed,
+        }),
+        () => undefined,
+      ),
+  }
+
   const providers = useProviders(() => props.session.data.info()?.location.directory)
+
+  const modelLabels = createMemo(() =>
+    composerModelLabels(
+      providers.all(),
+      providers.connected().map((provider) => provider.id),
+    ),
+  )
 
   const subagentModel = () => {
     const ref =
@@ -457,11 +525,17 @@ export function ActiveSessionComposerRegion(props: {
       props.session.history.messages().findLast((message) => message.type === "assistant")?.model
 
     if (!ref) return
-    const catalog = providers.all()
+    const label = modelLabels().get(composerModelLabelKey(ref.providerID, ref.id))
 
     return {
-      provider: composerProviderName(ref.providerID, catalog),
-      name: catalog.get(ref.providerID)?.models[ref.id]?.name.replace("(latest)", "").trim() ?? ref.id,
+      provider: label
+        ? label.provider
+        : composerProviderName(
+            ref.providerID,
+            providers.all(),
+            providers.connected().map((provider) => provider.id),
+          ),
+      name: label?.model ?? ref.id,
       variant: ref.variant,
     }
   }
@@ -492,12 +566,24 @@ export function ActiveSessionComposerRegion(props: {
       above={
         <Show when={!missing() && !props.session.data.isChild()}>
           <SessionComposerLane>
-            <SessionActivityChips subagents={subagents()} shells={shells()} onOpen={open} onStop={stop} />
+            <SessionActivityChips
+              subagents={subagents()}
+              shells={shells()}
+              shell={shell}
+              onOpen={open}
+              onStop={stop}
+              onEmpty={props.model.region.focusPrompt}
+            />
             <Show when={todosVisible()}>
               <SessionTodoPill todos={todos()} />
             </Show>
+            <SessionPluginPills session={props.view()} screen={props.screen} alignment={alignment} />
           </SessionComposerLane>
           <SessionQueuePanel queue={props.model.queue} hidden={props.model.region.state.blocked()} />
+          <SessionGoLimitTray
+            sessionID={props.session.identity.params.id}
+            selection={() => props.model.composer.model.selection}
+          />
         </Show>
       }
       composer={

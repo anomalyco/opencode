@@ -1,7 +1,7 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema, Semaphore } from "effect"
-import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http"
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ConfigProvider } from "@opencode/schema/config/provider"
-import { MaxTokensField } from "@opencode/schema/model-compatibility"
+import { MaxTokensField, MediaInput } from "@opencode/schema/model-compatibility"
 import { ModelsDev } from "@opencode/schema/models-dev"
 import { Money } from "@opencode/schema/money"
 import { App } from "./app.js"
@@ -76,6 +76,7 @@ const SourceApi = Schema.Struct({
     Schema.Struct({
       reasoning_field: Schema.optional(Schema.String),
       max_tokens_field: Schema.optional(Schema.String),
+      media_input: Schema.optional(Schema.String),
     }),
   ),
 })
@@ -134,6 +135,7 @@ const decodeMode = Schema.decodeUnknownOption(SourceMode)
 const decodeProvider = Schema.decodeUnknownOption(SourceProvider)
 const decodeContext = Schema.decodeUnknownOption(ContextCondition)
 const decodeMaxTokensField = Schema.decodeUnknownOption(MaxTokensField)
+const decodeMediaInput = Schema.decodeUnknownOption(MediaInput)
 const decodeStatus = Schema.decodeUnknownOption(Schema.Literals(["alpha", "beta", "deprecated"]))
 
 export type Snapshot = {
@@ -153,10 +155,16 @@ type Route = {
 const BUILDS_OWN_URL = new Set([
   "@opencode/ai/providers/amazon-bedrock",
   "@opencode/ai/providers/azure/chat",
+  "@opencode/ai/providers/azure/images",
+  "@opencode/ai/providers/azure/messages",
   "@opencode/ai/providers/azure/responses",
   "@opencode/ai/providers/cloudflare-ai-gateway",
+  "@opencode/ai/providers/cloudflare-ai-gateway/decisions",
   "@opencode/ai/providers/cloudflare-workers-ai",
+  "@opencode/ai/providers/cloudflare-workers-ai/decisions",
+  "@opencode/ai/providers/cloudflare-workers-ai/images",
   "@opencode/ai/providers/google-vertex/gemini",
+  "@opencode/ai/providers/google-vertex/images",
   "@opencode/ai/providers/google-vertex/messages",
   "aisdk:@jerome-benoit/sap-ai-provider-v2",
   "aisdk:watsonx-ai-provider",
@@ -164,6 +172,7 @@ const BUILDS_OWN_URL = new Set([
 
 const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>) {
   const failed: { readonly model: string; readonly issue: unknown }[] = []
+  const unknown = new Set<string>()
   const snapshots = Object.values(isV1(catalog) ? toV2(catalog) : catalog).flatMap((value) => {
     const item = Option.getOrUndefined(decodeProvider(value))
     if (!item) return []
@@ -173,7 +182,7 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>)
       if (Result.isFailure(decoded)) failed.push({ model: `${item.id}/${key}`, issue: decoded.failure })
       const model = Result.isSuccess(decoded) ? decoded.success : undefined
       // The fetch already asks for these types, but custom files and v1 catalogs may hold any type.
-      const target = model && TYPES.includes(model.type) && route(providerID, model)
+      const target = model && TYPES.includes(model.type) && route(providerID, model, unknown)
       return model && target ? [{ model, route: target }] : []
     })
     if (sources.length === 0) return []
@@ -218,6 +227,10 @@ const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>)
       models: failed.slice(0, 10).map((item) => item.model),
       issue: String(failed[0]?.issue),
     })
+  if (unknown.size > 0)
+    yield* Effect.logDebug("Skipped models.dev APIs with entrypoints this build doesn't have", {
+      entrypoints: [...unknown],
+    })
   return snapshots as readonly Snapshot[]
 })
 
@@ -227,17 +240,21 @@ function entries<A>(record: Record<string, unknown> | undefined, decode: (input:
   )
 }
 
-function route(providerID: Provider.ID, model: SourceModel): Route | undefined {
-  // A chat model uses its first API with a package. Other types (image, decision…) only run through
-  // opencode's own packages, so they use their first API that has one, and are skipped without one.
-  const [protocol, api] =
-    entries(model.api, decodeApi).find(([, entry]) =>
-      model.type === "chat" ? entry.sdk?.opencodeai || entry.sdk?.aisdk : entry.sdk?.opencodeai,
-    ) ?? []
+function route(providerID: Provider.ID, model: SourceModel, unknown: Set<string>): Route | undefined {
+  // A chat model uses its first API with a package. Other types (image, decision…) only run through the
+  // opencode entrypoint for their type (`providers/<P>/images`) that this build can load, and are skipped
+  // without one: a chat entrypoint loads a chat model, which can't generate images or decisions.
+  const apis = entries(model.api, decodeApi).map(
+    ([protocol, entry]) => [protocol, entry, loadable(entry.sdk?.opencodeai, unknown)] as const,
+  )
+  const [protocol, api, opencodeai] =
+    (model.type === "chat"
+      ? apis.find(([, entry, opencodeai]) => opencodeai || entry.sdk?.aisdk)
+      : apis.find(([, , opencodeai]) => opencodeai?.endsWith(`/${model.type}s`))) ?? []
   if (!protocol || !api) return undefined
   const aisdk = api.sdk?.aisdk
   const packageName =
-    api.sdk?.opencodeai ??
+    opencodeai ??
     (aisdk &&
       (AISDKNative.native(aisdk, {
         providerID,
@@ -247,9 +264,11 @@ function route(providerID: Provider.ID, model: SourceModel): Route | undefined {
         Provider.aisdk(aisdk)))
   if (!packageName) return undefined
   const maxTokensField = Option.getOrUndefined(decodeMaxTokensField(api.compatibility?.max_tokens_field))
+  const mediaInput = Option.getOrUndefined(decodeMediaInput(api.compatibility?.media_input))
   const compatibility = {
     ...(api.compatibility?.reasoning_field ? { reasoningField: api.compatibility.reasoning_field } : {}),
     ...(maxTokensField ? { maxTokensField } : {}),
+    ...(mediaInput ? { mediaInput } : {}),
   }
   return {
     package: packageName,
@@ -257,6 +276,14 @@ function route(providerID: Provider.ID, model: SourceModel): Route | undefined {
     ...(BUILDS_OWN_URL.has(packageName) || !api.base_url ? {} : { baseURL: api.base_url }),
     ...(Object.keys(compatibility).length > 0 ? { compatibility } : {}),
   }
+}
+
+// Newer catalogs may name @opencode/ai entrypoints that older builds don't ship, so those count as no package.
+function loadable(opencodeai: string | undefined, unknown: Set<string>) {
+  const name = Provider.packageName(opencodeai)
+  if (!name?.startsWith("@opencode/ai/") || Provider.builtinPackages.has(name)) return opencodeai
+  unknown.add(name)
+  return undefined
 }
 
 function mostCommon<T>(values: readonly T[]) {
@@ -508,14 +535,12 @@ export const layer = (options?: Options) =>
       const bus = yield* Bus.Service
       const app = yield* App.Metadata
       const kv = yield* KV.Service
-      const http = HttpClient.filterStatusOk(
-        (yield* HttpClient.HttpClient).pipe(
-          HttpClient.retryTransient({
-            retryOn: "errors-and-responses",
-            times: 2,
-            schedule: Schedule.exponential(200).pipe(Schedule.jittered),
-          }),
-        ),
+      const http = (yield* HttpClient.HttpClient).pipe(
+        HttpClient.retryTransient({
+          retryOn: "errors-and-responses",
+          times: 2,
+          schedule: Schedule.exponential(200).pipe(Schedule.jittered),
+        }),
       )
 
       const source = options?.url || defaultSource
@@ -548,7 +573,13 @@ export const layer = (options?: Options) =>
           HttpClientRequest.setHeader("User-Agent", userAgent),
           HttpClientRequest.setHeaders(etag ? { "If-None-Match": etag } : {}),
           http.execute,
-          Effect.flatMap((res) => Effect.map(res.text, (text) => ({ text, etag: res.headers.etag }))),
+          Effect.flatMap((res) =>
+            etag && res.status === 304
+              ? Effect.undefined
+              : HttpClientResponse.filterStatusOk(res).pipe(
+                  Effect.flatMap((ok) => Effect.map(ok.text, (text) => ({ text, etag: ok.headers.etag }))),
+                ),
+          ),
           Effect.timeout("10 seconds"),
         )
 
@@ -598,6 +629,7 @@ export const layer = (options?: Options) =>
 
       const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
         const response = yield* fetchApi()
+        if (!response) return {}
         const catalog = yield* decodeCatalog(response.text)
         yield* writeCache(response.text, response.etag)
         return catalog
@@ -633,12 +665,7 @@ export const layer = (options?: Options) =>
                 Schema.decodeUnknownOption(CacheMeta)((yield* kv.get(metaKey)) ?? (yield* kv.get(key))),
               )
               if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
-              const response = yield* fetchApi(force ? undefined : stored?.etag).pipe(
-                Effect.catchIf(
-                  (error) => HttpClientError.isHttpClientError(error) && error.response?.status === 304,
-                  () => Effect.undefined,
-                ),
-              )
+              const response = yield* fetchApi(force ? undefined : stored?.etag)
               const digest = response && bodyDigest(response.text)
               // models.dev rarely changes between polls; skip invalidation and
               // the Refreshed event for a byte-identical body so downstream

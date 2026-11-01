@@ -5,9 +5,13 @@ import { ServerConnection } from "../../services/server-connection"
 
 export default Runtime.handler(Commands.commands.run, (input) =>
   Effect.gen(function* () {
-    const { runNonInteractive } = yield* Effect.promise(() => import("../../run/run"))
+    const { reportRunError, runNonInteractive } = yield* Effect.promise(() => import("../../run/run"))
     const separator = process.argv.indexOf("--", 2)
-    const server = yield* ServerConnection.resolve()
+    const server = yield* ServerConnection.resolve().pipe(
+      Effect.tapError((error) => Effect.logError("run could not resolve its server", { cause: error })),
+      Effect.catch((error) => Effect.sync(() => reportRunError(input, error.message))),
+    )
+    if (!server) return
     yield* Effect.promise(() =>
       runNonInteractive({
         server,
@@ -15,6 +19,7 @@ export default Runtime.handler(Commands.commands.run, (input) =>
         continue: input.continue,
         session: Option.getOrUndefined(input.session),
         fork: input.fork,
+        worktree: Option.getOrUndefined(input.worktree),
         model: Option.getOrUndefined(input.model),
         agent: Option.getOrUndefined(input.agent),
         format: input.format,

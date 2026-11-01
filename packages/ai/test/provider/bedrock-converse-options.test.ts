@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM } from "../../src/effect.js"
+import { ai } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
@@ -11,7 +11,7 @@ const bedrock = (id: string, settings: Omit<Parameters<typeof AmazonBedrock.mode
   AmazonBedrock.model(id, { baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer", ...settings })
 
 const request = (model: ReturnType<typeof bedrock>) =>
-  LLM.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 64 } })
+  ai.request({ model, prompt: "Say hello.", cache: "none", generation: { maxTokens: 64 } })
 
 const body = (model: ReturnType<typeof bedrock>) =>
   compileRequest(request(model)).pipe(Effect.map((prepared) => prepared.body))
