@@ -14,7 +14,7 @@ import { createScrollPersistence, type SessionScroll } from "./scroll"
 import type { ClosedSideTab } from "@/runtime/plugin/closed-tabs"
 import { SessionStateKey } from "@/runtime/server/scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
-import { requireServerKey } from "@/shell/routes/session"
+import { parseServerKey } from "@/shell/routes/session"
 import {
   closeSessionTab,
   moveSessionTab,
@@ -81,10 +81,13 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   }
 
   if (parts[0] === "server" && parts[2] === "session" && parts[3]) {
+    const server = parseServerKey(parts[1])
+    if (!server) return { type: "home" }
+
     return {
       type: "session",
       sessionId: parts[3],
-      server: requireServerKey(parts[1]),
+      server,
     }
   }
 
