@@ -6,6 +6,13 @@ import { Effect, FileSystem, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/http"
 import { NetAddress } from "effect/net"
 import { OPENCODE_VERSION } from "../version"
+import { normalizeLoopback } from "./service-config"
+
+function formatClientAddress(address: NetAddress.SocketAddress) {
+  if (!NetAddress.isInetAddress(address)) return HttpServer.formatAddress(address)
+  const ip = normalizeLoopback(NetAddress.formatIp(address.address))
+  return `http://${ip.includes(":") ? `[${ip}]` : ip}:${address.port}`
+}
 
 const infoJson = Schema.fromJsonString(Service.Info)
 const encodeInfo = Schema.encodeEffect(infoJson)
@@ -24,7 +31,7 @@ export const register = Effect.fnUntraced(function* (options: {
   const info = {
     id: options.id,
     version: OPENCODE_VERSION,
-    url: HttpServer.formatAddress(options.address),
+    url: formatClientAddress(options.address),
     pid: process.pid,
     password: options.password,
   }
