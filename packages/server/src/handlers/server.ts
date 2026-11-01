@@ -4,6 +4,7 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { UnauthorizedError } from "@opencode/protocol/errors"
+import { API_VERSION } from "@opencode/protocol/groups/server"
 import { Api } from "../api"
 import { ServerAuth } from "../auth"
 import { ServerInfo } from "../server-info"
@@ -20,6 +21,7 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
           const info = yield* ServerInfo.Service
           return {
             version: info.app.version ?? "unknown",
+            apiVersion: API_VERSION,
             pid: process.pid ?? 0,
             hostname: hostname() || undefined,
             urls: info.urls(),
