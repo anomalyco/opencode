@@ -1,5 +1,5 @@
 import { Clock, Effect, Semaphore } from "effect"
-import { mkdir, open } from "node:fs/promises"
+import { mkdir, open, rm, stat } from "node:fs/promises"
 import path from "node:path"
 
 // One process-wide permit: the signal listener and the HTTP endpoint share it, so concurrent
@@ -10,7 +10,7 @@ const lock = Semaphore.makeUnsafe(1)
  * Writes a V8 heap snapshot of this process into `directory` and returns once the file is complete, with the
  * process's memory just before the snapshot: the snapshot holds only the garbage-collected heap, and writing it
  * raises the process's memory. Blocks the event loop while the heap serializes. The file can contain secrets, so it
- * is created owner-only before the runtime writes into it.
+ * is created owner-only before the runtime writes into it. Fails, removing the file, when the runtime writes nothing.
  */
 export const write = Effect.fn("HeapSnapshot.write")(
   function* (directory: string) {
@@ -25,7 +25,16 @@ export const write = Effect.fn("HeapSnapshot.write")(
     const memory = yield* Effect.sync(() => process.memoryUsage())
     yield* Effect.logInfo("writing heap snapshot", { path: file, rss: memory.rss, heapUsed: memory.heapUsed })
     yield* Effect.try(() => v8.writeHeapSnapshot(file))
-    yield* Effect.logInfo("heap snapshot written", { path: file })
+    // Bun writes an empty file instead of throwing when the V8-format output would exceed about 2 GiB.
+    const bytes = yield* Effect.tryPromise(async () => {
+      const size = (await stat(file)).size
+      if (size > 0) return size
+      await rm(file, { force: true })
+      throw new Error(
+        `Bun cannot write a V8 heap snapshot over about 2 GiB, and this heap is too large (${Math.round(memory.heapUsed / 1024 ** 2)} MiB used)`,
+      )
+    })
+    yield* Effect.logInfo("heap snapshot written", { path: file, bytes })
     return {
       path: file,
       pid: process.pid,
