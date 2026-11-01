@@ -4,7 +4,8 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Document, Info, type Entry } from "@opencode/schema/config"
 import { ConfigAgent } from "@opencode/schema/config/agent"
 import path from "path"
-import { Effect, Option, PubSub, Schema, Stream } from "effect"
+import { Effect, FiberMap, Option, PubSub, Schema, Stream } from "effect"
+import { Watcher } from "../../filesystem/watcher.js"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { ConfigMarkdown } from "../markdown.js"
@@ -38,19 +39,81 @@ export const Plugin = define({
     const config = yield* Config.Service
     const fs = yield* FSUtil.Service
     const global = yield* Global.Service
+    const watcher = yield* Effect.serviceOption(Watcher.Service)
+    const watches = yield* FiberMap.make<string>()
+
+    const syncExternalWatches = Effect.fnUntraced(function* (
+      entries: Entry[],
+      discoveredFiles: { directory: string; filepath: string }[],
+    ) {
+      const currentDirs = new Set<string>()
+      const currentFiles = new Set<string>()
+
+      for (const entry of entries) {
+        if (entry.type !== "directory") continue
+        for (const name of sourceDirectories) {
+          const sourcePath = path.join(entry.path, name)
+          const resolved = yield* fs.realPath(sourcePath).pipe(Effect.orElseSucceed(() => undefined))
+          if (resolved && !FSUtil.contains(entry.path, resolved)) {
+            currentDirs.add(resolved)
+          }
+        }
+      }
+
+      for (const file of discoveredFiles) {
+        const resolved = yield* fs.realPath(file.filepath).pipe(Effect.orElseSucceed(() => undefined))
+        if (
+          resolved &&
+          !FSUtil.contains(file.directory, resolved) &&
+          !Array.from(currentDirs).some((dir) => FSUtil.contains(dir, resolved))
+        ) {
+          currentFiles.add(resolved)
+        }
+      }
+
+      if (Option.isSome(watcher)) {
+        const w = watcher.value
+        for (const [key] of Array.from(watches)) {
+          if (!currentDirs.has(key) && !currentFiles.has(key)) {
+            yield* FiberMap.remove(watches, key)
+          }
+        }
+        for (const dir of currentDirs) {
+          const updates = yield* w.subscribe({ path: dir, type: "directory", ignore: FSUtil.ignoreGlobs })
+          yield* FiberMap.run(watches, dir, updates.pipe(Stream.runForEach(notify)), {
+            onlyIfMissing: true,
+            startImmediately: true,
+          })
+        }
+        for (const file of currentFiles) {
+          const updates = yield* w.subscribe({ path: file, type: "file" })
+          yield* FiberMap.run(watches, file, updates.pipe(Stream.runForEach(notify)), {
+            onlyIfMissing: true,
+            startImmediately: true,
+          })
+        }
+      }
+    })
     const loadEntry = Effect.fnUntraced(function* (entry: Entry) {
-      if (entry.type === "document") return [entry]
-      if (entry.type !== "directory") return []
+      if (entry.type === "document") return { documents: [entry], files: [] as { directory: string; filepath: string }[] }
+      if (entry.type !== "directory") return { documents: [] as Document[], files: [] as { directory: string; filepath: string }[] }
       const files = yield* discover(fs, entry.path)
-      return yield* Effect.forEach(files, (file) =>
+      const documents = yield* Effect.forEach(files, (file) =>
         fs.readFileStringSafe(file.filepath).pipe(
           Effect.flatMap((content) => (content ? decode(file, content) : Effect.succeed(undefined))),
           Effect.orElseSucceed(() => undefined),
         ),
-      ).pipe(Effect.map((documents) => documents.filter((document): document is Document => document !== undefined)))
+      ).pipe(Effect.map((docs) => docs.filter((document): document is Document => document !== undefined)))
+      return { documents, files }
     })
     const load = Effect.fn("ConfigAgentPlugin.load")(function* () {
-      return yield* Effect.forEach(yield* config.entries(), loadEntry).pipe(Effect.map((documents) => documents.flat()))
+      const entries = yield* config.entries()
+      const results = yield* Effect.forEach(entries, loadEntry)
+      yield* syncExternalWatches(
+        entries,
+        results.flatMap((item) => item.files),
+      )
+      return results.flatMap((item) => item.documents)
     })
     const loaded = { documents: [] as Document[] }
     const reload = load().pipe(
