@@ -2,7 +2,7 @@ export * as Project from "./project.js"
 
 import { Cache, Context, Duration, Effect, Layer, Schedule, Schema, Scope } from "effect"
 import { ChildProcess } from "effect/process"
-import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
@@ -15,6 +15,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Hash } from "@opencode/util/hash"
 import { ProjectSchema } from "./project/schema.js"
 import { ProjectTable, upsertProject } from "./project/sql.js"
+import { storedAbsolutePath } from "./database/path.js"
 import { ProjectIcon } from "./project/icon.js"
 import { WorktreeTable } from "./worktree/sql.js"
 
@@ -248,10 +249,31 @@ const layer = Layer.effect(
     })
 
     const list = Effect.fn("Project.list")(function* (input?: ListInput) {
+      // Decoding a stored worktree that no longer parses as an absolute path
+      // (e.g. a Windows path left over after a cross-OS migration) throws for
+      // the whole result set, so read the raw values first and drop such rows
+      // instead of failing the entire listing.
+      const candidates = yield* db
+        .select({ id: ProjectTable.id, worktree: sql<string>`${ProjectTable.worktree}` })
+        .from(ProjectTable)
+        .where(input?.archived ? undefined : isNull(ProjectTable.time_archived))
+        .orderBy(desc(ProjectTable.time_active), asc(ProjectTable.id))
+        .all()
+        .pipe(Effect.orDie)
+      const invalid = candidates.filter((candidate) => storedAbsolutePath(candidate.worktree) === undefined)
+      yield* Effect.forEach(
+        invalid,
+        (candidate) => Effect.logWarning("Skipped project with invalid stored worktree", { projectID: candidate.id, worktree: candidate.worktree }),
+        { discard: true },
+      )
+      const ids = candidates
+        .filter((candidate) => storedAbsolutePath(candidate.worktree) !== undefined)
+        .map((candidate) => candidate.id)
+      if (ids.length === 0) return []
       const rows = yield* db
         .select()
         .from(ProjectTable)
-        .where(input?.archived ? undefined : isNull(ProjectTable.time_archived))
+        .where(input?.archived ? inArray(ProjectTable.id, ids) : and(inArray(ProjectTable.id, ids), isNull(ProjectTable.time_archived)))
         .orderBy(desc(ProjectTable.time_active), asc(ProjectTable.id))
         .all()
         .pipe(Effect.orDie)
