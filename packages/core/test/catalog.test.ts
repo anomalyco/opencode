@@ -95,6 +95,84 @@ describe("Provider and Model", () => {
     }),
   )
 
+  it.effect("does not republish or rebuild the catalog when a provider reload changes nothing", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const bus = yield* Bus.Service
+      const providerID = Provider.ID.make("test")
+      let name = "Chat"
+      yield* providers.transform((editor) => {
+        editor.update(providerID, () => {})
+        editor.models.update(providerID, Model.ID.make("chat"), (model) => {
+          model.name = name
+        })
+        editor.models.update(providerID, Model.ID.make("image"), (model) => {
+          model.type = "image"
+        })
+      })
+      const all = yield* models.all()
+      const images = yield* models.available(["image"])
+      const first = yield* bus
+        .subscribe([Provider.Event.Updated, Model.Event.Updated])
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+
+      yield* providers.reload()
+      expect(yield* models.all()).toBe(all)
+      expect(required((yield* models.available(["image"]))[0])).toBe(required(images[0]))
+      // Anything published by the reload would arrive before this marker.
+      const marker = yield* bus.publish(Model.Event.Updated, {})
+      expect((yield* Fiber.join(first))[0]?.id).toBe(marker.id)
+
+      const updated = yield* bus
+        .subscribe(Model.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      name = "Renamed"
+      yield* providers.reload()
+      yield* Fiber.join(updated)
+      expect(required(yield* models.get(providerID, Model.ID.make("chat"))).name).toBe("Renamed")
+    }),
+  )
+
+  it.effect("publishes a model reload that only changes a non-chat model", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const bus = yield* Bus.Service
+      const providerID = Provider.ID.make("test")
+      const image = Model.ID.make("image")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, () => {})
+        editor.models.update(providerID, Model.ID.make("chat"), () => {})
+        editor.models.update(providerID, image, (model) => {
+          model.type = "image"
+        })
+      })
+      let name = "Image"
+      yield* models.transform((editor) =>
+        editor.update(providerID, image, (model) => {
+          model.name = name
+        }),
+      )
+      yield* models.all()
+      const first = yield* bus
+        .subscribe(Model.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+
+      yield* models.reload()
+      const marker = yield* bus.publish(Model.Event.Updated, {})
+      expect((yield* Fiber.join(first))[0]?.id).toBe(marker.id)
+
+      const updated = yield* bus
+        .subscribe(Model.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+      name = "Renamed"
+      yield* models.reload()
+      expect((yield* Fiber.join(updated))[0]?.location).toMatchObject({ directory: "test" })
+      expect((yield* models.available(["image"])).map((model) => model.name)).toEqual(["Renamed"])
+    }),
+  )
+
   it.effect("preserves provider identity when updating new and existing providers", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
