@@ -4,6 +4,7 @@ import { Effect, Option, Schema } from "effect"
 import type { Model } from "@opencode/schema/model"
 import { SessionLegacy } from "@opencode/schema/session-legacy"
 import { Database } from "../database/database.js"
+import { DatabaseBatch } from "../database/batch.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import type { SessionSchema } from "./schema.js"
@@ -22,7 +23,6 @@ const decodeStoredUser = Schema.decodeUnknownEffect(SessionStored.User)
 const decodeMedia = Schema.decodeUnknownEffect(SessionMessage.MediaInfo)
 const decodePartSync = Schema.decodeUnknownSync(SessionMessage.AssistantContent)
 export const encodePart = Schema.encodeSync(SessionMessage.AssistantContent)
-const PartQueryBatchSize = 500
 
 /**
  * Which completed compactions bound a history read. Local summaries always do. Native
@@ -92,7 +92,9 @@ export const hasInlineContent = (data: typeof SessionMessageTable.$inferSelect.d
 
 /**
  * Puts each assistant row's `session_part` rows into its `data.content`, in ordinal order. Rows without parts keep
- * their inline content, so legacy rows read unchanged. Runs before blob hydration so media in parts restores too.
+ * their inline content, so legacy rows read unchanged. A row an older build wrote inline content to after its parts
+ * were split reads as the parts followed by that content, the order the projector moves them in. Runs before blob
+ * hydration so media in parts restores too.
  */
 export const withParts = Effect.fnUntraced(function* (
   db: DatabaseService,
@@ -101,11 +103,11 @@ export const withParts = Effect.fnUntraced(function* (
   const assistantIDs = rows.flatMap((row) => (row.type === "assistant" ? [row.id] : []))
   if (assistantIDs.length === 0) return rows
   const partsByMessage = new Map<SessionMessage.ID, Array<(typeof SessionPartTable.$inferSelect)["data"]>>()
-  for (let index = 0; index < assistantIDs.length; index += PartQueryBatchSize) {
+  for (const ids of DatabaseBatch.batches(assistantIDs, 1)) {
     const partRows = yield* db
       .select()
       .from(SessionPartTable)
-      .where(inArray(SessionPartTable.message_id, assistantIDs.slice(index, index + PartQueryBatchSize)))
+      .where(inArray(SessionPartTable.message_id, ids))
       .orderBy(asc(SessionPartTable.message_id), asc(SessionPartTable.ordinal))
       .all()
       .pipe(Effect.orDie)
@@ -118,7 +120,8 @@ export const withParts = Effect.fnUntraced(function* (
   if (partsByMessage.size === 0) return rows
   return rows.map((row) => {
     const parts = partsByMessage.get(row.id)
-    return parts && "content" in row.data ? { ...row, data: { ...row.data, content: parts } } : row
+    if (!parts || !("content" in row.data)) return row
+    return { ...row, data: { ...row.data, content: [...parts, ...row.data.content] } }
   })
 })
 
@@ -157,6 +160,15 @@ export const decodeMessageRows = Effect.fnUntraced(function* (
   return yield* Effect.forEach(yield* SessionBlob.hydrate(db, yield* withParts(db, rows)), decodeMessageRow, {
     concurrency: 1,
   })
+})
+
+/** {@link decodeMessageRows} for one row. */
+export const loadMessageRow = Effect.fnUntraced(function* (
+  db: DatabaseService,
+  row: typeof SessionMessageTable.$inferSelect,
+) {
+  const [hydrated = row] = yield* SessionBlob.hydrate(db, yield* withParts(db, [row]))
+  return yield* decodeMessageRow(hydrated)
 })
 
 /** Decodes rows for clients that fetch media themselves, so files stored in `blob` stay `media:` refs. */

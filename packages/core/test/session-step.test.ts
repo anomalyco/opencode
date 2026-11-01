@@ -13,6 +13,7 @@ import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionHistory } from "@opencode/core/session/history"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStep } from "@opencode/core/session/runner/step"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
@@ -138,6 +139,9 @@ for (const fixture of [
         finish: fixture.finish,
         tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 2 } },
         snapshot: { start, end, files },
+        content: [],
+      })
+      expect(yield* SessionHistory.loadMessageRow(db, message!)).toMatchObject({
         content: [{ type: "tool", state: { status: fixture.toolChoice === "none" ? "error" : "completed" } }],
       })
       expect(message?.data).toHaveProperty("cost", expect.closeTo(0.0000233, 10))
