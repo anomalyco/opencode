@@ -388,12 +388,13 @@ export function editorSelectionKey(selection: EditorSelection | undefined) {
 }
 
 function openEditorSocket(connection: EditorConnection, WebSocketImpl: typeof WebSocket) {
-  if (!connection.authToken) return new WebSocketImpl(connection.url)
+  if (!connection.authToken) return new WebSocketImpl(connection.url, ["mcp"])
 
   return new WebSocketImpl(connection.url, {
     headers: {
       "x-claude-code-ide-authorization": connection.authToken,
     },
+    protocols: ["mcp"],
   } as any)
 }
 
