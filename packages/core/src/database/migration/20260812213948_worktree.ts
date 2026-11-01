@@ -26,7 +26,10 @@ const migration: DatabaseMigration.Migration = {
             WHEN \`type\` = 'git_worktree' THEN 'git'
           END,
           \`time_created\`
-        FROM \`project_directory\`;
+        FROM \`project_directory\`
+        WHERE EXISTS (
+          SELECT 1 FROM \`project\` WHERE \`project\`.\`id\` = \`project_directory\`.\`project_id\`
+        );
       `)
     })
   },
