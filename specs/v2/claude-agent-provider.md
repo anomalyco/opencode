@@ -69,6 +69,7 @@ We also clear three variables a user might have set in their shell. `CLAUDE_CODE
 - Thinking with summaries, so opencode has reasoning text to show
 - Messages sent exactly as given. opencode already expands `/commands` and adds `@file` contents before sending, so Claude Code does not process them again. It also skips the context Claude Code normally adds at the start of each turn, such as nested CLAUDE.md files, skill lists and reminders. This needs Claude Code 2.1.248 or later.
 - A higher limit on tool output, so opencode's own truncation applies instead
+- `opencode` as Claude Code's entrypoint label. With the SDK's default `sdk-ts`, the same tokens use the 5-hour plan limit about 1.8x faster ([anthropics/claude-code#97074](https://github.com/anthropics/claude-code/issues/97074)). It replaces any label inherited from the shell, such as `sdk-cli` when opencode starts inside Claude Code.
 - Saved Claude sessions for chats, but not for side calls such as titles
 
 ### User Config
