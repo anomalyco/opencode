@@ -17,7 +17,7 @@ import {
   type ScrollbackWriter,
 } from "@opentui/core"
 import { isFallbackTitle } from "@opencode/util/session-title-fallback"
-import { setTerminalTitle } from "../util/renderer"
+import { kittyImageTransport, setTerminalTitle } from "../util/renderer"
 import { monoSnapshot } from "./mono"
 import { entrySplash, exitSplash } from "./splash"
 import { resolveRunTheme } from "./theme"
@@ -159,6 +159,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   const miniSettings = resolveMiniSettings(tuiConfig)
   const mono = miniSettings.mono
   const renderer = await createCliRenderer({
+    kittyImageTransport,
     stdin: input.host.terminal.stdin,
     targetFps: 30,
     maxFps: 60,

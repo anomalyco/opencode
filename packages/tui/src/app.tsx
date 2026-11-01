@@ -104,7 +104,7 @@ import { CommandPaletteDialog } from "./component/command-palette"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/keymap"
 
 import { DialogVariant } from "./component/dialog-variant"
-import { destroyRenderer, setTerminalTitle } from "./util/renderer"
+import { destroyRenderer, kittyImageTransport, setTerminalTitle } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
@@ -250,6 +250,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
       const options = {
+        kittyImageTransport,
         externalOutputMode: "passthrough",
         targetFps: 60,
         gatherStats: false,
@@ -264,6 +265,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       } satisfies CliRendererConfig
       const renderer = yield* Effect.gen(function* () {
         if (handoff) {
+          handoff.renderer.kittyImageTransport = options.kittyImageTransport
           handoff.renderer.useMouse = options.useMouse
           return yield* Effect.acquireRelease(Effect.succeed(handoff.renderer), (renderer) =>
             Effect.promise(async () => {

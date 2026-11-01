@@ -1,5 +1,8 @@
 import { RendererControlState, type CliRenderer } from "@opentui/core"
 
+// Large JPEG previews can exceed OpenTUI's 8 MiB frame budget before its downscaling threshold applies.
+export const kittyImageTransport = "zlib"
+
 type TitleRenderer = Pick<CliRenderer, "isDestroyed" | "controlState" | "setTerminalTitle">
 
 // OpenTUI rejects terminal control from suspend() until resume() completes, e.g. while $EDITOR runs.
