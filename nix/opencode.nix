@@ -67,6 +67,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
     # OpenTUI dlopens Wayland for clipboard images.
     wrapProgram $out/bin/opencode \
+      --set OPENCODE_DISABLE_AUTOUPDATE 1 \
       --prefix PATH : ${
         lib.makeBinPath (
           [
