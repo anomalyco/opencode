@@ -5,6 +5,7 @@ import { Array, Cause, Clock, Context, Deferred, Effect, Exit, Layer, Schema, Sc
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Database } from "./database/database.js"
 import { JobTable } from "./job/sql.js"
+import { SessionInbox } from "./session/inbox.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 
@@ -95,7 +96,7 @@ type BlockWait = {
 
 type BlockStart =
   | { type: "missing" }
-  | { type: "finished"; info: Info; generation: Scope.Closeable }
+  | { type: "finished"; info: Info }
   | { type: "backgrounded"; info: Info }
   | { type: "wait"; wait: BlockWait }
 
@@ -208,18 +209,20 @@ export const make = Effect.gen(function* () {
     scope: yield* Scope.Scope,
   }
 
+  const consumeJob = (jobs: Map<string, Active>, id: string, generation: Scope.Closeable) => {
+    const job = jobs.get(id)
+    if (!job || job.scope !== generation || job.info.status === "running" || job.consumed) return jobs
+    const next = new Map(jobs)
+    // Order history by first consumption, not by start time or subsequent reads.
+    next.delete(id)
+    next.set(id, { ...job, consumed: true })
+    const completed = [...next].filter(([, job]) => job.consumed && !job.info.notificationID)
+    for (const [id] of completed.slice(0, -COMPLETED_LIMIT)) next.delete(id)
+    return next
+  }
+
   const consume = (id: string, generation: Scope.Closeable) =>
-    SynchronizedRef.update(state.jobs, (jobs) => {
-      const job = jobs.get(id)
-      if (!job || job.scope !== generation || job.info.status === "running" || job.consumed) return jobs
-      const next = new Map(jobs)
-      // Order history by first consumption, not by start time or subsequent reads.
-      next.delete(id)
-      next.set(id, { ...job, consumed: true })
-      const completed = [...next].filter(([, job]) => job.consumed && !job.info.notificationID)
-      for (const [id] of completed.slice(0, -COMPLETED_LIMIT)) next.delete(id)
-      return next
-    })
+    SynchronizedRef.update(state.jobs, (jobs) => consumeJob(jobs, id, generation))
 
   const persistBackground = Effect.fnUntraced(function* (job: Active) {
     if (!job.recovery || !job.info.notificationID) return
@@ -377,8 +380,9 @@ export const make = Effect.gen(function* () {
     const result = yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [BlockStart, Map<string, Active>] => {
       const job = jobs.get(input.id)
       if (!job) return [{ type: "missing" }, jobs]
-      if (job.info.status !== "running") return [{ type: "finished", info: snapshot(job), generation: job.scope }, jobs]
       if (job.isBackgrounded) return [{ type: "backgrounded", info: snapshot(job) }, jobs]
+      if (job.info.status !== "running")
+        return [{ type: "finished", info: snapshot(job) }, consumeJob(jobs, input.id, job.scope)]
       return [
         { type: "wait", wait: { done: job.done, backgrounded: job.backgrounded, generation: job.scope } },
         new Map(jobs).set(input.id, {
@@ -388,18 +392,24 @@ export const make = Effect.gen(function* () {
       ]
     })
     if (result.type === "missing") return undefined
-    if (result.type === "finished") {
-      yield* consume(input.id, result.generation)
-      return { type: "finished", info: result.info }
-    }
+    if (result.type === "finished") return { type: "finished", info: result.info }
     if (result.type === "backgrounded") return { type: "backgrounded", info: result.info }
-    return yield* Effect.raceFirst(
-      Deferred.await(result.wait.done).pipe(Effect.map((info) => ({ type: "finished" as const, info }))),
-      Deferred.await(result.wait.backgrounded).pipe(Effect.map((info) => ({ type: "backgrounded" as const, info }))),
-    ).pipe(
-      Effect.tap((outcome) => (outcome.type === "finished" ? consume(input.id, result.wait.generation) : Effect.void)),
-      Effect.ensuring(removeBlock(input)),
-    )
+    return yield* Effect.gen(function* () {
+      // A steer that landed while tool-call JSON was streaming or the job was starting yields on arrival here.
+      if (yield* SessionInbox.hasUserSteer(db, input.sessionID)) yield* backgroundAll({ sessionID: input.sessionID })
+      const settled = yield* Effect.raceFirst(
+        Deferred.await(result.wait.done),
+        Deferred.await(result.wait.backgrounded),
+      )
+      // Decide foreground vs background ownership under the registry lock: once isBackgrounded is committed,
+      // block returns backgrounded even if completion also resolved, so the background observer owns delivery.
+      return yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [BlockResult, Map<string, Active>] => {
+        const job = jobs.get(input.id)
+        if (!job || job.scope !== result.wait.generation) return [{ type: "finished", info: settled }, jobs]
+        if (job.isBackgrounded) return [{ type: "backgrounded", info: snapshot(job) }, jobs]
+        return [{ type: "finished", info: snapshot(job) }, consumeJob(jobs, input.id, result.wait.generation)]
+      })
+    }).pipe(Effect.ensuring(removeBlock(input)))
   })
 
   const markBackground = Effect.fnUntraced(function* (job: Active) {
@@ -421,8 +431,8 @@ export const make = Effect.gen(function* () {
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [BackgroundResult, Map<string, Active>]> {
         const job = jobs.get(id)
-        // Recoverable work may finish before the caller backgrounds it.
-        if (!job || (job.info.status !== "running" && !job.recovery)) return [{}, jobs]
+        // Recoverable work may finish before the caller backgrounds it, unless a foreground block already consumed it.
+        if (!job || job.consumed || (job.info.status !== "running" && !job.recovery)) return [{}, jobs]
         if (job.isBackgrounded) return [{ info: snapshot(job) }, jobs]
         const next = yield* markBackground(job)
         return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)]

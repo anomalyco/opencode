@@ -526,6 +526,26 @@ export const has = Effect.fn("SessionInbox.has")(function* (
   return row !== undefined
 })
 
+export const hasUserSteer = Effect.fn("SessionInbox.hasUserSteer")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const row = yield* db
+    .select({ id: SessionInboxTable.id })
+    .from(SessionInboxTable)
+    .where(
+      and(
+        eq(SessionInboxTable.session_id, sessionID),
+        eq(SessionInboxTable.type, "user"),
+        eq(SessionInboxTable.delivery, "steer"),
+      ),
+    )
+    .limit(1)
+    .get()
+    .pipe(Effect.orDie)
+  return row !== undefined
+})
+
 const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
   serialized(input.sessionID, effect).pipe(
     Effect.asVoid,

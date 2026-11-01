@@ -508,21 +508,7 @@ const layer = Layer.effect(
       active: execution.active,
       background: Effect.fn("Session.background")(function* (sessionID) {
         yield* result.get(sessionID)
-        const backgrounded = yield* jobs.backgroundAll({ sessionID })
-        if (backgrounded.length === 0) return
-        yield* result
-          .synthetic({
-            sessionID,
-            text: [
-              "User requested that active blocking work be moved to the background.",
-              "",
-              "Backgrounded work:",
-              ...backgrounded.map((job) => `- ${job.type}: ${job.title && job.title.length > 0 ? job.title : job.id}`),
-              "",
-              "The backgrounded work is still unfinished. Move on to other work if you can. If there is nothing else useful to do, finish your response. Do not wait, sleep, poll, or report the backgrounded work as complete until a later completion notification is added to the conversation.",
-            ].join("\n"),
-          })
-          .pipe(Effect.catchTag("Session.SyntheticConflictError", Effect.die))
+        yield* jobs.backgroundAll({ sessionID })
       }),
       resume: (sessionID) => sessions.forSession(sessionID).resume(),
       synthetic: (input) => sessions.forSession(input.sessionID).synthetic(input),

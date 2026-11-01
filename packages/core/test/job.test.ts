@@ -6,12 +6,17 @@ import { JobTable } from "@opencode/core/job/sql"
 import { KVTable } from "@opencode/core/kv/sql"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Integration } from "@opencode/core/integration"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
+import { AbsolutePath } from "@opencode/core/schema"
+import { SessionInbox } from "@opencode/core/session/inbox"
+import { SessionMessage } from "@opencode/core/session/message"
+import { SessionSchema } from "@opencode/core/session/schema"
+import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { eq, like } from "drizzle-orm"
-import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
-import { SessionMessage } from "@opencode/core/session/message"
-import { SessionSchema } from "@opencode/core/session/schema"
+import { Cause, Clock, Deferred, Effect, Exit, Fiber, References, Scope } from "effect"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Job.node, Database.node, Global.node])))
@@ -250,6 +255,165 @@ describe("Job", () => {
       yield* Deferred.succeed(latch, undefined)
       expect(yield* Fiber.join(secondWait)).toMatchObject({ type: "finished", info: { id: second.id } })
       expect(yield* Fiber.join(thirdWait)).toMatchObject({ type: "finished", info: { id: third.id } })
+    }),
+  )
+
+  it.live("backgrounds a newly blocking job when its session already has a pending user steer", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const { db } = yield* Database.Service
+      const steered = SessionSchema.ID.make("ses_steered")
+      const other = SessionSchema.ID.make("ses_other")
+      const inboxID = SessionMessage.ID.create()
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: steered,
+          project_id: Project.ID.global,
+          slug: "steered",
+          directory: "/project",
+          title: "steered",
+          version: "test",
+        })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      yield* SessionInbox.projectAdmitted(db, {
+        enqueuedSeq: 1,
+        id: inboxID,
+        sessionID: steered,
+        item: { type: "user", payload: SessionInbox.UserPayload.make({ text: "Steer now" }), delivery: "steer" },
+        timeCreated: 1,
+      })
+
+      const latch = yield* Deferred.make<void>()
+      const recovery = {
+        kind: "shell" as const,
+        sessionID: steered,
+        shellID: "shell_guarded",
+        command: "sleep 60",
+      }
+      const first = yield* jobs.start({
+        id: recovery.shellID,
+        type: "shell",
+        recovery,
+        run: Deferred.await(latch).pipe(Effect.as("guarded")),
+      })
+      const second = yield* jobs.start({
+        id: "job_unguarded",
+        type: "test",
+        run: Deferred.await(latch).pipe(Effect.as("unguarded")),
+      })
+
+      const guarded = yield* jobs.block({ id: first.id, sessionID: steered })
+      expect(guarded).toMatchObject({ type: "backgrounded", info: { id: first.id, status: "running" } })
+      const marker = (yield* jobs.pendingBackground).find((item) => item.id === first.id)
+      expect(marker).toMatchObject({ id: first.id, recovery, status: "running" })
+
+      const unguarded = yield* jobs
+        .block({ id: second.id, sessionID: other })
+        .pipe(Effect.forkIn(yield* Scope.Scope, { startImmediately: true }))
+      yield* Deferred.succeed(latch, undefined)
+      expect(yield* Fiber.join(unguarded)).toMatchObject({
+        type: "finished",
+        info: { id: second.id, status: "completed", output: "unguarded" },
+      })
+      if (marker) yield* jobs.completeBackground(marker.notificationID)
+      yield* db.delete(SessionInboxTable).where(eq(SessionInboxTable.id, inboxID)).run().pipe(Effect.orDie)
+    }),
+  )
+
+  it.live("returns backgrounded when completion settles after background ownership commits during block entry", () =>
+    Effect.gen(function* () {
+      const baseClock = yield* Clock.Clock
+      const jobs = yield* Job.Service
+      const { db } = yield* Database.Service
+      const steered = SessionSchema.ID.make("ses_steered_race")
+      const inboxID = SessionMessage.ID.create()
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: steered,
+          project_id: Project.ID.global,
+          slug: "steered-race",
+          directory: "/project",
+          title: "steered-race",
+          version: "test",
+        })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      yield* SessionInbox.projectAdmitted(db, {
+        enqueuedSeq: 1,
+        id: inboxID,
+        sessionID: steered,
+        item: { type: "user", payload: SessionInbox.UserPayload.make({ text: "Steer race" }), delivery: "steer" },
+        timeCreated: 1,
+      })
+
+      const finishJob = yield* Deferred.make<string>()
+      let triggered = false
+      const clock: Clock.Clock = Object.assign(Object.create(baseClock), {
+        currentTimeMillis: Effect.gen(function* () {
+          const now = yield* baseClock.currentTimeMillis
+          if (!triggered) {
+            triggered = true
+            yield* Deferred.succeed(finishJob, "settled-during-background")
+            yield* Effect.yieldNow
+          }
+          return now
+        }),
+      })
+      const recovery = {
+        kind: "shell" as const,
+        sessionID: steered,
+        shellID: "shell_race_entry",
+        command: "printf done",
+      }
+      const started = yield* jobs.start({
+        id: recovery.shellID,
+        type: "shell",
+        recovery,
+        run: Deferred.await(finishJob),
+      })
+
+      const deliveries: string[] = []
+      const blocking = yield* jobs
+        .block({ id: started.id, sessionID: steered })
+        .pipe(
+          Effect.provideService(Clock.Clock, clock),
+          Effect.provideService(References.MaxOpsBeforeYield, 5),
+          Effect.timeout("2 seconds"),
+          Effect.forkChild,
+        )
+      const outcome = yield* Fiber.join(blocking)
+      if (outcome?.type === "finished") {
+        deliveries.push(`inline:${outcome.info.output}`)
+      }
+      if (outcome?.type === "backgrounded") {
+        const waited = (yield* jobs.wait({ id: started.id })).info
+        if (waited && waited.status !== "running") {
+          deliveries.push(`background:${waited.output}`)
+          if (waited.notificationID) yield* jobs.completeBackground(waited.notificationID)
+        }
+      }
+
+      expect(outcome?.type).toBe("backgrounded")
+      expect(deliveries).toEqual(["background:settled-during-background"])
+      expect((yield* jobs.pendingBackground).find((item) => item.id === started.id)).toBeUndefined()
+      yield* db.delete(SessionInboxTable).where(eq(SessionInboxTable.id, inboxID)).run().pipe(Effect.orDie)
     }),
   )
 
