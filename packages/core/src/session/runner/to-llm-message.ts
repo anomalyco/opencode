@@ -152,19 +152,12 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
-const ranTool = (item: SessionMessage.AssistantContent) =>
-  item.type === "tool" && (item.time.ran !== undefined || item.executed === true)
-
-const isUncalledAbortedTool = (item: SessionMessage.AssistantTool) =>
+// A call cut off before it ran (by Esc, a crash or a failed stream) is not replayed. Input
+// errors stay so the model can reissue the call.
+const isAbandonedTool = (item: SessionMessage.AssistantContent) =>
+  item.type === "tool" &&
   item.time.ran === undefined &&
-  item.executed !== true &&
-  item.state.status === "error" &&
-  item.state.error.type === "aborted"
-
-// OpenAI multi-part reasoning summaries emit earlier summary parts with `reasoningEncryptedContent: null`
-// before `response.output_item.done` delivers the encrypted state on the final part.
-const isUnfinalizedReasoning = (native: Record<string, unknown> | undefined) =>
-  native !== undefined && native.reasoningEncryptedContent === null && typeof native.signature !== "string"
+  !(item.state.status === "error" && item.state.error.type.startsWith("tool.input"))
 
 const assistant = (
   message: SessionMessage.Assistant,
@@ -175,13 +168,22 @@ const assistant = (
   const sameProvider = message.model.providerID === model.providerID
   const sameModel = sameProvider && message.model.id === model.id
   const failed = message.error !== undefined && message.error.type !== "aborted"
-  // A zero-tool failure retried from the prompt keeps `retry` set until replaced; legacy `synthetic`
-  // continuations and `idle` stops (retries exhausted or Esc during backoff) keep their partial text.
-  const retriedFromPrompt = message.retry !== undefined && next?.type !== "synthetic" && next?.type !== "idle"
-  if (failed && retriedFromPrompt && !message.content.some(ranTool)) return []
-  const cut = message.error?.type === "aborted" || message.time.completed === undefined
+  // A failure before any tool ran is retried from the prompt, so the fresh attempt replaces it. Running out
+  // of retries, Esc during the retry wait (idle) and older continuations (synthetic) keep the visible text.
+  if (
+    failed &&
+    message.retry !== undefined &&
+    next?.type !== "synthetic" &&
+    next?.type !== "idle" &&
+    !message.content.some((item) => item.type === "tool" && item.time.ran !== undefined)
+  )
+    return []
+  const items = message.content.filter((item) => !isAbandonedTool(item))
+  // A stream cut by Esc or a crash may end mid-block, so its last block's provider state is not replayed,
+  // and reasoning is only replayed once the model moved on to output.
+  const cut = message.error?.type === "aborted" || message.finish === undefined
   const tail = cut ? message.content.at(-1) : undefined
-  const content = message.content.flatMap((item): ContentPart[] => {
+  const content = items.flatMap((item, index): ContentPart[] => {
     if (item.type === "text")
       return [
         {
@@ -193,11 +195,12 @@ const assistant = (
       ]
     // Let the destination adapter handle readable reasoning after a model/provider switch.
     if (item.type === "reasoning") {
+      if (failed) return []
       if (
-        failed ||
-        item === tail ||
-        (item.time !== undefined && item.time.completed === undefined) ||
-        (cut && isUnfinalizedReasoning(item.native))
+        cut &&
+        !items
+          .slice(index + 1)
+          .some((after) => after.type === "tool" || (after.type === "text" && after.text.trim() !== ""))
       )
         return []
       return sameModel
@@ -212,7 +215,6 @@ const assistant = (
           ? [{ type: "reasoning", text: item.text }]
           : []
     }
-    if (isUncalledAbortedTool(item)) return []
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
     // replay it.
@@ -228,25 +230,18 @@ const assistant = (
     return result ? [call, result] : [call]
   })
   const meaningful = content.filter((part) => {
-    if (part.type === "text") return part.text !== ""
+    if (part.type === "text") return cut ? part.text.trim() !== "" : part.text !== ""
     if (part.type !== "reasoning") return true
     return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
   })
-  const results = message.content
-    .filter(
-      (item): item is SessionMessage.AssistantTool =>
-        item.type === "tool" && item.executed !== true && !isUncalledAbortedTool(item),
-    )
+  const results = items
+    .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.executed !== true)
     .map((item) =>
       toolResult(item, sameModel && !failed ? providerMetadata(providerMetadataKey, item.native) : undefined),
     )
     .filter((message) => message !== undefined)
     .map(Message.tool)
-  if (
-    meaningful.length === 0 ||
-    (cut && !meaningful.some((part) => (part.type === "text" && part.text.trim() !== "") || part.type === "tool-call"))
-  )
-    return results
+  if (meaningful.length === 0) return results
   return [
     Message.make({ id: message.id, role: "assistant", content: meaningful, metadata: message.metadata }),
     ...results,
