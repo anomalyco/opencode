@@ -143,6 +143,7 @@ export function QuoteCommentEditor(props: {
           })
         }}
         data-component="composer-quote-comment"
+        data-floating
         data-prevent-autofocus
         class="fixed z-50"
         style={{

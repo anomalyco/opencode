@@ -187,9 +187,13 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   }
 
   // The native embed always paints above the DOM, so hide it while a floating
-  // menu, select, or popover overlaps it. Tooltips are excluded.
+  // menu, select, or popover overlaps it. Tooltips are excluded. Floating content
+  // positioned without Kobalte, such as the quote toolbar and comment editor, marks
+  // itself with data-floating.
   const covered = (rect: DOMRect) =>
-    Array.from(document.querySelectorAll('[data-popper-positioner]:not(:has([role="tooltip"]))')).some((el) => {
+    Array.from(
+      document.querySelectorAll('[data-popper-positioner]:not(:has([role="tooltip"])), [data-floating]'),
+    ).some((el) => {
       const r = el.getBoundingClientRect()
 
       return r.width > 0 && r.left < rect.right && r.right > rect.left && r.top < rect.bottom && r.bottom > rect.top
