@@ -728,6 +728,63 @@ describe("EditTool", () => {
     }),
   )
 
+  it.live("keeps mixed endings through a small change inside a large match", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "large.txt")
+      // A full LCS table over this many lines would be larger than a typed array can hold.
+      const lines = Array.from({ length: 70_000 }, (_, index) => `line ${index}`)
+      const content = lines.map((line, index) => line + (index % 2 ? "\n" : "\r\n")).join("")
+      return Effect.promise(() => fs.writeFile(target, content)).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            executeTool(
+              registry,
+              call({
+                path: "large.txt",
+                oldString: lines.join("\n") + "\n",
+                newString: lines.map((line, index) => (index === 35_000 ? "changed" : line)).join("\n") + "\n",
+              }),
+            ),
+          ),
+        ),
+        Effect.tap((settled) => Effect.sync(() => expect(settled.status).toBe("completed"))),
+        Effect.andThen(() => Effect.promise(() => fs.readFile(target, "utf8"))),
+        Effect.tap((result) =>
+          Effect.sync(() => expect(result).toBe(content.replace("line 35000\r\n", "changed\r\n"))),
+        ),
+      )
+    }),
+  )
+
+  it.live("falls back to positional alignment when almost every line changes", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "rewrite.txt")
+      const lines = Array.from({ length: 2_100 }, (_, index) => `old ${index}`)
+      const replacement = Array.from({ length: 2_100 }, (_, index) => `new ${index}`)
+      const endings = lines.slice(0, -1).map((_, index) => (index % 2 === 0 ? "\r\n" : "\n"))
+      const source = lines.map((line, index) => line + (endings[index] ?? "\n")).join("")
+      const expected = replacement.map((line, index) => line + (endings[index] ?? "\n")).join("")
+      return Effect.promise(() => fs.writeFile(target, source)).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            executeTool(
+              registry,
+              call({
+                path: "rewrite.txt",
+                oldString: lines.join("\n"),
+                newString: replacement.join("\n"),
+              }),
+            ),
+          ),
+        ),
+        Effect.andThen(() => Effect.promise(() => fs.readFile(target, "utf8"))),
+        Effect.tap((content) => Effect.sync(() => expect(content).toBe(expected))),
+      )
+    }),
+  )
+
   it.live("applies edits that differ only in \\r to the exact bytes", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()
