@@ -29,6 +29,7 @@ import * as Cache from "./utils/cache.js"
 import { resolveParallelToolCalls } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
+import { DSML } from "./utils/dsml.js"
 import { ToolStream } from "./utils/tool-stream.js"
 import { OpenAIFreeform } from "./openai-freeform.js"
 
@@ -370,6 +371,8 @@ export interface ParserState {
   readonly latestToolIndex?: number
   readonly nextToolIndex: number
   readonly requireFinishReason: boolean
+  /** DeepSeek DSML recovery state; undefined when recovery is disabled for this request. */
+  readonly recovery?: DSML.State
 }
 
 // =============================================================================
@@ -839,6 +842,16 @@ const detectZaiToolStream = (provider: string, baseURL: string | undefined, mode
   return true
 }
 
+// DeepSeek serving lanes describe tool calls with DSML markup, and a
+// misconfigured or saturated text→tool-call conversion leaks that markup into
+// `content` instead of structured tool calls (anomalyco/opencode#50206).
+// Recovery is enabled for DeepSeek families while tools are declared; other
+// lanes opt in through `compatibility.dsmlRecovery`.
+const detectDSMLRecovery = (provider: string, baseURL: string | undefined, modelID: string): boolean =>
+  provider === "deepseek" ||
+  (baseURL ?? "").toLowerCase().includes("deepseek") ||
+  modelID.toLowerCase().includes("deepseek")
+
 const lowerOptions = (request: LLMRequest, supportsStore: boolean, hasActiveTools: boolean) => {
   const options = OpenResponsesOptions.resolve(request)
   // OpenAI rejects `parallel_tool_calls` unless tools are present.
@@ -1137,6 +1150,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     let nextToolIndex = state.nextToolIndex
 
     let lifecycle = state.lifecycle
+    let recovery = state.recovery
 
     const reasoning = reasoningDelta(delta, state.reasoningField)
     if (
@@ -1178,7 +1192,21 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     // Reasoning is one response-wide channel: it stays open alongside text and
     // refusal output so late reasoning deltas and details join the same block,
     // and `finishEvents` closes it once with the complete metadata.
-    if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    if (delta?.content) {
+      if (recovery === undefined) {
+        lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+      } else {
+        // DSML recovery withholds and parses tool-call markup that a serving
+        // lane leaked into the text channel, emitting tool-call events instead.
+        const [next, leaked] = DSML.push(recovery, delta.content)
+        recovery = next
+        if (leaked.text) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", leaked.text)
+        if (leaked.events.length > 0) {
+          lifecycle = Lifecycle.stepStart(lifecycle, events)
+          events.push(...leaked.events)
+        }
+      }
+    }
 
     if (delta?.refusal) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.refusal)
 
@@ -1285,6 +1313,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         latestToolIndex,
         nextToolIndex,
         requireFinishReason: state.requireFinishReason,
+        recovery,
       },
       events,
     ] as const
@@ -1311,7 +1340,14 @@ export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
     state.finishReason === undefined && Object.keys(state.tools).length > 0
       ? (yield* finishTools(state.tools, state.customCalls)).events
       : state.toolCallEvents
-  const hasToolCalls = toolCallEvents.length > 0
+  // Recovered invokes flush at stream end: complete calls inside a truncated
+  // block still execute, leftover markup noise is dropped, and the withheld
+  // idle tail is ordinary text that gets published.
+  const flushed = state.recovery === undefined ? undefined : DSML.flush(state.recovery)
+  const recoveredEvents = flushed?.[1].events ?? []
+  // Recovered calls upgrade a "stop" finish even though the provider never
+  // reported tool calls itself.
+  const hasToolCalls = toolCallEvents.length > 0 || (flushed?.[0].recovered ?? 0) > 0
   const reason = state.finishReason
     ? {
         ...state.finishReason,
@@ -1335,9 +1371,12 @@ export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
           reasoningMetadata(state.providerMetadataKey, state.reasoningField),
         )
       : state.lifecycle
-  const ended = Lifecycle.reasoningEnd(started, events, "reasoning-0", metadata)
-  const lifecycle = toolCallEvents.length ? Lifecycle.stepStart(ended, events) : ended
-  events.push(...toolCallEvents)
+  // Text withheld by recovery's tag-prefix holdback is published before the step closes.
+  const text = flushed?.[1].text
+  const published = text === undefined ? started : Lifecycle.textDelta(started, events, "text-0", text)
+  const ended = Lifecycle.reasoningEnd(published, events, "reasoning-0", metadata)
+  const lifecycle = toolCallEvents.length || recoveredEvents.length > 0 ? Lifecycle.stepStart(ended, events) : ended
+  events.push(...recoveredEvents, ...toolCallEvents)
   Lifecycle.finish(lifecycle, events, { reason, usage: state.usage })
   return events
 })
@@ -1374,6 +1413,12 @@ export const protocol = Protocol.make({
       reasoningEmitted: false,
       nextToolIndex: 0,
       requireFinishReason: request.model.compatibility?.requireFinishReason ?? true,
+      recovery:
+        request.tools.length > 0 &&
+        (request.model.compatibility?.dsmlRecovery ??
+          detectDSMLRecovery(request.model.provider, request.model.route.endpoint.baseURL, request.model.id))
+          ? DSML.initial()
+          : undefined,
     }),
     step: (state: ParserState, event) => (event === DONE ? Effect.succeed([state, []] as const) : step(state, event)),
     terminal: (event) => event === DONE,

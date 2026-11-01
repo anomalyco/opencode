@@ -231,6 +231,8 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   /** Prompt-cache marker syntax the endpoint accepts. Overrides the route default; both send `cache_control`, and `alibaba` skips tool definitions. */
   cacheFormat: Schema.optional(LanguageModelCacheFormatCompatibility),
   zaiToolStream: Schema.optional(Schema.Boolean),
+  /** Recover DeepSeek DSML tool calls that a serving lane leaked into the text channel. Overrides model-ID detection. */
+  dsmlRecovery: Schema.optional(Schema.Boolean),
   requireSignature: Schema.optional(Schema.Boolean),
   /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
   supportsThinkingBlockBinding: Schema.optional(Schema.Boolean),
