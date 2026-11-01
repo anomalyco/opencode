@@ -76,7 +76,13 @@ const directoryAttachment = (file: FileAttachment): ContentPart => ({
 const attachmentContent = (file: FileAttachment): ContentPart[] => {
   if (file.mime === "text/plain") return [textAttachment(file)]
   if (file.mime === "application/x-directory") return [directoryAttachment(file)]
-  if (imageMimes.has(file.mime) || file.mime === "application/pdf") {
+  // Audio and video pass through like images; the model request swaps them for an error when the model lacks that input.
+  if (
+    imageMimes.has(file.mime) ||
+    file.mime === "application/pdf" ||
+    file.mime.startsWith("audio/") ||
+    file.mime.startsWith("video/")
+  ) {
     const location = attachmentLocation(file)
     return [...(location === undefined ? [] : [Message.text(`Attached file: ${location}`)]), media(file)]
   }
