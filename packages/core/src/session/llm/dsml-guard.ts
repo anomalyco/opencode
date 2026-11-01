@@ -1,6 +1,6 @@
 export * as DSMLGuard from "./dsml-guard.js"
 
-import { LLMEvent, LLMClient, type LLMClientService } from "@opencode/ai/effect"
+import { AIError, InvalidProviderOutputError, LLMEvent, LLMClient, type LLMClientService } from "@opencode/ai/effect"
 import { Context, Effect, Layer, Stream } from "effect"
 import { DSML_GUARD_MESSAGE, EMPTY_VETTING_LOOP_MESSAGE, emptyVettingLoopDetector } from "./dsml.js"
 import { guardStatus, isDSV4Scope } from "./dsml-recovery.js"
@@ -17,13 +17,15 @@ type Options = {
  * Native-route counterpart of `guardDSMLStream`. Providers configured with an
  * AI SDK package are rewritten to the native `@opencode/ai/providers/*` routes,
  * so the AI SDK `doStream` seam never sees them. This guard runs on the
- * provider-neutral event stream instead and stops a response that emits the
- * DSML closing marker or repeats empty vetting blocks.
+ * provider-neutral event stream instead and fails the stream when the response
+ * emits the DSML closing marker or repeats empty vetting blocks. Provider
+ * failures are stream errors, not events, since the `provider-error` LLMEvent
+ * was removed upstream.
  */
 export function guardDSMLEvents<E>(
   stream: Stream.Stream<LLMEvent, E>,
   options: Options = {},
-): Stream.Stream<LLMEvent, E> {
+): Stream.Stream<LLMEvent, E | AIError> {
   const loop = emptyVettingLoopDetector()
   let tail = ""
   let message: string | undefined
@@ -49,7 +51,9 @@ export function guardDSMLEvents<E>(
     Stream.concat(
       Stream.suspend(() => {
         const failure = message
-        return failure === undefined ? Stream.empty : Stream.make(LLMEvent.providerError({ message: failure }))
+        return failure === undefined
+          ? Stream.empty
+          : Stream.fail(new AIError({ reason: new InvalidProviderOutputError({ message: failure, classification: "incomplete-stream" }) }))
       }),
     ),
   )

@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { ai, LLMEvent } from "@opencode/ai/effect"
+import { ai, AIError, LLMEvent } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -50,11 +50,17 @@ const guarded = (response: Response) => {
   return DSMLGuard.layer.pipe(Layer.provide(LLMClient.layer.pipe(Layer.provide(executor))))
 }
 
-const collect = (id: string, response: Response) =>
+const requestStream = (id: string) =>
   Effect.gen(function* () {
     const client = yield* LLMClient.Service
     return yield* client.stream(ai.request({ model: model(id), prompt: "hi" })).pipe(Stream.runCollect)
-  }).pipe(Effect.provide(guarded(response)))
+  })
+
+const collect = (id: string, response: Response) => requestStream(id).pipe(Effect.provide(guarded(response)))
+
+/** Fails with the stream error when the guard stops the response. */
+const failure = (id: string, response: Response) =>
+  requestStream(id).pipe(Effect.flip, Effect.provide(guarded(response)))
 
 // The production node graph, not a hand-built layer: this fails if the guard is
 // dropped from `effect/app-node-platform.ts`.
@@ -72,44 +78,40 @@ const collectProduction = (id: string, response: Response) =>
   Effect.gen(function* () {
     const client = yield* LLMClient.Service
     return yield* client.stream(ai.request({ model: model(id), prompt: "hi" })).pipe(Stream.runCollect)
-  }).pipe(Effect.provide(production(response)))
+  })
+    .pipe(Effect.flip, Effect.provide(production(response)))
+
+const guardMessage = (error: unknown) => (error instanceof AIError ? error.reason.message : undefined)
 
 const it = testEffect(Layer.empty)
 
-it.effect("the production llm client guards the native dsv4 route", () =>
+it.effect("the production llm client fails the native dsv4 guard error", () =>
   Effect.gen(function* () {
-    const events = Array.from(yield* collectProduction("dsv4", sse([chunk(CLOSING), stop])))
-    expect(events.find((event) => event.type === "provider-error")).toEqual({
-      type: "provider-error",
-      message: DSML_GUARD_MESSAGE,
-    })
+    const error = yield* collectProduction("dsv4", sse([chunk(CLOSING), stop]))
+    expect(error).toBeInstanceOf(AIError)
+    expect(guardMessage(error)).toBe(DSML_GUARD_MESSAGE)
   }),
 )
 
 it.effect("stops a native dsv4 response that emits the DSML closing marker", () =>
   Effect.gen(function* () {
-    const events = Array.from(yield* collect("dsv4", sse([chunk("before "), chunk(CLOSING), chunk(" after"), stop])))
-    const error = events.find((event) => event.type === "provider-error")
-    expect(error).toEqual({ type: "provider-error", message: DSML_GUARD_MESSAGE })
-    // The marker is the last text the model produced; nothing after it is replayed.
-    expect(events.some((event) => event.type === "text-delta" && event.text.includes("after"))).toBe(false)
+    const error = yield* failure("dsv4", sse([chunk("before "), chunk(CLOSING), chunk(" after"), stop]))
+    expect(error).toBeInstanceOf(AIError)
+    expect(guardMessage(error)).toBe(DSML_GUARD_MESSAGE)
   }),
 )
 
 it.effect("stops a native dsv4 response that repeats empty vetting blocks", () =>
   Effect.gen(function* () {
-    const events = Array.from(yield* collect("dsv4", sse([chunk("<vetting></vetting>".repeat(16)), stop])))
-    expect(events.find((event) => event.type === "provider-error")).toEqual({
-      type: "provider-error",
-      message: EMPTY_VETTING_LOOP_MESSAGE,
-    })
+    const error = yield* failure("dsv4", sse([chunk("<vetting></vetting>".repeat(16)), stop]))
+    expect(error).toBeInstanceOf(AIError)
+    expect(guardMessage(error)).toBe(EMPTY_VETTING_LOOP_MESSAGE)
   }),
 )
 
 it.effect("passes ordinary native dsv4 text through untouched", () =>
   Effect.gen(function* () {
     const events = Array.from(yield* collect("dsv4", sse([chunk("hello "), chunk("world"), stop])))
-    expect(events.some((event) => event.type === "provider-error")).toBe(false)
     expect(
       events
         .filter((event) => event.type === "text-delta")
@@ -122,7 +124,7 @@ it.effect("passes ordinary native dsv4 text through untouched", () =>
 it.effect("leaves other models on the same provider unguarded", () =>
   Effect.gen(function* () {
     const events = Array.from(yield* collect("thinker", sse([chunk(CLOSING), stop])))
-    expect(events.some((event) => event.type === "provider-error")).toBe(false)
+    expect(events.some((event) => event.type === "text-delta" && event.text.includes("invoke>"))).toBe(true)
   }),
 )
 
@@ -133,8 +135,9 @@ it.effect("stops pulling from the provider once the guard fires", () =>
       LLMEvent.textDelta({ id: "t", text: CLOSING }),
       ...Array.from({ length: 50 }, () => LLMEvent.textDelta({ id: "t", text: "x" })),
     ]).pipe(Stream.tap(() => Effect.sync(() => void pulled++)))
-    const events = Array.from(yield* DSMLGuard.guardDSMLEvents(upstream).pipe(Stream.runCollect))
-    expect(events.map((event) => event.type)).toEqual(["text-delta", "provider-error"])
+    const error = yield* DSMLGuard.guardDSMLEvents(upstream).pipe(Stream.runCollect, Effect.flip)
+    expect(error).toBeInstanceOf(AIError)
+    expect(guardMessage(error)).toBe(DSML_GUARD_MESSAGE)
     // The response is already unusable, so the rest of it is not drained.
     expect(pulled).toBeLessThan(5)
   }),
@@ -154,6 +157,6 @@ it.effect("OPENCODE_DSV4_RECOVERY_ENABLED=0 disables the guard", () =>
         ),
       ),
     )
-    expect(events.some((event) => event.type === "provider-error")).toBe(false)
+    expect(events.some((event) => event.type === "text-delta" && event.text.includes("invoke>"))).toBe(true)
   }),
 )
