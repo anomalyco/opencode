@@ -12,6 +12,7 @@ import {
   type PaletteHighlight,
 } from "@/shell/commands/palette"
 import { CommandPaletteView, matchesCommandPaletteEntry } from "@/shell/commands/dialog"
+import { usePluginPaletteSources } from "@/runtime/plugin/palette-sources"
 import { createSettingsPaletteEntries } from "@/settings/palette"
 
 export function HomeCommandPalette(props: {
@@ -31,6 +32,8 @@ export function HomeCommandPalette(props: {
 
     return commandPaletteOptions(command.options).map((option) => createCommandPaletteCommandEntry(option, category))
   })
+
+  const pluginSources = usePluginPaletteSources(() => language.t("command.category.session"))
 
   const sessions = createServerSessionEntries({
     server: ServerConnection.key(props.server),
@@ -88,7 +91,7 @@ export function HomeCommandPalette(props: {
     <CommandPaletteView
       placeholder={language.t("palette.search.placeholder.home")}
       items={items}
-      sources={[sessions.search]}
+      sources={[sessions.search, pluginSources]}
       highlight={highlight}
       select={select}
       close={() => dialog.close()}
