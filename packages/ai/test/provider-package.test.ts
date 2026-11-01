@@ -104,6 +104,35 @@ describe("provider package entrypoints", () => {
     }
   })
 
+  test("maps host Anthropic Messages entrypoints onto provider-owned routes", async () => {
+    const providers = [
+      ["openrouter", "https://openrouter.ai/api/v1", await import("@opencode/ai/providers/openrouter/messages")],
+      ["digitalocean", "https://inference.do-ai.run/v1", await import("@opencode/ai/providers/digitalocean/messages")],
+      ["fireworks", "https://api.fireworks.ai/inference/v1", await import("@opencode/ai/providers/fireworks/messages")],
+      ["baseten", "https://inference.baseten.co/v1", await import("@opencode/ai/providers/baseten/messages")],
+      ["deepseek", "https://api.deepseek.com/anthropic/v1", await import("@opencode/ai/providers/deepseek/messages")],
+    ] as const
+    const settings = {
+      apiKey: "fixture",
+      headers: { "x-test": "fixture" },
+      body: { future_option: true },
+      effort: "low",
+    }
+    for (const [provider, baseURL, module] of providers) {
+      const selected = module.model("fixture-model", settings)
+      expect(selected.provider).toBe(provider)
+      expect(selected.route.id).toBe(`${provider}-messages`)
+      expect(selected.route.protocol).toBe("anthropic-messages")
+      expect(selected.route.endpoint.baseURL).toBe(baseURL)
+      expect(selected.route.defaults.headers).toEqual(settings.headers)
+      expect(selected.route.defaults.http?.body).toEqual(settings.body)
+      expect(selected.route.defaults.providerOptions).toEqual({ effort: "low" })
+      expect(
+        module.model("fixture-model", { ...settings, baseURL: "https://gateway.test/v1" }).route.endpoint.baseURL,
+      ).toBe("https://gateway.test/v1")
+    }
+  })
+
   test("maps Cohere entrypoints onto native and compatibility routes", async () => {
     const modules = await Promise.all([
       import("@opencode/ai/providers/cohere"),
