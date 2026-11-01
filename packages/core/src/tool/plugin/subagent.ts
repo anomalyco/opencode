@@ -167,6 +167,10 @@ export const Plugin = {
                             new ToolFailure({ message: `Subagent session not found: ${input.sessionID}`, error }),
                         ),
                       )
+              if (existing !== undefined && parent.fork !== undefined && existing.parentID === parent.fork.sessionID)
+                return yield* new ToolFailure({
+                  message: `Session ${existing.id} belongs to session ${existing.parentID}, which this session was forked from. Its results go to that session and it can't be continued here. Start a new subagent if you still need this work.`,
+                })
               if (existing !== undefined && existing.parentID !== context.sessionID)
                 return yield* new ToolFailure({
                   message: `Session ${existing.id} is not a child of the current session`,

@@ -750,6 +750,53 @@ describe("SubagentTool", () => {
     ),
   )
 
+  it.live("explains that children of the fork source cannot be continued from the fork", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const bus = yield* Bus.Service
+          const { db } = yield* Database.Service
+          const origin = yield* sessions.create({ location, model: parentModel })
+          const child = yield* sessions.create({
+            parentID: origin.id,
+            title: "review",
+            agent: Agent.ID.make("reviewer"),
+          })
+          yield* sessions.prompt({ sessionID: origin.id, text: "Fork context", resume: false })
+          yield* SessionInbox.promote(db, bus, origin.id, "steer")
+          const forked = yield* sessions.fork({ sessionID: origin.id })
+          yield* withSubagent(forked.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(forked.location)))
+
+          expect(
+            yield* executeTool(registry, {
+              sessionID: forked.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-origin-child",
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "follow up", prompt: "continue", sessionID: child.id },
+              },
+            }),
+          ).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: `Session ${child.id} belongs to session ${origin.id}, which this session was forked from. Its results go to that session and it can't be continued here. Start a new subagent if you still need this work.`,
+            },
+          })
+        }),
+      ),
+    ),
+  )
+
   it.live("runs the child on an explicitly requested model", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
