@@ -282,7 +282,12 @@ export function SearchList<T>(props: {
 
   return (
     <QueryContext.Provider value={() => props.query}>
-      <div data-component="search-list" data-popover={props.popover ? "" : undefined} class={props.class}>
+      <div
+        data-component="search-list"
+        data-field={props.field ? "" : undefined}
+        data-popover={props.popover ? "" : undefined}
+        class={props.class}
+      >
         <Show
           when={props.field}
           fallback={

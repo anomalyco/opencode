@@ -180,6 +180,14 @@
     letter-spacing: -0.04px;
   }
 
+  /* Under a page's own field, the empty state is one quiet row on the rows' text spine rather than a centred panel. */
+  &[data-field] [data-slot="search-list-empty"] {
+    display: flex;
+    min-height: 48px;
+    align-items: center;
+    padding: 6px 18px;
+  }
+
   /* On the rows' text spine, under the bottom fade rather than inside it. */
   [data-slot="search-list-footer"] {
     flex-shrink: 0;
