@@ -2944,26 +2944,3 @@ test("does not treat a 404 method-not-found from templates/list as session expir
     ),
   )
 })
-
-test("does not reconnect when templates/list answers 404 method-not-found", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const server = yield* resourceServer({ respond: methodNotFound })
-        server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
-
-        yield* Effect.gen(function* () {
-          const service = yield* Mcp.Service
-          yield* settled(service)
-          const catalog = yield* service.resourceCatalog()
-          expect(catalog.resources.map((resource) => resource.name)).toEqual(["Readme"])
-          expect(catalog.templates).toEqual([])
-
-          // The reconnect used to fire asynchronously, so give it time to loop before counting.
-          yield* Effect.sleep("1 second")
-          expect(server.state.initializations).toBe(1)
-        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
-      }),
-    ),
-  )
-})
