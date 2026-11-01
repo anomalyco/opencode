@@ -25,11 +25,15 @@ test("Home keeps the session list in every interface mode", async ({ page }) => 
   await expect(search).toBeVisible()
   await expect(row(page, earlier.title)).toBeVisible()
 
-  // The Inbox mode moves session tabs into the sidebar inbox; Home stays the session list.
-  for (const mode of ["Side tabs", "Inbox", "Top tabs"]) {
+  // The Inbox mode moves session tabs into the sidebar inbox; Home stays the session list. It is Beta-only, so the
+  // dev server offers it but the production build CI tests (see playwright.config.ts) leaves it out.
+  const inbox = !process.env.CI && process.env.PLAYWRIGHT_BUILD !== "1"
+
+  for (const mode of inbox ? ["Side tabs", "Inbox", "Top tabs"] : ["Side tabs", "Top tabs"]) {
     await page.keyboard.press("Control+,")
     const settings = page.getByTestId("settings-screen")
     const option = settings.getByRole("radio", { name: mode, exact: true })
+    await expect(settings.getByRole("radio", { name: "Inbox", exact: true })).toHaveCount(inbox ? 1 : 0)
     await settings.getByRole("group", { name: "Interface", exact: true }).getByText(mode, { exact: true }).click()
     await expect(option).toBeChecked()
     await settings.getByRole("button", { name: "Back to app", exact: true }).click()
