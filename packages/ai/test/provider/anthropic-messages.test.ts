@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/http"
 import {
   ai,
@@ -2169,6 +2169,102 @@ describe("Anthropic Messages route", () => {
       expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" }, message: "Bad request" })
     }),
   )
+
+  for (const scenario of [
+    {
+      name: "matches",
+      content: {
+        type: "tool_search_tool_search_result",
+        tool_references: [{ type: "tool_reference", tool_name: "read" }],
+      },
+      resultType: "json",
+    },
+    {
+      name: "no matches",
+      content: { type: "tool_search_tool_search_result", tool_references: [] },
+      resultType: "json",
+    },
+    {
+      name: "an error",
+      content: { type: "tool_search_tool_result_error", error_code: "invalid_tool_input" },
+      resultType: "error",
+    },
+  ]) {
+    it.effect(`round-trips native regex and BM25 tool-search results with ${scenario.name}`, () => {
+      const calls = [
+        { id: "srvtoolu_regex", name: "tool_search_tool_regex", input: { pattern: "read" } },
+        { id: "srvtoolu_bm25", name: "tool_search_tool_bm25", input: { query: "read files" } },
+      ]
+      const results = calls.toReversed().map((call) => ({
+        type: "tool_search_tool_result",
+        tool_use_id: call.id,
+        content: scenario.content,
+      }))
+      const requests: unknown[] = []
+      return Effect.gen(function* () {
+        const response = yield* LLMClient.generate(request)
+        expect(response.toolCalls).toMatchObject(calls.map((call) => ({ ...call, providerExecuted: true })))
+        expect(response.events.filter((event) => event.type === "tool-result")).toMatchObject(
+          calls.toReversed().map((call) => ({
+            id: call.id,
+            name: call.name,
+            result: { type: scenario.resultType, value: scenario.content },
+            providerExecuted: true,
+            providerMetadata: { anthropic: { blockType: "tool_search_tool_result", result: scenario.content } },
+          })),
+        )
+        const next = yield* LLMClient.generate(
+          LLMRequest.update(request, {
+            messages: [...request.messages, response.message, Message.user("Continue.")],
+          }),
+        )
+        expect(next.text).toBe("Done.")
+        expect(requests).toHaveLength(2)
+        expect(requests[1]).toMatchObject({
+          messages: [
+            { role: "user" },
+            {
+              role: "assistant",
+              content: [...calls.map((call) => ({ type: "server_tool_use", ...call })), ...results],
+            },
+            { role: "user", content: [{ type: "text", text: "Continue." }] },
+          ],
+        })
+      }).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.sync(() => {
+              requests.push(Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(input.text))
+              return input.respond(
+                sseEvents(
+                  { type: "message_start", message: { usage: { input_tokens: 5 } } },
+                  ...(requests.length === 1
+                    ? [
+                        ...calls.flatMap((call, index) => [
+                          { type: "content_block_start", index, content_block: { type: "server_tool_use", ...call } },
+                          { type: "content_block_stop", index },
+                        ]),
+                        // Both calls have closed; result order must not determine their tool names.
+                        ...results.flatMap((result, index) => [
+                          { type: "content_block_start", index: index + 2, content_block: result },
+                          { type: "content_block_stop", index: index + 2 },
+                        ]),
+                      ]
+                    : [
+                        { type: "content_block_start", index: 0, content_block: { type: "text", text: "Done." } },
+                        { type: "content_block_stop", index: 0 },
+                      ]),
+                  { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 8 } },
+                  { type: "message_stop" },
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            }),
+          ),
+        ),
+      )
+    })
+  }
 
   it.effect("decodes server_tool_use + web_search_tool_result as provider-executed events", () =>
     Effect.gen(function* () {
