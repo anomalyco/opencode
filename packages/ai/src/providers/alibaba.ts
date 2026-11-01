@@ -127,6 +127,9 @@ export const responsesModel: ProviderPackage.Model<Settings<ResponsesOptionsInpu
   id,
   input,
 ) => configure(config(input)).responses(id)
+export const chat = model
+export const messages = messagesModel
+export const responses = responsesModel
 export const imageModel = (id: string, settings: Settings) => {
   const input = config(settings)
   return configure(input).image(id, input.providerOptions)

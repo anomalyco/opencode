@@ -59,7 +59,7 @@ export const dict = {
   "modal.success": "구독되었습니다.",
   "modal.error": "구독에 실패했습니다",
   "product.allUsers": "모든 사용자",
-  "product.zen": "Zen",
+  "product.zen": "Models",
   "product.go": "Go",
   "range.1D": "1일",
   "range.1W": "1주",

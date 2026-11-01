@@ -9,7 +9,7 @@ export const dict = {
   "nav.github": "GitHub",
   "nav.docs": "Documentación",
   "nav.enterprise": "Enterprise",
-  "nav.zen": "Zen",
+  "nav.zen": "OpenCode Models",
   "nav.login": "Iniciar sesión",
   "nav.free": "Descargar",
   "nav.home": "Inicio",
@@ -112,7 +112,7 @@ export const dict = {
     "Aparte de estos, puedes usar cualquiera de los modelos de codificación populares creando una cuenta de",
   "home.faq.a3.p2.afterZen": ".",
   "home.faq.a3.p3":
-    "Aunque animamos a los usuarios a usar Zen, OpenCode también funciona con todos los proveedores populares como OpenAI, Anthropic, xAI, etc.",
+    "Aunque animamos a los usuarios a usar OpenCode Models, OpenCode también funciona con todos los proveedores populares como OpenAI, Anthropic, xAI, etc.",
   "home.faq.a3.p4.beforeLocal": "Incluso puedes conectar tus",
   "home.faq.a3.p4.localLink": "modelos locales",
   "home.faq.q4": "¿Puedo usar mis suscripciones de IA existentes con OpenCode?",
@@ -138,26 +138,26 @@ export const dict = {
 
   "home.zenCta.title": "Accede a modelos optimizados y confiables para agentes de codificación",
   "home.zenCta.body":
-    "Zen te da acceso a un conjunto seleccionado de modelos de IA que OpenCode ha probado y evaluado específicamente para agentes de codificación. No necesitas preocuparte por el rendimiento y la calidad inconsistentes entre proveedores, usa modelos validados que funcionan.",
-  "home.zenCta.link": "Aprende sobre Zen",
+    "OpenCode Models te da acceso a un conjunto seleccionado de modelos de IA que OpenCode ha probado y evaluado específicamente para agentes de codificación. No necesitas preocuparte por el rendimiento y la calidad inconsistentes entre proveedores, usa modelos validados que funcionan.",
+  "home.zenCta.link": "Aprende sobre OpenCode Models",
 
   "zen.title":
-    "OpenCode Zen | Un conjunto seleccionado de modelos optimizados y confiables para agentes de codificación",
+    "OpenCode Models | Un conjunto seleccionado de modelos optimizados y confiables para agentes de codificación",
   "zen.hero.title": "Modelos optimizados y confiables para agentes de codificación",
   "zen.hero.body":
-    "Zen te da acceso a un conjunto seleccionado de modelos de IA que OpenCode ha probado y evaluado específicamente para agentes de codificación. No necesitas preocuparte por el rendimiento y la calidad inconsistentes, usa modelos validados que funcionan.",
+    "OpenCode Models te da acceso a un conjunto seleccionado de modelos de IA que OpenCode ha probado y evaluado específicamente para agentes de codificación. No necesitas preocuparte por el rendimiento y la calidad inconsistentes, usa modelos validados que funcionan.",
 
-  "zen.faq.q1": "¿Qué es OpenCode Zen?",
+  "zen.faq.q1": "¿Qué es OpenCode Models?",
   "zen.faq.a1":
-    "Zen es un conjunto seleccionado de modelos de IA probados y evaluados para agentes de codificación, creado por el equipo detrás de OpenCode.",
-  "zen.faq.q2": "¿Qué hace a Zen más preciso?",
+    "OpenCode Models es un conjunto seleccionado de modelos de IA probados y evaluados para agentes de codificación, creado por el equipo detrás de OpenCode.",
+  "zen.faq.q2": "¿Qué hace a OpenCode Models más preciso?",
   "zen.faq.a2":
-    "Zen solo proporciona modelos que han sido específicamente probados y evaluados para agentes de codificación. No usarías un cuchillo de mantequilla para cortar carne, no uses modelos pobres para codificar.",
-  "zen.faq.q3": "¿Es Zen más barato?",
+    "OpenCode Models solo proporciona modelos que han sido específicamente probados y evaluados para agentes de codificación. No usarías un cuchillo de mantequilla para cortar carne, no uses modelos pobres para codificar.",
+  "zen.faq.q3": "¿Es OpenCode Models más barato?",
   "zen.faq.a3":
-    "Zen no tiene fines de lucro. Zen te transfiere los costos de los proveedores de modelos. Cuanto mayor sea el uso de Zen, más podrá OpenCode negociar mejores tarifas y transferírtelas.",
-  "zen.faq.q4": "¿Cuánto cuesta Zen?",
-  "zen.faq.a4.p1.beforePricing": "Zen",
+    "OpenCode Models no tiene fines de lucro. OpenCode Models te transfiere los costos de los proveedores de modelos. Cuanto mayor sea el uso de OpenCode Models, más podrá OpenCode negociar mejores tarifas y transferírtelas.",
+  "zen.faq.q4": "¿Cuánto cuesta OpenCode Models?",
+  "zen.faq.a4.p1.beforePricing": "OpenCode",
   "zen.faq.a4.p1.pricingLink": "cobra por solicitud",
   "zen.faq.a4.p1.afterPricing": "sin recargos, así que pagas exactamente lo que cobra el proveedor del modelo.",
   "zen.faq.a4.p2.beforeAccount": "Tu costo total depende del uso, y puedes establecer límites de gasto mensuales en tu",
@@ -166,43 +166,44 @@ export const dict = {
     "Para cubrir costos, OpenCode añade solo una pequeña tarifa de procesamiento de pagos de $1.23 por cada recarga de saldo de $20.",
   "zen.faq.q5": "¿Qué hay sobre datos y privacidad?",
   "zen.faq.a5.beforeExceptions":
-    "Todos los modelos Zen están alojados en EE. UU. y la UE Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
+    "Todos los modelos de OpenCode Models están alojados en EE. UU. y la UE Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
   "zen.faq.a5.exceptionsLink": "siguientes excepciones",
   "zen.faq.q6": "¿Puedo establecer límites de gasto?",
   "zen.faq.a6": "Sí, puedes establecer límites de gasto mensuales en tu cuenta.",
   "zen.faq.q7": "¿Puedo cancelar?",
   "zen.faq.a7": "Sí, puedes deshabilitar la facturación en cualquier momento y usar tu saldo restante.",
-  "zen.faq.q8": "¿Puedo usar Zen con otros agentes de codificación?",
+  "zen.faq.q8": "¿Puedo usar OpenCode Models con otros agentes de codificación?",
   "zen.faq.a8":
-    "Aunque Zen funciona genial con OpenCode, puedes usar Zen con cualquier agente. Sigue las instrucciones de configuración en tu agente de codificación preferido.",
+    "Aunque OpenCode Models funciona genial con OpenCode, puedes usar OpenCode Models con cualquier agente. Sigue las instrucciones de configuración en tu agente de codificación preferido.",
   "zen.faq.q9": "¿Puedo obtener un reembolso?",
   "zen.faq.a9":
     "Podrías tener derecho a un reembolso si el cargo se realizó en los últimos 14 días y no has utilizado el crédito de esa compra. {{contact}} para solicitar un reembolso.",
 
-  "zen.cta.start": "Empieza con Zen",
+  "zen.cta.start": "Empieza con OpenCode Models",
   "zen.pricing.title": "Añade $20 de saldo prepago",
   "zen.pricing.fee": "(+$1.23 tarifa de procesamiento de tarjeta)",
   "zen.pricing.body": "Úsalo con cualquier agente. Establece límites de gasto mensual. Cancela en cualquier momento.",
-  "zen.problem.title": "¿Qué problema está resolviendo Zen?",
+  "zen.problem.title": "¿Qué problema está resolviendo OpenCode Models?",
   "zen.problem.body":
     "Hay muchos modelos disponibles, pero solo unos pocos funcionan bien con agentes de codificación. La mayoría de los proveedores los configuran de manera diferente con resultados variables.",
   "zen.problem.subtitle": "Estamos arreglando esto para todos, no solo para usuarios de OpenCode.",
   "zen.problem.item1": "Probando modelos seleccionados y consultando a sus equipos",
   "zen.problem.item2": "Trabajando con proveedores para asegurar que se entreguen correctamente",
   "zen.problem.item3": "Evaluando todas las combinaciones modelo-proveedor que recomendamos",
-  "zen.how.title": "Cómo funciona Zen",
-  "zen.how.body": "Aunque sugerimos usar Zen con OpenCode, puedes usar Zen con cualquier agente.",
+  "zen.how.title": "Cómo funciona OpenCode Models",
+  "zen.how.body":
+    "Aunque sugerimos usar OpenCode Models con OpenCode, puedes usar OpenCode Models con cualquier agente.",
   "zen.how.step1.title": "Regístrate y añade $20 de saldo",
   "zen.how.step1.beforeLink": "sigue las",
   "zen.how.step1.link": "instrucciones de configuración",
-  "zen.how.step2.title": "Usa Zen con precios transparentes",
+  "zen.how.step2.title": "Usa OpenCode Models con precios transparentes",
   "zen.how.step2.link": "paga por solicitud",
   "zen.how.step2.afterLink": "con cero recargos",
   "zen.how.step3.title": "Auto-recarga",
   "zen.how.step3.body": "activa la recarga automática opcional y elige el umbral de saldo y el importe de la recarga",
   "zen.privacy.title": "Tu privacidad es importante para nosotros",
   "zen.privacy.beforeExceptions":
-    "Todos los modelos Zen están alojados en EE. UU. y la UE Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
+    "Todos los modelos de OpenCode Models están alojados en EE. UU. y la UE Los proveedores siguen una política de cero retención y no usan tus datos para entrenamiento de modelos, con las",
   "zen.privacy.exceptionsLink": "siguientes excepciones",
 
   "go.promo.kimiK31Pro": "Kimi K3.1 Pro ya está disponible en Go.",
@@ -273,9 +274,9 @@ export const dict = {
     "Go es una suscripción de bajo coste que te da acceso fiable a modelos de código abierto capaces para programación agéntica.",
   "go.faq.q2": "¿Qué modelos incluye Go?",
   "go.faq.a2": "Go incluye los modelos que se indican abajo, con límites generosos y acceso confiable.",
-  "go.faq.q3": "¿Es Go lo mismo que Zen?",
+  "go.faq.q3": "¿Es Go lo mismo que OpenCode Models?",
   "go.faq.a3":
-    "No. Zen es de pago por uso, mientras que Go cuesta 10 $/mes, con límites generosos y acceso fiable a una selección de modelos.",
+    "No. OpenCode Models es de pago por uso, mientras que Go cuesta 10 $/mes, con límites generosos y acceso fiable a una selección de modelos.",
   "go.faq.q4": "¿Cuánto cuesta Go?",
   "go.faq.a4.p1.beforePricing": "Go cuesta",
   "go.faq.a4.p1.pricingLink": "10 $/mes",

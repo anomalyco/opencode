@@ -2,7 +2,7 @@ import { Effect, Stream } from "effect"
 import { LLMClient } from "../../src/route.js"
 import {
   LLMEvent,
-  LLMRequest,
+  type LLMRequest,
   Message,
   type ContentPart,
   type ProviderMetadata,
@@ -24,9 +24,10 @@ export const runTools = (options: RunOptions) =>
   Stream.unwrap(
     Effect.gen(function* () {
       const names = new Set(options.tools.map((tool) => tool.name))
-      let request = LLMRequest.update(options.request, {
+      let request = {
+        ...options.request,
         tools: [...options.request.tools.filter((tool) => !names.has(tool.name)), ...toDefinitions(options.tools)],
-      })
+      }
       let usage: Usage | undefined
       const events: LLMEvent[] = []
 
@@ -53,7 +54,8 @@ export const runTools = (options: RunOptions) =>
           return Stream.fromIterable(events)
         }
 
-        request = LLMRequest.update(request, {
+        request = {
+          ...request,
           messages: [
             ...request.messages,
             Message.assistant(state.assistantContent),
@@ -66,7 +68,7 @@ export const runTools = (options: RunOptions) =>
               }),
             ),
           ],
-        })
+        }
       }
 
       return Stream.fromIterable(events)

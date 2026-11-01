@@ -70,9 +70,7 @@ export const Plugin = {
               }
               const target = yield* access.resolve({ path: input.path, kind: "file" })
               yield* access.authorizeExternal([target], context)
-              const current = yield* FileMutation.readText(environment.files, target.absolute).pipe(
-                Effect.catchTag("Environment.NotFound", () => Effect.undefined),
-              )
+              const current = yield* FileMutation.readOptionalText(environment.files, target.absolute)
               const next = Bom.split(input.content)
               const preview = fileDiff(target.resource, current?.text ?? "", next.text, current ? "modified" : "added")
               yield* permission.assert({
@@ -84,12 +82,16 @@ export const Plugin = {
                 agent: context.agent,
                 source,
               })
-              const result = yield* fileMutation.writeTextPreservingBom({ target, content: input.content })
-              const bom = (yield* FileMutation.readText(environment.files, target.absolute)).bom
+              const written = yield* fileMutation.writeTextPreservingBom({ target, content: input.content })
               if (yield* formatter.file(target.absolute)) {
-                yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
+                yield* FileMutation.syncTextBom(environment.files, target.absolute, written.bom)
               }
-              return result
+              return {
+                operation: written.operation,
+                target: written.target,
+                resource: written.resource,
+                existed: written.existed,
+              }
             }).pipe(
               Effect.map((output) => ({ output, content: toModelContent(output) })),
               Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),

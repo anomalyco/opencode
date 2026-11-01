@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import { Base64 } from "effect/encoding"
 import { Protocol } from "../route/protocol.js"
-import { LLMEvent, LLMRequest, Message, ToolResultPart } from "../schema/index.js"
+import { LLMEvent, type LLMRequest, Message, ToolResultPart } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
@@ -62,7 +62,8 @@ const adapter = {
 const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: LLMRequest) {
   const key = request.model.route.providerMetadataKey ?? String(request.model.provider)
   const body = yield* OpenResponses.fromRequestWithAdapter(
-    LLMRequest.update(request, {
+    {
+      ...request,
       messages: request.messages.map((message) =>
         Message.make({
           ...message,
@@ -86,7 +87,7 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
           }),
         }),
       ),
-    }),
+    },
     adapter,
   )
   // Meta cannot see video nested in tool results; attach it after the complete result batch.
@@ -171,10 +172,7 @@ const HOSTED_TOOLS = {
   },
 } satisfies ResponsesHostedTools.Definitions
 
-const onEvent = Effect.fnUntraced(function* (
-  state: OpenResponses.ParserState,
-  input: OpenResponses.Event,
-) {
+const onEvent = Effect.fnUntraced(function* (state: OpenResponses.ParserState, input: OpenResponses.Event) {
   const event = OpenResponses.normalize(state, input)
   if (event.type === "response.output_item.done" && event.item && ResponsesHostedTools.isItem(event.item, HOSTED_TOOLS))
     return yield* ResponsesHostedTools.onDone(state, event.item, HOSTED_TOOLS)

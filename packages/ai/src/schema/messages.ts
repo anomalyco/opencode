@@ -3,14 +3,13 @@ import { withStatics } from "@opencode/schema/schema"
 import { Tool } from "@opencode/schema/tool"
 import {
   CacheHint,
-  CachePolicy,
-  GenerationOptions,
-  HttpOptions,
+  type CachePolicy,
+  type GenerationOptions,
+  type HttpOptions,
   JsonSchema,
-  LanguageModelSchema,
   type LanguageModel,
+  type LanguageModelProviderOptions,
   ProviderMetadata,
-  ProviderOptions,
   ReasoningEffort,
 } from "./options.js"
 import { ProviderID } from "./ids.js"
@@ -402,72 +401,24 @@ export namespace ToolChoice {
   }
 }
 
-const requestSchema = Schema.Struct({
-  id: Schema.optional(Schema.String),
-  model: LanguageModelSchema,
-  system: Schema.Array(SystemPart),
-  messages: Schema.Array(Message),
-  tools: Schema.Array(ToolEntry),
-  toolChoice: Schema.optional(ToolChoice),
-  generation: Schema.optional(GenerationOptions),
-  providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
-  cache: Schema.optional(CachePolicy),
-  // Stable cache affinity for protocols that support provider-managed prompt caching.
-  promptCacheKey: Schema.optional(Schema.String),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+/**
+ * A normalized text request, the plain object `ai.request(...)` returns. Edit it with a spread, such as
+ * `{ ...request, messages: [...request.messages, next] }`, or pass the edited object back to `ai.request`.
+ */
+export interface LLMRequest<Model extends LanguageModel = LanguageModel> {
+  readonly id?: string
+  readonly model: Model
+  readonly system: ReadonlyArray<SystemPart>
+  readonly messages: ReadonlyArray<Message>
+  readonly tools: ReadonlyArray<ToolEntry>
+  readonly toolChoice?: ToolChoice
+  readonly generation?: GenerationOptions
+  readonly providerOptions?: LanguageModelProviderOptions<Model>
+  readonly http?: HttpOptions
+  readonly cache?: CachePolicy
+  /** Stable cache affinity for protocols that support provider-managed prompt caching. */
+  readonly promptCacheKey?: string
+  readonly metadata?: Record<string, unknown>
   /** Emit a `raw` event with each provider frame before the events parsed from it. */
-  includeRaw: Schema.optional(Schema.Boolean),
-})
-
-export class LLMRequest<Model extends LanguageModel = LanguageModel> extends Schema.Class<LLMRequest>("LLM.Request")(
-  requestSchema.fields,
-) {
-  declare readonly model: Model
-
-  // Preserve model inference instead of inheriting the schema's erased constructor signature.
-  // oxlint-disable-next-line no-useless-constructor
-  constructor(input: LLMRequest.Input<Model>) {
-    super(input)
-  }
-}
-
-export namespace LLMRequest {
-  export type Input<Model extends LanguageModel = LanguageModel> = Omit<typeof requestSchema.Type, "model"> & {
-    readonly model: Model
-  }
-
-  export const input = <Model extends LanguageModel>(request: LLMRequest<Model>): Input<Model> => ({
-    id: request.id,
-    model: request.model,
-    system: request.system,
-    messages: request.messages,
-    tools: request.tools,
-    toolChoice: request.toolChoice,
-    generation: request.generation,
-    providerOptions: request.providerOptions,
-    http: request.http,
-    cache: request.cache,
-    promptCacheKey: request.promptCacheKey,
-    metadata: request.metadata,
-    includeRaw: request.includeRaw,
-  })
-
-  export function update<Model extends LanguageModel>(
-    request: LLMRequest,
-    patch: Partial<Input<Model>> & { readonly model: Model },
-  ): LLMRequest<Model>
-  export function update<Model extends LanguageModel>(
-    request: LLMRequest<Model>,
-    patch: Partial<Omit<Input, "model">> & { readonly model?: undefined },
-  ): LLMRequest<Model>
-  export function update(request: LLMRequest, patch: Partial<Input>): LLMRequest
-  export function update(request: LLMRequest, patch: Partial<Input>) {
-    if (Object.keys(patch).length === 0) return request
-    return new LLMRequest({
-      ...input(request),
-      ...patch,
-      model: patch.model ?? request.model,
-    })
-  }
+  readonly includeRaw?: boolean
 }
