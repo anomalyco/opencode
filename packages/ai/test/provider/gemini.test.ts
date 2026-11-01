@@ -677,6 +677,74 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("keeps Interactions URI audio associated with its tool result after the complete batch", () =>
+    Effect.gen(function* () {
+      const uri = "https://example.test/recording.wav"
+      const storage = "gs://bucket/recording.wav"
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: Google.configure({ apiKey: "test" }).interactions("gemini-3-flash-preview"),
+          messages: [
+            Message.user(Message.media(Media.url(uri, { mediaType: "audio/wav" }))),
+            Message.assistant([
+              ToolCallPart.make({ id: "first", name: "read", input: {} }),
+              ToolCallPart.make({ id: "second", name: "read", input: {} }),
+            ]),
+            Message.tool({
+              id: "first",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "First recording." },
+                  { type: "file", uri, mime: "audio/wav" },
+                  { type: "file", uri: "data:audio/wav;base64,AAECAw==", mime: "audio/wav" },
+                ],
+              },
+            }),
+            Message.tool({
+              id: "second",
+              name: "read",
+              result: { type: "content", value: [{ type: "file", uri: storage, mime: "audio/wav" }] },
+            }),
+            Message.user("Compare the recordings."),
+          ],
+        }),
+      )
+      expect(prepared.body.input).toEqual([
+        { type: "user_input", content: [{ type: "audio", uri, mime_type: "audio/wav" }] },
+        { type: "function_call", id: "first", name: "read", arguments: {} },
+        { type: "function_call", id: "second", name: "read", arguments: {} },
+        {
+          type: "function_result",
+          call_id: "first",
+          name: "read",
+          result: [
+            { type: "text", text: "First recording." },
+            { type: "text", text: "Audio attached in the following user message." },
+            { type: "audio", data: "AAECAw==", mime_type: "audio/wav" },
+          ],
+        },
+        {
+          type: "function_result",
+          call_id: "second",
+          name: "read",
+          result: [{ type: "text", text: "Audio attached in the following user message." }],
+        },
+        {
+          type: "user_input",
+          content: [
+            { type: "text", text: "Audio from tool read (first):" },
+            { type: "audio", uri, mime_type: "audio/wav" },
+            { type: "text", text: "Audio from tool read (second):" },
+            { type: "audio", uri: storage, mime_type: "audio/wav" },
+          ],
+        },
+        { type: "user_input", content: [{ type: "text", text: "Compare the recordings." }] },
+      ])
+    }),
+  )
+
   it.effect("flushes pending media before system update text", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
