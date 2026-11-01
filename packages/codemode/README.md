@@ -196,6 +196,7 @@ Diagnostic kinds:
 | `ToolFailure`           | A tool refused or failed.                                                                      |
 | `ExecutionFailure`      | The program threw or another execution error occurred.                                         |
 | `Truncated`             | Warning only: additional warnings were omitted by `maxOutputBytes`.                            |
+| `StateNotSaved`         | Warning only, in REPL mode: a value or the whole cell's state was not saved for later cells.   |
 
 Host failures and defects report their messages and underlying causes. Invalid outputs include the validation or
 copying error. Interruption propagates without becoming an error diagnostic.
@@ -225,3 +226,85 @@ Invalid limit configuration throws `RangeError`. Warnings receive a separate bud
 Truncation does not fail execution; an oversized value becomes a string with an in-band marker. Timeouts interrupt
 tool calls and busy loops, while a result returned before cleanup times out remains successful with a
 `TimeoutExceeded` warning. Tool-call concurrency is unrestricted. Boundary data is limited to 32 nested levels.
+
+## REPL mode
+
+REPL mode is off by default. When a host turns it on, each `execute` call is a cell, and top-level declarations
+(`const`, `let`, `var`, `function`) carry over to later cells with their values, mutations, and shared references:
+
+```ts
+const runtime = CodeMode.make({ tools, repl: true })
+
+await Effect.runPromise(runtime.execute(`const orders = await tools.orders.list({}); let seen = 0`))
+await Effect.runPromise(runtime.execute(`seen += orders.length; seen`)) // { ok: true, value: <orders.length> }
+```
+
+Within one cell, JavaScript's rules apply. Across cells, a declaration replaces the earlier binding of the same name,
+as in Node's REPL, so `const` and `let` can be declared again; a `var` without an initializer keeps the earlier value.
+Cells of one runtime run one at a time. Limits apply to each cell, including restoring and saving its state.
+
+State is committed after each successful cell. A cell that fails commits nothing, so the next cell sees the state
+from before it: a cell that throws halfway leaves no half-applied changes behind.
+
+### Stores
+
+`repl: true` keeps state in memory for the runtime's lifetime. To keep it across runtimes or processes, pass a store:
+
+```ts
+const runtime = CodeMode.make({ tools, repl: { store, maxStateBytes: 16 * 1024 * 1024 } })
+```
+
+A new runtime given the same store continues from the last commit; cells are never replayed. `Repl.memory()` is the
+built-in store; hosts implement `Repl.Store` over their own storage:
+
+```ts
+type Store = {
+  // The latest commit, or undefined before the first.
+  readonly head: () => Effect.Effect<Repl.Commit | undefined, unknown>
+  // These records as visible at `commit`: the newest version written at it or an ancestor. Missing ids are omitted.
+  readonly read: (commit: string, ids: ReadonlyArray<number>) => Effect.Effect<ReadonlyArray<Repl.Record>, unknown>
+  // Atomically store the commit and its records and make it the head, only if the head is still `commit.parent`.
+  readonly write: (commit: Repl.Commit, records: ReadonlyArray<Repl.Record>) => Effect.Effect<boolean, unknown>
+}
+```
+
+The state is one record per object, scope, and cell source, keyed by an integer id that never changes for that
+object, so a commit carries only new and changed records (`{ id, data, refs }`, where `data` is opaque JSON text and
+`refs` lists the ids it points to). Each commit names its parent, so a host can map commits to conversation messages
+and fork or revert by moving the head. Restoring reads breadth-first from `commit.root` along `refs`. Nothing is
+deleted: records no kept commit reaches can be collected by the host by walking `refs`.
+
+A failed `read` fails the cell. A failed or conflicting `write`, or state over `maxStateBytes` (default 16 MiB,
+counted over everything reachable), keeps the cell's result but adds a `StateNotSaved` warning.
+
+### What is saved
+
+Program data, functions, and closures are saved; built-ins and extension globals are saved by name, and tool
+references by path, so each resolves against the runtime that restores it. A function is saved as its cell's source
+and position plus the scopes it captured; a function defined in an earlier cell keeps reporting error locations in
+that cell's source.
+
+Values that cannot be saved are never dropped silently. A pending or rejected promise, a generator, an iterator, a
+`WeakMap` or `WeakSet`, a bound function, or a host function returned by an extension is restored as a placeholder:
+reading a top-level binding that held one, or calling, reading, or writing through a nested one, throws an error that
+names where it was and the cell that defined it. The cell that held it gets a `StateNotSaved` warning. Changes to
+built-in objects such as `Array.prototype` are not kept either and are reported the same way.
+
+### Inventory
+
+`Repl.inventory(store)` returns the top-level bindings at the head, so a host can tell the model what exists after a
+compaction or restart without running code:
+
+```ts
+type Binding = {
+  readonly name: string
+  readonly declaration: "const" | "let" | "var" | "function"
+  readonly cell: number // the committed cell that last declared it, counting from 1
+  readonly kind: string // "number", "string", "object", "array", "function", "tool", "lost", "Map", ...
+  readonly preview: string // at most 100 characters, such as `{ id: 1, name: "Ada" }` or `function greet(who)`
+  readonly bytes: number // stored bytes first reached through this binding
+  readonly lost?: string // the placeholder's message, when the value could not be saved
+}
+```
+
+The same list is on every `Repl.Commit` as `bindings`.

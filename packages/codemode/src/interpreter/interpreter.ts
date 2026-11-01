@@ -309,6 +309,36 @@ const collectVarNames = (
   return out
 }
 
+/** How a top-level name is declared, for REPL cells that redeclare names an earlier cell bound. */
+export type Declaration = "const" | "let" | "var" | "function"
+
+/** The names a program declares in its top-level scope, in source order; a later declaration of a name wins. */
+export const topLevelDeclarations = (program: Program): Map<string, Declaration> => {
+  const declared = new Map<string, Declaration>()
+  for (const statement of program.body) {
+    if (statement.type === "FunctionDeclaration") declared.set(statement.id.name, "function")
+    if (statement.type === "VariableDeclaration" && statement.kind !== "var") {
+      for (const declaration of statement.declarations) {
+        for (const name of collectPatternNames(declaration.id))
+          declared.set(name, statement.kind === "let" ? "let" : "const")
+      }
+    }
+    for (const name of collectVarNames(statement)) if (!declared.has(name)) declared.set(name, "var")
+  }
+  return declared
+}
+
+// REPL mode, as in V8's: a cell's declaration replaces the binding of an earlier cell. A `var` keeps the earlier
+// value, as redeclaring a `var` does, unless that binding cannot hold it (a constant or a lost value).
+const redeclare = (scope: Map<string, Binding>, program: Program): void => {
+  for (const [name, declaration] of topLevelDeclarations(program)) {
+    const existing = scope.get(name)
+    if (existing === undefined) continue
+    if (declaration === "var" && existing.mutable && existing.initialized !== false) continue
+    scope.delete(name)
+  }
+}
+
 const loopDeclaration = (left: VariableDeclaration | Pattern, statement: "for...of" | "for...in") => {
   if (left.type !== "VariableDeclaration") return undefined
   const declaration = left.declarations.length === 1 ? left.declarations[0] : undefined
@@ -383,6 +413,8 @@ export class Interpreter<R> {
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
   readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
   private readonly root: Frame<R>
+  /** Built-ins, extension globals, and host bindings, below the program's own top-level scope. */
+  readonly globalScope: Map<string, Binding>
 
   constructor(options: {
     readonly tools: ToolRuntime<R>
@@ -398,6 +430,7 @@ export class Interpreter<R> {
     this.runner = new Runner(this, options.services)
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     const globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
+    this.globalScope = globalScope
     // Calling back into the program never reads frame state, so any frame serves; the root is always alive.
     this.root = new Frame(this, new ScopeStack([globalScope]))
     for (const [name, value] of [...globals(this), ...(options.globals?.(this) ?? [])]) {
@@ -405,9 +438,12 @@ export class Interpreter<R> {
     }
   }
 
-  /** The program's body, as the first job: its completion value, copied out for the host. */
-  *main(program: Program): Eval<Json | undefined> {
-    return yield* toBoundary(this, yield* this.root.run(program))
+  /**
+   * The program's body, as the first job: its completion value, copied out for the host. A REPL cell passes the
+   * top-level scope earlier cells left, which its own declarations update.
+   */
+  *main(program: Program, scope?: Map<string, Binding>): Eval<Json | undefined> {
+    return yield* toBoundary(this, yield* this.root.run(program, scope))
   }
 
   /** Calls into the program; a built-in passes its own call site so failures inside are located there. */
@@ -452,9 +488,10 @@ class Frame<R> {
     private scopes: ScopeStack,
   ) {}
 
-  *run(program: Program): Eval<Value> {
+  *run(program: Program, scope?: Map<string, Binding>): Eval<Value> {
     // Keep top-level declarations separate so they can shadow builtins.
-    this.scopes.push()
+    this.scopes.push(scope)
+    if (scope !== undefined) redeclare(scope, program)
     try {
       this.predeclareLexical(program.body)
       this.hoistFunctions(program.body)

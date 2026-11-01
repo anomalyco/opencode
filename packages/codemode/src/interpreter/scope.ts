@@ -1,5 +1,5 @@
 import { type AstNode, type Binding, referenceError, typeError } from "./model.js"
-import type { Value } from "./objects.js"
+import { Lost, type Value } from "./objects.js"
 
 export class ScopeStack {
   private readonly scopes: Array<Map<string, Binding>>
@@ -41,6 +41,7 @@ export class ScopeStack {
     }
 
     if (binding.initialized === false) {
+      if (binding.value instanceof Lost) throw typeError(binding.value.message, node)
       throw referenceError(`Cannot access '${name}' before initialization.`, node)
     }
 
@@ -54,7 +55,9 @@ export class ScopeStack {
       throw referenceError(`Unknown identifier '${name}'.`, node)
     }
 
-    if (binding.initialized === false) {
+    // A binding lost between REPL cells can be assigned again; one still in its TDZ cannot.
+    const lost = binding.initialized === false && binding.value instanceof Lost
+    if (binding.initialized === false && !lost) {
       throw referenceError(`Cannot access '${name}' before initialization.`, node)
     }
 
@@ -62,6 +65,7 @@ export class ScopeStack {
       throw typeError(`Cannot assign to constant '${name}'.`, node)
     }
 
+    if (lost) binding.initialized = true
     binding.value = value
     return value
   }

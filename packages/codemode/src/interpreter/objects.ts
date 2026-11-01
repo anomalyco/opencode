@@ -216,6 +216,55 @@ export class Native extends Callable {
   }
 }
 
+// Every property read, key listing, or write through a lost value reaches its properties first, so they throw.
+class LostProps extends Map<string | symbol, Slot> {
+  constructor(private readonly message: string) {
+    super()
+  }
+  override get(): never {
+    throw typeError(this.message)
+  }
+  override has(): never {
+    throw typeError(this.message)
+  }
+  override keys(): never {
+    throw typeError(this.message)
+  }
+  override set(): never {
+    throw typeError(this.message)
+  }
+}
+
+/**
+ * A REPL value that could not be saved between cells, such as a pending Promise or a host function. Calling it,
+ * reading or writing its properties, or coercing it throws `message`, which names where it was and why it was lost.
+ */
+export class Lost extends Native {
+  declare readonly props: Map<string | symbol, Slot>
+  constructor(
+    proto: Obj,
+    readonly message: string,
+  ) {
+    super(proto, {
+      name: "",
+      call: () => {
+        throw typeError(message)
+      },
+      callback: false,
+    })
+    this.props = new LostProps(message)
+  }
+  override get describe() {
+    return "a value lost between REPL cells"
+  }
+  override toString(): never {
+    throw typeError(this.message)
+  }
+  override inspect() {
+    return `[lost: ${this.message}]`
+  }
+}
+
 export class PromiseObj extends Opaque {
   override readonly tag = "Promise"
   state: "pending" | "fulfilled" | "rejected" = "pending"

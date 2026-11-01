@@ -1,9 +1,11 @@
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Semaphore } from "effect"
 import { fromJson } from "./data.js"
 import type { Extension } from "./extension.js"
 import { executeProgram } from "./interpreter/execute.js"
 import { extensionGlobals } from "./interpreter/extensions.js"
 import { globalNames } from "./interpreter/globals.js"
+import { DEFAULT_MAX_STATE_BYTES, memory, type Options as ReplOptions } from "./repl.js"
+import { openCell } from "./repl-cell.js"
 import { scanTools } from "./scan.js"
 import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
@@ -54,6 +56,11 @@ export type Options<Provided extends Record<string, unknown> = {}, Extensions ex
   extensions?: Extensions
   /** Resource limits enforced on each execution. */
   limits?: ExecutionLimits
+  /**
+   * REPL mode, off by default. When on, each `execute` is a cell: top-level declarations persist into later cells
+   * of the same store, and a later declaration of a name replaces the earlier binding. `true` keeps state in memory.
+   */
+  repl?: true | ReplOptions
 }
 
 /** The Effect environment an execution needs: what the tools and the extensions' Effect globals require. */
@@ -91,6 +98,7 @@ export const DiagnosticKind = Schema.Literals([
   "ToolFailure",
   "ExecutionFailure",
   "Truncated",
+  "StateNotSaved",
 ])
 /** Stable categories produced by program, schema, tool, limit, and truncation diagnostics. */
 export type DiagnosticKind = typeof DiagnosticKind.Type
@@ -137,7 +145,11 @@ export type Runtime<R = never> = {
   readonly execute: (code: string, bindings?: Readonly<Record<string, DataValue>>) => Effect.Effect<Result, never, R>
 }
 
-const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, minimum: number): number | undefined => {
+const validateLimit = (
+  name: keyof ExecutionLimits | "maxStateBytes",
+  value: number | undefined,
+  minimum: number,
+): number | undefined => {
   if (value !== undefined && (!Number.isSafeInteger(value) || value < minimum)) {
     throw new RangeError(`${name} must be a safe integer greater than or equal to ${minimum}.`)
   }
@@ -156,7 +168,8 @@ export const execute = <
   const Extensions extends ReadonlyArray<Extension> = [],
 >(
   options: ExecuteOptions<Provided, Extensions>,
-): Effect.Effect<Result, never, Environment<Provided, Extensions>> => make(options).execute(options.code, options.bindings)
+): Effect.Effect<Result, never, Environment<Provided, Extensions>> =>
+  make(options).execute(options.code, options.bindings)
 
 /** Creates an Effect-native runtime over explicit, schema-described tools and extensions. */
 export const make = <
@@ -177,14 +190,35 @@ export const make = <
       bound.add(name)
     }
   }
+  const repl = options.repl === true ? {} : options.repl
+  const cell =
+    repl === undefined
+      ? undefined
+      : openCell<Environment<Provided, Extensions>>(
+          repl.store ?? memory(),
+          validateLimit("maxStateBytes", repl.maxStateBytes, 0) ?? DEFAULT_MAX_STATE_BYTES,
+          // Built-ins and extension globals are the same in every runtime; host bindings may differ per call.
+          bound,
+        )
+  // Cells of one REPL context run one at a time, each against the state the previous one committed.
+  const lock = repl === undefined ? undefined : Semaphore.makeUnsafe(1)
   return {
     get catalog() {
       return prepared.catalog
     },
-    execute: (code, bindings) =>
-      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => [
-        ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
-        ...extensionGlobals(ctx, extensions),
-      ]),
+    execute: (code, bindings) => {
+      const run = executeProgram(
+        code,
+        prepared,
+        limits,
+        options.hooks ?? {},
+        (ctx) => [
+          ...Object.entries(bindings ?? {}).map(([name, value]) => [name, fromJson(ctx, value)] as const),
+          ...extensionGlobals(ctx, extensions),
+        ],
+        cell,
+      )
+      return lock === undefined ? run : lock.withPermits(1)(run)
+    },
   }
 }

@@ -40,6 +40,12 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       maximum of 2^32 - 1), and 10,000 pending promises at once. Exceeding one throws a `RangeError`. A single regular
       expression match can still run long on a pathological pattern; the host regex engine has no interrupt hook.
 - [x] A trailing comma after a rest parameter is a syntax error, with or without `"use strict"`.
+- [x] Optional REPL mode (`CodeMode.make({ repl })`): top-level `const`, `let`, `var`, and `function` bindings persist
+      across `execute` calls through a host store, a later cell's declaration replaces an earlier binding, and a
+      failed cell commits nothing. Functions and closures are saved as source positions plus captured scopes.
+- [ ] REPL values that are saved only as throwing placeholders: pending and rejected promises, generators,
+      iterators, `WeakMap`/`WeakSet`, bound functions, and host functions from extension results. Changes to
+      built-in objects are not kept between cells.
 - [x] A program that begins with `"use strict"` rejects `yield` as an identifier and duplicate parameter names at
       parse time. Without it, `yield` is an ordinary binding.
 - [x] Duplicate parameter names in non-strict code bind the last parameter, as in JS (`function f(a, a)` called
