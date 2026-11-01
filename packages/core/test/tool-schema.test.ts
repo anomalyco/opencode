@@ -398,6 +398,50 @@ test("legacy Zod schemas cloned from an overridden parent still convert", () => 
   expect(path._zod.parent).toBe(base)
 })
 
+test("current Zod schemas with JSON Schema overrides use guarded conversion", () => {
+  const base = z.string().describe("Base")
+  const baseParent = base._zod.parent
+  let parentDuringOverride: unknown
+  base._zod.toJSONSchema = () => {
+    parentDuringOverride = base._zod.parent
+    return { type: "string", description: "Base" }
+  }
+  const path = base.describe("File path")
+  const input = z.object({ args: z.object({ path }) })
+  const tool: Info = {
+    name: "current-zod",
+    description: "Current Zod tool",
+    input,
+    output: input,
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+
+  const result = definition(tool)
+  const expected = {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    type: "object",
+    properties: {
+      args: {
+        type: "object",
+        properties: { path: { type: "string", description: "File path" } },
+        required: ["path"],
+      },
+    },
+    required: ["args"],
+  }
+  expect(result.inputSchema).toEqual(expected)
+  expect(result.outputSchema).toEqual({
+    ...expected,
+    additionalProperties: false,
+    properties: {
+      args: { ...expected.properties.args, additionalProperties: false },
+    },
+  })
+  expect(parentDuringOverride).toBeUndefined()
+  expect(base._zod.parent).toBe(baseParent)
+  expect(path._zod.parent).toBe(base)
+})
+
 test("portable schema failures become tool failures", async () => {
   const input = {
     "~standard": {
