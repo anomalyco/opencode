@@ -50,6 +50,7 @@ export const configure = (input: Config = {}) => {
   }
 }
 export const provider = configure()
+export const chat = provider.chat
 export const model: ProviderPackage.Model<Settings, CohereChat.ProviderOptionsInput> = (
   modelID,
   { apiKey, baseURL, body, headers, ...providerOptions }: Settings = {},

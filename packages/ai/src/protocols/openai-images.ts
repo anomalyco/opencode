@@ -5,7 +5,7 @@ import {
   ImageOutputEvent,
   ImagePartialEvent,
   type ImageEvent,
-  type ImageRequestFor,
+  type ImageRequest,
 } from "../image.js"
 import { Media } from "../media.js"
 import { classifyProviderFailure } from "../provider-error.js"
@@ -41,7 +41,7 @@ export type OpenAIImageOptions = {
   readonly partialImages?: number
 } & Record<string, unknown>
 
-export type Request = ImageRequestFor<OpenAIImageOptions>
+export type Request = ImageRequest<ImageModel<OpenAIImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema

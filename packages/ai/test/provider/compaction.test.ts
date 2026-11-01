@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { ai, LLMRequest, Message } from "../../src/effect.js"
+import { ai, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route/client.js"
 import { OpenAI, Azure, XAI } from "../../src/providers/index.js"
 import { testEffect } from "../lib/effect.js"
@@ -43,16 +43,13 @@ for (const model of [
       expect(first.text).toBe("")
       const codec = Schema.fromJsonString(Message)
       const message = Schema.decodeSync(codec)(Schema.encodeSync(codec)(first.message))
-      yield* LLMClient.generate(
-        LLMRequest.update(request, { messages: [...request.messages, message, Message.user("continue")] }),
-      )
-      const rejected = yield* LLMClient.generate(
-        LLMRequest.update(request, {
-          model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"),
-          providerOptions: {},
-          messages: [message],
-        }),
-      ).pipe(Effect.flip)
+      yield* LLMClient.generate({ ...request, messages: [...request.messages, message, Message.user("continue")] })
+      const rejected = yield* LLMClient.generate({
+        ...request,
+        model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"),
+        providerOptions: {},
+        messages: [message],
+      }).pipe(Effect.flip)
       expect(rejected.reason._tag).toBe("InvalidRequest")
     }),
   )

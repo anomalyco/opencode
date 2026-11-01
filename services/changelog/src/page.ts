@@ -80,7 +80,7 @@ export function renderPage(state: PageState) {
 <li><a href="${REPO}" ${external}>GitHub</a></li>
 <li><a href="${SITE}/v2/docs">Docs</a></li>
 <li><a href="${SITE}/data">Data</a></li>
-<li><a href="${SITE}/zen">Zen</a></li>
+<li><a href="${SITE}/console/models">Models</a></li>
 <li><a href="${SITE}/go">Go</a></li>
 <li><a href="${SITE}/enterprise">Enterprise</a></li>
 <li><a class="cta" href="${SITE}/download">${download}Download</a></li>

@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { ai, LLMRequest, Message, ToolDefinition } from "../../src/effect.js"
+import { ai, Message, ToolDefinition } from "../../src/effect.js"
 import { LLMClient, Route } from "../../src/route/client.js"
 import { Auth } from "../../src/route/auth.js"
 import { Endpoint } from "../../src/route/endpoint.js"
@@ -137,7 +137,8 @@ for (const model of [
       })
       for (const [candidate, tag] of [
         [
-          LLMRequest.update(request, {
+          {
+            ...request,
             tools: [
               ToolDefinition.make({
                 name: "unsupported",
@@ -146,11 +147,11 @@ for (const model of [
                 native: { unsupported: {} },
               }),
             ],
-          }),
+          },
           "InvalidRequest",
         ],
         [
-          LLMRequest.update(request, { providerOptions: { contextManagement: "invalid-generation-option" } }),
+          { ...request, providerOptions: { contextManagement: "invalid-generation-option" } },
           model.provider === "xai" ? "UnsupportedOperation" : "InvalidRequest",
         ],
       ] as const) {
@@ -252,7 +253,7 @@ for (const model of [
       expect(compacted.replacement[4]?.content.map((part) => part.type)).toEqual(["media", "media", "media"])
       const codec = Schema.fromJsonString(Schema.Array(Message))
       const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
-      yield* LLMClient.generate(LLMRequest.update(request, { messages }))
+      yield* LLMClient.generate({ ...request, messages })
     }),
   )
 }
@@ -387,17 +388,17 @@ for (const model of [
       const compacted = yield* ai.compact(request)
       const codec = Schema.fromJsonString(Schema.Array(Message))
       const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
-      yield* LLMClient.generate(LLMRequest.update(request, { messages }))
+      yield* LLMClient.generate({ ...request, messages })
     }),
   )
 }
 
 testEffect(fixedResponse("must not execute")).effect("xAI rejects automatic compaction options", () =>
   Effect.gen(function* () {
-    const request = LLMRequest.update(
-      ai.request({ model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"), prompt: "hello" }),
-      { providerOptions: { contextManagement: [{ type: "compaction" }] } },
-    )
+    const request = {
+      ...ai.request({ model: XAI.configure({ apiKey: "test" }).responses("grok-4.6"), prompt: "hello" }),
+      providerOptions: { contextManagement: [{ type: "compaction" }] },
+    }
     const error = yield* LLMClient.generate(request).pipe(Effect.flip)
     expect(error.reason._tag).toBe("UnsupportedOperation")
     expect(error.message).toContain("ai.compact")
@@ -457,7 +458,7 @@ for (const model of [
       ])
       const codec = Schema.fromJsonString(Schema.Array(Message))
       const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
-      yield* LLMClient.generate(LLMRequest.update(request, { messages: [...messages, Message.user("continue")] }))
+      yield* LLMClient.generate({ ...request, messages: [...messages, Message.user("continue")] })
     }),
   )
 }

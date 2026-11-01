@@ -4,7 +4,7 @@ import { Title, Meta } from "@solidjs/meta"
 import video from "../asset/lander/opencode-min.mp4"
 import videoPoster from "../asset/lander/opencode-poster.png"
 import { IconCopy, IconCheck } from "../component/icon"
-import { A, createAsync } from "@solidjs/router"
+import { createAsync } from "@solidjs/router"
 import { createMemo } from "solid-js"
 import { EmailSignup } from "~/component/email-signup"
 import { Tabs } from "@kobalte/core/tabs"
@@ -677,7 +677,7 @@ export default function Home() {
               <li>
                 <Faq question={i18n.t("home.faq.q3")}>
                   {i18n.t("home.faq.a3.p1")} {i18n.t("home.faq.a3.p2.beforeZen")}{" "}
-                  <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+                  <a href="https://opencode.ai/console/models">{i18n.t("nav.zen")}</a>
                   {i18n.t("home.faq.a3.p2.afterZen")} {i18n.t("home.faq.a3.p3")} {i18n.t("home.faq.a3.p4.beforeLocal")}{" "}
                   <a href="/v2/docs/models/#local" target="_blank">
                     {i18n.t("home.faq.a3.p4.localLink")}
@@ -687,8 +687,7 @@ export default function Home() {
               </li>
               <li>
                 <Faq question={i18n.t("home.faq.q4")}>
-                  {i18n.t("home.faq.a4.p1")}{" "}
-                  <a href="/v2/docs/providers/">{i18n.t("common.learnMore")}</a>.
+                  {i18n.t("home.faq.a4.p1")} <a href="/v2/docs/providers/">{i18n.t("common.learnMore")}</a>.
                 </Faq>
               </li>
               <li>
@@ -808,7 +807,7 @@ export default function Home() {
                   </svg>
                 </div>
               </div>
-              <A href={language.route("/zen")}>
+              <a href="https://opencode.ai/console/models">
                 <span>{i18n.t("home.zenCta.link")} </span>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path
@@ -818,7 +817,7 @@ export default function Home() {
                     stroke-linecap="square"
                   />
                 </svg>
-              </A>
+              </a>
             </div>
           </section>
 

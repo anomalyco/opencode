@@ -12,7 +12,7 @@ import {
   AIError,
   CacheTTL,
   HttpOptions,
-  LLMRequest,
+  type LLMRequest,
   LLMEvent,
   mergeJsonRecords,
   Usage,
@@ -1406,10 +1406,7 @@ const onContentBlockDelta = Effect.fnUntraced(function* (
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onContentBlockStop = Effect.fnUntraced(function* (
-  state: ParserState,
-  event: AnthropicEvent,
-) {
+const onContentBlockStop = Effect.fnUntraced(function* (state: ParserState, event: AnthropicEvent) {
   if (event.index === undefined) return [state, NO_EVENTS] satisfies StepResult
   if (event.index in state.compactions) {
     const { [event.index]: content, ...compactions } = state.compactions
@@ -1653,12 +1650,13 @@ export const transport = <
       const betas = new Set([...existingBetas, ...requiredBetas])
       return http.prepare({
         ...input,
-        request: LLMRequest.update(input.request, {
+        request: {
+          ...input.request,
           http: new HttpOptions({
             ...input.request.http,
             headers: { ...headers, "anthropic-beta": [...betas].join(",") },
           }),
-        }),
+        },
       })
     },
   }

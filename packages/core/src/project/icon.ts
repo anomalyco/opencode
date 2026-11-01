@@ -55,7 +55,9 @@ export const refresh = Effect.fn("ProjectIcon.refresh")(function* (
 })
 
 export const discover = Effect.fn("ProjectIcon.discover")(function* (fs: FSUtil.Interface, directory: string) {
-  const root = yield* fs.realPath(directory)
+  const resolved = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => undefined))
+  if (!resolved) return
+  const root = resolved
   const children = yield* fs.readDirectoryEntries(root).pipe(Effect.orElseSucceed(() => []))
   const catalogs = children
     .filter((e) => e.type === "Directory" && !e.name.startsWith("."))

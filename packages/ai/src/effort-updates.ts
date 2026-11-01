@@ -1,6 +1,6 @@
 // Changing the top-level reasoning effort invalidates the provider prompt cache. Protocols with a native
 // per-message update keep it frozen and lower `Message.effort(...)` markers instead; other routes strip them.
-import { LLMRequest, type EffortPart, type Message } from "./schema/messages.js"
+import { type LLMRequest, type EffortPart, type Message } from "./schema/messages.js"
 
 export const effortUpdate = (message: Message): EffortPart | undefined => {
   if (message.role !== "system" || message.content.length !== 1) return undefined
@@ -10,7 +10,7 @@ export const effortUpdate = (message: Message): EffortPart | undefined => {
 
 export const stripEffortUpdates = (request: LLMRequest) => {
   const messages = request.messages.filter((message) => effortUpdate(message) === undefined)
-  return messages.length === request.messages.length ? request : LLMRequest.update(request, { messages })
+  return messages.length === request.messages.length ? request : { ...request, messages }
 }
 
 export const applyEffortUpdates = (request: LLMRequest): LLMRequest =>

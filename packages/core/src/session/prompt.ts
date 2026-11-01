@@ -67,10 +67,11 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
         const skill = yield* skillService.get(attachment.id)
         if (!skill) return yield* new SkillNotFoundError({ skill: attachment.id })
         prepared.set(skill.id, skill.name)
+        const files = yield* skillService.files(skill.id)
         return {
           id: skill.id,
           name: skill.name,
-          text: (yield* Skill.prepare(fs, skill).pipe(Effect.orDie)).output,
+          text: (yield* Skill.prepare(fs, skill, files).pipe(Effect.orDie)).output,
           mention: attachment.mention,
         }
       }),

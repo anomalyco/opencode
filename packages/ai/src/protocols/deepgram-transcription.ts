@@ -3,7 +3,7 @@ import type { HttpClientResponse } from "effect/http"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
-import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequestFor } from "../transcription.js"
+import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequest } from "../transcription.js"
 import { ProviderShared } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 import { SpeakerTurns } from "./utils/speaker-turns.js"
@@ -30,7 +30,7 @@ export type DeepgramTranscriptionOptions = {
   readonly tag?: string | ReadonlyArray<string>
 } & Record<string, unknown>
 
-export type Request = TranscriptionRequestFor<DeepgramTranscriptionOptions>
+export type Request = TranscriptionRequest<TranscriptionModel<DeepgramTranscriptionOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema

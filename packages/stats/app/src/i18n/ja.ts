@@ -59,7 +59,7 @@ export const dict = {
   "modal.success": "登録しました。",
   "modal.error": "登録に失敗しました",
   "product.allUsers": "すべてのユーザー",
-  "product.zen": "Zen",
+  "product.zen": "Models",
   "product.go": "Go",
   "range.1D": "1日",
   "range.1W": "1週間",
