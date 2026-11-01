@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "grok-4.20-0309-non-reasoning",
+    "tags": [
+      "prefix:xai-chat",
+      "provider:xai",
+      "protocol:openai-chat",
+      "text",
+      "usage"
+    ],
+    "name": "xai-chat/streams-text",
+    "recordedAt": "2026-10-31T17:08:36.469Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.x.ai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"grok-4.20-0309-non-reasoning\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with exactly one word: hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_completion_tokens\":256}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"c49dcb74-ce08-900d-a735-e936a9122b0f\",\"object\":\"chat.completion.chunk\",\"created\":1793466516,\"model\":\"grok-4.20-0309-non-reasoning\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\",\"role\":\"assistant\"}}],\"system_fingerprint\":\"fp_8d6266e762\",\"service_tier\":\"default\"}\n\ndata: {\"id\":\"c49dcb74-ce08-900d-a735-e936a9122b0f\",\"object\":\"chat.completion.chunk\",\"created\":1793466516,\"model\":\"grok-4.20-0309-non-reasoning\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"system_fingerprint\":\"fp_8d6266e762\",\"service_tier\":\"default\"}\n\ndata: {\"id\":\"c49dcb74-ce08-900d-a735-e936a9122b0f\",\"object\":\"chat.completion.chunk\",\"created\":1793466516,\"model\":\"grok-4.20-0309-non-reasoning\",\"choices\":[],\"usage\":{\"prompt_tokens\":191,\"completion_tokens\":1,\"total_tokens\":192,\"prompt_tokens_details\":{\"text_tokens\":191,\"audio_tokens\":0,\"image_tokens\":0,\"cached_tokens\":128},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0},\"num_sources_used\":0,\"cost_in_usd_ticks\":1068500},\"system_fingerprint\":\"fp_8d6266e762\",\"service_tier\":\"default\"}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}
