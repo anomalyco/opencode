@@ -17,6 +17,7 @@ import {
   pickerParent,
   pickerRoot,
   pickerAbsoluteInput,
+  cleanPickerInput,
 } from "./domain"
 
 type Sdk = Parameters<typeof listPickerDirectory>[0]
@@ -76,6 +77,13 @@ test("centralizes file and directory selection policy", () => {
   expect(selectedTreePath("/home/luke/repo", "src/index.ts", "file")).toBe("src/index.ts")
   expect(selectedTreePath("/home/luke/repo/src", "index.ts", "file", "/home/luke/repo")).toBe("src/index.ts")
   expect(selectedTreePath("/home/luke/repo", "src/", "file")).toBeUndefined()
+})
+
+test("preserves trailing spaces in resolved picker paths", () => {
+  expect(cleanPickerInput("/tmp/foo ", false)).toBe("/tmp/foo ")
+  expect(cleanPickerInput("/tmp/foo \nignored", false)).toBe("/tmp/foo ")
+  expect(cleanPickerInput("/tmp/foo ")).toBe("/tmp/foo")
+  expect(pickerAbsoluteInput(cleanPickerInput("/tmp/foo ", false), "/home/luke", "/home/luke/repo")).toBe("/tmp/foo ")
 })
 
 test("preserves POSIX case while matching Windows drives case-insensitively", () => {
