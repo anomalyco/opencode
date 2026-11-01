@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, Show, Switch } from "solid-js"
 import { RGBA, TextAttributes, type MouseEvent } from "@opentui/core"
 import { useRenderer, type JSX } from "@opentui/solid"
 import type {
@@ -52,15 +52,20 @@ export function ReasoningPart(props: {
     generateThinkingSyntax(syntax(), theme.text.muted, renderer.nativeScene),
   )
   const ctx = use()
-  // Collapsed by default in hide mode: a single line throughout, so the
-  // layout never shifts. Click to open the full markdown block, click to close.
-  const [expanded, setExpanded] = createSignal(false)
+  // Open by default when thinking is shown, collapsed to one line when hidden.
+  // Clicking the header overrides that default either way, so a block can be
+  // folded without hiding every block in the session.
+  const [override, setOverride] = createSignal<boolean>()
 
   const content = createMemo(() => reasoningContent(props.part))
   const isDone = createMemo(
     () => props.part.time?.completed !== undefined || props.message.time.completed !== undefined,
   )
   const inMinimal = createMemo(() => ctx.thinkingMode() === "hide")
+  // A new session default applies to every block; drop per-block overrides so
+  // switching between show and hide cannot leave a stale folded state behind.
+  createEffect(on(inMinimal, () => setOverride(undefined), { defer: true }))
+  const open = () => override() ?? !inMinimal()
   const duration = createMemo(() => {
     const end = props.part.time?.completed ?? props.message.time.completed
     const start = props.part.time?.created ?? props.message.time.created
@@ -68,30 +73,30 @@ export function ReasoningPart(props: {
   })
   const summary = createMemo(() => reasoningSummary(content()))
   const toggle = () => {
-    if (!inMinimal()) return
-    setExpanded((prev) => !prev)
+    // Selecting the header text for a copy must not fold the block.
+    if (renderer.getSelection()?.getSelectedText()) return
+    setOverride(!open())
   }
 
   return (
     <Show when={content()}>
       <box paddingLeft={3} flexDirection="column" flexShrink={0}>
         <box
-          border={!inMinimal() || expanded() ? ["left"] : undefined}
+          border={open() ? ["left"] : undefined}
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.decrease(theme.background.base)}
-          paddingLeft={!inMinimal() || expanded() ? 1 : 0}
+          paddingLeft={open() ? 1 : 0}
         >
           <box onMouseUp={toggle}>
             <ReasoningHeader
-              toggleable={inMinimal()}
-              open={!inMinimal() || expanded()}
+              open={open()}
               done={isDone()}
-              title={inMinimal() && !expanded() ? summary().title : null}
+              title={open() ? null : summary().title}
               duration={isDone() ? Locale.duration(duration()) : undefined}
             />
           </box>
         </box>
-        <Show when={!inMinimal() || expanded()}>
+        <Show when={open()}>
           <box marginTop={1}>
             <box
               border={["left"]}
@@ -121,13 +126,7 @@ export function reasoningContent(part: SessionMessageAssistantReasoning) {
   return part.text.replace("[REDACTED]", "").trim()
 }
 
-function ReasoningHeader(props: {
-  toggleable: boolean
-  open: boolean
-  done: boolean
-  title: string | null
-  duration?: string
-}) {
+function ReasoningHeader(props: { open: boolean; done: boolean; title: string | null; duration?: string }) {
   const theme = useTheme()
   const fg = () =>
     props.open
@@ -148,9 +147,7 @@ function ReasoningHeader(props: {
       </Match>
       <Match when={true}>
         <text fg={fg()} wrapMode="none">
-          <Show when={props.toggleable}>
-            <span>{props.open ? "- " : "+ "}</span>
-          </Show>
+          <span>{props.open ? "- " : "+ "}</span>
           <span>Thought</span>
           <Show when={props.title || props.duration}>
             <span>: </span>
