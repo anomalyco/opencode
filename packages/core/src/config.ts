@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from "node:util"
 import { applyEdits, modify, type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, FiberMap, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
 import { Directory, Document, Info, type Patch, type Entry, Event } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Credential } from "./credential.js"
 import { Bus } from "./bus.js"
 import { Watcher } from "./filesystem/watcher.js"
@@ -28,6 +29,15 @@ import { ChildProcess } from "effect/process"
 export function latest<K extends keyof Info>(entries: readonly Entry[], key: K): Info[K] | undefined {
   return entries.findLast((entry): entry is Document => entry.type === "document" && entry.info[key] !== undefined)
     ?.info[key]
+}
+
+export function latestField<K extends keyof ConfigExperimental.Info>(
+  entries: readonly Entry[],
+  field: K,
+): ConfigExperimental.Info[K] | undefined {
+  return entries.findLast(
+    (entry): entry is Document => entry.type === "document" && entry.info.experimental?.[field] !== undefined,
+  )?.info.experimental?.[field]
 }
 
 export interface Interface {

@@ -132,7 +132,7 @@ export const Plugin = {
                     ),
                   )
               }
-              const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
+              const limit = Config.latestField(yield* config.entries(), "subagent_depth") ?? 1
               if (depth >= limit)
                 return yield* new ToolFailure({
                   message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
