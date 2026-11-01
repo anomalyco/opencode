@@ -48,37 +48,6 @@ La CLI di OpenCode include anche i seguenti comandi.
 
 ---
 
-### attach
-
-Collega un terminale a un backend server di OpenCode già in esecuzione avviato tramite i comandi `serve` o `web`.
-
-```bash
-opencode attach [url]
-```
-
-Questo consente di usare la TUI con un backend OpenCode remoto. Per esempio:
-
-```bash
-# Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
-
-# In un altro terminale, collega la TUI al backend in esecuzione
-opencode attach http://10.20.30.40:4096
-```
-
-#### Flag
-
-| Flag                                     | Breve | Descrizione                                                                                     |
-| ---------------------------------------- | ----- | ----------------------------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |       | Working directory in cui avviare la TUI                                                         |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continua l'ultima sessione                                                                      |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`  | ID sessione da continuare                                                                       |
-| <nobr><code>{"--fork"}</code></nobr>     |       | Crea un fork della sessione durante la continuazione (usa con `--continue` o `--session`)       |
-| <nobr><code>{"--password"}</code></nobr> | `-p`  | Password per l'autenticazione di base (predefinita: `OPENCODE_SERVER_PASSWORD`)                 |
-| <nobr><code>{"--username"}</code></nobr> | `-u`  | Nome utente per l'autenticazione di base (predefinito: `OPENCODE_SERVER_USERNAME` o `opencode`) |
-
----
-
 ### auth
 
 Comando per gestire le credenziali e il login dei provider.
