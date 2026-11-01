@@ -218,6 +218,19 @@ describe("Host.resolve", () => {
     assert.equal(Host.packageID(plugin.target), path.basename(plugin.target.directory))
   })
 
+  it("falls back when a local package.json cannot be read", async () => {
+    await using plugin = await fixture({ "index.ts": source })
+    // A directory at this path makes readFile fail on Windows and Unix without changing permissions.
+    await mkdir(path.join(plugin.target.directory, "package.json"))
+    assert.deepEqual(Host.resolve(plugin.target), {
+      server: plugin.url("index.ts"),
+      tui: undefined,
+      rpc: undefined,
+      gui: undefined,
+    })
+    assert.equal(Host.packageID(plugin.target), path.basename(plugin.target.directory))
+  })
+
   it("resolves the conventional GUI entrypoint in a local directory", async () => {
     await using plugin = await fixture({ "index.ts": source, "gui-experimental.js": source })
     assert.deepEqual(Host.resolve(plugin.target), {
