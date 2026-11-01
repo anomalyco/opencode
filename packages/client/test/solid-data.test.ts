@@ -1,5 +1,6 @@
-import { expect, test } from "bun:test"
+import { afterEach, expect, jest, test } from "bun:test"
 import { getEventListeners } from "node:events"
+import { setImmediate } from "node:timers/promises"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
 import { OpenCode, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
@@ -13,6 +14,8 @@ const session = (viewed: number): SessionInfo => ({
   time: { created: 0, updated: 0, idle: 2, viewed },
   location: { directory: "/project" },
 })
+
+afterEach(() => jest.useRealTimers())
 
 test("uses the configured initial window and retains normal cursor page sizes", async () => {
   const requests: { limit: string | null; cursor: string | null }[] = []
@@ -1499,6 +1502,155 @@ test("projects background user shell metadata from durable shell data", () => {
     setup.dispose()
   }
 })
+
+const mcpEvents = ["mcp.status.changed", "mcp.resources.changed"] as const
+
+test.each(mcpEvents)("does not load unread MCP catalogs on %s", async (type) => {
+  const setup = mcpFixture()
+  try {
+    setup.emit(type, "/cold")
+    await setup.flush()
+    expect(setup.requests).toEqual([])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test.each(mcpEvents)("keeps teardown %s idle and resumes on an explicit read", async (type) => {
+  const setup = mcpFixture()
+  const path = type === "mcp.status.changed" ? "/api/mcp" : "/api/mcp/resource"
+  try {
+    await setup.load("/project")
+    await setup.load("/other")
+    setup.requests.length = 0
+    setup.emit("location.shutdown")
+    for (const event of mcpEvents) setup.emit(event)
+    setup.emit(type, "/other")
+    await setup.flush()
+    expect(setup.requests).toEqual([`${path}:/other`])
+    setup.requests.length = 0
+    await setup.load("/project")
+    expect(setup.requests.toSorted()).toEqual(["/api/mcp/resource:/project", "/api/mcp:/project"])
+    setup.requests.length = 0
+    setup.emit(type)
+    await setup.flush()
+    expect(setup.requests).toEqual([`${path}:/project`])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test.each([
+  ["provider before MCP", "provider.updated", false],
+  ["provider after MCP", "provider.updated", true],
+  ["agent before MCP", "agent.updated", false],
+  ["agent after MCP", "agent.updated", true],
+] as const)("refreshes rebuilt MCP catalogs: %s", async (_name, type, mcpFirst) => {
+  const setup = mcpFixture()
+  try {
+    await setup.load("/project")
+    setup.emit("location.shutdown")
+    setup.requests.length = 0
+    if (mcpFirst) for (const event of mcpEvents) setup.emit(event)
+    setup.emit(type)
+    if (!mcpFirst) for (const event of mcpEvents) setup.emit(event)
+    await setup.flush()
+    expect(new Set(setup.requests.filter((request) => request.startsWith("/api/mcp")))).toEqual(
+      new Set(["/api/mcp:/project", "/api/mcp/resource:/project"]),
+    )
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("discards queued MCP refreshes and ignores an old read finishing after shutdown", async () => {
+  const requested = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const setup = mcpFixture(async (url) => {
+    if (url.pathname !== "/api/mcp/resource") return
+    requested.resolve()
+    await release.promise
+  })
+  const load = setup.load("/project")
+  try {
+    await requested.promise
+    await setup.flush()
+    setup.emit("mcp.resources.changed")
+    setup.emit("mcp.status.changed")
+    setup.emit("location.shutdown")
+    release.resolve()
+    await load
+    expect(setup.data.location.mcp.resource.list()).toBeUndefined()
+    for (const type of mcpEvents) setup.emit(type)
+    await setup.flush()
+    expect(setup.requests.toSorted()).toEqual(["/api/mcp/resource:/project", "/api/mcp:/project"])
+    await setup.data.location.mcp.resource.sync()
+    expect(setup.data.location.mcp.resource.list()).toEqual([])
+  } finally {
+    release.resolve()
+    await load
+    setup.dispose()
+  }
+})
+
+function mcpFixture(read?: (url: URL) => Promise<void>) {
+  jest.useFakeTimers()
+  const requests: string[] = []
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  let sequence = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const url = new URL(request.url)
+      const directory = url.searchParams.get("location[directory]") ?? "/project"
+      requests.push(`${url.pathname}:${directory}`)
+      await read?.(url)
+      if (url.pathname === "/api/location") return Response.json({ directory })
+      return Response.json({
+        location: { directory },
+        data: url.pathname === "/api/mcp/resource" ? { resources: [], templates: [] } : [],
+      })
+    },
+  })
+  return createRoot((dispose) => {
+    const data = createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    })
+    return {
+      data,
+      requests,
+      load: (directory: string) =>
+        Promise.all([data.location.mcp.server.sync({ directory }), data.location.mcp.resource.sync({ directory })]),
+      emit(
+        type: (typeof mcpEvents)[number] | "location.shutdown" | "provider.updated" | "agent.updated",
+        directory = "/project",
+      ) {
+        const details: OpenCodeEvent = {
+          id: `evt_mcp_${++sequence}`,
+          created: sequence,
+          type,
+          location: { directory },
+          data: {},
+        }
+        listeners.forEach((listener) => listener({ name: details.type, details }))
+      },
+      async flush() {
+        jest.runOnlyPendingTimers()
+        await setImmediate()
+      },
+      dispose,
+    }
+  })
+}
 
 function modelInfo(name: string): ModelInfo {
   return {

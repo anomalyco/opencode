@@ -321,6 +321,8 @@ export function createData(config: CreateDataInput) {
   const messageIndex = new Map<string, Map<string, number>>()
   const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
   const sync = createSync()
+  // MCP teardown events must not reopen a shut-down location.
+  const shutdowns = new Set<string>()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
@@ -1348,7 +1350,34 @@ export function createData(config: CreateDataInput) {
 
     if (!event.location) return
     const location = event.location
+    // Catalog updates come from a live location. Its rebuilt MCP events may have arrived first.
     switch (event.type) {
+      case "provider.updated":
+      case "model.updated":
+      case "agent.updated":
+      case "command.updated":
+      case "skill.updated":
+      case "reference.updated":
+      case "integration.updated":
+      case "config.updated":
+      case "websearch.updated": {
+        const key = locationKey(location)
+        if (!shutdowns.delete(key)) break
+        if (hasLocation("mcpServer", location)) refresh(() => result.location.mcp.server.sync(location))
+        if (hasLocation("mcpResource", location)) refresh(() => result.location.mcp.resource.sync(location))
+        break
+      }
+    }
+    switch (event.type) {
+      case "location.shutdown": {
+        const key = locationKey(location)
+        const timer = `mcp.status:${key}`
+        shutdowns.add(key)
+        result.location.invalidate(location)
+        clearTimeout(settling.get(timer))
+        settling.delete(timer)
+        break
+      }
       case "provider.updated":
         refreshLocation("provider", result.location.provider, location)
         break
@@ -1422,12 +1451,14 @@ export function createData(config: CreateDataInput) {
       // so the mcp list syncs here rather than off integration.updated. The server emits one event
       // per MCP server as each settles, so a location booting nine servers emitted nine refetches.
       case "mcp.status.changed": {
+        if (shutdowns.has(locationKey(location))) break
         const active = hasLocation("mcpServer", location)
         result.location.mcp.server.invalidate(location)
         if (active) settle(`mcp.status:${locationKey(location)}`, () => result.location.mcp.server.sync(location))
         break
       }
       case "mcp.resources.changed":
+        if (shutdowns.has(locationKey(location))) break
         refreshLocation("mcpResource", result.location.mcp.resource, location)
         break
     }
@@ -1471,8 +1502,15 @@ export function createData(config: CreateDataInput) {
       sync: (ref?: LocationRef) => {
         const location = ref ?? defaultLocation()
         const id = locationKey(location)
+        shutdowns.delete(id)
         return sync.run(`location.${field}:${id}`, async () => {
+          // A reload queued behind an older read may outlive the location.
+          if (shutdowns.has(id)) {
+            sync.invalidate(`location.${field}:${id}`)
+            return
+          }
           const response = await load(locationQuery(location))
+          if (shutdowns.has(id)) return
           const key = locationKey(response.location)
           publish(key, response.data)
           if (options?.alias && key !== id) publish(id, response.data)
@@ -2061,6 +2099,7 @@ export function createData(config: CreateDataInput) {
       },
       syncInfo(ref?: LocationRef) {
         const current = ref ?? defaultLocation()
+        shutdowns.delete(locationKey(current))
         return sync.run(`location:${locationKey(current)}`, async () => {
           const location = await api().location.get({ location: locationQuery(current) })
           const key = locationKey(location)
