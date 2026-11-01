@@ -31,7 +31,8 @@ export const appHandlers = AppRpcs.toLayer(
     return AppRpcs.of({
       AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
-      AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
+      AppConsumeInitialDeepLinks: (_, context) =>
+        Effect.sync(() => lifecycle.consumeInitialDeepLinks(sender(handoff, context))),
       AppIsFirstLaunchOnboardingPending: isFirstLaunchOnboardingPending,
       AppFinishFirstLaunchOnboarding: ({ createDefaultProject }) =>
         finishFirstLaunchOnboarding(createDefaultProject).pipe(Effect.orDie),

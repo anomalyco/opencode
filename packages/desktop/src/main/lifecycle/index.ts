@@ -1,23 +1,35 @@
 export * as ApplicationLifecycle from "./index"
 
 import { app, BrowserWindow } from "electron"
-import type { Event } from "electron"
+import type { Event, WebContents } from "electron"
 import { Context, Effect, Layer } from "effect"
 import { DeepLinksOpened } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 import { DesktopLogging, scoped } from "../native/logging"
+import { windowDataFile } from "../../shared/ipc-transport"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
-import { getLastFocusedWindow, getWindowByID, mainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import {
+  getLastFocusedWindow,
+  getMainWindows,
+  getWindowByID,
+  getWindowID,
+  mainWindows,
+  onMainWindow,
+  setAppQuitting,
+  setRelaunchHandler,
+} from "../windows"
 import { marks } from "./marks"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
-import { consoleReturnWindow } from "./deep-link"
+import { formatDeepLink, linkBatchWindow, parseDeepLink, pickLinkWindow, tabsHoldSession } from "./deep-link"
+import { linkArguments, receiveLinks } from "./link-intake"
+import { createLinkQueue } from "./link-queue"
 
 export interface Interface {
   readonly relaunch: () => void
   readonly prepareToRestart: Effect.Effect<void>
-  readonly consumeInitialDeepLinks: () => string[]
+  readonly consumeInitialDeepLinks: (contents: WebContents) => string[]
   readonly createWindow: () => BrowserWindow
   readonly restoreWindows: () => BrowserWindow[]
 }
@@ -32,7 +44,8 @@ const runtime = Layer.effect(
     const windows = yield* mainWindows()
     const createWindow = windows.create
     const restoreWindows = windows.restore
-    const pendingDeepLinks: string[] = []
+    const storage = yield* DesktopStorage.Service
+    const links = createLinkQueue<number>()
     let shutdownReady = false
     let quitRequested = false
 
@@ -53,22 +66,55 @@ const runtime = Layer.effect(
       win.focus()
     }
 
-    const emitDeepLinks = (urls: string[]) => {
-      if (!urls.length) return
-      pendingDeepLinks.push(...urls)
+    // Restored windows exist before `activate` runs, so it finds windows and doesn't restore them again.
+    const linkWindow = (sessionID?: string) =>
+      pickLinkWindow({
+        open: getMainWindows(),
+        restore: restoreWindows,
+        create: createWindow,
+        focused: getLastFocusedWindow(),
+        holds: sessionID
+          ? (win) => {
+              const id = getWindowID(win)
 
-      const target = urls.flatMap((url) => {
-        const id = consoleReturnWindow(url)
-        const win = id ? getWindowByID(id) : null
+              return !!id && tabsHoldSession(storage.state.get(windowDataFile(id), "tabs"), sessionID)
+            }
+          : undefined,
+      })
 
-        return win ? [win] : []
-      })[0]
+    const openLink = (url: string) => {
+      const link = parseDeepLink(url)
 
-      const win = target ?? getLastFocusedWindow()
+      if (!link) {
+        runFork(Effect.logWarning("deep link rejected"))
 
-      if (win) emitIpcEvent(win.webContents, new DeepLinksOpened({ urls }))
+        return
+      }
+
+      if (link.type === "console") return getWindowByID(link.windowID) ?? getLastFocusedWindow()
+      const win = linkWindow(link.sessionID)
+      const canonical = formatDeepLink(link)
+      runFork(
+        Effect.logInfo("deep link opened", { type: link.type, sessionID: link.sessionID, window: getWindowID(win) }),
+      )
+
+      if (links.push(win.webContents.id, canonical))
+        emitIpcEvent(win.webContents, new DeepLinksOpened({ urls: [canonical] }))
 
       return win
+    }
+
+    const openLinks = (urls: string[]) => focusWindow(linkBatchWindow(urls.map(openLink), () => linkWindow()))
+
+    const wireLinks = (win: BrowserWindow) => {
+      const contents = win.webContents.id
+      win.webContents.on(
+        "did-start-navigation",
+        (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
+          if (event.isMainFrame && !event.isSameDocument) links.unload(contents)
+        },
+      )
+      win.once("closed", () => links.close(contents))
     }
 
     const relaunch = () => {
@@ -85,21 +131,9 @@ const runtime = Layer.effect(
       )
     }
 
+    // Links in the argv are routed by the link intake.
     const secondInstance = (_event: Event, argv: string[]) => {
-      const urls = argv.filter((arg) => arg.startsWith("opencode://"))
-
-      if (urls.length) {
-        runFork(Effect.logInfo("deep link received via second-instance", { urls }))
-        focusWindow(emitDeepLinks(urls) ?? null)
-      }
-
-      if (!urls.length) focusWindow(getLastFocusedWindow())
-    }
-
-    const openUrl = (event: Event, url: string) => {
-      event.preventDefault()
-      runFork(Effect.logInfo("deep link received via open-url", { url }))
-      focusWindow(emitDeepLinks([url]) ?? null)
+      if (!linkArguments(argv).length) focusWindow(getLastFocusedWindow())
     }
 
     const beforeQuit = (event: Event) => {
@@ -150,10 +184,12 @@ const runtime = Layer.effect(
     }
 
     const resetRelaunchHandler = setRelaunchHandler(relaunch)
+    const stopWindowLinks = onMainWindow(wireLinks)
+    let stopLinks = () => {}
+
     let windowsWired = false
 
     app.on("second-instance", secondInstance)
-    app.on("open-url", openUrl)
     app.on("before-quit", beforeQuit)
     app.on("will-quit", willQuit)
     app.on("child-process-gone", childProcessGone)
@@ -163,7 +199,6 @@ const runtime = Layer.effect(
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         app.off("second-instance", secondInstance)
-        app.off("open-url", openUrl)
         app.off("before-quit", beforeQuit)
         app.off("will-quit", willQuit)
         app.off("child-process-gone", childProcessGone)
@@ -173,22 +208,29 @@ const runtime = Layer.effect(
         process.off("SIGINT", signal)
         process.off("SIGTERM", signal)
         resetRelaunchHandler()
+        stopWindowLinks()
+        stopLinks()
       }),
     )
 
     return Service.of({
       relaunch,
       prepareToRestart,
-      consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
+      consumeInitialDeepLinks: (contents) => links.take(contents.id),
       createWindow,
       restoreWindows: () => {
+        const restored = restoreWindows()
+
         if (!windowsWired) {
           windowsWired = true
           app.on("window-all-closed", windowAllClosed)
           app.on("activate", activate)
+          // Links that launched the app waited for the restored windows, so one already showing
+          // the session can take it instead of a new one.
+          stopLinks = receiveLinks(openLinks)
         }
 
-        return restoreWindows()
+        return restored
       },
     })
   }),
