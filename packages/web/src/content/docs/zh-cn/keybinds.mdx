@@ -114,6 +114,27 @@ OpenCode 的大多数快捷键使用 `leader`（前导键）。这可以避免�
 
 ---
 
+## 绑定值
+
+一个字符串可以包含一个快捷键，也可以包含多个用逗号分隔的快捷键。多个快捷键也可以写成数组。
+
+更复杂的情况可以改用对象，支持 `key`、`event`、`preventDefault` 和 `fallthrough`。
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "keybinds": {
+    "messages_copy": ["<leader>y", "ctrl+shift+c"],
+    "input_paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}
+```
+
+---
+
 ## 禁用快捷键
 
 您可以通过将键值添加到 `tui.json` 并设置为 "none" 来禁用某个快捷键。
