@@ -16224,19 +16224,6 @@
             "type": "string",
             "enum": ["disable", "notify", "auto"]
           },
-          "share": {
-            "type": "string",
-            "enum": ["manual", "auto", "disabled"]
-          },
-          "enterprise": {
-            "type": "object",
-            "properties": {
-              "url": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": false
-          },
           "username": {
             "type": "string"
           },

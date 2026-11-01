@@ -639,9 +639,15 @@ describe("ConfigNormalize", () => {
         },
       },
       experimental: { openTelemetry: true },
+      share: "auto",
+      enterprise: { url: secret },
+      autoshare: true,
     })
     expect(result.diagnostics.filter((item) => item.kind === "unsupported").map((item) => item.path)).toEqual([
       ["logLevel"],
+      ["share"],
+      ["enterprise"],
+      ["autoshare"],
       ["agent", "reviewer", "name"],
       ["provider", "custom", "id"],
       ["provider", "custom", "whitelist"],
@@ -651,6 +657,8 @@ describe("ConfigNormalize", () => {
       ["experimental", "openTelemetry"],
     ])
     expect(JSON.stringify(result.diagnostics)).not.toContain(secret)
+    expect(result.encoded).not.toHaveProperty("share")
+    expect(result.encoded).not.toHaveProperty("enterprise")
   })
 
   test("diagnoses unsupported legacy model selections without dropping their entries", () => {
@@ -768,7 +776,6 @@ describe("ConfigNormalize", () => {
   test("preserves explicit false, zero, empty list, and empty map presence", () => {
     const result = normalized({
       snapshot: false,
-      autoshare: false,
       references: {},
       commands: {},
       agents: {},
@@ -785,6 +792,5 @@ describe("ConfigNormalize", () => {
       instructions: [],
       experimental: { subagent_depth: 0, location_idle_timeout: false },
     })
-    expect(result.encoded.share).toBeUndefined()
   })
 })
