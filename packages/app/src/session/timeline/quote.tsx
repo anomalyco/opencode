@@ -348,6 +348,7 @@ export function TimelineQuote(props: { controller: TimelineQuoteController }) {
               onCleanup(() => quote.setElement(undefined))
             }}
             data-component="timeline-quote"
+            data-floating
             data-prevent-autofocus
             role="toolbar"
             aria-label={language.t("session.quote.actions")}
