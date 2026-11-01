@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import { ai, LLMEvent, toDefinitions } from "../../src/effect.js"
-import { DigitalOcean, OpenRouter, Venice } from "../../src/providers.js"
+import { DigitalOcean, Fireworks, Groq, OpenRouter, Venice } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { tool } from "../../src/tool.js"
 import { expectWeatherToolLoop, runWeatherToolLoop, weatherToolLoopRequest } from "../recorded-scenarios.js"
@@ -36,6 +36,20 @@ for (const item of [
     provider: "venice",
     env: "VENICE_API_KEY",
     model: Venice.configure({ apiKey: process.env.VENICE_API_KEY ?? "fixture" }).responses("openai-gpt-54-mini"),
+  },
+  {
+    provider: "fireworks",
+    env: "FIREWORKS_API_KEY",
+    freeform: false,
+    model: Fireworks.configure({ apiKey: process.env.FIREWORKS_API_KEY ?? "fixture" }).responses(
+      "accounts/fireworks/models/gpt-oss-120b",
+    ),
+  },
+  {
+    provider: "groq",
+    env: "GROQ_API_KEY",
+    freeform: false,
+    model: Groq.configure({ apiKey: process.env.GROQ_API_KEY ?? "fixture" }).responses("openai/gpt-oss-20b"),
   },
 ]) {
   const recorded = recordedTests({
@@ -72,6 +86,8 @@ for (const item of [
     }),
   )
 
+  if (item.freeform === false) continue
+
   recorded.effect.with("calls a freeform text tool", { tags: ["tool", "freeform"] }, () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
@@ -89,3 +105,4 @@ for (const item of [
     }),
   )
 }
+
