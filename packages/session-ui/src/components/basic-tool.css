@@ -11,6 +11,16 @@
     cursor: pointer;
   }
 
+  &:has([data-component="task-tool-card"]) {
+    width: fit-content;
+    max-width: 100%;
+    align-self: flex-start;
+
+    [data-slot="basic-tool-tool-trigger-content"] {
+      max-width: 100%;
+    }
+  }
+
   [data-slot="basic-tool-tool-trigger-content"] {
     flex: 0 1 auto;
     width: auto;
@@ -249,7 +259,8 @@
 }
 
 [data-component="task-tool-card"] {
-  width: 100%;
+  width: fit-content;
+  max-width: 100%;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -344,6 +355,14 @@
       opacity: 1;
       transform: none;
     }
+  }
+}
+
+[data-component="collapsible"].tool-collapsible {
+  [data-slot="collapsible-trigger"]:has([data-component="task-tool-card"]) {
+    width: fit-content;
+    max-width: 100%;
+    align-self: flex-start;
   }
 }
 
