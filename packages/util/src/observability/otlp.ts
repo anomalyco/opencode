@@ -1,4 +1,4 @@
-import { Effect, Layer, Scope } from "effect"
+import { Effect, Layer, Option, Schema, Scope } from "effect"
 import { OtlpLogger } from "effect/observability"
 import { runID } from "./shared.js"
 
@@ -18,7 +18,8 @@ function parseHeaders(value?: string) {
     ? value.split(",").reduce(
         (acc, entry) => {
           const [key, ...value] = entry.split("=")
-          acc[key] = value.join("=")
+          const decoded = Schema.decodeUnknownOption(Schema.StringFromUriComponent)(value.join("="))
+          if (Option.isSome(decoded)) acc[key] = decoded.value
           return acc
         },
         {} as Record<string, string>,
