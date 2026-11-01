@@ -1761,6 +1761,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
           text: [next.prompt.text, ...attachments.text].join("\n\n"),
           files: attachments.files.length ? attachments.files : undefined,
           agents: agents.length ? agents : undefined,
+          agent: next.agent,
           skills: skills.length ? skills : undefined,
           delivery,
         },
@@ -1813,8 +1814,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       if (next.prompt.mode === "shell") throw new Error("This prompt cannot be queued")
       await waitUntilConnected(next.signal)
       const client = sdk
-      if (!next.prompt.command && next.agent)
-        await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
       if (!next.prompt.command) {
         const selected = await resolveSelectedModel(input, client, next)
         if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
@@ -1848,9 +1847,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         return
       }
 
-      if (next.agent) {
-        await client.session.switchAgent({ sessionID: input.sessionID, agent: next.agent }, { signal: next.signal })
-      }
       const selected = await resolveSelectedModel(input, client, next)
       if (next.variant && !selected) throw new Error("Cannot select a variant before selecting a model")
       if (selected)

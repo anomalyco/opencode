@@ -214,6 +214,7 @@ export type SessionPromptInput = {
   readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
   readonly agents?: ReadonlyArray<AgentAttachment> | undefined
   readonly skills?: ReadonlyArray<PromptInput.SkillAttachment> | undefined
+  readonly agent?: Agent.ID | undefined
   readonly metadata?: { readonly [x: string]: unknown } | undefined
   readonly delivery?: SessionInbox.Delivery | undefined
   readonly resume?: boolean | undefined
@@ -646,6 +647,7 @@ export type ExperimentalSessionLogOutput =
             readonly sessionID: Session.ID
             readonly agent: Agent.ID
             readonly previous?: Agent.ID | undefined
+            readonly source?: "delivery" | undefined
           }
         }
       | {

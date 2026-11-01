@@ -2,6 +2,7 @@ export * as SessionPrompt from "./prompt.js"
 
 import { Base64, FileAttachment } from "@opencode/schema/prompt"
 import { PromptInput } from "@opencode/schema/prompt-input"
+import type { Agent } from "@opencode/schema/agent"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import type { Session } from "@opencode/schema/session"
 import type { SessionMessage } from "@opencode/schema/session-message"
@@ -26,6 +27,8 @@ export type Input = {
   text: string
   files?: PromptInput.Prompt["files"]
   agents?: PromptInput.Prompt["agents"]
+  /** Agent selection admitted with this prompt; applied when the inbox item is promoted. */
+  agent?: Agent.ID
   skills?: PromptInput.Prompt["skills"]
   metadata?: Record<string, unknown>
   delivery?: SessionInbox.Delivery
@@ -82,6 +85,7 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
     payload: SessionInbox.UserPayload.make({
       text: input.text,
       agents: input.agents,
+      agent: request.input.agent,
       files,
       skills: selected?.length ? selected : undefined,
       metadata: event.metadata,

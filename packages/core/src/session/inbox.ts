@@ -27,7 +27,7 @@ import { SessionBlob } from "./blob.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStored } from "./stored.js"
-import { SessionInboxTable, SessionMessageTable } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { SessionHistory } from "./history.js"
 
 type DatabaseService = Database.Interface["db"]
@@ -544,21 +544,48 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
     (row) => {
       if (row.type !== "move" && row.type !== "user" && row.type !== "synthetic")
         return Effect.die(new LifecycleConflict({ id: row.id }))
-      return bus
-        .publish(SessionEvent.InboxDelivered, {
-          sessionID,
-          inboxID: row.id,
-        })
-        .pipe(
-          Effect.catchDefect((defect) =>
-            defect instanceof LifecycleConflict
-              ? promotedFromMessage(db, sessionID, row.id, row.delivery).pipe(
-                  Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
-                  Effect.orDie,
-                )
-              : Effect.die(defect),
-          ),
-        )
+      return Effect.gen(function* () {
+        // Promotion is a turn boundary, the only safe point to apply a prompt's agent
+        // selection: the projector persists it before the message becomes visible. Only
+        // queued rows apply it — a steered row delivers into the running turn, whose
+        // agent must not change mid-flight.
+        if (row.type === "user" && row.delivery === "queue") {
+          const payload = decodeUser(row.payload)
+          if (payload.agent) {
+            const session = yield* db
+              .select({ agent: SessionTable.agent })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, sessionID))
+              .get()
+              .pipe(Effect.orDie)
+            if (session && session.agent !== payload.agent)
+              yield* bus.publish(SessionEvent.AgentSelected, {
+                sessionID,
+                agent: payload.agent,
+                previous: session.agent ?? undefined,
+                // The context hook owns the mode reminder for this switch: it runs
+                // synchronously with the new turn's preparation, while the plugin's
+                // event subscriber would race it and double the reminder.
+                source: "delivery",
+              })
+          }
+        }
+        return yield* bus
+          .publish(SessionEvent.InboxDelivered, {
+            sessionID,
+            inboxID: row.id,
+          })
+          .pipe(
+            Effect.catchDefect((defect) =>
+              defect instanceof LifecycleConflict
+                ? promotedFromMessage(db, sessionID, row.id, row.delivery).pipe(
+                    Effect.flatMap((stored) => (stored !== undefined ? Effect.void : Effect.die(defect))),
+                    Effect.orDie,
+                  )
+                : Effect.die(defect),
+            ),
+          )
+      })
     },
     { discard: true },
   )

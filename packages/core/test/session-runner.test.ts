@@ -4609,6 +4609,44 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[2])).toEqual(["Start working", "Queue first", "Queue second"])
   })
 
+  scenario("defers a per-prompt agent change to the delivery boundary", function* (s) {
+    yield* s.admit("Start working")
+
+    yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
+
+    const active = yield* s.resumePaused
+    yield* s.session.prompt({ sessionID, text: "Follow up as reviewer", agent: Agent.ID.make("reviewer") })
+
+    // The selection rides the queued prompt: the running turn keeps its agent,
+    // and the change applies only when the prompt promotes at the idle boundary.
+    expect((yield* s.session.get(sessionID)).agent).toBeUndefined()
+    expect(yield* SessionInbox.has(s.db, sessionID, "queue")).toBe(true)
+    yield* active.finish
+
+    expect(s.requests).toHaveLength(2)
+    expect(userTexts(s.requests[1])).toEqual(["Start working", "Follow up as reviewer"])
+    expect((yield* s.session.get(sessionID)).agent).toBe(Agent.ID.make("reviewer"))
+    expect((yield* s.messages).find((message) => message.type === "agent-switched")).toMatchObject({
+      agent: "reviewer",
+    })
+  })
+
+  scenario("steers a per-prompt selection matching the session agent", function* (s) {
+    yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
+    yield* s.session.prompt({ sessionID, text: "Start working", agent: Agent.ID.make("build") })
+    const active = yield* s.resumePaused
+
+    yield* s.session.prompt({ sessionID, text: "Steer the turn", agent: Agent.ID.make("build") })
+
+    // The selection matches the session's agent, so the prompt steers the running
+    // turn instead of waiting behind it.
+    expect(yield* SessionInbox.has(s.db, sessionID, "queue")).toBe(false)
+    yield* active.finish
+
+    expect(s.requests).toHaveLength(2)
+    expect(userTexts(s.requests[1])).toEqual(["Start working", "Steer the turn"])
+  })
+
   scenario("stops a steer-scoped drain before queued input", function* (s) {
     yield* s.session.prompt({ sessionID, text: "Queue for later", delivery: "queue", resume: false })
     yield* s.session.prompt({ sessionID, text: "Steer now", resume: false })
