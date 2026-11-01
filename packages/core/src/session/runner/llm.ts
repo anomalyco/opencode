@@ -93,6 +93,7 @@ const layer = Layer.effect(
               }
               // Location entry and idle boundaries allow queued controls, not necessarily queued prompts.
               const pending = yield* SessionInbox.serialized(
+                db,
                 sessionID,
                 Effect.gen(function* () {
                   const next = yield* SessionInbox.nextPromotable(

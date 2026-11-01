@@ -127,6 +127,7 @@ const layer = Layer.effect(
           delivery: input.delivery ?? "steer",
         })
         yield* SessionInbox.serialized(
+          database.db,
           input.sessionID,
           Effect.gen(function* () {
             const latest = yield* get(input.sessionID)

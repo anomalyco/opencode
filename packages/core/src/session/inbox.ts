@@ -66,11 +66,21 @@ const decodeCompaction = Schema.decodeUnknownSync(CompactionPayload)
 const encodeCompaction = Schema.encodeSync(CompactionPayload)
 const decodeMove = Schema.decodeUnknownSync(MovePayload)
 const encodeMove = Schema.encodeSync(MovePayload)
-const inboxLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
+// Location graphs and file connections sharing a database must share inbox locks.
+// Separate databases can reuse Session IDs, including Durable Objects in one isolate.
+const inboxLocks = new WeakMap<object, KeyedMutex.KeyedMutex<SessionSchema.ID>>()
 type PendingRef = { readonly id: SessionMessage.ID; readonly sessionID: SessionSchema.ID }
 
-export const serialized = <A, E, R>(sessionID: SessionSchema.ID, effect: Effect.Effect<A, E, R>) =>
-  inboxLocks.withLock(sessionID)(effect)
+export const serialized = <A, E, R>(
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  effect: Effect.Effect<A, E, R>,
+) => {
+  const key = Database.lockKey(db)
+  const locks = inboxLocks.get(key) ?? KeyedMutex.makeUnsafe<SessionSchema.ID>()
+  inboxLocks.set(key, locks)
+  return locks.withLock(sessionID)(effect)
+}
 
 export class LifecycleConflict extends Schema.TaggedError<LifecycleConflict>()("SessionInbox.LifecycleConflict", {
   id: SessionMessage.ID,
@@ -229,6 +239,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     readonly delivery: Delivery
   }) {
     return yield* serialized(
+      db,
       input.sessionID,
       Effect.gen(function* () {
         const exact = yield* find(db, input.id)
@@ -251,6 +262,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
 
   const cancel = Effect.fn("SessionInbox.cancel")((input: PendingRef) =>
     publishMutation(
+      db,
       input,
       bus.publish(SessionEvent.InboxCancelled, {
         sessionID: input.sessionID,
@@ -261,6 +273,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
 
   const steer = Effect.fn("SessionInbox.steer")((input: PendingRef) =>
     publishMutation(
+      db,
       input,
       bus.publish(SessionEvent.InboxDeliveryChanged, {
         sessionID: input.sessionID,
@@ -272,6 +285,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
 
   const queue = Effect.fn("SessionInbox.queue")((input: PendingRef) =>
     publishMutation(
+      db,
       input,
       bus.publish(SessionEvent.InboxDeliveryChanged, {
         sessionID: input.sessionID,
@@ -526,8 +540,8 @@ export const has = Effect.fn("SessionInbox.has")(function* (
   return row !== undefined
 })
 
-const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E, R>) =>
-  serialized(input.sessionID, effect).pipe(
+const publishMutation = <A, E, R>(db: DatabaseService, input: PendingRef, effect: Effect.Effect<A, E, R>) =>
+  serialized(db, input.sessionID, effect).pipe(
     Effect.asVoid,
     // Bus projectors abort their transaction through the defect channel.
     Effect.catchDefect((defect) => (defect instanceof LifecycleConflict ? Effect.fail(defect) : Effect.die(defect))),
@@ -578,6 +592,7 @@ export const promote = Effect.fn("SessionInbox.promote")(function* (
   scope: Promotable,
 ) {
   return yield* serialized(
+    db,
     sessionID,
     Effect.gen(function* () {
       const steers = yield* pendingSteers(db, sessionID)
