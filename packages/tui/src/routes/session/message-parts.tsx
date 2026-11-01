@@ -174,6 +174,7 @@ export function TextPart(props: {
   last: boolean
   part: SessionMessageAssistantText
   message: SessionMessageAssistant
+  onMouseUp?: (event: MouseEvent) => void
 }) {
   const ctx = use()
   const theme = useTheme()
@@ -181,7 +182,7 @@ export function TextPart(props: {
   const plugins = usePlugin()
   return (
     <Show when={props.part.text.trim()}>
-      <box paddingLeft={3} flexShrink={0}>
+      <box paddingLeft={3} flexShrink={0} onMouseUp={props.onMouseUp}>
         {/* Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens. */}
         <markdown
           syntaxStyle={syntax()}
