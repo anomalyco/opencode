@@ -9,7 +9,7 @@ import {
   isContextOverflowFailure,
   LLMClient,
   LLMEvent,
-  LLMRequest,
+  type LLMRequest,
   Message,
   type ToolEntry,
   UnknownProviderError,
@@ -480,7 +480,7 @@ export const layer = Layer.effect(
       const send = (request: LLMRequest, size?: Estimate) =>
         Effect.gen(function* () {
           const prompted = fitOutput(
-            LLMRequest.update(request, { messages: [...request.messages, Message.user(prompt)] }),
+            { ...request, messages: [...request.messages, Message.user(prompt)] },
             context.model.limit,
             size && { ...size, estimated: size.estimated + Token.estimate(prompt) },
           )
@@ -488,7 +488,7 @@ export const layer = Layer.effect(
           if (filled(reply.text)) return reply
 
           const nudged = fitOutput(
-            LLMRequest.update(prompted, { messages: [...prompted.messages, Message.user(NUDGE)] }),
+            { ...prompted, messages: [...prompted.messages, Message.user(NUDGE)] },
             context.model.limit,
             size && { ...size, estimated: size.estimated + Token.estimate(prompt) + Token.estimate(NUDGE) },
           )
@@ -756,7 +756,7 @@ export const layer = Layer.effect(
         .map((renders, index) => renders[levels[index]])
         .filter(Boolean)
         .join("\n\n")
-      return LLMRequest.update(request, { tools: [], messages: [...lead, Message.user(note(omitted) + text)] })
+      return { ...request, tools: [], messages: [...lead, Message.user(note(omitted) + text)] }
     }
 
     const stream = (
@@ -1000,7 +1000,7 @@ const splitConversation = (messages: ReadonlyArray<SessionMessage.Info>, keep: n
 const withoutTail = (request: LLMRequest, from: SessionMessage.ID | undefined) => {
   const index = from === undefined ? -1 : request.messages.findIndex((message) => message.id === from)
   if (index < 0) return request
-  return LLMRequest.update(request, { messages: request.messages.slice(0, index) })
+  return { ...request, messages: request.messages.slice(0, index) }
 }
 
 const recentStart = (
@@ -1202,7 +1202,7 @@ const fitOutput = (request: LLMRequest, limit: SessionContext.Loaded["model"]["l
     ),
   )
   if (maxTokens === current) return request
-  return LLMRequest.update(request, { generation: { ...request.generation, maxTokens } })
+  return { ...request, generation: { ...request.generation, maxTokens } }
 }
 
 const estimateRequest = (request: Pick<LLMRequest, "system" | "tools" | "messages">) =>

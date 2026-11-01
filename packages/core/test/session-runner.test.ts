@@ -5,7 +5,7 @@ import {
   CompactionCheckpointResponse,
   HttpContext,
   LLMEvent,
-  LLMRequest,
+  type LLMRequest,
   Message,
   SystemPart,
   LanguageModel,
@@ -103,13 +103,14 @@ const testLLM = Layer.unwrap(
     return TestLLM.testLayer({
       fallback: [],
       transformRequest: (request) => {
-        const transformed = LLMRequest.update(request, {
+        const transformed = {
+          ...request,
           system: request.system.map((part) => ({
             ...part,
             text: part.text.replace(emptyCodeMode, ""),
           })),
           tools: request.tools.filter((tool) => tool.name !== "execute"),
-        })
+        }
         requests.push(transformed)
         return transformed
       },
@@ -2822,8 +2823,8 @@ describe("SessionRunnerLLM", () => {
         expect(stored).not.toHaveProperty("native")
 
         // Compare wire content without the cache breakpoints that move to the new final message.
-        const before = yield* compileRequest(LLMRequest.update(normal, { cache: "none" }))
-        const after = yield* compileRequest(LLMRequest.update(compact, { cache: "none" }))
+        const before = yield* compileRequest({ ...normal, cache: "none" })
+        const after = yield* compileRequest({ ...compact, cache: "none" })
         const key = route === OpenAIResponses.route ? "input" : "messages"
         const input = Schema.decodeUnknownSync(Schema.Array(Schema.Unknown))
         const prefix = input(before.body[key])
