@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.2.0",
+  "version": "2.2.5",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -23,6 +23,7 @@
     "!src/**/*.stories.ts",
     "!src/**/*.stories.tsx",
     "src/**/*.css",
+    "src/data-display/line-comment/*.svg",
     "src/theme/themes/*.json",
     "src/components/app-icons/sprite.svg",
     "src/components/provider-icons/sprite.svg",

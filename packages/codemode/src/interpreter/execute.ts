@@ -110,7 +110,7 @@ export const executeProgram = <R>(
   })
 }
 
-const parseProgram = (code: string): { ok: true; program: Program } | { ok: false; error: Diagnostic } => {
+export const parseProgram = (code: string): { ok: true; program: Program } | { ok: false; error: Diagnostic } => {
   try {
     const program = parse(code, {
       ecmaVersion: "latest",

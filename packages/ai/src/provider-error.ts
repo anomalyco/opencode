@@ -4,7 +4,6 @@ import {
   ContentPolicyError,
   InvalidRequestError,
   AIError,
-  ProviderErrorEvent,
   ProviderInternalError,
   QuotaExceededError,
   RateLimitError,
@@ -42,6 +41,8 @@ const patterns = [
   // Hugging Face Text Generation Inference, e.g. Together
   /`inputs` tokens \+ `max_new_tokens` must be <= \d+/i,
   /context window exceeds limit/i,
+  // LiteLLM's ContextWindowExceededError
+  /context window exceeded/i,
   /exceeded model token limit/i,
   /context[_ ]length[_ ]exceeded/i,
   /context length is only \d+ tokens/i,
@@ -73,12 +74,12 @@ export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&
   (patterns.some((pattern) => pattern.test(message)) || /^4(?:00|13)\s*(status code)?\s*\(no body\)/i.test(message))
 
-export const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
+const isPayloadTooLarge = (message: string) => payloadPatterns.some((pattern) => pattern.test(message))
 
 export const isContextOverflowFailure = (failure: unknown) =>
-  failure instanceof AIError
-    ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
-    : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
+  failure instanceof AIError &&
+  failure.reason._tag === "InvalidRequest" &&
+  failure.reason.classification === "context-overflow"
 
 /**
  * Whether a failed call may succeed when sent again: rate limits, provider-side failures, transport failures that did
@@ -111,7 +112,6 @@ export const isRetryable = (error: AIError) => {
     case "ContentPolicy":
     case "InvalidRequest":
     case "UnsupportedOperation":
-    case "NoRoute":
     case "Timeout":
       return false
     default: {

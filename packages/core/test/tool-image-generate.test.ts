@@ -131,13 +131,13 @@ const setup = (providerID = "test") =>
     return { session, run, notice, directory: location.directory }
   })
 
-const configure = (image_model: ConfigExperimental.Info["image_model"]) =>
+const configure = (image_generate: ConfigExperimental.Info["image_generate"]) =>
   Effect.gen(function* () {
     const config = yield* Config.Test
     yield* config.setEntries([
       new Document({
         type: "document",
-        info: new Info({ experimental: new ConfigExperimental.Info({ image_model }) }),
+        info: new Info({ experimental: new ConfigExperimental.Info({ image_generate }) }),
       }),
     ])
     const bus = yield* Bus.Service
@@ -163,7 +163,7 @@ const text = (result: { readonly content?: ReadonlyArray<Tool.Content> }) =>
   result.content?.[0]?.type === "text" ? result.content[0].text : undefined
 const failure = (result: { readonly error?: { readonly message: string } }) => result.error?.message
 
-describe("image_generate", () => {
+describe("experimental_image_generate", () => {
   it.live("is registered only while an image model is available", () =>
     Effect.gen(function* () {
       yield* setup()
@@ -176,6 +176,23 @@ describe("image_generate", () => {
     }),
   )
 
+  it.live("is on by default and off with experimental.image_generate: false", () =>
+    Effect.gen(function* () {
+      yield* imageModel("test", "painter")
+      yield* setup()
+      expect(yield* until(true)).toBe(true)
+      yield* configure(false)
+      expect(yield* until(false)).toBe(false)
+      // Older configs that set true or a model keep working and keep the tool on.
+      yield* configure(true)
+      expect(yield* until(true)).toBe(true)
+      yield* configure(false)
+      expect(yield* until(false)).toBe(false)
+      yield* configure({})
+      expect(yield* until(true)).toBe(true)
+    }),
+  )
+
   it.live("uses the configured model unless the agent picks one, and falls back with a note", () =>
     Effect.gen(function* () {
       yield* imageModel("test", "painter", (model) => {
@@ -184,7 +201,7 @@ describe("image_generate", () => {
       yield* imageModel("other", "text-only", (model) => {
         model.capabilities.input = ["text"]
       })
-      yield* configure(configuredModel("other", "text-only"))
+      yield* configure({ model: configuredModel("other", "text-only") })
       const { run, directory } = yield* setup()
       yield* Effect.promise(() => fs.writeFile(path.join(directory, "in.png"), Buffer.from(PNG, "base64")))
 
@@ -199,7 +216,7 @@ describe("image_generate", () => {
       expect(edit.output).toMatchObject({ model: "test/painter" })
       expect(text(edit)).toContain("other/text-only doesn't accept input images; used test/painter.")
 
-      yield* configure(configuredModel("gone", "model"))
+      yield* configure({ model: configuredModel("gone", "model") })
       const missing = yield* run({ prompt: "x" })
       expect(missing.output).toMatchObject({ model: "test/painter" })
       expect(text(missing)).toContain("gone/model isn't available; used test/painter.")
@@ -217,20 +234,23 @@ describe("image_generate", () => {
       const result = yield* run({ prompt: "make it blue", images: ["in.png"], path: "out.png" })
       const file = path.join(directory, "out.png")
       const stem = path.join(directory, "out")
-      expect(result.output).toEqual({ path: stem, model: "test/painter" })
+      const id = result.output.id
+      expect(id).toStartWith("image_")
+      expect(result.output).toEqual({ id, path: stem, model: "test/painter" })
       expect(result.content).toEqual([
         {
           type: "text",
           text: [
-            `Image request started in the background with test/painter. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.`,
+            `Image job ${id} started in the background with test/painter. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.`,
             "You will be notified automatically when it finishes or fails.",
             "DO NOT sleep, poll, check whether the file exists, or request the same image again while it runs.",
             "Work on other tasks, or briefly tell the user what you started and end your response.",
           ].join("\n"),
         },
       ])
+      // The notice carries the job ID from the start result, like shell notices.
       expect(yield* notice(result)).toBe(
-        `Image request finished. Saved image: ${file} (test/painter).\nUse the read tool on this path to view the image.`,
+        `<image id="${id}" state="completed">\nImage request finished. Saved image: ${file} (test/painter).\nUse the read tool on this path to view the image.\n</image>`,
       )
       expect((yield* Effect.promise(() => fs.readFile(file))).toString("base64")).toBe(PNG)
       expect(fixture.requests).toEqual([
@@ -242,7 +262,7 @@ describe("image_generate", () => {
         },
       ])
       expect(fixture.assertions.map((item) => [item.action, item.resources])).toEqual([
-        ["image_generate", ["test/painter"]],
+        ["experimental_image_generate", ["test/painter"]],
         ["edit", ["out.png"]],
         ["read", ["in.png"]],
       ])
@@ -267,7 +287,7 @@ describe("image_generate", () => {
       const result = yield* run({ prompt: "a cat" })
       expect(path.dirname(result.output.path)).toBe(path.join(global.tmp, "images", session.id))
       const saved = `${result.output.path}.jpg`
-      expect(yield* notice(result)).toBe(
+      expect(yield* notice(result)).toContain(
         `Image request finished. Saved image: ${saved} (test/painter).\nUse the read tool on this path to view the image.`,
       )
       expect(yield* Effect.promise(() => Bun.file(saved).exists())).toBe(true)
@@ -306,7 +326,7 @@ describe("image_generate", () => {
       })
       const result = yield* run({ prompt: "x", path: "out.png" })
       expect(yield* notice(result)).toBe(
-        `Image request failed for ${path.join(directory, "out")}: The prompt was rejected`,
+        `<image id="${result.output.id}" state="error">\nImage request failed for ${path.join(directory, "out")}: The prompt was rejected\n</image>`,
       )
       expect(yield* Effect.promise(() => Bun.file(path.join(directory, "out.png")).exists())).toBe(false)
     }),
@@ -322,7 +342,9 @@ describe("image_generate", () => {
       const id = String(result.metadata?.jobID)
       expect((yield* jobs.get(id))?.status).toBe("running")
       yield* jobs.cancel(id)
-      expect(yield* notice(result)).toBe(`Image request for ${path.join(directory, "out")} was cancelled.`)
+      expect(yield* notice(result)).toBe(
+        `<image id="${id}" state="cancelled">\nImage request for ${path.join(directory, "out")} was cancelled.\n</image>`,
+      )
       expect(yield* Effect.promise(() => Bun.file(path.join(directory, "out.png")).exists())).toBe(false)
     }),
   )
@@ -334,7 +356,7 @@ describe("image_generate", () => {
       fixture.deny = "edit"
       const result = yield* run({ prompt: "x", path: "out.png" })
       expect(result.status).toBe("error")
-      expect(fixture.assertions.map((item) => item.action)).toEqual(["image_generate", "edit"])
+      expect(fixture.assertions.map((item) => item.action)).toEqual(["experimental_image_generate", "edit"])
       expect(fixture.requests).toEqual([])
     }),
   )
@@ -393,9 +415,11 @@ describe("image_generate", () => {
       )
 
       yield* configure({
-        providerID: Provider.ID.make("test"),
-        model: Model.ID.make("painter"),
-        variant: Model.VariantID.make("hd"),
+        model: {
+          providerID: Provider.ID.make("test"),
+          model: Model.ID.make("painter"),
+          variant: Model.VariantID.make("hd"),
+        },
       })
       const configured = yield* run({ prompt: "x" })
       expect(configured.output).toMatchObject({ model: "test/painter#hd" })
@@ -403,9 +427,11 @@ describe("image_generate", () => {
       expect(fixture.requests.at(-1)?.model.variant).toBe(Model.VariantID.make("hd"))
 
       yield* configure({
-        providerID: Provider.ID.make("test"),
-        model: Model.ID.make("painter"),
-        variant: Model.VariantID.make("bogus"),
+        model: {
+          providerID: Provider.ID.make("test"),
+          model: Model.ID.make("painter"),
+          variant: Model.VariantID.make("bogus"),
+        },
       })
       const fallback = yield* run({ prompt: "x" })
       expect(text(fallback)).toContain('test/painter#bogus has no variant "bogus"; used ')
@@ -424,7 +450,7 @@ describe("image_generate", () => {
       const result = yield* run({ prompt: "x", images: ["https://example.invalid/cat.png"] })
       expect(result.status).toBe("error")
       expect(fixture.assertions.map((item) => [item.action, item.resources])).toEqual([
-        ["image_generate", ["test/painter"]],
+        ["experimental_image_generate", ["test/painter"]],
         ["webfetch", ["https://example.invalid/cat.png"]],
       ])
       expect(fixture.requests).toEqual([])

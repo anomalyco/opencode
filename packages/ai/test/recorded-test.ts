@@ -1,5 +1,5 @@
 import { HttpRecorder } from "@opencode/http-recorder"
-import { NodeSocket } from "@effect/platform-node"
+import { NodeWS } from "@effect/platform-node"
 import { Effect, Layer } from "effect"
 import { Socket } from "effect/socket"
 import * as path from "node:path"
@@ -100,7 +100,7 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         ...recorderOptions,
         directory: FIXTURES_DIR,
         metadata: recorderMetadata,
-      }).pipe(Layer.provide(NodeSocket.layerWebSocketConstructorWS))
+      }).pipe(Layer.provide(NodeWS.layerWebSocketConstructor))
       const layer = Layer.mergeAll(
         requestExecutor,
         LLMClient.layer.pipe(Layer.provide(requestExecutor)),

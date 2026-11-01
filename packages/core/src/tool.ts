@@ -3,8 +3,9 @@ export { CallID, Content, Error, FileContent, TextContent } from "@opencode/sche
 export type { Context, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
+import type { CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
-import { Context, Effect, Layer, Result, Schema, SchemaIssue, Types } from "effect"
+import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
@@ -43,6 +44,20 @@ type Data = {
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
   readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
+  /**
+   * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
+   * whole-tool permission filtering and each tool's own executor policy), with no `fetch`.
+   */
+  readonly check: (input: CheckInput) => Effect.Effect<CodeMode.Result>
+}
+
+export interface CheckInput {
+  readonly code: string
+  readonly tools: ReadonlyArray<string>
+  readonly bindings: Readonly<Record<string, CodeMode.DataValue>>
+  readonly permissions: Permission.Ruleset
+  readonly limits: CodeMode.ExecutionLimits
+  readonly context: Omit<Tool.Context, "id">
 }
 
 /** A local execution result after hooks and content normalization. */
@@ -71,6 +86,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
     const image = yield* Image.Service
+    const permission = yield* Permission.Service
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -118,6 +134,11 @@ const layer = Layer.effect(
       input: unknown,
       context: Tool.Context,
     ) {
+      yield* Effect.annotateCurrentSpan({
+        "gen_ai.tool.name": name,
+        "gen_ai.tool.call.id": context.id,
+        "session.id": context.sessionID,
+      })
       const execution = yield* execute(tool, input, context).pipe(
         Effect.map((value) => ({ value })),
         Effect.catchTag("Tool.Error", (failure) => Effect.succeed({ failure })),
@@ -268,10 +289,13 @@ const layer = Layer.effect(
           const cached = catalog?.data === data && catalog.names === names ? catalog : undefined
           const codeModeInventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
           const codeModeTool = codeModeEnabled
-            ? CodeModeTool.create(codeModeInventory, (name, tool, input, context) =>
-                beforeExecute(name, input, context).pipe(
-                  Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
-                ),
+            ? CodeModeTool.create(
+                codeModeInventory,
+                (name, tool, input, context) =>
+                  beforeExecute(name, input, context).pipe(
+                    Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
+                  ),
+                permission,
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
@@ -319,6 +343,42 @@ const layer = Layer.effect(
           }
         }),
       ),
+      check: Effect.fn("Tool.check")(function* (input) {
+        if (whollyDisabled("execute", input.permissions)) {
+          return {
+            ok: false,
+            error: { kind: "ExecutionFailure", message: "Code Mode is disabled for this agent" },
+            toolCalls: [],
+          } satisfies CodeMode.Result
+        }
+        const data = state.get()
+        const allowed = new Set(input.tools)
+        const tools = new Map(
+          Array.from(data.tools).filter(
+            ([name, tool]) =>
+              tool.options?.codemode !== false &&
+              allowed.has(CodeModeTool.qualifiedName(tool)) &&
+              !whollyDisabled(tool.options?.permission ?? name, input.permissions),
+          ),
+        )
+        const callSeq = yield* Ref.make(0)
+        return yield* CodeModeTool.check(
+          { tools, namespaces: data.namespaces },
+          input.code,
+          input.bindings,
+          input.limits,
+          (name, tool, toolInput) =>
+            Effect.gen(function* () {
+              const index = yield* Ref.getAndUpdate(callSeq, (value) => value + 1)
+              const context: Tool.Context = {
+                ...input.context,
+                id: Tool.CallID.make(`call_${input.context.messageID}_${index}`),
+              }
+              const event = yield* beforeExecute(name, toolInput, context)
+              return yield* executeTool(tool, name, event.input, context)
+            }),
+        )
+      }),
     })
   }),
 )
@@ -362,5 +422,5 @@ function namespaceError(name: string) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, Image.node],
+  deps: [PluginHooks.node, Image.node, Permission.node],
 })

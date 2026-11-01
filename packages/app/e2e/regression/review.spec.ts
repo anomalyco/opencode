@@ -151,6 +151,27 @@ test("a rejected Git init releases its session's button without showing an error
   await expect(init).toBeEnabled()
 })
 
+test("opens file picker launchers when randomUUID is unavailable on insecure HTTP origins", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(globalThis, "isSecureContext", { configurable: true, value: false })
+    Object.defineProperty(globalThis.crypto, "randomUUID", { configurable: true, value: undefined })
+  })
+
+  await openSession(page, {
+    name: "ReviewOpenFileInsecure",
+    seed: { panes: { ses_reviewopenfileinsecure: { review: true } } },
+  })
+
+  const panel = page.locator("#review-panel")
+  const tab = panel.getByRole("tab", { name: "Open file", exact: true })
+  await openFileLauncher(panel)
+  await expect(tab).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByRole("combobox", { name: "Filter files" })).toBeFocused()
+
+  await openFileLauncher(panel)
+  await expect(tab).toHaveCount(2)
+})
+
 test("open file tab browses, searches, and tracks missing files", async ({ page }) => {
   const searches: { query: string; dirs?: string; limit?: number; directory: string }[] = []
   const directory = "C:/OpenCode/ReviewOpenFile"
@@ -1349,6 +1370,49 @@ test("video files stream into the viewer behind a loading state, open into the p
   await video.click()
   await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThan(0)
   expect(await page.evaluate(() => document.fullscreenElement)).toBeNull()
+})
+
+test("review file navigation focuses the arrow for the keyboard direction", async ({ page }) => {
+  await openSession(page, {
+    name: "ReviewArrowFocus",
+    vcsDiff: [fileDiff("src/alpha.ts"), fileDiff("src/beta.ts"), fileDiff("src/gamma.ts")],
+    seed: {
+      panes: { ses_reviewarrowfocus: { review: true } },
+      storage: {
+        ...reviewTabs("C:/OpenCode/ReviewArrowFocus", "ses_reviewarrowfocus"),
+        "opencode.global.dat:review-panel-v2": { sidebarOpened: false },
+      },
+    },
+  })
+
+  const panel = page.locator("#review-panel")
+  const file = panel.locator('[data-slot="session-review-v2-file-name"]')
+  const previous = panel.getByRole("button", { name: "Previous file", exact: true })
+  const next = panel.getByRole("button", { name: "Next file", exact: true })
+
+  await expect(file).toHaveText("alpha.ts")
+  await previous.click()
+  await expect(file).toHaveText("gamma.ts")
+  await page.keyboard.press("ArrowRight")
+  await expect(file).toHaveText("alpha.ts")
+  await expect(next).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(file).toHaveText("beta.ts")
+  await page.keyboard.press("ArrowLeft")
+  await expect(file).toHaveText("alpha.ts")
+  await expect(previous).toBeFocused()
+  await next.click()
+  await expect(file).toHaveText("beta.ts")
+  await expect(next).toBeFocused()
+
+  const home = page.getByRole("button", { name: "Home", exact: true })
+  await home.focus()
+  await page.keyboard.press("ArrowRight")
+  await expect(file).toHaveText("gamma.ts")
+  await expect(home).toBeFocused()
+  await page.keyboard.press("ArrowLeft")
+  await expect(file).toHaveText("beta.ts")
+  await expect(home).toBeFocused()
 })
 
 test("restores review state and the side-panel tab per session", async ({ page }) => {

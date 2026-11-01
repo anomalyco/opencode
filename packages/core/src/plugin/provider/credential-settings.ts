@@ -7,8 +7,8 @@ import type { Provider } from "../../provider.js"
 /**
  * Tracks provider settings a plugin derives from the active connection's stored credential, such as login form
  * answers kept as credential metadata. The model resolver does not pass credential metadata to packages, so a
- * plugin that needs it applies these settings in its provider transform. A credential update or switch reloads
- * providers when the derived settings change.
+ * plugin that needs it applies these settings in its provider transform. Switching this integration's active
+ * credential reloads providers when the derived settings change.
  */
 export const credentialSettings = Effect.fn("ProviderPlugin.credentialSettings")(function* (
   ctx: Context,
@@ -25,7 +25,8 @@ export const credentialSettings = Effect.fn("ProviderPlugin.credentialSettings")
     return stored ? select(stored.value) : {}
   })
   const current = { settings: yield* load() }
-  yield* bus.subscribe([Credential.Event.Updated, Credential.Event.Switched]).pipe(
+  yield* bus.subscribe(Credential.Event.Switched).pipe(
+    Stream.filter((event) => event.data.integrationID === integrationID),
     Stream.runForEach(() =>
       Effect.gen(function* () {
         const next = yield* load()

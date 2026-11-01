@@ -52,7 +52,7 @@ export const OpenResponsesInputImage = Schema.Struct({
 })
 export const OpenResponsesInputFile = Schema.Struct({
   type: Schema.tag("input_file"),
-  filename: Schema.String,
+  filename: Schema.optional(Schema.String),
   detail: Schema.optional(Schema.String),
   file_data: Schema.optional(Schema.String),
   file_url: Schema.optional(Schema.String),
@@ -590,11 +590,12 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMReq
   const location = url ?? (yield* ProviderShared.requireInlineMedia(adapter.name, part.media)).dataUrl
   if (part.media.kind !== "image") {
     if (part.media.kind === "video") return { type: "input_video" as const, video_url: location }
+    if (url) return { type: "input_file" as const, file_url: url, detail }
     return {
       type: "input_file" as const,
       filename: part.filename ?? (mime === "application/pdf" ? "document.pdf" : "file"),
       detail,
-      ...(url ? { file_url: url } : { file_data: location }),
+      file_data: location,
     }
   }
   return {
@@ -640,10 +641,7 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
-const lowerMessages = Effect.fnUntraced(function* (
-  request: LLMRequest,
-  adapter: ProviderAdapter,
-) {
+const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
   const custom = OpenAIFreeform.tools(request)
@@ -806,10 +804,7 @@ const lowerMessages = Effect.fnUntraced(function* (
   return input
 })
 
-export const lowerConversation = Effect.fnUntraced(function* (
-  request: LLMRequest,
-  adapter: ProviderAdapter,
-) {
+export const lowerConversation = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const instructions = ProviderShared.joinText(request.system)
   return {
     model: request.model.id,
@@ -1204,10 +1199,7 @@ const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResul
   ]
 }
 
-const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (
-  state: ParserState,
-  event: Event,
-) {
+const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (state: ParserState, event: Event) {
   if (event.item_id === undefined) return [state, NO_EVENTS] satisfies StepResult
   const tool = state.tools[event.item_id]
   if (!tool) return [state, NO_EVENTS] satisfies StepResult
@@ -1235,10 +1227,7 @@ const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (
   return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
-const onOutputItemDone = Effect.fnUntraced(function* (
-  state: ParserState,
-  item: NormalizedEvent["item"],
-) {
+const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: NormalizedEvent["item"]) {
   if (!item) return [state, NO_EVENTS] satisfies StepResult
 
   if (item.type === "compaction") {

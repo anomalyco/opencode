@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
+import { ImageModel, ImageResponse, type ImageRequest } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
@@ -25,7 +25,7 @@ export type XAIImageOptions = {
   readonly response_format?: OpenString<"url" | "b64_json">
 } & Record<string, unknown>
 
-export type Request = ImageRequestFor<XAIImageOptions>
+export type Request = ImageRequest<ImageModel<XAIImageOptions>>
 
 // ---------------------------------------------------------------------------
 // 2. Response schema

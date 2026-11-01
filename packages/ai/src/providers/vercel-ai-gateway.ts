@@ -15,7 +15,7 @@ import { Framing } from "../route/framing.js"
 import { MediaRoute } from "../route/media.js"
 import type { Protocol } from "../route/protocol.js"
 import {
-  LLMRequest,
+  type LLMRequest,
   ModelID,
   ProviderID,
   ProviderMetadata,
@@ -105,7 +105,7 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
     readonly providerOptions?: ProviderOptionsInput
   }
 
-export type Settings = ProviderPackage.Settings & ProviderOptionsInput & { readonly apiKey?: string }
+export type Settings = ProviderPackage.Settings & ProviderOptionsInput & { readonly apiKey?: string | false }
 
 const GatewayOptionsSchema = Schema.Struct({
   gateway: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
@@ -137,13 +137,14 @@ const prepare = (api: "messages" | "responses" | "chat") =>
         if (effort === undefined) return { request, body: { providerOptions } }
         const enabled = effort !== "none"
         const thinking = request.providerOptions?.thinking ?? { type: enabled ? "adaptive" : "disabled" }
-        const next = LLMRequest.update(request, {
+        const next = {
+          ...request,
           providerOptions: {
             ...request.providerOptions,
             effort: enabled ? effort : undefined,
             thinking,
           },
-        })
+        }
         return { request: next, body: { providerOptions } }
       }
       case "responses":

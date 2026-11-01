@@ -43,6 +43,7 @@ const CONTINUE_AFTER_OUTPUT_LIMIT =
 // A grant funds a fresh agent budget, so C=2 bounds a user turn at 3×N model
 // steps: one recovery plus one follow-through past a failure.
 const STOPPING_MAX_CONTINUATIONS = 2
+type DrainInput = Parameters<Interface["drain"]>[0]
 
 const layer = Layer.effect(
   Service,
@@ -63,7 +64,8 @@ const layer = Layer.effect(
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
 
-    const drain = Effect.fn("SessionRunner.drain")(function* (input: Parameters<Interface["drain"]>[0]) {
+    // Each drain is one turn and starts its own trace, whatever fiber woke it.
+    const drain = Effect.fn("SessionRunner.drain", { root: true })(function* (input: DrainInput) {
       const sessionID = input.sessionID
       let force = input.force
       let continuing = input.continuation !== undefined
@@ -553,7 +555,9 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ drain })
+    return Service.of({
+      drain: (input) => drain(input).pipe(Effect.annotateSpans("session.id", input.sessionID)),
+    })
   }),
 )
 

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMRequest, Message } from "../../src/effect.js"
+import { ai, Message } from "../../src/effect.js"
 import { LLMClient } from "../../src/route.js"
 import { AmazonBedrock } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
@@ -26,7 +26,7 @@ const model = (blockBinding?: { readonly prefix_mismatch_behavior: string }) =>
 
 const question = "How many positive integers below 5000 have exactly 12 positive divisors? Reply with the number only."
 
-const first = LLM.request({
+const first = ai.request({
   id: "recorded_bedrock_thinking_binding_first",
   model: model(),
   system: "You are a concise assistant.",
@@ -46,7 +46,7 @@ describe("Bedrock Converse thinking binding recorded", () => {
   recorded.effect.with("accepts the default binding with no thinking configured", { tags: ["reasoning"] }, () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
-        LLM.request({
+        ai.request({
           id: "recorded_bedrock_thinking_binding_default",
           model: AmazonBedrock.model(modelID, {
             apiKey: process.env.AWS_BEARER_TOKEN_BEDROCK ?? "fixture",
@@ -74,7 +74,8 @@ describe("Bedrock Converse thinking binding recorded", () => {
         expect(turn.message.content.some((part) => part.type === "reasoning")).toBe(true)
 
         // Replay the assistant turn under a different system prompt, as a prompt rebuild or compaction would.
-        const next = LLMRequest.update(first, {
+        const next = {
+          ...first,
           id: "recorded_bedrock_thinking_binding_next",
           system: [{ type: "text", text: "You are a concise assistant. Today is Monday." }],
           messages: [
@@ -82,7 +83,7 @@ describe("Bedrock Converse thinking binding recorded", () => {
             Message.assistant(turn.message.content),
             Message.user("Now double it. Reply with the number only."),
           ],
-        })
+        }
 
         const bound = yield* LLMClient.generate(next)
         expect(bound.finishReason?.normalized).toBe("stop")
@@ -90,12 +91,11 @@ describe("Bedrock Converse thinking binding recorded", () => {
 
         // The same replay is rejected when the caller asks for the default `error` behavior, proving the check is
         // enforced and that the default `drop_block` is what let the request above through.
-        const rejected = yield* LLMClient.generate(
-          LLMRequest.update(next, {
-            id: "recorded_bedrock_thinking_binding_error",
-            model: model({ prefix_mismatch_behavior: "error" }),
-          }),
-        ).pipe(Effect.flip)
+        const rejected = yield* LLMClient.generate({
+          ...next,
+          id: "recorded_bedrock_thinking_binding_error",
+          model: model({ prefix_mismatch_behavior: "error" }),
+        }).pipe(Effect.flip)
         expect(rejected.message).toContain("bound to a different conversation")
       }),
     60_000,

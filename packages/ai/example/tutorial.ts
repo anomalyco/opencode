@@ -1,7 +1,8 @@
 import { Config, Effect, Formatter, Schema, Stream } from "effect"
 import { HttpClientResponse } from "effect/http"
 import { NodeFileSystem } from "@effect/platform-node"
-import { AIClient, Image, LLM, LLMRequest, Media, Message, ProviderID, Tool, ToolRuntime } from "@opencode/ai/effect"
+import { ai, AIClient, Media, Message, ProviderID, ToolRuntime } from "@opencode/ai/effect"
+import { tool } from "@opencode/ai/effect"
 import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode/ai/route"
 import { OpenAI } from "@opencode/ai/providers"
 
@@ -49,7 +50,7 @@ const model = openai.responses("gpt-4o-mini")
 //     and query params. Prefer typed `providerOptions` when a field is stable.
 //
 // Route/provider options are defaults. Request options override them for this call.
-const request = LLM.request({
+const request = ai.request({
   model,
   system: "You are concise and practical.",
   prompt: "Tell me a joke",
@@ -60,7 +61,7 @@ const request = LLM.request({
 // 3. `generate` sends the request and collects the event stream into one
 // response object. `response.text` is the collected text output.
 const generateOnce = Effect.gen(function* () {
-  const response = yield* LLM.generate(request)
+  const response = yield* ai.generate(request)
 
   console.log("\n== generate ==")
   console.log("generated text:", response.text)
@@ -69,7 +70,7 @@ const generateOnce = Effect.gen(function* () {
 
 // 4. `stream` exposes provider output as common `LLMEvent`s for UIs that want
 // incremental text, reasoning, tool input, usage, or finish events.
-const streamText = LLM.stream(request).pipe(
+const streamText = ai.stream(request).pipe(
   Stream.tap((event) =>
     Effect.sync(() => {
       if (event.type === "text-delta") process.stdout.write(`\ntext: ${event.text}`)
@@ -85,23 +86,24 @@ const streamText = LLM.stream(request).pipe(
 // 5. Tools are typed with Effect Schema. Provider turns remain explicit:
 // advertise definitions on the request, stream one turn, dispatch local calls,
 // then persist/build follow-up history in the enclosing product flow.
-const tools = {
-  get_weather: Tool.make({
+const tools = [
+  tool({
+    name: "get_weather",
     description: "Get current weather for a city.",
-    parameters: Schema.Struct({ city: Schema.String }),
+    input: Schema.Struct({ city: Schema.String }),
     success: Schema.Struct({ forecast: Schema.String }),
     execute: (input) => Effect.succeed({ forecast: `${input.city}: sunny, 72F` }),
   }),
-}
+]
 
 const streamWithTools = Effect.gen(function* () {
-  const request = LLM.request({
+  const request = ai.request({
     model,
     prompt: "Use get_weather for San Francisco, then answer in one sentence.",
     generation: { maxTokens: 80, temperature: 0 },
-    tools: Tool.toDefinitions(tools),
+    tools,
   })
-  const events = Array.from(yield* LLM.stream(request).pipe(Stream.runCollect))
+  const events = Array.from(yield* ai.stream(request).pipe(Stream.runCollect))
   for (const event of events) {
     if (event.type === "tool-call") console.log("tool call", event.name, event.input)
     if (event.type === "text-delta") process.stdout.write(event.text)
@@ -111,20 +113,20 @@ const streamWithTools = Effect.gen(function* () {
 
     // A durable agent would persist these messages before starting another
     // raw model turn. This tutorial keeps the boundary visible instead.
-    const followUp = LLMRequest.update(request, {
+    const followUp = {
+      ...request,
       messages: [
         ...request.messages,
         Message.assistant([event]),
         Message.tool({ ...event, result: dispatched.result }),
       ],
-    })
+    }
     console.log("follow-up history messages:", followUp.messages.length)
   }
 })
 
-// 6. `generateObject` is the structured-output helper. It forces a synthetic
-// tool call internally, so the same call site works across providers instead of
-// depending on provider-specific JSON mode flags.
+// 6. `schema` asks for structured output. It forces a hidden tool call, so the
+// same call site works across providers, and decodes its input into `object`.
 const WeatherReport = Schema.Struct({
   city: Schema.String,
   forecast: Schema.String,
@@ -132,7 +134,7 @@ const WeatherReport = Schema.Struct({
 })
 
 const generateStructuredObject = Effect.gen(function* () {
-  const response = yield* LLM.generateObject({
+  const response = yield* ai.generate({
     model,
     system: "Return only structured weather data.",
     prompt: "Give me today's weather for San Francisco.",
@@ -140,16 +142,16 @@ const generateStructuredObject = Effect.gen(function* () {
     generation: { maxTokens: 120, temperature: 0 },
   })
 
-  console.log("\n== generateObject ==")
+  console.log("\n== structured output ==")
   console.log(Formatter.formatJson(response.object, { space: 2 }))
 })
 
 // If the shape is only known at runtime, pass raw JSON Schema instead. The
 // `.object` type is `unknown`; callers that need static types should validate it.
-const generateDynamicObject = LLM.generateObject({
+const generateDynamicObject = ai.generate({
   model,
   prompt: "Extract the city and forecast from: San Francisco is sunny.",
-  jsonSchema: {
+  schema: {
     type: "object",
     properties: {
       city: { type: "string" },
@@ -230,7 +232,7 @@ const fakeExecutor = RequestExecutor.middleware((request) =>
 )
 
 const generateFake = Effect.gen(function* () {
-  const response = yield* LLM.generate({ model: FakeEcho.configure().model("echo-1"), prompt: "Say hello." })
+  const response = yield* ai.generate({ model: FakeEcho.configure().model("echo-1"), prompt: "Say hello." })
   console.log("\n== fake provider ==")
   console.log("generated text:", response.text)
 })
@@ -239,7 +241,7 @@ const generateFake = Effect.gen(function* () {
 // `response.image` is a `Media.Asset`: bytes decode lazily and are cached, and
 // `Media.write` persists them through the Effect `FileSystem`.
 const generateImage = Effect.gen(function* () {
-  const response = yield* Image.generate({
+  const response = yield* ai.image.generate({
     model: openai.image("gpt-image-1-mini"),
     prompt: "A flat black circle centered on a plain white background.",
     aspect: "1:1",

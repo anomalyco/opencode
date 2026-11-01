@@ -5,11 +5,11 @@ description: "Reliable access to open coding models with three plans, for one pe
 
 OpenCode Go gives you reliable access to popular open coding models, with three monthly plans:
 
-| Plan         | Price                | Included usage                                                      |
-| ------------ | -------------------- | ------------------------------------------------------------------- |
-| **Go**       | **$10/month**        | Lower-cost access to the models below                               |
-| **Go Plus**  | **$40/month**        | Higher usage limits across the models below                         |
-| **Go Teams** | **$20/member/month** | Every member gets their own Go limits, plus $5/month on every model |
+| Plan         | Price                | Included usage                                                             |
+| ------------ | -------------------- | -------------------------------------------------------------------------- |
+| **Go**       | **$10/month**        | Lower-cost access to the models below                                      |
+| **Go Plus**  | **$40/month**        | Higher usage limits across the models below                                |
+| **Go Teams** | **$20/member/month** | Every member gets their own limits, $5/month higher than Go on every model |
 
 Go works like any other provider in OpenCode. You subscribe to OpenCode Go and get your API key. It's **completely optional** and you don't need it to use OpenCode.
 
@@ -135,8 +135,7 @@ monthly limit for each plan and the token costs for each model. Token pricing is
 the same for Go, Go Plus, and Go Teams.
 
 Each model has the following usage limits: 5-hour — 20% of the monthly limit;
-weekly — 50%; and monthly — 100%. On Go Teams, each member's 5-hour and weekly
-limits are Go's, and their monthly limit is $5 higher.
+weekly — 50%; and monthly — 100%.
 
 Each model's monthly limit below determines how its usage counts toward those allowances. Each response reports how
 much the request counted, as [`opencode.allowance`](/console/api/inference#cost).
@@ -171,8 +170,8 @@ Token prices are per 1M tokens.
     | Qwen3.8 Flash                    | $0.15           | $0.47             | $0.016          | $0.20        | **$30**                                        |
     | Qwen3.7 Plus (≤ 256K tokens)     | $0.40           | $1.60             | $0.04           | $0.50        | **$60**                                        |
     | Qwen3.7 Plus (> 256K tokens)     | $1.20           | $4.80             | $0.12           | $1.50        | **$60**                                        |
-    | DeepSeek V4.1 Flash (Off-Peak)   | $0.15           | $0.60             | $0.003          | -            | **$80**                                        |
-    | DeepSeek V4.1 Flash (Peak)       | $0.30           | $1.20             | $0.006          | -            | **$80**                                        |
+    | DeepSeek V4.1 Flash (Off-Peak)   | $0.15           | $0.60             | $0.003          | -            | **$100**                                       |
+    | DeepSeek V4.1 Flash (Peak)       | $0.30           | $1.20             | $0.006          | -            | **$100**                                       |
     | DeepSeek V4 Pro (Off-Peak)       | $0.66           | $1.98             | $0.022          | -            | **$15**                                        |
     | DeepSeek V4 Pro (Peak)           | $1.32           | $3.96             | $0.044          | -            | **$15**                                        |
     | Hy4 preview                      | $0.834          | $2.501            | $0.042          | -            | **$30**                                        |
@@ -215,8 +214,8 @@ Token prices are per 1M tokens.
     | Qwen3.8 Flash                    | $0.15           | $0.47             | $0.016          | $0.20        | **$90**                                        |
     | Qwen3.7 Plus (≤ 256K tokens)     | $0.40           | $1.60             | $0.04           | $0.50        | **$180**                                       |
     | Qwen3.7 Plus (> 256K tokens)     | $1.20           | $4.80             | $0.12           | $1.50        | **$180**                                       |
-    | DeepSeek V4.1 Flash (Off-Peak)   | $0.15           | $0.60             | $0.003          | -            | **$160**                                       |
-    | DeepSeek V4.1 Flash (Peak)       | $0.30           | $1.20             | $0.006          | -            | **$160**                                       |
+    | DeepSeek V4.1 Flash (Off-Peak)   | $0.15           | $0.60             | $0.003          | -            | **$200**                                       |
+    | DeepSeek V4.1 Flash (Peak)       | $0.30           | $1.20             | $0.006          | -            | **$200**                                       |
     | DeepSeek V4 Pro (Off-Peak)       | $0.66           | $1.98             | $0.022          | -            | **$60**                                        |
     | DeepSeek V4 Pro (Peak)           | $1.32           | $3.96             | $0.044          | -            | **$60**                                        |
     | Hy4 preview                      | $0.834          | $2.501            | $0.042          | -            | **$120**                                       |
@@ -259,8 +258,8 @@ Token prices are per 1M tokens.
     | Qwen3.8 Flash                    | $0.15           | $0.47             | $0.016          | $0.20        | **$35**                                        |
     | Qwen3.7 Plus (≤ 256K tokens)     | $0.40           | $1.60             | $0.04           | $0.50        | **$65**                                        |
     | Qwen3.7 Plus (> 256K tokens)     | $1.20           | $4.80             | $0.12           | $1.50        | **$65**                                        |
-    | DeepSeek V4.1 Flash (Off-Peak)   | $0.15           | $0.60             | $0.003          | -            | **$85**                                        |
-    | DeepSeek V4.1 Flash (Peak)       | $0.30           | $1.20             | $0.006          | -            | **$85**                                        |
+    | DeepSeek V4.1 Flash (Off-Peak)   | $0.15           | $0.60             | $0.003          | -            | **$105**                                       |
+    | DeepSeek V4.1 Flash (Peak)       | $0.30           | $1.20             | $0.006          | -            | **$105**                                       |
     | DeepSeek V4 Pro (Off-Peak)       | $0.66           | $1.98             | $0.022          | -            | **$20**                                        |
     | DeepSeek V4 Pro (Peak)           | $1.32           | $3.96             | $0.044          | -            | **$20**                                        |
     | Hy4 preview                      | $0.834          | $2.501            | $0.042          | -            | **$35**                                        |
@@ -289,9 +288,7 @@ Token prices are per 1M tokens.
 ### Estimated requests
 
 The tables below estimate request counts based on typical Go usage patterns. Go
-Plus estimates scale with each model's higher usage limit. Go Teams keeps Go's
-5-hour and weekly estimates, and its monthly estimates scale with each model's
-$5 higher monthly limit.
+Plus and Go Teams estimates scale with each model's higher usage limit.
 
 <PlanTabs id="go-requests" label="Go plan" syncKey="go-plan">
   <div slot="go">
@@ -319,7 +316,7 @@ $5 higher monthly limit.
     | Qwen3.8 Max                | 160                  | 400               | 810                |
     | Qwen3.8 Flash              | 5,400                | 13,500            | 27,000             |
     | Qwen3.7 Plus               | 4,300                | 10,800            | 21,600             |
-    | DeepSeek V4.1 Flash        | 34,670               | 86,670            | 173,330            |
+    | DeepSeek V4.1 Flash        | 43,330               | 108,330           | 216,670            |
     | DeepSeek V4 Pro            | 1,050                | 2,600             | 5,200              |
     | Hy4 preview                | 1,350                | 3,380             | 6,770              |
     | Hy3                        | 4,300                | 10,750            | 21,500             |
@@ -355,7 +352,7 @@ $5 higher monthly limit.
     | Qwen3.8 Max                | 640                  | 1,600             | 3,240              |
     | Qwen3.8 Flash              | 16,200               | 40,500            | 81,000             |
     | Qwen3.7 Plus               | 12,900               | 32,400            | 64,800             |
-    | DeepSeek V4.1 Flash        | 69,330               | 173,330           | 346,670            |
+    | DeepSeek V4.1 Flash        | 86,670               | 216,670           | 433,330            |
     | DeepSeek V4 Pro            | 4,200                | 10,400            | 20,800             |
     | Hy4 preview                | 5,400                | 13,520            | 27,080             |
     | Hy3                        | 17,200               | 43,000            | 86,000             |
@@ -370,36 +367,36 @@ $5 higher monthly limit.
 
     | Model                      | Requests per 5 hours | Requests per week | Requests per month |
     | -------------------------- | -------------------- | ----------------- | ------------------ |
-    | GLM-5.3-Flash              | 6,320                | 15,790            | 34,210             |
-    | GLM-5.3                    | 220                  | 540               | 1,440              |
-    | GLM-5.2                    | 880                  | 2,150             | 4,660              |
-    | Kimi K3.1 Pro              | 147                  | 368               | 980                |
-    | Kimi K3                    | 110                  | 250               | 653                |
-    | Kimi K2.7 Code             | 1,350                | 3,380             | 7,310              |
-    | LongCat-2.0                | 11,400               | 28,600            | 61,970             |
-    | Step 5 Preview             | 430                  | 1,070             | 2,840              |
+    | GLM-5.3-Flash              | 6,847                | 17,110            | 34,210             |
+    | GLM-5.3                    | 293                  | 720               | 1,440              |
+    | GLM-5.2                    | 953                  | 2,330             | 4,660              |
+    | Kimi K3.1 Pro              | 196                  | 491               | 980                |
+    | Kimi K3                    | 147                  | 333               | 653                |
+    | Kimi K2.7 Code             | 1,462                | 3,660             | 7,310              |
+    | LongCat-2.0                | 12,350               | 30,980            | 61,970             |
+    | Step 5 Preview             | 573                  | 1,430             | 2,840              |
     | Beam Free                  | Unlimited            | Unlimited         | Unlimited          |
     | Iceman Contributor Free    | Unlimited            | Unlimited         | Unlimited          |
-    | MiMo-V2.6-Flash            | 30,100               | 75,200            | 162,930            |
-    | MiMo-V2.6-Pro              | 3,250                | 8,150             | 21,730             |
-    | MiMo-V2.5                  | 30,100               | 75,200            | 162,930            |
-    | MiMo-V2.5-Pro              | 3,250                | 8,150             | 21,730             |
-    | MiniMax M3.1 Flash         | 3,880                | 9,690             | 24,230             |
-    | MiniMax M3                 | 3,200                | 8,000             | 17,330             |
-    | Muse Spark 1.3 Contributor | 45,300               | 113,300           | 245,480            |
-    | Muse Spark 1.2 Contributor | 45,300               | 113,300           | 245,480            |
-    | Qwen3.8 Max                | 160                  | 400               | 1,080              |
-    | Qwen3.8 Flash              | 5,400                | 13,500            | 31,500             |
-    | Qwen3.7 Plus               | 4,300                | 10,800            | 23,400             |
-    | DeepSeek V4.1 Flash        | 34,670               | 86,670            | 184,160            |
-    | DeepSeek V4 Pro            | 1,050                | 2,600             | 6,930              |
-    | Hy4 preview                | 1,350                | 3,380             | 7,900              |
-    | Hy3                        | 4,300                | 10,750            | 23,290             |
-    | Grok 4.7                   | 169                  | 423               | 1,130              |
-    | GPT 6 Luna                 | 4,230                | 10,560            | 28,170             |
-    | GPT 5.6 Luna               | 2,050                | 5,100             | 13,670             |
-    | Claude Haiku 5.5           | 3,850                | 9,620             | 25,640             |
-    | Gemini 4 Argon             | 440                  | 1,080             | 2,470              |
+    | MiMo-V2.6-Flash            | 32,608               | 81,470            | 162,930            |
+    | MiMo-V2.6-Pro              | 4,333                | 10,870            | 21,730             |
+    | MiMo-V2.5                  | 32,608               | 81,470            | 162,930            |
+    | MiMo-V2.5-Pro              | 4,333                | 10,870            | 21,730             |
+    | MiniMax M3.1 Flash         | 4,850                | 12,110            | 24,230             |
+    | MiniMax M3                 | 3,467                | 8,670             | 17,330             |
+    | Muse Spark 1.3 Contributor | 49,075               | 122,740           | 245,480            |
+    | Muse Spark 1.2 Contributor | 49,075               | 122,740           | 245,480            |
+    | Qwen3.8 Max                | 213                  | 530               | 1,080              |
+    | Qwen3.8 Flash              | 6,300                | 15,750            | 31,500             |
+    | Qwen3.7 Plus               | 4,658                | 11,700            | 23,400             |
+    | DeepSeek V4.1 Flash        | 45,500               | 113,750           | 227,500            |
+    | DeepSeek V4 Pro            | 1,400                | 3,470             | 6,930              |
+    | Hy4 preview                | 1,575                | 3,940             | 7,900              |
+    | Hy3                        | 4,658                | 11,650            | 23,290             |
+    | Grok 4.7                   | 225                  | 564               | 1,130              |
+    | GPT 6 Luna                 | 5,640                | 14,080            | 28,170             |
+    | GPT 5.6 Luna               | 2,733                | 6,800             | 13,670             |
+    | Claude Haiku 5.5           | 5,133                | 12,830            | 25,640             |
+    | Gemini 4 Argon             | 513                  | 1,260             | 2,470              |
 
   </div>
 </PlanTabs>
@@ -561,7 +558,7 @@ curl https://opencode.ai/inference/go/v1/models
 - **Muse Spark 1.3 Contributor:** Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models. Availability is limited to regions permitted by Meta's [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy). [Learn more](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models. Availability is limited to regions permitted by Meta's [Geographic Use Policy](https://ai.developer.meta.com/legal/geographic-use-policy). [Learn more](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Iceman Contributor Free:** Free for a limited time in exchange for permission to use your prompts and completions to improve the model.
-- **DeepSeek:** ZDR agreement is renewed monthly. The current agreement is valid through October 31, 2026.
+- **DeepSeek:** ZDR agreement is renewed monthly. The current agreement is valid through November 30, 2026.
 
 ## Background
 

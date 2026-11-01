@@ -243,11 +243,16 @@ export const OpenAIPlugin = define({
       const credential = connection
         ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
+      const previous = chatgpt
       chatgpt =
         credential?.type === "oauth" &&
         (credential.methodID === browserMethodID || credential.methodID === headlessMethodID)
           ? credential
           : undefined
+      return (
+        (previous === undefined) !== (chatgpt === undefined) ||
+        previous?.metadata?.accountID !== chatgpt?.metadata?.accountID
+      )
     })
 
     yield* ctx.integration.transform((editor) => {
@@ -326,7 +331,7 @@ export const OpenAIPlugin = define({
       })
     for (const name of ["context", "compaction"] as const)
       yield* ctx.session.hook(name, omitOutputLimit, { providerID: Provider.ID.openai })
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
+    const refresh = () => loading.withPermit(load().pipe(Effect.flatMap((changed) => (changed ? ctx.provider.reload() : Effect.void))))
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
       Stream.runForEach(refresh),
