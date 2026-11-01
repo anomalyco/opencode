@@ -175,7 +175,8 @@ const standardJsonSchema = (schema: StandardSchemaV1<any, any>, io: "input" | "o
 // versions reach this conversion path. A plugin-defined `_zod.toJSONSchema` override replaces
 // the default processor, which also skips processing `_zod.parent`; Zod's finalizer still walks
 // that parent and crashes on schemas cloned by `.describe()`. Hide only the parents that the
-// override strands for the duration of the conversion, then restore them.
+// override strands for the duration of the conversion, then restore them. An override runs while
+// its parent is hidden, so it must not depend on reading `_zod.parent` itself.
 const zodJsonSchema = (schema: $ZodType, io: "input" | "output"): JsonSchema.JsonSchema => {
   const restore: Array<() => void> = []
   const seen = new Set<object>()
