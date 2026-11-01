@@ -8,6 +8,47 @@ import { renderTimelineDiagram } from "../timeline/diagram.js"
 import { renderSequenceDiagram } from "../sequence/diagram.js"
 
 describe("parser diagnostics", () => {
+  test.each([
+    [
+      "self-referential",
+      `flowchart TD
+  subgraph A
+    subgraph A
+      X[First]
+    end
+  end`,
+    ],
+    [
+      "mutually recursive",
+      `flowchart TD
+  subgraph A
+    subgraph B
+      X[First]
+    end
+  end
+  subgraph B
+    subgraph A
+      Y[Second]
+    end
+  end`,
+    ],
+  ])("rejects %s flowchart subgraphs", (_name, source) => {
+    expect(() => parseMermaidFlowchartDiagram(source)).toThrow(/cyclic flowchart subgraphs/i)
+  })
+
+  test("accepts repeated subgraph IDs with acyclic ancestry", () => {
+    const diagram = parseMermaidFlowchartDiagram(`flowchart LR
+  subgraph A
+    X[First]
+  end
+  subgraph A
+    Y[Second]
+  end`)
+
+    expect(diagram.subgraphs?.map((subgraph) => subgraph.nodeIds)).toEqual([["X"], ["Y"]])
+    expect(diagram.nodes.map((node) => node.label)).toEqual(["First", "Second"])
+  })
+
   test("ignores flowchart presentation directives that do not change terminal structure", () => {
     const diagram = parseMermaidFlowchartDiagram(`flowchart LR
   A[Start] --> B[Done]

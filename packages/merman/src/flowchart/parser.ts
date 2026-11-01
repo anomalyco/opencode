@@ -6,7 +6,7 @@ import type {
   FlowchartNode,
   FlowchartSubgraph,
 } from "./types.js"
-import { MermaidSyntaxError } from "../diagnostics.js"
+import { MermaidSubgraphCycleError, MermaidSyntaxError } from "../diagnostics.js"
 import {
   firstMeaningfulMermaidLine,
   meaningfulNumberedMermaidLines,
@@ -333,6 +333,31 @@ export function isMermaidFlowchartDiagram(content: string): boolean {
   return FLOWCHART_HEADER_RE.test(firstMeaningfulMermaidLine(content) ?? "")
 }
 
+function assertAcyclicSubgraphs(subgraphs: FlowchartSubgraph[]): void {
+  const indegrees = new Map<string, number>(subgraphs.map((subgraph) => [subgraph.id, 0]))
+  if (indegrees.size === subgraphs.length) return
+
+  const children = new Map<string, Set<string>>()
+  for (const subgraph of subgraphs) {
+    if (!subgraph.parentId) continue
+    const ids = children.get(subgraph.parentId) ?? new Set<string>()
+    if (ids.has(subgraph.id)) continue
+    ids.add(subgraph.id)
+    children.set(subgraph.parentId, ids)
+    indegrees.set(subgraph.id, indegrees.get(subgraph.id)! + 1)
+  }
+
+  const pending = [...indegrees].filter(([, count]) => count === 0).map(([id]) => id)
+  for (let index = 0; index < pending.length; index++) {
+    for (const id of children.get(pending[index]!) ?? []) {
+      const remaining = indegrees.get(id)! - 1
+      indegrees.set(id, remaining)
+      if (remaining === 0) pending.push(id)
+    }
+  }
+  if (pending.length !== indegrees.size) throw new MermaidSubgraphCycleError()
+}
+
 export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram {
   const nodes = new Map<string, FlowchartNode>()
   const edges: FlowchartEdge[] = []
@@ -462,6 +487,7 @@ export function parseMermaidFlowchartDiagram(content: string): FlowchartDiagram 
     )
   }
 
+  assertAcyclicSubgraphs(subgraphs)
   resolveSubgraphEndpoints(nodes, edges, subgraphs, explicitShapeIds, referencedInOpenSubgraphs)
   return { direction, nodes: [...nodes.values()], edges, subgraphs }
 }
