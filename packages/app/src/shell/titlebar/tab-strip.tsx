@@ -8,7 +8,7 @@ import { RestrictToHorizontalAxis, RestrictToVerticalAxis } from "@dnd-kit/abstr
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { arrayMove } from "@/runtime/array-move"
 import { tabHref, tabKey, type SessionTab, type Tab } from "@/shell/tabs/tabs"
-import { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { DraftTabItem, TabNavItem } from "@/shell/titlebar/tab-nav"
 import { useGlobal, useServerCtx, type ServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -19,6 +19,7 @@ import { createTabComposerState } from "@/composer/persistence"
 import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
+import { orderTabsByServer, serverGroupHeaders } from "./tab-groups"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
@@ -390,6 +391,7 @@ export function TitlebarTabStrip(props: {
   onReorder: (keys: string[]) => void
 }) {
   const global = useGlobal()
+  const servers = useServers()
   const language = useLanguage()
   const command = useCommand()
   const vertical = () => props.orientation === "vertical"
@@ -412,7 +414,43 @@ export function TitlebarTabStrip(props: {
   })
   const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
   const [unread, setUnread] = createStore<Record<string, boolean>>({})
-  const visibleTabs = createMemo(() => props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
+
+  // A vertical strip with several servers reads as one flat list of identical
+  // rows, so it groups by server. A stable sort keeps each server's own tab
+  // order, so reordering inside a group still persists.
+  const hasMultipleServers = createMemo(() => {
+    const open = props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)])
+
+    return new Set(open.map((tab) => tab.server)).size > 1
+  })
+
+  const ordering = createMemo(() => {
+    if (!vertical() || !hasMultipleServers()) return props.tabs
+
+    return orderTabsByServer(
+      props.tabs,
+      servers.list.map((conn) => ServerConnection.key(conn)),
+    )
+  })
+
+  // The first visible tab of each server carries its group header. Hidden tabs
+  // are skipped so a header never floats above a row that is not drawn.
+  const headers = createMemo(() => {
+    if (!vertical() || !hasMultipleServers()) return new Map<string, string>()
+
+    const labels = new Map(servers.list.map((conn) => [ServerConnection.key(conn), servers.label(conn)]))
+
+    return serverGroupHeaders(
+      ordering(),
+      (tab) => tab.type === "draft" || !!visibility[tabKey(tab)],
+      labels,
+    )
+  })
+
+  const visibleTabs = createMemo(() =>
+    ordering().filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]),
+  )
+
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
   // Tells the closed sidebar's toggle whether any row here shows its unread dot, which the current tab never does.
@@ -577,11 +615,12 @@ export function TitlebarTabStrip(props: {
             classList={{ "flex-row items-center": !vertical(), "flex-col items-stretch": vertical() }}
             ref={listRef}
           >
-            <For each={props.tabs}>
+            <For each={ordering()}>
               {(tab) => {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
                 const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
+                const header = () => headers().get(id)
                 const element = () => ref
                 tabRefs.set(id, element)
                 onCleanup(() => {
@@ -594,8 +633,8 @@ export function TitlebarTabStrip(props: {
                   return global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
                 })
 
-                if (tab.type === "session") {
-                  return (
+                const entry =
+                  tab.type === "session" ? (
                     <SessionTabEntry
                       tab={tab}
                       currentTab={props.currentTab}
@@ -612,23 +651,37 @@ export function TitlebarTabStrip(props: {
                       }}
                       onClose={() => props.onClose(tab)}
                     />
+                  ) : (
+                    <DraftTabSlot
+                      tab={tab}
+                      id={id}
+                      index={visibleIndex()}
+                      active={props.currentTab === tab}
+                      orientation={vertical() ? "vertical" : "horizontal"}
+                      title={language.t("session.tab.session")}
+                      onNavigate={(element) => {
+                        ref = element
+                        props.onNavigate(tab, element)
+                      }}
+                      onClose={() => props.onClose(tab)}
+                    />
                   )
-                }
 
                 return (
-                  <DraftTabSlot
-                    tab={tab}
-                    id={id}
-                    index={visibleIndex()}
-                    active={props.currentTab === tab}
-                    orientation={vertical() ? "vertical" : "horizontal"}
-                    title={language.t("session.tab.session")}
-                    onNavigate={(element) => {
-                      ref = element
-                      props.onNavigate(tab, element)
-                    }}
-                    onClose={() => props.onClose(tab)}
-                  />
+                  <>
+                    <Show when={header()}>
+                      {(title) => (
+                        <div
+                          data-slot="tab-server-group"
+                          data-server={tab.server}
+                          class="mt-2 flex h-6 w-full shrink-0 items-center overflow-hidden px-1.5 text-[12px] leading-4 font-medium text-v2-text-text-muted"
+                        >
+                          <bdi class="truncate">{title()}</bdi>
+                        </div>
+                      )}
+                    </Show>
+                    {entry}
+                  </>
                 )
               }}
             </For>

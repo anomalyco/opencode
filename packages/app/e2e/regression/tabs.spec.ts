@@ -786,6 +786,7 @@ test("closing the active server's last tab opens the remaining server tab", asyn
   await twoServers(page, { a: [sessionA], b: [sessionB] })
   await page.goto(sessionHref(sessionA.id))
   await expectSessionTitle(page, sessionA.title)
+  await expect(page.locator('[data-slot="tab-server-group"]')).toHaveCount(0)
 
   await page
     .locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(sessionA.id)}"])`)
@@ -797,6 +798,41 @@ test("closing the active server's last tab opens the remaining server tab", asyn
   const reads = requests.filter((url) => url.includes(`/session/${sessionB.id}`))
   expect(reads.length).toBeGreaterThan(0)
   expect(reads.filter((url) => !url.startsWith(REMOTE_SERVER))).toEqual([])
+})
+
+test("vertical tabs group by server and keep each server's tab order", async ({ page }) => {
+  const sessionA = session({ id: "ses_group_a1", directory: "C:/server-a", title: "Group the sidebar by server" })
+  const sessionA2 = session({ id: "ses_group_a2", directory: "C:/server-a", title: "Review the tab order" })
+  const sessionB = session({ id: "ses_group_b1", directory: "/home/server-b", title: "Fix the docs build" })
+  await twoServers(page, { a: [sessionA, sessionA2], b: [sessionB] })
+  await seed(page, {
+    settings: { appearance: { tabLayout: "vertical" } },
+    tabs: [sessionA.id, { session: sessionB.id, server: REMOTE_SERVER }, sessionA2.id],
+  })
+  await page.goto(sessionHref(sessionA.id))
+
+  const order = () =>
+    page
+      .locator("[data-titlebar-tab-slot]")
+      .evaluateAll((slots) => slots.map((slot) => slot.getAttribute("data-tab-key")))
+
+  await expect.poll(order).toEqual([
+    `${SERVER}\n${sessionHref(sessionA.id)}`,
+    `${SERVER}\n${sessionHref(sessionA2.id)}`,
+    `${REMOTE_SERVER}\n${sessionHref(sessionB.id, REMOTE_SERVER)}`,
+  ])
+  await expect(page.locator('[data-slot="tab-server-group"]')).toHaveText(["This computer", "127.0.0.1:4097"])
+})
+
+test("vertical tabs stay flat when only one server has open tabs", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "SingleServerTabs",
+    sessions: [a, b],
+    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+  })
+  await page.goto(sessionHref(a.id))
+  await expect(page.locator("[data-titlebar-tab-slot]")).toHaveCount(2)
+  await expect(page.locator('[data-slot="tab-server-group"]')).toHaveCount(0)
 })
 
 test("a remote tab stays busy while a child session runs", async ({ page }) => {
