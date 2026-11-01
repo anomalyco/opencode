@@ -190,6 +190,10 @@ export const layer = Layer.effect(
         .resolveDecision(input.model)
         .pipe(Effect.mapError((error) => resolutionError(input.model, "decision", error)))
       if (!model) return yield* missing(input.model, "decision")
+      // The AI package keys questions by name, so a duplicate name has to be caught before the list becomes a record.
+      const names = input.questions.map((question) => question.name)
+      if (new Set(names).size !== names.length)
+        return yield* new InvalidRequestError({ message: "Decision question names must be unique" })
       const response = yield* ai.decision.generate({
         model,
         input: input.input.map((part) =>
@@ -197,7 +201,7 @@ export const layer = Layer.effect(
             ? { type: "media" as const, media: Media.base64(part.data, part.mime), filename: part.name }
             : part,
         ),
-        questions: input.questions,
+        questions: Object.fromEntries(input.questions.map(({ name, ...question }) => [name, question])),
       }).pipe(
         Effect.provideService(DecisionClient.Service, decisionClient),
         ModelRetry.retryOneShot,
@@ -205,7 +209,7 @@ export const layer = Layer.effect(
       )
       const usage = response.usage
       return {
-        answers: response.answers,
+        answers: names.map((name) => ({ name, ...response.answers[name] })),
         ...(usage?.cost === undefined ? {} : { cost: Money.USD.make(usage.cost) }),
         ...(usage?.inputTokens === undefined && usage?.outputTokens === undefined
           ? {}
