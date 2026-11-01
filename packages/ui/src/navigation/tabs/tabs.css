@@ -609,16 +609,25 @@
   padding-inline-end: 0;
   border-bottom: none;
   /* Tabs fade out at each edge with more of them past it. The tab strip's scroll handler sets the fade widths and the
-     width of the sticky "+", which the second layer keeps unmasked. */
+     width of the sticky "+", which the second layer keeps unmasked. The end fade stops short of a tab's trailing close
+     button (24px: a 20px button plus the wrapper's 4px end padding), which the third layer keeps unmasked together with
+     the 8px gap in front of it, so the button stays crisp wherever the strip parks. The fade must never cover a control
+     it leaves clickable. */
+  --tab-strip-close: 32px;
   mask-image:
     linear-gradient(
       to right,
       transparent,
       #000 var(--tab-strip-fade-start, 0px),
-      #000 calc(100% - var(--tab-strip-add, 0px) - var(--tab-strip-fade-end, 0px)),
-      transparent calc(100% - var(--tab-strip-add, 0px))
+      #000 calc(100% - var(--tab-strip-add, 0px) - var(--tab-strip-close, 32px) - var(--tab-strip-fade-end, 0px)),
+      transparent calc(100% - var(--tab-strip-add, 0px) - var(--tab-strip-close, 32px))
     ),
-    linear-gradient(to left, #000 var(--tab-strip-add, 0px), transparent var(--tab-strip-add, 0px));
+    linear-gradient(to left, #000 var(--tab-strip-add, 0px), transparent var(--tab-strip-add, 0px)),
+    linear-gradient(
+      to left,
+      #000 calc(var(--tab-strip-add, 0px) + var(--tab-strip-close, 32px)),
+      transparent calc(var(--tab-strip-add, 0px) + var(--tab-strip-close, 32px))
+    );
 
   &:dir(rtl) {
     mask-image:
@@ -626,10 +635,15 @@
         to left,
         transparent,
         #000 var(--tab-strip-fade-start, 0px),
-        #000 calc(100% - var(--tab-strip-add, 0px) - var(--tab-strip-fade-end, 0px)),
-        transparent calc(100% - var(--tab-strip-add, 0px))
+        #000 calc(100% - var(--tab-strip-add, 0px) - var(--tab-strip-close, 32px) - var(--tab-strip-fade-end, 0px)),
+        transparent calc(100% - var(--tab-strip-add, 0px) - var(--tab-strip-close, 32px))
       ),
-      linear-gradient(to right, #000 var(--tab-strip-add, 0px), transparent var(--tab-strip-add, 0px));
+      linear-gradient(to right, #000 var(--tab-strip-add, 0px), transparent var(--tab-strip-add, 0px)),
+      linear-gradient(
+        to right,
+        #000 calc(var(--tab-strip-add, 0px) + var(--tab-strip-close, 32px)),
+        transparent calc(var(--tab-strip-add, 0px) + var(--tab-strip-close, 32px))
+      );
   }
 }
 
