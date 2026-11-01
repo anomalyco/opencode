@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { HttpRateLimitDetails } from "@opencode/ai/effect"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { UsageLimits } from "@opencode/core/usage-limits"
@@ -49,13 +50,42 @@ const budget = {
 
 const meter = (status: string, percent: number) => ({ status, percent, resetsAt: "2026-10-24T17:00:00.000Z" })
 
+/** Console without a Go subscription: budgets load, Go has nothing to show. */
+const consoleWithoutGo = (url: string) =>
+  url.endsWith("/zen/go/v1/usage")
+    ? Response.json({ type: "error" }, { status: 403 })
+    : Response.json([budget])
+
+/** A rate-limit snapshot as a provider's responses report it. */
+const snapshot = (windows: Record<string, { limit: string; remaining: string; reset?: string }>) =>
+  HttpRateLimitDetails.make({
+    limit: Object.fromEntries(Object.entries(windows).map(([dimension, window]) => [dimension, window.limit])),
+    remaining: Object.fromEntries(
+      Object.entries(windows).map(([dimension, window]) => [dimension, window.remaining]),
+    ),
+    ...(Object.values(windows).some((window) => window.reset !== undefined)
+      ? {
+          reset: Object.fromEntries(
+            Object.entries(windows)
+              .filter((entry): entry is [string, { limit: string; remaining: string; reset: string }] =>
+                entry[1].reset !== undefined,
+              )
+              .map(([dimension, window]) => [dimension, window.reset]),
+          ),
+        }
+      : {}),
+  })
+
 /** Reads usage limits for a location whose active OpenCode Console connection resolves to `credential`. */
 const read = (
   credential: Credential.Value | undefined,
   respond: (url: string) => Response,
   requests: HttpClientRequest.HttpClientRequest[] = [],
+  observed: HttpRateLimitDetails | undefined = undefined,
 ) =>
-  Effect.flatMap(UsageLimits.Service, (limits) => limits.get()).pipe(
+  Effect.flatMap(UsageLimits.Service, (limits) =>
+    Effect.andThen(observed ? limits.observe("meta", observed) : Effect.void, limits.get()),
+  ).pipe(
     Effect.provide(
       UsageLimits.layer.pipe(
         Layer.provide(
@@ -201,6 +231,102 @@ it.effect("reports a Console that can't answer as unavailable", () =>
       url.endsWith("/current-budgets")
         ? new Response("upstream down", { status: 502 })
         : Response.json({ type: "error" }, { status: 403 }),
+    ).pipe(Effect.exit)
+
+    expect(Exit.isFailure(exit) && Exit.findErrorOption(exit)).toMatchObject({
+      value: { _tag: "UsageLimits.UnavailableError" },
+    })
+  }),
+)
+
+it.effect("attaches the Meta meter from the response headers Meta reported", () =>
+  Effect.gen(function* () {
+    const limits = yield* read(
+      signedIn,
+      consoleWithoutGo,
+      [],
+      snapshot({
+        requests: { limit: "100", remaining: "37", reset: "1780000000" },
+        tokens: { limit: "200000", remaining: "200000" },
+      }),
+    )
+
+    expect(limits?.workspace).toEqual({
+      id: "wrk_anomaly",
+      name: "Anomaly",
+      usageURL: "https://dev.opencode.ai/console/wrk_anomaly/activity/overview",
+    })
+    // 63 of 100 requests used; the token window is untouched and names no reset.
+    expect(limits?.meta).toEqual({
+      requests: { percent: 63, limited: false, resetsAt: 1780000000000 },
+      tokens: { percent: 0, limited: false },
+    })
+  }),
+)
+
+it.effect("reads a duration reset from the response headers", () =>
+  Effect.gen(function* () {
+    const before = Date.now()
+    const limits = yield* read(
+      signedIn,
+      consoleWithoutGo,
+      [],
+      snapshot({ requests: { limit: "60", remaining: "59", reset: "90s" } }),
+    )
+
+    expect(limits?.meta?.requests?.percent).toBe(2)
+    expect(limits?.meta?.requests?.limited).toBe(false)
+    expect(limits?.meta?.requests?.resetsAt).toBeGreaterThanOrEqual(before + 90_000)
+    expect(limits?.meta?.requests?.resetsAt).toBeLessThanOrEqual(Date.now() + 90_000)
+  }),
+)
+
+it.effect("has no Meta meter without observed headers", () =>
+  Effect.gen(function* () {
+    const limits = yield* read(signedIn, consoleWithoutGo)
+
+    expect(limits?.workspace.id).toBe("wrk_anomaly")
+    expect(limits).not.toHaveProperty("meta")
+  }),
+)
+
+it.effect("ignores observed snapshots with no usable window", () =>
+  Effect.gen(function* () {
+    const limits = yield* read(
+      signedIn,
+      consoleWithoutGo,
+      [],
+      snapshot({ requests: { limit: "0", remaining: "0" } }),
+    )
+
+    expect(limits).not.toHaveProperty("meta")
+  }),
+)
+
+it.effect("ignores an observed snapshot with no quota windows at all", () =>
+  Effect.gen(function* () {
+    const limits = yield* read(
+      signedIn,
+      consoleWithoutGo,
+      [],
+      HttpRateLimitDetails.make({}),
+    )
+
+    expect(limits).not.toHaveProperty("meta")
+  }),
+)
+
+it.effect("reports a Console that can't answer as unavailable after observing headers", () =>
+  Effect.gen(function* () {
+    // Observed headers never mask a Console failure: the read still fails.
+    const exit = yield* read(
+      signedIn,
+      (url) =>
+        url.endsWith("/current-budgets")
+          ? new Response("upstream down", { status: 502 })
+          : Response.json({ type: "error" }, { status: 403 }),
+      [],
+      snapshot({ requests: { limit: "100", remaining: "37" } }),
     ).pipe(Effect.exit)
 
     expect(Exit.isFailure(exit) && Exit.findErrorOption(exit)).toMatchObject({

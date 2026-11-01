@@ -18,6 +18,7 @@ import { SessionStep } from "@opencode/core/session/runner/step"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { Snapshot } from "@opencode/core/snapshot"
 import { ToolOutput } from "@opencode/core/tool-output"
+import { UsageLimits } from "@opencode/core/usage-limits"
 import { Money } from "@opencode/schema/money"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { asc, eq } from "drizzle-orm"
@@ -51,13 +52,19 @@ for (const fixture of [
       let executions = 0
       const steps = yield* SessionStep.make.pipe(
         Effect.provide(
-          Layer.mock(Snapshot.Service)({
-            capture: () => Effect.sync(() => (captures++ === 0 ? start : end)),
-            files: (input) => {
-              expect(input).toEqual({ from: start, to: end })
-              return Effect.succeed(files)
-            },
-          }),
+          Layer.merge(
+            Layer.mock(Snapshot.Service)({
+              capture: () => Effect.sync(() => (captures++ === 0 ? start : end)),
+              files: (input) => {
+                expect(input).toEqual({ from: start, to: end })
+                return Effect.succeed(files)
+              },
+            }),
+            Layer.mock(UsageLimits.Service)({
+              get: () => Effect.succeed(undefined),
+              observe: () => Effect.void,
+            }),
+          ),
         ),
       )
       yield* db
@@ -167,10 +174,16 @@ it.effect("records the cost the endpoint reports instead of the catalog price", 
     const assistantMessageID = SessionMessage.ID.create()
     const steps = yield* SessionStep.make.pipe(
       Effect.provide(
-        Layer.mock(Snapshot.Service)({
-          capture: () => Effect.succeed(undefined),
-          files: () => Effect.succeed([]),
-        }),
+        Layer.merge(
+          Layer.mock(Snapshot.Service)({
+            capture: () => Effect.succeed(undefined),
+            files: () => Effect.succeed([]),
+          }),
+          Layer.mock(UsageLimits.Service)({
+            get: () => Effect.succeed(undefined),
+            observe: () => Effect.void,
+          }),
+        ),
       ),
     )
     yield* db

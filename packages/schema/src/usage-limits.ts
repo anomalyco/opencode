@@ -62,6 +62,22 @@ export const Budget = Schema.Struct({
   resetsAt: Instant,
 }).annotate({ identifier: "UsageLimits.Budget" })
 
+/** One quota window a provider's `x-ratelimit-*` response headers reported. */
+export interface MetaMeter extends Schema.Schema.Type<typeof MetaMeter> {}
+export const MetaMeter = Schema.Struct({
+  /** How much of the window is used, from 0 to 100. */
+  percent: Schema.Finite,
+  limited: Schema.Boolean,
+  resetsAt: Schema.Number.pipe(optional),
+}).annotate({ identifier: "UsageLimits.MetaMeter" })
+
+/** The Meta API quota meter, built from the `x-ratelimit-*` headers Meta's own responses report. */
+export interface Meta extends Schema.Schema.Type<typeof Meta> {}
+export const Meta = Schema.Struct({
+  requests: MetaMeter.pipe(optional),
+  tokens: MetaMeter.pipe(optional),
+}).annotate({ identifier: "UsageLimits.Meta" })
+
 /** The usage limits of the OpenCode Console workspace a location is signed in to. */
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
@@ -72,5 +88,6 @@ export const Info = Schema.Struct({
     usageURL: Schema.String,
   }),
   go: Go.pipe(optional),
+  meta: Meta.pipe(optional),
   budgets: Schema.Array(Budget),
 }).annotate({ identifier: "UsageLimits.Info" })

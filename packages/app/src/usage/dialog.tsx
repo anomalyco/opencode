@@ -17,6 +17,7 @@ import {
   type CurrentModel,
   type GoRow,
   type LimitAction,
+  type MetaRow,
   usageView,
 } from "./limits"
 import "./dialog.css"
@@ -260,6 +261,28 @@ export function UsageDialogContent(props: {
           </Section>
         )}
       </Show>
+      <Show when={view().meta}>
+        {(rows) => (
+          <Section label={language.t("usage.section.meta")}>
+            <Panel>
+              <For each={rows()}>
+                {(row, index) => (
+                  <>
+                    <Show when={index() > 0}>
+                      <Divider />
+                    </Show>
+                    <MetaItem row={row} used={language.t("usage.go.used", { percent: Math.round(row.percent) })}>
+                      {row.resetsAt === undefined
+                        ? undefined
+                        : language.t("usage.go.resetsIn", { duration: duration(row.resetsAt) })}
+                    </MetaItem>
+                  </>
+                )}
+              </For>
+            </Panel>
+          </Section>
+        )}
+      </Show>
       <Section label={language.t("usage.section.console")} badge={view().workspace} dimmed={view().dimmed}>
         <Show
           when={view().budgets.length > 0}
@@ -408,6 +431,34 @@ function GoItem(props: { row: GoRow; used: string; children: JSX.Element }) {
         <Spend status={props.used} reached={props.row.limited}>
           {props.children}
         </Spend>
+      </div>
+      <Track fill={props.row.percent / 100} reached={props.row.limited} />
+    </Item>
+  )
+}
+
+function MetaItem(props: { row: MetaRow; used: string; children?: JSX.Element }) {
+  const language = useLanguage()
+  return (
+    <Item>
+      <div class="flex items-center justify-between self-stretch">
+        <Line class="font-[530] text-v2-text-text-base">{language.t(`usage.meta.${props.row.window}`)}</Line>
+        <Show
+          when={props.children}
+          fallback={
+            <Line
+              class={`font-[530] tabular-nums ${props.row.limited ? "text-[var(--usage-reached)]" : "text-v2-text-text-base"}`}
+            >
+              {props.used}
+            </Line>
+          }
+        >
+          {(resets) => (
+            <Spend status={props.used} reached={props.row.limited}>
+              {resets()}
+            </Spend>
+          )}
+        </Show>
       </div>
       <Track fill={props.row.percent / 100} reached={props.row.limited} />
     </Item>

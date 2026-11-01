@@ -364,6 +364,12 @@ export type WebSearchResult = { url: string; title?: string; content?: string; t
 
 export type UsageLimitsMeter = { percent: number; limited: boolean; resetsAt: number }
 
+export type UsageLimitsMetaMeter = {
+  percent: number
+  limited: boolean
+  resetsAt?: number | "Infinity" | "-Infinity" | "NaN"
+}
+
 export type McpProtocol = "legacy" | "auto" | "2026-07-28"
 
 export type ConfigCompactionPercent = string
@@ -939,6 +945,8 @@ export type VcsInfo = { provider?: string; branch: VcsBranch }
 export type WebSearchProvider = { id: WebSearchID; name: string }
 
 export type UsageLimitsGo = { rolling: UsageLimitsMeter; weekly: UsageLimitsMeter; monthly: UsageLimitsMeter }
+
+export type UsageLimitsMeta = { requests?: UsageLimitsMetaMeter; tokens?: UsageLimitsMetaMeter }
 
 export type ConfigModelCapabilities = {
   tools?: boolean
@@ -2527,6 +2535,7 @@ export type ConfigEntry =
 export type UsageLimitsInfo = {
   workspace: { id: string; name?: string; usageURL: string }
   go?: UsageLimitsGo
+  meta?: UsageLimitsMeta
   budgets: Array<UsageLimitsBudget>
 }
 

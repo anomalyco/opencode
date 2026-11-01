@@ -6,11 +6,12 @@ import {
   LLMClient,
   LLMEvent,
   isContextOverflowFailure,
+  type HttpRateLimitDetails,
   type ProviderErrorEvent,
   type ToolCall,
 } from "@opencode/ai/effect"
 import type { Agent } from "@opencode/schema/agent"
-import { Cause, Clock, Data, Effect, Exit, Fiber, Option, Stream } from "effect"
+import { Cause, Clock, Data, Effect, Exit, Fiber, Option, Ref, Stream } from "effect"
 import { SessionError } from "@opencode/schema/session-error"
 import { Bus } from "../../bus.js"
 import { Permission } from "../../permission.js"
@@ -25,6 +26,7 @@ import { SessionModelRequest } from "../model-request.js"
 import { SessionSchema } from "../schema.js"
 import { toSessionError } from "../to-session-error.js"
 import { SessionUsage } from "../usage.js"
+import { UsageLimits } from "../../usage-limits.js"
 import { SessionRunnerModel } from "./model.js"
 import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
@@ -67,6 +69,7 @@ const RESULT_MISSING = { type: "tool.result-missing", message: "Provider did not
 export const make = Effect.gen(function* () {
   const bus = yield* Bus.Service
   const llm = yield* LLMClient.Service
+  const usageLimits = yield* UsageLimits.Service
   const snapshots = yield* Snapshot.Service
   const toolOutput = yield* ToolOutput.Service
 
@@ -109,8 +112,11 @@ export const make = Effect.gen(function* () {
     // Provider and tool fibers retain per-source order without a shared writer queue.
     // A local execution starts only after its Tool.Called publication completes.
     let overflowFailure: ProviderErrorEvent | undefined
+    const rateLimits = yield* Ref.make(Option.none<HttpRateLimitDetails>())
+    const capture = UsageLimits.RateLimitCapture.of({ ref: rateLimits })
     // Read to the end, not just the finish event, so the next request can reuse this response.
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
+      Stream.provideService(UsageLimits.RateLimitCapture, capture),
       Stream.runForEach((event) =>
         Effect.gen(function* () {
           if (overflowFailure || publisher.hasProviderError()) return
@@ -160,6 +166,9 @@ export const make = Effect.gen(function* () {
         )
           return yield* Effect.failCause(stream.cause)
         if (!overflowFailure && publisher.hasStarted()) yield* publisher.streamed()
+        // Remember the quota the provider's responses reported, for the usage meters.
+        const rateLimit = yield* Ref.get(rateLimits)
+        if (Option.isSome(rateLimit)) yield* usageLimits.observe(input.model.ref.providerID, rateLimit.value)
         if (streamInterrupted) yield* interruptTools
         const joined = yield* restore(Fiber.awaitAll(toolRuns.map((run) => run.fiber))).pipe(Effect.exit)
         if (Exit.isFailure(joined)) yield* interruptTools

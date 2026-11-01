@@ -24966,6 +24966,9 @@
           "go": {
             "$ref": "#/components/schemas/UsageLimits.Go"
           },
+          "meta": {
+            "$ref": "#/components/schemas/UsageLimits.Meta"
+          },
           "budgets": {
             "type": "array",
             "items": {
@@ -24974,6 +24977,42 @@
           }
         },
         "required": ["workspace", "budgets"],
+        "additionalProperties": false
+      },
+      "UsageLimits.Meta": {
+        "type": "object",
+        "properties": {
+          "requests": {
+            "$ref": "#/components/schemas/UsageLimits.MetaMeter"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/UsageLimits.MetaMeter"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UsageLimits.MetaMeter": {
+        "type": "object",
+        "properties": {
+          "percent": {
+            "type": "number"
+          },
+          "limited": {
+            "type": "boolean"
+          },
+          "resetsAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": ["Infinity", "-Infinity", "NaN"]
+              }
+            ]
+          }
+        },
+        "required": ["percent", "limited"],
         "additionalProperties": false
       },
       "UsageLimits.Meter": {

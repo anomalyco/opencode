@@ -207,6 +207,16 @@ const httpError = (input: {
   })
 }
 
+/**
+ * The live quota signal from response headers, whatever the status. Parses the
+ * OpenAI-style `x-ratelimit-*` and Anthropic-style `anthropic-ratelimit-*`
+ * families; anything else yields no snapshot.
+ */
+export const rateLimitSnapshot = (headers: Headers.Headers | Record<string, string>) => {
+  const normalized = normalizedHeaders(Headers.fromInput(headers))
+  return rateLimitDetails(normalized, retryAfterMs(normalized))
+}
+
 export const responseStream = (response: HttpClientResponse.HttpClientResponse): Stream.Stream<Uint8Array, AIError> =>
   response.stream.pipe(
     Stream.mapError((error) =>
