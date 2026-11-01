@@ -166,6 +166,40 @@ test("tabs in a narrow side strip shrink to keep their close buttons, and a tab'
   await expect(side.getByRole("tab", { name: "b.md", exact: true })).toHaveCount(0)
 })
 
+test("right-clicking + lists the launchers as a menu instead of opening a New tab", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/AddMenu"
+  const key = `local\u0000${base64Encode(directory)}/ses_addmenu`
+
+  await openSession(page, {
+    name: "AddMenu",
+    fileList: () => [],
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: {
+      panes: { ses_addmenu: { review: true } },
+      storage: {
+        "opencode.global.dat:layout": {
+          sessionTabs: { [key]: { all: ["file://README.md"], active: "file://README.md" } },
+        },
+      },
+    },
+  })
+
+  const side = page.locator('[data-pane-content="side"]')
+  const add = side.getByRole("button", { name: "Add tab", exact: true })
+  const newTab = side.getByRole("tab", { name: "New tab", exact: true })
+  await expect(side.getByRole("tab", { name: "README.md", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  await add.click({ button: "right" })
+  await page.getByRole("menuitem", { name: /^Review/ }).click()
+  await expect(side.getByRole("tab", { name: /^Review/ })).toHaveAttribute("aria-selected", "true")
+  await expect(newTab).toHaveCount(0)
+
+  // A plain click still opens the full New tab view.
+  await add.click()
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+})
+
 async function expectTreeSentinel(page: Page) {
   const tree = page.locator('#review-panel [data-component="file-tree-v2"]')
   await expect(tree.getByRole("treeitem", { name: "action.yml" })).toBeVisible()
