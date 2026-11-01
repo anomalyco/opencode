@@ -10,6 +10,8 @@ export { type FatalRendererErrorLog, type Platform, PlatformProvider } from "./r
 
 export { ServerConnection, useServers } from "./runtime/server/registry"
 
+export { sessionHref } from "./shell/routes/session"
+
 export { useGlobal } from "./runtime/server/runtime"
 
 export { useTabs } from "./shell/tabs/tabs"
