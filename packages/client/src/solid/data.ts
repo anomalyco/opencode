@@ -1307,6 +1307,15 @@ export function createData(config: CreateDataInput) {
       case "permission.replied":
         removePermission(event.data.sessionID, event.data.requestID)
         return
+      // A form is owned by a session ID, so a session form does not need a Location to be routed.
+      // The "global" elicitation form is listed per Location and stays below, where the event has one.
+      case "form.created": {
+        const form = event.data.form
+        if (form.sessionID === "global") break
+        if (store.session.form[form.sessionID]?.some((existing) => existing.id === form.id)) return
+        setStore("session", "form", form.sessionID, [...(store.session.form[form.sessionID] ?? []), form])
+        return
+      }
       case "form.replied":
       case "form.cancelled":
         removeForm(event.data.sessionID, event.data.id, event.location)
@@ -1369,12 +1378,11 @@ export function createData(config: CreateDataInput) {
         // it, and a read served before the location's VCS provider loaded has neither.
         refreshLocation("vcs", result.location.vcs, location)
         break
+      // Only the "global" elicitation form is listed per Location; session forms are stored above the guard.
       case "form.created":
-        if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
-        setStore("session", "form", event.data.form.sessionID, [
-          ...(store.session.form[event.data.form.sessionID] ?? []),
-          event.data.form.sessionID === "global" ? { ...event.data.form, location } : event.data.form,
-        ])
+        if (event.data.form.sessionID !== "global") break
+        if (store.session.form.global?.some((form) => form.id === event.data.form.id)) break
+        setStore("session", "form", "global", [...(store.session.form.global ?? []), { ...event.data.form, location }])
         break
       case "shell.created":
         setStore("location", locationKey(location), (data) => ({
